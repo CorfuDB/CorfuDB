@@ -70,18 +70,19 @@ public class StreamsSnapshotReader extends SnapshotReader {
     private ObservableValue<Integer> observeBiggerMsg = new ObservableValue(0);
 
     private final LogReplicationSession session;
-    private final LogReplicationContext context;
+    private final LogReplicationContext replicationContext;
 
     /**
      * Init runtime and streams to read
      */
-    public StreamsSnapshotReader(CorfuRuntime runtime, LogReplicationSession session, LogReplicationContext context) {
+    public StreamsSnapshotReader(CorfuRuntime runtime, LogReplicationSession session,
+                                 LogReplicationContext replicationContext) {
         this.rt = runtime;
         this.session = session;
-        this.context = context;
+        this.replicationContext = replicationContext;
         this.rt.parseConfigurationString(runtime.getLayoutServers().get(0)).connect();
-        this.maxDataSizePerMsg = context.getConfigManager().getConfig().getMaxDataSizePerMsg();
-        this.streams = context.getConfigManager().getConfig().getStreamsToReplicate();
+        this.maxDataSizePerMsg = replicationContext.getConfigManager().getConfig().getMaxDataSizePerMsg();
+        this.streams = replicationContext.getConfigManager().getConfig().getStreamsToReplicate();
         this.messageSizeDistributionSummary = configureMessageSizeDistributionSummary();
     }
 
@@ -270,8 +271,8 @@ public class StreamsSnapshotReader extends SnapshotReader {
     public void reset(long ts) {
         // As the config should reflect the latest configuration read from registry table, it will be synced with the
         // latest registry table content instead of the given ts, while the streams to replicate will be read up to ts.
-        context.refresh();
-        streams = context.getConfig().getStreamsToReplicate();
+        replicationContext.refresh();
+        streams = replicationContext.getConfig().getStreamsToReplicate();
         streamsToSend = new PriorityQueue<>(streams);
         preMsgTs = Address.NON_ADDRESS;
         currentMsgTs = Address.NON_ADDRESS;

@@ -85,8 +85,8 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
     private Phase phase;
 
     public StreamsSnapshotWriter(CorfuRuntime rt, LogReplicationMetadataManager metadataManager,
-                                 LogReplicationSession session, LogReplicationContext context) {
-        super(session, context);
+                                 LogReplicationSession session, LogReplicationContext replicationContext) {
+        super(session, replicationContext);
         this.rt = rt;
         this.metadataManager = metadataManager;
         this.phase = Phase.TRANSFER_PHASE;
@@ -402,8 +402,7 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
         phase = Phase.APPLY_PHASE;
 
         // Get the number of entries to apply
-        long sequenceNumber =
-            metadataManager.getReplicationMetadata(session).getLastSnapshotTransferredSeqNumber();
+        long sequenceNumber = metadataManager.getReplicationMetadata(session).getLastSnapshotTransferredSeqNumber();
 
         if (sequenceNumber != Address.NON_ADDRESS) {
             log.debug("Start applying shadow streams, seqNum={}", sequenceNumber);

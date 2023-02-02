@@ -10,7 +10,8 @@ import java.util.UUID;
  */
 public class LogicalGroupSnapshotReader extends SnapshotReader {
 
-    public LogicalGroupSnapshotReader(CorfuRuntime runtime, LogReplicationSession session, LogReplicationContext context) {
+    public LogicalGroupSnapshotReader(CorfuRuntime runtime, LogReplicationSession session,
+                                      LogReplicationContext replicationContext) {
     }
 
     @Override

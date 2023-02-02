@@ -43,8 +43,8 @@ public class LogEntryWriter extends SinkWriter {
     private final LogReplicationMetadataManager metadataManager;
 
     public LogEntryWriter(LogReplicationMetadataManager metadataManager,
-                          LogReplicationSession session, LogReplicationContext context) {
-        super(session, context);
+                          LogReplicationSession session, LogReplicationContext replicationContext) {
+        super(session, replicationContext);
 
         ReplicationMetadata metadata = metadataManager.getReplicationMetadata(session);
 

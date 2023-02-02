@@ -30,7 +30,6 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 /**
  * Manage log replication sessions for multiple replication models.
@@ -202,8 +201,6 @@ public class SessionManager {
         try {
             IRetry.build(IntervalRetry.class, () -> {
                 try (TxnContext txn = corfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
-                    // TODO(V2): A replication context should be specific per session, as the set of streams to replicate is
-                    // specific to a session (for now only supporting one default model) so using the same context
 
                     for (ClusterDescriptor sourceCluster : topology.getSourceClusters().values()) {
                         for (ClusterDescriptor sinkCluster : topology.getSinkClusters().values()) {
@@ -233,12 +230,12 @@ public class SessionManager {
                     }
                     txn.commit();
 
-                    LogReplicationContext context = new LogReplicationContext(configManager,
+                    LogReplicationContext replicationContext = new LogReplicationContext(configManager,
                         topology.getTopologyConfigId(), localCorfuEndpoint);
                     sessions.addAll(sessionsToAdd);
                     incomingSessions.addAll(incomingSessionsToAdd);
                     outgoingSessions.addAll(outgoingSessionsToAdd);
-                    sessionsToAdd.forEach(session -> sessionToContextMap.put(session, context));
+                    sessionsToAdd.forEach(session -> sessionToContextMap.put(session, replicationContext));
                     return null;
                 } catch (TransactionAbortedException e) {
                     log.error("Failed to create sessions.  Retrying.", e);
@@ -264,34 +261,12 @@ public class SessionManager {
     }
 
     /**
-     * Retrieve all sessions from the given source cluster
-     *
-     * @param sourceClusterId   the identifier of the source cluster
-     * @return set of sessions for which this cluster is the sink
-     */
-    public Set<LogReplicationSession> getIncomingSessions(String sourceClusterId) {
-        return incomingSessions.stream()
-                .filter(s -> s.getSinkClusterId().equals(sourceClusterId)).collect(Collectors.toSet());
-    }
-
-    /**
      * Retrieve all sessions for which this cluster is the source
      *
      * @return set of sessions for which this cluster is the sink
      */
     public Set<LogReplicationSession> getOutgoingSessions() {
         return outgoingSessions;
-    }
-
-    /**
-     * Retrieve all sessions to the given sink cluster
-     *
-     * @param sinkClusterId   the identifier of the sink cluster
-     * @return set of sessions for which this cluster is the sink
-     */
-    public Set<LogReplicationSession> getOutgoingSessions(String sinkClusterId) {
-        return outgoingSessions.stream()
-                .filter(s -> s.getSinkClusterId().equals(sinkClusterId)).collect(Collectors.toSet());
     }
 
     /**

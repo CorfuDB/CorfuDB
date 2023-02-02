@@ -19,7 +19,7 @@ import java.util.UUID;
 public class RoutingQueuesLogEntryReader extends LogEntryReader {
 
     public RoutingQueuesLogEntryReader(CorfuRuntime runtime, LogReplicationSession session,
-                                       LogReplicationContext context) {
+                                       LogReplicationContext replicationContext) {
     }
 
     @Override

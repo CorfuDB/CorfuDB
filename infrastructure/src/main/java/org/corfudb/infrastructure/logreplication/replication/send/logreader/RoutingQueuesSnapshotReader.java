@@ -11,7 +11,7 @@ import java.util.UUID;
 public class RoutingQueuesSnapshotReader extends SnapshotReader {
 
     public RoutingQueuesSnapshotReader(CorfuRuntime corfuRuntime, LogReplicationSession session,
-                                       LogReplicationContext context) {
+                                       LogReplicationContext replicationContext) {
     }
 
     @Override

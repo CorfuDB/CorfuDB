@@ -502,9 +502,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
     }
 
     /**
-     * Process topology config change:
-     * - Higher config id
-     * - Potential cluster role change
+     * Process topology change where the cluster's role has changed
      *
      * Cluster change from Source to Sink is a two step process,
      * we first confirm that we are ready to do the cluster role change,

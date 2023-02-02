@@ -17,7 +17,7 @@ import java.util.UUID;
 public class LogicalGroupLogEntryReader extends LogEntryReader {
 
     public LogicalGroupLogEntryReader(CorfuRuntime runtime, LogReplicationSession session,
-                                      LogReplicationContext context) {
+                                      LogReplicationContext replicationContext) {
     }
 
     @Override

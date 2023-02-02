@@ -66,16 +66,17 @@ public class LogReplicationSourceManager {
      * @param metadataManager Replication Metadata Manager
      */
     public LogReplicationSourceManager(LogReplicationRuntimeParameters params, LogReplicationClient client,
-        LogReplicationMetadataManager metadataManager, LogReplicationUpgradeManager upgradeManager,
-        LogReplicationSession session, LogReplicationContext context) {
-        this(params, metadataManager, new CorfuDataSender(client), upgradeManager, session, context);
+                                       LogReplicationMetadataManager metadataManager,
+                                       LogReplicationUpgradeManager upgradeManager,
+                                       LogReplicationSession session, LogReplicationContext replicationContext) {
+        this(params, metadataManager, new CorfuDataSender(client), upgradeManager, session, replicationContext);
     }
 
     @VisibleForTesting
     public LogReplicationSourceManager(LogReplicationRuntimeParameters params,
                                        LogReplicationMetadataManager metadataManager, DataSender dataSender,
                                        LogReplicationUpgradeManager upgradeManager, LogReplicationSession session,
-                                       LogReplicationContext context) {
+                                       LogReplicationContext replicationContext) {
 
         // This runtime is used exclusively for the snapshot and log entry reader which do not require a cache
         // as these are one time operations.
@@ -93,24 +94,23 @@ public class LogReplicationSourceManager {
 
         this.parameters = params;
 
-        Set<String> streamsToReplicate = context.getConfigManager().getConfig().getStreamsToReplicate();
+        Set<String> streamsToReplicate = replicationContext.getConfig().getStreamsToReplicate();
         if (streamsToReplicate == null || streamsToReplicate.isEmpty()) {
             // Avoid FSM being initialized if there are no streams to replicate
             throw new IllegalArgumentException("Invalid Log Replication: Streams to replicate is EMPTY");
         }
 
         ExecutorService logReplicationFSMWorkers = Executors.newFixedThreadPool(DEFAULT_FSM_WORKER_THREADS,
-            new ThreadFactoryBuilder().setNameFormat("state-machine-worker-" + session.getSinkClusterId())
-                .build());
+                new ThreadFactoryBuilder().setNameFormat("state-machine-worker-" + session.hashCode()).build());
 
         ReadProcessor readProcessor = new DefaultReadProcessor(runtime);
         this.metadataManager = metadataManager;
 
         // Ack Reader for Snapshot and LogEntry Sync
-        this.ackReader = new LogReplicationAckReader(this.metadataManager, runtime, session, context);
+        this.ackReader = new LogReplicationAckReader(this.metadataManager, runtime, session, replicationContext);
 
         this.logReplicationFSM = new LogReplicationFSM(this.runtime, upgradeManager, dataSender, readProcessor,
-            logReplicationFSMWorkers, ackReader, session, context);
+                logReplicationFSMWorkers, ackReader, session, replicationContext);
 
         this.logReplicationFSM.setTopologyConfigId(params.getTopologyConfigId());
         this.ackReader.setLogEntryReader(this.logReplicationFSM.getLogEntryReader());

@@ -109,8 +109,6 @@ public class LogReplicationSinkManager implements DataReceiver {
     @Getter
     private final AtomicBoolean ongoingApply = new AtomicBoolean(false);
 
-    private LogReplicationContext context;
-
     /**
      * Constructor Sink Manager
      *
@@ -124,19 +122,19 @@ public class LogReplicationSinkManager implements DataReceiver {
                                      ServerContext serverContext, LogReplicationSession session,
                                      LogReplicationContext replicationContext) {
 
-        this.context = replicationContext;
+        this.replicationContext = replicationContext;
         this.runtime = CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder()
                 .trustStore((String) serverContext.getServerConfig().get(ConfigParamNames.TRUST_STORE))
                 .tsPasswordFile((String) serverContext.getServerConfig().get(ConfigParamNames.TRUST_STORE_PASS_FILE))
                 .keyStore((String) serverContext.getServerConfig().get(ConfigParamNames.KEY_STORE))
                 .ksPasswordFile((String) serverContext.getServerConfig().get(ConfigParamNames.KEY_STORE_PASS_FILE))
                 .tlsEnabled((Boolean) serverContext.getServerConfig().get("--enable-tls"))
-                .maxCacheEntries(context.getConfigManager().getConfig().getMaxCacheSize())
+                .maxCacheEntries(replicationContext.getConfigManager().getConfig().getMaxCacheSize())
                 .maxWriteSize(serverContext.getMaxWriteSize())
                 .build())
                 .parseConfigurationString(localCorfuEndpoint).connect();
         this.pluginConfigFilePath = serverContext.getPluginConfigFilePath();
-        this.topologyConfigId = context.getTopologyConfigId();
+        this.topologyConfigId = replicationContext.getTopologyConfigId();
         this.session = session;
         this.metadataManager = metadataManager;
 
@@ -153,7 +151,7 @@ public class LogReplicationSinkManager implements DataReceiver {
         this.metadataManager = metadataManager;
         this.pluginConfigFilePath = pluginConfigFilePath;
         this.session = session;
-        this.context = context;
+        this.replicationContext = context;
 
         init();
     }
@@ -185,7 +183,7 @@ public class LogReplicationSinkManager implements DataReceiver {
         this.applyExecutor = Executors.newSingleThreadExecutor(
                 new ThreadFactoryBuilder()
                         .setDaemon(true)
-                        .setNameFormat("snapshotSyncApplyExecutor-" + session.getSourceClusterId())
+                        .setNameFormat("snapshotSyncApplyExecutor-" + session.hashCode())
                         .build());
 
         initWriterAndBufferMgr();
@@ -221,12 +219,11 @@ public class LogReplicationSinkManager implements DataReceiver {
         // Instantiate Snapshot Sync Plugin, this is an external service which will be triggered on start and end
         // of a snapshot sync.
         snapshotSyncPlugin = getOnSnapshotSyncPlugin();
-        snapshotWriter = new StreamsSnapshotWriter(runtime, metadataManager, session, context);
-        logEntryWriter = new LogEntryWriter(metadataManager, session, context);
+        snapshotWriter = new StreamsSnapshotWriter(runtime, metadataManager, session, replicationContext);
+        logEntryWriter = new LogEntryWriter(metadataManager, session, replicationContext);
 
         logEntrySinkBufferManager = new LogEntrySinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,
-                metadataManager.getReplicationMetadata(session)
-                    .getLastLogEntryApplied(), this);
+                metadataManager.getReplicationMetadata(session).getLastLogEntryApplied(), this);
     }
 
     private ISnapshotSyncPlugin getOnSnapshotSyncPlugin() {
@@ -360,9 +357,8 @@ public class LogReplicationSinkManager implements DataReceiver {
             log.info("Exit onSnapshotSyncEnd :: {}", snapshotSyncPlugin.getClass().getSimpleName());
         } else {
             log.warn("SNAPSHOT_SYNC has completed for {}, but new ongoing SNAPSHOT_SYNC is {}. Id mismatch :: " +
-                    "current_snapshot_cycle_id={}, ack_cycle_id={}",
-                entry.getMetadata().getSnapshotTimestamp(), lastAppliedBaseSnapshotTimestamp, latestSnapshotSyncCycleId,
-                ackSnapshotSyncCycleId);
+                    "current_snapshot_cycle_id={}, ack_cycle_id={}", entry.getMetadata().getSnapshotTimestamp(),
+                    lastAppliedBaseSnapshotTimestamp, latestSnapshotSyncCycleId, ackSnapshotSyncCycleId);
         }
     }
 
@@ -420,12 +416,11 @@ public class LogReplicationSinkManager implements DataReceiver {
         // TODO V2: If the sink crashes in the middle of a snapshot transfer cycle, a SNAPSHOT_START message
         //  won't come and the buffer will not get created, resulting in an NPE
         snapshotSinkBufferManager = new SnapshotSinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,
-            metadataManager.getReplicationMetadata(session).getLastSnapshotTransferredSeqNumber(),
-            this);
+                metadataManager.getReplicationMetadata(session).getLastSnapshotTransferredSeqNumber(), this);
         rxState = RxState.SNAPSHOT_SYNC;
 
         log.info("Sink manager entry {} state, snapshot start with {}", rxState,
-            TextFormat.shortDebugString(entry.getMetadata()));
+                TextFormat.shortDebugString(entry.getMetadata()));
     }
 
     /**
@@ -499,7 +494,7 @@ public class LogReplicationSinkManager implements DataReceiver {
 
         // Sync with registry after transfer phase to capture local updates, as transfer phase could
         // take a relatively long time.
-        context.refresh();
+        replicationContext.refresh();
         snapshotWriter.clearLocalStreams();
         snapshotWriter.startSnapshotSyncApply();
         completeSnapshotApply(entry);

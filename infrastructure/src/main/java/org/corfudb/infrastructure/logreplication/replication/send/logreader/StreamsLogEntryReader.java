@@ -79,19 +79,19 @@ public class StreamsLogEntryReader extends LogEntryReader {
 
     private LogReplicationSession session;
 
-    private LogReplicationContext context;
+    private LogReplicationContext replicationContext;
 
     public StreamsLogEntryReader(CorfuRuntime runtime, LogReplicationSession replicationSession,
-                                 LogReplicationContext context) {
+                                 LogReplicationContext replicationContext) {
         runtime.parseConfigurationString(runtime.getLayoutServers().get(0)).connect();
-        this.maxDataSizePerMsg = context.getConfigManager().getConfig().getMaxDataSizePerMsg();
+        this.maxDataSizePerMsg = replicationContext.getConfigManager().getConfig().getMaxDataSizePerMsg();
         this.currentProcessedEntryMetadata = new StreamIteratorMetadata(Address.NON_ADDRESS, false);
         this.messageSizeDistributionSummary = configureMessageSizeDistributionSummary();
         this.deltaCounter = configureDeltaCounter();
         this.validDeltaCounter = configureValidDeltaCounter();
         this.opaqueEntryCounter = configureOpaqueEntryCounter();
         this.session = replicationSession;
-        this.context = context;
+        this.replicationContext = replicationContext;
 
         // Get UUIDs for streams to replicate
         refreshStreamUUIDs();
@@ -106,7 +106,7 @@ public class StreamsLogEntryReader extends LogEntryReader {
      * constructor and when LogReplicationConfig is synced with registry table.
      */
     private void refreshStreamUUIDs() {
-        Set<String> streams = context.getConfig().getStreamsToReplicate();
+        Set<String> streams = replicationContext.getConfig().getStreamsToReplicate();
         streamUUIDs = new HashSet<>();
         for (String s : streams) {
             streamUUIDs.add(CorfuRuntime.getStreamID(s));
@@ -163,7 +163,7 @@ public class StreamsLogEntryReader extends LogEntryReader {
         // table and add them to the list in that case.
         if (!streamUUIDs.containsAll(txEntryStreamIds)) {
             log.info("There could be additional streams to replicate in tx stream. Checking with registry table.");
-            context.refresh();
+            replicationContext.refresh();
             refreshStreamUUIDs();
             // TODO: Add log message here for the newly found streams when we support incremental refresh.
         }
@@ -298,7 +298,7 @@ public class StreamsLogEntryReader extends LogEntryReader {
     @Override
     public void reset(long lastSentBaseSnapshotTimestamp, long lastAckedTimestamp) {
         // Sync with registry when entering into IN_LOG_ENTRY_SYNC state
-        context.refresh();
+        replicationContext.refresh();
         refreshStreamUUIDs();
         this.currentProcessedEntryMetadata = new StreamIteratorMetadata(Address.NON_ADDRESS, false);
         setGlobalBaseSnapshot(lastSentBaseSnapshotTimestamp, lastAckedTimestamp);

@@ -36,7 +36,7 @@ public class LogReplicationAckReader {
     private final LogReplicationMetadataManager metadataManager;
     private final CorfuRuntime runtime;
     private final LogReplicationSession session;
-    private final LogReplicationContext context;
+    private final LogReplicationContext replicationContext;
 
     // Log tail when the current snapshot sync started.  We do not need to synchronize access to it because it will not
     // be read(calculateRemainingEntriesToSend) and written(setBaseSnapshot) concurrently.
@@ -63,11 +63,11 @@ public class LogReplicationAckReader {
     private final Lock lock = new ReentrantLock();
 
     public LogReplicationAckReader(LogReplicationMetadataManager metadataManager, CorfuRuntime runtime,
-                                   LogReplicationSession session, LogReplicationContext context) {
+                                   LogReplicationSession session, LogReplicationContext replicationContext) {
         this.metadataManager = metadataManager;
         this.runtime = runtime;
         this.session = session;
-        this.context = context;
+        this.replicationContext = replicationContext;
     }
 
     public void setAckedTsAndSyncType(long ackedTs, SyncType syncType) {
@@ -172,7 +172,7 @@ public class LogReplicationAckReader {
      */
     private long getMaxReplicatedStreamsTail(Map<UUID, Long> tailMap) {
         long maxTail = Address.NON_ADDRESS;
-        Set<String> streamsToReplicate = context.refresh().getStreamsToReplicate();
+        Set<String> streamsToReplicate = replicationContext.refresh().getStreamsToReplicate();
         for (String streamName : streamsToReplicate) {
             UUID streamUuid = CorfuRuntime.getStreamID(streamName);
             if (tailMap.containsKey(streamUuid)) {
@@ -354,7 +354,7 @@ public class LogReplicationAckReader {
                             calculateRemainingEntriesToSend(baseSnapshotTimestamp), baseSnapshotTimestamp);
                 } catch (TransactionAbortedException tae) {
                     log.error("Error while attempting to markSnapshotSyncInfoCompleted for remote session {}.",
-                        session, tae);
+                            session, tae);
                     throw new RetryNeededException();
                 } finally {
                     lock.unlock();
@@ -448,8 +448,7 @@ public class LogReplicationAckReader {
     public void startSyncStatusUpdatePeriodicTask() {
         log.info("Start sync status update periodic task");
         lastAckedTsPoller = Executors.newSingleThreadScheduledExecutor(
-            new ThreadFactoryBuilder().setNameFormat(
-                "ack-timestamp-reader-"+ session.getSinkClusterId()).build());
+                new ThreadFactoryBuilder().setNameFormat("ack-timestamp-reader-"+ session.hashCode()).build());
         lastAckedTsPoller.scheduleWithFixedDelay(new TsPollingTask(), 0, ACKED_TS_READ_INTERVAL_SECONDS,
                 TimeUnit.SECONDS);
     }
@@ -478,7 +477,7 @@ public class LogReplicationAckReader {
                         metadataManager.setReplicationStatusTable(session, entriesToSend, lastSyncType);
                     } catch (TransactionAbortedException tae) {
                         log.error("Error while attempting to set replication status for remote session {} with " +
-                            "lastSyncType {}.", session, lastSyncType, tae);
+                                "lastSyncType {}.", session, lastSyncType, tae);
                         throw new RetryNeededException();
                     } finally {
                         lock.unlock();

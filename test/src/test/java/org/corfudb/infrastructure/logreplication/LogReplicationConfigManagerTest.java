@@ -30,7 +30,6 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 @Slf4j
 public class LogReplicationConfigManagerTest extends AbstractViewTest {
-    // TODO(Anny) come back to this
     private CorfuRuntime runtime;
     private CorfuStore corfuStore;
     
@@ -104,7 +103,7 @@ public class LogReplicationConfigManagerTest extends AbstractViewTest {
     }
 
     @Test
-    public void testConfigUpdate() throws Exception {
+    public void testConfigUpdate() {
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(runtime);
         verifyExpectedConfigGenerated(configManager.getConfig());
         verifyExpectedConfigGenerated(configManager.getUpdatedConfig());
@@ -112,5 +111,6 @@ public class LogReplicationConfigManagerTest extends AbstractViewTest {
 
     private void verifyExpectedConfigGenerated(LogReplicationConfig actualConfig) {
         Assert.assertTrue(Objects.equals(streamToTagsMap, actualConfig.getDataStreamToTagsMap()));
+
     }
 }

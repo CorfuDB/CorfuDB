@@ -49,10 +49,11 @@ public class CorfuReplicationManager {
     /**
      * Start log replication by instantiating a runtime for each session
      */
-    public void start(ClusterDescriptor remoteCluster, LogReplicationSession session, LogReplicationContext context) {
+    public void start(ClusterDescriptor remoteCluster, LogReplicationSession session,
+                      LogReplicationContext replicationContext) {
         try {
             // TODO (V2): we might think of unifying the info in ClusterDescriptor into session (all nodes host+port)
-            startLogReplicationRuntime(remoteCluster, session, context);
+            startLogReplicationRuntime(remoteCluster, session, replicationContext);
         } catch (Exception e) {
             log.error("Failed to start log replication runtime for session={}", session);
         }
@@ -82,14 +83,13 @@ public class CorfuReplicationManager {
     }
 
     private void startLogReplicationRuntime(ClusterDescriptor remoteClusterDescriptor,
-                                            LogReplicationSession session, LogReplicationContext context) {
+                                            LogReplicationSession session, LogReplicationContext replicationContext) {
         try {
             if (!sessionRuntimeMap.containsKey(session)) {
                 log.info("Starting Log Replication Runtime for session {}", session);
-                connect(remoteClusterDescriptor, session, context);
+                connect(remoteClusterDescriptor, session, replicationContext);
             } else {
-                log.warn("Log Replication Runtime for session {}, already exists. Skip.",
-                        session);
+                log.warn("Log Replication Runtime for session {}, already exists. Skip.", session);
             }
         } catch (Exception e) {
             log.error("Caught exception, stop log replication runtime to {}", session, e);

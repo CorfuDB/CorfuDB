@@ -29,16 +29,16 @@ public abstract class SinkWriter {
 
     final LogReplicationSession session;
 
-    final LogReplicationContext context;
+    final LogReplicationContext replicationContext;
 
     // Limit the initialization of this class only to its children classes.
-    SinkWriter(LogReplicationSession session, LogReplicationContext context) {
+    SinkWriter(LogReplicationSession session, LogReplicationContext replicationContext) {
         this.session = session;
-        this.context = context;
+        this.replicationContext = replicationContext;
 
         // The CorfuRuntime in LogReplicationConfigManager used to get the config fields from registry
         // table, and the protobufSerializer is guaranteed to be registered before initializing SinkWriter.
-        this.protobufSerializer = context.getProtobufSerializer();
+        this.protobufSerializer = replicationContext.getProtobufSerializer();
     }
 
     /**
@@ -87,7 +87,7 @@ public abstract class SinkWriter {
      * @return True if the entries should be ignored.
      */
     boolean ignoreEntriesForStream(UUID streamId) {
-        return context.getConfig().getStreamsToDrop().contains(streamId);
+        return replicationContext.getConfig().getStreamsToDrop().contains(streamId);
     }
 
     /**
@@ -99,7 +99,7 @@ public abstract class SinkWriter {
      * @return True if the entry should be ignored.
      */
     boolean ignoreEntryForRegistryTable(UUID streamId, CorfuRecord<TableDescriptors, TableMetadata> record) {
-        return context.getConfig().getStreamsToDrop().contains(streamId) ||
+        return replicationContext.getConfig().getStreamsToDrop().contains(streamId) ||
             !record.getMetadata().getTableOptions().getIsFederated();
     }
 }
