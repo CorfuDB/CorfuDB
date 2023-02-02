@@ -136,9 +136,6 @@ public class SessionManager {
         Set<String> sinksToRemove = Sets.difference(currentSinks, newSinks);
         Set<String> sinkClustersUnchanged = Sets.intersection(newSinks, currentSinks);
 
-        topology = newTopology;
-        metadataManager.setTopologyConfigId(topology.getTopologyConfigId());
-
         Set<LogReplicationSession> sessionsToRemove = new HashSet<>();
         Set<LogReplicationSession> sessionsUnchanged = new HashSet<>();
 
@@ -154,9 +151,8 @@ public class SessionManager {
 
                         if(sinkClustersUnchanged.contains(session.getSinkClusterId())) {
                             sessionsUnchanged.add(session);
-                            sessionToContextMap.get(session).setTopologyConfigId(topology.getTopologyConfigId());
                             metadataManager.updateReplicationMetadataField(txn, session,
-                                    ReplicationMetadata.TOPOLOGYCONFIGID_FIELD_NUMBER, topology.getTopologyConfigId());
+                                ReplicationMetadata.TOPOLOGYCONFIGID_FIELD_NUMBER, newTopology.getTopologyConfigId());
                         }
                     });
                     txn.commit();
@@ -164,13 +160,22 @@ public class SessionManager {
                     throw new RetryNeededException();
                 }
 
+                // Update the in-memory topology config id after metadata tables have been updated
+                topology = newTopology;
+                metadataManager.setTopologyConfigId(topology.getTopologyConfigId());
+
                 stopReplication(sessionsToRemove);
+
+                for (LogReplicationSession session : sessionsUnchanged) {
+                    sessionToContextMap.get(session).setTopologyConfigId(topology.getTopologyConfigId());
+                }
+
                 updateReplicationParameters(sessionsUnchanged);
                 createSessions();
                 return null;
             }).run();
         } catch (InterruptedException e) {
-            log.error("Unrecoverable exception while removing session", e);
+            log.error("Unrecoverable exception while refreshing sessions", e);
             throw new UnrecoverableCorfuInterruptedError(e);
         }
     }
@@ -190,43 +195,59 @@ public class SessionManager {
      *
      */
     private void createSessions() {
-        LogReplicationSession session;
+        Set<LogReplicationSession> sessionsToAdd = new HashSet<>();
+        Set<LogReplicationSession> incomingSessionsToAdd = new HashSet<>();
+        Set<LogReplicationSession> outgoingSessionsToAdd = new HashSet<>();
 
-        try(TxnContext txn = corfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
-            // TODO(V2): A replication context should be specific per session, as the set of streams to replicate is
-            // specific to a session (for now only supporting one default model) so using the same context
-            LogReplicationContext context = new LogReplicationContext(configManager,
-                    topology.getTopologyConfigId(), localCorfuEndpoint);
+        try {
+            IRetry.build(IntervalRetry.class, () -> {
+                try (TxnContext txn = corfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
+                    // TODO(V2): A replication context should be specific per session, as the set of streams to replicate is
+                    // specific to a session (for now only supporting one default model) so using the same context
 
-            for(ClusterDescriptor sourceCluster : topology.getSourceClusters().values()) {
-                for(ClusterDescriptor sinkCluster : topology.getSinkClusters().values()) {
+                    for (ClusterDescriptor sourceCluster : topology.getSourceClusters().values()) {
+                        for (ClusterDescriptor sinkCluster : topology.getSinkClusters().values()) {
 
-                    // TODO(V2): for now only creating sessions for FULL TABLE replication model (assumed as default)
-                    session = LogReplicationSession.newBuilder()
-                            .setSourceClusterId(sourceCluster.clusterId)
-                            .setSinkClusterId(sinkCluster.clusterId)
-                            .setSubscriber(getDefaultSubscriber())
-                            .build();
+                            // TODO(V2): for now only creating sessions for FULL TABLE replication model (assumed as default)
+                            LogReplicationSession session = LogReplicationSession.newBuilder()
+                                .setSourceClusterId(sourceCluster.clusterId)
+                                .setSinkClusterId(sinkCluster.clusterId)
+                                .setSubscriber(getDefaultSubscriber())
+                                .build();
 
-                    if(!sessions.contains(session)) {
-                        if (session.getSourceClusterId() == topology.getLocalClusterDescriptor().getClusterId()) {
-                            sessions.add(session);
-                            outgoingSessions.add(session);
-                            metadataManager.addSession(txn, session, topology.getTopologyConfigId(), false);
-                        } else if(session.getSinkClusterId() == topology.getLocalClusterDescriptor().getClusterId()) {
-                            sessions.add(session);
-                            incomingSessions.add(session);
-                            metadataManager.addSession(txn, session, topology.getTopologyConfigId(), true);
-                        } else {
-                            log.info("Session {} does not contain current node {} - skipping", session,
-                                    topology.getLocalClusterDescriptor().getClusterId());
+                            if (!sessions.contains(session)) {
+                                if (session.getSourceClusterId() == topology.getLocalClusterDescriptor().getClusterId()) {
+                                    sessionsToAdd.add(session);
+                                    outgoingSessionsToAdd.add(session);
+                                    metadataManager.addSession(txn, session, topology.getTopologyConfigId(), false);
+                                } else if (session.getSinkClusterId() == topology.getLocalClusterDescriptor().getClusterId()) {
+                                    sessionsToAdd.add(session);
+                                    incomingSessionsToAdd.add(session);
+                                    metadataManager.addSession(txn, session, topology.getTopologyConfigId(), true);
+                                } else {
+                                    log.info("Session {} does not contain current node {} - skipping", session,
+                                        topology.getLocalClusterDescriptor().getClusterId());
+                                }
+                            }
                         }
-
-                        sessionToContextMap.put(session, context);
                     }
+                    txn.commit();
+
+                    LogReplicationContext context = new LogReplicationContext(configManager,
+                        topology.getTopologyConfigId(), localCorfuEndpoint);
+                    sessions.addAll(sessionsToAdd);
+                    incomingSessions.addAll(incomingSessionsToAdd);
+                    outgoingSessions.addAll(outgoingSessionsToAdd);
+                    sessionsToAdd.forEach(session -> sessionToContextMap.put(session, context));
+                    return null;
+                } catch (TransactionAbortedException e) {
+                    log.error("Failed to create sessions.  Retrying.", e);
+                    throw new RetryNeededException();
                 }
-            }
-            txn.commit();
+            }).run();
+        } catch (InterruptedException e) {
+            log.error("Unrecoverable Corfu Error when creating the sessions", e);
+            throw new UnrecoverableCorfuInterruptedError(e);
         }
 
         log.info("Total sessions={}, outgoing={}, incoming={}, sessions={}", sessions.size(), outgoingSessions.size(),
