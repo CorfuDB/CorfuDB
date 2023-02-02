@@ -62,8 +62,7 @@ message LogReplicationSession {
 
 message ReplicationSubscriber {
   ReplicationModel model = 1;
-  org.corfudb.runtime.UuidMsg client_id = 2;
-  string client_name = 3;
+  string client_name = 2;
 }
 
 enum ReplicationModel {

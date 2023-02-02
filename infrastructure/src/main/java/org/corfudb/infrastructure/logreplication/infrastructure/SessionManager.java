@@ -18,7 +18,6 @@ import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
-import org.corfudb.runtime.proto.RpcCommon.UuidMsg;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalRetry;
@@ -28,7 +27,6 @@ import javax.annotation.Nonnull;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
-import java.util.UUID;
 
 /**
  * Manage log replication sessions for multiple replication models.
@@ -43,8 +41,6 @@ public class SessionManager {
     // Represents default client for LR V1, i.e., use case where tables are tagged with
     // 'is_federated' flag, yet no client is specified in proto
     private static final String DEFAULT_CLIENT = "00000000-0000-0000-0000-000000000000";
-
-    private static final UUID DEFAULT_CLIENT_ID = UUID.fromString(DEFAULT_CLIENT);
 
     private final CorfuStore corfuStore;
 
@@ -282,10 +278,6 @@ public class SessionManager {
 
     public static ReplicationSubscriber getDefaultSubscriber() {
         return ReplicationSubscriber.newBuilder()
-                .setClientId(UuidMsg.newBuilder()
-                        .setMsb(DEFAULT_CLIENT_ID.getMostSignificantBits())
-                        .setLsb(DEFAULT_CLIENT_ID.getMostSignificantBits())
-                        .build())
                 .setClientName(DEFAULT_CLIENT)
                 .setModel(ReplicationModel.FULL_TABLE)
                 .build();
