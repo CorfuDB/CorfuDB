@@ -25,7 +25,6 @@ import org.corfudb.util.retry.IntervalRetry;
 import org.corfudb.util.retry.RetryNeededException;
 
 import javax.annotation.Nonnull;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
@@ -63,8 +62,6 @@ public class SessionManager {
 
     private Set<LogReplicationSession> outgoingSessions = new HashSet<>();
 
-    Map<LogReplicationSession, LogReplicationContext> sessionToContextMap = new HashMap<>();
-
     @Getter
     private TopologyDescriptor topology;
 
@@ -72,6 +69,9 @@ public class SessionManager {
     private final LogReplicationMetadataManager metadataManager;
 
     private final LogReplicationUpgradeManager upgradeManager;
+
+    @Getter
+    private final LogReplicationContext replicationContext;
 
     /**
      * Constructor
@@ -91,6 +91,7 @@ public class SessionManager {
         this.metadataManager = new LogReplicationMetadataManager(corfuRuntime, topology.getTopologyConfigId());
         this.configManager = new LogReplicationConfigManager(runtime, serverContext);
         this.upgradeManager = upgradeManager;
+        replicationContext = new LogReplicationContext(configManager, topology.getTopologyConfigId(), localCorfuEndpoint);
 
         createSessions();
     }
@@ -106,11 +107,11 @@ public class SessionManager {
         this.topology = topology;
         this.runtime = corfuRuntime;
         this.corfuStore = new CorfuStore(corfuRuntime);
-        this.localCorfuEndpoint = "localhost:" +
-                topology.getLocalClusterDescriptor().getCorfuPort();
+        this.localCorfuEndpoint = "localhost:" + topology.getLocalClusterDescriptor().getCorfuPort();
         this.metadataManager = new LogReplicationMetadataManager(corfuRuntime, topology.getTopologyConfigId());
         this.configManager = new LogReplicationConfigManager(runtime);
         this.upgradeManager = null;
+        replicationContext = new LogReplicationContext(configManager, topology.getTopologyConfigId(), localCorfuEndpoint);
 
         createSessions();
     }
@@ -161,13 +162,10 @@ public class SessionManager {
 
                 // Update the in-memory topology config id after metadata tables have been updated
                 topology = newTopology;
+                replicationContext.setTopologyConfigId(topology.getTopologyConfigId());
                 metadataManager.setTopologyConfigId(topology.getTopologyConfigId());
 
                 stopReplication(sessionsToRemove);
-
-                for (LogReplicationSession session : sessionsUnchanged) {
-                    sessionToContextMap.get(session).setTopologyConfigId(topology.getTopologyConfigId());
-                }
 
                 updateReplicationParameters(sessionsUnchanged);
                 createSessions();
@@ -230,12 +228,9 @@ public class SessionManager {
                     }
                     txn.commit();
 
-                    LogReplicationContext replicationContext = new LogReplicationContext(configManager,
-                        topology.getTopologyConfigId(), localCorfuEndpoint);
                     sessions.addAll(sessionsToAdd);
                     incomingSessions.addAll(incomingSessionsToAdd);
                     outgoingSessions.addAll(outgoingSessionsToAdd);
-                    sessionsToAdd.forEach(session -> sessionToContextMap.put(session, replicationContext));
                     return null;
                 } catch (TransactionAbortedException e) {
                     log.error("Failed to create sessions.  Retrying.", e);
@@ -309,17 +304,8 @@ public class SessionManager {
         sessions.forEach(session -> {
             this.sessions.remove(session);
             this.outgoingSessions.remove(session);
-            this.sessionToContextMap.remove(session);
         });
 
-    }
-
-    public LogReplicationContext getContext(LogReplicationSession session) {
-        if(!sessionToContextMap.containsKey(session)) {
-            log.warn("Context not found fpr session={}, generate new context");
-            return new LogReplicationContext(configManager, topology.getTopologyConfigId(), localCorfuEndpoint);
-        }
-        return sessionToContextMap.get(session);
     }
 
     public synchronized void startReplication() {
@@ -334,7 +320,7 @@ public class SessionManager {
         createSessions();
         outgoingSessions.forEach(session -> {
             ClusterDescriptor remoteClusterDescriptor = topology.getSinkClusters().get(session.getSinkClusterId());
-            replicationManager.start(remoteClusterDescriptor, session, sessionToContextMap.get(session));
+            replicationManager.start(remoteClusterDescriptor, session, replicationContext);
         });
     }
 
