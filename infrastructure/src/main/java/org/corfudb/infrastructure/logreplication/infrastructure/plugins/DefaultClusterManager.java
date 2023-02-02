@@ -158,20 +158,6 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
     }
 
     @Override
-    public Map<LogReplicationSession, SinkReplicationStatus> queryStatusOnSink() {
-        Map<LogReplicationSession, SinkReplicationStatus> statusMap = new HashMap<>();
-        for(Map.Entry<LogReplicationSession, ReplicationStatus> session :
-                corfuReplicationDiscoveryService.queryReplicationStatus().entrySet()) {
-            statusMap.put(session.getKey(), session.getValue().getSinkStatus());
-        }
-        return statusMap;
-    }
-
-    public Map<LogReplicationSession, SinkReplicationStatus> isDataConsistent() {
-        return queryStatusOnSink();
-    }
-
-    @Override
     public UUID forceSnapshotSync(LogReplicationSession session) throws LogReplicationDiscoveryServiceException {
         return corfuReplicationDiscoveryService.forceSnapshotSync(session);
     }

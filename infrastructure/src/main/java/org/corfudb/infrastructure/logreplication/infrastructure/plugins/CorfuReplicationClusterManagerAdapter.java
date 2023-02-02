@@ -61,12 +61,6 @@ public interface CorfuReplicationClusterManagerAdapter {
     Map<LogReplicationSession, ReplicationStatus> queryReplicationStatus();
 
     /**
-     * Query replication status on sink, currently only relevant status on sink is the consistency flag
-     *  on sink
-     */
-    Map<LogReplicationSession, SinkReplicationStatus> queryStatusOnSink();
-
-    /**
      * This API enforces a full snapshot sync on a session at best effort.
      * The command will be executed on a node in the source cluster.
      *
