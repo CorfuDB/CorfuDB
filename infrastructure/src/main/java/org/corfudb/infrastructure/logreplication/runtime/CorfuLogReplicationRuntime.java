@@ -6,7 +6,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
-import org.corfudb.infrastructure.logreplication.infrastructure.TopologyDescriptor;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationUpgradeManager;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationSourceManager;
@@ -119,11 +118,6 @@ public class CorfuLogReplicationRuntime {
     public static final int DEFAULT_TIMEOUT = 5000;
 
     /**
-     * Used for checking if LR is in upgrading path
-     */
-    private final LogReplicationUpgradeManager upgradeManager;
-
-    /**
      * Current state of the FSM.
      */
     private volatile LogReplicationRuntimeState state;
@@ -150,7 +144,6 @@ public class CorfuLogReplicationRuntime {
     private final LinkedBlockingQueue<LogReplicationRuntimeEvent> eventQueue = new LinkedBlockingQueue<>();
 
     private final LogReplicationClientRouter router;
-    private final LogReplicationMetadataManager metadataManager;
 
     @Getter
     private final LogReplicationSourceManager sourceManager;
@@ -163,23 +156,18 @@ public class CorfuLogReplicationRuntime {
     @Getter
     public final LogReplicationSession session;
 
-    public final LogReplicationContext context;
-
     /**
      * Default Constructor
      */
     public CorfuLogReplicationRuntime(LogReplicationRuntimeParameters parameters,
                                       LogReplicationMetadataManager metadataManager, LogReplicationUpgradeManager upgradeManager,
-                                      LogReplicationSession session, LogReplicationContext context) {
+                                      LogReplicationSession session, LogReplicationContext replicationContext) {
         this.remoteClusterId = session.getSinkClusterId();
         this.session = session;
-        this.context = context;
-        this.metadataManager = metadataManager;
-        this.upgradeManager = upgradeManager;
         this.router = new LogReplicationClientRouter(parameters, this);
         this.router.addClient(new LogReplicationHandler());
         this.sourceManager = new LogReplicationSourceManager(parameters, new LogReplicationClient(router, session.getSinkClusterId()),
-                metadataManager, upgradeManager, session, context);
+                metadataManager, upgradeManager, session, replicationContext);
         this.connectedNodes = new HashSet<>();
 
         ThreadFactory threadFactory = new ThreadFactoryBuilder().setNameFormat("runtime-fsm-worker-"+remoteClusterId)
@@ -192,7 +180,7 @@ public class CorfuLogReplicationRuntime {
                 ThreadFactoryBuilder().setNameFormat(
                     "runtime-fsm-consumer-"+remoteClusterId).build());
 
-        initializeStates();
+        initializeStates(metadataManager, upgradeManager);
         this.state = states.get(LogReplicationRuntimeStateType.WAITING_FOR_CONNECTIVITY);
 
         log.info("Log Replication Runtime State Machine initialized");
@@ -211,7 +199,7 @@ public class CorfuLogReplicationRuntime {
     /**
      * Initialize all states for the Log Replication Runtime FSM.
      */
-    private void initializeStates() {
+    private void initializeStates(LogReplicationMetadataManager metadataManager, LogReplicationUpgradeManager upgradeManager) {
         /*
          * Log Replication Runtime State instances are kept in a map to be reused in transitions, avoid creating one
          * per every transition (reduce GC cycles).
