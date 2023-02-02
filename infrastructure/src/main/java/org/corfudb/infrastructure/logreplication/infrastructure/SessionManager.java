@@ -222,7 +222,7 @@ public class SessionManager {
 
                     for(ClusterDescriptor remoteSourceCluster : topology.getRemoteSourceClusters().values()) {
                         // TODO(V2): for now only creating sessions for FULL TABLE replication model (assumed as default)
-                        sessionBuilder(remoteSourceCluster.clusterId, localClusterId, sessionsToAdd, txn, connectionEndpoints, false);
+                        sessionBuilder(remoteSourceCluster.clusterId, localClusterId, sessionsToAdd, txn, connectionEndpoints, true);
                     }
 
                     for(ClusterDescriptor remoteSinkCluster : topology.getRemoteSinkClusters().values()) {
@@ -269,7 +269,7 @@ public class SessionManager {
      */
     private void sessionBuilder(String sourceClusterId, String sinkClusterId,
                                 Set<LogReplicationSession> sessionsToAdd, TxnContext txn,
-                                Map<String, ClusterDescriptor> connectionEndpoints, boolean isSource) {
+                                Map<String, ClusterDescriptor> connectionEndpoints, boolean isIncoming) {
         LogReplicationSession session = LogReplicationSession.newBuilder()
                 .setSourceClusterId(sourceClusterId)
                 .setSinkClusterId(sinkClusterId)
@@ -283,7 +283,7 @@ public class SessionManager {
             } else {
                 incomingSessions.add(session);
             }
-            metadataManager.addSession(txn, session, topology.getTopologyConfigId(), isSource);
+            metadataManager.addSession(txn, session, topology.getTopologyConfigId(), isIncoming);
         }
     }
 
