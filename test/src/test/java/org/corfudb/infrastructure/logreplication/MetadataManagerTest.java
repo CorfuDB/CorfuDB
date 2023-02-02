@@ -34,21 +34,21 @@ public class MetadataManagerTest extends AbstractViewTest {
 
     private CorfuRuntime corfuRuntime;
     private LogReplicationConfigManager configManager;
-    private LogReplicationContext replicationContext;
     private boolean success;
     private long topologyConfigId = 5L;
     private TestUtils utils;
     private List<LogReplicationSession> sessions = DefaultClusterConfig.getSessions();
     private LogReplicationSession defaultSession = sessions.get(0);
+    private LogReplicationMetadataManager metadataManager;
 
     @Before
     public void setUp() {
         corfuRuntime = getDefaultRuntime();
         configManager = Mockito.mock(LogReplicationConfigManager.class);
-        replicationContext = new LogReplicationContext(configManager, topologyConfigId,
-                getEndpoint(SERVERS.PORT_0));
         Mockito.doReturn(corfuRuntime).when(configManager).getRuntime();
         utils = new TestUtils();
+        metadataManager = new LogReplicationMetadataManager(corfuRuntime, topologyConfigId);
+        metadataManager.addSession(defaultSession, topologyConfigId, true);
     }
 
     @After
@@ -62,8 +62,6 @@ public class MetadataManagerTest extends AbstractViewTest {
      */
     @Test
     public void testMetadataAfterLogEntrySync() {
-        LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(corfuRuntime, topologyConfigId);
-        metadataManager.addSession(defaultSession, topologyConfigId, true);
         LogReplicationContext context = new LogReplicationContext(configManager, topologyConfigId, getEndpoint(SERVERS.PORT_0));
         LogEntryWriter writer = new LogEntryWriter(metadataManager, defaultSession, context);
 
@@ -96,11 +94,12 @@ public class MetadataManagerTest extends AbstractViewTest {
     public void testInitTsForSnapshotAndLogEntryProcessed() {
 
         LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(corfuRuntime, topologyConfigId);
+        metadataManager.addSession(defaultSession, topologyConfigId, true);
 
-        long lastAppliedSnapshotTimestamp = metadataManager.getReplicationMetadata(defaultSession, true)
-                .getLastSnapshotApplied();
-        long lastProcessedLogEntryTimestamp = metadataManager.getReplicationMetadata(defaultSession, true)
-                .getLastLogEntryBatchProcessed();
+        long lastAppliedSnapshotTimestamp = metadataManager.getReplicationMetadata(defaultSession)
+            .getLastSnapshotApplied();
+        long lastProcessedLogEntryTimestamp = metadataManager.getReplicationMetadata(defaultSession)
+            .getLastLogEntryBatchProcessed();
 
         Assert.assertEquals(Address.NON_ADDRESS, lastAppliedSnapshotTimestamp);
         Assert.assertEquals(Address.NON_ADDRESS, lastProcessedLogEntryTimestamp);
@@ -189,7 +188,9 @@ public class MetadataManagerTest extends AbstractViewTest {
     @Test
     public void testSetBaseSnapshotStart() {
         LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(corfuRuntime, topologyConfigId);
-        ReplicationMetadata metadata = metadataManager.getReplicationMetadata(defaultSession, true);
+        metadataManager.addSession(defaultSession, topologyConfigId, true);
+
+        ReplicationMetadata metadata = metadataManager.getReplicationMetadata(defaultSession);
         Assert.assertNotNull(metadata);
 
         boolean snapshotStartTsSetWithInvalidTopConfigId = metadataManager.setBaseSnapshotStart(defaultSession,
@@ -207,7 +208,9 @@ public class MetadataManagerTest extends AbstractViewTest {
     @Test
     public void testSetLastSnapshotTransferCompleteTimestamp() {
         LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(corfuRuntime, topologyConfigId);
-        ReplicationMetadata metadata = metadataManager.getReplicationMetadata(defaultSession, true);
+        metadataManager.addSession(defaultSession, topologyConfigId, true);
+
+        ReplicationMetadata metadata = metadataManager.getReplicationMetadata(defaultSession);
         Assert.assertNotNull(metadata);
         long initialLastTransferredTs = metadata.getLastSnapshotTransferred();
 
@@ -215,13 +218,12 @@ public class MetadataManagerTest extends AbstractViewTest {
         metadataManager.setLastSnapshotTransferCompleteTimestamp(defaultSession,
                 topologyConfigId + 1, Address.NON_ADDRESS);
         Assert.assertEquals(initialLastTransferredTs,
-                metadataManager.getReplicationMetadata(defaultSession, true).getLastSnapshotTransferred());
+            metadataManager.getReplicationMetadata(defaultSession).getLastSnapshotTransferred());
 
         // Verify the update operation succeed.
-        metadataManager.setLastSnapshotTransferCompleteTimestamp(defaultSession,
-                topologyConfigId, 6L);
+        metadataManager.setLastSnapshotTransferCompleteTimestamp(defaultSession, topologyConfigId, 6L);
         Assert.assertEquals(6L,
-                metadataManager.getReplicationMetadata(defaultSession, true).getLastSnapshotTransferred());
+            metadataManager.getReplicationMetadata(defaultSession).getLastSnapshotTransferred());
     }
 
     /**
@@ -230,7 +232,12 @@ public class MetadataManagerTest extends AbstractViewTest {
     @Test
     public void testSetSnapshotAppliedComplete() {
         LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(corfuRuntime, topologyConfigId);
-        ReplicationMetadata metadata = metadataManager.getReplicationMetadata(defaultSession, true);
+        metadataManager.addSession(defaultSession, topologyConfigId, true);
+
+        // Verify that an entry in the replication status table was created for the default session
+        Assert.assertEquals(1L, metadataManager.getReplicationStatus().size());
+
+        ReplicationMetadata metadata = metadataManager.getReplicationMetadata(defaultSession);
         Assert.assertNotNull(metadata);
 
         // Modify the topology config in log entry message, and verify that the update operation failed.
@@ -238,7 +245,6 @@ public class MetadataManagerTest extends AbstractViewTest {
         LogReplication.LogReplicationEntryMsg lrEntryMsg = utils.generateLogEntryMsg(1, numOpaqueEntries,
                 Address.NON_ADDRESS, topologyConfigId + 1, Address.NON_ADDRESS);
         metadataManager.setSnapshotAppliedComplete(lrEntryMsg, defaultSession);
-        Assert.assertEquals(0L, metadataManager.getReplicationStatus().size());
 
         // Verify the update operation succeed.
         lrEntryMsg = utils.generateLogEntryMsg(1, numOpaqueEntries,

@@ -9,7 +9,6 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
-import org.corfudb.infrastructure.logreplication.infrastructure.TopologyDescriptor;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatus;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationInfo;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SyncType;
@@ -86,6 +85,7 @@ public class LogReplicationMetadataManager {
 
     private Optional<Timer.Sample> snapshotSyncTimerSample = Optional.empty();
 
+    @Getter
     @Setter
     private long topologyConfigId;
 
@@ -143,7 +143,6 @@ public class LogReplicationMetadataManager {
                 txn.putRecord(statusTable, session, defaultSinkStatus, null);
             }
         } else if (!txn.keySet(statusTable).contains(session)) {
-            // TODO pankti: Ask why only the status table is initialized if incoming is false(Source cluster)
             ReplicationStatus defaultSourceStatus = ReplicationStatus.newBuilder()
                     .setSourceStatus(SourceReplicationStatus.newBuilder()
                             .setRemainingEntriesToSend(-1L)
@@ -183,19 +182,13 @@ public class LogReplicationMetadataManager {
      * Get the replication metadata for a given LR session and set it to default values if no metadata is found
      *
      * @param session   unique identifier for LR session
-     * @param setIfNotFound initialize the metadata to default values and current topology config id if not found
      * @return          replication metadata info
      */
-    public ReplicationMetadata getReplicationMetadata(LogReplicationSession session, boolean setIfNotFound) {
+    public ReplicationMetadata getReplicationMetadata(LogReplicationSession session) {
         ReplicationMetadata metadata;
 
         try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
             metadata = queryReplicationMetadata(txn, session);
-
-            if (metadata == null && setIfNotFound) {
-                metadata = getDefaultMetadata(topologyConfigId);
-                txn.putRecord(metadataTable, session, metadata, null);
-            }
             txn.commit();
         }
         return metadata;

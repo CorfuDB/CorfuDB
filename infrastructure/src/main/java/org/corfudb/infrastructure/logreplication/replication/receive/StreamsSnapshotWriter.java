@@ -294,8 +294,7 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
         // This variable reflects the minimum timestamp for all shadow streams in the current snapshot cycle.
         // We seek up to this address, assuming that no trim should occur beyond this snapshot start
         long currentMinShadowStreamTimestamp =
-            metadataManager.getReplicationMetadata(session, false).
-                getCurrentCycleMinShadowStreamTs();
+            metadataManager.getReplicationMetadata(session).getCurrentCycleMinShadowStreamTs();
         OpaqueStream shadowOpaqueStream = new OpaqueStream(rt.getStreamsView().get(shadowStreamId, options));
         shadowOpaqueStream.seek(currentMinShadowStreamTimestamp);
         Stream<OpaqueEntry> shadowStream = shadowOpaqueStream.streamUpTo(snapshot);
@@ -404,8 +403,7 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
 
         // Get the number of entries to apply
         long sequenceNumber =
-            metadataManager.getReplicationMetadata(session, false)
-                .getLastSnapshotTransferredSeqNumber();
+            metadataManager.getReplicationMetadata(session).getLastSnapshotTransferredSeqNumber();
 
         if (sequenceNumber != Address.NON_ADDRESS) {
             log.debug("Start applying shadow streams, seqNum={}", sequenceNumber);

@@ -1052,7 +1052,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         // Simulate negotiation. Return metadata from the sink
         ReplicationMetadata metadata = sourceDataSender.getSinkManager()
                 .getMetadataManager()
-                .getReplicationMetadata(session, false);
+                .getReplicationMetadata(session);
         LogReplicationMetadataResponseMsg negotiationResponse = LogReplicationMetadataResponseMsg.newBuilder()
                 .setTopologyConfigID(metadata.getTopologyConfigId())
                 .setVersion(metadata.getVersion())
@@ -1357,14 +1357,14 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     }
 
     private void verifyPersistedSnapshotMetadata() {
-        ReplicationMetadata metadata = metadataManager.getReplicationMetadata(session, false);
+        ReplicationMetadata metadata = metadataManager.getReplicationMetadata(session);
         long lastSnapshotStart = metadata.getLastSnapshotStarted();
         long lastSnapshotDone = metadata.getLastSnapshotApplied();
         assertThat(lastSnapshotStart).isEqualTo(lastSnapshotDone);
     }
 
     private void verifyPersistedLogEntryMetadata() {
-        long lastLogProcessed = metadataManager.getReplicationMetadata(session, false)
+        long lastLogProcessed = metadataManager.getReplicationMetadata(session)
                 .getLastLogEntryBatchProcessed();
         assertThat(expectedAckTimestamp.get() == lastLogProcessed).isTrue();
     }

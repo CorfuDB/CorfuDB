@@ -88,12 +88,12 @@ public class LogReplicationServerTest {
 
         lrServer.setLeadership(true);
         doReturn(LogReplicationMetadata.ReplicationMetadata.getDefaultInstance()).when(metadataManager)
-            .getReplicationMetadata(session, false);
+            .getReplicationMetadata(session);
         doReturn(metadataManager).when(sessionManager).getMetadataManager();
 
         lrServer.getHandlerMethods().handle(request, mockHandlerContext, mockServerRouter);
 
-        verify(metadataManager).getReplicationMetadata(session, false);
+        verify(metadataManager).getReplicationMetadata(session);
     }
 
     /**

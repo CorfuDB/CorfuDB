@@ -47,7 +47,7 @@ public class LogEntryWriterTest extends AbstractViewTest {
         Mockito.doReturn(txnContext).when(metadataManager).getTxnContext();
         Mockito.doReturn(getDefaultMetadata()).when(metadataManager).queryReplicationMetadata(txnContext,
             getDefaultSession());
-        Mockito.doReturn(getDefaultMetadata()).when(metadataManager).getReplicationMetadata(getDefaultSession(), false);
+        Mockito.doReturn(getDefaultMetadata()).when(metadataManager).getReplicationMetadata(getDefaultSession());
 
         logEntryWriter = new LogEntryWriter(metadataManager, getDefaultSession(),
                 new LogReplicationContext(new LogReplicationConfigManager(corfuRuntime), topologyConfigId,

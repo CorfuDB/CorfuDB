@@ -224,7 +224,7 @@ public class LogReplicationSinkManager implements DataReceiver {
         logEntryWriter = new LogEntryWriter(metadataManager, session, context);
 
         logEntrySinkBufferManager = new LogEntrySinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,
-                metadataManager.getReplicationMetadata(session, false)
+                metadataManager.getReplicationMetadata(session)
                     .getLastLogEntryApplied(), this);
     }
 
@@ -342,7 +342,7 @@ public class LogReplicationSinkManager implements DataReceiver {
     }
 
     private void processSnapshotSyncApplied(LogReplicationEntryMsg entry) {
-        ReplicationMetadata metadata = metadataManager.getReplicationMetadata(session, false);
+        ReplicationMetadata metadata = metadataManager.getReplicationMetadata(session);
         long lastAppliedBaseSnapshotTimestamp = metadata.getLastSnapshotApplied();
         UuidMsg latestSnapshotSyncCycleId = metadata.getCurrentSnapshotCycleId();
         UuidMsg ackSnapshotSyncCycleId = entry.getMetadata().getSyncRequestId();
@@ -419,7 +419,7 @@ public class LogReplicationSinkManager implements DataReceiver {
         // TODO V2: If the sink crashes in the middle of a snapshot transfer cycle, a SNAPSHOT_START message
         //  won't come and the buffer will not get created, resulting in an NPE
         snapshotSinkBufferManager = new SnapshotSinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,
-            metadataManager.getReplicationMetadata(session, false).getLastSnapshotTransferredSeqNumber(),
+            metadataManager.getReplicationMetadata(session).getLastSnapshotTransferredSeqNumber(),
             this);
         rxState = RxState.SNAPSHOT_SYNC;
 
@@ -455,7 +455,7 @@ public class LogReplicationSinkManager implements DataReceiver {
         // Create the Sink Buffer Manager with the last processed timestamp as the snapshot timestamp (log entry
         // batch processed timestamp is already updated to the snapshot timestamp
         logEntrySinkBufferManager = new LogEntrySinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,
-                metadataManager.getReplicationMetadata(session, false)
+                metadataManager.getReplicationMetadata(session)
                     .getLastLogEntryBatchProcessed(), this);
         logEntryWriter.reset(entry.getMetadata().getSnapshotTimestamp(), entry.getMetadata().getSnapshotTimestamp());
 
@@ -564,7 +564,7 @@ public class LogReplicationSinkManager implements DataReceiver {
      *
      * */
     public void reset() {
-        ReplicationMetadata metadata = metadataManager.getReplicationMetadata(session, false);
+        ReplicationMetadata metadata = metadataManager.getReplicationMetadata(session);
         log.debug("Reset sink manager, lastAppliedSnapshotTs={}, lastProcessedLogEntryTs={}", metadata.getLastSnapshotApplied(),
                 metadata.getLastLogEntryBatchProcessed());
         snapshotWriter.reset(topologyConfigId, metadata.getLastSnapshotApplied());
@@ -586,7 +586,7 @@ public class LogReplicationSinkManager implements DataReceiver {
      */
     private void resumeSnapshotApply() {
 
-        ReplicationMetadata metadata = metadataManager.getReplicationMetadata(session, false);
+        ReplicationMetadata metadata = metadataManager.getReplicationMetadata(session);
 
         // Signal start of snapshot sync to the writer, so data can be cleared (on old snapshot syncs)
         snapshotWriter.reset(topologyConfigId, metadata.getLastSnapshotStarted());
@@ -634,7 +634,7 @@ public class LogReplicationSinkManager implements DataReceiver {
     }
 
     public void startPendingSnapshotApply() {
-        ReplicationMetadata metadata = metadataManager.getReplicationMetadata(session, false);
+        ReplicationMetadata metadata = metadataManager.getReplicationMetadata(session);
 
         boolean isSnapshotApplyPending = (metadata.getLastSnapshotStarted() == metadata.getLastSnapshotTransferred()) &&
                 metadata.getLastSnapshotTransferred() > metadata.getLastSnapshotApplied();
