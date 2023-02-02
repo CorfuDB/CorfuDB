@@ -115,7 +115,7 @@ public class SessionManager {
      */
     @VisibleForTesting
     public SessionManager(@Nonnull TopologyDescriptor topology, CorfuRuntime corfuRuntime,
-                          Map<String, ClusterDescriptor> connectionEndpoints) {
+                          Map<String, ClusterDescriptor> connectionEndpoints, String localCorfuEndpoint) {
         this.topology = topology;
         this.runtime = corfuRuntime;
         this.corfuStore = new CorfuStore(corfuRuntime);
@@ -222,30 +222,12 @@ public class SessionManager {
 
                     for(ClusterDescriptor remoteSourceCluster : topology.getRemoteSourceClusters().values()) {
                         // TODO(V2): for now only creating sessions for FULL TABLE replication model (assumed as default)
-                        LogReplicationSession session = buildSession(remoteSourceCluster.clusterId, localClusterId);
-                        if (!sessions.contains(session)) {
-                            sessionsToAdd.add(session);
-                            if (connectionEndpoints.containsKey(remoteSourceCluster.getClusterId())) {
-                                outgoingSessions.add(session);
-                            } else {
-                                incomingSessions.add(session);
-                            }
-                            metadataManager.addSession(txn, session, topology.getTopologyConfigId(), true);
-                        }
+                        sessionBuilder(remoteSourceCluster.clusterId, localClusterId, sessionsToAdd, txn, connectionEndpoints, false);
                     }
 
                     for(ClusterDescriptor remoteSinkCluster : topology.getRemoteSinkClusters().values()) {
                         // TODO(V2): for now only creating sessions for FULL TABLE replication model (assumed as default)
-                        LogReplicationSession session = buildSession(localClusterId, remoteSinkCluster.clusterId);
-                        if (!sessions.contains(session)) {
-                            sessionsToAdd.add(session);
-                            if (connectionEndpoints.containsKey(remoteSinkCluster.getClusterId())) {
-                                outgoingSessions.add(session);
-                            } else {
-                                incomingSessions.add(session);
-                            }
-                            metadataManager.addSession(txn, session, topology.getTopologyConfigId(), false);
-                        }
+                        sessionBuilder(localClusterId, remoteSinkCluster.clusterId, sessionsToAdd, txn, connectionEndpoints, false);
                     }
                     txn.commit();
 
@@ -274,19 +256,35 @@ public class SessionManager {
                 incomingSessions.size(), sessions);
     }
 
+
     private void logNewlyAddedSessionInfo(Set<LogReplicationSession> newlyAddedSessions) {
         log.info("========= HashCode -> Session mapping for newly added session: =========");
         for (LogReplicationSession session : newlyAddedSessions) {
             log.info("HashCode: {}, Session: {}", session.hashCode(), session);
         }
     }
-    
-    private LogReplicationSession buildSession(String sourceClusterId, String sinkClusterId) {
-        return LogReplicationSession.newBuilder()
+
+    /**
+     * Build a session and add to incoming/outgoing session appropriately.
+     */
+    private void sessionBuilder(String sourceClusterId, String sinkClusterId,
+                                Set<LogReplicationSession> sessionsToAdd, TxnContext txn,
+                                Map<String, ClusterDescriptor> connectionEndpoints, boolean isSource) {
+        LogReplicationSession session = LogReplicationSession.newBuilder()
                 .setSourceClusterId(sourceClusterId)
                 .setSinkClusterId(sinkClusterId)
                 .setSubscriber(getDefaultSubscriber())
                 .build();
+
+        if (!sessions.contains(session)) {
+            sessionsToAdd.add(session);
+            if (connectionEndpoints.containsKey(sourceClusterId) || connectionEndpoints.containsKey(sinkClusterId)) {
+                outgoingSessions.add(session);
+            } else {
+                incomingSessions.add(session);
+            }
+            metadataManager.addSession(txn, session, topology.getTopologyConfigId(), isSource);
+        }
     }
 
     /**

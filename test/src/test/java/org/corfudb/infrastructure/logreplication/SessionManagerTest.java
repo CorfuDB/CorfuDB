@@ -43,7 +43,8 @@ public class SessionManagerTest extends AbstractViewTest {
     public void testSessionMgrWithOutgoingSession() {
         DefaultClusterManager defaultClusterManager = new DefaultClusterManager();
         topology = defaultClusterManager.generateDefaultValidConfig();
-        SessionManager sessionManager = new SessionManager(topology, corfuRuntime, fetchConnectionEndpoint(defaultClusterManager));
+        SessionManager sessionManager = new SessionManager(topology, corfuRuntime,
+                fetchConnectionEndpoint(defaultClusterManager), defaultClusterManager.getCorfuEndpoint());
         String sourceClusterId = "456e4567-e89b-12d3-a456-556642440001";
         int numSourceCluster = topology.getRemoteSourceClusters().size();
 
@@ -62,7 +63,8 @@ public class SessionManagerTest extends AbstractViewTest {
         DefaultClusterManager defaultClusterManager = new DefaultClusterManager();
         topology = defaultClusterManager.generateDefaultValidConfig();
 
-        SessionManager sessionManager = new SessionManager(topology, corfuRuntime, fetchConnectionEndpoint(defaultClusterManager));
+        SessionManager sessionManager = new SessionManager(topology, corfuRuntime,
+                fetchConnectionEndpoint(defaultClusterManager), defaultClusterManager.getCorfuEndpoint());
         String sinkClusterId = "456e4567-e89b-12d3-a456-556642440002";
         int numSinkCluster = topology.getRemoteSinkClusters().size();
 
@@ -75,7 +77,8 @@ public class SessionManagerTest extends AbstractViewTest {
     private Map<String, ClusterDescriptor> fetchConnectionEndpoint(DefaultClusterManager defaultClusterManager) {
         Set<LogReplicationClusterInfo.ClusterConfigurationMsg> connectionEndpointsMsgs = defaultClusterManager.fetchConnectionEndpoints();
         Map<String, ClusterDescriptor> connectionEndpoints = new HashMap<>();
-        connectionEndpointsMsgs.stream().forEach(clusterMsg -> connectionEndpoints.put(clusterMsg.getId(), new ClusterDescriptor(clusterMsg)));
+        connectionEndpointsMsgs.stream().forEach(clusterMsg ->
+                connectionEndpoints.put(clusterMsg.getId(), new ClusterDescriptor(clusterMsg)));
 
         return connectionEndpoints;
     }
