@@ -86,6 +86,7 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
 
     private ConfigStreamListener configStreamListener;
 
+    @Getter
     private String corfuEndpoint = "localhost:9000";
 
     private DefaultClusterConfig topology;
