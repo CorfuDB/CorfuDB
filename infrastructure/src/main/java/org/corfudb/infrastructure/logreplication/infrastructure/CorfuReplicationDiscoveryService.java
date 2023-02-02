@@ -513,7 +513,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
      *
      * @param newTopology new discovered topology
      */
-    public void onClusterRoleChange(TopologyDescriptor newTopology) {
+    private void onClusterRoleChange(TopologyDescriptor newTopology) {
 
         log.debug("OnClusterRoleChange, topology={}", newTopology);
 
@@ -608,6 +608,9 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
      *
      * @param newTopology the new discovered topology
      */
+    // TODO V2: This method can be renamed to something more generic.  It is the default handling for any topology
+    //  change where the role has not changed.  This method assumes that only Sink clusters can change.  Once more
+    //  topologies are supported, Source clusters can also be added/removed.
     private void onSinkClusterAddRemove(TopologyDescriptor newTopology) {
         log.debug("Sink Cluster has been added or removed");
 

@@ -153,17 +153,10 @@ public class CorfuReplicationManager {
         }
     }
 
-    /**
-     * Update Log Replication Runtime config id.
-     */
-    private void updateRuntimeConfigId(TopologyDescriptor newConfig) {
-        sessionRuntimeMap.values().forEach(runtime -> runtime.updateFSMConfigId(newConfig));
-    }
-
     public void refreshRuntime(LogReplicationSession session, ClusterDescriptor cluster, long topologyConfigId) {
         // The connection id or other transportation plugin's info could've changed for existing Sink clusters,
         // updating the routers will re-establish the connection to the correct endpoints/nodes
-        sessionRuntimeMap.get(session).updateRouterClusterDescriptor(cluster, topologyConfigId);
+        sessionRuntimeMap.get(session).refresh(cluster, topologyConfigId);
     }
 
     /**

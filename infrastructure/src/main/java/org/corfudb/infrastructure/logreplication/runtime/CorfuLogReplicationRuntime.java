@@ -290,10 +290,6 @@ public class CorfuLogReplicationRuntime {
         to.onEntry(from);
     }
 
-    public synchronized void updateFSMConfigId(TopologyDescriptor newConfig) {
-        sourceManager.getLogReplicationFSM().setTopologyConfigId(newConfig.getTopologyConfigId());
-    }
-
     public synchronized void updateConnectedNodes(String nodeId) {
         connectedNodes.add(nodeId);
     }
@@ -322,8 +318,8 @@ public class CorfuLogReplicationRuntime {
         return connectedNodes;
     }
 
-    public synchronized void updateRouterClusterDescriptor(ClusterDescriptor clusterDescriptor, long topologyConfigId) {
-        log.warn("update router's cluster descriptor {}", clusterDescriptor);
+    public synchronized void refresh(ClusterDescriptor clusterDescriptor, long topologyConfigId) {
+        log.warn("Update router's cluster descriptor {}", clusterDescriptor);
         router.onClusterChange(clusterDescriptor);
         sourceManager.getLogReplicationFSM().setTopologyConfigId(topologyConfigId);
     }
