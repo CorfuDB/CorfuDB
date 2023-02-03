@@ -211,7 +211,6 @@ public class SessionManager {
         Set<LogReplicationSession> sessionsToAdd = new HashSet<>();
         Set<LogReplicationSession> incomingSessionsToAdd = new HashSet<>();
         Set<LogReplicationSession> outgoingSessionsToAdd = new HashSet<>();
-        Map<String, ClusterDescriptor> remoteClusterEndpoints = topology.getRemoteClusterEndpoints();
 
         try {
             String localClusterId = topology.getLocalClusterDescriptor().getClusterId();
@@ -219,16 +218,20 @@ public class SessionManager {
             IRetry.build(IntervalRetry.class, () -> {
                 try (TxnContext txn = corfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
 
-                    for(ClusterDescriptor remoteSourceCluster : topology.getRemoteSourceClusters().values()) {
-                        // TODO(V2): for now only creating sessions for FULL TABLE replication model (assumed as default)
-                        constructSession(remoteSourceCluster.clusterId, localClusterId, sessionsToAdd, txn,
-                                remoteClusterEndpoints, true);
-                    }
-
                     for(ClusterDescriptor remoteSinkCluster : topology.getRemoteSinkClusters().values()) {
                         // TODO(V2): for now only creating sessions for FULL TABLE replication model (assumed as default)
-                        constructSession(localClusterId, remoteSinkCluster.clusterId, sessionsToAdd, txn,
-                                remoteClusterEndpoints, false);
+                        LogReplicationSession session = constructSession(localClusterId, remoteSinkCluster.clusterId);
+                        sessionsToAdd.add(session);
+                        outgoingSessions.add(session);
+                        metadataManager.addSession(txn, session, topology.getTopologyConfigId(), false);
+                    }
+
+                    for(ClusterDescriptor remoteSourceCluster : topology.getRemoteSourceClusters().values()) {
+                        // TODO(V2): for now only creating sessions for FULL TABLE replication model (assumed as default)
+                        LogReplicationSession session = constructSession(remoteSourceCluster.getClusterId(), localClusterId);
+                        sessionsToAdd.add(session);
+                        incomingSessionsToAdd.add(session);
+                        metadataManager.addSession(txn, session, topology.getTopologyConfigId(), true);
                     }
                     txn.commit();
 
@@ -268,24 +271,12 @@ public class SessionManager {
     /**
      * Build a session and add to incoming/outgoing session appropriately.
      */
-    private void constructSession(String sourceClusterId, String sinkClusterId,
-                                  Set<LogReplicationSession> sessionsToAdd, TxnContext txn,
-                                  Map<String, ClusterDescriptor> connectionEndpoints, boolean isIncoming) {
-        LogReplicationSession session = LogReplicationSession.newBuilder()
+    private LogReplicationSession constructSession(String sourceClusterId, String sinkClusterId) {
+        return LogReplicationSession.newBuilder()
                 .setSourceClusterId(sourceClusterId)
                 .setSinkClusterId(sinkClusterId)
                 .setSubscriber(getDefaultSubscriber())
                 .build();
-
-        if (!sessions.contains(session)) {
-            sessionsToAdd.add(session);
-            if (connectionEndpoints.containsKey(sourceClusterId) || connectionEndpoints.containsKey(sinkClusterId)) {
-                outgoingSessions.add(session);
-            } else {
-                incomingSessions.add(session);
-            }
-            metadataManager.addSession(txn, session, topology.getTopologyConfigId(), isIncoming);
-        }
     }
 
     /**
