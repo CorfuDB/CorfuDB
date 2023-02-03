@@ -635,7 +635,7 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
                         clusterManager.forceSnapshotSync(session);
                     } catch (LogReplicationDiscoveryServiceException e) {
                         log.warn("Caught a RuntimeException ", e);
-                        ClusterRole role = clusterManager.getCorfuReplicationDiscoveryService().getLocalClusterRoleType();
+                        ClusterRole role = clusterManager.topologyConfig.getLocalClusterDescriptor().getRole();
                         if (role == ClusterRole.SOURCE) {
                             log.error("The current cluster role is SOURCE but forcedSnapshot Sync failed with an " +
                                     "exception", e);
