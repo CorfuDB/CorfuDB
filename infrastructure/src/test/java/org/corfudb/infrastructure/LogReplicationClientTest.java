@@ -38,6 +38,7 @@ import static org.mockito.Mockito.verify;
 public class LogReplicationClientTest {
 
     private final static String SAMPLE_CLUSTER = "CLUSTER";
+    private final static int SAMPLE_PORT = 0;
 
     LogReplicationClientRouter lrClient;
     LogReplicationRuntimeParameters lrRuntimeParameters;
@@ -51,7 +52,8 @@ public class LogReplicationClientTest {
         handlerMap = spy(new ConcurrentHashMap<>());
         lrFsm = mock(CorfuLogReplicationRuntime.class);
         lrRuntimeParameters = mock(LogReplicationRuntimeParameters.class);
-        doReturn(new ClusterDescriptor(SAMPLE_CLUSTER)).when(lrRuntimeParameters).getRemoteClusterDescriptor();
+        doReturn(new ClusterDescriptor(SAMPLE_CLUSTER, ClusterDescriptor.ClusterRole.SOURCE, SAMPLE_PORT))
+                .when(lrRuntimeParameters).getRemoteClusterDescriptor();
         lrClient = spy(new LogReplicationClientRouter(lrRuntimeParameters, lrFsm));
 
         lrClientHandler = spy(new LogReplicationHandler());

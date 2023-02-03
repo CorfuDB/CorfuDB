@@ -79,8 +79,7 @@ public class SessionManager {
      * @param upgradeManager      upgrade management module
      */
     public SessionManager(@Nonnull TopologyDescriptor topology, CorfuRuntime corfuRuntime,
-                          ServerContext serverContext, LogReplicationUpgradeManager upgradeManager,
-                          Map<String, ClusterDescriptor> connectionEndpoints) {
+                          ServerContext serverContext, LogReplicationUpgradeManager upgradeManager) {
         this.topology = topology;
         this.runtime = corfuRuntime;
         this.corfuStore = new CorfuStore(corfuRuntime);
@@ -104,7 +103,7 @@ public class SessionManager {
         this.upgradeManager = upgradeManager;
         replicationContext = new LogReplicationContext(configManager, topology.getTopologyConfigId(), localCorfuEndpoint);
 
-        createSessions(connectionEndpoints);
+        createSessions();
     }
 
     /**
@@ -114,8 +113,7 @@ public class SessionManager {
      * @param corfuRuntime        runtime for database access
      */
     @VisibleForTesting
-    public SessionManager(@Nonnull TopologyDescriptor topology, CorfuRuntime corfuRuntime,
-                          Map<String, ClusterDescriptor> connectionEndpoints, String localCorfuEndpoint) {
+    public SessionManager(@Nonnull TopologyDescriptor topology, CorfuRuntime corfuRuntime, String localCorfuEndpoint) {
         this.topology = topology;
         this.runtime = corfuRuntime;
         this.corfuStore = new CorfuStore(corfuRuntime);
@@ -129,7 +127,7 @@ public class SessionManager {
         this.upgradeManager = null;
         replicationContext = new LogReplicationContext(configManager, topology.getTopologyConfigId(), localCorfuEndpoint);
 
-        createSessions(connectionEndpoints);
+        createSessions();
     }
 
     /**
@@ -137,8 +135,7 @@ public class SessionManager {
      *
      * @param newTopology   the new discovered topology
      */
-    public synchronized void refresh(@Nonnull TopologyDescriptor newTopology,
-                                     Map<String, ClusterDescriptor> connectionEndpoints) {
+    public synchronized void refresh(@Nonnull TopologyDescriptor newTopology) {
 
         // TODO V2: Make this method a no-op if the new topology has not changed.  Need to override equals and
         //  hashcode in all TopologyDescriptor and all its members.  It is being taken care of in a subsequent PR
@@ -187,7 +184,7 @@ public class SessionManager {
                 stopReplication(sessionsToRemove);
 
                 updateReplicationParameters(sessionsUnchanged);
-                createSessions(connectionEndpoints);
+                createSessions();
                 return null;
             }).run();
         } catch (InterruptedException e) {
@@ -210,10 +207,11 @@ public class SessionManager {
      * Create sessions (outgoing and incoming) along with metadata
      *
      */
-    private void createSessions(Map<String, ClusterDescriptor> connectionEndpoints) {
+    private void createSessions() {
         Set<LogReplicationSession> sessionsToAdd = new HashSet<>();
         Set<LogReplicationSession> incomingSessionsToAdd = new HashSet<>();
         Set<LogReplicationSession> outgoingSessionsToAdd = new HashSet<>();
+        Map<String, ClusterDescriptor> connectionEndpoints = topology.getConnectionEndpoints();
 
         try {
             String localClusterId = topology.getLocalClusterDescriptor().getClusterId();
@@ -350,7 +348,7 @@ public class SessionManager {
 
 
 
-    public synchronized void startReplication(Map<String, ClusterDescriptor> endpoints) {
+    public synchronized void startReplication() {
 
         log.info("Start replication for all sessions count={}", outgoingSessions.size());
 
@@ -359,7 +357,7 @@ public class SessionManager {
                     metadataManager, configManager.getServerContext().getPluginConfigFilePath(), runtime, upgradeManager);
         }
 
-        createSessions(endpoints);
+        createSessions();
         outgoingSessions.forEach(session -> {
             ClusterDescriptor remoteClusterDescriptor = topology.getRemoteSinkClusters().get(session.getSinkClusterId());
             replicationManager.start(remoteClusterDescriptor, session, replicationContext);

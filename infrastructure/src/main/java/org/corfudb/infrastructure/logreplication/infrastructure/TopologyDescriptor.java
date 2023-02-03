@@ -4,16 +4,11 @@ import com.google.common.annotations.VisibleForTesting;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.ClusterConfigurationMsg;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.ClusterRole;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.TopologyConfigurationMsg;
 import org.corfudb.runtime.LogReplication;
 
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -55,7 +50,10 @@ public class TopologyDescriptor {
 
     // Map of ClusterId -> ClusterConfigurationMsg. Contains the complete view of topology.
     @Getter
-    private final Map<String, ClusterConfigurationMsg> allClusterMsgsInTopology = new HashMap<>();
+    private final Map<String, ClusterDescriptor> allClustersInTopology = new HashMap<>();
+
+    @Getter
+    private final Map<String, ClusterDescriptor> connectionEndpoints = new HashMap<>();
 
     /**
      * Defines the cluster to which this node belongs to.
@@ -70,37 +68,40 @@ public class TopologyDescriptor {
     /**
      * Constructor
      *
-     * @param topologyMessage  topology message
+     * @param topologyConfigId  topology ID
      * @param localNodeId      the identifier of this node
      * @param remoteSinkToReplicationModel  remote Sink to local cluster and corresponding replication models
      * @param remoteSourceToReplicationModel  remote Source to local cluster and corresponding replication models
+     * @param connectionEndpoints remote clusters to which the local cluster will initiate connection
+     * @param otherClusters      remote clusters which are neither Source nor Sink to the local cluster
      */
-    public TopologyDescriptor(TopologyConfigurationMsg topologyMessage, String localNodeId,
-                              Map<ClusterConfigurationMsg, Set<LogReplication.ReplicationModel>> remoteSinkToReplicationModel,
-                              Map<ClusterConfigurationMsg, Set<LogReplication.ReplicationModel>> remoteSourceToReplicationModel) {
-        this.topologyConfigId = topologyMessage.getTopologyConfigID();
+    public TopologyDescriptor(long topologyConfigId, String localNodeId,
+                              Map<ClusterDescriptor, Set<LogReplication.ReplicationModel>> remoteSinkToReplicationModel,
+                              Map<ClusterDescriptor, Set<LogReplication.ReplicationModel>> remoteSourceToReplicationModel,
+                              Set<ClusterDescriptor> connectionEndpoints, Set<ClusterDescriptor> otherClusters) {
+
+        this.topologyConfigId = topologyConfigId;
+        this.remoteSinkClusterToReplicationModels = remoteSinkToReplicationModel;
+        this.remoteSourceClusterToReplicationModels = remoteSourceToReplicationModel;
+        connectionEndpoints.forEach(cluster -> this.connectionEndpoints.put(cluster.getClusterId(), cluster));
+
         this.remoteSinkClusters = new HashMap<>();
-        this.remoteSinkClusterToReplicationModels = new HashMap<>();
-
-
-        remoteSinkToReplicationModel.entrySet().stream().forEach(e -> {
-            ClusterDescriptor cluster = new ClusterDescriptor(e.getKey());
-            remoteSinkClusterToReplicationModels.put(cluster, new HashSet<>(e.getValue()));
+        remoteSinkToReplicationModel.keySet().stream().forEach(cluster -> {
             remoteSinkClusters.put(cluster.getClusterId(), cluster);
+            allClustersInTopology.put(cluster.getClusterId(), cluster);
         });
 
 
         this.remoteSourceClusters = new HashMap<>();
-        this.remoteSourceClusterToReplicationModels = new HashMap<>();
-
-        remoteSourceToReplicationModel.entrySet().stream().forEach(e -> {
-            ClusterDescriptor cluster = new ClusterDescriptor(e.getKey());
-            remoteSourceClusterToReplicationModels.put(cluster, new HashSet<>(e.getValue()));
+        remoteSourceToReplicationModel.keySet().stream().forEach(cluster -> {
             remoteSourceClusters.put(cluster.getClusterId(), cluster);
+            allClustersInTopology.put(cluster.getClusterId(), cluster);
         });
 
-        topologyMessage.getClustersList().stream()
-                .forEach(clusterMsg -> allClusterMsgsInTopology.put(clusterMsg.getId(), clusterMsg));
+        otherClusters.stream().forEach(cluster -> {
+            remoteSourceClusters.put(cluster.getClusterId(), cluster);
+            allClustersInTopology.put(cluster.getClusterId(), cluster);
+        });
 
         setLocalDescriptor(localNodeId);
     }
@@ -108,58 +109,36 @@ public class TopologyDescriptor {
     /**
      * Constructor
      *
-     * @param topologyConfigId topology configuration identifier (epoch)
-     * @param remoteSourceClusters source clusters
-     * @param remoteSinkClusters sink clusters
-     * @param localNodeId       the identifier of this node
+     * @param topologyConfigId   topology ID
+     * @param remoteSinkToReplicationModel   remote Sink to local cluster and corresponding replication models
+     * @param remoteSourceToReplicationModel  remote Source to local cluster and corresponding replication models
+     * @param allClusters  all clusters in topology
+     * @param connectionEndpoints  remote clusters to which the local cluster will initiate connection
+     * @param localNodeId  the identifier of this node
      */
-    private TopologyDescriptor(long topologyConfigId, @NonNull List<ClusterDescriptor> remoteSourceClusters,
-                              @NonNull List<ClusterDescriptor> remoteSinkClusters) {
+    @VisibleForTesting
+    public TopologyDescriptor(long topologyConfigId,
+                              @NonNull Map<ClusterDescriptor, Set<LogReplication.ReplicationModel>> remoteSinkToReplicationModel,
+                              @NonNull Map<ClusterDescriptor, Set<LogReplication.ReplicationModel>> remoteSourceToReplicationModel,
+                              @NonNull Map<String, ClusterDescriptor> allClusters,
+                              Set<ClusterDescriptor> connectionEndpoints,
+                              String localNodeId) {
+
         this.topologyConfigId = topologyConfigId;
         this.remoteSourceClusters = new HashMap<>();
         this.remoteSinkClusters = new HashMap<>();
-        this.remoteSourceClusterToReplicationModels = new HashMap<>();
-        this.remoteSinkClusterToReplicationModels = new HashMap<>();
+        this.remoteSourceClusterToReplicationModels = new HashMap<>(remoteSourceToReplicationModel);
+        this.remoteSinkClusterToReplicationModels = new HashMap<>(remoteSinkToReplicationModel);
+        connectionEndpoints.forEach(cluster -> this.connectionEndpoints.put(cluster.getClusterId(), cluster));
 
-        remoteSourceClusters.forEach(sourceCluster -> {
-            this.remoteSourceClusters.put(sourceCluster.getClusterId(), sourceCluster);
-            this.remoteSourceClusterToReplicationModels.putIfAbsent(sourceCluster, new HashSet<>());
-            this.remoteSourceClusterToReplicationModels.get(sourceCluster).add(LogReplication.ReplicationModel.FULL_TABLE);
-        });
+        remoteSourceClusterToReplicationModels.keySet().forEach(sourceCluster ->
+                this.remoteSourceClusters.put(sourceCluster.getClusterId(), sourceCluster));
 
-        remoteSinkClusters.forEach(sinkCluster -> {
-            this.remoteSinkClusters.put(sinkCluster.getClusterId(), sinkCluster);
-            this.remoteSinkClusterToReplicationModels.putIfAbsent(sinkCluster, new HashSet<>());
-            this.remoteSinkClusterToReplicationModels.get(sinkCluster).add(LogReplication.ReplicationModel.FULL_TABLE);
-        });
-    }
+        remoteSinkClusterToReplicationModels.keySet().forEach(sinkCluster ->
+                this.remoteSinkClusters.put(sinkCluster.getClusterId(), sinkCluster));
 
-    /**
-     * Constructor
-     *
-     * @param topologyConfigId topology configuration identifier (epoch)
-     * @param remoteSourceClusters remote source clusters
-     * @param remoteSinkClusters remote sink clusters
-     * @param allClusters all clusters in topology
-     */
-    @VisibleForTesting
-    public TopologyDescriptor(long topologyConfigId, @NonNull List<ClusterDescriptor> remoteSourceClusters,
-                              @NonNull List<ClusterDescriptor> remoteSinkClusters,
-                              @NonNull List<ClusterDescriptor> allClusters,  String localNodeId) {
-        this(topologyConfigId, remoteSourceClusters, remoteSinkClusters);
-        allClusters.forEach(cluster -> allClusterMsgsInTopology.put(cluster.getClusterId(), cluster.convertToMessage()));
+        this.allClustersInTopology.putAll(allClusters);
         setLocalDescriptor(localNodeId);
-    }
-
-    /**
-     * Convert Topology Descriptor to ProtoBuf Definition
-     *
-     * @return topology protoBuf
-     */
-    public TopologyConfigurationMsg convertToMessage() {
-        return TopologyConfigurationMsg.newBuilder()
-                .setTopologyConfigID(topologyConfigId)
-                .addAllClusters(allClusterMsgsInTopology.values()).build();
     }
 
     /**
@@ -169,24 +148,22 @@ public class TopologyDescriptor {
      */
     public void setLocalDescriptor(String nodeId) {
 
-        for (ClusterConfigurationMsg clusterMsg : allClusterMsgsInTopology.values()) {
-            for (LogReplicationClusterInfo.NodeConfigurationMsg nodeMsg : clusterMsg.getNodeInfoList()) {
-                if (nodeMsg.getNodeId().equals(nodeId)) {
-                    localClusterDescriptor = new ClusterDescriptor(clusterMsg);
-                    localNodeDescriptor =  new NodeDescriptor(nodeMsg.getAddress(), Integer.toString(nodeMsg.getPort()),
-                            clusterMsg.getId(), nodeMsg.getConnectionId(), nodeMsg.getNodeId());
+        for (ClusterDescriptor cluster : allClustersInTopology.values()) {
+            for (NodeDescriptor node : cluster.nodesDescriptors) {
+                if (node.getNodeId().equals(nodeId)) {
+                    localClusterDescriptor = cluster;
+                    localNodeDescriptor =  node;
                     return;
                 }
             }
         }
-        log.warn("Node {} does not belong to any cluster defined in {}", nodeId, allClusterMsgsInTopology.values());
+        log.warn("Node {} does not belong to any cluster defined in {}", nodeId, allClustersInTopology.values());
     }
 
     @Override
     public String toString() {
-        // Find clusters which are neither Source nor Sink
-        Set<ClusterDescriptor> otherClusters = new HashSet<>();
-        allClusterMsgsInTopology.values().stream().forEach(clusterMsg -> otherClusters.add(new ClusterDescriptor(clusterMsg)));
+        // Find clusters which are neither Source nor Sink for logging
+        Set<ClusterDescriptor> otherClusters = new HashSet<>(allClustersInTopology.values());
         Set<ClusterDescriptor> sourceOrSinkClusters = Stream.of(remoteSourceClusters.values(), remoteSinkClusters.values())
                 .flatMap(Collection::stream)
                 .collect(Collectors.toSet());

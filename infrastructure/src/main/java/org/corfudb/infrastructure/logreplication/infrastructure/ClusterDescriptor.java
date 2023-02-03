@@ -1,9 +1,7 @@
 package org.corfudb.infrastructure.logreplication.infrastructure;
 
+import com.google.common.annotations.VisibleForTesting;
 import lombok.Getter;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.ClusterConfigurationMsg;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.ClusterRole;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.NodeConfigurationMsg;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -16,34 +14,17 @@ public class ClusterDescriptor {
     private static int CORFU_PORT = 9000;
 
     @Getter
-    String clusterId;
+    final String clusterId;
 
     @Getter
-    ClusterRole role;
+    final ClusterRole role;
 
     @Getter
-    List<NodeDescriptor> nodesDescriptors;
+    final List<NodeDescriptor> nodesDescriptors;
 
     @Getter
-    private int corfuPort;    // Port on which Corfu DB runs on this cluster
+    final private int corfuPort;    // Port on which Corfu DB runs on this cluster
 
-    public ClusterDescriptor(String clusterId) {
-        this.clusterId = clusterId;
-    }
-
-    public ClusterDescriptor(ClusterConfigurationMsg clusterConfig) {
-        this.clusterId = clusterConfig.getId();
-        this.role = clusterConfig.getRole();
-        this.corfuPort = clusterConfig.getCorfuPort() != 0 ? clusterConfig.getCorfuPort() : CORFU_PORT;
-        this.nodesDescriptors = new ArrayList<>();
-        for (NodeConfigurationMsg nodeConfig : clusterConfig.getNodeInfoList()) {
-            NodeDescriptor newNode = new NodeDescriptor(nodeConfig.getAddress(),
-                    Integer.toString(nodeConfig.getPort()), clusterId,
-                    nodeConfig.getConnectionId(),
-                    nodeConfig.getNodeId());
-            this.nodesDescriptors.add(newNode);
-        }
-    }
 
     public ClusterDescriptor(ClusterDescriptor info, ClusterRole roleType) {
         this.clusterId = info.clusterId;
@@ -57,26 +38,12 @@ public class ClusterDescriptor {
         }
     }
 
+    @VisibleForTesting
     public ClusterDescriptor(String clusterId, ClusterRole roleType, int corfuPort) {
         this.clusterId = clusterId;
         this.role = roleType;
         this.corfuPort = corfuPort;
         nodesDescriptors = new ArrayList<>();
-    }
-
-    public ClusterConfigurationMsg convertToMessage() {
-        ArrayList<NodeConfigurationMsg> nodeInfoMsgs = new ArrayList<>();
-        for (NodeDescriptor nodeInfo : nodesDescriptors) {
-            nodeInfoMsgs.add(nodeInfo.convertToMessage());
-        }
-
-        ClusterConfigurationMsg clusterMsg = ClusterConfigurationMsg.newBuilder()
-                .setId(clusterId)
-                .setRole(role)
-                .setCorfuPort(corfuPort)
-                .addAllNodeInfo(nodeInfoMsgs)
-                .build();
-        return clusterMsg;
     }
 
     public static String listToString(List<?> list) {
@@ -114,5 +81,12 @@ public class ClusterDescriptor {
             }
         }
         return null;
+    }
+
+    public enum ClusterRole {
+        INVALID,
+        SOURCE,
+        SINK,
+        NONE,
     }
 }

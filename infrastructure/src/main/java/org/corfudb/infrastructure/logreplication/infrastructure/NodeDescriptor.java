@@ -2,9 +2,6 @@ package org.corfudb.infrastructure.logreplication.infrastructure;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.NodeConfigurationMsg;
-
-import java.util.UUID;
 
 /**
  * This class represents a Log Replication Node
@@ -33,15 +30,6 @@ public class NodeDescriptor {
         this.clusterId = siteId;
         this.connectionId = connectionId;
         this.nodeId = nodeId;
-    }
-
-    public NodeConfigurationMsg convertToMessage() {
-        NodeConfigurationMsg nodeConfig = NodeConfigurationMsg.newBuilder()
-                .setAddress(host)
-                .setPort(Integer.parseInt(port))
-                .setConnectionId(connectionId)
-                .setNodeId(nodeId).build();
-        return nodeConfig;
     }
 
     public String getEndpoint() {
