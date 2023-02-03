@@ -11,12 +11,10 @@ import org.corfudb.common.config.ConfigParamNames;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.logreplication.infrastructure.DiscoveryServiceEvent.DiscoveryServiceEventType;
+import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor.ClusterRole;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.CorfuReplicationClusterManagerAdapter;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.ClusterRole;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.TopologyConfigurationMsg;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEventInfoKey;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatus;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
@@ -311,7 +309,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
             return;
         }
 
-        sessionManager.refresh(topologyDescriptor, fetchConnectionEndpoints());
+        sessionManager.refresh(topologyDescriptor);
 
         if (isSource()) {
             logReplicationEventListener = new LogReplicationEventListener(this, getCorfuRuntime());
@@ -370,11 +368,6 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         return NodeLocator.parseString(localEndpoint).getHost() + ":" + corfuPort;
     }
 
-    @Override
-    public ClusterRole getLocalClusterRoleType() {
-        return topologyDescriptor.getLocalClusterDescriptor().getRole();
-    }
-
     /**
      * Register interest on Log Replication Lock.
      * <p>
@@ -422,7 +415,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
             log.info("Start as Source (sender/replicator)");
             // TODO: Shama: currently the supported model is FULL_TABLE. So fetchConnectionEndpoints will get all SINKs.
             //  This will change in the connection Model PR where an endpoint can be SOURCE/SINK.
-            sessionManager.startReplication(fetchConnectionEndpoints());
+            sessionManager.startReplication();
             lockAcquireSample = recordLockAcquire(topologyDescriptor.getLocalClusterDescriptor().getRole());
             processCountOnLockAcquire();
         } else if (isSink()) {
@@ -439,15 +432,6 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         }
     }
 
-    private Map<String, ClusterDescriptor> fetchConnectionEndpoints() {
-        Set<LogReplicationClusterInfo.ClusterConfigurationMsg> clusterEndpointMsgs =
-                clusterManagerAdapter.fetchConnectionEndpoints();
-        Map<String, ClusterDescriptor> clusterIdToConnectionEndpoint = new HashMap<>();
-        clusterEndpointMsgs.stream().forEach(clusterConfigMsg ->
-                clusterIdToConnectionEndpoint.put(clusterConfigMsg.getId(),new ClusterDescriptor(clusterConfigMsg)));
-        return clusterIdToConnectionEndpoint;
-    }
-
     /**
      * Fetch current topology from cluster manager
      */
@@ -459,10 +443,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
             IRetry.build(ExponentialBackoffRetry.class, () -> {
                 try {
                     log.info("Fetching topology from cluster manager...");
-                    TopologyConfigurationMsg topologyMessage = clusterManagerAdapter.queryTopologyConfig(false);
-                    topologyDescriptor = new TopologyDescriptor(topologyMessage, localNodeId,
-                            clusterManagerAdapter.getRemoteSinkToReplicationModels(),
-                            clusterManagerAdapter.getRemoteSourceToReplicationModels());
+                    topologyDescriptor = clusterManagerAdapter.queryTopologyConfig(false);
                 } catch (Exception e) {
                     log.error("Caught exception while fetching topology. Retry.", e);
                     throw new RetryNeededException();
@@ -577,17 +558,15 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
      * @param event discovery event
      */
     public void processTopologyChangeNotification(DiscoveryServiceEvent event) {
-        if (event.getTopologyConfig().getTopologyConfigID() < topologyDescriptor.getTopologyConfigId()) {
+        if (event.getTopologyConfig().getTopologyConfigId() < topologyDescriptor.getTopologyConfigId()) {
             log.debug("Stale Topology Change Notification, current={}, received={}",
-                    topologyDescriptor.getTopologyConfigId(), event.getTopologyConfig().getTopologyConfigID());
+                    topologyDescriptor.getTopologyConfigId(), event.getTopologyConfig().getTopologyConfigId());
             return;
         }
 
         log.debug("Received topology change, topology={}", event.getTopologyConfig());
 
-        TopologyDescriptor discoveredTopology = new TopologyDescriptor(event.getTopologyConfig(), localNodeId,
-                clusterManagerAdapter.getRemoteSinkToReplicationModels(),
-                clusterManagerAdapter.getRemoteSourceToReplicationModels());
+        TopologyDescriptor discoveredTopology = event.getTopologyConfig();
 
         boolean isValid;
         try {
@@ -635,13 +614,13 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
 
         // Only process new sinks if the local cluster role is SOURCE
         if (isSource()) {
-            sessionManager.refresh(newTopology, fetchConnectionEndpoints());
-            sessionManager.startReplication(fetchConnectionEndpoints());
+            sessionManager.refresh(newTopology);
+            sessionManager.startReplication();
         } else {
             // Update the topology config id on the Sink components
             if (interClusterServerNode != null) {
                 interClusterServerNode.updateTopologyConfigId(newTopology.getTopologyConfigId());
-                sessionManager.refresh(newTopology, fetchConnectionEndpoints());
+                sessionManager.refresh(newTopology);
             }
         }
 
@@ -666,9 +645,9 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
                 localEndpoint, localNodeId, topology.getLocalClusterDescriptor(), topology);
             if (!bootstrapComplete) {
                 log.info("Bootstrap the Log Replication Service");
-                upgradeManager = new LogReplicationUpgradeManager(getCorfuRuntime(), serverContext.getPluginConfigFilePath());
-                sessionManager = new SessionManager(topologyDescriptor, getCorfuRuntime(), serverContext, upgradeManager,
-                        fetchConnectionEndpoints());
+                upgradeManager = new LogReplicationUpgradeManager(getCorfuRuntime(),
+                        serverContext.getPluginConfigFilePath());
+                sessionManager = new SessionManager(topologyDescriptor, getCorfuRuntime(), serverContext, upgradeManager);
                 performRoleBasedSetup();
                 registerToLogReplicationLock();
                 bootstrapComplete = true;
@@ -710,7 +689,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         notifyAll();
     }
 
-    public void updateTopology(LogReplicationClusterInfo.TopologyConfigurationMsg topologyConfig) {
+    public void updateTopology(TopologyDescriptor topologyConfig) {
         input(new DiscoveryServiceEvent(DiscoveryServiceEventType.DISCOVERED_TOPOLOGY, topologyConfig));
     }
 

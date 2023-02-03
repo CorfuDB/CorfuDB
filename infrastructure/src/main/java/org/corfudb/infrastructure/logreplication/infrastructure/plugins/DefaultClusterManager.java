@@ -5,15 +5,12 @@ import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
+import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor.ClusterRole;
 import org.corfudb.infrastructure.logreplication.infrastructure.CorfuReplicationDiscoveryService;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationDiscoveryServiceException;
 import org.corfudb.infrastructure.logreplication.infrastructure.NodeDescriptor;
 import org.corfudb.infrastructure.logreplication.infrastructure.SessionManager;
 import org.corfudb.infrastructure.logreplication.infrastructure.TopologyDescriptor;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.ClusterConfigurationMsg;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.ClusterRole;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.TopologyConfigurationMsg;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.CorfuRuntime;
@@ -30,19 +27,15 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterrupte
 import org.corfudb.runtime.view.Address;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 /**
  * This class extends CorfuReplicationClusterManagerAdapter, provides topology config API
@@ -91,18 +84,12 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
     private String corfuEndpoint = "localhost:9000";
 
     private DefaultClusterConfig topology;
-    private final Map<ClusterConfigurationMsg, Set<LogReplication.ReplicationModel>> remoteSourceToReplicationModels;
-    private final Map<ClusterConfigurationMsg, Set<LogReplication.ReplicationModel>> remoteSinkToReplicationModels;
-    private final Set<LogReplicationClusterInfo.ClusterConfigurationMsg> connectionEndPoints;
-
-    // Boolean to indicate if the topology triggered from test has been created for LR to consume.
-    private boolean topologyBucketsInitialized;
 
     @Getter
     public CorfuReplicationDiscoveryService corfuReplicationDiscoveryService;
 
     @Getter
-    public TopologyConfigurationMsg topologyConfig;
+    public TopologyDescriptor topologyConfig;
 
     public String localEndpoint;
 
@@ -111,10 +98,6 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
 
     public DefaultClusterManager() {
         topology = new DefaultClusterConfig();
-        remoteSourceToReplicationModels = new HashMap<>();
-        remoteSinkToReplicationModels = new HashMap<>();
-        connectionEndPoints = new HashSet<>();
-        topologyBucketsInitialized = false;
     }
 
     @Override
@@ -123,9 +106,9 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
     }
 
     @Override
-    public synchronized void updateTopologyConfig(TopologyConfigurationMsg newTopologyConfigMsg) {
-        if (newTopologyConfigMsg.getTopologyConfigID() > topologyConfig.getTopologyConfigID()) {
-            topologyConfig = newTopologyConfigMsg;
+    public synchronized void updateTopologyConfig(TopologyDescriptor newTopology) {
+        if (newTopology.getTopologyConfigId() > topologyConfig.getTopologyConfigId()) {
+            topologyConfig = newTopology;
             corfuReplicationDiscoveryService.updateTopology(topologyConfig);
         }
     }
@@ -198,9 +181,10 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
         log.info("Shutdown Cluster Manager completed.");
     }
 
-    public TopologyConfigurationMsg readConfig() {
-        List<ClusterConfigurationMsg> sourceClusters = new ArrayList<>();
-        List<ClusterConfigurationMsg> sinkClusters = new ArrayList<>();
+    public TopologyDescriptor readConfig() {
+        Map<ClusterDescriptor, Set<LogReplication.ReplicationModel>> sourceClustersToReplicationModel = new HashMap<>();
+        Map<ClusterDescriptor, Set<LogReplication.ReplicationModel>> sinkClustersToReplicationModel= new HashMap<>();
+        Map<String, ClusterDescriptor> allClusters = new HashMap<>();
 
         List<String> sourceClusterIds = topology.getSourceClusterIds();
         List<String> sourceCorfuPorts = topology.getSourceCorfuPorts();
@@ -228,7 +212,12 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
                         SOURCE_CLUSTER_NAME, sourceNodeIds.get(i), sourceNodeIds.get(i));
                 sourceCluster.getNodesDescriptors().add(nodeInfo);
             }
-            sourceClusters.add(sourceCluster.convertToMessage());
+            sourceClustersToReplicationModel.put(sourceCluster,
+                    new HashSet<LogReplication.ReplicationModel>(){
+                {
+                    add(LogReplication.ReplicationModel.FULL_TABLE);
+                }});
+            allClusters.put(sourceCluster.getClusterId(), sourceCluster);
         }
 
         // Setup sink cluster information
@@ -241,28 +230,21 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
                         SINK_CLUSTER_NAME, sinkNodeIds.get(i), sinkNodeIds.get(i));
                 sinkCluster.getNodesDescriptors().add(nodeInfo);
             }
-            sinkClusters.add(sinkCluster.convertToMessage());
+            sinkClustersToReplicationModel.put(sinkCluster,
+                    new HashSet<LogReplication.ReplicationModel>(){
+                        {
+                            add(LogReplication.ReplicationModel.FULL_TABLE);
+                        }});
+            allClusters.put(sinkCluster.getClusterId(), sinkCluster);
         }
 
-        return constructTopologyConfigurationMsg(0L, sourceClusters, sinkClusters, new ArrayList<>());
-    }
-
-    private TopologyConfigurationMsg constructTopologyConfigurationMsg(long configId,
-                                                                       List<ClusterConfigurationMsg> sourceClusters,
-                                                                       List<ClusterConfigurationMsg> sinkClusters,
-                                                                       List<ClusterConfigurationMsg> invalidClusters) {
-        List<ClusterConfigurationMsg> clusterConfigurationMsgs = Stream.of(sourceClusters, sinkClusters, invalidClusters)
-                .flatMap(Collection::stream)
-                .collect(Collectors.toList());
-
-        return TopologyConfigurationMsg.newBuilder().addAllClusters(clusterConfigurationMsgs)
-                .setTopologyConfigID(configId).build();
-
+        return new TopologyDescriptor(0L, sinkClustersToReplicationModel, sourceClustersToReplicationModel,
+                allClusters, null, localNodeId);
     }
 
 
     @Override
-    public TopologyConfigurationMsg queryTopologyConfig(boolean useCached) {
+    public TopologyDescriptor queryTopologyConfig(boolean useCached) {
         if (topologyConfig == null || !useCached) {
             topologyConfig = readConfig();
         }
@@ -271,121 +253,77 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
         return topologyConfig;
     }
 
-    public Map<LogReplicationClusterInfo.ClusterConfigurationMsg, Set<LogReplication.ReplicationModel>> getRemoteSourceToReplicationModels() {
-        log.debug("getRemoteSourceToReplicationModels {}", this.remoteSourceToReplicationModels);
-        return getClusterBucket(this.remoteSourceToReplicationModels);
-    }
+    private TopologyDescriptor createSingleSourceSinkTopologyBuckets() {
+        topologyConfig = readConfig();
 
+        Map<ClusterDescriptor, Set<LogReplication.ReplicationModel>> remoteSourceToReplicationModels = new HashMap<>();
+        Map<ClusterDescriptor, Set<LogReplication.ReplicationModel>> remoteSinkToReplicationModels = new HashMap<>();
+        Set<ClusterDescriptor> connectionEndPoints = new HashSet<>();
 
-    public Map<ClusterConfigurationMsg, Set<LogReplication.ReplicationModel>> getRemoteSinkToReplicationModels(){
-        log.debug("getRemoteSinkForReplicationModels {}", this.remoteSinkToReplicationModels);
-        return getClusterBucket(this.remoteSinkToReplicationModels);
-    }
+        ClusterDescriptor localCluster = findLocalCluster();
 
-    private Map<ClusterConfigurationMsg, Set<LogReplication.ReplicationModel>> getClusterBucket(
-            Map<ClusterConfigurationMsg, Set<LogReplication.ReplicationModel>> bucket) {
-        Map<ClusterConfigurationMsg, Set<LogReplication.ReplicationModel>> remoteClustersbucket;
-
-        synchronized (this) {
-            while (!topologyBucketsInitialized) {
-                try {
-                    log.warn("sleeping until the buckets are initialized by plugin");
-                    wait();
-                } catch (InterruptedException e) {
-                    log.error("The thread {} has been interrupted", Thread.currentThread().getName());
-                }
-            }
-            remoteClustersbucket = new HashMap<>(bucket);
+        if(localCluster.getRole().equals(ClusterRole.SOURCE)) {
+            remoteSinkToReplicationModels.put(topologyConfig.getRemoteSinkClusters().values().stream()
+                            .filter(cluster -> cluster.getClusterId()
+                                    .equals(DefaultClusterConfig.getSinkClusterIds().get(0)))
+                            .findFirst().get(),
+                    new HashSet<LogReplication.ReplicationModel>(){{ add(LogReplication.ReplicationModel.FULL_TABLE);
+            }});
+            connectionEndPoints.add(topologyConfig.getRemoteSinkClusters().values().stream()
+                    .filter(cluster -> cluster.getClusterId().equals(topology.getSinkCorfuPorts().get(0)))
+                    .findFirst().get());
+        } else {
+            remoteSourceToReplicationModels.put(topologyConfig.getRemoteSourceClusters().values().stream()
+                            .filter(cluster -> cluster.getClusterId()
+                                    .equals(DefaultClusterConfig.getSourceClusterIds().get(0)))
+                            .findFirst().get(),
+                    new HashSet<LogReplication.ReplicationModel>(){{ add(LogReplication.ReplicationModel.FULL_TABLE);
+                    }});
         }
-        return remoteClustersbucket;
+        log.info("new topology has clusters: source: {} sink: {} connectionEndpoints: {}",
+                remoteSourceToReplicationModels, remoteSinkToReplicationModels, connectionEndPoints);
+
+        topologyConfig = new TopologyDescriptor(++configId, remoteSinkToReplicationModels, remoteSourceToReplicationModels,
+                topologyConfig.getAllClustersInTopology(), connectionEndPoints, localNodeId);
+
+        return topologyConfig;
     }
 
-    public Set<LogReplicationClusterInfo.ClusterConfigurationMsg> fetchConnectionEndpoints() {
-        Set<LogReplicationClusterInfo.ClusterConfigurationMsg> connectionEnpoints;
-        synchronized (this) {
-            while (!topologyBucketsInitialized) {
-                try {
-                    log.warn("sleeping untill the buckets are initialized by plugin");
-                    wait();
-                } catch (InterruptedException e) {
-                    log.error("The thread {} has been interrupted", Thread.currentThread().getName());
-                }
-            }
-            connectionEnpoints = new HashSet<>(this.connectionEndPoints);
-        }
-        log.debug("fetchConnectionEndpoints {}", connectionEnpoints);
-        return connectionEnpoints;
-    }
+    private TopologyDescriptor createSingleSourceMultiSinkTopologyBuckets() {
+        topologyConfig = readConfig();
 
+        Map<ClusterDescriptor, Set<LogReplication.ReplicationModel>> remoteSourceToReplicationModels = new HashMap<>();
+        Map<ClusterDescriptor, Set<LogReplication.ReplicationModel>> remoteSinkToReplicationModels = new HashMap<>();
+        Set<ClusterDescriptor> connectionEndPoints = new HashSet<>();
 
-    private void createSingleSourceSinkTopologyBuckets() {
-        if(topologyConfig == null) {
-            topologyConfig = readConfig();
-        }
-        ClusterConfigurationMsg localCluster = findLocalCluster();
-        synchronized (this) {
-            if(localCluster.getRole().equals(ClusterRole.SOURCE)) {
-                this.remoteSinkToReplicationModels.putIfAbsent(topologyConfig.getClustersList().stream()
-                        .filter(clusterConfigurationMsg -> clusterConfigurationMsg.getId().equals(topology.getSinkClusterIds().get(0)))
-                        .findFirst().get(), new HashSet<LogReplication.ReplicationModel>(){{
+        ClusterDescriptor localCluster = findLocalCluster();
+
+        if(localCluster.getRole().equals(ClusterRole.SOURCE)) {
+            remoteSinkToReplicationModels.putAll(topologyConfig.getRemoteSinkClusterToReplicationModels());
+            topologyConfig.getRemoteSinkClusters().values().forEach(connectionEndPoints::add);
+        } else {
+            remoteSourceToReplicationModels.put(topologyConfig.getRemoteSourceClusters().values().stream()
+                    .filter(cluster -> cluster.getClusterId().equals(DefaultClusterConfig.getSourceClusterIds().get(0)))
+                    .findFirst().get(), new HashSet<LogReplication.ReplicationModel>() {
+                {
                     add(LogReplication.ReplicationModel.FULL_TABLE);
                 }});
-                this.connectionEndPoints.add(topologyConfig.getClustersList().stream()
-                        .filter(clusterConfigurationMsg -> clusterConfigurationMsg.getId().equals(topology.getSinkClusterIds().get(0)))
-                        .findFirst().get());
-            } else {
-                this.remoteSourceToReplicationModels.putIfAbsent(topologyConfig.getClustersList().stream()
-                        .filter(clusterConfigurationMsg -> clusterConfigurationMsg.getId().equals(topology.getSourceClusterIds().get(0)))
-                        .findFirst().get(), new HashSet<LogReplication.ReplicationModel>(){{
-                    add(LogReplication.ReplicationModel.FULL_TABLE);
-                }});
-            }
-            log.info("added the clusters: source: {} sink: {} connectionEndpoints: {}", this.remoteSourceToReplicationModels,
-                    this.remoteSinkToReplicationModels, this.connectionEndPoints);
-            topologyBucketsInitialized = true;
-            notify();
         }
+        log.info("new Topology single-source-multi-sink: source: {} sink: {} connectionEndpoints: {}",
+                remoteSourceToReplicationModels, remoteSinkToReplicationModels, connectionEndPoints);
+
+        topologyConfig = new TopologyDescriptor(++configId, remoteSinkToReplicationModels, remoteSourceToReplicationModels,
+                topologyConfig.getAllClustersInTopology(), connectionEndPoints, localNodeId);
+
+        return topologyConfig;
     }
 
-    private void createSingleSourceMultiSinkTopologyBuckets() {
-        if(topologyConfig == null) {
-            topologyConfig = readConfig();
-        }
-
-        ClusterConfigurationMsg localCluster = findLocalCluster();
-
-        synchronized (this) {
-            if(localCluster.getRole().equals(ClusterRole.SOURCE)) {
-                topologyConfig.getClustersList().stream()
-                        .filter(clusterConfigurationMsg -> clusterConfigurationMsg.getRole().equals(ClusterRole.SINK))
-                        .forEach(clusterConfigurationMsg -> {
-                            remoteSinkToReplicationModels.putIfAbsent(clusterConfigurationMsg, new HashSet<>());
-                            remoteSinkToReplicationModels.get(clusterConfigurationMsg)
-                                    .add(LogReplication.ReplicationModel.FULL_TABLE);
-                        });
-                topologyConfig.getClustersList().stream()
-                        .filter(clusterConfigurationMsg -> clusterConfigurationMsg.getRole().equals(ClusterRole.SINK))
-                        .forEach(connectionEndPoints::add);
-            } else {
-                this.remoteSourceToReplicationModels.putIfAbsent(topologyConfig.getClustersList().stream()
-                        .filter(clusterConfigurationMsg -> clusterConfigurationMsg.getId().equals(topology.getSourceClusterIds().get(0)))
-                        .findFirst().get(), new HashSet<LogReplication.ReplicationModel>() {{
-                    add(LogReplication.ReplicationModel.FULL_TABLE);
-                }});
-            }
-            log.info("added the multi sink clusters: source: {} sink: {} connectionEndpoints: {}", this.remoteSourceToReplicationModels,
-                    this.remoteSinkToReplicationModels, this.connectionEndPoints);
-            topologyBucketsInitialized = true;
-            notify();
-        }
-    }
-
-    private ClusterConfigurationMsg findLocalCluster() {
-        AtomicReference<ClusterConfigurationMsg> localCluster = new AtomicReference<>();
-        topologyConfig.getClustersList().stream().forEach(clusterMsg -> {
-            clusterMsg.getNodeInfoList().stream().forEach(nodeMsg -> {
+    private ClusterDescriptor findLocalCluster() {
+        AtomicReference<ClusterDescriptor> localCluster = new AtomicReference<>();
+        topologyConfig.getAllClustersInTopology().values().forEach(cluster -> {
+            cluster.getNodesDescriptors().stream().forEach(nodeMsg -> {
                 if (nodeMsg.getNodeId().equals(localNodeId)) {
-                    localCluster.set(clusterMsg);
+                    localCluster.set(cluster);
                 }
             });
         });
@@ -393,54 +331,48 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
 
         //true when a backup cluster becomes the source
         if(localCluster.get() == null) {
-            ClusterDescriptor currentSource = new ClusterDescriptor(topologyConfig.getClustersList().stream()
-                    .filter(clusterMsg -> clusterMsg.getId().equals(topology.getSourceClusterIds().get(1))).findFirst().get());
-
             ClusterDescriptor newLocalCluster = new ClusterDescriptor(
-                    currentSource.getClusterId(), ClusterRole.SOURCE,
+                    topology.getSourceClusterIds().get(1), ClusterRole.SOURCE,
                     BACKUP_CORFU_PORT);
-            localCluster.set(newLocalCluster.convertToMessage());
+            localCluster.set(newLocalCluster);
         }
 
         return localCluster.get();
     }
 
-    private void createMultiSourceSingleSinkTopologyBuckets() {
-        if(topologyConfig == null) {
-            topologyConfig = readConfig();
-        }
+    private TopologyDescriptor createMultiSourceSingleSinkTopologyBuckets() {
+        topologyConfig = readConfig();
 
-        ClusterConfigurationMsg localCluster = findLocalCluster();
+        Map<ClusterDescriptor, Set<LogReplication.ReplicationModel>> remoteSourceToReplicationModels = new HashMap<>();
+        Map<ClusterDescriptor, Set<LogReplication.ReplicationModel>> remoteSinkToReplicationModels = new HashMap<>();
+        Set<ClusterDescriptor> connectionEndPoints = new HashSet<>();
 
+        ClusterDescriptor localCluster = findLocalCluster();
 
-        synchronized (this) {
-            if(localCluster.getRole().equals(ClusterRole.SOURCE)) {
+        if(localCluster.getRole().equals(ClusterRole.SOURCE)) {
 
-                this.remoteSinkToReplicationModels.putIfAbsent(topologyConfig.getClustersList().stream()
-                        .filter(clusterConfigurationMsg -> clusterConfigurationMsg.getId().equals(topology.getSinkClusterIds().get(0)))
-                        .findFirst().get(), new HashSet<LogReplication.ReplicationModel>() {{
+            remoteSinkToReplicationModels.put(topologyConfig.getRemoteSinkClusters().values().stream()
+                    .filter(cluster -> cluster.getClusterId().equals(DefaultClusterConfig.getSinkClusterIds().get(0)))
+                    .findFirst().get(), new HashSet<LogReplication.ReplicationModel>() {
+                {
                     add(LogReplication.ReplicationModel.FULL_TABLE);
                 }});
 
-                this.connectionEndPoints.add(topologyConfig.getClustersList().stream()
-                        .filter(clusterConfigurationMsg -> clusterConfigurationMsg.getId().equals(topology.getSinkClusterIds().get(0)))
-                        .findFirst().get());
+            connectionEndPoints.add(topologyConfig.getRemoteSinkClusters().values().stream()
+                    .filter(cluster -> cluster.getClusterId().equals(DefaultClusterConfig.getSinkClusterIds().get(0)))
+                    .findFirst().get());
 
-            } else {
-                topologyConfig.getClustersList().stream()
-                        .filter(clusterConfigurationMsg -> clusterConfigurationMsg.getRole().equals(ClusterRole.SOURCE))
-                        .forEach(clusterConfigurationMsg -> {
-                            remoteSourceToReplicationModels.putIfAbsent(clusterConfigurationMsg, new HashSet<>());
-                            remoteSourceToReplicationModels.get(clusterConfigurationMsg)
-                                    .add(LogReplication.ReplicationModel.FULL_TABLE);
-                        });
-            }
-
-            log.info("added the multi source single sink clusters: source: {} sink: {} connectionEndpoints: {}",
-                    this.remoteSourceToReplicationModels, this.remoteSinkToReplicationModels, this.connectionEndPoints);
-            topologyBucketsInitialized = true;
-            notify();
+        } else {
+            remoteSourceToReplicationModels.putAll(topologyConfig.getRemoteSourceClusterToReplicationModels());
         }
+
+        log.info("new topology:: the multi-source-single-sink: source: {} sink: {} connectionEndpoints: {}",
+                remoteSourceToReplicationModels, remoteSinkToReplicationModels, connectionEndPoints);
+
+        topologyConfig = new TopologyDescriptor(++configId, remoteSinkToReplicationModels, remoteSourceToReplicationModels,
+                topologyConfig.getAllClustersInTopology(), connectionEndPoints, localNodeId);
+
+        return topologyConfig;
     }
 
 
@@ -449,119 +381,87 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
      * and source as sink. Data should flow in the reverse direction.
      **/
     public TopologyDescriptor generateConfigWithRoleSwitch() {
-        TopologyDescriptor oldConfig = new TopologyDescriptor(topologyConfig, localNodeId, this.remoteSinkToReplicationModels,
-                this.remoteSourceToReplicationModels);
+        TopologyDescriptor oldTopology = topologyConfig;
 
-        List<ClusterConfigurationMsg> newSourceClusters = new ArrayList<>();
-        List<ClusterConfigurationMsg> newSinkClusters = new ArrayList<>();
-        List<ClusterDescriptor> allClusters = new ArrayList<>();
-        oldConfig.getAllClusterMsgsInTopology().values().forEach(clusterConfigurationMsg -> {
-            if (clusterConfigurationMsg.getRole().equals(ClusterRole.SINK)) {
-                newSourceClusters.add(ClusterConfigurationMsg.newBuilder(clusterConfigurationMsg)
-                        .setRole(ClusterRole.SOURCE).build());
-                allClusters.add(new ClusterDescriptor(new ClusterDescriptor(clusterConfigurationMsg), ClusterRole.SOURCE));
-            } else if (clusterConfigurationMsg.getRole().equals(ClusterRole.SOURCE)) {
-                newSinkClusters.add(ClusterConfigurationMsg.newBuilder(clusterConfigurationMsg)
-                        .setRole(ClusterRole.SINK).build());
-                allClusters.add(new ClusterDescriptor(new ClusterDescriptor(clusterConfigurationMsg), ClusterRole.SINK));
+        Map<ClusterDescriptor, Set<LogReplication.ReplicationModel>> remoteSourceToReplicationModels = new HashMap<>();
+        Map<ClusterDescriptor, Set<LogReplication.ReplicationModel>> remoteSinkToReplicationModels = new HashMap<>();
+        Set<ClusterDescriptor> connectionEndPoints = new HashSet<>();
+
+        ClusterDescriptor oldLocalClusterDescriptor = findLocalCluster();
+
+
+        // On role change, the role of oldCluster is flipped.
+        //If old role is SOURCE (i.e., it is now the sink), it only has the remote SOURCEs connecting to it.
+        //If old role is SINK (i.e., it is now the SOURCE), it has to connect to all the remote sinks.
+        if(oldLocalClusterDescriptor.getRole().equals(ClusterRole.SOURCE)) {
+            oldTopology.getRemoteSinkClusterToReplicationModels().forEach((cluster, value) ->
+                    remoteSourceToReplicationModels.put(new ClusterDescriptor(cluster, ClusterRole.SOURCE), value));
+
+        } else if(oldLocalClusterDescriptor.getRole().equals(ClusterRole.SINK)){
+            oldTopology.getRemoteSourceClusterToReplicationModels().forEach((cluster, value) ->
+                    remoteSinkToReplicationModels.put(new ClusterDescriptor(cluster, ClusterRole.SINK), value));
+
+            connectionEndPoints.addAll(remoteSinkToReplicationModels.keySet());
+        }
+
+        Map<String, ClusterDescriptor> allRolesFlipped = new HashMap<>();
+        oldTopology.getAllClustersInTopology().forEach((id, cluster) -> {
+            if (cluster.getRole().equals(ClusterRole.SOURCE)) {
+                allRolesFlipped.put(id, new ClusterDescriptor(cluster, ClusterRole.SINK));
+            } else if (cluster.getRole().equals(ClusterRole.SINK)) {
+                allRolesFlipped.put(id, new ClusterDescriptor(cluster, ClusterRole.SOURCE));
             }
         });
 
-        ClusterDescriptor oldLocalClusterDescriptor = oldConfig.getLocalClusterDescriptor();
-        List<ClusterDescriptor> remoteSourceClusterList = new ArrayList<>();
-        List<ClusterDescriptor> remoteSinkClusterList = new ArrayList<>();
+        log.debug("new topology :: role changed : source: {}, sink: {}, connectionEndPoints: {}",
+                remoteSourceToReplicationModels, remoteSinkToReplicationModels, connectionEndPoints);
 
-        synchronized (this) {
-            // if the current one is Source => give only remote sink; but if the current one is sink, remote sink should be empty
-            Set<ClusterConfigurationMsg> newSourceClusterMsg = new HashSet<>();
-            Set<ClusterConfigurationMsg> newSinkClusterMsg = new HashSet<>();
+        topologyConfig = new TopologyDescriptor(++configId, remoteSinkToReplicationModels, remoteSourceToReplicationModels,
+                allRolesFlipped, connectionEndPoints, localNodeId);
 
-            this.remoteSinkToReplicationModels.keySet().stream().forEach(clusterMsg -> {
-                ClusterConfigurationMsg newClusterMsg = ClusterConfigurationMsg
-                        .newBuilder(clusterMsg).setRole(ClusterRole.SOURCE).build();
-                newSourceClusterMsg.add(newClusterMsg);
-            });
-            this.remoteSourceToReplicationModels.keySet().stream().forEach(clusterMsg -> {
-                ClusterConfigurationMsg newClusterMsg = ClusterConfigurationMsg
-                        .newBuilder(clusterMsg).setRole(ClusterRole.SINK).build();
-                newSinkClusterMsg.add(newClusterMsg);
-            });
-            this.remoteSinkToReplicationModels.clear();
-            this.remoteSourceToReplicationModels.clear();
-            this.connectionEndPoints.clear();
-
-            // On role change, the role of oldCluster is flipped.
-            //If old role is SOURCE (i.e., it is now the sink), it only has the remote SOURCEs connecting to it.
-            //If old role is SINK (i.e., it is now the SOURCE), it has to connect to all the remote sinks.
-            if(oldLocalClusterDescriptor.getRole().equals(ClusterRole.SOURCE)) {
-                newSourceClusterMsg.stream().forEach(clusterConfigurationMsg -> {
-                    remoteSourceToReplicationModels.putIfAbsent(clusterConfigurationMsg, new HashSet<>());
-                    remoteSourceToReplicationModels.get(clusterConfigurationMsg).add(LogReplication.ReplicationModel.FULL_TABLE);
-                    remoteSourceClusterList.add(new ClusterDescriptor(clusterConfigurationMsg));
-                });
-
-            } else if(oldLocalClusterDescriptor.getRole().equals(ClusterRole.SINK)){
-                newSinkClusterMsg.stream().forEach(clusterConfigurationMsg -> {
-                    remoteSinkToReplicationModels.putIfAbsent(clusterConfigurationMsg, new HashSet<>());
-                    remoteSinkToReplicationModels.get(clusterConfigurationMsg).add(LogReplication.ReplicationModel.FULL_TABLE);
-                    remoteSinkClusterList.add(new ClusterDescriptor(clusterConfigurationMsg));
-                });
-                this.connectionEndPoints.addAll(newSinkClusterMsg);
-            }
-        }
-
-        log.debug("the topology has source: {}, sink: {}, connectionEndPoints: {}", this.remoteSourceToReplicationModels,
-                this.remoteSinkToReplicationModels, this.connectionEndPoints);
-        return new TopologyDescriptor(++configId, remoteSourceClusterList, remoteSinkClusterList, allClusters, localNodeId);
+        return topologyConfig;
     }
 
     /**
-     * Create a new topology config, which marks all sink cluster as source on purpose.
+     * Using the current topology, create a new topology config, which marks all sink cluster as source on purpose.
      * System should drop messages between any two source clusters.
      **/
     public TopologyDescriptor generateConfigWithAllSource() {
-        topologyConfig = readConfig();
-        List<ClusterDescriptor> newSourceClusters = new ArrayList<>();
-        topologyConfig.getClustersList().stream().forEach(clusterMsg -> {
-            if (clusterMsg.getRole().equals(ClusterRole.SOURCE)) {
-                newSourceClusters.add(new ClusterDescriptor(clusterMsg));
+        Map<String, ClusterDescriptor> newSourceClusters = new HashMap<>();
+        topologyConfig.getAllClustersInTopology().values().forEach(cluster -> {
+            if (cluster.getRole().equals(ClusterRole.SOURCE)) {
+                newSourceClusters.put(cluster.getClusterId(), cluster);
             } else {
-                newSourceClusters.add(new ClusterDescriptor(new ClusterDescriptor(clusterMsg), ClusterRole.SOURCE));
+                newSourceClusters.put(cluster.getClusterId(), new ClusterDescriptor(cluster, ClusterRole.SOURCE));
             }
         });
-        resetBuckets();
 
-        return new TopologyDescriptor(++configId, new ArrayList<>(), new ArrayList<>(), newSourceClusters, localNodeId);
+        topologyConfig = new TopologyDescriptor(++configId, new HashMap<>(), new HashMap<>(), newSourceClusters,
+                new HashSet<>(), localNodeId);
+
+        return topologyConfig;
     }
 
-    private void resetBuckets() {
-        synchronized (this) {
-            this.remoteSourceToReplicationModels.clear();
-            this.remoteSinkToReplicationModels.clear();
-            this.connectionEndPoints.clear();
-        }
-    }
 
     /**
-     * Create a new topology config, which marks all cluster as sink on purpose.
+     * Using the current topology, create a new topology config, which marks all cluster as sink on purpose.
      * System should not send messages in this case.
      **/
     public TopologyDescriptor generateConfigWithAllSink() {
-        topologyConfig = readConfig();
-        ClusterDescriptor currentSource = new ClusterDescriptor(topologyConfig.getClustersList().stream()
-                .filter(clusterMsg -> clusterMsg.getId().equals(topology.getSourceClusterIds().get(0)))
-                .findFirst().get());
 
+        Map<String, ClusterDescriptor> newSinkClusters = new HashMap<>();
+        topologyConfig.getAllClustersInTopology().values().forEach(cluster -> {
+            if (cluster.getRole().equals(ClusterRole.SINK)) {
+                newSinkClusters.put(cluster.getClusterId(), cluster);
+            } else {
+                newSinkClusters.put(cluster.getClusterId(), new ClusterDescriptor(cluster, ClusterRole.SINK));
+            }
+        });
 
-        List<ClusterDescriptor> allSinkClusters = new ArrayList<>();
-        topologyConfig.getClustersList().stream()
-                .forEach(clusterMsg -> allSinkClusters.add(new ClusterDescriptor(clusterMsg)));
-        ClusterDescriptor newSink = new ClusterDescriptor(currentSource, ClusterRole.SINK);
-        allSinkClusters.add(newSink);
+        topologyConfig = new TopologyDescriptor(++configId, new HashMap<>(), new HashMap<>(), newSinkClusters,
+                new HashSet<>(), localNodeId);
 
-        resetBuckets();
-
-        return new TopologyDescriptor(++configId, new ArrayList<>(), new ArrayList<>(), allSinkClusters, localNodeId);
+        return topologyConfig;
     }
 
     /**
@@ -569,60 +469,23 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
      * LR should not replicate to these clusters.
      **/
     public TopologyDescriptor generateConfigWithInvalid() {
-
-        List<ClusterDescriptor> newInvalidClusters = new ArrayList<>();
-        topologyConfig.getClustersList().stream()
-                .forEach(clusterMsg -> newInvalidClusters.add(new ClusterDescriptor(clusterMsg)));
-
         //Since all the sinks are marked as invalid, the remote source/sink/connectionEndPoints will all be empty as
         //(i) if local cluster is source, there are no sinks and hence no connectionEndPoints
         //(ii) if the local cluster is INVALID (previously sink), no LR against it.
-        resetBuckets();
 
-        return new TopologyDescriptor(++configId, new ArrayList<>(), new ArrayList<>(), newInvalidClusters, localNodeId);
+        Map<String, ClusterDescriptor> newInvalidClusters = new HashMap<>();
+        topologyConfig.getAllClustersInTopology().values().forEach(cluster -> {
+            newInvalidClusters.put(cluster.getClusterId(), new ClusterDescriptor(cluster, ClusterRole.INVALID));
+        });
+
+        topologyConfig = new TopologyDescriptor(++configId, new HashMap<>(), new HashMap<>(), newInvalidClusters,
+                new HashSet<>(), localNodeId);
+
+        return topologyConfig;
     }
 
-    /**
-     * Bring topology config back to default valid config.
-     **/
     public TopologyDescriptor generateDefaultValidConfig() {
-        topologyConfig = readConfig();
-        resetBuckets();
-        createSingleSourceSinkTopologyBuckets();
-
-        TopologyDescriptor defaultTopology = new TopologyDescriptor(readConfig(),localNodeId, this.remoteSinkToReplicationModels,
-                this.remoteSourceToReplicationModels);
-        List<ClusterDescriptor> sourceClusters = new ArrayList<>(defaultTopology.getRemoteSourceClusters().values());
-        List<ClusterDescriptor> sinkClusters = new ArrayList<>(defaultTopology.getRemoteSinkClusters().values());
-        List<ClusterDescriptor> allClusters = new ArrayList<>();
-        topologyConfig.getClustersList().stream()
-                .forEach(clusterConfigurationMsg -> allClusters.add(new ClusterDescriptor(clusterConfigurationMsg)));
-
-
-        ClusterConfigurationMsg localCluster = findLocalCluster();
-
-        synchronized (this) {
-            if (localCluster.getRole().equals(ClusterRole.SOURCE)) {
-                sinkClusters.stream().forEach(clusterDescriptor -> {
-                    this.remoteSinkToReplicationModels.putIfAbsent(clusterDescriptor.convertToMessage(), new HashSet<>());
-                    this.remoteSinkToReplicationModels.get(clusterDescriptor.convertToMessage())
-                            .add(LogReplication.ReplicationModel.FULL_TABLE);
-
-                    this.connectionEndPoints.add(clusterDescriptor.convertToMessage());
-                });
-                sourceClusters.clear();
-
-            } else {
-                sourceClusters.stream().forEach(clusterDescriptor -> {
-                    this.remoteSourceToReplicationModels.putIfAbsent(clusterDescriptor.convertToMessage(), new HashSet<>());
-                    this.remoteSourceToReplicationModels.get(clusterDescriptor.convertToMessage())
-                            .add(LogReplication.ReplicationModel.FULL_TABLE);
-                });
-                sinkClusters.clear();
-            }
-        }
-
-        return new TopologyDescriptor(++configId, sourceClusters, sinkClusters, allClusters, localNodeId);
+        return createSingleSourceSinkTopologyBuckets();
     }
 
     /**
@@ -632,7 +495,7 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
         topologyConfig = readConfig();
 
         List<ClusterDescriptor> backupSourceClusters = new ArrayList<>();
-        backupSourceClusters.add(new ClusterDescriptor(topology.getSourceClusterIds().get(1), ClusterRole.SOURCE,
+        backupSourceClusters.add(new ClusterDescriptor(DefaultClusterConfig.getSourceClusterIds().get(1), ClusterRole.SOURCE,
             BACKUP_CORFU_PORT));
 
         NodeDescriptor backupNode = new NodeDescriptor(
@@ -643,54 +506,45 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
                 topology.getBackupNodesUuid().get(0)
                 );
         backupSourceClusters.get(0).getNodesDescriptors().add(backupNode);
-        List<ClusterDescriptor> sinkClusters = new ArrayList<>();
-        List<ClusterDescriptor> sourceClusters = new ArrayList<>();
 
-        topologyConfig.getClustersList().stream().filter(clusterMsg -> clusterMsg.getId().equals(topology.getSinkClusterIds().get(0)))
-                .forEach(clusterMsg -> sinkClusters.add(new ClusterDescriptor(clusterMsg)));
+        Map<ClusterDescriptor, Set<LogReplication.ReplicationModel>> remoteSourceToReplicationModels = new HashMap<>();
+        Map<ClusterDescriptor, Set<LogReplication.ReplicationModel>> remoteSinkToReplicationModels = new HashMap<>();
+        Set<ClusterDescriptor> connectionEndPoints = new HashSet<>();
 
-        ClusterConfigurationMsg localCluster = findLocalCluster();
+        ClusterDescriptor localCluster = findLocalCluster();
 
-        synchronized (this) {
-            if(localCluster.getRole().equals(ClusterRole.SINK)) {
+        if(localCluster.getRole().equals(ClusterRole.SINK)) {
+            remoteSourceToReplicationModels.put(backupSourceClusters.get(0),
+                    new HashSet<LogReplication.ReplicationModel>(){
+                {
+                    add(LogReplication.ReplicationModel.FULL_TABLE);
+                }});
 
-                this.remoteSourceToReplicationModels.clear();
-                this.remoteSourceToReplicationModels.putIfAbsent(backupSourceClusters.get(0).convertToMessage(), new HashSet<>());
-                this.remoteSourceToReplicationModels.get(backupSourceClusters.get(0).convertToMessage())
-                        .add(LogReplication.ReplicationModel.FULL_TABLE);
-                sourceClusters.add(backupSourceClusters.get(0));
-
-                this.remoteSinkToReplicationModels.clear();
-                this.connectionEndPoints.clear();
-
-            } else if (localCluster.getId().equals(topology.getSourceClusterIds().get(1))){
-                topologyConfig.getClustersList().stream()
-                        .filter(clusterMsg -> clusterMsg.getId().equals(topology.getSinkClusterIds().get(0)))
-                        .forEach(clusterMsg -> {
-                            ClusterConfigurationMsg configurationMsg = clusterMsg;
-                            this.remoteSinkToReplicationModels.putIfAbsent(configurationMsg, new HashSet<>());
-                            this.remoteSinkToReplicationModels.get(configurationMsg).add(LogReplication.ReplicationModel.FULL_TABLE);
-                            sinkClusters.add(new ClusterDescriptor(clusterMsg));
-
-                            this.remoteSourceToReplicationModels.clear();
-                            this.connectionEndPoints.clear();
-
-                            this.connectionEndPoints.add(configurationMsg);
-                });
-            }
+        } else if (localCluster.getClusterId().equals(DefaultClusterConfig.getSourceClusterIds().get(1))){
+            topologyConfig.getRemoteSinkClusters().values().stream()
+                    .filter(cluster -> cluster.getClusterId().equals(DefaultClusterConfig.getSinkClusterIds().get(0)))
+                    .forEach(cluster ->
+                            remoteSinkToReplicationModels.put(cluster,
+                                    new HashSet<LogReplication.ReplicationModel>() {
+                                {
+                                    add(LogReplication.ReplicationModel.FULL_TABLE);
+                                }})
+                    );
+            connectionEndPoints.addAll(remoteSinkToReplicationModels.keySet());
         }
 
         // capture all the clusters
-        List<ClusterDescriptor> allClusters = new ArrayList<>();
-        allClusters.add(backupSourceClusters.get(0));
-        topologyConfig.getClustersList().stream()
-                .filter(clusterMsg -> clusterMsg.getId().equals(topology.getSinkClusterIds().get(0)))
-                .forEach(clusterConfigurationMsg -> allClusters.add(new ClusterDescriptor(clusterConfigurationMsg)));
+        Map<String, ClusterDescriptor> allClusters = new HashMap<>(topologyConfig.getAllClustersInTopology());
+        allClusters.put(DefaultClusterConfig.getSourceClusterIds().get(1),backupSourceClusters.get(0));
 
-        log.info("added the backup cluster: source: {} sink: {} connectionEndpoints: {}", this.remoteSourceToReplicationModels,
-                this.remoteSinkToReplicationModels, this.connectionEndPoints);
 
-        return new TopologyDescriptor(++configId, sourceClusters, sinkClusters, allClusters, localNodeId);
+        log.info("added the backup cluster: source: {} sink: {} connectionEndpoints: {}", remoteSourceToReplicationModels,
+                remoteSinkToReplicationModels, connectionEndPoints);
+
+        topologyConfig = new TopologyDescriptor(++configId, remoteSinkToReplicationModels, remoteSourceToReplicationModels,
+                allClusters, connectionEndPoints, localNodeId);
+
+        return topologyConfig;
     }
 
     /**
@@ -715,7 +569,7 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
             while (!clusterManager.isShutdown()) {
                 try {
                     TopologyDescriptor newConfig = queue.take();
-                    clusterManager.updateTopologyConfig(newConfig.convertToMessage());
+                    clusterManager.updateTopologyConfig(newConfig);
                     log.warn("change the cluster config");
                 } catch (InterruptedException ie) {
                     throw new UnrecoverableCorfuInterruptedError(ie);
@@ -761,27 +615,27 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
                             .applyNewTopologyConfig(clusterManager.generateConfigWithInvalid());
                 } else if (entry.getKey().equals(OP_RESUME)) {
                     clusterManager.getClusterManagerCallback()
-                            .applyNewTopologyConfig(clusterManager.generateDefaultValidConfig());
+                            .applyNewTopologyConfig(clusterManager.createSingleSourceSinkTopologyBuckets());
                 } else if (entry.getKey().equals(OP_ENFORCE_SNAPSHOT_FULL_SYNC)) {
                     try {
-                        ClusterConfigurationMsg localCluster = clusterManager.findLocalCluster();
+                        ClusterDescriptor localCluster = clusterManager.findLocalCluster();
                         if (localCluster.getRole().equals(ClusterRole.SINK)) {
                             return;
                         }
                         // Enforce snapshot sync on the 1st sink cluster
-                        List<ClusterConfigurationMsg> clusters =
-                            clusterManager.queryTopologyConfig(true).getClustersList();
-                        Optional<ClusterConfigurationMsg> sinkCluster =
-                            clusters.stream().filter(cluster -> cluster.getRole() == ClusterRole.SINK
-                            && cluster.getId().equals(clusterManager.topology.getSinkClusterIds().get(0))).findFirst();
+                        TopologyDescriptor currentTopology = clusterManager.queryTopologyConfig(true);
+                        String sinkClusterId = currentTopology.getRemoteSinkClusters().keySet().stream()
+                                .filter(clusterId -> clusterId.equals(DefaultClusterConfig.getSinkClusterIds().get(0)))
+                                .findFirst().get();
 
-                        Optional<ClusterConfigurationMsg> sourceCluster =
-                            clusters.stream().filter(cluster -> cluster.getRole() == ClusterRole.SOURCE
-                                && cluster.getId().equals(clusterManager.topology.getSourceClusterIds().get(0))).findFirst();
+                        String sourceClusterId = currentTopology.getRemoteSourceClusters().keySet().stream()
+                                .filter(clusterId ->
+                                        clusterId.equals(DefaultClusterConfig.getSourceClusterIds().get(0)))
+                                .findFirst().get();
 
                         LogReplicationSession session = LogReplicationSession.newBuilder()
-                            .setSinkClusterId(sinkCluster.get().getId())
-                            .setSourceClusterId(sourceCluster.get().getId())
+                            .setSinkClusterId(sinkClusterId)
+                            .setSourceClusterId(sourceClusterId)
                             .setSubscriber(SessionManager.getDefaultSubscriber())
                             .build();
                         clusterManager.forceSnapshotSync(session);
@@ -798,11 +652,14 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
                     clusterManager.getClusterManagerCallback()
                             .applyNewTopologyConfig(clusterManager.generateConfigWithBackup());
                 } else if (entry.getKey().equals(TP_SINGLE_SOURCE_SINK)) {
-                    clusterManager.createSingleSourceSinkTopologyBuckets();
+                    clusterManager.getClusterManagerCallback()
+                            .applyNewTopologyConfig(clusterManager.createSingleSourceSinkTopologyBuckets());
                 } else if (entry.getKey().equals(TP_MULTI_SINK)) {
-                    clusterManager.createSingleSourceMultiSinkTopologyBuckets();
+                    clusterManager.getClusterManagerCallback()
+                            .applyNewTopologyConfig(clusterManager.createSingleSourceMultiSinkTopologyBuckets());
                 } else if (entry.getKey().equals(TP_MULTI_SOURCE)) {
-                    clusterManager.createMultiSourceSingleSinkTopologyBuckets();
+                    clusterManager.getClusterManagerCallback()
+                            .applyNewTopologyConfig(clusterManager.createMultiSourceSingleSinkTopologyBuckets());
                 }
             } else {
                 log.info("onNext :: operation={}, key={}, payload={}, metadata={}", entry.getOperation().name(),

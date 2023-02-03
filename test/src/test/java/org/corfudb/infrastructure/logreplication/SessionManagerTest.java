@@ -5,7 +5,6 @@ import org.corfudb.infrastructure.logreplication.infrastructure.SessionManager;
 import org.corfudb.infrastructure.logreplication.infrastructure.TopologyDescriptor;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.AbstractViewTest;
@@ -47,8 +46,7 @@ public class SessionManagerTest extends AbstractViewTest {
         defaultClusterManager.setLocalNodeId(topologyConfig.getSourceNodeUuids().get(0));
         topology = defaultClusterManager.generateDefaultValidConfig();
 
-        SessionManager sessionManager = new SessionManager(topology, corfuRuntime,
-                fetchConnectionEndpoint(defaultClusterManager), defaultClusterManager.getCorfuEndpoint());
+        SessionManager sessionManager = new SessionManager(topology, corfuRuntime, defaultClusterManager.getCorfuEndpoint());
         String sourceClusterId = DefaultClusterConfig.getSourceClusterIds().get(0);
         int numSinkCluster = topology.getRemoteSinkClusters().size();
 
@@ -69,8 +67,7 @@ public class SessionManagerTest extends AbstractViewTest {
         defaultClusterManager.setLocalNodeId(topologyConfig.getSinkNodeUuids().get(0));
         topology = defaultClusterManager.generateDefaultValidConfig();
 
-        SessionManager sessionManager = new SessionManager(topology, corfuRuntime,
-                fetchConnectionEndpoint(defaultClusterManager), defaultClusterManager.getCorfuEndpoint());
+        SessionManager sessionManager = new SessionManager(topology, corfuRuntime, defaultClusterManager.getCorfuEndpoint());
         String sinkClusterId = DefaultClusterConfig.getSinkClusterIds().get(0);
         int numSourceCluster = topology.getRemoteSourceClusters().size();
 
@@ -78,15 +75,6 @@ public class SessionManagerTest extends AbstractViewTest {
         Assert.assertEquals(0, sessionManager.getOutgoingSessions().size());
         Assert.assertEquals(sinkClusterId, topology.getLocalClusterDescriptor().getClusterId());
         Assert.assertEquals(numSourceCluster, sessionManager.getIncomingSessions().size());
-    }
-
-    private Map<String, ClusterDescriptor> fetchConnectionEndpoint(DefaultClusterManager defaultClusterManager) {
-        Set<LogReplicationClusterInfo.ClusterConfigurationMsg> connectionEndpointsMsgs = defaultClusterManager.fetchConnectionEndpoints();
-        Map<String, ClusterDescriptor> connectionEndpoints = new HashMap<>();
-        connectionEndpointsMsgs.stream().forEach(clusterMsg ->
-                connectionEndpoints.put(clusterMsg.getId(), new ClusterDescriptor(clusterMsg)));
-
-        return connectionEndpoints;
     }
 }
 
