@@ -313,7 +313,6 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
 
         sessionManager.refresh(topologyDescriptor, fetchConnectionEndpoints());
 
-        // Check if local cluster is a SOURCE
         if (isSource()) {
             logReplicationEventListener = new LogReplicationEventListener(this, getCorfuRuntime());
             logReplicationEventListener.start();
@@ -417,6 +416,8 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
      * as source (sender/producer) or sink (receiver).
      */
     private void onLeadershipAcquire() {
+        // TODO [V2]: a cluster can Source and/or Sink for different replication models. The support for this is coming
+        //  in the connectionModel PR
         if (isSource()) {
             log.info("Start as Source (sender/replicator)");
             // TODO: Shama: currently the supported model is FULL_TABLE. So fetchConnectionEndpoints will get all SINKs.
@@ -630,12 +631,12 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
      */
     // TODO V2: This method can be renamed to something more generic.  It is the default handling for any topology
     //  change where the role has not changed.  This method assumes that only Sink clusters can change.  Once more
-    //  topologies are supported, Source clusters can also be added/removed.
+    //  topologies are supported, Source clusters can also be added/removed.:::Coming in connectionModel PR
     private void onSinkClusterAddRemove(TopologyDescriptor newTopology) {
         log.debug("Sink Cluster has been added or removed");
 
         // Only process new sinks if the local cluster role is SOURCE
-        if (topologyDescriptor.getLocalClusterDescriptor().getRole() == ClusterRole.SOURCE) {
+        if (isSource()) {
             sessionManager.refresh(newTopology, fetchConnectionEndpoints());
             sessionManager.startReplication(fetchConnectionEndpoints());
         } else {
