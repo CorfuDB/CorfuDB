@@ -416,8 +416,8 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
      * as source (sender/producer) or sink (receiver).
      */
     private void onLeadershipAcquire() {
-        // TODO [V2]: a cluster can Source and/or Sink for different replication models. The support for this is coming
-        //  in the connectionModel PR
+        // TODO [V2]: a cluster can be Source and/or Sink for different replication models. The support for this is
+        //  coming in the connectionModel PR
         if (isSource()) {
             log.info("Start as Source (sender/replicator)");
             // TODO: Shama: currently the supported model is FULL_TABLE. So fetchConnectionEndpoints will get all SINKs.
@@ -428,12 +428,10 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         } else if (isSink()) {
             // TODO: Shama: in connectionModel PR, log session info when cluster is a sink
             log.info("Start as Sink (receiver)");
-
             // Sink Site : the LogReplicationServer (server handler) will
             // reset the LogReplicationSinkManager on acquiring leadership
             interClusterServerNode.setLeadership(true);
             lockAcquireSample = recordLockAcquire(topologyDescriptor.getLocalClusterDescriptor().getRole());
-
             processCountOnLockAcquire();
         } else {
             log.error("Log Replication not started on this cluster. Leader node {} id {} belongs to cluster with {} role.",
@@ -741,7 +739,14 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
 
 
     public UUID forceSnapshotSync(LogReplicationSession session) throws LogReplicationDiscoveryServiceException {
-        if(!topologyDescriptor.getRemoteSinkClusters().containsKey(session.getSinkClusterId())) {
+        if (!topologyDescriptor.getLocalClusterDescriptor().getClusterId().equals(session.getSourceClusterId())) {
+            String errorStr = "The session with sourceClusterID " + session.getSourceClusterId()+" and sinkClusterId " +
+                    session.getSinkClusterId() +" does not belong to the local cluster: " +
+                    topologyDescriptor.getLocalClusterDescriptor().getClusterId();
+            log.error(errorStr);
+            throw new LogReplicationDiscoveryServiceException(errorStr);
+
+        } else if(!topologyDescriptor.getRemoteSinkClusters().containsKey(session.getSinkClusterId())) {
             String errorStr = "the localCluster " + topologyDescriptor.getLocalClusterDescriptor().getClusterId()+
                     " does not have a SINK with clusterId " + session.getSinkClusterId();
             log.error(errorStr);
