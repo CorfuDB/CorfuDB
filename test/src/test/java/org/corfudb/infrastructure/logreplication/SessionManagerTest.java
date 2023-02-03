@@ -63,5 +63,32 @@ public class SessionManagerTest extends AbstractViewTest {
         Assert.assertEquals(sinkClusterId, topology.getLocalClusterDescriptor().getClusterId());
         Assert.assertEquals(numSinkCluster, sessionManager.getIncomingSessions().size());
     }
+
+    /**
+     * This test verifies that the incoming session is established using session manager.
+     * It also triggers and validates the topology change scenario.
+     * Last, tt verifies that the in-memory session state for the incoming session.
+     */
+    @Test
+    public void testSessionMgrTopologyChange() {
+        // Session established using default topology.
+        boolean sinkClusterAsLocalEndpoint = true;
+        DefaultClusterManager clusterManager = new DefaultClusterManager(sinkClusterAsLocalEndpoint);
+        topology = clusterManager.generateDefaultValidConfig();
+        SessionManager sessionManager = new SessionManager(topology, corfuRuntime);
+        String sinkClusterId = "456e4567-e89b-12d3-a456-556642440002";
+        int numSinkCluster = topology.getSinkClusters().size();
+
+        // Verifies that the sink cluster has established session with all 3 source clusters.
+        Assert.assertEquals(0, sessionManager.getOutgoingSessions().size());
+        Assert.assertEquals(sinkClusterId, topology.getLocalClusterDescriptor().getClusterId());
+        Assert.assertEquals(numSinkCluster, sessionManager.getIncomingSessions().size());
+
+        // Encounter topology change by introducing a new sink cluster and removing the existing sink cluster.
+        TopologyDescriptor newTopology = clusterManager.updateDefaultValidConfig();
+        sessionManager.refresh(newTopology);
+        Assert.assertEquals(numSinkCluster, sessionManager.getIncomingSessions().size());
+
+    }
 }
 
