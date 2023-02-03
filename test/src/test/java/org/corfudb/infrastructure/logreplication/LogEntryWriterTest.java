@@ -401,7 +401,6 @@ public class LogEntryWriterTest extends AbstractViewTest {
                 .setLastSnapshotTransferred(Address.NON_ADDRESS)
                 .setLastSnapshotStarted(Address.NON_ADDRESS)
                 .setCurrentCycleMinShadowStreamTs(Address.NON_ADDRESS)
-                .setRemainingReplicationPercent(-1L)
                 .build();
     }
 }

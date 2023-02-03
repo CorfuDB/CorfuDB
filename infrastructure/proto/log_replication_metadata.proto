@@ -49,11 +49,9 @@ message ReplicationMetadata {
   int64 lastLogEntryApplied = 7;
   org.corfudb.runtime.UuidMsg currentSnapshotCycleId = 8;
   int64 currentCycleMinShadowStreamTs = 9;
-  int64 remainingReplicationPercent = 10;
-  bool dataConsistentOnStandby = 11;
-  SyncType snapshotSyncType = 12;
-  int64 snapshotSyncCompleteTime = 13;
-  int64 lastLogEntryBatchProcessed = 14;
+  SyncType snapshotSyncType = 10;
+  int64 snapshotSyncCompleteTime = 11;
+  int64 lastLogEntryBatchProcessed = 12;
 }
 
 /*--------END---------*/

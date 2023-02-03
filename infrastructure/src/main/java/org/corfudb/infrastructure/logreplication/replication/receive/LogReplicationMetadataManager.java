@@ -171,7 +171,6 @@ public class LogReplicationMetadataManager {
                 .setLastSnapshotTransferred(Address.NON_ADDRESS)
                 .setLastSnapshotStarted(Address.NON_ADDRESS)
                 .setCurrentCycleMinShadowStreamTs(Address.NON_ADDRESS)
-                .setRemainingReplicationPercent(-1L)
                 .build();
     }
 
