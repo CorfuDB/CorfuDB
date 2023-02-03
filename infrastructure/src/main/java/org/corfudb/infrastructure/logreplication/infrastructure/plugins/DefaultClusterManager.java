@@ -33,9 +33,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * This class extends CorfuReplicationClusterManagerAdapter, provides topology config API
@@ -45,10 +45,6 @@ import java.util.concurrent.atomic.AtomicReference;
 @Slf4j
 public class DefaultClusterManager implements CorfuReplicationClusterManagerAdapter {
     private static final int BACKUP_CORFU_PORT = 9007;
-
-    private static final String SOURCE_CLUSTER_NAME = "primary_site";
-    private static final String SINK_CLUSTER_NAME = "sink_site";
-    private static final String BACKUP_CLUSTER_NAME = "backup_site";
 
     public static final String CONFIG_NAMESPACE = "ns_lr_config_it";
     public static final String CONFIG_TABLE_NAME = "lr_config_it";
@@ -95,6 +91,8 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
 
     @Setter
     private String localNodeId;
+
+    private CountDownLatch waitForTopologyInit = new CountDownLatch(1);
 
     public DefaultClusterManager() {
         topology = new DefaultClusterConfig();
@@ -209,7 +207,7 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
 
             for (int j = 0; j < sourceNodeNames.size(); j++) {
                 NodeDescriptor nodeInfo = new NodeDescriptor(sourceNodeHosts.get(i), sourceLogReplicationPorts.get(i),
-                        SOURCE_CLUSTER_NAME, sourceNodeIds.get(i), sourceNodeIds.get(i));
+                        sourceClusterIds.get(i), sourceNodeIds.get(i), sourceNodeIds.get(i));
                 sourceCluster.getNodesDescriptors().add(nodeInfo);
             }
             sourceClustersToReplicationModel.put(sourceCluster,
@@ -227,7 +225,7 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
 
             for (int j = 0; j < sinkNodeNames.size(); j++) {
                 NodeDescriptor nodeInfo = new NodeDescriptor(sinkNodeHosts.get(i), sinkLogReplicationPorts.get(i),
-                        SINK_CLUSTER_NAME, sinkNodeIds.get(i), sinkNodeIds.get(i));
+                        sinkClusterIds.get(i), sinkNodeIds.get(i), sinkNodeIds.get(i));
                 sinkCluster.getNodesDescriptors().add(nodeInfo);
             }
             sinkClustersToReplicationModel.put(sinkCluster,
@@ -239,21 +237,23 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
         }
 
         return new TopologyDescriptor(0L, sinkClustersToReplicationModel, sourceClustersToReplicationModel,
-                allClusters, null, localNodeId);
+                allClusters, new HashSet<>(), localNodeId);
     }
 
 
     @Override
-    public TopologyDescriptor queryTopologyConfig(boolean useCached) {
-        if (topologyConfig == null || !useCached) {
-            topologyConfig = readConfig();
+    public TopologyDescriptor queryTopologyConfig(boolean useCached){
+        try {
+            log.info("Wait until a topology is created");
+            waitForTopologyInit.await();
+        } catch (InterruptedException e) {
+            log.error("Interrupted");
         }
-
         log.debug("new cluster config msg " + topologyConfig);
         return topologyConfig;
     }
 
-    private TopologyDescriptor createSingleSourceSinkTopologyBuckets() {
+    private void createSingleSourceSinkTopologyBuckets() {
         topologyConfig = readConfig();
 
         Map<ClusterDescriptor, Set<LogReplication.ReplicationModel>> remoteSourceToReplicationModels = new HashMap<>();
@@ -270,7 +270,7 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
                     new HashSet<LogReplication.ReplicationModel>(){{ add(LogReplication.ReplicationModel.FULL_TABLE);
             }});
             connectionEndPoints.add(topologyConfig.getRemoteSinkClusters().values().stream()
-                    .filter(cluster -> cluster.getClusterId().equals(topology.getSinkCorfuPorts().get(0)))
+                    .filter(cluster -> cluster.getClusterId().equals(DefaultClusterConfig.getSinkClusterIds().get(0)))
                     .findFirst().get());
         } else {
             remoteSourceToReplicationModels.put(topologyConfig.getRemoteSourceClusters().values().stream()
@@ -286,10 +286,10 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
         topologyConfig = new TopologyDescriptor(++configId, remoteSinkToReplicationModels, remoteSourceToReplicationModels,
                 topologyConfig.getAllClustersInTopology(), connectionEndPoints, localNodeId);
 
-        return topologyConfig;
+        waitForTopologyInit.countDown();
     }
 
-    private TopologyDescriptor createSingleSourceMultiSinkTopologyBuckets() {
+    private void createSingleSourceMultiSinkTopologyBuckets() {
         topologyConfig = readConfig();
 
         Map<ClusterDescriptor, Set<LogReplication.ReplicationModel>> remoteSourceToReplicationModels = new HashMap<>();
@@ -315,32 +315,14 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
         topologyConfig = new TopologyDescriptor(++configId, remoteSinkToReplicationModels, remoteSourceToReplicationModels,
                 topologyConfig.getAllClustersInTopology(), connectionEndPoints, localNodeId);
 
-        return topologyConfig;
+        waitForTopologyInit.countDown();
     }
 
     private ClusterDescriptor findLocalCluster() {
-        AtomicReference<ClusterDescriptor> localCluster = new AtomicReference<>();
-        topologyConfig.getAllClustersInTopology().values().forEach(cluster -> {
-            cluster.getNodesDescriptors().stream().forEach(nodeMsg -> {
-                if (nodeMsg.getNodeId().equals(localNodeId)) {
-                    localCluster.set(cluster);
-                }
-            });
-        });
-
-
-        //true when a backup cluster becomes the source
-        if(localCluster.get() == null) {
-            ClusterDescriptor newLocalCluster = new ClusterDescriptor(
-                    topology.getSourceClusterIds().get(1), ClusterRole.SOURCE,
-                    BACKUP_CORFU_PORT);
-            localCluster.set(newLocalCluster);
-        }
-
-        return localCluster.get();
+        return topologyConfig.getLocalClusterDescriptor();
     }
 
-    private TopologyDescriptor createMultiSourceSingleSinkTopologyBuckets() {
+    private void createMultiSourceSingleSinkTopologyBuckets() {
         topologyConfig = readConfig();
 
         Map<ClusterDescriptor, Set<LogReplication.ReplicationModel>> remoteSourceToReplicationModels = new HashMap<>();
@@ -372,7 +354,7 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
         topologyConfig = new TopologyDescriptor(++configId, remoteSinkToReplicationModels, remoteSourceToReplicationModels,
                 topologyConfig.getAllClustersInTopology(), connectionEndPoints, localNodeId);
 
-        return topologyConfig;
+        waitForTopologyInit.countDown();
     }
 
 
@@ -416,10 +398,8 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
         log.debug("new topology :: role changed : source: {}, sink: {}, connectionEndPoints: {}",
                 remoteSourceToReplicationModels, remoteSinkToReplicationModels, connectionEndPoints);
 
-        topologyConfig = new TopologyDescriptor(++configId, remoteSinkToReplicationModels, remoteSourceToReplicationModels,
+        return new TopologyDescriptor(++configId, remoteSinkToReplicationModels, remoteSourceToReplicationModels,
                 allRolesFlipped, connectionEndPoints, localNodeId);
-
-        return topologyConfig;
     }
 
     /**
@@ -436,10 +416,8 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
             }
         });
 
-        topologyConfig = new TopologyDescriptor(++configId, new HashMap<>(), new HashMap<>(), newSourceClusters,
+        return new TopologyDescriptor(++configId, new HashMap<>(), new HashMap<>(), newSourceClusters,
                 new HashSet<>(), localNodeId);
-
-        return topologyConfig;
     }
 
 
@@ -458,10 +436,8 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
             }
         });
 
-        topologyConfig = new TopologyDescriptor(++configId, new HashMap<>(), new HashMap<>(), newSinkClusters,
+        return new TopologyDescriptor(++configId, new HashMap<>(), new HashMap<>(), newSinkClusters,
                 new HashSet<>(), localNodeId);
-
-        return topologyConfig;
     }
 
     /**
@@ -478,14 +454,13 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
             newInvalidClusters.put(cluster.getClusterId(), new ClusterDescriptor(cluster, ClusterRole.INVALID));
         });
 
-        topologyConfig = new TopologyDescriptor(++configId, new HashMap<>(), new HashMap<>(), newInvalidClusters,
+        return new TopologyDescriptor(++configId, new HashMap<>(), new HashMap<>(), newInvalidClusters,
                 new HashSet<>(), localNodeId);
-
-        return topologyConfig;
     }
 
     public TopologyDescriptor generateDefaultValidConfig() {
-        return createSingleSourceSinkTopologyBuckets();
+        createSingleSourceSinkTopologyBuckets();
+        return topologyConfig;
     }
 
     /**
@@ -501,7 +476,7 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
         NodeDescriptor backupNode = new NodeDescriptor(
                 topology.getDefaultHost(),
                 topology.getBackupLogReplicationPort(),
-                BACKUP_CLUSTER_NAME,
+                DefaultClusterConfig.getSourceClusterIds().get(1),
                 topology.getBackupNodesUuid().get(0),
                 topology.getBackupNodesUuid().get(0)
                 );
@@ -541,10 +516,8 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
         log.info("added the backup cluster: source: {} sink: {} connectionEndpoints: {}", remoteSourceToReplicationModels,
                 remoteSinkToReplicationModels, connectionEndPoints);
 
-        topologyConfig = new TopologyDescriptor(++configId, remoteSinkToReplicationModels, remoteSourceToReplicationModels,
+        return new TopologyDescriptor(++configId, remoteSinkToReplicationModels, remoteSourceToReplicationModels,
                 allClusters, connectionEndPoints, localNodeId);
-
-        return topologyConfig;
     }
 
     /**
@@ -614,8 +587,9 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
                     clusterManager.getClusterManagerCallback()
                             .applyNewTopologyConfig(clusterManager.generateConfigWithInvalid());
                 } else if (entry.getKey().equals(OP_RESUME)) {
+                    clusterManager.createSingleSourceSinkTopologyBuckets();
                     clusterManager.getClusterManagerCallback()
-                            .applyNewTopologyConfig(clusterManager.createSingleSourceSinkTopologyBuckets());
+                            .applyNewTopologyConfig(clusterManager.topologyConfig);
                 } else if (entry.getKey().equals(OP_ENFORCE_SNAPSHOT_FULL_SYNC)) {
                     try {
                         ClusterDescriptor localCluster = clusterManager.findLocalCluster();
@@ -652,14 +626,11 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
                     clusterManager.getClusterManagerCallback()
                             .applyNewTopologyConfig(clusterManager.generateConfigWithBackup());
                 } else if (entry.getKey().equals(TP_SINGLE_SOURCE_SINK)) {
-                    clusterManager.getClusterManagerCallback()
-                            .applyNewTopologyConfig(clusterManager.createSingleSourceSinkTopologyBuckets());
+                    clusterManager.createSingleSourceSinkTopologyBuckets();
                 } else if (entry.getKey().equals(TP_MULTI_SINK)) {
-                    clusterManager.getClusterManagerCallback()
-                            .applyNewTopologyConfig(clusterManager.createSingleSourceMultiSinkTopologyBuckets());
+                    clusterManager.createSingleSourceMultiSinkTopologyBuckets();
                 } else if (entry.getKey().equals(TP_MULTI_SOURCE)) {
-                    clusterManager.getClusterManagerCallback()
-                            .applyNewTopologyConfig(clusterManager.createMultiSourceSingleSinkTopologyBuckets());
+                    clusterManager.createMultiSourceSingleSinkTopologyBuckets();
                 }
             } else {
                 log.info("onNext :: operation={}, key={}, payload={}, metadata={}", entry.getOperation().name(),
