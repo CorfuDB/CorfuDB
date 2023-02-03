@@ -166,18 +166,6 @@ public class LogReplicationSourceManager {
     }
 
     /**
-     * Signal to cancel snapshot send.
-     *
-     * @param snapshotSyncId identifier of the snapshot sync task to cancel.
-     */
-    public void cancelSnapshotSync(UUID snapshotSyncId) {
-        log.info("Cancel Snapshot Sync for request: {}", snapshotSyncId);
-        // Enqueue event into Log Replication FSM
-        logReplicationFSM.input(new LogReplicationEvent(LogReplicationEventType.SYNC_CANCEL,
-                new LogReplicationEventMetadata(snapshotSyncId)));
-    }
-
-    /**
      * Shutdown Log Replication.
      *
      * Termination of the Log Replication State Machine, to enable replication a JVM restart is required.

@@ -675,8 +675,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
             return;
         }
         if (!isLeader.get()) {
-            log.warn("Node is not the leader - skipping forced snapshot sync, id={}",
-                event.getEventId());
+            log.warn("Node is not the leader - skipping forced snapshot sync, id={}", event.getEventId());
             return;
         }
 
