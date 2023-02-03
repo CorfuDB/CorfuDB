@@ -38,6 +38,7 @@ import org.corfudb.util.retry.IntervalRetry;
 import org.corfudb.util.retry.RetryNeededException;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -313,14 +314,20 @@ public class LogReplicationMetadataManager {
      *
      */
     public Map<LogReplicationSession, ReplicationStatus> getReplicationStatus() {
+        Map<LogReplicationSession, ReplicationStatus> statusMap = new HashMap<>();
+        List<CorfuStoreEntry<LogReplicationSession, ReplicationStatus, Message>> entries;
+
         try(TxnContext txn = corfuStore.txn(NAMESPACE)) {
-            Map<LogReplicationSession, ReplicationStatus> statusMap = new HashMap<>();
-            List<CorfuStoreEntry<LogReplicationSession, ReplicationStatus, Message>> entries = txn.executeQuery(statusTable, e -> true);
+            entries = txn.executeQuery(statusTable, e -> true);
+            txn.commit();
+        }
+
+        if (entries != null) {
             for (CorfuStoreEntry<LogReplicationSession, ReplicationStatus, Message> entry : entries) {
                 statusMap.put(entry.getKey(), entry.getPayload());
             }
-            return statusMap;
         }
+        return statusMap;
     }
 
     // =========================== Replication Status Table Methods ===============================
@@ -356,8 +363,9 @@ public class LogReplicationMetadataManager {
             // It means the cluster config has changed, ignore the update operation.
             if (topologyConfigId != metadata.getTopologyConfigId()) {
                 log.warn("Config differs between source and sink, Source[topologyConfigId={}, ts={}]" +
-                                " Sink[topologyConfigId={}, snapshotStart={}]", topologyConfigId,
+                        " Sink[topologyConfigId={}, snapshotStart={}]", topologyConfigId,
                         snapshotStartTs, metadata.getTopologyConfigId(), metadata.getLastSnapshotStarted());
+                txn.commit();
                 return false;
             }
 
@@ -375,8 +383,8 @@ public class LogReplicationMetadataManager {
             txn.commit();
 
             log.debug("Commit. Set snapshotStart topologyConfigId={}, ts={}, persistedTopologyConfigID={}, " +
-                            "persistedSnapshotStart={}",
-                    topologyConfigId, snapshotStartTs, metadata.getTopologyConfigId(), metadata.getLastSnapshotStarted());
+                    "persistedSnapshotStart={}", topologyConfigId, snapshotStartTs, metadata.getTopologyConfigId(),
+                    metadata.getLastSnapshotStarted());
         }
         return true;
     }
@@ -634,12 +642,13 @@ public class LogReplicationMetadataManager {
             // (STOPPED status is used for other FSM states as well, so cannot rely only on the incoming status)
             if (entry.getPayload() == null && status == SyncStatus.STOPPED) {
                 log.debug("syncStatus :: ignoring update for session {} to syncType {} and status {} as no record " +
-                    "exists for the same", session, lastSyncType, status);
+                        "exists for the same", session, lastSyncType, status);
+                txn.commit();
                 return;
             }
 
             SourceReplicationStatus previous = entry.getPayload() != null ? entry.getPayload().getSourceStatus() :
-                SourceReplicationStatus.newBuilder().build();
+                    SourceReplicationStatus.newBuilder().build();
             SourceReplicationStatus current;
 
             if (lastSyncType.equals(SyncType.LOG_ENTRY)) {
@@ -690,82 +699,75 @@ public class LogReplicationMetadataManager {
                 previous = entry.getPayload();
                 snapshotStatus = previous.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo();
             }
-            txn.commit();
-        }
 
-        if (type == SyncType.LOG_ENTRY) {
-            if (previous != null &&
-                    (previous.getSourceStatus().getReplicationInfo().getStatus().equals(SyncStatus.NOT_STARTED)
-                            || snapshotStatus.getStatus().equals(SyncStatus.STOPPED))) {
-                log.info("syncStatusPoller :: skip replication status update, log entry replication is {}",
-                        previous.getSourceStatus().getReplicationInfo().getStatus());
-                // Skip update of sync status, it will be updated once replication is resumed or started
-                return;
-            }
-
-            if (snapshotStatus == null){
-                log.warn("syncStatusPoller [logEntry]:: previous snapshot status is not present for session: {}",
-                    session);
-                snapshotStatus = SnapshotSyncInfo.newBuilder().build();
-            }
-
-            current = ReplicationStatus.newBuilder()
-                    .setSourceStatus(SourceReplicationStatus.newBuilder()
-                            .setRemainingEntriesToSend(remainingEntries)
-                            .setReplicationInfo(ReplicationInfo.newBuilder()
-                                    .setSyncType(type)
-                                    .setStatus(SyncStatus.ONGOING)
-                                    .setSnapshotSyncInfo(snapshotStatus)
-                                    .build())
-                            .build())
-                    .build();
-
-            try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
-                txn.putRecord(statusTable, session, current, null);
-                txn.commit();
-            }
-
-            log.debug("syncStatusPoller :: Log Entry status set to ONGOING, session: {}, remainingEntries: {}, " +
-                    "snapshotSyncInfo: {}", session, remainingEntries, snapshotStatus);
-        } else if (type == SyncType.SNAPSHOT) {
-
-            SnapshotSyncInfo currentSnapshotSyncInfo;
-            if (snapshotStatus == null){
-                log.warn("syncStatusPoller [snapshot] :: previous status is not present for session: {}", session);
-                currentSnapshotSyncInfo = SnapshotSyncInfo.newBuilder().build();
-            } else {
-
-                if (snapshotStatus.getStatus().equals(SyncStatus.NOT_STARTED)
-                        || snapshotStatus.getStatus().equals(SyncStatus.STOPPED)) {
+            if (type == SyncType.LOG_ENTRY) {
+                if (previous != null &&
+                        (previous.getSourceStatus().getReplicationInfo().getStatus().equals(SyncStatus.NOT_STARTED)
+                                || snapshotStatus.getStatus().equals(SyncStatus.STOPPED))) {
+                    log.info("syncStatusPoller :: skip replication status update, log entry replication is {}",
+                            previous.getSourceStatus().getReplicationInfo().getStatus());
                     // Skip update of sync status, it will be updated once replication is resumed or started
-                    log.info("syncStatusPoller :: skip replication status update, snapshot sync is {}", snapshotStatus);
+                    txn.commit();
                     return;
                 }
 
-                currentSnapshotSyncInfo = snapshotStatus.toBuilder()
-                        .setStatus(SyncStatus.ONGOING)
-                        .build();
-            }
+                if (snapshotStatus == null) {
+                    log.warn("syncStatusPoller [logEntry]:: previous snapshot status is not present for session: {}",
+                            session);
+                    snapshotStatus = SnapshotSyncInfo.newBuilder().build();
+                }
 
-            current = ReplicationStatus.newBuilder()
+                current = ReplicationStatus.newBuilder()
                     .setSourceStatus(SourceReplicationStatus.newBuilder()
-                            .setRemainingEntriesToSend(remainingEntries)
-                            .setReplicationInfo(ReplicationInfo.newBuilder()
-                                    .setSyncType(type)
-                                    .setStatus(SyncStatus.ONGOING)
-                                    .setSnapshotSyncInfo(currentSnapshotSyncInfo)
-                                    .build())
+                        .setRemainingEntriesToSend(remainingEntries)
+                        .setReplicationInfo(ReplicationInfo.newBuilder()
+                            .setSyncType(type)
+                            .setStatus(SyncStatus.ONGOING)
+                            .setSnapshotSyncInfo(snapshotStatus)
                             .build())
+                        .build())
                     .build();
 
-            try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
                 txn.putRecord(statusTable, session, current, null);
-                txn.commit();
-            }
 
-            log.debug("syncStatusPoller :: sync status for {} set to ONGOING, session: {}, remainingEntries: {}",
-                    type, session, remainingEntries);
+                log.debug("syncStatusPoller :: Log Entry status set to ONGOING, session: {}, remainingEntries: {}, " +
+                    "snapshotSyncInfo: {}", session, remainingEntries, snapshotStatus);
+            } else if (type == SyncType.SNAPSHOT) {
+
+                SnapshotSyncInfo currentSnapshotSyncInfo;
+                if (snapshotStatus == null) {
+                    log.warn("syncStatusPoller [snapshot] :: previous status is not present for session: {}", session);
+                    currentSnapshotSyncInfo = SnapshotSyncInfo.newBuilder().build();
+                } else {
+                    if (snapshotStatus.getStatus().equals(SyncStatus.NOT_STARTED)
+                                || snapshotStatus.getStatus().equals(SyncStatus.STOPPED)) {
+                        // Skip update of sync status, it will be updated once replication is resumed or started
+                        log.info("syncStatusPoller :: skip replication status update, snapshot sync is {}", snapshotStatus);
+                        txn.commit();
+                        return;
+                    }
+                    currentSnapshotSyncInfo = snapshotStatus.toBuilder()
+                            .setStatus(SyncStatus.ONGOING)
+                            .build();
+                }
+
+                current = ReplicationStatus.newBuilder()
+                    .setSourceStatus(SourceReplicationStatus.newBuilder()
+                        .setRemainingEntriesToSend(remainingEntries)
+                        .setReplicationInfo(ReplicationInfo.newBuilder()
+                            .setSyncType(type)
+                            .setStatus(SyncStatus.ONGOING)
+                            .setSnapshotSyncInfo(currentSnapshotSyncInfo)
+                            .build())
+                        .build())
+                    .build();
+
+                txn.putRecord(statusTable, session, current, null);
+            }
+            txn.commit();
         }
+        log.debug("syncStatusPoller :: sync status for {} set to ONGOING, session: {}, remainingEntries: {}",
+                type, session, remainingEntries);
     }
 
     /**
