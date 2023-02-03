@@ -161,9 +161,12 @@ public class LogReplicationServer extends AbstractServer {
 
             LogReplicationSinkManager sinkManager = sessionToSinkManagerMap.get(session);
 
-            // SinkManager not found can indicate a new session discovered or yet to be discovered.
-            // Drop the message if the incoming session is not known to sessionManager, otherwise create a corresponding
-            // sinkManager
+            // We create a sinkManager for sessions that are discovered while bootstrapping LR. But as topology changes,
+            // we may discover new sessions. At the same time, its possible that the remote Source cluster finds a new
+            // session before the local cluster and sends a request to the local cluster.
+            // Since the two events are async, we wait to receive a new session in the incoming request.
+            // If the incoming session is not known to sessionManager drop the message (until session is discovered by
+            // local cluster), otherwise create a corresponding sinkManager.
             // TODO[V2] : We still have a case where the cluster does not ever discover a session on its own.
             //  To resolve this, we need to have a long living RPC from the connectionInitiator cluster which will query
             //  for sessions from the other cluster
@@ -221,9 +224,12 @@ public class LogReplicationServer extends AbstractServer {
 
             LogReplicationSinkManager sinkManager = sessionToSinkManagerMap.get(session);
 
-            // SinkManager not found can indicate a new session discovered or yet to be discovered.
-            // Drop the message if the incoming session is not known to sessionManager, otherwise create a corresponding
-            // sinkManager
+            // We create a sinkManager for sessions that are discovered while bootstrapping LR. But as topology changes,
+            // we may discover new sessions. At the same time, its possible that the remote Source cluster finds a new
+            // session before the local cluster and sends a request to the local cluster.
+            // Since the two events are async, we wait to receive a new session in the incoming request.
+            // If the incoming session is not known to sessionManager drop the message (until session is discovered by
+            // local cluster), otherwise create a corresponding sinkManager.
             // TODO[V2] : We still have a case where the cluster does not ever discover a session on its own.
             //  To resolve this, we need to have a long living RPC from the connectionInitiator cluster which will query
             //  for sessions from the other cluster
