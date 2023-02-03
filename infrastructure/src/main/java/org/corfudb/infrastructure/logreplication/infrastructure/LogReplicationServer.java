@@ -114,7 +114,7 @@ public class LogReplicationServer extends AbstractServer {
 
     private LogReplicationSinkManager createSinkManager(LogReplicationSession session) {
         LogReplicationSinkManager sinkManager = new LogReplicationSinkManager(localEndpoint,
-                sessionManager.getMetadataManager(), serverContext, session, sessionManager.getContext(session));
+                sessionManager.getMetadataManager(), serverContext, session, sessionManager.getReplicationContext());
         sessionToSinkManagerMap.put(session, sinkManager);
         log.info("Sink Manager created for session={}", session);
         return sinkManager;
