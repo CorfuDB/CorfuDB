@@ -162,8 +162,11 @@ public class LogReplicationServer extends AbstractServer {
             LogReplicationSinkManager sinkManager = sessionToSinkManagerMap.get(session);
 
             // SinkManager not found can indicate a new session discovered or yet to be discovered.
-            // Drop the message if the incoming session is not known to sessionManger, otherwise create a corresponding
+            // Drop the message if the incoming session is not known to sessionManager, otherwise create a corresponding
             // sinkManager
+            // TODO[V2] : We still have a case where the cluster does not ever discover a session on its own.
+            //  To resolve this, we need to have a long living RPC from the connectionInitiator cluster which will query
+            //  for sessions from the other cluster
             if (sinkManager == null) {
                 if(!sessionManager.getSessions().contains(session)) {
                     log.error("Sink Manager not found for session {}, total={}, sessions={}", session,
@@ -219,8 +222,11 @@ public class LogReplicationServer extends AbstractServer {
             LogReplicationSinkManager sinkManager = sessionToSinkManagerMap.get(session);
 
             // SinkManager not found can indicate a new session discovered or yet to be discovered.
-            // Drop the message if the incoming session is not known to sessionManger, otherwise create a corresponding
+            // Drop the message if the incoming session is not known to sessionManager, otherwise create a corresponding
             // sinkManager
+            // TODO[V2] : We still have a case where the cluster does not ever discover a session on its own.
+            //  To resolve this, we need to have a long living RPC from the connectionInitiator cluster which will query
+            //  for sessions from the other cluster
             if (sinkManager == null) {
                 if(!sessionManager.getSessions().contains(session)) {
                     log.error("Sink Manager not found for session {}, total={}, sessions={}", session,
