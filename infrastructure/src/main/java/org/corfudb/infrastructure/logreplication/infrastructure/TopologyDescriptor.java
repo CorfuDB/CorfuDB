@@ -127,15 +127,15 @@ public class TopologyDescriptor {
         this.topologyConfigId = topologyConfigId;
         this.remoteSourceClusters = new HashMap<>();
         this.remoteSinkClusters = new HashMap<>();
-        this.remoteSourceClusterToReplicationModels = new HashMap<>(remoteSourceToReplicationModel);
         this.remoteSinkClusterToReplicationModels = new HashMap<>(remoteSinkToReplicationModel);
+        this.remoteSourceClusterToReplicationModels = new HashMap<>(remoteSourceToReplicationModel);
         connectionEndpoints.forEach(cluster -> this.connectionEndpoints.put(cluster.getClusterId(), cluster));
-
-        remoteSourceClusterToReplicationModels.keySet().forEach(sourceCluster ->
-                this.remoteSourceClusters.put(sourceCluster.getClusterId(), sourceCluster));
 
         remoteSinkClusterToReplicationModels.keySet().forEach(sinkCluster ->
                 this.remoteSinkClusters.put(sinkCluster.getClusterId(), sinkCluster));
+
+        remoteSourceClusterToReplicationModels.keySet().forEach(sourceCluster ->
+                this.remoteSourceClusters.put(sourceCluster.getClusterId(), sourceCluster));
 
         this.allClustersInTopology.putAll(allClusters);
         setLocalDescriptor(localNodeId);
