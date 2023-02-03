@@ -8,7 +8,7 @@ import lombok.extern.slf4j.Slf4j;
  */
 @Getter
 @Slf4j
-public class CorfuCompactorControlsConfig extends CorfuCompactorConfig {
+public class CompactorControllerConfig extends CompactorBaseConfig {
     private final boolean upgradeDescriptorTable;
     private final boolean instantTriggerCompaction;
     private final boolean trim;
@@ -17,7 +17,7 @@ public class CorfuCompactorControlsConfig extends CorfuCompactorConfig {
     private final boolean disableCompaction;
     private final boolean enableCompaction;
 
-    public CorfuCompactorControlsConfig(String[] args) {
+    public CompactorControllerConfig(String[] args) {
         super(args, CompactorControlsCmdLineHelper.USAGE_PARAMS, CompactorControlsCmdLineHelper.OPTIONS_PARAMS);
 
         upgradeDescriptorTable = getOpt("--upgradeDescriptorTable").isPresent();

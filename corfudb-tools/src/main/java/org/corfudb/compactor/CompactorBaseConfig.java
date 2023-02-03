@@ -18,7 +18,7 @@ import java.util.Optional;
  */
 @Getter
 @Slf4j
-public class CorfuCompactorConfig {
+public class CompactorBaseConfig {
 
     // Reduce checkpoint batch size due to disk-based nature and for smaller compactor JVM size
     public static final int DISK_BACKED_DEFAULT_CP_MAX_WRITE_SIZE = 1 << 20;
@@ -37,7 +37,7 @@ public class CorfuCompactorConfig {
     private NodeLocator nodeLocator;
     private Optional<String> persistedCacheRoot;
 
-    public CorfuCompactorConfig(String[] args, String additionalUsageParams, String additionalOptionsParams) {
+    public CompactorBaseConfig(String[] args, String additionalUsageParams, String additionalOptionsParams) {
         parse(args, additionalUsageParams, additionalOptionsParams);
         buildRuntime();
     }

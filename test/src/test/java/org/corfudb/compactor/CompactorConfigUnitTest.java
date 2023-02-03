@@ -13,7 +13,7 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertEquals;
 
 @Slf4j
-public class CorfuCompactorConfigUnitTest {
+public class CompactorConfigUnitTest {
     private static final String hostname = "hostname";
     private static final int port = 9000;
     private static final String keystore = "keystore";
@@ -31,13 +31,13 @@ public class CorfuCompactorConfigUnitTest {
         final String cmd = baseCmd + " --freezeCompaction=true --disableCompaction=true --trim=true" +
                 " --upgradeDescriptorTable=true --instantTriggerCompaction=true";
 
-        CorfuCompactorControlsConfig corfuCompactorControlsConfig = new CorfuCompactorControlsConfig(cmd.split(SPACE));
+        CompactorControllerConfig corfuCompactorControlsConfig = new CompactorControllerConfig(cmd.split(SPACE));
 
         CorfuRuntimeParameters params = CorfuRuntimeParameters.builder().tlsEnabled(true).keyStore(keystore)
                 .ksPasswordFile(ks_password).trustStore(truststore).tsPasswordFile(truststore_password)
-                .maxWriteSize(CorfuCompactorConfig.DEFAULT_CP_MAX_WRITE_SIZE).bulkReadSize(bulkReadSize)
+                .maxWriteSize(CompactorBaseConfig.DEFAULT_CP_MAX_WRITE_SIZE).bulkReadSize(bulkReadSize)
                 .priorityLevel(PriorityLevel.HIGH)
-                .systemDownHandlerTriggerLimit(CorfuCompactorConfig.SYSTEM_DOWN_HANDLER_TRIGGER_LIMIT)
+                .systemDownHandlerTriggerLimit(CompactorBaseConfig.SYSTEM_DOWN_HANDLER_TRIGGER_LIMIT)
                 .systemDownHandler(corfuCompactorControlsConfig.getDefaultSystemDownHandler())
                 .clientName(hostname)
                 .cacheDisabled(true)
@@ -58,13 +58,13 @@ public class CorfuCompactorConfigUnitTest {
     public void testCompactorConfigException() {
         final String cmd1 = baseCmd + " --freezeCompaction=true --unfreezeCompaction=true";
         Exception actualException = assertThrows(IllegalArgumentException.class, () -> {
-            new CorfuCompactorControlsConfig(cmd1.split(SPACE));
+            new CompactorControllerConfig(cmd1.split(SPACE));
         });
         assertTrue(actualException.getMessage().contentEquals("Both freeze and unfreeze compaction parameters cannot be passed together"));
 
         final String cmd2 = baseCmd + " --enableCompaction=true --disableCompaction=true";
         actualException = assertThrows(IllegalArgumentException.class, () -> {
-            new CorfuCompactorControlsConfig(cmd2.split(SPACE));
+            new CompactorControllerConfig(cmd2.split(SPACE));
         });
         assertTrue(actualException.getMessage().contentEquals("Both enable and disable compaction parameters cannot be passed together"));
     }

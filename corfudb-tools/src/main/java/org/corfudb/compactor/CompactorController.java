@@ -11,13 +11,13 @@ import org.corfudb.runtime.collections.CorfuStore;
  * These keys are used by the manager to make decisions regarding triggering the next cycle
  */
 @Slf4j
-public class CorfuCompactorControls {
+public class CompactorController {
     private final CorfuRuntime corfuRuntime;
     private final CorfuStore corfuStore;
-    private final CorfuCompactorControlsConfig config;
+    private final CompactorControllerConfig config;
     private final DistributedCheckpointerHelper distributedCheckpointerHelper;
-    public CorfuCompactorControls(String[] args) throws Exception {
-        this.config = new CorfuCompactorControlsConfig(args);
+    public CompactorController(String[] args) throws Exception {
+        this.config = new CompactorControllerConfig(args);
 
         Thread.currentThread().setName("Cmpt-ctrls-" + config.getNodeLocator().getPort());
         this.corfuRuntime = (CorfuRuntime.fromParameters(
@@ -27,8 +27,8 @@ public class CorfuCompactorControls {
         this.distributedCheckpointerHelper = new DistributedCheckpointerHelper(corfuStore);
     }
 
-    public CorfuCompactorControls(CorfuCompactorControlsConfig config, CorfuRuntime corfuRuntime, CorfuStore corfuStore,
-                                  DistributedCheckpointerHelper distributedCheckpointerHelper) {
+    public CompactorController(CompactorControllerConfig config, CorfuRuntime corfuRuntime, CorfuStore corfuStore,
+                               DistributedCheckpointerHelper distributedCheckpointerHelper) {
         this.config = config;
         this.corfuRuntime = corfuRuntime;
         this.corfuStore = corfuStore;
@@ -42,11 +42,11 @@ public class CorfuCompactorControls {
      */
     public static void main(String[] args) {
         try {
-            CorfuCompactorControls corfuStoreCompactorControls = new CorfuCompactorControls(args);
+            CompactorController corfuStoreCompactorControls = new CompactorController(args);
             corfuStoreCompactorControls.doCompactorAction();
         } catch (Exception e) {
             log.error("CorfuStoreCompactorMain crashed with error: {}, Exception: ",
-                    CorfuCompactorConfig.CORFU_LOG_CHECKPOINT_ERROR, e);
+                    CompactorBaseConfig.CORFU_LOG_CHECKPOINT_ERROR, e);
         }
         log.info("Exiting CorfuStoreCompactor");
     }

@@ -18,20 +18,20 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-    public class CorfuCompactorClientUnitTest {
+    public class CompactorClientUnitTest {
     private final CorfuRuntime corfuRuntime = mock(CorfuRuntime.class);
     private final CorfuStore corfuStore = mock(CorfuStore.class);
-    private final CorfuCompactorControlsConfig config = mock(CorfuCompactorControlsConfig.class);
+    private final CompactorControllerConfig config = mock(CompactorControllerConfig.class);
     private final DistributedCheckpointerHelper distributedCheckpointerHelper = mock(DistributedCheckpointerHelper.class);
     private final DistributedCheckpointer distributedCheckpointer = mock(DistributedCheckpointer.class);
-    private CorfuCompactorControls corfuCompactorControls;
-    private CorfuCompactorCheckpointer corfuCompactorCheckpointer;
+    private CompactorController corfuCompactorControls;
+    private CompactorCheckpointer corfuCompactorCheckpointer;
 
     @Before
     public void setup() {
         when(corfuRuntime.getParameters()).thenReturn(CorfuRuntime.CorfuRuntimeParameters.builder().clientName("TestClient").build());
-        corfuCompactorControls = spy(new CorfuCompactorControls(config, corfuRuntime, corfuStore, distributedCheckpointerHelper));
-        corfuCompactorCheckpointer = spy(new CorfuCompactorCheckpointer(distributedCheckpointerHelper, distributedCheckpointer));
+        corfuCompactorControls = spy(new CompactorController(config, corfuRuntime, corfuStore, distributedCheckpointerHelper));
+        corfuCompactorCheckpointer = spy(new CompactorCheckpointer(distributedCheckpointerHelper, distributedCheckpointer));
         doReturn(true).when(distributedCheckpointerHelper).disableCompaction();
         doNothing().when(distributedCheckpointerHelper).enableCompaction();
         doNothing().when(distributedCheckpointerHelper).freezeCompaction();
@@ -86,7 +86,7 @@ import static org.mockito.Mockito.when;
         doReturn(false).when(distributedCheckpointerHelper).hasCompactionStarted();
         corfuCompactorCheckpointer.startCheckpointing();
 
-        verify(distributedCheckpointerHelper, times(CorfuCompactorCheckpointer.RETRY_CHECKPOINTING)).hasCompactionStarted();
+        verify(distributedCheckpointerHelper, times(CompactorCheckpointer.RETRY_CHECKPOINTING)).hasCompactionStarted();
         verify(distributedCheckpointer).shutdown();
     }
 

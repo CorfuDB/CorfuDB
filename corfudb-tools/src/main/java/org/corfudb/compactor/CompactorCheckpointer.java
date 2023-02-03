@@ -17,14 +17,14 @@ import java.util.concurrent.TimeUnit;
  * checkpointed by other clients
  */
 @Slf4j
-public class CorfuCompactorCheckpointer {
+public class CompactorCheckpointer {
     private final DistributedCheckpointerHelper distributedCheckpointerHelper;
     private final DistributedCheckpointer distributedCheckpointer;
     public static final int RETRY_CHECKPOINTING = 5;
     private static final int RETRY_CHECKPOINTING_SLEEP_SECOND = 10;
 
-    public CorfuCompactorCheckpointer(String[] args) throws Exception {
-        CorfuCompactorConfig config = new CorfuCompactorConfig(args, "", "");
+    public CompactorCheckpointer(String[] args) throws Exception {
+        CompactorBaseConfig config = new CompactorBaseConfig(args, "", "");
 
         Thread.currentThread().setName("Cmpt-chkpter-" + config.getNodeLocator().getPort());
         CorfuRuntime cpRuntime = (CorfuRuntime.fromParameters(
@@ -42,8 +42,8 @@ public class CorfuCompactorCheckpointer {
                 .build(), corfuStore, distributedCheckpointerHelper.getCompactorMetadataTables());
     }
 
-    public CorfuCompactorCheckpointer(DistributedCheckpointerHelper distributedCheckpointerHelper,
-                                      DistributedCheckpointer distributedCheckpointer) {
+    public CompactorCheckpointer(DistributedCheckpointerHelper distributedCheckpointerHelper,
+                                 DistributedCheckpointer distributedCheckpointer) {
         this.distributedCheckpointerHelper = distributedCheckpointerHelper;
         this.distributedCheckpointer = distributedCheckpointer;
     }
@@ -55,11 +55,11 @@ public class CorfuCompactorCheckpointer {
      */
     public static void main(String[] args) {
         try {
-            CorfuCompactorCheckpointer corfuCompactorMain = new CorfuCompactorCheckpointer(args);
+            CompactorCheckpointer corfuCompactorMain = new CompactorCheckpointer(args);
             corfuCompactorMain.startCheckpointing();
         } catch (Exception e) {
             log.error("CorfuStoreCompactorMain crashed with error: {}, Exception: ",
-                    CorfuCompactorConfig.CORFU_LOG_CHECKPOINT_ERROR, e);
+                    CompactorBaseConfig.CORFU_LOG_CHECKPOINT_ERROR, e);
         }
         log.info("Exiting CorfuStoreCompactor");
     }

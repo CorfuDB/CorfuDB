@@ -274,6 +274,7 @@ class CompactorRunner(object):
                 force_disable_checkpointing = (os.environ.get(FORCE_DISABLE_CHECKPOINTING, "False") == "True")
                 if not force_disable_checkpointing:
                     class_to_invoke = COMPACTOR_CHECKPOINTER_CLASS_NAME
+                    self._print_and_log("Invoke CompactorCheckpointer...")
                 else:
                     self._print_and_log("Force disabled checkpointing, hence exiting")
                     return
