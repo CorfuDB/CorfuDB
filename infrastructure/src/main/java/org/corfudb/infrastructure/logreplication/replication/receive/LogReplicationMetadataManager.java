@@ -119,9 +119,9 @@ public class LogReplicationMetadataManager {
         }
     }
 
-    private void initializeMetadata(TxnContext txn, LogReplicationSession session, boolean isSource,
+    private void initializeMetadata(TxnContext txn, LogReplicationSession session, boolean incomingSession,
                                     long topologyConfigId) {
-        if (isSource) {
+        if (incomingSession) {
             // Add an entry for this session if it does not exist, otherwise, this is a resuming/ongoing session
             if (!txn.keySet(metadataTable).contains(session)) {
 
