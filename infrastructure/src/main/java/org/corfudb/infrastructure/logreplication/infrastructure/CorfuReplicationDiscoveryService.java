@@ -717,6 +717,13 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
     }
 
 
+    /**
+     * Called by clients when needed to enforce a snapshot sync for a session.
+     *
+     * @param session against which the local cluster has to enforce a snapshot sync
+     * @return event ID
+     * @throws LogReplicationDiscoveryServiceException
+     */
     public UUID forceSnapshotSync(LogReplicationSession session) throws LogReplicationDiscoveryServiceException {
         if (!topologyDescriptor.getLocalClusterDescriptor().getClusterId().equals(session.getSourceClusterId())) {
             String errorStr = "The session with sourceClusterID " + session.getSourceClusterId()+" and sinkClusterId " +
