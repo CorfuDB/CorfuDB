@@ -211,7 +211,7 @@ public class SessionManager {
         Set<LogReplicationSession> sessionsToAdd = new HashSet<>();
         Set<LogReplicationSession> incomingSessionsToAdd = new HashSet<>();
         Set<LogReplicationSession> outgoingSessionsToAdd = new HashSet<>();
-        Map<String, ClusterDescriptor> connectionEndpoints = topology.getConnectionEndpoints();
+        Map<String, ClusterDescriptor> remoteClusterEndpoints = topology.getRemoteClusterEndpoints();
 
         try {
             String localClusterId = topology.getLocalClusterDescriptor().getClusterId();
@@ -221,14 +221,14 @@ public class SessionManager {
 
                     for(ClusterDescriptor remoteSourceCluster : topology.getRemoteSourceClusters().values()) {
                         // TODO(V2): for now only creating sessions for FULL TABLE replication model (assumed as default)
-                        sessionBuilder(remoteSourceCluster.clusterId, localClusterId, sessionsToAdd, txn,
-                                connectionEndpoints, true);
+                        constructSession(remoteSourceCluster.clusterId, localClusterId, sessionsToAdd, txn,
+                                remoteClusterEndpoints, true);
                     }
 
                     for(ClusterDescriptor remoteSinkCluster : topology.getRemoteSinkClusters().values()) {
                         // TODO(V2): for now only creating sessions for FULL TABLE replication model (assumed as default)
-                        sessionBuilder(localClusterId, remoteSinkCluster.clusterId, sessionsToAdd, txn,
-                                connectionEndpoints, false);
+                        constructSession(localClusterId, remoteSinkCluster.clusterId, sessionsToAdd, txn,
+                                remoteClusterEndpoints, false);
                     }
                     txn.commit();
 
@@ -268,9 +268,9 @@ public class SessionManager {
     /**
      * Build a session and add to incoming/outgoing session appropriately.
      */
-    private void sessionBuilder(String sourceClusterId, String sinkClusterId,
-                                Set<LogReplicationSession> sessionsToAdd, TxnContext txn,
-                                Map<String, ClusterDescriptor> connectionEndpoints, boolean isIncoming) {
+    private void constructSession(String sourceClusterId, String sinkClusterId,
+                                  Set<LogReplicationSession> sessionsToAdd, TxnContext txn,
+                                  Map<String, ClusterDescriptor> connectionEndpoints, boolean isIncoming) {
         LogReplicationSession session = LogReplicationSession.newBuilder()
                 .setSourceClusterId(sourceClusterId)
                 .setSinkClusterId(sinkClusterId)
