@@ -338,7 +338,10 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
         List<ClusterDescriptor> sourceClusters = new ArrayList<>(defaultTopology.getSourceClusters().values());
         List<ClusterDescriptor> sinkClusters = new ArrayList<>(defaultTopology.getSinkClusters().values());
         int sinkClusterSize = sinkClusters.size();
-        sinkClusters.remove(sinkClusters.get(sinkClusterSize - 2));
+        // Given the sink cluster size is 3 already. It is safe to remove the middle cluster.
+        if(sinkClusterSize > 2) {
+            sinkClusters.remove(sinkClusters.get(sinkClusterSize - 2));
+        }
         sinkClusters.add(new ClusterDescriptor("new-test-sink-cluster-id", ClusterRole.SINK,
                 Integer.parseInt(topology.getSinkCorfuPorts().get(0))));
 

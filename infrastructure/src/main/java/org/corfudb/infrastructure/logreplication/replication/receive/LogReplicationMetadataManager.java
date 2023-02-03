@@ -871,30 +871,6 @@ public class LogReplicationMetadataManager {
 
     // ================================ End Runtime Helper Functions ==================================
 
-    public void removeFromStatusTable(LogReplicationSession session) {
-        try {
-            IRetry.build(IntervalRetry.class, () -> {
-                try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
-                    if (txn.isExists(statusTable, session)) {
-                        txn.delete(statusTable, session);
-                        txn.commit();
-                    } else {
-                        log.warn("Status for session {} does not exist.", session);
-                    }
-                } catch(TransactionAbortedException e) {
-                    log.error("Exception while removing status from table", e);
-                    throw new RetryNeededException();
-                }
-                return null;
-            }).run();
-        } catch (InterruptedException e) {
-            log.error("Unrecoverable exception when updating the topology " +
-                    "config id", e);
-            throw new UnrecoverableCorfuInterruptedError(e);
-        }
-        log.debug("Successfully deleted session {} from {}", session, REPLICATION_STATUS_TABLE_NAME);
-    }
-
     /**
      * Reset manager by clearing all tables
      */
@@ -911,23 +887,6 @@ public class LogReplicationMetadataManager {
     public void removeSession(TxnContext txn, LogReplicationSession session) {
         txn.delete(statusTable, session);
         txn.delete(metadataTable, session);
-    }
-
-    public void removeSession(LogReplicationSession session) {
-        try {
-            IRetry.build(IntervalRetry.class, () -> {
-                try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
-                    removeSession(txn, session);
-                    txn.commit();
-                } catch (TransactionAbortedException e) {
-                    throw new RetryNeededException();
-                }
-                return null;
-            }).run();
-        } catch (InterruptedException e) {
-            log.error("Unrecoverable exception while removing session", e);
-            throw new UnrecoverableCorfuInterruptedError(e);
-        }
     }
 
     public enum LogReplicationMetadataType {
