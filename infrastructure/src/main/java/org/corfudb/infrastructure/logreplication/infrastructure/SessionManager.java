@@ -137,7 +137,8 @@ public class SessionManager {
      *
      * @param newTopology   the new discovered topology
      */
-    public synchronized void refresh(@Nonnull TopologyDescriptor newTopology, Map<String, ClusterDescriptor> connectionEndpoints) {
+    public synchronized void refresh(@Nonnull TopologyDescriptor newTopology,
+                                     Map<String, ClusterDescriptor> connectionEndpoints) {
 
         // TODO V2: Make this method a no-op if the new topology has not changed.  Need to override equals and
         //  hashcode in all TopologyDescriptor and all its members.  It is being taken care of in a subsequent PR
@@ -222,12 +223,14 @@ public class SessionManager {
 
                     for(ClusterDescriptor remoteSourceCluster : topology.getRemoteSourceClusters().values()) {
                         // TODO(V2): for now only creating sessions for FULL TABLE replication model (assumed as default)
-                        sessionBuilder(remoteSourceCluster.clusterId, localClusterId, sessionsToAdd, txn, connectionEndpoints, true);
+                        sessionBuilder(remoteSourceCluster.clusterId, localClusterId, sessionsToAdd, txn,
+                                connectionEndpoints, true);
                     }
 
                     for(ClusterDescriptor remoteSinkCluster : topology.getRemoteSinkClusters().values()) {
                         // TODO(V2): for now only creating sessions for FULL TABLE replication model (assumed as default)
-                        sessionBuilder(localClusterId, remoteSinkCluster.clusterId, sessionsToAdd, txn, connectionEndpoints, false);
+                        sessionBuilder(localClusterId, remoteSinkCluster.clusterId, sessionsToAdd, txn,
+                                connectionEndpoints, false);
                     }
                     txn.commit();
 
