@@ -20,7 +20,7 @@ public class ClusterDescriptor {
     final ClusterRole role;
 
     @Getter
-    final List<NodeDescriptor> nodesDescriptors;
+    final List<NodeDescriptor> nodeDescriptors;
 
     @Getter
     final private int corfuPort;    // Port on which Corfu DB runs on this cluster
@@ -29,12 +29,12 @@ public class ClusterDescriptor {
     public ClusterDescriptor(ClusterDescriptor info, ClusterRole roleType) {
         this.clusterId = info.clusterId;
         this.role = roleType;
-        this.nodesDescriptors = new ArrayList<>();
+        this.nodeDescriptors = new ArrayList<>();
         this.corfuPort = info.getCorfuPort();
-        for (NodeDescriptor nodeInfo : info.nodesDescriptors) {
+        for (NodeDescriptor nodeInfo : info.nodeDescriptors) {
             NodeDescriptor newNode = new NodeDescriptor(nodeInfo.getHost(), nodeInfo.getPort(),
                     info.clusterId, nodeInfo.getConnectionId(), nodeInfo.getNodeId());
-            this.nodesDescriptors.add(newNode);
+            this.nodeDescriptors.add(newNode);
         }
     }
 
@@ -43,7 +43,7 @@ public class ClusterDescriptor {
         this.clusterId = clusterId;
         this.role = roleType;
         this.corfuPort = corfuPort;
-        nodesDescriptors = new ArrayList<>();
+        nodeDescriptors = new ArrayList<>();
     }
 
     public static String listToString(List<?> list) {
@@ -56,7 +56,7 @@ public class ClusterDescriptor {
 
     @Override
     public String toString() {
-        return String.format("Cluster[%s]:: role=%s, CorfuPort=%s, Nodes[%s]:  %s", getClusterId(), role, corfuPort, nodesDescriptors.size(), listToString(nodesDescriptors));
+        return String.format("Cluster[%s]:: role=%s, CorfuPort=%s, Nodes[%s]:  %s", getClusterId(), role, corfuPort, nodeDescriptors.size(), listToString(nodeDescriptors));
     }
 
     /**
@@ -66,7 +66,7 @@ public class ClusterDescriptor {
      * @return endpoint's node descriptor or null if it does not belong to this cluster.
      */
     public NodeDescriptor getNode(String nodeId) {
-        for (NodeDescriptor node : nodesDescriptors) {
+        for (NodeDescriptor node : nodeDescriptors) {
             if(node.getNodeId().equals(nodeId)) {
                 return node;
             }
@@ -75,7 +75,7 @@ public class ClusterDescriptor {
     }
 
     public String getEndpointByNodeId(String nodeId) {
-        for (NodeDescriptor node : nodesDescriptors) {
+        for (NodeDescriptor node : nodeDescriptors) {
             if(node.getNodeId().equals(nodeId)) {
                 return String.format("%s:%s", node.getHost(), node.getPort());
             }

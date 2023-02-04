@@ -338,14 +338,14 @@ public class LogReplicationClientRouter implements IClientRouter {
     public Integer getPort() {
         // For logging purposes return one port (as this abstraction does not make sense for a Log Replication
         // Client Router) as it is a router to an entire cluster/site.
-        return Integer.valueOf(remoteClusterDescriptor.getNodesDescriptors().iterator().next().getPort());
+        return Integer.valueOf(remoteClusterDescriptor.getNodeDescriptors().iterator().next().getPort());
     }
 
     @Override
     public String getHost() {
         String host = "";
         // For logging purposes return all remote cluster nodes host in a concatenated form
-        remoteClusterDescriptor.getNodesDescriptors().forEach(node -> host.concat(node.getHost() + ":"));
+        remoteClusterDescriptor.getNodeDescriptors().forEach(node -> host.concat(node.getHost() + ":"));
         return host;
     }
 
