@@ -92,19 +92,19 @@ public class TopologyDescriptor {
         remoteClusterEndpoints.forEach(cluster -> this.remoteClusterEndpoints.put(cluster.getClusterId(), cluster));
 
         this.remoteSinkClusters = new HashMap<>();
-        remoteSinkToReplicationModel.keySet().stream().forEach(cluster -> {
+        remoteSinkToReplicationModel.keySet().forEach(cluster -> {
             remoteSinkClusters.put(cluster.getClusterId(), cluster);
             allClustersInTopology.put(cluster.getClusterId(), cluster);
         });
 
 
         this.remoteSourceClusters = new HashMap<>();
-        remoteSourceToReplicationModel.keySet().stream().forEach(cluster -> {
+        remoteSourceToReplicationModel.keySet().forEach(cluster -> {
             remoteSourceClusters.put(cluster.getClusterId(), cluster);
             allClustersInTopology.put(cluster.getClusterId(), cluster);
         });
 
-        otherClusters.stream().forEach(cluster -> {
+        otherClusters.forEach(cluster -> {
             allClustersInTopology.put(cluster.getClusterId(), cluster);
         });
 
