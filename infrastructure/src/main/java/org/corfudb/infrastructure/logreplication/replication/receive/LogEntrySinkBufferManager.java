@@ -6,20 +6,13 @@ import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
 
 /**
- * It manages the log entry sink buffer.
+ * Manage log entry (delta) sink buffer
  */
 @Slf4j
 public class LogEntrySinkBufferManager extends SinkBufferManager {
 
-    /**
-     *
-     * @param ackCycleTime
-     * @param ackCycleCnt
-     * @param size
-     * @param lastProcessedSeq last processed log entry's timestamp
-     * @param sinkManager
-     */
-    public LogEntrySinkBufferManager(int ackCycleTime, int ackCycleCnt, int size, long lastProcessedSeq, LogReplicationSinkManager sinkManager) {
+    public LogEntrySinkBufferManager(int ackCycleTime, int ackCycleCnt, int size, long lastProcessedSeq,
+                                     LogReplicationSinkManager sinkManager) {
         super(LogReplicationEntryType.LOG_ENTRY_MESSAGE, ackCycleTime, ackCycleCnt, size, lastProcessedSeq, sinkManager);
     }
 
