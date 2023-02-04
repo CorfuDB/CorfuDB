@@ -1,30 +1,35 @@
 package org.corfudb.infrastructure.logreplication.infrastructure;
 
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.ClusterRole;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.TopologyConfigurationMsg;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatus;
+import org.corfudb.runtime.LogReplication.LogReplicationSession;
 
 import java.util.Map;
 import java.util.UUID;
 
+/**
+ * This class contains all the interfaces exposed from the Discovery Service to the Cluster Manager plugin.
+ */
 public interface CorfuReplicationDiscoveryServiceAdapter {
 
     /**
      *
      * @param topologyConfiguration
      */
-    void updateTopology(LogReplicationClusterInfo.TopologyConfigurationMsg topologyConfiguration);
+    void updateTopology(TopologyConfigurationMsg topologyConfiguration);
 
     /**
      *
      * @return
      */
-    Map<String, LogReplicationMetadata.ReplicationStatusVal> queryReplicationStatus();
+    Map<LogReplicationSession, ReplicationStatus> queryReplicationStatus();
 
     /**
      * Enforce snapshotFullSync
      */
-    UUID forceSnapshotSync(String clusterId) throws LogReplicationDiscoveryServiceException;
+    UUID forceSnapshotSync(LogReplicationSession session) throws LogReplicationDiscoveryServiceException;
 
 
-    LogReplicationClusterInfo.ClusterRole getLocalClusterRoleType();
+    ClusterRole getLocalClusterRoleType();
 }

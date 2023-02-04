@@ -4,12 +4,10 @@ import lombok.Data;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.ServerContext;
-import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSubscriber;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.TableRegistry;
 
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -49,12 +47,8 @@ public class LogReplicationConfig {
     public static final UUID REGISTRY_TABLE_ID = CorfuRuntime.getStreamID(
         getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, TableRegistry.REGISTRY_TABLE_NAME));
 
-    // A map consisting of the streams to replicate for each supported replication model
-    private Map<ReplicationSubscriber, Set<String>> replicationSubscriberToStreamsMap;
-
     public static final UUID PROTOBUF_TABLE_ID = CorfuRuntime.getStreamID(
             getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME));
-
 
     // Set of streams that shouldn't be cleared on snapshot apply phase, as these streams should be the result of
     // "merging" the replicated data (from source) + local data (on sink).
@@ -64,15 +58,17 @@ public class LogReplicationConfig {
             PROTOBUF_TABLE_ID
     ));
 
+    private Set<String> streamsToReplicate;
+
     // Mapping from stream ids to their fully qualified names.
     private Map<UUID, String> streamIdsToNameMap;
 
     // Streaming tags on Sink (map data stream id to list of tags associated to it)
-    private Map<UUID, List<UUID>> dataStreamToTagsMap = new HashMap<>();
+    private Map<UUID, List<UUID>> dataStreamToTagsMap;
 
     // Set of streams to drop on Sink if replication subscriber info differs from Source when both are on different
     // versions
-    private Map<ReplicationSubscriber, Set<UUID>> subscriberToNonReplicatedStreamsMap = new HashMap<>();
+    private Set<UUID> streamsToDrop;
 
     // Snapshot Sync Batch Size(number of messages)
     private int maxNumMsgPerBatch;
@@ -90,12 +86,12 @@ public class LogReplicationConfig {
 
     public static final String SAMPLE_CLIENT = "Sample Client";
 
-    public LogReplicationConfig(Map<ReplicationSubscriber, Set<String>> subscriberToStreamsMap,
-                                Map<ReplicationSubscriber, Set<UUID>> subscriberToNonReplicatedStreamsMap,
+
+    public LogReplicationConfig(Set<String> streamsToReplicate, Set<UUID> streamsToDrop,
                                 Map<UUID, List<UUID>> streamToTagsMap, ServerContext serverContext) {
-        replicationSubscriberToStreamsMap = subscriberToStreamsMap;
-        dataStreamToTagsMap = streamToTagsMap;
-        this.subscriberToNonReplicatedStreamsMap = subscriberToNonReplicatedStreamsMap;
+        this.streamsToReplicate = streamsToReplicate;
+        this.streamsToDrop = streamsToDrop;
+        this.dataStreamToTagsMap = streamToTagsMap;
 
         if (serverContext == null) {
             this.maxNumMsgPerBatch = DEFAULT_MAX_NUM_MSG_PER_BATCH;
