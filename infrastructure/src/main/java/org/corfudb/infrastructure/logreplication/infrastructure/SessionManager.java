@@ -141,8 +141,6 @@ public class SessionManager {
         //  hashcode in all TopologyDescriptor and all its members.  It is being taken care of in a subsequent PR
         //  which contains changes to the Connection Model.
 
-        // TODO: Shama - have logic to add a remote cluster -> part of connectionModel PR
-
         Set<String> newSources = newTopology.getRemoteSourceClusters().keySet();
         Set<String> currentSources = topology.getRemoteSourceClusters().keySet();
         Set<String> sourcesToRemove = Sets.difference(currentSources, newSources);
@@ -221,17 +219,21 @@ public class SessionManager {
                     for(ClusterDescriptor remoteSinkCluster : topology.getRemoteSinkClusters().values()) {
                         // TODO(V2): for now only creating sessions for FULL TABLE replication model (assumed as default)
                         LogReplicationSession session = constructSession(localClusterId, remoteSinkCluster.clusterId);
-                        sessionsToAdd.add(session);
-                        outgoingSessions.add(session);
-                        metadataManager.addSession(txn, session, topology.getTopologyConfigId(), false);
+                        if (!sessions.contains(session)) {
+                            sessionsToAdd.add(session);
+                            outgoingSessionsToAdd.add(session);
+                            metadataManager.addSession(txn, session, topology.getTopologyConfigId(), false);
+                        }
                     }
 
                     for(ClusterDescriptor remoteSourceCluster : topology.getRemoteSourceClusters().values()) {
                         // TODO(V2): for now only creating sessions for FULL TABLE replication model (assumed as default)
                         LogReplicationSession session = constructSession(remoteSourceCluster.getClusterId(), localClusterId);
-                        sessionsToAdd.add(session);
-                        incomingSessionsToAdd.add(session);
-                        metadataManager.addSession(txn, session, topology.getTopologyConfigId(), true);
+                        if (!sessions.contains(session)) {
+                            sessionsToAdd.add(session);
+                            incomingSessionsToAdd.add(session);
+                            metadataManager.addSession(txn, session, topology.getTopologyConfigId(), true);
+                        }
                     }
                     txn.commit();
 
@@ -336,8 +338,6 @@ public class SessionManager {
         });
 
     }
-
-
 
     public synchronized void startReplication() {
 

@@ -105,10 +105,7 @@ public class LogReplicationServer extends AbstractServer {
 
      private void createSinkManagers() {
         for (LogReplicationSession session : sessionManager.getIncomingSessions()) {
-            LogReplicationSinkManager sinkManager = new LogReplicationSinkManager(localEndpoint,
-                    sessionManager.getMetadataManager(), serverContext, session, sessionManager.getReplicationContext());
-            sessionToSinkManagerMap.put(session, sinkManager);
-            log.info("Sink Manager created for session={}", session);
+            createSinkManager(session);
         }
     }
 
@@ -172,8 +169,8 @@ public class LogReplicationServer extends AbstractServer {
             //  for sessions from the other cluster
             if (sinkManager == null) {
                 if(!sessionManager.getSessions().contains(session)) {
-                    log.error("Sink Manager not found for session {}, total={}, sessions={}", session,
-                            sessionToSinkManagerMap.size(), sessionToSinkManagerMap.keySet());
+                    log.error("SessionManager does not know about incoming session {}, total={}, current sessions={}",
+                            session, sessionToSinkManagerMap.size(), sessionToSinkManagerMap.keySet());
                     return;
                 } else {
                     sinkManager = createSinkManager(session);
@@ -235,8 +232,8 @@ public class LogReplicationServer extends AbstractServer {
             //  for sessions from the other cluster
             if (sinkManager == null) {
                 if(!sessionManager.getSessions().contains(session)) {
-                    log.error("Sink Manager not found for session {}, total={}, sessions={}", session,
-                            sessionToSinkManagerMap.size(), sessionToSinkManagerMap.keySet());
+                    log.error("SessionManager does not know about incoming session {}, total={}, current sessions={}",
+                            session, sessionToSinkManagerMap.size(), sessionToSinkManagerMap.keySet());
                     return;
                 } else {
                     sinkManager = createSinkManager(session);

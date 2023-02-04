@@ -30,6 +30,11 @@ public class TopologyDescriptor {
     @Getter
     private final long topologyConfigId;
 
+    // TODO[V2] Shama: re-evaluate if all these structures are needed in connectionModel PR.
+    //  Comment to address:: SessionManager also tracks incomingSessions and outgoingSessions just wondering if it might
+    //  help to just have it hang on to the TopologyDescriptor to reduce the number of maps tracking the sessions
+    //  perhaps? Do you think it can help reduce the overhead in keeping these in sync?
+
     // Contains remote clusters that are SOURCE to the local cluster.
     @Getter
     private final Map<String, ClusterDescriptor> remoteSourceClusters;
@@ -150,7 +155,7 @@ public class TopologyDescriptor {
     public void setLocalDescriptor(String nodeId) {
 
         for (ClusterDescriptor cluster : allClustersInTopology.values()) {
-            for (NodeDescriptor node : cluster.nodesDescriptors) {
+            for (NodeDescriptor node : cluster.nodeDescriptors) {
                 if (node.getNodeId().equals(nodeId)) {
                     localClusterDescriptor = cluster;
                     localNodeDescriptor =  node;
