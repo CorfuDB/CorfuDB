@@ -1,8 +1,7 @@
 package org.corfudb.integration;
 
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatus;
 import org.corfudb.infrastructure.logreplication.proto.Sample.IntValue;
 import org.corfudb.infrastructure.logreplication.proto.Sample.IntValueTag;
 import org.corfudb.infrastructure.logreplication.proto.Sample.Metadata;
@@ -11,6 +10,7 @@ import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicat
 import org.corfudb.runtime.CorfuStoreMetadata.TableDescriptors;
 import org.corfudb.runtime.CorfuStoreMetadata.TableMetadata;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
+import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
@@ -30,7 +30,7 @@ public class LogReplicationSinkWriterIT extends LogReplicationAbstractIT {
 
     private static final int NUM_WRITES = 500;
 
-    private static final String REPLICATION_STATUS_TABLE = "LogReplicationStatus";
+    private static final String REPLICATION_STATUS_TABLE = LogReplicationMetadataManager.REPLICATION_STATUS_TABLE_NAME;
 
 
     /**
@@ -80,11 +80,11 @@ public class LogReplicationSinkWriterIT extends LogReplicationAbstractIT {
 
         // Verify snapshot sync completed and cluster went into log entry sync
         verifyInLogEntrySyncState();
+
         // Verify Sink side record for Table001 is retained on the Registry table, and records for Table003 and
         // Table004 are replicated.
         // Also verify all the table's contents for snapshot sync
         verifyTableContentsAndRecords(1, 2, 4);
-
 
         /* The last 4 tables are for log entry sync */
 
@@ -92,6 +92,7 @@ public class LogReplicationSinkWriterIT extends LogReplicationAbstractIT {
         // Log Entry sync. LR needs to be stopped to open some tables on both Source and Sink with different metadata,
         // otherwise it is possible that registry table entries from Source get replicated before Sink side opens them.
         stopSourceLogReplicator();
+
         // Clear these two map as different set of tables will be verified
         mapNameToMapSource.clear();
         mapNameToMapSink.clear();
@@ -107,6 +108,7 @@ public class LogReplicationSinkWriterIT extends LogReplicationAbstractIT {
         // At this point mapNameToMapSink only has 1 table. This step is also used as a barrier to indicate
         // it's a good point to check records on Sink side
         verifyDataOnSink(NUM_WRITES);
+
         // Verify Sink side record for Table005 is retained on the Registry table, and records for Table007 and
         // Table008 are replicated.
         // Also verify all the table's contents for log entry sync
@@ -201,16 +203,16 @@ public class LogReplicationSinkWriterIT extends LogReplicationAbstractIT {
     private void openLogReplicationStatusTable() throws Exception {
         corfuStoreSource.openTable(LogReplicationMetadataManager.NAMESPACE,
                 REPLICATION_STATUS_TABLE,
-                LogReplicationMetadata.ReplicationStatusKey.class,
-                ReplicationStatusVal.class,
+                LogReplicationSession.class,
+                ReplicationStatus.class,
                 null,
-                TableOptions.fromProtoSchema(ReplicationStatusVal.class));
+                TableOptions.fromProtoSchema(ReplicationStatus.class));
 
         corfuStoreSink.openTable(LogReplicationMetadataManager.NAMESPACE,
                 REPLICATION_STATUS_TABLE,
-                LogReplicationMetadata.ReplicationStatusKey.class,
-                ReplicationStatusVal.class,
+                LogReplicationSession.class,
+                ReplicationStatus.class,
                 null,
-                TableOptions.fromProtoSchema(ReplicationStatusVal.class));
+                TableOptions.fromProtoSchema(ReplicationStatus.class));
     }
 }
