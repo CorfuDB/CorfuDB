@@ -8,7 +8,7 @@ import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.common.util.Memory;
 import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
-import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
+import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.infrastructure.logreplication.replication.send.IllegalSnapshotEntrySizeException;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
@@ -57,7 +57,6 @@ public class StreamsSnapshotReader extends SnapshotReader {
     private final int maxDataSizePerMsg;
     private final Optional<DistributionSummary> messageSizeDistributionSummary;
     private final CorfuRuntime rt;
-    private final LogReplicationContext replicationContext;
     private long snapshotTimestamp;
     private Set<String> streams;
     private PriorityQueue<String> streamsToSend;
@@ -70,19 +69,20 @@ public class StreamsSnapshotReader extends SnapshotReader {
     @Getter
     private ObservableValue<Integer> observeBiggerMsg = new ObservableValue(0);
 
-    private final ReplicationSession replicationSession;
+    private final LogReplicationSession session;
+    private final LogReplicationContext replicationContext;
 
     /**
      * Init runtime and streams to read
      */
-    public StreamsSnapshotReader(CorfuRuntime runtime, LogReplicationContext replicationContext,
-                                 ReplicationSession replicationSession) {
+    public StreamsSnapshotReader(CorfuRuntime runtime, LogReplicationSession session,
+                                 LogReplicationContext replicationContext) {
         this.rt = runtime;
+        this.session = session;
         this.replicationContext = replicationContext;
-        this.replicationSession = replicationSession;
         this.rt.parseConfigurationString(runtime.getLayoutServers().get(0)).connect();
-        this.maxDataSizePerMsg = replicationContext.getConfig().getMaxDataSizePerMsg();
-        this.streams = replicationContext.getConfig().getReplicationSubscriberToStreamsMap().get(replicationSession.getSubscriber());
+        this.maxDataSizePerMsg = replicationContext.getConfigManager().getConfig().getMaxDataSizePerMsg();
+        this.streams = replicationContext.getConfigManager().getConfig().getStreamsToReplicate();
         this.messageSizeDistributionSummary = configureMessageSizeDistributionSummary();
     }
 
@@ -92,7 +92,7 @@ public class StreamsSnapshotReader extends SnapshotReader {
      * @param entryList
      * @return
      */
-    private OpaqueEntry generateOpaqueEntry(long version, UUID streamID,  SMREntryList entryList) {
+    private OpaqueEntry generateOpaqueEntry(long version, UUID streamID, SMREntryList entryList) {
         Map<UUID, List<SMREntry>> map = new HashMap<>();
         map.put(streamID, entryList.getSmrEntries());
         return new OpaqueEntry(version, map);
@@ -271,8 +271,8 @@ public class StreamsSnapshotReader extends SnapshotReader {
     public void reset(long ts) {
         // As the config should reflect the latest configuration read from registry table, it will be synced with the
         // latest registry table content instead of the given ts, while the streams to replicate will be read up to ts.
-        streams = replicationContext.refresh().getReplicationSubscriberToStreamsMap()
-                .get(replicationSession.getSubscriber());
+        replicationContext.refresh();
+        streams = replicationContext.getConfig().getStreamsToReplicate();
         streamsToSend = new PriorityQueue<>(streams);
         preMsgTs = Address.NON_ADDRESS;
         currentMsgTs = Address.NON_ADDRESS;

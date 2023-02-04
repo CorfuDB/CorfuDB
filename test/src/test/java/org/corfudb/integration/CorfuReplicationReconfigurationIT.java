@@ -1,12 +1,18 @@
 package org.corfudb.integration;
 
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.logreplication.infrastructure.SessionManager;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
-import org.corfudb.infrastructure.logreplication.proto.Sample;
-import org.corfudb.infrastructure.logreplication.replication.LogReplicationAckReader;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SyncType;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SnapshotSyncInfo;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SyncStatus;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatus;
+import org.corfudb.infrastructure.logreplication.proto.Sample.IntValueTag;
+import org.corfudb.infrastructure.logreplication.proto.Sample.Metadata;
+import org.corfudb.infrastructure.logreplication.proto.Sample.StringKey;
+import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationAckReader;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
@@ -16,6 +22,7 @@ import org.corfudb.runtime.collections.StreamListener;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.stream.IStreamView;
@@ -44,6 +51,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
+import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.REPLICATION_STATUS_TABLE_NAME;
 
 /**
  * This suite of tests validates the behavior of Log Replication
@@ -61,18 +69,18 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
 
     private AtomicBoolean replicationEnded = new AtomicBoolean(false);
 
-    private Map<String, Table<Sample.StringKey, ValueFieldTagOne, Sample.Metadata>> mapNameToMapSourceTypeA
+    private Map<String, Table<StringKey, ValueFieldTagOne, Metadata>> mapNameToMapSourceTypeA
             = new HashMap<>();
-    private Map<String, Table<Sample.StringKey, ValueFieldTagOne, Sample.Metadata>> mapNameToMapSinkTypeA =
+    private Map<String, Table<StringKey, ValueFieldTagOne, Metadata>> mapNameToMapSinkTypeA =
             new HashMap<>();
-    private Map<String, Table<Sample.StringKey, ValueFieldTagOneAndTwo, Sample.Metadata>> mapNameToMapSourceTypeB =
+    private Map<String, Table<StringKey, ValueFieldTagOneAndTwo, Metadata>> mapNameToMapSourceTypeB =
             new HashMap<>();
-    private Map<String, Table<Sample.StringKey, ValueFieldTagOneAndTwo, Sample.Metadata>> mapNameToMapSinkTypeB =
+    private Map<String, Table<StringKey, ValueFieldTagOneAndTwo, Metadata>> mapNameToMapSinkTypeB =
             new HashMap<>();
 
     private volatile AtomicBoolean stopWrites = new AtomicBoolean(false);
 
-    private Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata> noisyMap;
+    private Table<StringKey, IntValueTag, Metadata> noisyMap;
 
     /**
      * Sets the plugin path before starting any test
@@ -163,16 +171,16 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
 
         // (7) Verify replication status after all data has been replicated (no further data)
         corfuStoreSource.openTable(LogReplicationMetadataManager.NAMESPACE,
-                LogReplicationMetadataManager.REPLICATION_STATUS_TABLE,
-                LogReplicationMetadata.ReplicationStatusKey.class,
-                LogReplicationMetadata.ReplicationStatusVal.class,
-                null,
-                TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
+            REPLICATION_STATUS_TABLE_NAME,
+            LogReplicationSession.class,
+            ReplicationStatus.class,
+            null,
+            TableOptions.fromProtoSchema(ReplicationStatus.class));
 
         // Wait the polling period time before verifying sync status (to make sure it was updated)
         Sleep.sleepUninterruptibly(Duration.ofSeconds(LogReplicationAckReader.ACKED_TS_READ_INTERVAL_SECONDS + 1));
 
-        long remainingEntriesToSend = verifyReplicationStatus(ReplicationStatusVal.SyncType.LOG_ENTRY,
+        long remainingEntriesToSend = verifyReplicationStatus(SyncType.LOG_ENTRY,
                 LogReplicationMetadata.SyncStatus.ONGOING, LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType.DEFAULT,
                 LogReplicationMetadata.SyncStatus.COMPLETED);
        assertThat(remainingEntriesToSend).isEqualTo(0L);
@@ -195,9 +203,9 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
 
         // While the TX log is growing, the remaining entries to send can be changing during this time, as it is computed
         // wrt. the tail of the log and this varies depending on how fast we are catching the tail of the log.
-        verifyReplicationStatus(ReplicationStatusVal.SyncType.LOG_ENTRY,
-                LogReplicationMetadata.SyncStatus.ONGOING, LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType.DEFAULT,
-                LogReplicationMetadata.SyncStatus.COMPLETED);
+        verifyReplicationStatus(SyncType.LOG_ENTRY,
+                SyncStatus.ONGOING, SnapshotSyncInfo.SnapshotSyncType.DEFAULT,
+                SyncStatus.COMPLETED);
 
         stopWrites.set(true);
 
@@ -209,57 +217,59 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
         // Wait the polling period time and verify sync status again (to make sure it was not erroneously updated)
         Sleep.sleepUninterruptibly(Duration.ofSeconds(LogReplicationAckReader.ACKED_TS_READ_INTERVAL_SECONDS + delta));
 
-        remainingEntriesToSend = verifyReplicationStatus(ReplicationStatusVal.SyncType.LOG_ENTRY,
+        remainingEntriesToSend = verifyReplicationStatus(SyncType.LOG_ENTRY,
                 LogReplicationMetadata.SyncStatus.ONGOING, LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType.DEFAULT,
                 LogReplicationMetadata.SyncStatus.COMPLETED);
         assertThat(remainingEntriesToSend).isEqualTo(0L);
     }
 
-    private long verifyReplicationStatus(ReplicationStatusVal.SyncType targetSyncType,
-                                         LogReplicationMetadata.SyncStatus targetSyncStatus,
-                                         LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType targetSnapshotSyncType,
-                                         LogReplicationMetadata.SyncStatus targetSnapshotSyncStatus) {
+    private long verifyReplicationStatus(SyncType targetSyncType, SyncStatus targetSyncStatus,
+                                         SnapshotSyncInfo.SnapshotSyncType targetSnapshotSyncType,
+                                         SyncStatus targetSnapshotSyncStatus) {
 
-        LogReplicationMetadata.ReplicationStatusKey key =
-                LogReplicationMetadata.ReplicationStatusKey
-                        .newBuilder()
-                        .setClusterId(new DefaultClusterConfig().getSinkClusterIds().get(0))
-                        .build();
+        LogReplicationSession session = LogReplicationSession.newBuilder()
+            .setSourceClusterId(new DefaultClusterConfig().getSourceClusterIds().get(0))
+            .setSinkClusterId(new DefaultClusterConfig().getSinkClusterIds().get(0))
+            .setSubscriber(SessionManager.getDefaultSubscriber())
+            .build();
 
-        ReplicationStatusVal replicationStatusVal;
+        ReplicationStatus replicationStatus;
         try (TxnContext txn = corfuStoreSource.txn(LogReplicationMetadataManager.NAMESPACE)) {
-            replicationStatusVal = (ReplicationStatusVal)txn.getRecord(LogReplicationMetadataManager.REPLICATION_STATUS_TABLE, key).getPayload();
+            replicationStatus = (ReplicationStatus)txn.getRecord(REPLICATION_STATUS_TABLE_NAME, session).getPayload();
             txn.commit();
         }
 
         log.info("ReplicationStatusVal: RemainingEntriesToSend: {}, SyncType: {}, Status: {}",
-                replicationStatusVal.getRemainingEntriesToSend(), replicationStatusVal.getSyncType(),
-                replicationStatusVal.getStatus());
+                replicationStatus.getSourceStatus().getRemainingEntriesToSend(),
+                replicationStatus.getSourceStatus().getReplicationInfo().getSyncType(),
+                replicationStatus.getSourceStatus().getReplicationInfo().getStatus());
 
         log.info("ReplicationStatusVal: Base: {}, Type: {}, Status: {}, CompletedTime: {}",
-                replicationStatusVal.getSnapshotSyncInfo().getBaseSnapshot(), replicationStatusVal.getSnapshotSyncInfo().getType(),
-                replicationStatusVal.getSnapshotSyncInfo().getStatus(), replicationStatusVal.getSnapshotSyncInfo().getCompletedTime());
+                replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getBaseSnapshot(),
+                replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getType(),
+                replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus(),
+                replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getCompletedTime());
 
-        assertThat(replicationStatusVal.getSyncType()).isEqualTo(targetSyncType);
-        assertThat(replicationStatusVal.getStatus()).isEqualTo(targetSyncStatus);
-        assertThat(replicationStatusVal.getSnapshotSyncInfo().getType()).isEqualTo(targetSnapshotSyncType);
-        assertThat(replicationStatusVal.getSnapshotSyncInfo().getStatus()).isEqualTo(targetSnapshotSyncStatus);
-        assertThat(replicationStatusVal.getSnapshotSyncInfo().getBaseSnapshot()).isGreaterThan(Address.NON_ADDRESS);
+        assertThat(replicationStatus.getSourceStatus().getReplicationInfo().getSyncType()).isEqualTo(targetSyncType);
+        assertThat(replicationStatus.getSourceStatus().getReplicationInfo().getStatus()).isEqualTo(targetSyncStatus);
+        assertThat(replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getType()).isEqualTo(targetSnapshotSyncType);
+        assertThat(replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus()).isEqualTo(targetSnapshotSyncStatus);
+        assertThat(replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getBaseSnapshot()).isGreaterThan(Address.NON_ADDRESS);
 
-        return replicationStatusVal.getRemainingEntriesToSend();
+        return replicationStatus.getSourceStatus().getRemainingEntriesToSend();
     }
 
     private void openNonReplicatedTable() throws Exception {
         noisyMap = corfuStoreSource.openTable(
-                NAMESPACE, "noisyMap", Sample.StringKey.class, Sample.IntValueTag.class, Sample.Metadata.class,
-                TableOptions.fromProtoSchema(Sample.IntValueTag.class));
+                NAMESPACE, "noisyMap", StringKey.class, IntValueTag.class, Metadata.class,
+                TableOptions.fromProtoSchema(IntValueTag.class));
     }
 
     private void writeNonReplicatedTable(int numWrites) {
         for (int i = 0; i < numWrites; i++) {
-            Sample.StringKey stringKey = Sample.StringKey.newBuilder().setKey(String.valueOf(i)).build();
-            Sample.IntValueTag intValueTag = Sample.IntValueTag.newBuilder().setValue(i).build();
-            Sample.Metadata metadata = Sample.Metadata.newBuilder().setMetadata("Metadata_" + i).build();
+            StringKey stringKey = StringKey.newBuilder().setKey(String.valueOf(i)).build();
+            IntValueTag intValueTag = IntValueTag.newBuilder().setValue(i).build();
+            Metadata metadata = Metadata.newBuilder().setMetadata("Metadata_" + i).build();
             try (TxnContext txn = corfuStoreSource.txn(NAMESPACE)) {
                 txn.putRecord(noisyMap, stringKey, intValueTag, metadata);
                 txn.commit();
@@ -288,12 +298,12 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
             writeToSource(0, numWritesSmaller);
 
             // Confirm data does exist on Source Cluster
-            for (Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata> map : mapNameToMapSource.values()) {
+            for (Table<StringKey, IntValueTag, Metadata> map : mapNameToMapSource.values()) {
                 assertThat(map.count()).isEqualTo(numWritesSmaller);
             }
 
             // Confirm data does not exist on Sink Cluster
-            for (Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata> map : mapNameToMapSink.values()) {
+            for (Table<StringKey, IntValueTag, Metadata> map : mapNameToMapSink.values()) {
                 assertThat(map.count()).isEqualTo(0);
             }
 
@@ -400,8 +410,8 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
         try {
             corfuStore.openTable(
                     NAMESPACE, mapName,
-                    Sample.StringKey.class, Sample.IntValueTag.class, Sample.Metadata.class,
-                    TableOptions.fromProtoSchema(Sample.IntValueTag.class)
+                    StringKey.class, IntValueTag.class, Metadata.class,
+                    TableOptions.fromProtoSchema(IntValueTag.class)
             );
         } catch (Exception e) {
             throw new RuntimeException(e);
@@ -507,7 +517,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
             // Wait until snapshot sync has completed
             // Open replication status table and monitor completion field
             corfuStoreSource.openTable(LogReplicationMetadataManager.NAMESPACE,
-                    LogReplicationMetadataManager.REPLICATION_STATUS_TABLE,
+                    REPLICATION_STATUS_TABLE_NAME,
                     LogReplicationMetadata.ReplicationStatusKey.class,
                     LogReplicationMetadata.ReplicationStatusVal.class,
                     null,
@@ -587,39 +597,44 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
                         .setClusterId(new DefaultClusterConfig().getSinkClusterIds().get(0))
                         .build();
 
-        ReplicationStatusVal replicationStatusVal;
+        ReplicationStatus replicationStatus;
         boolean snapshotSyncCompleted = false;
 
         while (snapshotSyncCompleted) {
             try (TxnContext txn = corfuStoreSource.txn(LogReplicationMetadataManager.NAMESPACE)) {
-                replicationStatusVal = (ReplicationStatusVal) txn.getRecord(LogReplicationMetadataManager.REPLICATION_STATUS_TABLE, key).getPayload();
+                replicationStatus = (ReplicationStatus) txn
+                        .getRecord(REPLICATION_STATUS_TABLE_NAME, key).getPayload();
                 txn.commit();
             }
 
             log.info("ReplicationStatusVal: RemainingEntriesToSend: {}, SyncType: {}, Status: {}",
-                    replicationStatusVal.getRemainingEntriesToSend(), replicationStatusVal.getSyncType(),
-                    replicationStatusVal.getStatus());
+                    replicationStatus.getSourceStatus().getRemainingEntriesToSend(),
+                    replicationStatus.getSourceStatus().getReplicationInfo().getSyncType(),
+                    replicationStatus.getSourceStatus().getReplicationInfo().getStatus());
 
             log.info("ReplicationStatusVal: Base: {}, Type: {}, Status: {}, CompletedTime: {}",
-                    replicationStatusVal.getSnapshotSyncInfo().getBaseSnapshot(), replicationStatusVal.getSnapshotSyncInfo().getType(),
-                    replicationStatusVal.getSnapshotSyncInfo().getStatus(), replicationStatusVal.getSnapshotSyncInfo().getCompletedTime());
+                    replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getBaseSnapshot(),
+                    replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getType(),
+                    replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus(),
+                    replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getCompletedTime());
 
-            snapshotSyncCompleted = replicationStatusVal.getSnapshotSyncInfo().getStatus() == LogReplicationMetadata.SyncStatus.COMPLETED;
+            snapshotSyncCompleted = replicationStatus.getSourceStatus().getReplicationInfo()
+                    .getSnapshotSyncInfo().getStatus() == LogReplicationMetadata.SyncStatus.COMPLETED;
         }
     }
 
     private void verifySourceData(int totalEntries) {
-        for (Table<Sample.StringKey, ValueFieldTagOne, Sample.Metadata> map : mapNameToMapSourceTypeA.values()) {
+        for (Table<StringKey, ValueFieldTagOne, Metadata> map : mapNameToMapSourceTypeA.values()) {
             assertThat(map.count()).isEqualTo(totalEntries);
         }
 
-        for (Table<Sample.StringKey, ValueFieldTagOneAndTwo, Sample.Metadata> map : mapNameToMapSourceTypeB.values()) {
+        for (Table<StringKey, ValueFieldTagOneAndTwo, Metadata> map : mapNameToMapSourceTypeB.values()) {
             assertThat(map.count()).isEqualTo(totalEntries);
         }
     }
 
     public void verifySinkData(int expectedConsecutiveWrites) {
-        for (Map.Entry<String, Table<Sample.StringKey, ValueFieldTagOne, Sample.Metadata>> entry : mapNameToMapSinkTypeA.entrySet()) {
+        for (Map.Entry<String, Table<StringKey, ValueFieldTagOne, Metadata>> entry : mapNameToMapSinkTypeA.entrySet()) {
 
             log.debug("Verify Data on Sink's Table {}", entry.getKey());
 
@@ -636,13 +651,13 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
             for (int i = 0; i < (expectedConsecutiveWrites); i++) {
                 try (TxnContext tx = corfuStoreSink.txn(entry.getValue().getNamespace())) {
                     assertThat(tx.getRecord(entry.getValue(),
-                            Sample.StringKey.newBuilder().setKey(String.valueOf(i)).build()).getPayload()).isNotNull();
+                            StringKey.newBuilder().setKey(String.valueOf(i)).build()).getPayload()).isNotNull();
                     tx.commit();
                 }
             }
         }
 
-        for (Map.Entry<String, Table<Sample.StringKey, ValueFieldTagOneAndTwo, Sample.Metadata>> entry : mapNameToMapSinkTypeB.entrySet()) {
+        for (Map.Entry<String, Table<StringKey, ValueFieldTagOneAndTwo, Metadata>> entry : mapNameToMapSinkTypeB.entrySet()) {
 
             log.debug("Verify Data on Sink's Table {}", entry.getKey());
 
@@ -659,7 +674,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
             for (int i = 0; i < (expectedConsecutiveWrites); i++) {
                 try (TxnContext tx = corfuStoreSink.txn(entry.getValue().getNamespace())) {
                     assertThat(tx.getRecord(entry.getValue(),
-                            Sample.StringKey.newBuilder().setKey(String.valueOf(i)).build()).getPayload()).isNotNull();
+                            StringKey.newBuilder().setKey(String.valueOf(i)).build()).getPayload()).isNotNull();
                     tx.commit();
                 }
             }
@@ -673,7 +688,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
     private void openTable(CorfuStore corfuStore, String tableName) throws Exception {
         corfuStore.openTable(
                 NAMESPACE, tableName,
-                Sample.StringKey.class, Sample.IntValueTag.class, Sample.Metadata.class,
+                StringKey.class, IntValueTag.class, Metadata.class,
                 TableOptions.fromProtoSchema(SampleTableAMsg.class)
         );
     }
@@ -699,24 +714,24 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
             String mapName = TABLE_PREFIX + i;
 
             if (i % 2 == 0) {
-                Table<Sample.StringKey, ValueFieldTagOne, Sample.Metadata> mapSource = corfuStoreSource.openTable(
-                        NAMESPACE, mapName, Sample.StringKey.class, ValueFieldTagOne.class, Sample.Metadata.class,
+                Table<StringKey, ValueFieldTagOne, Metadata> mapSource = corfuStoreSource.openTable(
+                        NAMESPACE, mapName, StringKey.class, ValueFieldTagOne.class, Metadata.class,
                         TableOptions.fromProtoSchema(ValueFieldTagOne.class));
                 mapNameToMapSourceTypeA.put(mapName, mapSource);
 
-                Table<Sample.StringKey, ValueFieldTagOne, Sample.Metadata> mapSink = corfuStoreSink.openTable(
-                        NAMESPACE, mapName, Sample.StringKey.class, ValueFieldTagOne.class, Sample.Metadata.class,
+                Table<StringKey, ValueFieldTagOne, Metadata> mapSink = corfuStoreSink.openTable(
+                        NAMESPACE, mapName, StringKey.class, ValueFieldTagOne.class, Metadata.class,
                         TableOptions.fromProtoSchema(ValueFieldTagOne.class));
                 mapNameToMapSinkTypeA.put(mapName, mapSink);
 
             } else {
-                Table<Sample.StringKey, ValueFieldTagOneAndTwo , Sample.Metadata> mapSource = corfuStoreSource.openTable(
-                        NAMESPACE, mapName, Sample.StringKey.class, ValueFieldTagOneAndTwo.class, Sample.Metadata.class,
+                Table<StringKey, ValueFieldTagOneAndTwo, Metadata> mapSource = corfuStoreSource.openTable(
+                        NAMESPACE, mapName, StringKey.class, ValueFieldTagOneAndTwo.class, Metadata.class,
                         TableOptions.fromProtoSchema(ValueFieldTagOneAndTwo.class));
                 mapNameToMapSourceTypeB.put(mapName, mapSource);
 
-                Table<Sample.StringKey, ValueFieldTagOneAndTwo, Sample.Metadata> mapSink = corfuStoreSink.openTable(
-                        NAMESPACE, mapName, Sample.StringKey.class, ValueFieldTagOneAndTwo.class, Sample.Metadata.class,
+                Table<StringKey, ValueFieldTagOneAndTwo, Metadata> mapSink = corfuStoreSink.openTable(
+                        NAMESPACE, mapName, StringKey.class, ValueFieldTagOneAndTwo.class, Metadata.class,
                         TableOptions.fromProtoSchema(ValueFieldTagOneAndTwo.class));
                 mapNameToMapSinkTypeB.put(mapName, mapSink);
             }
@@ -730,14 +745,14 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
 
     public void writeToSourceDifferentTypes(int startIndex, int totalEntries) {
         int maxIndex = totalEntries + startIndex;
-        for(Map.Entry<String, Table<Sample.StringKey, ValueFieldTagOne, Sample.Metadata>> entry : mapNameToMapSourceTypeA.entrySet()) {
+        for(Map.Entry<String, Table<StringKey, ValueFieldTagOne, Metadata>> entry : mapNameToMapSourceTypeA.entrySet()) {
 
-            Table<Sample.StringKey, ValueFieldTagOne, Sample.Metadata> map = entry.getValue();
+            Table<StringKey, ValueFieldTagOne, Metadata> map = entry.getValue();
 
             for (int i = startIndex; i < maxIndex; i++) {
-                Sample.StringKey stringKey = Sample.StringKey.newBuilder().setKey(String.valueOf(i)).build();
+                StringKey stringKey = StringKey.newBuilder().setKey(String.valueOf(i)).build();
                 ValueFieldTagOne value = ValueFieldTagOne.newBuilder().setPayload(Integer.toString(i)).build();
-                Sample.Metadata metadata = Sample.Metadata.newBuilder().setMetadata("Metadata_" + i).build();
+                Metadata metadata = Metadata.newBuilder().setMetadata("Metadata_" + i).build();
                 try (TxnContext txn = corfuStoreSource.txn(NAMESPACE)) {
                     txn.putRecord(map, stringKey, value, metadata);
                     txn.commit();
@@ -745,14 +760,14 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
             }
         }
 
-        for(Map.Entry<String, Table<Sample.StringKey, ValueFieldTagOneAndTwo, Sample.Metadata>> entry : mapNameToMapSourceTypeB.entrySet()) {
+        for(Map.Entry<String, Table<StringKey, ValueFieldTagOneAndTwo, Metadata>> entry : mapNameToMapSourceTypeB.entrySet()) {
 
-            Table<Sample.StringKey, ValueFieldTagOneAndTwo, Sample.Metadata> map = entry.getValue();
+            Table<StringKey, ValueFieldTagOneAndTwo, Metadata> map = entry.getValue();
 
             for (int i = startIndex; i < maxIndex; i++) {
-                Sample.StringKey stringKey = Sample.StringKey.newBuilder().setKey(String.valueOf(i)).build();
+                StringKey stringKey = StringKey.newBuilder().setKey(String.valueOf(i)).build();
                 ValueFieldTagOneAndTwo value = ValueFieldTagOneAndTwo.newBuilder().setPayload(Integer.toString(i)).build();
-                Sample.Metadata metadata = Sample.Metadata.newBuilder().setMetadata("Metadata_" + i).build();
+                Metadata metadata = Metadata.newBuilder().setMetadata("Metadata_" + i).build();
                 try (TxnContext txn = corfuStoreSource.txn(NAMESPACE)) {
                     txn.putRecord(map, stringKey, value, metadata);
                     txn.commit();
