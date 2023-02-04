@@ -113,7 +113,7 @@ public class SessionManager {
      * @param corfuRuntime        runtime for database access
      */
     @VisibleForTesting
-    public SessionManager(@Nonnull TopologyDescriptor topology, CorfuRuntime corfuRuntime, String localCorfuEndpoint) {
+    public SessionManager(@Nonnull TopologyDescriptor topology, CorfuRuntime corfuRuntime) {
         this.topology = topology;
         this.runtime = corfuRuntime;
         this.corfuStore = new CorfuStore(corfuRuntime);

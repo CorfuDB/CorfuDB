@@ -475,20 +475,9 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
      * Update the valid default topology config with sink cluster.
      * Add one sink cluster and Remove existing sink cluster.
      **/
-    @VisibleForTesting
     public TopologyDescriptor updateDefaultValidConfig() {
-        TopologyDescriptor defaultTopology = new TopologyDescriptor(constructTopologyConfigMsg(), localEndpoint);
-        List<ClusterDescriptor> sourceClusters = new ArrayList<>(defaultTopology.getSourceClusters().values());
-        List<ClusterDescriptor> sinkClusters = new ArrayList<>(defaultTopology.getSinkClusters().values());
-        int sinkClusterSize = sinkClusters.size();
-        // Given the sink cluster size is 3 already. It is safe to remove the middle cluster.
-        if(sinkClusterSize > 2) {
-            sinkClusters.remove(sinkClusters.get(sinkClusterSize - 2));
-        }
-        sinkClusters.add(new ClusterDescriptor("new-test-sink-cluster-id", ClusterRole.SINK,
-                Integer.parseInt(topology.getSinkCorfuPorts().get(0))));
-
-        return new TopologyDescriptor(++configId, sourceClusters, sinkClusters, localEndpoint);
+        createSingleSourceSinkTopology();
+        return topologyConfig;
     }
 
     /**
