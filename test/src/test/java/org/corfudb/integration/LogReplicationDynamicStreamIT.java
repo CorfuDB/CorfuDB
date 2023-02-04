@@ -1,7 +1,7 @@
 package org.corfudb.integration;
 
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.LogReplication.ReplicationStatus;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatus;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
 import org.corfudb.infrastructure.logreplication.proto.Sample.IntValueTag;
 import org.corfudb.infrastructure.logreplication.proto.Sample.Metadata;
@@ -27,7 +27,7 @@ import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.corfudb.runtime.LogReplicationUtils.REPLICATION_STATUS_TABLE_NAME;
+import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.REPLICATION_STATUS_TABLE_NAME;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 /**
@@ -58,19 +58,18 @@ public class LogReplicationDynamicStreamIT extends LogReplicationAbstractIT {
 
         // Open replication status table to for verification purpose
         corfuStoreSource.openTable(LogReplicationMetadataManager.NAMESPACE,
-                REPLICATION_STATUS_TABLE,
-                ReplicationStatusKey.class,
-                ReplicationStatusVal.class,
+                REPLICATION_STATUS_TABLE_NAME,
+                LogReplicationSession.class,
+                ReplicationStatus.class,
                 null,
                 TableOptions.fromProtoSchema(ReplicationStatus.class));
 
         corfuStoreSink.openTable(LogReplicationMetadataManager.NAMESPACE,
-                REPLICATION_STATUS_TABLE,
-                ReplicationStatusKey.class,
-                ReplicationStatusVal.class,
+                REPLICATION_STATUS_TABLE_NAME,
+                LogReplicationSession.class,
+                ReplicationStatus.class,
                 null,
                 TableOptions.fromProtoSchema(ReplicationStatus.class));
-        initSingleSourceSinkCluster();
     }
 
     /*

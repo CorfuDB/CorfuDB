@@ -7,8 +7,6 @@ import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.logreplication.DataControl;
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationSourceManager;
 
-import static org.assertj.core.api.Assertions.fail;
-
 /**
  * Test Default Data Control Implementation, used for source and sink (destination) nodes.
  */

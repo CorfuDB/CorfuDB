@@ -7,7 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.logreplication.DataSender;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
-import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
+import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
@@ -27,7 +27,6 @@ import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
-import org.corfudb.runtime.LogReplication.ReplicationStatus;
 import org.corfudb.runtime.view.Address;
 
 import java.util.List;
@@ -97,15 +96,14 @@ public class SourceForwardingDataSender implements DataSender {
 
     private CorfuStore sinkCorfuStore;
 
-    private LogReplicationIT.TestConfig testConfig;
+    private static final String REPLICATION_STATUS_TABLE = LogReplicationMetadataManager.REPLICATION_STATUS_TABLE_NAME;
 
-    private int numStartMsgsDropped;
+    private LogReplicationSession session = DefaultClusterConfig.getSessions().get(0);
 
     @SneakyThrows
-    public SourceForwardingDataSender(String destinationEndpoint, LogReplicationContext replicationContext,
-                                      LogReplicationIT.TestConfig testConfig,
+    public SourceForwardingDataSender(String destinationEndpoint, LogReplicationIT.TestConfig testConfig,
                                       LogReplicationMetadataManager metadataManager,
-                                      LogReplicationIT.TransitionSource function,
+                                      String pluginConfigFilePath, LogReplicationIT.TransitionSource function,
                                       LogReplicationContext context) {
         this.runtime = CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder().build())
                 .parseConfigurationString(destinationEndpoint)
@@ -113,12 +111,10 @@ public class SourceForwardingDataSender implements DataSender {
         this.destinationDataSender = new AckDataSender();
         this.destinationDataControl = new DefaultDataControl(new DefaultDataControlConfig(
             false, 0));
-        ReplicationSession replicationSession =
-            ReplicationSession.getDefaultReplicationSessionForCluster(testConfig.getRemoteClusterId());
 
         // TODO pankti: This test-only constructor can be removed
         this.destinationLogReplicationManager = new LogReplicationSinkManager(runtime.getLayoutServers().get(0),
-            replicationContext, metadataManager, pluginConfigFilePath, replicationSession);
+            metadataManager, pluginConfigFilePath, session, context);
 
         this.ifDropMsg = testConfig.getDropMessageLevel();
         this.delayedApplyCycles = testConfig.getDelayedApplyCycles();
@@ -131,30 +127,14 @@ public class SourceForwardingDataSender implements DataSender {
         sinkCorfuStore.openTable(LogReplicationMetadataManager.NAMESPACE,
                 REPLICATION_STATUS_TABLE,
                 LogReplicationSession.class,
-                ReplicationStatus.class,
+                LogReplicationMetadata.ReplicationStatus.class,
                 null,
-                TableOptions.fromProtoSchema(ReplicationStatus.class));
-        this.testConfig = testConfig;
+                TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatus.class));
     }
 
     @Override
     public CompletableFuture<LogReplicationEntryMsg> send(LogReplicationEntryMsg message) {
-        // Check if the SNAPSHOT_START message must be dropped
-        if (testConfig.isDropSnapshotStartMsg() && message.getMetadata().getEntryType() ==
-                LogReplicationEntryType.SNAPSHOT_START) {
-            if (testConfig.getNumDropsForSnapshotStart() != Integer.MAX_VALUE) {
-                // If a limited number of START messages must be dropped, drop them only if the number is yet to be
-                // reached
-                if (numStartMsgsDropped < testConfig.getNumDropsForSnapshotStart()) {
-                    numStartMsgsDropped++;
-                    return new CompletableFuture<>();
-                }
-            } else {
-                return new CompletableFuture<>();
-            }
-        }
-
-        log.trace("Send message: " + message.getMetadata().getEntryType() + " for:: " + message.getMetadata().getTimestamp());
+        log.info("Send message: " + message.getMetadata().getEntryType() + " for:: " + message.getMetadata().getTimestamp());
         if (ifDropMsg > 0 && msgCnt == droppingNum || dropACKLevel == 2 && message.getMetadata().getTimestamp() >= lastAckDropped) {
             log.info("****** Drop msg {} log entry ts {}",  msgCnt, message.getMetadata().getTimestamp());
             if (ifDropMsg == DROP_MSG_ONCE) {
@@ -347,15 +327,10 @@ public class SourceForwardingDataSender implements DataSender {
     }
 
     public void checkStatusOnSink(boolean expectedDataConsistent) {
-        if (destinationClusterID == null) {
-            return;
-        }
-        LogReplicationMetadata.ReplicationStatusKey sinkClusterId = LogReplicationMetadata.ReplicationStatusKey.newBuilder()
-                .setClusterId(destinationClusterID)
-                .build();
         try (TxnContext txn = sinkCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
-            LogReplicationMetadata.ReplicationStatusVal sinkStatus = (LogReplicationMetadata.ReplicationStatusVal)txn.getRecord(REPLICATION_STATUS_TABLE, sinkClusterId).getPayload();
-            assertThat(sinkStatus.getDataConsistent()).isEqualTo(expectedDataConsistent);
+            LogReplicationMetadata.ReplicationStatus status = (LogReplicationMetadata.ReplicationStatus)
+                txn.getRecord(REPLICATION_STATUS_TABLE, session).getPayload();
+            assertThat(status.getSinkStatus().getDataConsistent()).isEqualTo(expectedDataConsistent);
         }
     }
 

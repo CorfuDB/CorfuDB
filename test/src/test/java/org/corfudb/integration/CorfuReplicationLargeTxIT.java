@@ -2,7 +2,7 @@ package org.corfudb.integration;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.LogReplication.ReplicationStatus;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatus;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.runtime.LogReplicationUtils;
@@ -107,9 +107,9 @@ public class CorfuReplicationLargeTxIT extends LogReplicationAbstractIT {
         // change on status are captured)
         int totalSinkStatusUpdates = 2;
         corfuStoreSink.openTable(LogReplicationMetadataManager.NAMESPACE,
-            LogReplicationMetadataManager.REPLICATION_STATUS_TABLE,
-            LogReplicationMetadata.ReplicationStatusKey.class,
-            LogReplicationMetadata.ReplicationStatusVal.class,
+            LogReplicationMetadataManager.REPLICATION_STATUS_TABLE_NAME,
+            LogReplicationSession.class,
+            ReplicationStatus.class,
             null,
             TableOptions.fromProtoSchema(ReplicationStatus.class));
 
@@ -156,12 +156,10 @@ public class CorfuReplicationLargeTxIT extends LogReplicationAbstractIT {
         protobufDescriptorTxLatch.await();
 
         // Verify that updates were received for all replicated tables with data
-        Assert.assertEquals(mapNameToMapSink.size(),
-            streamingUpdateListener.getTableNameToUpdatesMap().size());
+        Assert.assertEquals(mapNameToMapSink.size(), streamingUpdateListener.getTableNameToUpdatesMap().size());
 
         mapNameToMapSink.keySet().forEach(key ->
-            Assert.assertTrue(streamingUpdateListener.getTableNameToUpdatesMap()
-                .containsKey(key)));
+            Assert.assertTrue(streamingUpdateListener.getTableNameToUpdatesMap().containsKey(key)));
 
         // Verify that the right number of entries are contained in the
         // streaming update.  Also verify that the first entry is a 'clear'
@@ -249,7 +247,7 @@ public class CorfuReplicationLargeTxIT extends LogReplicationAbstractIT {
                         .ValueFieldTagOne.newBuilder()
                         .setPayload(String.valueOf(i)).build();
                 Sample.Metadata metadata = Sample.Metadata.newBuilder()
-                    .setMetadata("Metadata_" + i).build();
+                        .setMetadata("Metadata_" + i).build();
                 try (TxnContext txn = corfuStoreSource.txn(NAMESPACE)) {
                     txn.putRecord(map, stringKey, value, metadata);
                     txn.commit();

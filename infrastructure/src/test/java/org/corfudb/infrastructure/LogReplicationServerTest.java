@@ -3,8 +3,9 @@ package org.corfudb.infrastructure;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.extern.slf4j.Slf4j;
 import org.assertj.core.api.Assertions;
-import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationServer;
+import org.corfudb.infrastructure.logreplication.infrastructure.SessionManager;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationSinkManager;
 import org.corfudb.infrastructure.logreplication.transport.IClientServerRouter;
@@ -26,9 +27,8 @@ import org.mockito.ArgumentCaptor;
 
 import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getRequestMsg;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
@@ -63,10 +63,13 @@ public class LogReplicationServerTest {
             .setSubscriber(LogReplicationConfigManager.getDefaultSubscriber())
             .build();
 
-    UuidMsg clusterId = UuidMsg.newBuilder().setLsb(5).setMsb(5).build();
-    String sourceClusterId = getUUID(clusterId).toString();
-    ReplicationSession replicationSession =
-        ReplicationSession.getDefaultReplicationSessionForCluster(sourceClusterId);
+    UuidMsg sourceClusterUuid = UuidMsg.newBuilder().setLsb(5).setMsb(5).build();
+    String sourceClusterId = getUUID(sourceClusterUuid).toString();
+    LogReplicationSession session = LogReplicationSession.newBuilder()
+            .setSourceClusterId(sourceClusterId)
+            .setSinkClusterId(SINK_CLUSTER_ID)
+            .setSubscriber(SessionManager.getDefaultSubscriber())
+            .build();
 
     /**
      * Stub most of the {@link LogReplicationServer} functionality, but spy on the actual instance.
@@ -77,8 +80,9 @@ public class LogReplicationServerTest {
         metadataManager = mock(LogReplicationMetadataManager.class);
         sessionManager = mock(SessionManager.class);
         sinkManager = mock(LogReplicationSinkManager.class);
-        doReturn(replicationSession).when(sinkManager).getSourceSession();
-        lrServer = spy(new LogReplicationServer(context, sinkManager,"nodeId"));
+        doReturn(session).when(sinkManager).getSession();
+        lrServer = spy(new LogReplicationServer(context, sinkManager, SINK_NODE_ID, SINK_CLUSTER_ID,
+            sessionManager));
         mockHandlerContext = mock(ChannelHandlerContext.class);
         mockServerRouter = mock(IClientServerRouter.class);
     }
@@ -92,19 +96,18 @@ public class LogReplicationServerTest {
         final LogReplicationMetadataRequestMsg metadataRequest = LogReplicationMetadataRequestMsg
                 .newBuilder().build();
         final RequestMsg request =
-            getRequestMsg(HeaderMsg.newBuilder().setClusterId(clusterId).build(),
+            getRequestMsg(HeaderMsg.newBuilder().setClusterId(sourceClusterUuid).build(),
                 CorfuMessage.RequestPayloadMsg.newBuilder()
                 .setLrMetadataRequest(metadataRequest).build());
 
         lrServer.setLeadership(true);
-        doReturn(metadataManager).when(sinkManager).getLogReplicationMetadataManager();
-        doReturn(response).when(metadataManager).getMetadataResponse(any());
+        doReturn(LogReplicationMetadata.ReplicationMetadata.getDefaultInstance()).when(metadataManager)
+            .getReplicationMetadata(session);
+        doReturn(metadataManager).when(sessionManager).getMetadataManager();
 
-        lrServer.getHandlerMethods().handle(request, mockHandlerContext,
-            mockServerRouter);
+        lrServer.getHandlerMethods().handle(request, mockHandlerContext, mockServerRouter);
 
-        verify(sinkManager).getLogReplicationMetadataManager();
-        verify(metadataManager).getMetadataResponse(any());
+        verify(metadataManager).getReplicationMetadata(session);
     }
 
     /**
@@ -116,7 +119,7 @@ public class LogReplicationServerTest {
         final LogReplicationLeadershipRequestMsg leadershipQuery =
             LogReplicationLeadershipRequestMsg.newBuilder().build();
         final RequestMsg request =
-            getRequestMsg(HeaderMsg.newBuilder().setClusterId(clusterId).build(),
+            getRequestMsg(HeaderMsg.newBuilder().setClusterId(sourceClusterUuid).build(),
                 CorfuMessage.RequestPayloadMsg.newBuilder()
                 .setLrLeadershipQuery(leadershipQuery).build());
 
@@ -152,7 +155,7 @@ public class LogReplicationServerTest {
         final LogReplicationEntryMsg logEntry = LogReplicationEntryMsg
                 .newBuilder().build();
         final RequestMsg request =
-            getRequestMsg(HeaderMsg.newBuilder().setClusterId(clusterId).build(),
+            getRequestMsg(HeaderMsg.newBuilder().setClusterId(sourceClusterUuid).build(),
                 CorfuMessage.RequestPayloadMsg.newBuilder()
                         .setLrEntry(logEntry).build());
         final LogReplicationEntryMsg ack = LogReplicationEntryMsg.newBuilder().build();

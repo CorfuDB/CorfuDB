@@ -8,8 +8,10 @@ import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.config.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
-import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
+import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationMetadata;
+import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
 import org.corfudb.infrastructure.logreplication.proto.Sample.IntValue;
 import org.corfudb.infrastructure.logreplication.proto.Sample.Metadata;
@@ -33,6 +35,7 @@ import org.corfudb.runtime.collections.CorfuStoreEntry;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
+
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.util.Utils;
 import org.junit.After;
@@ -180,14 +183,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
     private final Semaphore blockUntilExpectedAckTs = new Semaphore(1, true);
 
-    // A semaphore that allows the sender to block for a null ACK from the receiver.  A null ACK is sent when the
-    // receiver gets an unexpected entry type - for example - a snapshot message when in Log Entry Sync State
-    private final Semaphore blockForNullAck = new Semaphore(1, true);
-
-    // A null ACK is received when messages do not reach the receiver.  On receiving a null ACK, the sender resends
-    // them.  Below variable specifies the number of null ACKs the test has waited for
-    private int numNullAcksObserved = 0;
-
     private LogReplicationMetadataManager metadataManager;
 
     private final String t0Name = TABLE_PREFIX + 0;
@@ -252,10 +247,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         srcCorfuStore = new CorfuStore(srcDataRuntime);
         dstCorfuStore = new CorfuStore(dstDataRuntime);
 
-        pluginConfig = new LogReplicationPluginConfig(pluginConfigFilePath);
-        metadataManager = new LogReplicationMetadataManager(dstTestRuntime,
-                new LogReplicationContext(new LogReplicationConfigManager(dstTestRuntime, LOCAL_SOURCE_CLUSTER_ID), 0,
-                "test" + SERVERS.PORT_0, true, pluginConfig));
+        metadataManager = new LogReplicationMetadataManager(dstTestRuntime, 0);
         metadataManager.addSession(session, 0, true);
 
         expectedAckTimestamp = new AtomicLong(Long.MAX_VALUE);
@@ -790,10 +782,11 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         // Verify Data on Destination
         verifyData(dstCorfuStore, dstCorfuTables, srcDataForVerification);
 
+        verifyPersistedSnapshotMetadata();
+
         // expectedAckTimestamp was set in 'startLogEntrySync' to the tail of the Log Replication Stream.  Verify
         // that the metadata table was updated with it after a successful LogEntrySync
-        assertThat(expectedAckTimestamp.get()).isEqualTo(logReplicationMetadataManager.getLastProcessedLogEntryBatchTimestamp());
-        verifyPersistedSnapshotMetadata();
+        verifyPersistedLogEntryMetadata();
 
         // expectedAckTimestamp was set in 'startLogEntrySync' to the tail of the Log Replication Stream.  Verify
         // that the metadata table was updated with it after a successful LogEntrySync
@@ -1282,21 +1275,20 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         configManager.getConfig().setMaxMsgSize(SMALL_MSG_SIZE);
         configManager.getConfig().setMaxDataSizePerMsg(SMALL_MSG_SIZE * LogReplicationConfig.DATA_FRACTION_PER_MSG / 100);
 
-        LogReplicationContext replicationContext = new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT);
+        LogReplicationContext context = new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT);
 
         // Data Sender
-        sourceDataSender = new SourceForwardingDataSender(DESTINATION_ENDPOINT, replicationContext, testConfig,
-            logReplicationMetadataManager, nettyConfig, function);
-
-        ReplicationSession replicationSession =
-            ReplicationSession.getDefaultReplicationSessionForCluster(REMOTE_CLUSTER_ID);
+        sourceDataSender = new SourceForwardingDataSender(DESTINATION_ENDPOINT, testConfig, metadataManager,
+                nettyConfig, function, context);
 
         // Source Manager
-        LogReplicationSourceManager logReplicationSourceManager = new LogReplicationSourceManager(
-            LogReplicationRuntimeParameters.builder().remoteClusterDescriptor(new ClusterDescriptor(REMOTE_CLUSTER_ID,
-                LogReplicationClusterInfo.ClusterRole.SOURCE, CORFU_PORT)).replicationConfig(configManager.getConfig())
-                .localCorfuEndpoint(SOURCE_ENDPOINT).build(), logReplicationMetadataManager, sourceDataSender,
-                replicationContext, upgradeManager, replicationSession);
+        LogReplicationRuntimeParameters runtimeParameters = LogReplicationRuntimeParameters.builder()
+                .remoteClusterDescriptor(new ClusterDescriptor(REMOTE_CLUSTER_ID,
+                        LogReplicationClusterInfo.ClusterRole.SOURCE, CORFU_PORT))
+                .localCorfuEndpoint(SOURCE_ENDPOINT)
+                .build();
+        LogReplicationSourceManager logReplicationSourceManager = new LogReplicationSourceManager(runtimeParameters,
+                metadataManager, sourceDataSender, upgradeManager, session, context);
 
         // Set Log Replication Source Manager so we can emulate the channel for data & control messages (required
         // for testing)

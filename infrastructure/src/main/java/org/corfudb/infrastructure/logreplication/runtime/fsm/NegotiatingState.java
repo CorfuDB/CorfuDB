@@ -186,15 +186,15 @@ public class NegotiatingState implements LogReplicationRuntimeState {
 
         log.debug("Process negotiation response {} from {}", negotiationResponse, fsm.getRemoteClusterId());
 
-        long topologyConfigId = metadataManager.getReplicationContext().getTopologyConfigId();
+        long topologyConfigId = metadataManager.getTopologyConfigId();
 
         /*
          * The sink site has a smaller config ID, redo the discovery for this sink site when
          * getting a new notification of the site config change if this sink is in the new config.
          */
-        if (negotiationResponse.getTopologyConfigID() < metadataManager.getTopologyConfigId()) {
+        if (negotiationResponse.getTopologyConfigID() < topologyConfigId) {
             log.error("The source site configID {} is bigger than the sink configID {} ",
-                    metadataManager.getTopologyConfigId(), negotiationResponse.getTopologyConfigID());
+                topologyConfigId, negotiationResponse.getTopologyConfigID());
             throw new LogReplicationNegotiationException("Mismatch of configID");
         }
 
@@ -202,9 +202,9 @@ public class NegotiatingState implements LogReplicationRuntimeState {
          * The sink site has larger config ID, redo the whole discovery for the source site
          * it will be triggered by a notification of the site config change.
          */
-        if (negotiationResponse.getTopologyConfigID() > metadataManager.getTopologyConfigId()) {
-            log.error("The active site configID {} is smaller than the sink configID {} ",
-                    metadataManager.getTopologyConfigId(), negotiationResponse.getTopologyConfigID());
+        if (negotiationResponse.getTopologyConfigID() > topologyConfigId) {
+            log.error("The source site configID {} is smaller than the sink configID {} ",
+                topologyConfigId, negotiationResponse.getTopologyConfigID());
             throw new LogReplicationNegotiationException("Mismatch of configID");
         }
 

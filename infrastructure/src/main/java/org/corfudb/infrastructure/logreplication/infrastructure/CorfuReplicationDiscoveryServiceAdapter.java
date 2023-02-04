@@ -1,7 +1,8 @@
 package org.corfudb.infrastructure.logreplication.infrastructure;
 
-import com.google.common.annotations.VisibleForTesting;
-import org.corfudb.runtime.LogReplication.ReplicationStatus;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.ClusterRole;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.TopologyConfigurationMsg;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatus;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 
 import java.util.Map;
@@ -17,7 +18,7 @@ public interface CorfuReplicationDiscoveryServiceAdapter {
      * Update with new topology
      * @param topologyConfiguration new topology
      */
-    void updateTopology(TopologyDescriptor topologyConfiguration);
+    void updateTopology(TopologyConfigurationMsg topologyConfiguration);
 
     /**
      * Query replication status
@@ -29,12 +30,6 @@ public interface CorfuReplicationDiscoveryServiceAdapter {
      * Enforce snapshotFullSync
      */
     UUID forceSnapshotSync(LogReplicationSession session) throws LogReplicationDiscoveryServiceException;
-    
-    /**
-     * Get outgoing sessions
-     * @return a set of sessions where the local cluster is a SOURCE
-     */
-    Set<LogReplicationSession> getOutgoingSessions();
 
     /**
      * Get incoming sessions
@@ -42,9 +37,5 @@ public interface CorfuReplicationDiscoveryServiceAdapter {
      */
     Set<LogReplicationSession> getIncomingSessions();
 
-    /**
-     * Gets the replication endpoint of the local cluster. Used only for the ITs.
-     */
-    @VisibleForTesting
-    String getLocalEndpoint();
+    ClusterRole getLocalClusterRoleType();
 }

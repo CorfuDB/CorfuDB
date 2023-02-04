@@ -1,20 +1,10 @@
 package org.corfudb.infrastructure.logreplication.replication.send.logreader;
 
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
-import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.LogReplication.ClientDestinationInfoKey;
-import org.corfudb.runtime.LogReplication.DestinationInfoVal;
+import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
+import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
-import org.corfudb.runtime.collections.CorfuRecord;
-import org.corfudb.runtime.collections.CorfuStreamEntry;
-import org.corfudb.runtime.collections.CorfuStreamEntry.OperationType;
-import org.corfudb.runtime.view.TableRegistry;
-import org.corfudb.util.serializer.ISerializer;
-
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
 import java.util.UUID;
 
 import static org.corfudb.runtime.LogReplicationLogicalGroupClient.LR_MODEL_METADATA_TABLE_NAME;
@@ -31,8 +21,8 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 @Slf4j
 public class LogicalGroupLogEntryReader extends BaseLogEntryReader {
 
-    public LogicalGroupLogEntryReader(CorfuRuntime runtime, LogReplicationContext replicationContext,
-                                      ReplicationSession session) {
+    public LogicalGroupLogEntryReader(CorfuRuntime runtime, LogReplicationSession session,
+                                      LogReplicationContext replicationContext) {
     }
 
     private final ISerializer protobufSerializer;

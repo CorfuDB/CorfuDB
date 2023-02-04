@@ -1,10 +1,10 @@
 package org.corfudb.infrastructure.logreplication.infrastructure.plugins;
 
-import org.corfudb.infrastructure.logreplication.infrastructure.CorfuReplicationDiscoveryServiceAdapter;
+import org.corfudb.infrastructure.logreplication.infrastructure.CorfuReplicationDiscoveryService;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationDiscoveryServiceException;
-import org.corfudb.infrastructure.logreplication.infrastructure.TopologyDescriptor;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.TopologyConfigurationMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
-import org.corfudb.runtime.LogReplication.ReplicationStatus;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatus;
 
 import java.util.Map;
 import java.util.UUID;
@@ -21,7 +21,12 @@ public interface CorfuReplicationClusterManagerAdapter {
     /**
      * Register the discovery service
      */
-    void register(CorfuReplicationDiscoveryServiceAdapter corfuReplicationDiscoveryServiceAdapter);
+    void register(CorfuReplicationDiscoveryService corfuReplicationDiscoveryService);
+
+     /**
+     * Set the localEndpoint
+     */
+    void setLocalEndpoint(String endpoint);
 
     /**
      * Query the topology information.
@@ -34,7 +39,7 @@ public interface CorfuReplicationClusterManagerAdapter {
     /**
      * Callback to update topology on cluster changes
      */
-    void updateTopologyConfig(TopologyDescriptor newClusterConfig);
+    void updateTopologyConfig(TopologyConfigurationMsg newClusterConfig);
 
     /**
      * Start cluster discovery against external topology provider
@@ -61,12 +66,4 @@ public interface CorfuReplicationClusterManagerAdapter {
      * @param session
      */
     UUID forceSnapshotSync(LogReplicationSession session) throws LogReplicationDiscoveryServiceException;
-
-    /**
-     * This API enforce a full snapshot sync on the sink cluster with the clusterId at best effort.
-     * The command can only be executed on the source cluster's node.
-     *
-     * @return node ID
-     */
-    String getLocalNodeId();
 }

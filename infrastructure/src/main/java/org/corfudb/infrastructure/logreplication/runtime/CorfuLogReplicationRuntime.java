@@ -6,9 +6,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
-import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
-import org.corfudb.infrastructure.logreplication.infrastructure.TopologyDescriptor;
-import org.corfudb.infrastructure.logreplication.replication.LogReplicationSourceManager;
+import org.corfudb.infrastructure.logreplication.utils.LogReplicationUpgradeManager;
+import org.corfudb.runtime.LogReplication.LogReplicationSession;
+import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationSourceManager;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.IllegalTransitionException;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRuntimeEvent;
@@ -20,7 +20,6 @@ import org.corfudb.infrastructure.logreplication.runtime.fsm.StoppedState;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.UnrecoverableState;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.VerifyingRemoteSinkLeaderState;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.WaitingForConnectionsState;
-import org.corfudb.infrastructure.logreplication.utils.LogReplicationUpgradeManager;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -157,22 +156,18 @@ public class CorfuLogReplicationRuntime {
     @Getter
     public final LogReplicationSession session;
 
-    @Getter
-    private final LogReplicationContext replicationContext;
-
     /**
      * Default Constructor
      */
     public CorfuLogReplicationRuntime(LogReplicationRuntimeParameters parameters,
-                                      LogReplicationMetadataManager metadataManager,
-                                      LogReplicationUpgradeManager upgradeManager,
-                                      LogReplicationContext replicationContext,
-                                      ReplicationSession replicationSession) {
-        this.remoteClusterId = replicationSession.getRemoteClusterId();
+                                      LogReplicationMetadataManager metadataManager, LogReplicationUpgradeManager upgradeManager,
+                                      LogReplicationSession session, LogReplicationContext replicationContext) {
+        this.remoteClusterId = session.getSinkClusterId();
+        this.session = session;
         this.router = new LogReplicationClientRouter(parameters, this);
         this.router.addClient(new LogReplicationHandler());
-        this.sourceManager = new LogReplicationSourceManager(parameters,
-                new LogReplicationClient(router, remoteClusterId), metadataManager, replicationContext, upgradeManager, replicationSession);
+        this.sourceManager = new LogReplicationSourceManager(parameters, new LogReplicationClient(router, session.getSinkClusterId()),
+                metadataManager, upgradeManager, session, replicationContext);
         this.connectedNodes = new HashSet<>();
 
         ThreadFactory threadFactory = new ThreadFactoryBuilder().setNameFormat("runtime-fsm-worker-"+remoteClusterId)

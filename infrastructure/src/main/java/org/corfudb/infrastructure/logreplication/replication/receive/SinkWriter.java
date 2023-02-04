@@ -4,7 +4,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
-import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
+import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.TableDescriptors;
@@ -15,7 +15,6 @@ import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.util.serializer.ISerializer;
 
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.UUID;
 
@@ -28,16 +27,14 @@ public abstract class SinkWriter {
 
     private final ISerializer protobufSerializer;
 
-    private final ReplicationSession session;
+    final LogReplicationSession session;
 
-    // Replication context that provides configuration for LR in Source / Sink cluster.
-    LogReplicationContext replicationContext;
-
+    final LogReplicationContext replicationContext;
 
     // Limit the initialization of this class only to its children classes.
-    SinkWriter(LogReplicationContext replicationContext, ReplicationSession session) {
-        this.replicationContext = replicationContext;
+    SinkWriter(LogReplicationSession session, LogReplicationContext replicationContext) {
         this.session = session;
+        this.replicationContext = replicationContext;
 
         // The CorfuRuntime in LogReplicationConfigManager used to get the config fields from registry
         // table, and the protobufSerializer is guaranteed to be registered before initializing SinkWriter.
@@ -91,9 +88,7 @@ public abstract class SinkWriter {
      * @return True if the entries should be ignored.
      */
     boolean ignoreEntriesForStream(UUID streamId) {
-        return replicationContext.getConfig().getSubscriberToNonReplicatedStreamsMap()
-            .getOrDefault(session.getSubscriber(), new HashSet<>())
-            .contains(streamId);
+        return replicationContext.getConfig().getStreamsToDrop().contains(streamId);
     }
 
     /**
@@ -106,9 +101,7 @@ public abstract class SinkWriter {
      * @return True if the entry should be ignored.
      */
     boolean ignoreEntryForRegistryTable(UUID streamId, CorfuRecord<TableDescriptors, TableMetadata> record) {
-
-        return replicationContext.getConfig().getSubscriberToNonReplicatedStreamsMap()
-            .getOrDefault(session.getSubscriber(), new HashSet<>())
-            .contains(streamId) || !record.getMetadata().getTableOptions().getIsFederated();
+        return replicationContext.getConfig().getStreamsToDrop().contains(streamId) ||
+            !record.getMetadata().getTableOptions().getIsFederated();
     }
 }

@@ -29,11 +29,11 @@ public class LogReplicationContext {
     @Setter
     private long topologyConfigId;
 
-
     /**
      * Constructor
      **/
-    public LogReplicationContext(LogReplicationConfigManager configManager, long topologyConfigId, String localCorfuEndpoint) {
+    public LogReplicationContext(LogReplicationConfigManager configManager, long topologyConfigId,
+                                 String localCorfuEndpoint) {
         this.configManager = configManager;
         this.topologyConfigId = topologyConfigId;
         this.localCorfuEndpoint = localCorfuEndpoint;

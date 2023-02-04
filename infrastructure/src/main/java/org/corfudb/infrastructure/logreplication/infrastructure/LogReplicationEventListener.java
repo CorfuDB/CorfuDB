@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.DiscoveryServiceEvent.DiscoveryServiceEventType;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEventInfoKey;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEvent;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEvent.ReplicationEventType;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuStore;
@@ -51,22 +52,30 @@ public final class LogReplicationEventListener implements StreamListener {
     @Override
     public void onNext(CorfuStreamEntries results) {
 
-        log.info("onNext[{}] :: processing updates for tables {}", results.getTimestamp(),
-            results.getEntries().keySet().stream().map(TableSchema::getTableName).collect(Collectors.toList()));
+        // If the current node is not a leader, ignore the notifications.
+        synchronized (discoveryService) {
+            if (!discoveryService.getIsLeader().get()) {
+                log.info("onNext[{}] :: skipped as current node is not the leader", results.getTimestamp());
+                return;
+            }
 
-            log.info("LogReplicationEventListener onNext {} will be processed at node {} in the cluster {}",
-                    results, discoveryService.getLocalNodeDescriptor(), discoveryService.getLocalClusterDescriptor());
+            log.info("onNext[{}] :: processing updates for tables {}", results.getTimestamp(),
+                    results.getEntries().keySet().stream().map(TableSchema::getTableName).collect(Collectors.toList()));
 
-            // If the current node is the leader, it generates a discovery event and put it into the discovery service event queue.
+            // If the current node is the leader, it generates a discovery event and puts it into the discovery
+            // service event queue.
             for (List<CorfuStreamEntry> entryList : results.getEntries().values()) {
                 for (CorfuStreamEntry entry : entryList) {
+                    ReplicationEventInfoKey key = (ReplicationEventInfoKey) entry.getKey();
                     ReplicationEvent event = (ReplicationEvent) entry.getPayload();
-                    log.info("ReplicationEventListener received an event with id {}, type {}, cluster id {}",
-                        event.getEventId(), event.getType(), event.getClusterId());
-                    if (event.getType().equals(ReplicationEvent.ReplicationEventType.FORCE_SNAPSHOT_SYNC)) {
-                        discoveryService.input(new DiscoveryServiceEvent(
-                            DiscoveryServiceEvent.DiscoveryServiceEventType.ENFORCE_SNAPSHOT_SYNC, event.getClusterId(),
-                            event.getEventId()));
+                    log.info("Received event :: id={}, type={}, session={}, ts={}", event.getEventId(), event.getType(),
+                            key.getSession(), event.getEventTimestamp());
+                    if (event.getType().equals(ReplicationEventType.FORCE_SNAPSHOT_SYNC)) {
+                        discoveryService.input(new DiscoveryServiceEvent(DiscoveryServiceEventType.ENFORCE_SNAPSHOT_SYNC,
+                            key.getSession(), event.getEventId()));
+                    } else {
+                        log.warn("Received invalid event :: id={}, type={}, cluster_id={} ts={}", event.getEventId(),
+                            event.getType(), event.getClusterId(), event.getEventTimestamp());
                     }
                 }
             }

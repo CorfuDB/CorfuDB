@@ -2,7 +2,8 @@ package org.corfudb.infrastructure.logreplication;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
-import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
+import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogEntryWriter;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
@@ -34,27 +35,20 @@ public class MetadataManagerTest extends AbstractViewTest {
     private static final String LOCAL_SOURCE_CLUSTER_ID = DefaultClusterConfig.getSourceClusterIds().get(0);
     private CorfuRuntime corfuRuntime;
     private LogReplicationConfigManager configManager;
-    private LogReplicationContext replicationContext;
     private boolean success;
-    private final Long topologyConfigId = 5L;
-    private final String localClusterId = "Test Cluster";
+    private long topologyConfigId = 5L;
     private TestUtils utils;
-    private final String remoteClusterId = "Remote Cluster";
-    private final ReplicationSession replicationSession =
-        ReplicationSession.getDefaultReplicationSessionForCluster(remoteClusterId);
+    private List<LogReplicationSession> sessions = DefaultClusterConfig.getSessions();
+    private LogReplicationSession defaultSession = sessions.get(0);
+    private LogReplicationMetadataManager metadataManager;
 
     @Before
     public void setUp() {
         corfuRuntime = getDefaultRuntime();
         configManager = Mockito.mock(LogReplicationConfigManager.class);
-        replicationContext = new LogReplicationContext(configManager, topologyConfigId,
-                getEndpoint(SERVERS.PORT_0));
         Mockito.doReturn(corfuRuntime).when(configManager).getRuntime();
         utils = new TestUtils();
-        replicationContext = new LogReplicationContext(new LogReplicationConfigManager(corfuRuntime,
-                LOCAL_SOURCE_CLUSTER_ID), topologyConfigId, getEndpoint(SERVERS.PORT_0), true,
-                Mockito.mock(LogReplicationPluginConfig.class));
-        metadataManager = new LogReplicationMetadataManager(corfuRuntime, replicationContext);
+        metadataManager = new LogReplicationMetadataManager(corfuRuntime, topologyConfigId);
         metadataManager.addSession(defaultSession, topologyConfigId, true);
     }
 
@@ -69,15 +63,10 @@ public class MetadataManagerTest extends AbstractViewTest {
      */
     @Test
     public void testMetadataAfterLogEntrySync() {
-        LogReplicationContext context = new LogReplicationContext(configManager, topologyConfigId,
-                getEndpoint(SERVERS.PORT_0), Mockito.mock(LogReplicationPluginConfig.class));
+        LogReplicationContext context = new LogReplicationContext(configManager, topologyConfigId, getEndpoint(SERVERS.PORT_0));
         LogEntryWriter writer = new LogEntryWriter(metadataManager, defaultSession, context);
 
-        LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(corfuRuntime, topologyConfigId,
-            localClusterId);
-        LogEntryWriter writer = new LogEntryWriter(replicationContext, metadataManager, replicationSession);
-
-        Long numOpaqueEntries = 3L;
+        long numOpaqueEntries = 3L;
         LogReplication.LogReplicationEntryMsg lrEntryMsg = utils.generateLogEntryMsg(1, numOpaqueEntries,
                 Address.NON_ADDRESS, topologyConfigId, Address.NON_ADDRESS);
 
@@ -105,7 +94,7 @@ public class MetadataManagerTest extends AbstractViewTest {
     @Test
     public void testInitTsForSnapshotAndLogEntryProcessed() {
 
-        LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(corfuRuntime, replicationContext);
+        LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(corfuRuntime, topologyConfigId);
         metadataManager.addSession(defaultSession, topologyConfigId, true);
 
         long lastAppliedSnapshotTimestamp = metadataManager.getReplicationMetadata(defaultSession)
@@ -128,9 +117,11 @@ public class MetadataManagerTest extends AbstractViewTest {
     @Test
     public void testConcurrentTopologyChange() throws Exception {
 
-        LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(corfuRuntime, topologyConfigId,
-            localClusterId);
-        LogEntryWriter writer = new LogEntryWriter(replicationContext, metadataManager, replicationSession);
+        LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(corfuRuntime, topologyConfigId);
+        metadataManager.addSession(defaultSession, topologyConfigId, true);
+        LogReplicationContext context = new LogReplicationContext(configManager, 0,
+                defaultSession.getSourceClusterId());
+        LogEntryWriter writer = new LogEntryWriter(metadataManager, defaultSession, context);
 
         // Create a message with 50 opaque entries
         long numOpaqueEntries = 50L;
@@ -197,7 +188,7 @@ public class MetadataManagerTest extends AbstractViewTest {
      */
     @Test
     public void testSetBaseSnapshotStart() {
-        LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(corfuRuntime, replicationContext);
+        LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(corfuRuntime, topologyConfigId);
         metadataManager.addSession(defaultSession, topologyConfigId, true);
 
         ReplicationMetadata metadata = metadataManager.getReplicationMetadata(defaultSession);
@@ -217,7 +208,7 @@ public class MetadataManagerTest extends AbstractViewTest {
      */
     @Test
     public void testSetLastSnapshotTransferCompleteTimestamp() {
-        LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(corfuRuntime, replicationContext);
+        LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(corfuRuntime, topologyConfigId);
         metadataManager.addSession(defaultSession, topologyConfigId, true);
 
         ReplicationMetadata metadata = metadataManager.getReplicationMetadata(defaultSession);
@@ -241,7 +232,7 @@ public class MetadataManagerTest extends AbstractViewTest {
      */
     @Test
     public void testSetSnapshotAppliedComplete() {
-        LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(corfuRuntime, replicationContext);
+        LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(corfuRuntime, topologyConfigId);
         metadataManager.addSession(defaultSession, topologyConfigId, true);
 
         // Verify that an entry in the replication status table was created for the default session

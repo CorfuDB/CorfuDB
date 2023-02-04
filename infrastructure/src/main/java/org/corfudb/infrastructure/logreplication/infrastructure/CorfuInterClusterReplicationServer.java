@@ -11,26 +11,13 @@ import org.corfudb.common.config.ConfigParamsHelper;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.common.util.URLUtils.NetworkInterfaceVersion;
 import org.corfudb.infrastructure.ServerContext;
-import org.corfudb.infrastructure.logreplication.infrastructure.plugins.ILogReplicationVersionAdapter;
-import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
-import org.corfudb.infrastructure.logreplication.infrastructure.utils.CorfuSaasEndpointProvider;
-import org.corfudb.infrastructure.logreplication.utils.LogReplicationUpgradeManager;
-import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.collections.CorfuStore;
-import org.corfudb.runtime.collections.TxnContext;
-import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.GitRepositoryState;
 import org.docopt.Docopt;
 import org.slf4j.LoggerFactory;
 
-import java.io.File;
-import java.net.URL;
-import java.net.URLClassLoader;
 import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.TimeUnit;
 
 import static org.corfudb.common.util.URLUtils.getHostFromEndpointURL;
 import static org.corfudb.common.util.URLUtils.getVersionFormattedEndpointURL;
@@ -333,7 +320,7 @@ public class CorfuInterClusterReplicationServer implements Runnable {
         // acquiring lock, retrieving Site Manager Info and processing this info
         // so this node is initialized as Source (sender) or Sink (receiver)
         replicationDiscoveryService = new CorfuReplicationDiscoveryService(serverContext);
-        replicationDiscoveryService.run();
+        replicationDiscoveryService.start();
     }
 
     /**

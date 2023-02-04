@@ -7,7 +7,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.DataSender;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
-import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
+import org.corfudb.infrastructure.logreplication.utils.LogReplicationUpgradeManager;
+import org.corfudb.runtime.LogReplication.LogReplicationSession;
+import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent.LogReplicationEventType;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationFSM;
@@ -15,7 +17,6 @@ import org.corfudb.infrastructure.logreplication.replication.fsm.ObservableAckMs
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.DefaultReadProcessor;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.ReadProcessor;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClient;
-import org.corfudb.infrastructure.logreplication.utils.LogReplicationUpgradeManager;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 
@@ -61,19 +62,16 @@ public class LogReplicationSourceManager {
      */
     public LogReplicationSourceManager(LogReplicationRuntimeParameters params, LogReplicationClient client,
                                        LogReplicationMetadataManager metadataManager,
-                                       LogReplicationContext replicationContext,
                                        LogReplicationUpgradeManager upgradeManager,
-                                       ReplicationSession replicationSession) {
-        this(params, metadataManager, new CorfuDataSender(client), replicationContext, upgradeManager, replicationSession);
+                                       LogReplicationSession session, LogReplicationContext replicationContext) {
+        this(params, metadataManager, new CorfuDataSender(client), upgradeManager, session, replicationContext);
     }
 
     @VisibleForTesting
     public LogReplicationSourceManager(LogReplicationRuntimeParameters params,
-                                       LogReplicationMetadataManager metadataManager,
-                                       DataSender dataSender,
-                                       LogReplicationContext replicationContext,
-                                       LogReplicationUpgradeManager upgradeManager,
-                                       ReplicationSession replicationSession) {
+                                       LogReplicationMetadataManager metadataManager, DataSender dataSender,
+                                       LogReplicationUpgradeManager upgradeManager, LogReplicationSession session,
+                                       LogReplicationContext replicationContext) {
 
         // This runtime is used exclusively for the snapshot and log entry reader which do not require a cache
         // as these are one time operations.
@@ -91,24 +89,22 @@ public class LogReplicationSourceManager {
 
         this.parameters = params;
 
-        Set<String> streamsToReplicate =
-            replicationContext.getConfig().getReplicationSubscriberToStreamsMap().get(replicationSession.getSubscriber());
+        Set<String> streamsToReplicate = replicationContext.getConfig().getStreamsToReplicate();
         if (streamsToReplicate == null || streamsToReplicate.isEmpty()) {
             // Avoid FSM being initialized if there are no streams to replicate
             throw new IllegalArgumentException("Invalid Log Replication: Streams to replicate is EMPTY");
         }
 
         ExecutorService logReplicationFSMWorkers = Executors.newFixedThreadPool(DEFAULT_FSM_WORKER_THREADS,
-            new ThreadFactoryBuilder().setNameFormat("state-machine-worker-" + replicationSession.getRemoteClusterId())
-                .build());
+                new ThreadFactoryBuilder().setNameFormat("state-machine-worker-" + session.hashCode()).build());
 
         ReadProcessor readProcessor = new DefaultReadProcessor(runtime);
         this.metadataManager = metadataManager;
         // Ack Reader for Snapshot and LogEntry Sync
-        this.ackReader = new LogReplicationAckReader(this.metadataManager, replicationContext, runtime, replicationSession);
+        this.ackReader = new LogReplicationAckReader(this.metadataManager, runtime, session, replicationContext);
 
-        this.logReplicationFSM = new LogReplicationFSM(this.runtime, replicationContext, dataSender, readProcessor,
-            logReplicationFSMWorkers, ackReader, upgradeManager, replicationSession);
+        this.logReplicationFSM = new LogReplicationFSM(this.runtime, upgradeManager, dataSender, readProcessor,
+                logReplicationFSMWorkers, ackReader, session, replicationContext);
 
         this.logReplicationFSM = new LogReplicationFSM(this.runtime, dataSender, readProcessor,
                 logReplicationFSMWorkers, ackReader, session, replicationContext);
