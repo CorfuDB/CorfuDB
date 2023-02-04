@@ -105,7 +105,6 @@ public class TopologyDescriptor {
         });
 
         otherClusters.stream().forEach(cluster -> {
-            remoteSourceClusters.put(cluster.getClusterId(), cluster);
             allClustersInTopology.put(cluster.getClusterId(), cluster);
         });
 

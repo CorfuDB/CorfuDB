@@ -48,7 +48,6 @@ import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -303,15 +302,16 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
      * - Metadata Managers which maintain metadata related to replication and its status
      */
     private void performRoleBasedSetup() {
+        // refresh the session before the setup so stale sessions are removed (even when the cluster is neither Source
+        // nor Sink for any remote cluster)
+        sessionManager.refresh(topologyDescriptor);
 
-        if (!isSource() && !isSink()) {
+        if (!isSource(topologyDescriptor) && !isSink(topologyDescriptor)) {
             log.debug("Cluster is neither SOURCE nor SINK.  Not performing role-based setup.");
             return;
         }
 
-        sessionManager.refresh(topologyDescriptor);
-
-        if (isSource()) {
+        if (isSource(topologyDescriptor)) {
             logReplicationEventListener = new LogReplicationEventListener(this, getCorfuRuntime());
             logReplicationEventListener.start();
         } else {
@@ -411,14 +411,12 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
     private void onLeadershipAcquire() {
         // TODO [V2]: a cluster can be Source and/or Sink for different replication models. The support for this is
         //  coming in the connectionModel PR
-        if (isSource()) {
+        if (isSource(topologyDescriptor)) {
             log.info("Start as Source (sender/replicator)");
-            // TODO: Shama: currently the supported model is FULL_TABLE. So fetchConnectionEndpoints will get all SINKs.
-            //  This will change in the connection Model PR where an endpoint can be SOURCE/SINK.
             sessionManager.startReplication();
             lockAcquireSample = recordLockAcquire(topologyDescriptor.getLocalClusterDescriptor().getRole());
             processCountOnLockAcquire();
-        } else if (isSink()) {
+        } else if (isSink(topologyDescriptor)) {
             // TODO: Shama: in connectionModel PR, log session info when cluster is a sink
             log.info("Start as Sink (receiver)");
             // Sink Site : the LogReplicationServer (server handler) will
@@ -461,7 +459,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
      * Stop Log Replication
      */
     private void stopLogReplication() {
-        if (isSource() && isLeader.get()) {
+        if (isSource(topologyDescriptor) && isLeader.get()) {
             log.info("Stopping log replication.");
             sessionManager.stopReplication();
         }
@@ -487,18 +485,18 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         stopLogReplication();
         isLeader.set(false);
         // Signal Log Replication Server/Sink to stop receiving messages, leadership loss
-        if (isSink()) {
+        if (isSink(topologyDescriptor)) {
             interClusterServerNode.setLeadership(false);
         }
         recordLockRelease();
     }
 
-    private boolean isSource() {
-        return !topologyDescriptor.getRemoteSinkClusters().isEmpty();
+    private boolean isSource(TopologyDescriptor topology) {
+        return !topology.getRemoteSinkClusters().isEmpty();
     }
 
-    private boolean isSink() {
-        return !topologyDescriptor.getRemoteSourceClusters().isEmpty();
+    private boolean isSink(TopologyDescriptor topology) {
+        return !topology.getRemoteSourceClusters().isEmpty();
     }
 
     /**
@@ -517,10 +515,10 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
 
         // Stop ongoing replication, stopLogReplication() checks leadership and role as SOURCE
         // We do not update topology until we successfully stop log replication
-        if (isSource()) {
+        if (isSource(topologyDescriptor)) {
             stopLogReplication();
             logReplicationEventListener.stop();
-        } else if (isSink()) {
+        } else if (isSink(topologyDescriptor)) {
             // Stop the replication server
             interClusterServerNode.disable();
         }
@@ -612,15 +610,16 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
     private void onSinkClusterAddRemove(TopologyDescriptor newTopology) {
         log.debug("Sink Cluster has been added or removed");
 
+        // refresh the session so new sessions are added/removed.
+        sessionManager.refresh(newTopology);
+
         // Only process new sinks if the local cluster role is SOURCE
-        if (isSource()) {
-            sessionManager.refresh(newTopology);
+        if (isSource(newTopology)) {
             sessionManager.startReplication();
         } else {
             // Update the topology config id on the Sink components
             if (interClusterServerNode != null) {
                 interClusterServerNode.updateTopologyConfigId(newTopology.getTopologyConfigId());
-                sessionManager.refresh(newTopology);
             }
         }
 
@@ -708,7 +707,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
             return replicationStatusMap;
         }
 
-        if (!isSource() && !isSink()) {
+        if (!isSource(topologyDescriptor) && !isSink(topologyDescriptor)) {
             log.error("Received Replication Status Query in Incorrect Role, cluster is neither SOURCE/SINK");
             return replicationStatusMap;
         }
