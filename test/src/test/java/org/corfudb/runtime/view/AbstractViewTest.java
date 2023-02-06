@@ -120,7 +120,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
                 .builder()
                 .maxMvoCacheEntries(MVO_CACHE_SIZE)
                 .build());
-        runtime.parseConfigurationString(node.getHost() + ":" + node.getPort());
+        runtime.parseConfigurationString(node.toEndpointUrl());
         return runtime;
     }
 

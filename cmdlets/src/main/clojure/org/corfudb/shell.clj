@@ -1,5 +1,6 @@
 (ns org.corfudb.shell)
 
+(import org.corfudb.common.util.URLUtils)
 (import org.corfudb.runtime.CorfuRuntime)
 (import org.corfudb.runtime.clients.NettyClientRouter)
 (import org.docopt.Docopt)
@@ -90,8 +91,8 @@ The variable *r holds the last runtime obtrained, and *o holds the last router o
 
 
 ; Util functions to get a host or port from an endpoint string.
-(defn get-port [endpoint] (Integer/parseInt (get (.. endpoint (split ":")) 1)))
-(defn get-host [endpoint] (get (.. endpoint (split ":")) 0))
+(defn get-port [endpoint] (URLUtils/getPortFromEndpointURL (endpoint)))
+(defn get-host [endpoint] (URLUtils/getVersionFormattedHostAddress (endpoint)))
 
 ; Get a runtime or a router, and add it to the runtime/router corfuTable
 (defn add-client ([client] (.. *o (addClient client)))

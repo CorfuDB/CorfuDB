@@ -4,7 +4,7 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.NodeConfigurationMsg;
 
-import java.util.UUID;
+import static org.corfudb.common.util.URLUtils.getVersionFormattedEndpointURL;
 
 /**
  * This class represents a Log Replication Node
@@ -45,7 +45,7 @@ public class NodeDescriptor {
     }
 
     public String getEndpoint() {
-        return host + ":" + port;
+        return getVersionFormattedEndpointURL(host, port);
     }
 
     @Override

@@ -29,7 +29,6 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.RetryExhaustedException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
-import org.corfudb.util.NodeLocator;
 import org.corfudb.util.retry.ExponentialBackoffRetry;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalRetry;
@@ -54,6 +53,9 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+
+import static org.corfudb.common.util.URLUtils.getHostFromEndpointURL;
+import static org.corfudb.common.util.URLUtils.getVersionFormattedEndpointURL;
 
 /**
  * This class represents the Log Replication Discovery Service.
@@ -415,8 +417,8 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     /**
      * Retrieve local Corfu Endpoint
      */
-    private String getCorfuEndpoint(String localEndpoint, int corfuPort) {
-        return NodeLocator.parseString(localEndpoint).getHost() + ":" + corfuPort;
+    private String getCorfuEndpoint(String localHostAddress, int corfuPort) {
+        return getVersionFormattedEndpointURL(localHostAddress, corfuPort);
     }
 
     /**
@@ -868,7 +870,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      * @return current node's IP
      */
     private String getLocalHost() {
-        return NodeLocator.parseString(serverContext.getLocalEndpoint()).getHost();
+        return getHostFromEndpointURL(serverContext.getLocalEndpoint());
     }
 
 

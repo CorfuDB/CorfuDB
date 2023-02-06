@@ -1,0 +1,166 @@
+package org.corfudb.common.util;
+
+import io.netty.channel.ChannelHandlerContext;
+import lombok.extern.slf4j.Slf4j;
+import org.apache.http.conn.util.InetAddressUtils;
+
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.net.UnknownHostException;
+
+/**
+ * Contains Utility methods to work with URIs or the Socket Addresses.
+ * Supports both IPv4 and IPv6 methods.
+ *
+ * Created by cgudisagar on 1/22/23.
+ */
+@Slf4j
+public final class URLUtils {
+
+    private static final String COLON_SEPERATOR = ":";
+
+    private URLUtils() {
+        // prevent instantiation of this class
+    }
+
+    /**
+     * Returns a version-formatted URL that contains the formatted host address along with the port.
+     *
+     * @param host host address that needs formatting
+     * @param port port of the endpoint
+     * @return a version-formatted endpoint
+     */
+    public static String getVersionFormattedEndpointURL(String host, Integer port) {
+        return getVersionFormattedEndpointURL(host, port.toString());
+    }
+
+    /**
+     * Returns a version-formatted URL that contains the formatted host address along with the port.
+     *
+     * @param host host address that needs formatting
+     * @param port port of the endpoint
+     * @return a version-formatted endpoint
+     */
+    public static String getVersionFormattedEndpointURL(String host, String port) {
+        return getVersionFormattedHostAddress(host) +
+                COLON_SEPERATOR +
+                port;
+    }
+
+    /**
+     * Returns a version-formatted URL that contains the formatted host address along with the port.
+     *
+     * @param address host address that needs formatting
+     * @return a version-formatted endpoint
+     */
+    public static String getVersionFormattedEndpointURL(String address) {
+        return getVersionFormattedHostAddress(address.substring(0, address.lastIndexOf(':'))) +
+                address.substring(address.lastIndexOf(COLON_SEPERATOR));
+    }
+
+    /**
+     * Returns a version-formatted URL that contains the formatted host address.
+     *
+     * @param host host address that needs formatting
+     * @return version-formatted address
+     */
+    public static String getVersionFormattedHostAddress(String host) {
+
+        // getByName(host) fails when host has scope/interface in it like ([....%eth0])
+        // remove the trailing names %eth0 or %en0 if present
+        String formattedHost = host.trim().split("%")[0];
+
+        try {
+            if (InetAddressUtils.isIPv6Address(InetAddress.getByName(formattedHost).getHostAddress())
+                && formattedHost.charAt(0)!='[' && formattedHost.charAt(formattedHost.length()-1)!=']') {
+                formattedHost = '[' + formattedHost + ']';
+            }
+        } catch (UnknownHostException e) {
+            log.warn("Unable to validate the host address: " + formattedHost, e);
+            return host;
+        }
+
+        return formattedHost;
+    }
+
+    /**
+     * Return the local socket address extracted from the netty Ctx
+     *
+     * @param ctx ChannelHandlerContext
+     * @return string in the form of IP:PORT
+     */
+    public static String getLocalEndpointFromCtx(ChannelHandlerContext ctx) {
+        try {
+            return getVersionFormattedHostAddress(((InetSocketAddress) ctx.channel().localAddress()).getAddress().getHostAddress())
+                    + COLON_SEPERATOR
+                    + ((InetSocketAddress) ctx.channel().localAddress()).getPort();
+        } catch (NullPointerException ex) {
+            return "unavailable";
+        }
+    }
+
+    /**
+     * Return the remote socket address extracted from the netty Ctx
+     *
+     * @param ctx ChannelHandlerContext
+     * @return string in the form of IP:PORT
+     */
+    public static String getRemoteEndpointFromCtx(ChannelHandlerContext ctx) {
+        try {
+            return getVersionFormattedHostAddress(
+                    ((InetSocketAddress) ctx.channel().remoteAddress()).getAddress().getHostAddress()
+            )
+                    + COLON_SEPERATOR
+                    + ((InetSocketAddress) ctx.channel().remoteAddress()).getPort();
+        } catch (NullPointerException ex) {
+            return "unavailable";
+        }
+    }
+
+    /**
+     * Extracts the host from the IPV4 or IPV6 endpoint URL
+     *
+     * @param address IPV4 or IPV6 endpoint URL
+     * @return extracted host address
+     */
+    public static String getHostFromEndpointURL(String address) {
+        return extractionHelper(true, address);
+    }
+
+    /**
+     * Extracts the port from the IPV4 or IPV6 endpoint URL
+     *
+     * @param address IPV4 or IPV6 endpoint URL
+     * @return extracted port
+     */
+    public static String getPortFromEndpointURL(String address) {
+        return extractionHelper(false, address);
+    }
+
+    /**
+     * A helper method to extract host and ports
+     * @param extractHost true to extract a host, false for port
+     * @param address address to extract form
+     * @return the extracted result
+     */
+    private static String extractionHelper(boolean extractHost, String address) {
+        int lastColonIndex = address.lastIndexOf(COLON_SEPERATOR);
+        // if ':' is present, return a substring
+        if (lastColonIndex != -1) {
+            if (extractHost) {
+                return address.substring(0, lastColonIndex);
+            } else {
+                return address.substring(lastColonIndex + 1);
+            }
+        } else {
+            log.warn("extractionHelper: Could not find colon in the address '{}'.", address);
+            return address;
+        }
+    }
+
+    public static enum NetworkInterfaceVersion {
+        IPV4,
+        IPV6
+    }
+
+}

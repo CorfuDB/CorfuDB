@@ -7,6 +7,7 @@ import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.Singular;
+import lombok.extern.slf4j.Slf4j;
 
 import java.io.Serializable;
 import java.net.URI;
@@ -17,11 +18,14 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import static org.corfudb.common.util.URLUtils.getVersionFormattedEndpointURL;
+
 /**
  * {@link NodeLocator}s represent locators for Corfu nodes.
  *
  * <p>A detailed document regarding their contents and format can be found in docs/NODE_FORMAT.md
  */
+@Slf4j
 @Builder
 @EqualsAndHashCode
 public class NodeLocator implements Serializable {
@@ -50,7 +54,6 @@ public class NodeLocator implements Serializable {
      * The host the node is located on.
      */
     @Getter
-    @NonNull
     private final String host;
 
     /**
@@ -85,6 +88,8 @@ public class NodeLocator implements Serializable {
             }
 
             URI url = new URI(toParse);
+            log.trace("parseString: url "+ url + " toParse "+ toParse + " host "+ url.getHost() +
+                    " port" + url.getPort());
 
             // Get the protocol from the enum
             Protocol proto = Protocol.valueOf(url.getScheme().toUpperCase());
@@ -127,7 +132,7 @@ public class NodeLocator implements Serializable {
     }
 
     public String toEndpointUrl(){
-        return host + ":" + port;
+        return getVersionFormattedEndpointURL(host, port);
     }
 
     @Override

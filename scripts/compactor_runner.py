@@ -18,13 +18,11 @@ USAGE:
 
 from __future__ import absolute_import, print_function
 from argparse import ArgumentParser
-import fcntl
 import glob
 import logging
+import netifaces
 import os
 import os.path
-import socket
-import struct
 from subprocess import check_call, check_output, STDOUT
 import time
 import yaml
@@ -114,11 +112,37 @@ class CommandBuilder(object):
 
     def _resolve_ip_address(self, ifname):
         """
-        Get IPv4 address of a network interface.
+        Get an address of from the network interfaces. IPv6 is preferred over IPv4.
         """
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        return socket.inet_ntoa(
-            fcntl.ioctl(sock.fileno(), 0x8915, struct.pack("256s", bytes(ifname[:15], 'utf-8')))[20:24])
+        network_interfaces = netifaces.interfaces()
+        ip_version = netifaces.AF_INET6  # Default is IPV6
+        generic_interfaces = ['eth0', 'en0', 'eth', 'en', 'lo']
+
+        for iteration in range(2):
+            try:
+                return netifaces.ifaddresses(ifname)[ip_version][0]['addr']
+            except (KeyError, ValueError) as e:
+                print('Unable to find valid IP in the interface %s at iteration %s, looking for other options.'
+                      % (ifname, iteration), e)
+
+                for generic_interface in generic_interfaces:
+                    for network_interface in network_interfaces:
+                        if network_interface.startswith(generic_interface):
+                            try:
+                                return netifaces.ifaddresses(network_interface)[ip_version][0]['addr']
+                            except (KeyError, ValueError) as e:
+                                print('Unable to find valid IP in the interface %s at iteration %s,'
+                                      ' looking for other options.'
+                                      % (network_interface, iteration), e)
+
+            if iteration == 0:
+                if ip_version == netifaces.AF_INET6:
+                    ip_version = netifaces.AF_INET
+                else:
+                    ip_version = netifaces.AF_INET6
+
+        raise RuntimeError("Could not find any IP addresses. "
+                           "Please check the network interfaces and the program arguments.")
 
     def get_corfu_compactor_cmd(self, compactor_config, class_to_invoke):
         diskBacked = False

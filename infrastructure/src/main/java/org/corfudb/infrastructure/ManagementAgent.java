@@ -134,6 +134,8 @@ public class ManagementAgent {
         // Else in every other case, the layout server is active and will contain the latest layout
         // (In case of trailing layout server, the management server's persisted layout helps.)
         serverContext.installSingleNodeLayoutIfAbsent();
+        log.debug("ManagementAgent(): serverContext.getCurrentLayout() {}, managementLayout {}",
+                serverContext.getCurrentLayout(), managementLayout);
         serverContext.saveManagementLayout(serverContext.getCurrentLayout());
         serverContext.saveManagementLayout(managementLayout);
 

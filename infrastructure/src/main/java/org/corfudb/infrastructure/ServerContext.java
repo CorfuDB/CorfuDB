@@ -3,6 +3,7 @@ package org.corfudb.infrastructure;
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_MAX_NUM_MSG_PER_BATCH;
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_DATA_MSG_SIZE_SUPPORTED;
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_CACHE_NUM_ENTRIES;
+import static org.corfudb.common.util.URLUtils.getVersionFormattedHostAddress;
 
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
@@ -140,10 +141,12 @@ public class ServerContext implements AutoCloseable {
     private final EventLoopGroup workerGroup;
 
     @Getter (AccessLevel.PACKAGE)
-    private final NodeLocator nodeLocator;
+    @Setter
+    private NodeLocator nodeLocator;
 
     @Getter
-    private final String localEndpoint;
+    @Setter
+    private String localEndpoint;
 
     @Getter
     private final Set<String> dsFilePrefixesForCleanup =
@@ -174,8 +177,13 @@ public class ServerContext implements AutoCloseable {
         }
 
         nodeLocator = NodeLocator
-                .parseString(serverConfig.get("--address") + ":" + serverConfig.get("<port>"));
+                .parseString(
+                        getVersionFormattedHostAddress((String)serverConfig.get("--address"))
+                                + ":" + serverConfig.get("<port>"));
         localEndpoint = nodeLocator.toEndpointUrl();
+
+        //TODO(Chetan): Remove this
+        log.debug("ServerContext: LocalEndpoint set as " + localEndpoint);
     }
 
     int getBaseServerThreadCount() {
@@ -475,10 +483,12 @@ public class ServerContext implements AutoCloseable {
                 clusterId = UuidUtils.fromBase64(clusterIdString);
             }
         }
-        log.info("getNewSingleNodeLayout: Bootstrapping with cluster Id {} [{}]",
-            clusterId, UuidUtils.asBase64(clusterId));
-        String localAddress = getServerConfig().get("--address") + ":"
-            + getServerConfig().get("<port>");
+
+        String localAddress = getNodeLocator().toEndpointUrl();
+
+        log.info("getNewSingleNodeLayout: Bootstrapping with cluster Id {} [{}], localAddress {}",
+            clusterId, UuidUtils.asBase64(clusterId), localAddress);
+
         return new Layout(
             Collections.singletonList(localAddress),
             Collections.singletonList(localAddress),

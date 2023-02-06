@@ -2,6 +2,7 @@ package org.corfudb.infrastructure.management;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
+import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
 import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats;
 import org.corfudb.runtime.clients.IClientRouter;
@@ -26,7 +27,9 @@ public class FailureDetectorTest {
                 .maxPeriod(Duration.ofMillis(200))
                 .periodDelta(Duration.ofMillis(50))
                 .build();
-        FailureDetector failureDetector = new FailureDetector(endpoint);
+        ServerContext serverContext = Mockito.mock(ServerContext.class);
+        Mockito.when(serverContext.getLocalEndpoint()).thenReturn(endpoint);
+        FailureDetector failureDetector = new FailureDetector(serverContext);
         failureDetector.setNetworkStretcher(ns);
 
         long epoch = 1;

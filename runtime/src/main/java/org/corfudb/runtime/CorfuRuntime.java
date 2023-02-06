@@ -64,6 +64,8 @@ import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import static org.corfudb.common.util.URLUtils.getVersionFormattedEndpointURL;
+
 /**
  * Created by mwei on 12/9/15.
  */
@@ -1066,6 +1068,8 @@ public class CorfuRuntime {
 
     /**
      * Parse a configuration string and get a CorfuRuntime.
+     * Both Pure IPv6 and Pure IPv4 addresses are supported.
+     *
      *
      * @param configurationString The configuration string to parse.
      * @return A CorfuRuntime Configured based on the configuration string.
@@ -1074,7 +1078,7 @@ public class CorfuRuntime {
         // Parse comma sep. list.
         bootstrapLayoutServers = Pattern.compile(",")
                 .splitAsStream(configurationString)
-                .map(String::trim)
+                .map(address -> getVersionFormattedEndpointURL(address.trim()))
                 .collect(Collectors.toList());
         log.info("Bootstrap Layout Servers {}", bootstrapLayoutServers);
         layoutServers = new ArrayList<>(bootstrapLayoutServers);

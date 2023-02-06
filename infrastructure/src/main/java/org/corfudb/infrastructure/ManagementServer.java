@@ -499,7 +499,7 @@ public class ManagementServer extends AbstractServer {
                                              @Nonnull ServerContext serverContext,
                                              @Nonnull ClusterStateContext clusterContext) {
             return new ManagementAgent(corfuRuntime, serverContext, clusterContext,
-                    new FailureDetector(serverContext.getLocalEndpoint()), serverContext.getManagementLayout());
+                    new FailureDetector(serverContext), serverContext.getManagementLayout());
         }
     }
 }

@@ -12,6 +12,7 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.infrastructure.RemoteMonitoringService;
+import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
@@ -59,15 +60,15 @@ public class FailureDetector implements IDetector {
     private int failureThreshold = 3;
 
     @NonNull
-    private final String localEndpoint;
+    private ServerContext serverContext;
 
     @NonNull
     @Default
     @Setter
     private NetworkStretcher networkStretcher = NetworkStretcher.builder().build();
 
-    public FailureDetector(String localEndpoint) {
-        this.localEndpoint = localEndpoint;
+    public FailureDetector(ServerContext serverContext) {
+        this.serverContext = serverContext;
     }
 
     /**
@@ -180,7 +181,7 @@ public class FailureDetector implements IDetector {
                 .collect(Collectors.toList());
 
         ClusterStateAggregator aggregator = ClusterStateAggregator.builder()
-                .localEndpoint(localEndpoint)
+                .localEndpoint(serverContext.getLocalEndpoint())
                 .clusterStates(clusterStates)
                 .unresponsiveNodes(layoutUnresponsiveNodes)
                 .build();
@@ -250,7 +251,7 @@ public class FailureDetector implements IDetector {
         long start = System.currentTimeMillis();
 
         ClusterStateCollector clusterCollector = ClusterStateCollector.builder()
-                .localEndpoint(localEndpoint)
+                .localEndpoint(serverContext.getLocalEndpoint())
                 .clusterState(pollAsync(allServers, clientRouters, epoch, clusterID))
                 .localNodeFileSystem(fileSystemStats)
                 .build();

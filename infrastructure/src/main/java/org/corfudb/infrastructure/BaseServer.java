@@ -2,7 +2,6 @@ package org.corfudb.infrastructure;
 
 import io.netty.channel.ChannelHandlerContext;
 import java.lang.invoke.MethodHandles;
-import java.net.InetSocketAddress;
 import java.util.concurrent.ExecutorService;
 import javax.annotation.Nonnull;
 import lombok.Getter;
@@ -15,6 +14,7 @@ import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
 
+import static org.corfudb.common.util.URLUtils.getRemoteEndpointFromCtx;
 import static org.corfudb.protocols.CorfuProtocolServerErrors.getWrongEpochErrorMsg;
 import static org.corfudb.protocols.service.CorfuProtocolBase.getPingResponseMsg;
 import static org.corfudb.protocols.service.CorfuProtocolBase.getResetResponseMsg;
@@ -57,20 +57,6 @@ public class BaseServer extends AbstractServer {
     }
 
     /**
-     * Return a human-readable string of the receiving endpoint
-     *
-     * @param ctx ChannelHandlerContext
-     * @return string in form of IP:PORT
-     */
-    protected static String getEndpoint(ChannelHandlerContext ctx) {
-        try {
-            return ((InetSocketAddress) ctx.channel().remoteAddress()).getAddress().getHostAddress();
-        } catch (NullPointerException ex) {
-            return "unavailable";
-        }
-    }
-
-    /**
      * Respond to a ping request.
      *
      * @param req   The incoming request message.
@@ -80,7 +66,7 @@ public class BaseServer extends AbstractServer {
     @RequestHandler(type = RequestPayloadMsg.PayloadCase.PING_REQUEST)
     public void handlePing(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
         log.trace("handlePing[{}]: Ping message received from {}",
-                req.getHeader().getRequestId(), getEndpoint(ctx));
+                req.getHeader().getRequestId(), getRemoteEndpointFromCtx(ctx));
 
         HeaderMsg responseHeader = getHeaderMsg(req.getHeader(), ClusterIdCheck.CHECK, EpochCheck.IGNORE);
         ResponseMsg response = getResponseMsg(responseHeader, getPingResponseMsg());
@@ -101,7 +87,7 @@ public class BaseServer extends AbstractServer {
             final long epoch = req.getPayload().getSealRequest().getEpoch();
 
             log.info("handleSeal[{}]: Received SEAL from {}, moving to new epoch {},",
-                    req.getHeader().getRequestId(), getEndpoint(ctx), epoch);
+                    req.getHeader().getRequestId(), getRemoteEndpointFromCtx(ctx), epoch);
 
             serverContext.setServerEpoch(epoch, r);
             HeaderMsg responseHeader = getHeaderMsg(req.getHeader(), ClusterIdCheck.CHECK, EpochCheck.IGNORE);
@@ -109,7 +95,7 @@ public class BaseServer extends AbstractServer {
             r.sendResponse(response, ctx);
         } catch (WrongEpochException e) {
             log.debug("handleSeal[{}]: Rejected SEAL from {} current={}, requested={}",
-                    req.getHeader().getRequestId(), getEndpoint(ctx),
+                    req.getHeader().getRequestId(), getRemoteEndpointFromCtx(ctx),
                     e.getCorrectEpoch(), req.getPayload().getSealRequest().getEpoch());
 
             HeaderMsg responseHeader = getHeaderMsg(req.getHeader(), ClusterIdCheck.CHECK, EpochCheck.IGNORE);
@@ -130,7 +116,7 @@ public class BaseServer extends AbstractServer {
     @RequestHandler(type = RequestPayloadMsg.PayloadCase.RESET_REQUEST)
     private void handleReset(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
         log.warn("handleReset[{}]: Remote reset requested from {}",
-                req.getHeader().getRequestId(), getEndpoint(ctx));
+                req.getHeader().getRequestId(), getRemoteEndpointFromCtx(ctx));
 
         HeaderMsg responseHeader = getHeaderMsg(req.getHeader(), ClusterIdCheck.CHECK, EpochCheck.IGNORE);
         ResponseMsg response = getResponseMsg(responseHeader, getResetResponseMsg());
@@ -150,7 +136,7 @@ public class BaseServer extends AbstractServer {
     @RequestHandler(type = RequestPayloadMsg.PayloadCase.RESTART_REQUEST)
     private void handleRestart(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
         log.warn("handleRestart[{}]: Remote restart requested from {}",
-                req.getHeader().getRequestId(), getEndpoint(ctx));
+                req.getHeader().getRequestId(), getRemoteEndpointFromCtx(ctx));
 
         HeaderMsg responseHeader = getHeaderMsg(req.getHeader(), ClusterIdCheck.CHECK, EpochCheck.IGNORE);
         ResponseMsg response = getResponseMsg(responseHeader, getRestartResponseMsg());

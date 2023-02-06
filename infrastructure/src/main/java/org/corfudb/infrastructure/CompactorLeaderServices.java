@@ -308,7 +308,7 @@ public class CompactorLeaderServices {
 
     private String printCheckpointStatus(TableName tableName, CheckpointingStatus status) {
         StringBuilder str = new StringBuilder();
-        str.append(status.getClientName()).append(":");
+        str.append(status.getClientName()).append(": ");
         if (status.getStatus() != StatusType.COMPLETED) {
             str.append("FAILED ");
         } else {

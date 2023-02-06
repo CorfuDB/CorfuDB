@@ -21,12 +21,16 @@ import org.corfudb.runtime.proto.service.Layout.CommitLayoutRequestMsg;
 import org.corfudb.runtime.proto.service.Layout.PrepareLayoutRequestMsg;
 import org.corfudb.runtime.proto.service.Layout.ProposeLayoutRequestMsg;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.util.NodeLocator;
 
 import javax.annotation.Nonnull;
 import java.lang.invoke.MethodHandles;
+import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 
+import static org.corfudb.common.util.URLUtils.getLocalEndpointFromCtx;
+import static org.corfudb.common.util.URLUtils.getVersionFormattedEndpointURL;
 import static org.corfudb.protocols.CorfuProtocolCommon.getLayout;
 import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
 import static org.corfudb.protocols.CorfuProtocolServerErrors.getBootstrappedErrorMsg;
@@ -212,7 +216,8 @@ public class LayoutServer extends AbstractServer {
             log.info("handleBootstrapLayoutRequest[{}]: Bootstrap with new layout={}", requestHeader.getRequestId(), layout);
             setCurrentLayout(layout);
             serverContext.setServerEpoch(layout.getEpoch(), r);
-
+            // Set serverContext's Current Node Locator using Channel ctx endpoint.
+            updateNodeLocator(ctx, serverContext);
             responseHeader = getHeaderMsg(requestHeader, ClusterIdCheck.CHECK, EpochCheck.IGNORE);
             response = getResponseMsg(responseHeader,
                     getBootstrapLayoutResponseMsg(true));
@@ -421,6 +426,9 @@ public class LayoutServer extends AbstractServer {
 
         setCurrentLayout(layout);
         serverContext.setServerEpoch(layout.getEpoch(), r);
+        // Set serverContext's Current Node Locator using Channel ctx endpoint.
+        updateNodeLocator(ctx, serverContext);
+
         log.warn("forceLayout[{}]: Forcing new layout={}", requestHeader.getRequestId(), layout);
         responseHeader = getHeaderMsg(requestHeader, ClusterIdCheck.CHECK, EpochCheck.IGNORE);
         response = getResponseMsg(responseHeader, getCommitLayoutResponseMsg(true));
@@ -468,6 +476,8 @@ public class LayoutServer extends AbstractServer {
 
         setCurrentLayout(layout);
         serverContext.setServerEpoch(payloadEpoch, r);
+        // Set serverContext's Current Node Locator using Channel ctx endpoint.
+        updateNodeLocator(ctx, serverContext);
 
         HeaderMsg responseHeader = getHeaderMsg(req.getHeader(), ClusterIdCheck.CHECK, EpochCheck.IGNORE);
         ResponseMsg response = getResponseMsg(responseHeader,
@@ -495,6 +505,39 @@ public class LayoutServer extends AbstractServer {
         serverContext.setCurrentLayout(layout);
         // set the layout in history as well
         setLayoutInHistory(layout);
+    }
+
+    /**
+     * Update serverContext's Current Node Locator to match the layout.
+     * Obtains the local endpoint from netty ctx to which the remote client connected to
+     * and checks its presence in the layout.
+     *
+     * @param ctx
+     * @param serverContext
+     */
+    protected static void updateNodeLocator(ChannelHandlerContext ctx, ServerContext serverContext) {
+        String endpoint = getLocalEndpointFromCtx(ctx);
+
+        if (!"unavailable".equals(endpoint)) {
+            List<String> layoutServers = serverContext.getCurrentLayout().getLayoutServers();
+
+            // If the current ctx endpoint shows some addresses (localhost, any IP, etc) that are
+            // not present in the layout, or current node locator value is already present in the
+            // layout, return as is.
+            // Example: When the server is bootstrapped with localhost as the layout address, and endpoint
+            // is 127.0.0.1 or ::1, retain localhost as the current node locator value.
+            if (!layoutServers.contains(endpoint) || layoutServers.contains(serverContext.getNodeLocator().toEndpointUrl())) {
+                return;
+            }
+
+            NodeLocator nodeLocator = NodeLocator.parseString(
+                    getVersionFormattedEndpointURL(endpoint)
+            );
+            serverContext.setNodeLocator(nodeLocator);
+            serverContext.setLocalEndpoint(nodeLocator.toEndpointUrl());
+            log.info("setCurrentNodeLocator: NodeLocator set as {}, LocalEndpoint set as {}",
+                    nodeLocator, nodeLocator.toEndpointUrl());
+        }
     }
 
     public Rank getPhase1Rank(long epoch) {
