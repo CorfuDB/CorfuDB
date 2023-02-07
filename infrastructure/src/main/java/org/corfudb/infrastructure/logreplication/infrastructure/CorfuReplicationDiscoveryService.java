@@ -437,8 +437,8 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                     replicationConfigManager,
                     serverContext.getLogReplicationMaxNumMsgPerBatch(),
                     serverContext.getLogReplicationMaxDataMessageSize(),
-                    serverContext.getLogReplicationCacheMaxSize()
-            );
+                    serverContext.getLogReplicationCacheMaxSize(),
+                    serverContext.getMaxSnapshotEntriesApplied());
         } catch (Throwable t) {
             log.error("Exception when fetching the Replication Config", t);
             throw t;
