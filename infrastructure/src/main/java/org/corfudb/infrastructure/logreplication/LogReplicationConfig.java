@@ -34,6 +34,9 @@ public class LogReplicationConfig {
     // Log Replication default max number of messages generated at the active cluster for each batch
     public static final int DEFAULT_MAX_NUM_MSG_PER_BATCH = 10;
 
+    // Default value for the max number of entries applied in a single transaction on Sink during snapshot sync
+    public static final int DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED = 50;
+
     // Log Replication default max data message size is 64MB
     public static final int MAX_DATA_MSG_SIZE_SUPPORTED = (64 << 20);
 
@@ -90,15 +93,21 @@ public class LogReplicationConfig {
     private int maxDataSizePerMsg;
 
     /**
+     * Max number of entries to be applied during a snapshot sync.  For special tables only.
+     */
+    private int maxSnapshotEntriesApplied = DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED;
+
+    /**
      * Constructor exposed to {@link CorfuReplicationDiscoveryService}
      */
     public LogReplicationConfig(LogReplicationConfigManager configManager,
-                                int maxNumMsgPerBatch, int maxMsgSize, int cacheSize) {
+                                int maxNumMsgPerBatch, int maxMsgSize, int cacheSize, int maxSnapshotEntriesApplied) {
         this.configManager = configManager;
         this.maxNumMsgPerBatch = maxNumMsgPerBatch;
         this.maxMsgSize = maxMsgSize;
         this.maxCacheSize = cacheSize;
         this.maxDataSizePerMsg = maxMsgSize * DATA_FRACTION_PER_MSG / 100;
+        this.maxSnapshotEntriesApplied = maxSnapshotEntriesApplied;
         syncWithRegistry();
     }
 

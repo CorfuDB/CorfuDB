@@ -58,6 +58,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import static java.lang.Thread.sleep;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_CACHE_NUM_ENTRIES;
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED;
 import static org.corfudb.integration.LogReplicationAbstractIT.checkpointAndTrimCorfuStore;
 import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
 
@@ -1226,7 +1227,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         LogReplicationConfigManager tableManagerPlugin = new LogReplicationConfigManager(srcTestRuntime);
         LogReplicationConfig config = new LogReplicationConfig(tableManagerPlugin, BATCH_SIZE,
-                SMALL_MSG_SIZE, MAX_CACHE_NUM_ENTRIES);
+                SMALL_MSG_SIZE, MAX_CACHE_NUM_ENTRIES, DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED);
 
         // Data Sender
         sourceDataSender = new SourceForwardingDataSender(DESTINATION_ENDPOINT, config, testConfig,

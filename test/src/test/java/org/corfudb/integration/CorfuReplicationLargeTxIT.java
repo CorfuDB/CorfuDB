@@ -44,11 +44,16 @@ public class CorfuReplicationLargeTxIT extends LogReplicationAbstractIT {
         Sample.Metadata>> mapNameToMapStandby = new HashMap<>();
 
     private static final int NUM_ENTRIES_PER_TABLE = 20;
-    private static final int MAX_WRITE_SIZE = 7000;
+
+    // Max transaction size(in bytes) for applying snapshot sync updates
+    private static final int MAX_WRITE_SIZE_BYTES = 7000;
+
+    // Max number of entries applied in a single transaction during snapshot sync
+    private static final int MAX_SNAPSHOT_ENTRIES_APPLIED = 1;
 
     /**
-     * With the max write size of MAX_WRITE_SIZE, it was empirically
-     * determined that 20 entries in a table had a serialized size of 5.5K
+     * With the max write size of MAX_WRITE_SIZE_BYTES, it was empirically
+     * determined that 20 entries in a table had a serialized size of 5.5K bytes
      * approx.  Hence, a snapshot sync with this much data will be applied in
      * a single transaction.
      * @throws Exception
@@ -59,7 +64,7 @@ public class CorfuReplicationLargeTxIT extends LogReplicationAbstractIT {
     }
 
     /**
-     * With the max write size of SEVEN_THOUSAND, it was empirically
+     * With the max write size of MAX_WRITE_SIZE_BYTES, it was empirically
      * determined that 20 entries in a table had a serialized size of 5.5K
      * approx.  Hence, a snapshot sync with twice the data(40 entries) will be
      * applied in 2 transactions.
@@ -77,9 +82,6 @@ public class CorfuReplicationLargeTxIT extends LogReplicationAbstractIT {
 
         log.debug("Open map on Source and Sink");
         openMaps(2, false);
-
-        // The max size of a payload in a transaction.
-        int maxWriteSize = MAX_WRITE_SIZE;
 
         log.debug("Write data to Source CorfuDB before LR is started ...");
         writeOnSender(0, numEntriesToWrite);
@@ -118,7 +120,8 @@ public class CorfuReplicationLargeTxIT extends LogReplicationAbstractIT {
             new StreamingUpdateListener(streamingUpdatesLatch);
         corfuStoreStandby.subscribeListener(streamingUpdateListener, NAMESPACE, TAG_ONE);
 
-        startLogReplicatorServersWithCustomMaxWriteSize(maxWriteSize);
+        // Start LR on both clusters with custom write sizes.
+        startLogReplicatorServersWithCustomMaxWriteSize();
 
         log.debug("Wait for snapshot sync to finish");
         statusUpdateLatch.await();
@@ -131,7 +134,6 @@ public class CorfuReplicationLargeTxIT extends LogReplicationAbstractIT {
         mapNameToMapStandby.keySet().forEach(key ->
             Assert.assertTrue(streamingUpdateListener.getTableNameToUpdatesMap()
                 .containsKey(key)));
-
 
         // Verify that the right number of entries are contained in the
         // streaming update.  Also verify that the first entry is a 'clear'
@@ -249,16 +251,15 @@ public class CorfuReplicationLargeTxIT extends LogReplicationAbstractIT {
         }
     }
 
-    private void startLogReplicatorServersWithCustomMaxWriteSize(
-        int maxWriteSize) throws Exception {
+    private void startLogReplicatorServersWithCustomMaxWriteSize() throws Exception {
         activeReplicationServer =
             runReplicationServerCustomMaxWriteSize(activeReplicationServerPort,
-                pluginConfigFilePath, maxWriteSize);
+                pluginConfigFilePath, MAX_WRITE_SIZE_BYTES, MAX_SNAPSHOT_ENTRIES_APPLIED);
 
         // Start Log Replication Server on Sink Site
         standbyReplicationServer =
             runReplicationServerCustomMaxWriteSize(standbyReplicationServerPort,
-                pluginConfigFilePath, maxWriteSize);
+                pluginConfigFilePath, MAX_WRITE_SIZE_BYTES, MAX_SNAPSHOT_ENTRIES_APPLIED);
     }
 
     private void shutDown() {
