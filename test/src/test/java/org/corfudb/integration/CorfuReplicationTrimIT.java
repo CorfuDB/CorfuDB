@@ -76,6 +76,7 @@ public class CorfuReplicationTrimIT extends LogReplicationAbstractIT {
 
             log.debug("Start source Log Replicator again ...");
             startSourceLogReplicator();
+            initSingleSourceSinkCluster();
 
             log.debug("Verify Data on Sink ...");
             verifyDataOnSinkNonUFO((numWrites*2));
@@ -200,6 +201,10 @@ public class CorfuReplicationTrimIT extends LogReplicationAbstractIT {
 
             // Checkpoint and Trim Before Starting
             checkpointAndTrim(true);
+
+            //initiate the topology buckets with a single source/sink topology.
+            // This needs to be done after checkpoint trim as defaultClusterManager starts the listener at trimMark
+            initSingleSourceSinkCluster();
 
             startLogReplicatorServers();
 

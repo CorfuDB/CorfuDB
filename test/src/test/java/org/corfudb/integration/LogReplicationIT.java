@@ -9,7 +9,6 @@ import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationMetadata;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
@@ -41,6 +40,7 @@ import org.junit.Test;
 
 import java.io.IOException;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
@@ -1248,8 +1248,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         // Source Manager
         LogReplicationRuntimeParameters runtimeParameters = LogReplicationRuntimeParameters.builder()
-                .remoteClusterDescriptor(new ClusterDescriptor(REMOTE_CLUSTER_ID,
-                        LogReplicationClusterInfo.ClusterRole.SOURCE, CORFU_PORT))
+                .remoteClusterDescriptor(new ClusterDescriptor(REMOTE_CLUSTER_ID, CORFU_PORT, new ArrayList<>()))
                 .localCorfuEndpoint(SOURCE_ENDPOINT)
                 .build();
         LogReplicationSourceManager logReplicationSourceManager = new LogReplicationSourceManager(runtimeParameters,
