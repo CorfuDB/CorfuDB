@@ -1,17 +1,17 @@
 package org.corfudb.infrastructure.logreplication.infrastructure;
 
-import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.AbstractServer;
-import org.corfudb.infrastructure.BaseServer;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerThreadFactory;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationServerRouter;
+import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSinkServerRouter;
+import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSourceServerRouter;
+import org.corfudb.runtime.LogReplication.LogReplicationSession;
 
 import javax.annotation.Nonnull;
-import java.util.ArrayList;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -28,9 +28,6 @@ public class CorfuInterClusterReplicationServerNode implements AutoCloseable {
     @Getter
     private final Map<Class, AbstractServer> serverMap;
 
-    @Getter
-    private final LogReplicationServerRouter router;
-
     // This flag makes the closing of the CorfuServer idempotent.
     private final AtomicBoolean close;
 
@@ -41,33 +38,48 @@ public class CorfuInterClusterReplicationServerNode implements AutoCloseable {
     // Error code required to detect an ungraceful shutdown.
     private static final int EXIT_ERROR_CODE = 100;
 
+    LogReplicationServerRouter router;
+
+    private AtomicBoolean serverStarted;
+
     /**
-     * Corfu Server initialization.
+     * Log Replication Server initialization.
      *
      * @param serverContext Initialized Server Context
-     * @param logReplicationServer Replication Server which processes incoming requests
+     * @param serverMap Servers which help process/validate incoming requests
      */
     public CorfuInterClusterReplicationServerNode(@Nonnull ServerContext serverContext,
-        LogReplicationServer logReplicationServer) {
+                                                  Map<Class, AbstractServer> serverMap) {
 
         this.serverContext = serverContext;
 
-        this.logReplicationServer = logReplicationServer;
+        this.logReplicationServer = (LogReplicationServer) serverMap.get(LogReplicationServer.class);
 
-        this.serverMap = ImmutableMap.<Class, AbstractServer>builder()
-            .put(BaseServer.class, new BaseServer(serverContext))
-            .put(LogReplicationServer.class, logReplicationServer)
-            .build();
+        this.serverMap = serverMap;
 
         this.close = new AtomicBoolean(false);
-        this.router = new LogReplicationServerRouter(new ArrayList<>(serverMap.values()));
-        this.serverContext.setServerRouter(router);
 
-        logReplicationServerRunner = Executors.newSingleThreadScheduledExecutor(new ThreadFactoryBuilder()
-            .setNameFormat("replication-server-runner").build());
+        this.serverStarted = new AtomicBoolean(false);
+    }
 
-        // Start and listen to the server
-        logReplicationServerRunner.submit(this::startAndListen);
+    public void setRouterAndStartServer(Map<LogReplicationSession, LogReplicationSourceServerRouter> sessionToSourceServer,
+                                        Map<LogReplicationSession, LogReplicationSinkServerRouter> sessionToSinkServer) {
+        if (!serverStarted.get()) {
+            this.router = new LogReplicationServerRouter(serverMap, this.serverContext, sessionToSourceServer, sessionToSinkServer);
+            this.serverContext.setServerRouter(router);
+            logReplicationServerRunner = Executors.newSingleThreadScheduledExecutor(new ThreadFactoryBuilder()
+                    .setNameFormat("replication-server-runner").build());
+            // Start and listen to the server
+            logReplicationServerRunner.submit(() -> this.startAndListen());
+        } else {
+            updateServerRouters(sessionToSourceServer, sessionToSinkServer);
+        }
+    }
+
+    public void updateServerRouters(Map<LogReplicationSession, LogReplicationSourceServerRouter> sessionToSourceServer,
+                                    Map<LogReplicationSession, LogReplicationSinkServerRouter> sessionToSinkServer) {
+        log.info("Server transport adapter is already running. Updating the router information");
+        this.router.setServerAdapterInRouters(sessionToSourceServer, sessionToSinkServer);
     }
 
     /**
@@ -75,8 +87,9 @@ public class CorfuInterClusterReplicationServerNode implements AutoCloseable {
      */
     private void startAndListen() {
         try {
-            log.info("Starting server transport adapter...");
-            router.getServerAdapter().start().get();
+            log.info("Starting server transport adapter ...");
+            serverStarted.set(true);
+            this.router.getServerAdapter().start().get();
         } catch (InterruptedException e) {
             // The server can be interrupted and stopped on a role switch.
             // It should not be treated as fatal
@@ -121,7 +134,6 @@ public class CorfuInterClusterReplicationServerNode implements AutoCloseable {
         }
         log.info("close: Shutting down Log Replication server and cleaning resources");
         serverContext.close();
-        cleanupResources();
     }
 
     private void cleanupResources() {
@@ -151,6 +163,9 @@ public class CorfuInterClusterReplicationServerNode implements AutoCloseable {
         CompletableFuture.allOf(shutdownFutures).join();
         shutdownService.shutdown();
 
+        synchronized (this) {
+            serverStarted.set(false);
+        }
         // Stop listening on the server channel
         logReplicationServerRunner.shutdownNow();
 

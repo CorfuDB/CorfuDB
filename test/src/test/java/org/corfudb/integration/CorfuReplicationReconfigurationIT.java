@@ -1,12 +1,15 @@
 package org.corfudb.integration;
 
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.tuple.Pair;
 import org.corfudb.infrastructure.logreplication.infrastructure.SessionManager;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
-import org.corfudb.runtime.LogReplication.SyncType;
-import org.corfudb.runtime.LogReplication.SnapshotSyncInfo;
-import org.corfudb.runtime.LogReplication.SyncStatus;
-import org.corfudb.runtime.LogReplication.ReplicationStatus;
+import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SyncType;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SnapshotSyncInfo;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SyncStatus;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatus;
 import org.corfudb.infrastructure.logreplication.proto.Sample.IntValueTag;
 import org.corfudb.infrastructure.logreplication.proto.Sample.Metadata;
 import org.corfudb.infrastructure.logreplication.proto.Sample.StringKey;
@@ -15,6 +18,7 @@ import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicat
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
+import org.corfudb.runtime.ExampleSchemas;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
 import org.corfudb.runtime.collections.StreamListener;
@@ -32,10 +36,14 @@ import org.corfudb.util.Sleep;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 import java.io.File;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -60,6 +68,7 @@ import static org.corfudb.runtime.LogReplicationUtils.REPLICATION_STATUS_TABLE_N
  * @author amartinezman
  */
 @Slf4j
+@RunWith(Parameterized.class)
 public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT {
 
     private static final int SLEEP_DURATION = 5;
@@ -82,19 +91,37 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
 
     private Table<StringKey, IntValueTag, Metadata> noisyMap;
 
-    /**
-     * Sets the plugin path before starting any test
-     *
-     * @throws Exception
-     */
-    @Before
-    public void setupPluginPath() {
+    public CorfuReplicationReconfigurationIT(Pair<String, ExampleSchemas.ClusterUuidMsg> pluginAndTopologyType) {
+        this.pluginConfigFilePath = pluginAndTopologyType.getKey();
+        this.topologyType = pluginAndTopologyType.getValue();
+    }
+
+    // Static method that generates and returns test data (automatically test for two transport protocols: netty and GRPC)
+    @Parameterized.Parameters
+    public static Collection<Pair<String, ExampleSchemas.ClusterUuidMsg>> input() {
+
+        List<String> transportPlugins = Arrays.asList(
+                "src/test/resources/transport/grpcConfig.properties"
+//                "src/test/resources/transport/nettyConfig.properties"
+        );
+
+        List<ExampleSchemas.ClusterUuidMsg> topologyTypes = Arrays.asList(
+                DefaultClusterManager.TP_SINGLE_SOURCE_SINK,
+                DefaultClusterManager.TP_SINGLE_SOURCE_SINK_REV_CONNECTION
+        );
+
+        List<Pair<String, ExampleSchemas.ClusterUuidMsg>> absolutePathPlugins = new ArrayList<>();
+
         if(runProcess) {
-            File f = new File(nettyConfig);
-            this.pluginConfigFilePath = f.getAbsolutePath();
+            transportPlugins.stream().map(File::new).forEach(f ->
+                    topologyTypes.stream().forEach(type -> absolutePathPlugins.add(Pair.of(f.getAbsolutePath(), type))));
         } else {
-            this.pluginConfigFilePath = nettyConfig;
+
+            transportPlugins.stream().forEach(f ->
+                    topologyTypes.stream().forEach(type -> absolutePathPlugins.add(Pair.of(f, type))));
         }
+
+        return absolutePathPlugins;
     }
 
     /**
@@ -106,7 +133,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
     public void testSinkClusterReset() throws Exception {
         // (1) Snapshot and Log Entry Sync
         log.debug(">>> (1) Start Snapshot and Log Entry Sync");
-        testEndToEndSnapshotAndLogEntrySyncUFO(false, false, 1);
+        testEndToEndSnapshotAndLogEntrySyncUFO(false, false, 1, false);
 
         ExecutorService writerService = Executors.newSingleThreadExecutor();
 
@@ -144,7 +171,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
 
         // (1) Snapshot and Log Entry Sync
         log.debug(">>> (1) Start Snapshot and Log Entry Sync");
-        testEndToEndSnapshotAndLogEntrySyncUFO(false, false, 1);
+        testEndToEndSnapshotAndLogEntrySyncUFO(false, false, 1, false);
 
         ExecutorService writerService = Executors.newSingleThreadExecutor();
 

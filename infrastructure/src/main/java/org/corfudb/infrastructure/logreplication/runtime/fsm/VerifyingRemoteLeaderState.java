@@ -2,6 +2,7 @@ package org.corfudb.infrastructure.logreplication.runtime.fsm;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
+import org.corfudb.infrastructure.logreplication.runtime.LogReplicationBaseSourceRouter;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientRouter;
 import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationLeadershipResponseMsg;
@@ -27,9 +28,10 @@ public class VerifyingRemoteLeaderState implements LogReplicationRuntimeState {
 
     private ThreadPoolExecutor worker;
 
-    private LogReplicationClientRouter router;
+    private LogReplicationBaseSourceRouter router;
 
-    public VerifyingRemoteLeaderState(CorfuLogReplicationRuntime fsm, ThreadPoolExecutor worker, LogReplicationClientRouter router) {
+    public VerifyingRemoteLeaderState(CorfuLogReplicationRuntime fsm, ThreadPoolExecutor worker,
+                                      LogReplicationBaseSourceRouter router) {
         this.fsm = fsm;
         this.worker = worker;
         this.router = router;
@@ -77,8 +79,18 @@ public class VerifyingRemoteLeaderState implements LogReplicationRuntimeState {
         log.debug("onEntry :: Verifying Remote Leader, transition from {}", from.getType());
         log.trace("Submitted tasks to worker :: size={} activeCount={} taskCount={}", worker.getQueue().size(),
                 worker.getActiveCount(), worker.getTaskCount());
-        // Verify Leadership on connected nodes (ignore those for which leadership is pending)
-        this.worker.submit(this::verifyLeadership);
+
+        // Proceed if remoteLeader is known, otherwise verify Leadership on connected nodes (ignore those for which
+        // leadership is pending)
+        if (fsm.getRemoteLeaderNodeId().isPresent()) {
+            fsm.input(new LogReplicationRuntimeEvent(
+                    LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.REMOTE_LEADER_FOUND,
+                    fsm.getRemoteLeaderNodeId().get())
+            );
+            log.debug("Exit :: leadership verification");
+        } else {
+            this.worker.submit(this::verifyLeadership);
+        }
     }
 
 

@@ -3,6 +3,7 @@ package org.corfudb.infrastructure.logreplication.runtime;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationMetadataRequestMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
@@ -13,7 +14,7 @@ import org.corfudb.runtime.proto.service.CorfuMessage;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
-import static org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientRouter.REMOTE_LEADER;
+import static org.corfudb.infrastructure.logreplication.runtime.LogReplicationSourceClientRouter.REMOTE_LEADER;
 
 /**
  * A client to send messages to the Log Replication Unit.
@@ -30,13 +31,17 @@ public class LogReplicationClient extends AbstractClient {
     @Setter
     private IClientRouter router;
 
-    public LogReplicationClient(IClientRouter router, String clusterId) {
+    private final LogReplicationSession replicationSession;
+
+    public LogReplicationClient(IClientRouter router, String clusterId, LogReplicationSession replicationSession) {
         super(router, 0, UUID.fromString(clusterId));
+        this.replicationSession = replicationSession;
         setRouter(router);
     }
 
-    public LogReplicationClient(IClientRouter router, long epoch) {
+    public LogReplicationClient(IClientRouter router, long epoch, LogReplicationSession replicationSession) {
         super(router, epoch, null);
+        this.replicationSession = replicationSession;
         setRouter(router);
     }
 
