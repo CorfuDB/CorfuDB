@@ -46,11 +46,48 @@ For instance, there are multiple possible scenarios of failures that could happe
   simultaneous updates of the cluster layout. Using current "decision maker" approach only one node can be added to
   the unresponsive list at a time.
 
-#### Local Node Failure Detection Sequence Diagram
+### Disk Failures Detection
+ - data corruption exception:
+     - StreamLogFiles#initializeLogMetadata(): corfu fails and can't recover if data on disk is corrupted 
+     - StreamLogFiles#initStreamLogDirectory(): during the creation of LogUnitServer, it can go down if disk is read only or log dir is not writable
+ - Batch processor failures: can occur in case of an exceptions in BatchProcessor#process() method
+ - FileSystemAgent: check that the partition has been mounted
+
+#### Disk failures handing:
+ - `FileSystemAgent` will collect information about disk failures (see above)
+ - `org.corfudb.infrastructure.management.failuredetector.DecisionMakerAgent` needs to decide 
+if a node is failed based on the information provided by `FileSystemAgent` and if the node needs to be added to the unresponsive list
+ - DecisionMakerAgent will collect statistics from FileSystemAgent and if the stats contains failures, like `DataCorruptionException` 
+   the agent will not allow the node participate in a failure detection on this iteration.
+ - FileSystem statistics will be provided as part of NodeState
+ - Other failure detectors will be able to collect the stats from the node and will decide 
+   which node to exclude from the cluster according to the information in FileSystemStats and poll report
+ - Nodes collect file system stats from all the other nodes in the cluster 
+   and whichever node gets a decision maker in the cluster on the current iteration can see if another node has problems
+   with file system and if the node needs to be excluded from the cluster.
+ - `FailuresAgent#detectAndHandleFailure()` is in charge of finding a failed node and 
+   figure out if a local node is a decision maker node. 
+   If those parameters are met then the agent will trigger the layout update to exclude a node from the cluster
+ - Current design of the Failre Detector (with Disk ReadOnly Failures) allows to enrich 
+   current FileSystemStats with the new types of failures to have disk probes in it and effectively handle more disk issues
+
+Changes in `LogUnitServer`:
+ - LogUnitServer (during the creation) will catch DataCorruptionException and IllegalStateException exceptions 
+   and send the information to FileSystemAgent
+ - LogUnitServer change change `AbstractServer#ServerState` which will indicate whether a node is ready to handle queries or not
+ - Until Failure Detector solves the issue with FileSystem (which allows us to survive DataCorruptionException):
+     - by detecting the failure 
+     - and then healing the node by executing `HealNodeWorkflow` 
+     - which will reset `StreamLogFiles` and triggers data transfer 
+     - which will replace corrupted data with the consistent data that the node will collect from the cluster
+ - Until the node would have issues with ReadOnly file system or the disk partition is not mounted, the node will stay in the unresponsiveList in the layout 
+
+### Local Node Failure Detection Sequence Diagram
 
 ![Local Node Failure Detection Visualization](http://www.plantuml.com/plantuml/proxy?src=https://raw.githubusercontent.com/CorfuDB/CorfuDB/master/docs/failure-detector/file-system-failure-detection.puml)
 
-#### An example of a layout with detected failures
+
+### An example of a possible layout with detected failures and the statistics about the failures
 
 ```json
 {
