@@ -571,6 +571,11 @@ public class TableRegistry {
             streamTagInfoForTable.add(LOG_REPLICATOR_STREAM_INFO);
         }
 
+        if (tableSchemaOptions.hasReplicationGroup()) {
+            streamTagInfoForTable.add(ObjectsView.getLogicalGroupStreamTagInfo(
+                tableSchemaOptions.getReplicationGroup().getClientName()));
+        }
+
         Set<UUID> streamTagIdsForTable = streamTagInfoForTable
                 .stream()
                 .map(StreamTagInfo::getStreamId)

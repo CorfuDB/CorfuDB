@@ -5,14 +5,18 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
+
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.TableDescriptors;
 import org.corfudb.runtime.CorfuStoreMetadata.TableMetadata;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
+import org.corfudb.runtime.LogReplication.ReplicationModel;
+import org.corfudb.runtime.LogReplication.ReplicationSubscriber;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 
@@ -135,5 +139,17 @@ public class LogReplicationConfigManager {
         }
 
         return false;
+    }
+
+    public UUID getOpaqueStreamToTrack(ReplicationSubscriber subscriber) {
+        switch(subscriber.getModel()) {
+            case FULL_TABLE:
+                return ObjectsView.getLogReplicatorStreamId();
+            case LOGICAL_GROUPS:
+                return ObjectsView.getLogicalGroupStreamTagInfo(subscriber.getClientName()).getStreamId();
+            default:
+                log.error("Unsupported replication model received: {}", subscriber.getModel());
+                return null;
+        }
     }
 }

@@ -44,9 +44,16 @@ public class ObjectsView extends AbstractView {
     private static final String LOG_REPLICATOR_STREAM_NAME =
         "LR_Transaction_Stream";
 
+    private static final String LOGICAL_GROUP_REPLICATION_STREAM_NAME_PREFIX = "LogicalGroupReplicationStream_";
+
     public static final StreamTagInfo LOG_REPLICATOR_STREAM_INFO =
             new StreamTagInfo(LOG_REPLICATOR_STREAM_NAME,
                 CorfuRuntime.getStreamID(LOG_REPLICATOR_STREAM_NAME));
+
+    public static StreamTagInfo getLogicalGroupStreamTagInfo(String replicationClientName) {
+        String streamName = LOGICAL_GROUP_REPLICATION_STREAM_NAME_PREFIX + replicationClientName;
+        return new StreamTagInfo(streamName, CorfuRuntime.getStreamID(streamName));
+    }
 
     /**
      * @return the ID of the log replicator stream.
