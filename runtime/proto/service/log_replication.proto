@@ -172,3 +172,7 @@ message ReplicationInfo {
 }
 
 /*------------------------------------*/
+
+message SubscribeToReplicationMsg {
+  LogReplicationSession session = 1;
+}

@@ -77,6 +77,7 @@ import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
 public class LogReplicationIT extends AbstractIT implements Observer {
 
     public static final String nettyConfig = "./test/src/test/resources/transport/nettyConfig.properties";
+    public static final String grpcConfig = "./test/src/test/resources/transport/grpcConfig.properties";
 
     private static final String SOURCE_ENDPOINT = DEFAULT_HOST + ":" + DEFAULT_PORT;
     private static final int WRITER_PORT = DEFAULT_PORT + 1;
@@ -1227,7 +1228,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         TransitionSource function) throws InterruptedException {
 
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(srcTestRuntime);
-        LogReplicationUpgradeManager upgradeManager = new LogReplicationUpgradeManager(srcTestRuntime, nettyConfig);
+        LogReplicationUpgradeManager upgradeManager = new LogReplicationUpgradeManager(srcTestRuntime, grpcConfig);
 
         // This IT requires custom values to be set for the replication config.  Set these values so that the default
         // values are not used
@@ -1239,7 +1240,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         // Data Sender
         sourceDataSender = new SourceForwardingDataSender(DESTINATION_ENDPOINT, testConfig, metadataManager,
-                nettyConfig, function, context);
+                grpcConfig, function, context);
 
         // Source Manager
         LogReplicationRuntimeParameters runtimeParameters = LogReplicationRuntimeParameters.builder()
