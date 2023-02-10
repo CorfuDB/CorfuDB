@@ -331,6 +331,12 @@ public class LogReplicationServer extends AbstractServer {
     }
 
     public void setLeadership(boolean leader) {
+        // Leadership change can come from sinkClientRouter and also from interClusterServerNode.
+        // Ignore redundant updates.
+        if(leader == isLeader.get()) {
+            return;
+        }
+
         isLeader.set(leader);
 
         if (isLeader.get()) {

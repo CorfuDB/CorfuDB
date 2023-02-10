@@ -4,10 +4,13 @@ import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.ServerContext;
-import org.corfudb.infrastructure.logreplication.runtime.LogReplicationServerRouter;
+import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSinkServerRouter;
+import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSourceServerRouter;
 import org.corfudb.infrastructure.logreplication.transport.server.IServerChannelAdapter;
+import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.proto.service.CorfuMessage;
 
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 
@@ -33,9 +36,11 @@ public class GRPCLogReplicationServerChannelAdapter extends IServerChannelAdapte
 
     private CompletableFuture<Boolean> serverCompletable;
 
-    public GRPCLogReplicationServerChannelAdapter(ServerContext serverContext, LogReplicationServerRouter router) {
-        super(serverContext, router);
-        this.service = new GRPCLogReplicationServerHandler(router);
+    public GRPCLogReplicationServerChannelAdapter(ServerContext serverContext,
+                                                  Map<LogReplicationSession, LogReplicationSourceServerRouter> sessionToSourceServer,
+                                                  Map<LogReplicationSession, LogReplicationSinkServerRouter> sessionToSinkServer) {
+        super(serverContext, sessionToSourceServer, sessionToSinkServer);
+        this.service = new GRPCLogReplicationServerHandler(sessionToSourceServer, sessionToSinkServer);
         this.port = Integer.parseInt((String) serverContext.getServerConfig().get("<port>"));
         // The executor of GRPCLogReplicationServerHandler needs to be single-threaded, otherwise the ordering of
         // requests and their acks cannot be guaranteed. By default, grpc utilizes thread-pool, so we need to provide
@@ -45,8 +50,22 @@ public class GRPCLogReplicationServerChannelAdapter extends IServerChannelAdapte
     }
 
     @Override
+    public void updateRouters(Map<LogReplicationSession, LogReplicationSourceServerRouter> sessionToSourceServerRouter,
+                              Map<LogReplicationSession, LogReplicationSinkServerRouter> sessionToSinkServerRouter) {
+        this.getIncomingSessionToSourceServerRouter().putAll(sessionToSourceServerRouter);
+        this.getIncomingSessionToSinkServerRouter().putAll(sessionToSinkServerRouter);
+        this.service.updateRouterInfo(sessionToSourceServerRouter, sessionToSinkServerRouter);
+    }
+
+    @Override
     public void send(CorfuMessage.ResponseMsg msg) {
-        log.info("Server send message {}", msg.getPayload().getPayloadCase());
+        log.info("Server send response message {}", msg.getPayload().getPayloadCase());
+        service.send(msg);
+    }
+
+    @Override
+    public void send(String nodeId, CorfuMessage.RequestMsg msg) {
+        log.info("Server send Request message {}", msg.getPayload().getPayloadCase());
         service.send(msg);
     }
 
