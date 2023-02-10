@@ -6,6 +6,7 @@ import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationE
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationEventMetadata;
 import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
+import org.corfudb.infrastructure.logreplication.runtime.LogReplicationBaseSourceRouter;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientRouter;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationUpgradeManager;
 import org.corfudb.runtime.LogReplication;
@@ -36,14 +37,15 @@ public class NegotiatingState implements LogReplicationRuntimeState {
 
     private final ThreadPoolExecutor worker;
 
-    private final LogReplicationClientRouter router;
+    private final LogReplicationBaseSourceRouter router;
 
     private final LogReplicationMetadataManager metadataManager;
 
     private final LogReplicationUpgradeManager upgradeManager;
 
-    public NegotiatingState(CorfuLogReplicationRuntime fsm, ThreadPoolExecutor worker, LogReplicationClientRouter router,
-                            LogReplicationMetadataManager metadataManager, LogReplicationUpgradeManager upgradeManager) {
+    public NegotiatingState(CorfuLogReplicationRuntime fsm, ThreadPoolExecutor worker,
+                            LogReplicationBaseSourceRouter router, LogReplicationMetadataManager metadataManager,
+                            LogReplicationUpgradeManager upgradeManager) {
         this.fsm = fsm;
         this.metadataManager = metadataManager;
         this.worker = worker;
