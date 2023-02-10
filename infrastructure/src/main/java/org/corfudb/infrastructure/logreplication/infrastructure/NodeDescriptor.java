@@ -4,11 +4,29 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import static org.corfudb.common.util.URLUtils.getVersionFormattedEndpointURL;
 
+import java.util.Objects;
+
 /**
  * This class represents a Log Replication Node
  */
 @Slf4j
 public class NodeDescriptor {
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        NodeDescriptor that = (NodeDescriptor) o;
+        return Objects.equals(host, that.host) && Objects.equals(port, that.port) &&
+                clusterId.equals(that.clusterId) && Objects.equals(connectionId, that.connectionId) &&
+                nodeId.equals(that.nodeId);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(host, port, clusterId, connectionId, nodeId);
+    }
 
     @Getter
     private final String host;

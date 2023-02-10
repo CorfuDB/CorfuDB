@@ -4,6 +4,7 @@ import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.Re
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -31,6 +32,10 @@ public interface CorfuReplicationDiscoveryServiceAdapter {
     // TODO [V2]: Remove this when localNodeId moves to plugin
     String getLocalNodeId();
 
-    SessionManager getSessionManager();
+    /**
+     * Get outgoing sessions
+     * @return a set of sessions where the local cluster is a SINK
+     */
+    Set<LogReplicationSession> getOutgoingSessions();
 
 }
