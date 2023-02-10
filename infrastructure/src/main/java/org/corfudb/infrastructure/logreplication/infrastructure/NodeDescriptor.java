@@ -36,34 +36,7 @@ public class NodeDescriptor {
     }
 
     public String getEndpoint() {
-        String endpoint;
-        try {
-            endpoint = getVersionFormattedEndpointURL(host, port);
-        } catch (IllegalArgumentException e) {
-            log.trace("the host is empty or null.{}", e.getMessage());
-            endpoint = "";
-        }
-
-        return endpoint;
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
-        NodeDescriptor that = (NodeDescriptor) o;
-        return Objects.equals(host, that.host) && Objects.equals(port, that.port) &&
-                clusterId.equals(that.clusterId) && Objects.equals(connectionId, that.connectionId) &&
-                nodeId.equals(that.nodeId);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(host, port, clusterId, connectionId, nodeId);
+        return getVersionFormattedEndpointURL(host, port);
     }
 
     @Override

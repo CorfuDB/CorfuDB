@@ -1,8 +1,9 @@
 package org.corfudb.infrastructure.logreplication.infrastructure.plugins;
 
 import org.corfudb.infrastructure.logreplication.infrastructure.CorfuReplicationDiscoveryService;
+import org.corfudb.infrastructure.logreplication.infrastructure.CorfuReplicationDiscoveryServiceAdapter;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationDiscoveryServiceException;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.TopologyConfigurationMsg;
+import org.corfudb.infrastructure.logreplication.infrastructure.TopologyDescriptor;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatus;
 
@@ -21,12 +22,7 @@ public interface CorfuReplicationClusterManagerAdapter {
     /**
      * Register the discovery service
      */
-    void register(CorfuReplicationDiscoveryService corfuReplicationDiscoveryService);
-
-     /**
-     * Set the localEndpoint
-     */
-    void setLocalEndpoint(String endpoint);
+    void register(CorfuReplicationDiscoveryServiceAdapter corfuReplicationDiscoveryServiceAdapter);
 
     /**
      * Query the topology information.
@@ -39,7 +35,7 @@ public interface CorfuReplicationClusterManagerAdapter {
     /**
      * Callback to update topology on cluster changes
      */
-    void updateTopologyConfig(TopologyConfigurationMsg newClusterConfig);
+    void updateTopologyConfig(TopologyDescriptor newClusterConfig);
 
     /**
      * Start cluster discovery against external topology provider

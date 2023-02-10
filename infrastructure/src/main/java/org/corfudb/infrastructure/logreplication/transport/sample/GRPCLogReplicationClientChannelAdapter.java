@@ -95,8 +95,9 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
     }
 
     @Override
-    public void connectAsync(ClusterDescriptor remoteClusterDescriptor, LogReplicationSession session) throws Exception {
-        this.executorService.submit(() -> remoteClusterDescriptor.getNodeDescriptors().forEach(node -> {
+    public void connectAsync() {
+        this.executorService.submit(() ->
+        getRemoteClusterDescriptor().getNodeDescriptors().forEach(node -> {
             try {
                 NodeLocator nodeLocator = NodeLocator.parseString(node.getEndpoint());
                 ManagedChannel channel;
@@ -145,8 +146,8 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
     }
 
     @Override
-    public void connectAsync(ClusterDescriptor remoteCluster, String nodeId, LogReplicationSession session) {
-        Optional<String> endpoint = remoteCluster.getNodeDescriptors()
+    public void connectAsync(String nodeId) {
+        Optional<String> endpoint = getRemoteClusterDescriptor().getNodeDescriptors()
                 .stream()
                 .filter(nodeDescriptor -> nodeDescriptor.getNodeId().toString().equals(nodeId))
                 .map(NodeDescriptor::getEndpoint)

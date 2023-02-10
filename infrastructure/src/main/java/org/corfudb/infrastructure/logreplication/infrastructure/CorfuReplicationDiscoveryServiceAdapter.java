@@ -1,7 +1,5 @@
 package org.corfudb.infrastructure.logreplication.infrastructure;
 
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.ClusterRole;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.TopologyConfigurationMsg;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatus;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 
@@ -18,7 +16,7 @@ public interface CorfuReplicationDiscoveryServiceAdapter {
      * Update with new topology
      * @param topologyConfiguration new topology
      */
-    void updateTopology(TopologyConfigurationMsg topologyConfiguration);
+    void updateTopology(TopologyDescriptor topologyConfiguration);
 
     /**
      * Query replication status
@@ -31,11 +29,9 @@ public interface CorfuReplicationDiscoveryServiceAdapter {
      */
     UUID forceSnapshotSync(LogReplicationSession session) throws LogReplicationDiscoveryServiceException;
 
-    /**
-     * Get incoming sessions
-     * @return a set of sessions where the local cluster is a SINK
-     */
-    Set<LogReplicationSession> getIncomingSessions();
+    // TODO [V2]: Remove this when localNodeId moves to plugin
+    String getLocalNodeId();
 
-    ClusterRole getLocalClusterRoleType();
+    SessionManager getSessionManager();
+
 }

@@ -63,6 +63,10 @@ public final class DefaultClusterConfig {
             "456e4567-e89b-12d3-a456-556642440005");
 
     @Getter
+    private static final List<String> backupClusterIds =
+            Arrays.asList("456e4567-e89b-12d3-a456-556642440007");
+
+    @Getter
     private final List<String> sourceCorfuPorts = Arrays.asList("9000", "9002", "9004");
 
     @Getter

@@ -95,10 +95,26 @@ public class CorfuReplicationMultiSourceSinkIT extends AbstractIT {
     // Listens to replication status updates on a Sink cluster
     private List<ReplicationStatusListener> replicationStatusListeners = new ArrayList<>();
 
-    protected void setUp(int numSourceClusters, int numSinkClusters) throws Exception {
+    protected void setUp(int numSourceClusters, int numSinkClusters, ExampleSchemas.ClusterUuidMsg topologyType) throws Exception {
         this.numSourceClusters = numSourceClusters;
         this.numSinkClusters = numSinkClusters;
         setupSourceAndSinkCorfu(numSourceClusters, numSinkClusters);
+        initMultiSinkTopology(topologyType);
+    }
+
+    private void initMultiSinkTopology(ExampleSchemas.ClusterUuidMsg topologyType) throws Exception {
+        for (int i = 0; i < numSourceClusters; i++) {
+            Table<ExampleSchemas.ClusterUuidMsg, ExampleSchemas.ClusterUuidMsg, ExampleSchemas.ClusterUuidMsg> configTable =
+                    sourceCorfuStores.get(i).openTable(
+                            DefaultClusterManager.CONFIG_NAMESPACE, DefaultClusterManager.CONFIG_TABLE_NAME,
+                            ExampleSchemas.ClusterUuidMsg.class, ExampleSchemas.ClusterUuidMsg.class, ExampleSchemas.ClusterUuidMsg.class,
+                            TableOptions.fromProtoSchema(ExampleSchemas.ClusterUuidMsg.class)
+                    );
+            try (TxnContext txn = sourceCorfuStores.get(i).txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
+                txn.putRecord(configTable, topologyType, topologyType, topologyType);
+                txn.commit();
+            }
+        }
     }
 
     private void setupSourceAndSinkCorfu(int numSourceClusters, int numSinkClusters) throws Exception {
@@ -435,7 +451,7 @@ public class CorfuReplicationMultiSourceSinkIT extends AbstractIT {
 
     private void shutdownCorfuServers() {
         for (Process process : sourceCorfuProcesses) {
-            process.destroy();
+           process.destroy();
         }
 
         for (Process process : sinkCorfuProcesses) {

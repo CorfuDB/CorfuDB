@@ -1,7 +1,6 @@
 package org.corfudb.infrastructure.logreplication.infrastructure;
 
 import lombok.Getter;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.TopologyConfigurationMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 
 import java.util.UUID;
@@ -21,9 +20,9 @@ public class DiscoveryServiceEvent {
        this.type = type;
     }
 
-    public DiscoveryServiceEvent(DiscoveryServiceEventType type, TopologyConfigurationMsg topologyConfigMsg) {
+    public DiscoveryServiceEvent(DiscoveryServiceEventType type, TopologyDescriptor topologyConfig) {
         this.type = type;
-        this.topologyConfig = topologyConfigMsg;
+        this.topologyConfig = topologyConfig;
     }
 
     public DiscoveryServiceEvent(DiscoveryServiceEventType type, LogReplicationSession session, String eventId) {
