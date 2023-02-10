@@ -1,7 +1,5 @@
 package org.corfudb.infrastructure.logreplication.infrastructure;
 
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.ClusterRole;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.TopologyConfigurationMsg;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatus;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 
@@ -14,14 +12,14 @@ import java.util.UUID;
 public interface CorfuReplicationDiscoveryServiceAdapter {
 
     /**
-     *
-     * @param topologyConfiguration
+     * Update with new topology
+     * @param topologyConfiguration new topology
      */
-    void updateTopology(TopologyConfigurationMsg topologyConfiguration);
+    void updateTopology(TopologyDescriptor topologyConfiguration);
 
     /**
-     *
-     * @return
+     * Query replication status
+     * @return Map of session and its corresponding replication status
      */
     Map<LogReplicationSession, ReplicationStatus> queryReplicationStatus();
 
@@ -30,6 +28,9 @@ public interface CorfuReplicationDiscoveryServiceAdapter {
      */
     UUID forceSnapshotSync(LogReplicationSession session) throws LogReplicationDiscoveryServiceException;
 
+    // TODO [V2]: Remove this when localNodeId moves to plugin
+    String getLocalNodeId();
 
-    ClusterRole getLocalClusterRoleType();
+    SessionManager getSessionManager();
+
 }

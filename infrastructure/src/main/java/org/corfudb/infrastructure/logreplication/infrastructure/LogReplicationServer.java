@@ -66,6 +66,10 @@ public class LogReplicationServer extends AbstractServer {
     @Getter
     private SessionManager sessionManager;
 
+    private ServerContext serverContext;
+
+    private String localEndpoint;
+
     /**
      * RequestHandlerMethods for the LogReplication server
      */
@@ -78,16 +82,20 @@ public class LogReplicationServer extends AbstractServer {
 
     public LogReplicationServer(@Nonnull ServerContext context, @Nonnull SessionManager sessionManager,
                                 String localEndpoint) {
+        this.serverContext = context;
+        this.localEndpoint = localEndpoint;
         this.localNodeId = sessionManager.getTopology().getLocalNodeDescriptor().getNodeId();
         this.localClusterId = sessionManager.getTopology().getLocalClusterDescriptor().getClusterId();
         this.sessionManager = sessionManager;
-        createSinkManagers(localEndpoint, context);
+        createSinkManagers();
         this.executor = context.getExecutorService(1, EXECUTOR_NAME_PREFIX);
     }
 
     @VisibleForTesting
     public LogReplicationServer(@Nonnull ServerContext context, LogReplicationSinkManager sinkManager,
         String localNodeId, String localClusterId, SessionManager sessionManager) {
+        this.serverContext = context;
+        this.localEndpoint = null;
         sessionToSinkManagerMap.put(sinkManager.getSession(), sinkManager);
         this.localNodeId = localNodeId;
         this.localClusterId = localClusterId;
@@ -95,13 +103,18 @@ public class LogReplicationServer extends AbstractServer {
         this.executor = context.getExecutorService(1, EXECUTOR_NAME_PREFIX);
     }
 
-     private void createSinkManagers(String localEndpoint, ServerContext serverContext) {
+     private void createSinkManagers() {
         for (LogReplicationSession session : sessionManager.getIncomingSessions()) {
-            LogReplicationSinkManager sinkManager = new LogReplicationSinkManager(localEndpoint,
-                    sessionManager.getMetadataManager(), serverContext, session, sessionManager.getReplicationContext());
-            sessionToSinkManagerMap.put(session, sinkManager);
-            log.info("Sink Manager created for session={}", session);
+            createSinkManager(session);
         }
+    }
+
+    private LogReplicationSinkManager createSinkManager(LogReplicationSession session) {
+        LogReplicationSinkManager sinkManager = new LogReplicationSinkManager(localEndpoint,
+                sessionManager.getMetadataManager(), serverContext, session, sessionManager.getReplicationContext());
+        sessionToSinkManagerMap.put(session, sinkManager);
+        log.info("Sink Manager created for session={}", session);
+        return sinkManager;
     }
 
     public void updateTopologyConfigId(long topologyConfigId) {
@@ -145,11 +158,25 @@ public class LogReplicationServer extends AbstractServer {
 
             LogReplicationSinkManager sinkManager = sessionToSinkManagerMap.get(session);
 
-            // If no sink Manager is found, drop the message and log an error
+            // We create a sinkManager for sessions that are discovered while bootstrapping LR. But as topology changes,
+            // we may discover new sessions. At the same time, its possible that the remote Source cluster finds a new
+            // session before the local cluster and sends a request to the local cluster.
+            // Since the two events are async, we wait to receive a new session in the incoming request.
+            // If the incoming session is not known to sessionManager drop the message (until session is discovered by
+            // local cluster), otherwise create a corresponding sinkManager.
+            // TODO[V2] : We still have a case where the cluster does not ever discover a session on its own, like in
+            //  the logical_group use case where only the source knows about the session even when sink starts the
+            //  connection.
+            //  To resolve this, we need to have a long living RPC from the connectionInitiator cluster which will query
+            //  for sessions from the other cluster
             if (sinkManager == null) {
-                log.error("Sink Manager not found for session {}, total={}, sessions={}", session,
-                        sessionToSinkManagerMap.size(), sessionToSinkManagerMap.keySet());
-                return;
+                if(!sessionManager.getSessions().contains(session)) {
+                    log.error("SessionManager does not know about incoming session {}, total={}, current sessions={}",
+                            session, sessionToSinkManagerMap.size(), sessionToSinkManagerMap.keySet());
+                    return;
+                } else {
+                    sinkManager = createSinkManager(session);
+                }
             }
 
             // Forward the received message to the Sink Manager for apply
@@ -196,10 +223,23 @@ public class LogReplicationServer extends AbstractServer {
 
             LogReplicationSinkManager sinkManager = sessionToSinkManagerMap.get(session);
 
+            // We create a sinkManager for sessions that are discovered while bootstrapping LR. But as topology changes,
+            // we may discover new sessions. At the same time, its possible that the remote Source cluster finds a new
+            // session before the local cluster and sends a request to the local cluster.
+            // Since the two events are async, we wait to receive a new session in the incoming request.
+            // If the incoming session is not known to sessionManager drop the message (until session is discovered by
+            // local cluster), otherwise create a corresponding sinkManager.
+            // TODO[V2] : We still have a case where the cluster does not ever discover a session on its own.
+            //  To resolve this, we need to have a long living RPC from the connectionInitiator cluster which will query
+            //  for sessions from the other cluster
             if (sinkManager == null) {
-                log.error("Sink Manager not found for session {}, total={}, sessions={}", session,
-                        sessionToSinkManagerMap.size(), sessionToSinkManagerMap.keySet());
-                return;
+                if(!sessionManager.getSessions().contains(session)) {
+                    log.error("SessionManager does not know about incoming session {}, total={}, current sessions={}",
+                            session, sessionToSinkManagerMap.size(), sessionToSinkManagerMap.keySet());
+                    return;
+                } else {
+                    sinkManager = createSinkManager(session);
+                }
             }
 
             ReplicationMetadata metadata = sessionManager.getMetadataManager().getReplicationMetadata(session);
