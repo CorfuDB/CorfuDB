@@ -55,8 +55,11 @@ For instance, there are multiple possible scenarios of failures that could happe
 
 #### Disk failures handing:
  - `FileSystemAgent` will collect information about disk failures (see above)
- - `org.corfudb.infrastructure.management.failuredetector.DecisionMakerAgent` needs to decide 
-if a node is failed based on the information provided by `FileSystemAgent` and if the node needs to be added to the unresponsive list
+
+ - `org.corfudb.infrastructure.management.failuredetector.DecisionMakerAgent` needs to decide:
+     - if a node is failed based on the information provided by `FileSystemAgent`
+     - if the node needs to be added to the unresponsive list
+
  - The DecisionMakerAgent has been designed to proactively monitor the health of the system. 
    To achieve this, it will systematically collect detailed statistics from the FileSystemAgent. 
    If the analysis of these statistics reveals any instances of failures, such as a DataCorruptionException, 
@@ -82,7 +85,7 @@ if a node is failed based on the information provided by `FileSystemAgent` and i
  - Current design of the Failre Detector (with Disk ReadOnly Failures) allows to enrich 
    current FileSystemStats with the new types of failures to have disk probes in it and effectively handle more disk issues
 
-Changes in `LogUnitServer`:
+**Changes in `LogUnitServer`:**
  - LogUnitServer (during the creation) will catch DataCorruptionException and IllegalStateException exceptions 
    and send the information to FileSystemAgent
 
@@ -96,6 +99,11 @@ Changes in `LogUnitServer`:
      - which will replace corrupted data with the consistent data that the node will collect from the cluster
    
  - Until the node would have issues with ReadOnly file system or the disk partition is not mounted, the node will stay in the unresponsiveList in the layout 
+
+**Testing**
+We will be able to add above scenarios to our test suite, since FileSystemStats contains just information (boolean values) 
+about the failure (if DataCorruptionException happened) we can emulate the entire cycle of additional failure detection scenarios.
+
 
 ### Local Node Failure Detection Sequence Diagram
 
