@@ -323,6 +323,7 @@ public class SessionManager {
                                                  Map<Class, AbstractServer> serverMap) {
         log.info("Starting Source (sender/replicator) components");
 
+        // find remote sink clusters which will connect to the local cluster
         Set<String> incomingConnections = new HashSet<>(topology.getRemoteSinkClusters().keySet());
         topology.getRemoteClusterEndpoints().keySet().forEach(incomingConnections::remove);
 
@@ -346,7 +347,7 @@ public class SessionManager {
                                                Map<Class, AbstractServer> serverMap) {
         log.info("Starting Sink (receiver) components");
 
-        // start sink if the cluster is not a connection starter
+        // find remote source clusters which will connect to the local cluster
         Set<String> incomingConnections = new HashSet<>(topology.getRemoteSourceClusters().keySet());
         topology.getRemoteClusterEndpoints().keySet().forEach(incomingConnections::remove);
 
@@ -400,6 +401,7 @@ public class SessionManager {
 
     public void stopSessions() {
         log.info("Stopping log replication.");
+        stopSessions(sessions);
         replicationManager.stop();
     }
 
@@ -409,8 +411,12 @@ public class SessionManager {
      */
     private void stopSessions(Set<LogReplicationSession> sessions) {
         if (replicationManager != null) {
-            // stop replication fsm for outgoing sessions
+            // stop replication fsm and router for outgoing sessions
             replicationManager.stop(sessions);
+            // stop connection starter sink routers
+            sessions.stream().filter(incomingSessions::contains)
+                    .filter(session -> topology.getRemoteClusterEndpoints().containsKey(session.getSourceClusterId()))
+                    .forEach(session -> replicationManager.stopSinkClientRouter(session));
             // remove router information for incoming sessions
             replicationManager.removeSinkRouterInfo(sessions);
         }
