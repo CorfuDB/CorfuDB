@@ -271,7 +271,8 @@ public class LogReplicationSinkClientRouter extends LogReplicationSinkServerRout
                 .setIgnoreClusterId(true)
                 .setIgnoreEpoch(true);
 
-        if(payload.getPayloadCase().equals(CorfuMessage.ResponsePayloadMsg.PayloadCase.LR_SUBSCRIBE_REQUEST)) {
+        if(payload.getPayloadCase().equals(CorfuMessage.ResponsePayloadMsg.PayloadCase.LR_SUBSCRIBE_REQUEST) ||
+                payload.getPayloadCase().equals(CorfuMessage.ResponsePayloadMsg.PayloadCase.LR_LEADERSHIP_LOSS)) {
             final long requestId = requestID.getAndIncrement();
             header.setRequestId(requestId);
             header.setClusterId(getUuidMsg(UUID.fromString(this.localClusterId)));

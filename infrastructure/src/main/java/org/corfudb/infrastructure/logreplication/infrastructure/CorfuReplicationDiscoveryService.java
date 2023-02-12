@@ -485,7 +485,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
      * Stop Log Replication
      */
     private void stopLogReplication() {
-        if (isSource() && isLeader.get()) {
+        if (isLeader.get()) {
             log.info("Stopping log replication.");
             sessionManager.stopSessions();
         }
@@ -512,7 +512,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         stopLogReplication();
         isLeader.set(false);
         // Signal Log Replication Server/Sink to stop receiving messages, leadership loss
-        if (isSink()) {
+        if (sessionManager.isConnectionReceiver()) {
             interClusterServerNode.setLeadership(false);
         }
         recordLockRelease();
@@ -572,6 +572,11 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
     private void onRemoteClusterAddRemove(TopologyDescriptor newTopology) {
         log.debug("Remote Cluster has been added or removed");
 
+        if(isLeader.get()) {
+            // refresh the session so new sessions are added and stale sessions are stopped.
+            sessionManager.refresh(newTopology);
+        }
+
         topologyDescriptor = newTopology;
 
         if (!sessionManager.isConnectionReceiver() && interClusterServerNode != null) {
@@ -582,8 +587,6 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         performRoleBasedSetup();
 
         if (isLeader.get()) {
-            // refresh the session so new sessions are added/removed.
-            sessionManager.refresh(newTopology);
             onLeadershipAcquire();
 
             if(!isSource() && logReplicationEventListener != null) {

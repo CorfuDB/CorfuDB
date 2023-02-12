@@ -60,6 +60,8 @@ import java.util.function.IntPredicate;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
+import static org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager.TP_SINGLE_SOURCE_SINK;
+import static org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager.TP_SINGLE_SOURCE_SINK_REV_CONNECTION;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 
@@ -110,6 +112,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
     private CorfuStore sinkCorfuStore;
     private Table<ClusterUuidMsg, ClusterUuidMsg, ClusterUuidMsg> configTable;
     private Table<LockDataTypes.LockId, LockDataTypes.LockData, Message> sourceLockTable;
+    private Table<LockDataTypes.LockId, LockDataTypes.LockData, Message> sinkLockTable;
 
     public Map<String, Table<StringKey, IntValueTag, Metadata>> mapNameToMapSource;
     public Map<String, Table<StringKey, IntValueTag, Metadata>> mapNameToMapSink;
@@ -127,8 +130,8 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
     @Parameterized.Parameters
     public static List<ClusterUuidMsg> input() {
         return Arrays.asList(
-                DefaultClusterManager.TP_SINGLE_SOURCE_SINK,
-                DefaultClusterManager.TP_SINGLE_SOURCE_SINK_REV_CONNECTION
+                TP_SINGLE_SOURCE_SINK,
+                TP_SINGLE_SOURCE_SINK_REV_CONNECTION
         );
 
     }
@@ -203,6 +206,14 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
                 null,
                 TableOptions.fromProtoSchema(LockDataTypes.LockData.class));
 
+        sinkLockTable = sinkCorfuStore.openTable(
+                CORFU_SYSTEM_NAMESPACE,
+                LOCK_TABLE_NAME,
+                LockDataTypes.LockId.class,
+                LockDataTypes.LockData.class,
+                null,
+                TableOptions.fromProtoSchema(LockDataTypes.LockData.class));
+
         sourceCorfuStore.openTable(LogReplicationMetadataManager.NAMESPACE,
                 REPLICATION_STATUS_TABLE,
                 LogReplicationSession.class,
@@ -253,7 +264,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
      */
     @Test
     public void testNewConfigWithSwitchRole() throws Exception {
-        if(topologyType.equals(DefaultClusterManager.TP_SINGLE_SOURCE_SINK_REV_CONNECTION)) {
+        if(topologyType.equals(TP_SINGLE_SOURCE_SINK_REV_CONNECTION)) {
             tearDown();
             return;
         }
@@ -1592,6 +1603,108 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
 
         Assert.assertEquals(0, sourceLockTable.count());
         log.info("Source's lock table cleared!");
+
+        // Wait till the lock release is asynchronously processed and the replication status on Source changes to
+        // STOPPED
+        countDownLatch.await();
+
+        // Write more data on the Source
+        for (int i = secondBatch; i < thirdBatch; i++) {
+            try (TxnContext txn = sourceCorfuStore.txn(NAMESPACE)) {
+                txn.putRecord(mapSource, StringKey.newBuilder().setKey(String.valueOf(i)).build(),
+                        IntValue.newBuilder().setValue(i).build(), null);
+                txn.commit();
+            }
+        }
+        assertThat(mapSource.count()).isEqualTo(thirdBatch);
+        log.info("Source map has {} entries now!", thirdBatch);
+
+        // Sink map should still have secondBatch size
+        log.info("Sink map should still have {} size", secondBatch);
+        assertThat(mapSink.count()).isEqualTo(secondBatch);
+    }
+
+    @Test
+    public void testSinkLockRelease() throws Exception {
+        if (topologyType.equals(TP_SINGLE_SOURCE_SINK)) {
+            tearDown();
+            return;
+        }
+        // Write 10 entries to source map
+        for (int i = 0; i < firstBatch; i++) {
+            try (TxnContext txn = sourceCorfuStore.txn(NAMESPACE)) {
+                txn.putRecord(mapSource, StringKey.newBuilder().setKey(String.valueOf(i)).build(),
+                        IntValue.newBuilder().setValue(i).build(), null);
+                txn.commit();
+            }
+        }
+        assertThat(mapSource.count()).isEqualTo(firstBatch);
+        assertThat(mapSink.count()).isZero();
+        assertThat(sinkLockTable.count()).isZero();
+
+        log.info("Before log replication, append {} entries to source map. Current source corfu" +
+                        "[{}] log tail is {}, sink corfu[{}] log tail is {}", firstBatch, sourceClusterCorfuPort,
+                sourceRuntime.getAddressSpaceView().getLogTail(), sinkClusterCorfuPort,
+                sinkRuntime.getAddressSpaceView().getLogTail());
+
+        // Start the source and sink replication servers with a lockLeaseDuration = 10 seconds.
+        // The default lease duration is 60 seconds.  The duration between lease checks is set by the Discovery
+        // Service to leaseDuration/10.  So reducing the lease duration will cause the detection of lease
+        // expiry faster, i.e., 1 second instead of 6
+        int lockLeaseDuration = 10;
+        sourceReplicationServer = runReplicationServer(sourceReplicationServerPort, grpcPluginPath, lockLeaseDuration);
+        sinkReplicationServer = runReplicationServer(sinkReplicationServerPort, grpcPluginPath, lockLeaseDuration);
+        log.info("Replication servers started, and replication is in progress...");
+
+        // Wait until data is fully replicated
+        waitForReplication(size -> size == firstBatch, mapSink, firstBatch);
+        log.info("After full sync, both maps have size {}. Current source corfu[{}] log tail " +
+                        "is {}, sink corfu[{}] log tail is {}", firstBatch, sourceClusterCorfuPort,
+                sourceRuntime.getAddressSpaceView().getLogTail(), sinkClusterCorfuPort,
+                sinkRuntime.getAddressSpaceView().getLogTail());
+
+        // Write 5 entries to source map
+        for (int i = firstBatch; i < secondBatch; i++) {
+            try (TxnContext txn = sourceCorfuStore.txn(NAMESPACE)) {
+                txn.putRecord(mapSource, StringKey.newBuilder().setKey(String.valueOf(i)).build(),
+                        IntValue.newBuilder().setValue(i).build(), null);
+                txn.commit();
+            }
+        }
+        assertThat(mapSource.count()).isEqualTo(secondBatch);
+
+        // Wait until data is fully replicated again
+        waitForReplication(size -> size == secondBatch, mapSink, secondBatch);
+        log.info("After delta sync, both maps have size {}. Current source corfu[{}] log tail " +
+                        "is {}, sink corfu[{}] log tail is {}", secondBatch, sourceClusterCorfuPort,
+                sourceRuntime.getAddressSpaceView().getLogTail(), sinkClusterCorfuPort,
+                sinkRuntime.getAddressSpaceView().getLogTail());
+
+        // Verify data
+        for (int i = 0; i < secondBatch; i++) {
+            try (TxnContext tx = sinkCorfuStore.txn(NAMESPACE)) {
+                assertThat(tx.getRecord(mapSink, Sample.StringKey.newBuilder().setKey(String.valueOf(i)).build())
+                        .getPayload().getValue()).isEqualTo(i);
+                tx.commit();
+            }
+        }
+        log.info("Log replication succeeds without config change!");
+
+        // Create a listener on the ReplicationStatus table on the Source cluster, which waits for Replication status
+        // to change to STOPPED
+        CountDownLatch countDownLatch = new CountDownLatch(1);
+        ReplicationStopListener listener = new ReplicationStopListener(countDownLatch);
+        sourceCorfuStore.subscribeListener(listener, LogReplicationMetadataManager.NAMESPACE,
+                LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
+
+        // Release Sink's lock by deleting the lock table
+        try (TxnContext txnContext = sinkCorfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+            txnContext.clear(sinkLockTable);
+            txnContext.commit();
+        }
+
+        Assert.assertEquals(0, sinkLockTable.count());
+        log.info("Sink's lock table cleared!");
 
         // Wait till the lock release is asynchronously processed and the replication status on Source changes to
         // STOPPED

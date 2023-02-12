@@ -137,14 +137,14 @@ public class CorfuReplicationManager {
         if (isConnectionStarter) {
             router = new LogReplicationSourceClientRouter(remoteSink,
                     localNodeDescriptor.getClusterId(), createRuntimeParams(remoteSink, session), this,
-                    session);;
+                    session);
         } else {
             router = new LogReplicationSourceServerRouter(remoteSink,
                     localNodeDescriptor.getClusterId(), createRuntimeParams(remoteSink, session), this,
-                    session, serverMap);;
+                    session, serverMap);
         }
         replicationSessionToRouterSource.put(session, router);
-        createRuntime(remoteSink, session);
+        createRuntime(remoteSink, session, isConnectionStarter);
         router.setRuntimeFSM(sessionRuntimeMap.get(session));
 
         return router;
@@ -158,7 +158,6 @@ public class CorfuReplicationManager {
                                                                 Map<Class, AbstractServer> serverMap,
                                                                 boolean isConnectionStarter) {
         if (replicationSessionToRouterSink.containsKey(session)) {
-            log.info("Router was already created");
             return replicationSessionToRouterSink.get(session);
         }
         LogReplicationSinkServerRouter router;
@@ -179,7 +178,8 @@ public class CorfuReplicationManager {
     /**
      * Create Log Replication Runtime for a session, if not already created.
      */
-    public void createRuntime(ClusterDescriptor remote, LogReplicationSession replicationSession) {
+    public void createRuntime(ClusterDescriptor remote, LogReplicationSession replicationSession,
+                              boolean isConnectionStarter) {
         try {
             CorfuLogReplicationRuntime replicationRuntime;
             if (!sessionRuntimeMap.containsKey(replicationSession)) {
@@ -193,7 +193,7 @@ public class CorfuReplicationManager {
                 }
                 replicationRuntime = new CorfuLogReplicationRuntime(parameters,
                         metadataManager, upgradeManager, replicationSession, replicationContext,
-                        replicationSessionToRouterSource.get(replicationSession));
+                        replicationSessionToRouterSource.get(replicationSession), isConnectionStarter);
                 sessionRuntimeMap.put(replicationSession, replicationRuntime);
             } else {
                 log.warn("Log Replication Runtime to remote session {}, already exists. Skipping init.",
@@ -265,7 +265,6 @@ public class CorfuReplicationManager {
         sessions.forEach(session -> {
             stopLogReplicationRuntime(session);
             sessionRuntimeMap.remove(session);
-
         });
     }
 
@@ -284,6 +283,13 @@ public class CorfuReplicationManager {
             }
         } else {
             log.warn("Runtime not found for session {}", session);
+        }
+    }
+
+    public void stopSinkClientRouter(LogReplicationSession session) {
+        if (replicationSessionToRouterSink.get(session) instanceof  LogReplicationSinkClientRouter) {
+            log.info("Stopping the SINK client router for session {}", session);
+            ((LogReplicationSinkClientRouter) replicationSessionToRouterSink.get(session)).stop();
         }
     }
 
