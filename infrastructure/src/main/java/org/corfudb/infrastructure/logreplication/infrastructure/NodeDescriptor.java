@@ -14,7 +14,9 @@ public class NodeDescriptor {
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
         NodeDescriptor that = (NodeDescriptor) o;
         return Objects.equals(host, that.host) && Objects.equals(port, that.port) &&
                 clusterId.equals(that.clusterId) && Objects.equals(connectionId, that.connectionId) &&

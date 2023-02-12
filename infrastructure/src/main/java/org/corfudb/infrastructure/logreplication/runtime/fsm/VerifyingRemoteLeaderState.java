@@ -88,7 +88,8 @@ public class VerifyingRemoteLeaderState implements LogReplicationRuntimeState {
                     fsm.getRemoteLeaderNodeId().get())
             );
             log.debug("Exit :: leadership verification");
-        } else {
+        } else if(fsm.isConnectionStarter()){
+            // Leadership verification is done only if connection starter.
             this.worker.submit(this::verifyLeadership);
         }
     }
