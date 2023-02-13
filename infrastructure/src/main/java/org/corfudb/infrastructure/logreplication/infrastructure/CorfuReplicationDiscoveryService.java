@@ -582,6 +582,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         if (!sessionManager.isConnectionReceiver() && interClusterServerNode != null) {
             // Stop the replication server
             interClusterServerNode.disable();
+            serverMap.clear();
         }
 
         performRoleBasedSetup();
