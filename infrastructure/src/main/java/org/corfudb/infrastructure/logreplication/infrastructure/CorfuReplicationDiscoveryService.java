@@ -42,12 +42,15 @@ import org.corfudb.utils.lock.states.LockState;
 import javax.annotation.Nonnull;
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileReader;
 import java.io.IOException;
+import java.io.InputStream;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Properties;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -407,11 +410,34 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
             if (update) {
                 localClusterDescriptor = tmpClusterDescriptor;
                 localNodeDescriptor = tmpNodeDescriptor;
-                localCorfuEndpoint = getCorfuEndpoint(getLocalHost(), localClusterDescriptor.getCorfuPort());
+                localCorfuEndpoint = getCorfuSaaSEndpoint()
+                        .orElseGet(() ->
+                                getCorfuEndpoint(getLocalHost(), localClusterDescriptor.getCorfuPort()));
             }
         }
 
         return tmpClusterDescriptor != null && tmpNodeDescriptor != null;
+    }
+
+    private Optional<String> getCorfuSaaSEndpoint() {
+        final String pluginConfigFilePath = serverContext.getPluginConfigFilePath();
+        if (pluginConfigFilePath != null) {
+            return extractEndpoint(pluginConfigFilePath);
+        }
+        log.warn("No plugin path found");
+        return Optional.empty();
+    }
+
+    private Optional<String> extractEndpoint(String path) {
+        try (InputStream input = new FileInputStream(path)) {
+            Properties prop = new Properties();
+            prop.load(input);
+            String endpoint = prop.getProperty("saas_endpoint");
+            return Optional.of(endpoint);
+        } catch (IOException e) {
+            log.warn("Error extracting saas endpoint");
+            return Optional.empty();
+        }
     }
 
     /**
