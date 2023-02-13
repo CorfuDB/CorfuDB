@@ -4,11 +4,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.AbstractServer;
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationBaseSourceRouter;
-import org.corfudb.infrastructure.logreplication.runtime.LogReplicationHandler;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSinkClientRouter;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSinkServerRouter;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSourceClientRouter;
-import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSourceServerRouter;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
@@ -40,14 +38,13 @@ public class CorfuReplicationManager {
 
     private final LogReplicationUpgradeManager upgradeManager;
 
-    private final Map<LogReplicationSession, LogReplicationBaseSourceRouter> replicationSessionToRouterSource;
-    private final Map<LogReplicationSession, LogReplicationSinkServerRouter> replicationSessionToRouterSink;
-
     private TopologyDescriptor topology;
 
     private final LogReplicationContext replicationContext;
 
     private final Map<LogReplicationSession, LogReplicationRuntimeParameters> replicationSessionToRuntimeParams;
+
+    private final LogReplicationRouterManager routerManager;
 
     /**
      * Constructor
@@ -56,7 +53,7 @@ public class CorfuReplicationManager {
                                    LogReplicationMetadataManager metadataManager,
                                    String pluginFilePath, CorfuRuntime corfuRuntime,
                                    LogReplicationUpgradeManager upgradeManager,
-                                   LogReplicationContext replicationContext) {
+                                   LogReplicationContext replicationContext, LogReplicationRouterManager routerManager) {
         this.metadataManager = metadataManager;
         this.pluginFilePath = pluginFilePath;
         this.corfuRuntime = corfuRuntime;
@@ -64,8 +61,7 @@ public class CorfuReplicationManager {
         this.upgradeManager = upgradeManager;
         this.topology = topology;
         this.replicationContext = replicationContext;
-        this.replicationSessionToRouterSource = new HashMap<>();
-        this.replicationSessionToRouterSink = new HashMap<>();
+        this.routerManager = routerManager;
         this.replicationSessionToRuntimeParams = new HashMap<>();
     }
 
@@ -86,7 +82,7 @@ public class CorfuReplicationManager {
         log.info("Starting connection to remote {} for session {} ", remote, session);
         if (!topology.getRemoteSinkClusters().isEmpty() &&
                 topology.getRemoteSinkClusters().containsKey(remote.getClusterId())) {
-            LogReplicationBaseSourceRouter router = getOrCreateSourceRouter(session, serverMap, true);
+            LogReplicationBaseSourceRouter router = createSourceRouter(session, serverMap, true);
             try {
                 IRetry.build(IntervalRetry.class, () -> {
                     try {
@@ -103,7 +99,8 @@ public class CorfuReplicationManager {
             }
         } else if (!topology.getRemoteSourceClusters().isEmpty() &&
                 topology.getRemoteSourceClusters().containsKey(remote.getClusterId())) {
-            LogReplicationSinkServerRouter router = getOrCreateSinkRouter(session, serverMap, true);
+            LogReplicationSinkServerRouter router = routerManager.getOrCreateSinkRouter(session, serverMap, true,
+                    pluginFilePath, corfuRuntime.getParameters().getRequestTimeout().toMillis());
             try {
                 IRetry.build(IntervalRetry.class, () -> {
                     try {
@@ -123,55 +120,15 @@ public class CorfuReplicationManager {
         }
     }
 
-    /**
-     * Creates a source router if not already created:
-     * A source-client router if cluster is connection starter else a source-server router
-     */
-    public LogReplicationBaseSourceRouter getOrCreateSourceRouter(LogReplicationSession session,
-                                                                  Map<Class, AbstractServer> serverMap, boolean isConnectionStarter) {
-        if (replicationSessionToRouterSource.containsKey(session)) {
-            return replicationSessionToRouterSource.get(session);
-        }
-        LogReplicationBaseSourceRouter router;
-        ClusterDescriptor remoteSink = topology.getRemoteSinkClusters().get(session.getSinkClusterId());
-        if (isConnectionStarter) {
-            router = new LogReplicationSourceClientRouter(remoteSink,
-                    localNodeDescriptor.getClusterId(), createRuntimeParams(remoteSink, session), this,
-                    session);
-        } else {
-            router = new LogReplicationSourceServerRouter(remoteSink,
-                    localNodeDescriptor.getClusterId(), createRuntimeParams(remoteSink, session), this,
-                    session, serverMap);
-        }
-        replicationSessionToRouterSource.put(session, router);
-        createRuntime(remoteSink, session, isConnectionStarter);
+    public LogReplicationBaseSourceRouter createSourceRouter(LogReplicationSession session,
+                                                             Map<Class, AbstractServer> serverMap,
+                                                             boolean isConnectionStarter) {
+        ClusterDescriptor remote = topology.getAllClustersInTopology().get(session.getSinkClusterId());
+        LogReplicationBaseSourceRouter router = routerManager.getOrCreateSourceRouter(session, serverMap,
+                isConnectionStarter, createRuntimeParams(remote, session), this, remote);
+        createRuntime(remote, session, isConnectionStarter, router);
         router.setRuntimeFSM(sessionRuntimeMap.get(session));
 
-        return router;
-    }
-
-    /**
-     * Creates a sink router if not already created:
-     * A sink-client router if cluster is connection starter else a sink-server router
-     */
-    public LogReplicationSinkServerRouter getOrCreateSinkRouter(LogReplicationSession session,
-                                                                Map<Class, AbstractServer> serverMap,
-                                                                boolean isConnectionStarter) {
-        if (replicationSessionToRouterSink.containsKey(session)) {
-            return replicationSessionToRouterSink.get(session);
-        }
-        LogReplicationSinkServerRouter router;
-        ClusterDescriptor remoteSource = topology.getRemoteSourceClusters().get(session.getSourceClusterId());
-        if(isConnectionStarter) {
-            LogReplicationSinkClientRouter sinkClientRouter = new LogReplicationSinkClientRouter(remoteSource,
-                    localNodeDescriptor.getClusterId(), pluginFilePath, corfuRuntime.getParameters()
-                    .getRequestTimeout().toMillis(), session, serverMap);
-            sinkClientRouter.addClient(new LogReplicationHandler(session));
-            router = sinkClientRouter;
-        } else {
-            router = new LogReplicationSinkServerRouter(serverMap);
-        }
-        replicationSessionToRouterSink.put(session, router);
         return router;
     }
 
@@ -179,7 +136,7 @@ public class CorfuReplicationManager {
      * Create Log Replication Runtime for a session, if not already created.
      */
     public void createRuntime(ClusterDescriptor remote, LogReplicationSession replicationSession,
-                              boolean isConnectionStarter) {
+                              boolean isConnectionStarter, LogReplicationBaseSourceRouter router) {
         try {
             CorfuLogReplicationRuntime replicationRuntime;
             if (!sessionRuntimeMap.containsKey(replicationSession)) {
@@ -193,7 +150,7 @@ public class CorfuReplicationManager {
                 }
                 replicationRuntime = new CorfuLogReplicationRuntime(parameters,
                         metadataManager, upgradeManager, replicationSession, replicationContext,
-                        replicationSessionToRouterSource.get(replicationSession), isConnectionStarter);
+                        router, isConnectionStarter);
                 sessionRuntimeMap.put(replicationSession, replicationRuntime);
             } else {
                 log.warn("Log Replication Runtime to remote session {}, already exists. Skipping init.",
@@ -274,8 +231,7 @@ public class CorfuReplicationManager {
             try {
                 log.info("Stop log replication runtime for session {}", session);
                 logReplicationRuntime.stop();
-                replicationSessionToRouterSource.get(session).stop();
-                replicationSessionToRouterSource.remove(session);
+                routerManager.stopSourceRouter(session);
                 replicationSessionToRuntimeParams.remove(session);
 
             } catch(Exception e) {
@@ -286,23 +242,9 @@ public class CorfuReplicationManager {
         }
     }
 
-    public void stopSinkClientRouter(LogReplicationSession session) {
-        if (replicationSessionToRouterSink.get(session) instanceof  LogReplicationSinkClientRouter) {
-            log.info("Stopping the SINK client router for session {}", session);
-            ((LogReplicationSinkClientRouter) replicationSessionToRouterSink.get(session)).stop();
-        }
-    }
-
     public void updateTopology(TopologyDescriptor newTopology) {
         this.topology = newTopology;
-    }
-
-    /**
-     * Remove router information for closed sessions
-     * @param sessions
-     */
-    public void removeSinkRouterInfo(Set<LogReplicationSession> sessions) {
-        sessions.forEach(session -> this.replicationSessionToRouterSink.remove(session));
+        routerManager.setTopology(newTopology);
     }
 
 
