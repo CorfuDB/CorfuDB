@@ -117,7 +117,8 @@ public class SessionManager {
         this.localCorfuEndpoint = lrNodeLocator.toEndpointUrl();
 
         this.metadataManager = new LogReplicationMetadataManager(corfuRuntime, topology.getTopologyConfigId());
-        this.configManager = new LogReplicationConfigManager(runtime, serverContext);
+        this.configManager = new LogReplicationConfigManager(runtime, serverContext,
+                topology.getLocalClusterDescriptor().getClusterId());
         this.upgradeManager = upgradeManager;
         this.replicationContext = new LogReplicationContext(configManager, topology.getTopologyConfigId(),
                 localCorfuEndpoint);
@@ -145,7 +146,7 @@ public class SessionManager {
             .build();
         this.localCorfuEndpoint = lrNodeLocator.toEndpointUrl();
         this.metadataManager = new LogReplicationMetadataManager(corfuRuntime, topology.getTopologyConfigId());
-        this.configManager = new LogReplicationConfigManager(runtime);
+        this.configManager = new LogReplicationConfigManager(runtime, topology.getLocalClusterDescriptor().getClusterId());
         this.upgradeManager = null;
         this.routerManager = new LogReplicationRouterManager(topology);
         this.replicationContext = new LogReplicationContext(configManager, topology.getTopologyConfigId(), localCorfuEndpoint);

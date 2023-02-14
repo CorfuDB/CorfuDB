@@ -24,7 +24,7 @@ public class StreamsSnapshotReader extends BaseSnapshotReader {
 
     @Override
     protected void refreshStreamsToReplicateSet() {
-        streams = replicationContext.getConfig().getStreamsToReplicate();
+        streams = replicationContext.getConfig(session).getStreamsToReplicate();
     }
 
 }

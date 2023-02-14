@@ -16,6 +16,6 @@ public class LogicalGroupSnapshotReader extends BaseSnapshotReader {
 
     @Override
     protected void refreshStreamsToReplicateSet() {
-
+        streams = replicationContext.getConfig(session).getStreamsToReplicate();
     }
 }
