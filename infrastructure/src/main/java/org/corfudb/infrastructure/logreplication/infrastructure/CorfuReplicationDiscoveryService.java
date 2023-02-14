@@ -408,6 +408,12 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         // check if all the sessions in system tables are valid
         sessionManager.removeStaleSessionOnLeadershipAcquire();
 
+
+        // If local cluster is Source, start the client config listener.
+        if (isSource()) {
+            sessionManager.startClientConfigListener();
+        }
+
         setupConnectionComponents();
         // record metrics about the lock acquired.
         lockAcquireSample = recordLockAcquire();

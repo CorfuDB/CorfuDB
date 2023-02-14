@@ -43,6 +43,7 @@ import org.junit.Test;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -70,6 +71,8 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
     private static final String SINK_CLUSTER_ID = "Cluster-London";
     private static final String SHADOW_SUFFIX = "_SHADOW";
     private static final String TEST_NAMESPACE = "LR-Test";
+    private static final String LOCAL_SOURCE_CLUSTER_ID = "456e4567-e89b-12d3-a456-556642440001";
+    private static final String LOCAL_SINK_CLUSTER_ID = "456e4567-e89b-12d3-a456-556642440002";
 
     private static Semaphore waitSem = new Semaphore(1);
 
@@ -225,9 +228,10 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
 
     public static void readSnapshotMsgs(List<LogReplicationEntryMsg> msgQ, CorfuRuntime rt, boolean blockOnSem) {
         int cnt = 0;
-        LogReplicationConfigManager configManager = new LogReplicationConfigManager(rt);
-        LogReplicationContext context = new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT);
+        LogReplicationConfigManager configManager = new LogReplicationConfigManager(rt, LOCAL_SOURCE_CLUSTER_ID);
+        configManager.generateConfig(Collections.singleton(getDefaultSession()));
 
+        LogReplicationContext context = new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT);
         StreamsSnapshotReader reader = new StreamsSnapshotReader(rt, getDefaultSession(), context);
 
         reader.reset(rt.getAddressSpaceView().getLogTail());
@@ -261,7 +265,8 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
                 new AtomicBoolean(true));
         logReplicationMetadataManager.addSession(getDefaultSession(), 0, true);
 
-        LogReplicationConfigManager configManager = new LogReplicationConfigManager(rt);
+        LogReplicationConfigManager configManager = new LogReplicationConfigManager(rt, LOCAL_SINK_CLUSTER_ID);
+        configManager.generateConfig(Collections.singleton(getDefaultSession()));
 
         StreamsSnapshotWriter writer = new StreamsSnapshotWriter(rt, logReplicationMetadataManager,
             getDefaultSession(), new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT));
@@ -294,7 +299,8 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
     public static void readLogEntryMsgs(List<LogReplicationEntryMsg> msgQ, CorfuRuntime rt,
                                         boolean blockOnce) throws TrimmedException {
 
-        LogReplicationConfigManager configManager = new LogReplicationConfigManager(rt);
+        LogReplicationConfigManager configManager = new LogReplicationConfigManager(rt, LOCAL_SOURCE_CLUSTER_ID);
+        configManager.generateConfig(Collections.singleton(getDefaultSession()));
 
         StreamsLogEntryReader reader = new StreamsLogEntryReader(rt, getDefaultSession(),
                 new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT));
@@ -331,7 +337,8 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
                 new AtomicBoolean(true));
         logReplicationMetadataManager.addSession(getDefaultSession(),0, true);
 
-        LogReplicationConfigManager configManager = new LogReplicationConfigManager(rt);
+        LogReplicationConfigManager configManager = new LogReplicationConfigManager(rt, LOCAL_SINK_CLUSTER_ID);
+        configManager.generateConfig(Collections.singleton(getDefaultSession()));
 
         LogEntryWriter writer = new LogEntryWriter(logReplicationMetadataManager, getDefaultSession(),
                 new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT));
