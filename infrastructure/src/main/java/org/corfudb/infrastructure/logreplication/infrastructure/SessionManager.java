@@ -2,10 +2,14 @@ package org.corfudb.infrastructure.logreplication.infrastructure;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Sets;
+import com.google.protobuf.Timestamp;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.AbstractServer;
 import org.corfudb.infrastructure.ServerContext;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEvent;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEvent.ReplicationEventType;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEventInfoKey;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatus;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSinkServerRouter;
@@ -27,10 +31,13 @@ import org.corfudb.util.retry.IntervalRetry;
 import org.corfudb.util.retry.RetryNeededException;
 
 import javax.annotation.Nonnull;
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.CopyOnWriteArraySet;
 
 /**
  * Manage log replication sessions for multiple replication models.
@@ -46,6 +53,9 @@ public class SessionManager {
     // 'is_federated' flag, yet no client is specified in proto
     private static final String DEFAULT_CLIENT = "00000000-0000-0000-0000-000000000000";
 
+    // TODO (V2): This field should be removed after the rpc stream is added for Sink side session creation.
+    private static final String DEFAULT_LOGICAL_GROUP_CLIENT = "00000000-0000-0000-0000-0000000000001";
+
     private final CorfuStore corfuStore;
 
     private final CorfuRuntime runtime;
@@ -57,11 +67,11 @@ public class SessionManager {
     private final LogReplicationConfigManager configManager;
 
     @Getter
-    private final Set<LogReplicationSession> sessions = new HashSet<>();
+    private final Set<LogReplicationSession> sessions = new CopyOnWriteArraySet<>();
 
-    private final Set<LogReplicationSession> incomingSessions = new HashSet<>();
+    private final Set<LogReplicationSession> incomingSessions = new CopyOnWriteArraySet<>();
 
-    private final Set<LogReplicationSession> outgoingSessions = new HashSet<>();
+    private final Set<LogReplicationSession> outgoingSessions = new CopyOnWriteArraySet<>();
 
     private final Set<LogReplicationSession> newSessionsDiscovered = new HashSet<>();
 
@@ -215,43 +225,46 @@ public class SessionManager {
     }
 
     /**
-     * Create sessions (outgoing and incoming) along with metadata
+     * Replication sessions are created by combining topology and registered replication subscribers.
      *
+     * (1) In the case of replication start / topology change, check all the subscribers with underlying topology and
+     *     create all the missed sessions.
+     *
+     * (2) In the case of client registration (on Source), sessions are created on-demand:
+     *     Source side: invoke session creation method from client config listener
+     *     Sink side: assigned grpc stream for subscriber registration
      */
     private void createSessions() {
-        Set<LogReplicationSession> sessionsToAdd = new HashSet<>();
-        // sessions where the local cluster is the Sink
-        Set<LogReplicationSession> incomingSessionsToAdd = new HashSet<>();
-        // sessions where the local cluster is the Source
-        Set<LogReplicationSession> outgoingSessionsToAdd = new HashSet<>();
-        // clear any prior session.
-        newSessionsDiscovered.clear();
+        for (ReplicationSubscriber subscriber : configManager.getRegisteredSubscribers()) {
+            createOutgoingSessionsBySubscriber(subscriber);
+            createIncomingSessionsBySubscriber(subscriber);
+        }
+    }
 
+    public void createOutgoingSessionsBySubscriber(ReplicationSubscriber subscriber) {
+        Set<LogReplicationSession> sessionsToAdd = new HashSet<>();
         try {
             String localClusterId = topology.getLocalClusterDescriptor().getClusterId();
-
             IRetry.build(IntervalRetry.class, () -> {
                 try (TxnContext txn = corfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
-
+                    // Create out-going sessions by combing the given registered replication subscriber and topology
                     for(ClusterDescriptor remoteSinkCluster : topology.getRemoteSinkClusters().values()) {
-                        LogReplicationSession session = constructSession(localClusterId, remoteSinkCluster.clusterId);
-                        if (!sessions.contains(session)) {
-                            sessionsToAdd.add(session);
-                            outgoingSessionsToAdd.add(session);
-                            metadataManager.addSession(txn, session, topology.getTopologyConfigId(), false);
+                        Set<ReplicationModel> supportedModels =
+                                topology.getRemoteSinkClusterToReplicationModels().get(remoteSinkCluster);
+                        if (supportedModels.contains(subscriber.getModel())) {
+                            LogReplicationSession session =
+                                    constructSession(localClusterId, remoteSinkCluster.clusterId, subscriber);
+                            // TODO: (V2 / Chris) this is still not thread-safe, need to synchronize on sessions
+                            if (!sessions.contains(session)) {
+                                sessionsToAdd.add(session);
+                                metadataManager.addSession(txn, session, topology.getTopologyConfigId(), false);
+                            }
                         }
                     }
-
-                    for(ClusterDescriptor remoteSourceCluster : topology.getRemoteSourceClusters().values()) {
-                        LogReplicationSession session = constructSession(remoteSourceCluster.getClusterId(), localClusterId);
-                        if (!sessions.contains(session)) {
-                            sessionsToAdd.add(session);
-                            incomingSessionsToAdd.add(session);
-                            metadataManager.addSession(txn, session, topology.getTopologyConfigId(), true);
-                        }
-                    }
-
                     txn.commit();
+                    sessions.addAll(sessionsToAdd);
+                    outgoingSessions.addAll(sessionsToAdd);
+                    logNewlyAddedSessionInfo(sessionsToAdd);
                     return null;
                 } catch (TransactionAbortedException e) {
                     log.error("Failed to create sessions.  Retrying.", e);
@@ -263,25 +276,60 @@ public class SessionManager {
             throw new UnrecoverableCorfuInterruptedError(e);
         }
 
-        newSessionsDiscovered.addAll(sessionsToAdd);
-        sessions.addAll(sessionsToAdd);
-        incomingSessions.addAll(incomingSessionsToAdd);
-        outgoingSessions.addAll(outgoingSessionsToAdd);
+        log.info("Total of {} outgoing sessions created with subscriber {}, sessions={}", sessionsToAdd.size(),
+                subscriber, sessionsToAdd);
 
-        // TODO(V2): The below method logs a mapping of a session's hashcode to the session itself.  This
-        //  is because LR names worker threads corresponding to a session using its hashcode.
-        //  To identify the remote cluster and replication information while debugging, we need a view of
-        //  the whole session object.  However, this method of logging the mapping has limitations
-        //  because the mapping is only printed when the session is created for the first time.  If the
-        //  logs have rolled over, the information is lost.  We need a permanent store/log of this mapping.
-        logNewlyAddedSessionInfo(sessionsToAdd);
-
-        log.info("Total sessions={}, outgoing={}, incoming={}, sessions={}", sessions.size(), outgoingSessions.size(),
-                incomingSessions.size(), sessions);
+        configManager.generateConfig(sessionsToAdd);
     }
 
+    public void createIncomingSessionsBySubscriber(ReplicationSubscriber subscriber) {
+        Set<LogReplicationSession> sessionsToAdd = new HashSet<>();
+        try {
+            String localClusterId = topology.getLocalClusterDescriptor().getClusterId();
+            IRetry.build(IntervalRetry.class, () -> {
+                try (TxnContext txn = corfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
+                    // Create out-going sessions by combing the given registered replication subscriber and topology
+                    for(ClusterDescriptor remoteSourceCluster : topology.getRemoteSourceClusters().values()) {
+                        Set<ReplicationModel> supportedModels =
+                                topology.getRemoteSourceClusterToReplicationModels().get(remoteSourceCluster);
+                        if (supportedModels.contains(subscriber.getModel())) {
+                            LogReplicationSession session =
+                                    constructSession(remoteSourceCluster.clusterId, localClusterId, subscriber);
+                            // TODO: (V2 / Chris) this is still not thread-safe, need to synchronize on sessions
+                            if (!sessions.contains(session)) {
+                                sessionsToAdd.add(session);
+                                metadataManager.addSession(txn, session, topology.getTopologyConfigId(), true);
+                            }
+                        }
+                    }
+                    txn.commit();
+                    sessions.addAll(sessionsToAdd);
+                    incomingSessions.addAll(sessionsToAdd);
+                    logNewlyAddedSessionInfo(sessionsToAdd);
+                    return null;
+                } catch (TransactionAbortedException e) {
+                    log.error("Failed to create sessions.  Retrying.", e);
+                    throw new RetryNeededException();
+                }
+            }).run();
+        } catch (InterruptedException e) {
+            log.error("Unrecoverable Corfu Error when creating the sessions", e);
+            throw new UnrecoverableCorfuInterruptedError(e);
+        }
 
-    private void logNewlyAddedSessionInfo(Set<LogReplicationSession> newlyAddedSessions) {
+        log.info("Total of {} incoming sessions created with subscriber {}, sessions={}", sessionsToAdd.size(),
+                subscriber, sessionsToAdd);
+
+        configManager.generateConfig(sessionsToAdd);
+    }
+
+    // TODO(V2): The below method logs a mapping of a session's hashcode to the session itself.  This
+    //  is because LR names worker threads corresponding to a session using its hashcode.
+    //  To identify the remote cluster and replication information while debugging, we need a view of
+    //  the whole session object.  However, this method of logging the mapping has limitations
+    //  because the mapping is only printed when the session is created for the first time.  If the
+    //  logs have rolled over, the information is lost.  We need a permanent store/log of this mapping.
+    private synchronized void logNewlyAddedSessionInfo(Set<LogReplicationSession> newlyAddedSessions) {
         log.info("========= HashCode -> Session mapping for newly added session: =========");
         for (LogReplicationSession session : newlyAddedSessions) {
             log.info("HashCode: {}, Session: {}", session.hashCode(), session);
@@ -289,14 +337,14 @@ public class SessionManager {
     }
 
     /**
-     * Construct session.
+     * Construct a replication session.
      */
-    // TODO(V2): for now only creating sessions for FULL TABLE replication model (assumed as default)
-    private LogReplicationSession constructSession(String sourceClusterId, String sinkClusterId) {
+    private LogReplicationSession constructSession(String sourceClusterId, String sinkClusterId,
+                                                   ReplicationSubscriber subscriber) {
         return LogReplicationSession.newBuilder()
                 .setSourceClusterId(sourceClusterId)
                 .setSinkClusterId(sinkClusterId)
-                .setSubscriber(getDefaultSubscriber())
+                .setSubscriber(subscriber)
                 .build();
     }
 
@@ -404,6 +452,14 @@ public class SessionManager {
                 .build();
     }
 
+    // TODO (V2): This builder should be removed after the rpc stream is added for Sink side session creation.
+    public static ReplicationSubscriber getDefaultLogicalGroupSubscriber() {
+        return ReplicationSubscriber.newBuilder()
+                .setClientName(DEFAULT_LOGICAL_GROUP_CLIENT)
+                .setModel(ReplicationModel.LOGICAL_GROUPS)
+                .build();
+    }
+
     public void stopSessions() {
         log.info("Stopping log replication.");
         stopSessions(sessions);
@@ -454,12 +510,46 @@ public class SessionManager {
     }
 
     /**
-     * Force snapshot sync on all outgoing sessions
+     * Force snapshot sync for the replication session associated with the DiscoveryServiceEvent. Note that this
+     * method is executed from external path - The forced snapshot sync event is triggered by the client of log
+     * replicator.
      *
-     * @param event
+     * @param event DiscoveryServiceEvent that specifies the session for forced snapshot sync.
      */
     public void enforceSnapshotSync(DiscoveryServiceEvent event) {
         replicationManager.enforceSnapshotSync(event);
+    }
+
+
+    /**
+     * TODO (V2): reason enum to differentiate the paths that trigger a forced snapshot sync
+     * Forced snapshot sync for a certain replication session. Note that this method is internal to LR for cases where
+     * a replication session has significant config change such that a forced snapshot sync is needed.
+     *
+     * For example, for LOGICAL_GROUP model, if a new group is added to a Sink destination that has an on-going logical
+     * group replication session, a forced snapshot sync should be triggered for the session to keep the Sink consistent
+     * with Source side.
+     *
+     * @param session Replication session that a forced snapshot sync is needed because of config change.
+     */
+    public void enforceSnapshotSync(LogReplicationSession session) {
+        UUID forceSyncId = UUID.randomUUID();
+
+        log.info("Forced snapshot sync will be triggered because of group destination change, session={}, sync_id={}",
+                session, forceSyncId);
+
+        // Write a force sync event to the logReplicationEventTable
+        ReplicationEventInfoKey key = ReplicationEventInfoKey.newBuilder()
+                .setSession(session)
+                .build();
+
+        ReplicationEvent event = ReplicationEvent.newBuilder()
+                .setEventId(forceSyncId.toString())
+                .setType(ReplicationEventType.FORCE_SNAPSHOT_SYNC)
+                .setEventTimestamp(Timestamp.newBuilder().setSeconds(Instant.now().getEpochSecond()).build())
+                .build();
+
+        metadataManager.addEvent(key, event);
     }
 
     public boolean isConnectionReceiver() {
