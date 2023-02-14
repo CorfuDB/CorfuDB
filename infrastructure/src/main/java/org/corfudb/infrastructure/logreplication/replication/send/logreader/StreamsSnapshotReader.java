@@ -34,7 +34,7 @@ import java.util.UUID;
 import java.util.stream.Stream;
 
 import static com.google.protobuf.UnsafeByteOperations.unsafeWrap;
-import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_DATA_MSG_SIZE_SUPPORTED;
+import static org.corfudb.infrastructure.logreplication.config.LogReplicationConfig.DEFAULT_MAX_DATA_MSG_SIZE;
 import static org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg;
 import static org.corfudb.protocols.service.CorfuProtocolLogReplication.generatePayload;
 import static org.corfudb.protocols.service.CorfuProtocolLogReplication.getLrEntryMsg;
@@ -81,8 +81,8 @@ public class StreamsSnapshotReader extends SnapshotReader {
         this.session = session;
         this.replicationContext = replicationContext;
         this.rt.parseConfigurationString(runtime.getLayoutServers().get(0)).connect();
-        this.maxDataSizePerMsg = replicationContext.getConfigManager().getConfig().getMaxDataSizePerMsg();
-        this.streams = replicationContext.getConfigManager().getConfig().getStreamsToReplicate();
+        this.maxDataSizePerMsg = replicationContext.getConfig(session).getMaxDataSizePerMsg();
+        this.streams = replicationContext.getConfig(session).getStreamsToReplicate();
         this.messageSizeDistributionSummary = configureMessageSizeDistributionSummary();
     }
 
@@ -152,9 +152,9 @@ public class StreamsSnapshotReader extends SnapshotReader {
                     if (smrEntries != null) {
                         int currentEntrySize = ReaderUtility.calculateSize(smrEntries);
 
-                        if (currentEntrySize > MAX_DATA_MSG_SIZE_SUPPORTED) {
+                        if (currentEntrySize > DEFAULT_MAX_DATA_MSG_SIZE) {
                             log.error("The current entry size {} is bigger than the maxDataSizePerMsg {} supported",
-                                    currentEntrySize, MAX_DATA_MSG_SIZE_SUPPORTED);
+                                    currentEntrySize, DEFAULT_MAX_DATA_MSG_SIZE);
                             throw new IllegalSnapshotEntrySizeException(" The snapshot entry is bigger than the system supported");
                         } else if (currentEntrySize > maxDataSizePerMsg) {
                             observeBiggerMsg.setValue(observeBiggerMsg.getValue()+1);
@@ -272,7 +272,7 @@ public class StreamsSnapshotReader extends SnapshotReader {
         // As the config should reflect the latest configuration read from registry table, it will be synced with the
         // latest registry table content instead of the given ts, while the streams to replicate will be read up to ts.
         replicationContext.refresh();
-        streams = replicationContext.getConfig().getStreamsToReplicate();
+        streams = replicationContext.getConfig(session).getStreamsToReplicate();
         streamsToSend = new PriorityQueue<>(streams);
         preMsgTs = Address.NON_ADDRESS;
         currentMsgTs = Address.NON_ADDRESS;

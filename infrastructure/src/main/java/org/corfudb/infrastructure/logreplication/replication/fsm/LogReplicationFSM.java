@@ -228,7 +228,7 @@ public class LogReplicationFSM {
 
         this.ackReader = ackReader;
         this.snapshotSender = new SnapshotSender(runtime, snapshotReader, dataSender, readProcessor,
-            replicationContext.getConfig().getMaxNumMsgPerBatch(), this);
+                replicationContext.getConfig(session).getMaxNumMsgPerBatch(), this);
         this.logEntrySender = new LogEntrySender(logEntryReader, dataSender, this);
         this.logReplicationFSMWorkers = workers;
         this.logReplicationFSMConsumer = Executors.newSingleThreadExecutor(new
@@ -236,7 +236,6 @@ public class LogReplicationFSM {
             .build());
 
         init(dataSender, session, upgradeManager);
-
     }
 
     /**
@@ -264,7 +263,7 @@ public class LogReplicationFSM {
         this.logEntryReader = logEntryReader;
         this.ackReader = ackReader;
         this.snapshotSender = new SnapshotSender(runtime, snapshotReader, dataSender, readProcessor,
-            replicationContext.getConfig().getMaxNumMsgPerBatch(), this);
+                replicationContext.getConfig(session).getMaxNumMsgPerBatch(), this);
         this.logEntrySender = new LogEntrySender(logEntryReader, dataSender, this);
         this.logReplicationFSMWorkers = workers;
         this.logReplicationFSMConsumer = Executors.newSingleThreadExecutor(new
@@ -302,9 +301,7 @@ public class LogReplicationFSM {
     private LogEntryReader createLogEntryReader(CorfuRuntime runtime, LogReplicationSession session,
                                                 LogReplicationContext replicationContext) {
         LogEntryReader logEntryReader;
-
         ReplicationModel model = session.getSubscriber().getModel();
-
         switch(model) {
             case FULL_TABLE:
                 logEntryReader = new StreamsLogEntryReader(runtime, session, replicationContext);
