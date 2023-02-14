@@ -46,12 +46,16 @@ public class ObjectsView extends AbstractView {
 
     private static final String LOGICAL_GROUP_REPLICATION_STREAM_NAME_PREFIX = "LogicalGroupReplicationStream_";
 
+    // TODO (V2): This field should be removed after the rpc stream is added for Sink side session creation.
+    private static final String DEFAULT_LOGICAL_GROUP_CLIENT = "00000000-0000-0000-0000-0000000000001";
+
     public static final StreamTagInfo LOG_REPLICATOR_STREAM_INFO =
             new StreamTagInfo(LOG_REPLICATOR_STREAM_NAME,
                 CorfuRuntime.getStreamID(LOG_REPLICATOR_STREAM_NAME));
 
     public static StreamTagInfo getLogicalGroupStreamTagInfo(String replicationClientName) {
-        String streamName = LOGICAL_GROUP_REPLICATION_STREAM_NAME_PREFIX + replicationClientName;
+//        String streamName = LOGICAL_GROUP_REPLICATION_STREAM_NAME_PREFIX + replicationClientName;
+        String streamName = LOGICAL_GROUP_REPLICATION_STREAM_NAME_PREFIX + DEFAULT_LOGICAL_GROUP_CLIENT;
         return new StreamTagInfo(streamName, CorfuRuntime.getStreamID(streamName));
     }
 

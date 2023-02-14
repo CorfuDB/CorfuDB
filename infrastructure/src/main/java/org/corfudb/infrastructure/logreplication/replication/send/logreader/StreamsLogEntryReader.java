@@ -23,7 +23,7 @@ public class StreamsLogEntryReader extends BaseLogEntryReader {
 
     @Override
     protected void refreshStreamUUIDs() {
-        Set<String> streams = replicationContext.getConfig().getStreamsToReplicate();
+        Set<String> streams = replicationContext.getConfig(session).getStreamsToReplicate();
         streamUUIDs = new HashSet<>();
         for (String s : streams) {
             streamUUIDs.add(CorfuRuntime.getStreamID(s));

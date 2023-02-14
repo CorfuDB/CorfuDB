@@ -86,6 +86,8 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
     private static final String TEST_NAMESPACE = "LR-Test";
 
+    private static final String LOCAL_SOURCE_CLUSTER_ID = "456e4567-e89b-12d3-a456-556642440001";
+
     static private final int NUM_KEYS = 10;
 
     static private final int NUM_KEYS_LARGE = 1000;
@@ -1225,7 +1227,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     private LogReplicationSourceManager setupSourceManagerAndObservedValues(Set<WAIT> waitConditions,
         TransitionSource function) throws InterruptedException {
 
-        LogReplicationConfigManager configManager = new LogReplicationConfigManager(srcTestRuntime);
+        LogReplicationConfigManager configManager = new LogReplicationConfigManager(srcTestRuntime, LOCAL_SOURCE_CLUSTER_ID);
         LogReplicationUpgradeManager upgradeManager = new LogReplicationUpgradeManager(srcTestRuntime, nettyConfig);
         LogReplicationContext context = new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT);
         configManager.generateConfig(Collections.singleton(session));
