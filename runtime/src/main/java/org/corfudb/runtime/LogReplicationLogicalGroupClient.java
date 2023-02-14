@@ -34,6 +34,8 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 /**
  * A client to interface with log replication utilizing the logical groups replication model.
+ * <p>
+ * Thread safety of client operations enforced by utilization of transactions.
  */
 @Slf4j
 public class LogReplicationLogicalGroupClient {
