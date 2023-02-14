@@ -143,6 +143,9 @@ public class LogReplicationLogicalGroupClient {
 
     /**
      * Adds a destination to LogReplicationModelMetadataTable for monitoring.
+     * <p>
+     * A new logical group will be created if one does not already exist.
+     * The destination will not be added again if it already exists in the group.
      *
      * @param logicalGroup The group of tables to be replicated, represented as a string.
      * @param destination The clusters which the specified group will be replicated to.
@@ -189,6 +192,9 @@ public class LogReplicationLogicalGroupClient {
 
     /**
      * Add a list of destinations for a group to the LogReplicationModelMetadataTable for monitoring.
+     * <p>
+     * A new logical group will be created if one does not already exist.
+     * If remoteDestinations contains existing elements they will be skipped.
      *
      * @param logicalGroup The group of tables to be replicated, represented as a string.
      * @param remoteDestinations The clusters which the specified group will be replicated to.
@@ -238,7 +244,54 @@ public class LogReplicationLogicalGroupClient {
     }
 
     /**
+     * Sets a list of destinations for a group to the LogReplicationModelMetadataTable for monitoring.
+     * <p>
+     * A new logical group will be created if one does not already exist.
+     * Setting destinations for a logical group will overwrite existing destinations.
+     * Setting destinations to an empty list not, i.e. "clearing", is not permitted.
+     *
+     * @param logicalGroup The group of tables to be replicated, represented as a string.
+     * @param remoteDestinations The clusters which the specified group will be replicated to.
+     */
+    public void setDestinations(String logicalGroup, List<String> remoteDestinations) {
+        Preconditions.checkArgument(isValid(logicalGroup),
+                String.format("[%s] logicalGroup is null or empty.", clientName));
+        Preconditions.checkArgument(isValid(remoteDestinations),
+                String.format("[%s] remoteDestinations is null or empty.", clientName));
+        Preconditions.checkArgument(hasNoNullOrEmptyElements(remoteDestinations),
+                String.format("[%s] remoteDestinations contains null or empty elements.", clientName));
+        List<String> finalRemoteDestinations = new ArrayList<>(deduplicate(remoteDestinations));
+        try {
+            IRetry.build(ExponentialBackoffRetry.class, () -> {
+                try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+                    ClientDestinationInfoKey clientInfoKey = buildClientDestinationInfoKey(logicalGroup);
+                    DestinationInfoVal clientDestinations = DestinationInfoVal.newBuilder()
+                            .addAllDestinationIds(finalRemoteDestinations)
+                            .build();
+
+                    if (txn.getRecord(sourceMetadataTable, clientInfoKey).getPayload() != null) {
+                        log.info(String.format("[%s] Existing destinations are being overwritten.", clientName));
+                    }
+
+                    txn.putRecord(sourceMetadataTable, clientInfoKey, clientDestinations, null);
+                    txn.commit();
+                    return null;
+                } catch (TransactionAbortedException tae) {
+                    log.error(String.format("[%s] Unable to set destinations, will be retried.", clientName), tae);
+                    throw new RetryNeededException();
+                }
+            }).run();
+        } catch (InterruptedException e) {
+            log.error(String.format("[%s] Unable to set destinations.", clientName), e);
+            throw new UnrecoverableCorfuInterruptedError(e);
+        }
+    }
+
+    /**
      * Remove a destination from the LogReplicationModelMetadataTable for a specific group.
+     * <p>
+     * The logical group is deleted when no destinations remain.
+     * Trying a deletion for a nonexistent destination is treated as a noop.
      *
      * @param logicalGroup The group of tables that are replicated, represented as a string.
      * @param destination The cluster which should be removed from the logical group for all future replication.
@@ -258,7 +311,7 @@ public class LogReplicationLogicalGroupClient {
                         List<String> clientDestinationIdsList = new ArrayList<>(clientDestinations.getDestinationIdsList());
 
                         if (clientDestinationIdsList.remove(destination)) {
-                            if (clientDestinationIdsList.size() == 0) {
+                            if (clientDestinationIdsList.isEmpty()) {
                                 txn.delete(sourceMetadataTable, clientInfoKey);
                             } else {
                                 clientDestinations = clientDestinations.toBuilder()
@@ -289,6 +342,9 @@ public class LogReplicationLogicalGroupClient {
 
     /**
      * Remove a list of destinations from the LogReplicationModelMetadataTable for a specific group.
+     * <p>
+     * The logical group is deleted when no destinations remain.
+     * Any destination to remove that is not present is skipped over.
      *
      * @param logicalGroup The group of tables that are replicated, represented as a string.
      * @param remoteDestinations The clusters which should be removed from the logical group for all future replication.
@@ -319,7 +375,7 @@ public class LogReplicationLogicalGroupClient {
                                 log.info(String.format("[%s] Following destinations to remove are not present: %s", clientName, removeRemoteDestinationsSet));
                             }
 
-                            if (clientDestinationIdsList.size() == 0) {
+                            if (clientDestinationIdsList.isEmpty()) {
                                 txn.delete(sourceMetadataTable, clientInfoKey);
                             } else {
                                 clientDestinations = clientDestinations.toBuilder()
@@ -352,7 +408,7 @@ public class LogReplicationLogicalGroupClient {
      * Get the destinations associated with a specific logical group.
      *
      * @param logicalGroup The group whose destinations will be returned.
-     * @return The associated destinations as a list of strings.
+     * @return The associated destinations as a list of strings, null if logical group is not found.
      */
     public List<String> getDestinations(String logicalGroup) {
         Preconditions.checkArgument(isValid(logicalGroup),

@@ -65,10 +65,13 @@ public class LogReplicationLogicalGroupClientTest extends AbstractViewTest {
      *
      */
     @Test
-    public void testRegisterReplicationClient() throws InvocationTargetException, NoSuchMethodException, IllegalAccessException {
+    public void testRegisterReplicationClient()
+            throws InvocationTargetException, NoSuchMethodException, IllegalAccessException {
         // Test registering client with null/empty client name
-        Assert.assertThrows(IllegalArgumentException.class, () -> new LogReplicationLogicalGroupClient(runtime, null));
-        Assert.assertThrows(IllegalArgumentException.class, () -> new LogReplicationLogicalGroupClient(runtime, ""));
+        Assert.assertThrows(IllegalArgumentException.class,
+                () -> new LogReplicationLogicalGroupClient(runtime, null));
+        Assert.assertThrows(IllegalArgumentException.class,
+                () -> new LogReplicationLogicalGroupClient(runtime, ""));
 
         // Check to see if client was registered from the @Before function
         final int expectedNumberRegisteredClients = 1;
@@ -93,12 +96,16 @@ public class LogReplicationLogicalGroupClientTest extends AbstractViewTest {
     @Test
     public void testAddDestination() {
         // Test adding a destination with null/empty logicalGroup
-        Assert.assertThrows(IllegalArgumentException.class, () -> client.addDestination("", "DESTINATION"));
-        Assert.assertThrows(IllegalArgumentException.class, () -> client.addDestination(null, "DESTINATION"));
+        Assert.assertThrows(IllegalArgumentException.class,
+                () -> client.addDestination("", "DESTINATION"));
+        Assert.assertThrows(IllegalArgumentException.class,
+                () -> client.addDestination(null, "DESTINATION"));
 
         // Test adding a destination with null/empty name
-        Assert.assertThrows(IllegalArgumentException.class, () -> client.addDestination("LOGICAL-GROUP", ""));
-        Assert.assertThrows(IllegalArgumentException.class, () -> client.addDestination("LOGICAL-GROUP", (String) null));
+        Assert.assertThrows(IllegalArgumentException.class,
+                () -> client.addDestination("LOGICAL-GROUP", ""));
+        Assert.assertThrows(IllegalArgumentException.class,
+                () -> client.addDestination("LOGICAL-GROUP", (String) null));
 
         // Test adding a destination
         final int expectedNumberDestinations = 1;
@@ -137,12 +144,16 @@ public class LogReplicationLogicalGroupClientTest extends AbstractViewTest {
     @Test
     public void testRemoveDestination() {
         // Test adding a destination with null/empty logicalGroup
-        Assert.assertThrows(IllegalArgumentException.class, () -> client.removeDestination("", "DESTINATION"));
-        Assert.assertThrows(IllegalArgumentException.class, () -> client.removeDestination(null, "DESTINATION"));
+        Assert.assertThrows(IllegalArgumentException.class,
+                () -> client.removeDestination("", "DESTINATION"));
+        Assert.assertThrows(IllegalArgumentException.class,
+                () -> client.removeDestination(null, "DESTINATION"));
 
         // Test adding a destination with null/empty name
-        Assert.assertThrows(IllegalArgumentException.class, () -> client.removeDestination("LOGICAL-GROUP", ""));
-        Assert.assertThrows(IllegalArgumentException.class, () -> client.removeDestination("LOGICAL-GROUP", (String) null));
+        Assert.assertThrows(IllegalArgumentException.class,
+                () -> client.removeDestination("LOGICAL-GROUP", ""));
+        Assert.assertThrows(IllegalArgumentException.class,
+                () -> client.removeDestination("LOGICAL-GROUP", (String) null));
 
         // Test add then remove, group should be deleted once empty
         final int expectedNumberRegisteredGroups = 0;
@@ -180,17 +191,23 @@ public class LogReplicationLogicalGroupClientTest extends AbstractViewTest {
     public void testAddListOfDestination() {
         // Test adding with request having a malformed logicalGroup
         final List<String> destinationsToAdd = Collections.singletonList("DESTINATION");
-        Assert.assertThrows(IllegalArgumentException.class, () -> client.addDestination("", destinationsToAdd));
-        Assert.assertThrows(IllegalArgumentException.class, () -> client.addDestination(null, destinationsToAdd));
+        Assert.assertThrows(IllegalArgumentException.class,
+                () -> client.addDestination("", destinationsToAdd));
+        Assert.assertThrows(IllegalArgumentException.class,
+                () -> client.addDestination(null, destinationsToAdd));
 
         // Test adding with request having a malformed destination
         final List<String> destinationsToAdd1 = Collections.singletonList("");
         final List<String> destinationsToAdd2 = Collections.singletonList(null);
         final List<String> destinationsToAdd3 = new ArrayList<>();
-        Assert.assertThrows(IllegalArgumentException.class, () -> client.addDestination("LOGICAL-GROUP", destinationsToAdd1));
-        Assert.assertThrows(IllegalArgumentException.class, () -> client.addDestination("LOGICAL-GROUP", destinationsToAdd2));
-        Assert.assertThrows(IllegalArgumentException.class, () -> client.addDestination("LOGICAL-GROUP", destinationsToAdd3));
-        Assert.assertThrows(IllegalArgumentException.class, () -> client.addDestination("LOGICAL-GROUP", (List<String>) null));
+        Assert.assertThrows(IllegalArgumentException.class,
+                () -> client.addDestination("LOGICAL-GROUP", destinationsToAdd1));
+        Assert.assertThrows(IllegalArgumentException.class,
+                () -> client.addDestination("LOGICAL-GROUP", destinationsToAdd2));
+        Assert.assertThrows(IllegalArgumentException.class,
+                () -> client.addDestination("LOGICAL-GROUP", destinationsToAdd3));
+        Assert.assertThrows(IllegalArgumentException.class,
+                () -> client.addDestination("LOGICAL-GROUP", (List<String>) null));
 
         // Test adding list of destinations that contain a duplicate, list gets de-duplicated and log warning here
         final int expectedNumberDestinations = 1;
@@ -227,17 +244,23 @@ public class LogReplicationLogicalGroupClientTest extends AbstractViewTest {
     public void testRemoveListOfDestinations() {
         // Test adding with request having a malformed logicalGroup
         final List<String> destinationsToRemove = Collections.singletonList("DESTINATION");
-        Assert.assertThrows(IllegalArgumentException.class, () -> client.removeDestination("", destinationsToRemove));
-        Assert.assertThrows(IllegalArgumentException.class, () -> client.removeDestination(null, destinationsToRemove));
+        Assert.assertThrows(IllegalArgumentException.class,
+                () -> client.removeDestination("", destinationsToRemove));
+        Assert.assertThrows(IllegalArgumentException.class,
+                () -> client.removeDestination(null, destinationsToRemove));
 
         // Test adding with request having a malformed destination
         final List<String> destinationsToRemove1 = Collections.singletonList("");
         final List<String> destinationsToRemove2 = Collections.singletonList(null);
         final List<String> destinationsToRemove3 = new ArrayList<>();
-        Assert.assertThrows(IllegalArgumentException.class, () -> client.removeDestination("LOGICAL-GROUP", destinationsToRemove1));
-        Assert.assertThrows(IllegalArgumentException.class, () -> client.removeDestination("LOGICAL-GROUP", destinationsToRemove2));
-        Assert.assertThrows(IllegalArgumentException.class, () -> client.removeDestination("LOGICAL-GROUP", destinationsToRemove3));
-        Assert.assertThrows(IllegalArgumentException.class, () -> client.removeDestination("LOGICAL-GROUP", (List<String>) null));
+        Assert.assertThrows(IllegalArgumentException.class,
+                () -> client.removeDestination("LOGICAL-GROUP", destinationsToRemove1));
+        Assert.assertThrows(IllegalArgumentException.class,
+                () -> client.removeDestination("LOGICAL-GROUP", destinationsToRemove2));
+        Assert.assertThrows(IllegalArgumentException.class,
+                () -> client.removeDestination("LOGICAL-GROUP", destinationsToRemove3));
+        Assert.assertThrows(IllegalArgumentException.class,
+                () -> client.removeDestination("LOGICAL-GROUP", (List<String>) null));
 
         // Test add then remove, group should be deleted once empty
         final int expectedNumberRegisteredGroups = 0;
@@ -276,8 +299,10 @@ public class LogReplicationLogicalGroupClientTest extends AbstractViewTest {
     @Test
     public void testGetDestinations() {
         // Test get destinations with null/empty group
-        Assert.assertThrows(IllegalArgumentException.class, () -> client.getDestinations(null));
-        Assert.assertThrows(IllegalArgumentException.class, () -> client.getDestinations(""));
+        Assert.assertThrows(IllegalArgumentException.class,
+                () -> client.getDestinations(null));
+        Assert.assertThrows(IllegalArgumentException.class,
+                () -> client.getDestinations(""));
 
         // Add destinations to get later
         client.addDestination("LOGICAL-GROUP", "DESTINATION");
@@ -289,5 +314,56 @@ public class LogReplicationLogicalGroupClientTest extends AbstractViewTest {
 
         // Test get destinations on an invalid group
         Assert.assertNull(client.getDestinations("LOGICAL-GROUP1"));
+    }
+
+    /**
+     * Test setting destinations for a logical group.
+     *
+     */
+    @Test
+    public void testSetDestinations() {
+        // Test setting with request having a malformed logicalGroup
+        final List<String> destinationsToSet = Collections.singletonList("DESTINATION");
+        Assert.assertThrows(IllegalArgumentException.class,
+                () -> client.setDestinations("", destinationsToSet));
+        Assert.assertThrows(IllegalArgumentException.class,
+                () -> client.setDestinations(null, destinationsToSet));
+
+        // Test setting  with request having a malformed destination
+        final List<String> destinationsToSet1 = Collections.singletonList("");
+        final List<String> destinationsToSet2 = Collections.singletonList(null);
+        final List<String> destinationsToSet3 = new ArrayList<>();
+        Assert.assertThrows(IllegalArgumentException.class,
+                () -> client.setDestinations("LOGICAL-GROUP", destinationsToSet1));
+        Assert.assertThrows(IllegalArgumentException.class,
+                () -> client.setDestinations("LOGICAL-GROUP", destinationsToSet2));
+        Assert.assertThrows(IllegalArgumentException.class,
+                () -> client.setDestinations("LOGICAL-GROUP", destinationsToSet3));
+        Assert.assertThrows(IllegalArgumentException.class,
+                () -> client.setDestinations("LOGICAL-GROUP", null));
+
+        // Test setting list of destinations that contain a duplicate, list gets de-duplicated and log warning here
+        final int expectedNumberDestinations = 1;
+        final String currentTableEntryKey = "LOGICAL-GROUP";
+        final List<String> destinationsToSet4 = Arrays.asList("DESTINATION", "DESTINATION");
+        client.setDestinations("LOGICAL-GROUP", destinationsToSet4);
+        Assert.assertEquals(expectedNumberDestinations, sourceMetadataTable.entryStream()
+                .filter(e -> e.getKey().getGroupName().equals(currentTableEntryKey))
+                .findFirst().get().getPayload().getDestinationIdsList().size());
+
+
+        // Test init and consequent overwrite of a new logical group using setDestinations
+        final List<String> destinationsToSet5 = Arrays.asList("DESTINATION", "DESTINATION1");
+        final List<String> destinationsToSet6 = Arrays.asList("DESTINATION", "DESTINATION1");
+        client.setDestinations("LOGICAL-GROUP1", destinationsToSet5);
+        Assert.assertEquals(new HashSet<>(destinationsToSet5),
+                new HashSet<>(client.getDestinations("LOGICAL-GROUP1")));
+        client.setDestinations("LOGICAL-GROUP1", destinationsToSet6);
+        Assert.assertEquals(new HashSet<>(destinationsToSet6),
+                new HashSet<>(client.getDestinations("LOGICAL-GROUP1")));
+
+        // Test that the overall table size is correct
+        final int expectedNumberRegisteredGroups = 2;
+        Assert.assertEquals(expectedNumberRegisteredGroups, sourceMetadataTable.count());
     }
 }
