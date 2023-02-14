@@ -84,7 +84,7 @@ public class StreamsLogEntryReader extends LogEntryReader {
     public StreamsLogEntryReader(CorfuRuntime runtime, LogReplicationSession replicationSession,
                                  LogReplicationContext replicationContext) {
         runtime.parseConfigurationString(runtime.getLayoutServers().get(0)).connect();
-        this.maxDataSizePerMsg = replicationContext.getConfigManager().getConfig().getMaxDataSizePerMsg();
+        this.maxDataSizePerMsg = replicationContext.getConfig(replicationSession).getMaxDataSizePerMsg();
         this.currentProcessedEntryMetadata = new StreamIteratorMetadata(Address.NON_ADDRESS, false);
         this.messageSizeDistributionSummary = configureMessageSizeDistributionSummary();
         this.deltaCounter = configureDeltaCounter();
@@ -103,10 +103,10 @@ public class StreamsLogEntryReader extends LogEntryReader {
 
     /**
      * Get streams to replicate from config and convert them into stream ids. This method will be invoked at
-     * constructor and when LogReplicationConfig is synced with registry table.
+     * constructor and when LogReplicationFullTableConfig is synced with registry table.
      */
     private void refreshStreamUUIDs() {
-        Set<String> streams = replicationContext.getConfig().getStreamsToReplicate();
+        Set<String> streams = replicationContext.getConfig(session).getStreamsToReplicate();
         streamUUIDs = new HashSet<>();
         for (String s : streams) {
             streamUUIDs.add(CorfuRuntime.getStreamID(s));
@@ -158,7 +158,7 @@ public class StreamsLogEntryReader extends LogEntryReader {
             return false;
         }
 
-        // It is possible that tables corresponding to some streams to replicate were not opened when LogReplicationConfig
+        // It is possible that tables corresponding to some streams to replicate were not opened when LogReplicationFullTableConfig
         // was initialized. So these streams will be missing from the list of streams to replicate. Check the registry
         // table and add them to the list in that case.
         if (!streamUUIDs.containsAll(txEntryStreamIds)) {

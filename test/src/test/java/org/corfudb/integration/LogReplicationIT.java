@@ -4,7 +4,7 @@ import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
-import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
+import org.corfudb.infrastructure.logreplication.config.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
@@ -33,7 +33,6 @@ import org.corfudb.runtime.collections.CorfuStoreEntry;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
-
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.util.Utils;
 import org.junit.Test;
@@ -1229,14 +1228,14 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(srcTestRuntime);
         LogReplicationUpgradeManager upgradeManager = new LogReplicationUpgradeManager(srcTestRuntime, grpcConfig);
+        LogReplicationContext context = new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT);
+        configManager.generateConfig(Collections.singleton(session));
 
         // This IT requires custom values to be set for the replication config.  Set these values so that the default
         // values are not used
-        configManager.getConfig().setMaxNumMsgPerBatch(BATCH_SIZE);
-        configManager.getConfig().setMaxMsgSize(SMALL_MSG_SIZE);
-        configManager.getConfig().setMaxDataSizePerMsg(SMALL_MSG_SIZE * LogReplicationConfig.DATA_FRACTION_PER_MSG / 100);
-
-        LogReplicationContext context = new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT);
+        context.getConfig(session).setMaxNumMsgPerBatch(BATCH_SIZE);
+        context.getConfig(session).setMaxMsgSize(SMALL_MSG_SIZE);
+        context.getConfig(session).setMaxDataSizePerMsg(SMALL_MSG_SIZE * LogReplicationConfig.DATA_FRACTION_PER_MSG / 100);
 
         // Data Sender
         sourceDataSender = new SourceForwardingDataSender(DESTINATION_ENDPOINT, testConfig, metadataManager,

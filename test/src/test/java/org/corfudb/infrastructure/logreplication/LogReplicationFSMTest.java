@@ -4,7 +4,9 @@ import static java.lang.Thread.sleep;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Observable;
 import java.util.Observer;
@@ -473,6 +475,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(runtime, null);
         LogReplicationUpgradeManager upgradeManager = new LogReplicationUpgradeManager(runtime, pluginConfigFilePath);
         LogReplicationSession session = DefaultClusterConfig.getSessions().get(0);
+        configManager.generateConfig(Collections.singleton(session));
 
         switch(readerImpl) {
             case EMPTY:

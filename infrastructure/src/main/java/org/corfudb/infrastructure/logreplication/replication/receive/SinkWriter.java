@@ -3,7 +3,9 @@ package org.corfudb.infrastructure.logreplication.replication.receive;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.logreplication.config.LogReplicationFullTableConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
+import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuRuntime;
@@ -29,6 +31,7 @@ public abstract class SinkWriter {
 
     final LogReplicationSession session;
 
+    // Replication context that provides configuration for LR in Source / Sink cluster.
     final LogReplicationContext replicationContext;
 
     // Limit the initialization of this class only to its children classes.
@@ -80,14 +83,20 @@ public abstract class SinkWriter {
     }
 
     /**
-     * Check if a stream id belongs to list of replicated streams to drop in LogReplicationConfig. If so, its entries
+     * Check if a stream id belongs to list of replicated streams to drop in LogReplicationFullTableConfig. If so, its entries
      * should be ignored by SnapshotWriter and LogEntryWriter.
      *
      * @param streamId ID of the stream whose entries are being applied by LR
      * @return True if the entries should be ignored.
      */
     boolean ignoreEntriesForStream(UUID streamId) {
-        return replicationContext.getConfig().getStreamsToDrop().contains(streamId);
+        if (session.getSubscriber().getModel().equals(LogReplication.ReplicationModel.FULL_TABLE)) {
+            return ((LogReplicationFullTableConfig) replicationContext.getConfig(session))
+                    .getStreamsToDrop().contains(streamId);
+        } else {
+            log.warn("Unexpected path for the sink writer of current replication session {}", session);
+        }
+        return false;
     }
 
     /**
@@ -99,7 +108,13 @@ public abstract class SinkWriter {
      * @return True if the entry should be ignored.
      */
     boolean ignoreEntryForRegistryTable(UUID streamId, CorfuRecord<TableDescriptors, TableMetadata> record) {
-        return replicationContext.getConfig().getStreamsToDrop().contains(streamId) ||
-            !record.getMetadata().getTableOptions().getIsFederated();
+        if (session.getSubscriber().getModel().equals(LogReplication.ReplicationModel.FULL_TABLE)) {
+            return ((LogReplicationFullTableConfig) replicationContext.getConfig(session))
+                    .getStreamsToDrop().contains(streamId) ||
+                    !record.getMetadata().getTableOptions().getIsFederated();
+        } else {
+            log.warn("Unexpected path for the sink writer of current replication session {}", session);
+        }
+        return false;
     }
 }
