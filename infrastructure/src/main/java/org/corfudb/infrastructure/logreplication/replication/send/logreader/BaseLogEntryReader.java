@@ -66,14 +66,14 @@ public abstract class BaseLogEntryReader extends LogEntryReader {
 
     private StreamIteratorMetadata currentProcessedEntryMetadata;
 
-    private LogReplication.LogReplicationSession session;
+    protected LogReplication.LogReplicationSession session;
 
     protected LogReplicationContext replicationContext;
 
     public BaseLogEntryReader(CorfuRuntime runtime, LogReplication.LogReplicationSession replicationSession,
                               LogReplicationContext replicationContext) {
         runtime.parseConfigurationString(runtime.getLayoutServers().get(0)).connect();
-        this.maxDataSizePerMsg = replicationContext.getConfigManager().getConfig().getMaxDataSizePerMsg();
+        this.maxDataSizePerMsg = replicationContext.getConfig(replicationSession).getMaxDataSizePerMsg();
         this.currentProcessedEntryMetadata = new StreamIteratorMetadata(Address.NON_ADDRESS, false);
         this.messageSizeDistributionSummary = configureMessageSizeDistributionSummary();
         this.deltaCounter = configureDeltaCounter();
@@ -84,7 +84,9 @@ public abstract class BaseLogEntryReader extends LogEntryReader {
 
         // Get UUIDs for streams to replicate
         refreshStreamUUIDs();
-        log.info("Total of {} streams to replicate at initialization.", this.streamUUIDs.size());
+        log.info("Total of {} streams to replicate at initialization. Streams to replicate={}, Session={}",
+                this.streamUUIDs.size(), replicationContext.getConfig(session).getStreamsToReplicate(),
+                TextFormat.shortDebugString(session));
 
         //create an opaque stream for transaction stream
         modelBasedOpaqueStream = new ModelBasedOpaqueStream(runtime);

@@ -77,6 +77,7 @@ public class LogReplicationClientConfigListener extends StreamListenerResumeOrFu
      */
     public void start() {
         CorfuStoreMetadata.Timestamp timestamp = configManager.preprocessAndGetTail();
+        configManager.generateConfig(sessionManager.getSessions());
 
         log.info("Start log replication listener for client config tables from {}", timestamp);
         corfuStore.subscribeListener(this, CORFU_SYSTEM_NAMESPACE, CLIENT_CONFIG_TAG, tablesOfInterest, timestamp);
@@ -142,6 +143,8 @@ public class LogReplicationClientConfigListener extends StreamListenerResumeOrFu
      */
     @Override
     protected CorfuStoreMetadata.Timestamp performFullSync() {
-        return configManager.onClientListenerResume();
+        CorfuStoreMetadata.Timestamp timestamp = configManager.onClientListenerResume();
+        configManager.generateConfig(sessionManager.getSessions());
+        return timestamp;
     }
 }

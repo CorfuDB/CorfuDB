@@ -18,14 +18,14 @@ public class LogReplicationLogicalGroupConfig extends LogReplicationConfig {
      */
     @Getter
     @Setter
-    private Set<String> logicalGroups;
+    private Map<String, Set<String>> logicalGroupToStreams;
 
     public LogReplicationLogicalGroupConfig(@NonNull LogReplicationSession session,
                                             @NonNull Set<String> streamsToReplicate,
                                             @NonNull Map<UUID, List<UUID>> dataStreamToTagsMap,
                                             ServerContext serverContext,
-                                            @NonNull Set<String> logicalGroups) {
+                                            @NonNull Map<String, Set<String>> logicalGroupToStreams) {
         super(session, streamsToReplicate, dataStreamToTagsMap, serverContext);
-        this.logicalGroups = logicalGroups;
+        this.logicalGroupToStreams = logicalGroupToStreams;
     }
 }

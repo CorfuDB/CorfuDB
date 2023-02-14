@@ -74,6 +74,9 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
     private static final String TEST_LOCAL_CLUSTER_ID = "local_cluster";
     private static final String TEST_LOCAL_ENDPOINT_PREFIX = "test:";
 
+    private static final String LOCAL_SOURCE_CLUSTER_ID = "456e4567-e89b-12d3-a456-556642440001";
+
+
     // This semaphore is used to block until the triggering event causes the transition to a new state
     private final Semaphore transitionAvailable = new Semaphore(1, true);
     // We observe the transition counter to know that a transition occurred.
@@ -472,7 +475,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         String fullyQualifiedStreamName = TableRegistry.getFullyQualifiedTableName(TEST_NAMESPACE, TEST_STREAM_NAME);
         LogEntryReader logEntryReader = new TestLogEntryReader();
 
-        LogReplicationConfigManager configManager = new LogReplicationConfigManager(runtime, null);
+        LogReplicationConfigManager configManager = new LogReplicationConfigManager(runtime, LOCAL_SOURCE_CLUSTER_ID);
         LogReplicationUpgradeManager upgradeManager = new LogReplicationUpgradeManager(runtime, pluginConfigFilePath);
         LogReplicationSession session = DefaultClusterConfig.getSessions().get(0);
         configManager.generateConfig(Collections.singleton(session));
