@@ -818,4 +818,9 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
     public Set<LogReplicationSession> getOutgoingSessions() {
         return sessionManager.getOutgoingSessions();
     }
+
+    @Override
+    public Set<LogReplicationSession> getIncomingSessions() {
+        return sessionManager.getIncomingSessions();
+    }
 }
