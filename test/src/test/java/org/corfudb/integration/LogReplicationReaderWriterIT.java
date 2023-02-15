@@ -43,6 +43,7 @@ import org.junit.Test;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -225,8 +226,9 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
     public static void readSnapshotMsgs(List<LogReplicationEntryMsg> msgQ, CorfuRuntime rt, boolean blockOnSem) {
         int cnt = 0;
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(rt);
-        LogReplicationContext context = new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT);
+        configManager.generateConfig(Collections.singleton(getDefaultSession()));
 
+        LogReplicationContext context = new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT);
         StreamsSnapshotReader reader = new StreamsSnapshotReader(rt, getDefaultSession(), context);
 
         reader.reset(rt.getAddressSpaceView().getLogTail());
@@ -260,6 +262,7 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
         logReplicationMetadataManager.addSession(getDefaultSession(), 0, true);
 
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(rt);
+        configManager.generateConfig(Collections.singleton(getDefaultSession()));
 
         StreamsSnapshotWriter writer = new StreamsSnapshotWriter(rt, logReplicationMetadataManager,
             getDefaultSession(), new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT));
@@ -293,6 +296,7 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
                                         boolean blockOnce) throws TrimmedException {
 
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(rt);
+        configManager.generateConfig(Collections.singleton(getDefaultSession()));
 
         StreamsLogEntryReader reader = new StreamsLogEntryReader(rt, getDefaultSession(),
                 new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT));
@@ -329,6 +333,7 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
         logReplicationMetadataManager.addSession(getDefaultSession(),0, true);
 
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(rt);
+        configManager.generateConfig(Collections.singleton(getDefaultSession()));
 
         LogEntryWriter writer = new LogEntryWriter(logReplicationMetadataManager, getDefaultSession(),
                 new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT));
