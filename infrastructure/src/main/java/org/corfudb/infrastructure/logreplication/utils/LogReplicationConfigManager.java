@@ -81,6 +81,7 @@ public class LogReplicationConfigManager {
 
     // Map from a logical group to all the Sinks it is targeting. Note that we maintain two bidirectional maps
     // to facilitate the detection of Sink removal case.
+    @Getter
     private final Map<String, Set<String>> groupSinksMap = new ConcurrentHashMap<>();
 
     // In-memory list of registry table entries for generating configs
