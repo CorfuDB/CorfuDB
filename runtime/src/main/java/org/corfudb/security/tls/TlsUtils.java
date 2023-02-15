@@ -156,7 +156,7 @@ public class TlsUtils {
         @ToString
         class TrustStoreConfig implements CertStoreConfig {
             public static final Path DEFAULT_DISABLE_CERT_EXPIRY_CHECK_FILE = Paths.get(
-                    "/", "config", "corfu", "DISABLE_CERT_EXPIRY_CHECK"
+                    "/", "usr", "share", "corfu", "conf", "DISABLE_CERT_EXPIRY_CHECK"
             );
 
             /**
