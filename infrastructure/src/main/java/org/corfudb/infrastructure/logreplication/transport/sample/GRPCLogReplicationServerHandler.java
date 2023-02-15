@@ -30,7 +30,7 @@ public class GRPCLogReplicationServerHandler extends LogReplicationChannelGrpc.L
     /*
      * Map of session to SINK Router (internal to Corfu)
      */
-    final Map<LogReplicationSession, LogReplicationSinkServerRouter> sessionToSinkServer;
+    final Map<LogReplicationSession, LogReplicationSinkServerRouter> sessionToSinkRouter;
 
     /*
      * Map of session to SOURCE Router (internal to Corfu)
@@ -52,12 +52,15 @@ public class GRPCLogReplicationServerHandler extends LogReplicationChannelGrpc.L
      */
     Map<Pair<UuidMsg, Long>, StreamObserver<ResponseMsg>> replicationStreamObserverMap;
 
+    /*
+     * Map of session to StreamObserver to send requests to the clients.
+     */
     Map<LogReplicationSession, StreamObserver<RequestMsg>> sessionToStreamObserverRequestMap;
 
     public GRPCLogReplicationServerHandler(Map<LogReplicationSession, LogReplicationSourceServerRouter> sessionToSourceServer,
-                                           Map<LogReplicationSession, LogReplicationSinkServerRouter> sessionToSinkServer) {
+                                           Map<LogReplicationSession, LogReplicationSinkServerRouter> sessionToSinkRouter) {
         this.sessionToSourceServer = sessionToSourceServer;
-        this.sessionToSinkServer = sessionToSinkServer;
+        this.sessionToSinkRouter = sessionToSinkRouter;
         this.streamObserverMap = new ConcurrentHashMap<>();
         this.replicationStreamObserverMap = new ConcurrentHashMap<>();
         this.sessionToStreamObserverRequestMap = new ConcurrentHashMap<>();
@@ -68,8 +71,8 @@ public class GRPCLogReplicationServerHandler extends LogReplicationChannelGrpc.L
         log.info("Received[{}]: {}", request.getHeader().getRequestId(),
                 request.getPayload().getPayloadCase().name());
         LogReplicationSession session = request.getHeader().getSession();
-        if (sessionToSinkServer.containsKey(session)) {
-            sessionToSinkServer.get(session).receive(request);
+        if (sessionToSinkRouter.containsKey(session)) {
+            sessionToSinkRouter.get(session).receive(request);
             streamObserverMap.put(Pair.of(request.getHeader().getClusterId(), request.getHeader().getRequestId()),
                     responseObserver);
         } else {
@@ -83,8 +86,8 @@ public class GRPCLogReplicationServerHandler extends LogReplicationChannelGrpc.L
                 request.getPayload().getPayloadCase().name());
 
         LogReplicationSession session = request.getHeader().getSession();
-        if(sessionToSinkServer.containsKey(session)) {
-            sessionToSinkServer.get(session).receive(request);
+        if(sessionToSinkRouter.containsKey(session)) {
+            sessionToSinkRouter.get(session).receive(request);
         } else if(sessionToSourceServer.containsKey(session)) {
             sessionToSourceServer.get(session).receive(request);
         } else {
@@ -116,8 +119,8 @@ public class GRPCLogReplicationServerHandler extends LogReplicationChannelGrpc.L
                 // Forward the received message to the router
                 LogReplicationSession session = replicationCorfuMessage.getHeader().getSession();
 
-                if(sessionToSinkServer.containsKey(session)) {
-                    sessionToSinkServer.get(session).receive(replicationCorfuMessage);
+                if(sessionToSinkRouter.containsKey(session)) {
+                    sessionToSinkRouter.get(session).receive(replicationCorfuMessage);
                 } else if(sessionToSourceServer.containsKey(session)) {
                     sessionToSourceServer.get(session).receive(replicationCorfuMessage);
                 }
@@ -222,7 +225,6 @@ public class GRPCLogReplicationServerHandler extends LogReplicationChannelGrpc.L
 
     public void send(RequestMsg msg) {
 
-        // Case: message to send is an ACK (async observers)
         if (msg.getPayload().getPayloadCase().equals(CorfuMessage.RequestPayloadMsg.PayloadCase.LR_METADATA_REQUEST) ||
                 msg.getPayload().getPayloadCase().equals(CorfuMessage.RequestPayloadMsg.PayloadCase.LR_ENTRY)) {
             try {
@@ -251,7 +253,7 @@ public class GRPCLogReplicationServerHandler extends LogReplicationChannelGrpc.L
     public void updateRouterInfo(Map<LogReplicationSession, LogReplicationSourceServerRouter> sesionToSourceServerRouter,
                                  Map<LogReplicationSession, LogReplicationSinkServerRouter> sessionToSinkServerRouter) {
         this.sessionToSourceServer.putAll(sesionToSourceServerRouter);
-        this.sessionToSinkServer.putAll(sessionToSinkServerRouter);
+        this.sessionToSinkRouter.putAll(sessionToSinkServerRouter);
 
     }
 

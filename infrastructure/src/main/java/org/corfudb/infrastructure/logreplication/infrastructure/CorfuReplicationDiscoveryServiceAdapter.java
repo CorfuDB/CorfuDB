@@ -38,4 +38,10 @@ public interface CorfuReplicationDiscoveryServiceAdapter {
      */
     Set<LogReplicationSession> getOutgoingSessions();
 
+    /**
+     * Get outgoing sessions
+     * @return a set of sessions where the local cluster is a SINK
+     */
+    Set<LogReplicationSession> getIncomingSessions();
+
 }
