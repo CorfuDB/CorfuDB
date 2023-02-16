@@ -955,7 +955,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         throw new RetryExhaustedException("Failed to fetch local node id within provided period");
     }
 
-    private boolean setupLocalNodeId() {
+    private void setupLocalNodeId() {
         // Retrieve system-specific node id
         LogReplicationPluginConfig config = new LogReplicationPluginConfig(serverContext.getPluginConfigFilePath());
         String nodeIdFilePath = config.getNodeIdFilePath();
