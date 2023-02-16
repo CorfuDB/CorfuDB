@@ -54,6 +54,7 @@ import java.util.Properties;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -85,6 +86,10 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      * Fraction of Lease Duration for Lease Monitoring
      */
     private static final int MONITOR_LEASE_FRACTION = 10;
+
+    private static final int CONFIG_RETRIES = 10;
+
+    private static final int CONFIG_RETRY_DURATION_SECONDS = 30;
 
     /**
      * Bookkeeping the topologyConfigId, version number and other log replication state information.
@@ -295,9 +300,9 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      * (streams to replicate) required by an active and standby site before starting
      * log replication.
      */
-    private void startDiscovery() {
+    private void startDiscovery() throws InterruptedException {
         log.info("Start Log Replication Discovery Service");
-        setupLocalNodeId();
+        setupLocalNodeIdWithRetries();
         connectToClusterManager();
         fetchTopologyFromClusterManager();
         processDiscoveredTopology(topologyDescriptor, true);
@@ -936,7 +941,21 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         }
     }
 
-    private void setupLocalNodeId() {
+    private void setupLocalNodeIdWithRetries() throws InterruptedException {
+        for (int i = 0; i < CONFIG_RETRIES; i++) {
+            try {
+                setupLocalNodeId();
+            }
+            catch (IllegalStateException ise) {
+                TimeUnit.SECONDS.sleep(CONFIG_RETRY_DURATION_SECONDS);
+                continue;
+            }
+            return;
+        }
+        throw new RetryExhaustedException("Failed to fetch local node id within provided period");
+    }
+
+    private boolean setupLocalNodeId() {
         // Retrieve system-specific node id
         LogReplicationPluginConfig config = new LogReplicationPluginConfig(serverContext.getPluginConfigFilePath());
         String nodeIdFilePath = config.getNodeIdFilePath();
