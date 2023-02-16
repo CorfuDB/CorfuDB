@@ -431,7 +431,9 @@ public class CorfuReplicationMultiSourceSinkIT extends AbstractIT {
 
     @After
     public void tearDown() throws Exception {
-        unsubscribeListeners();
+        if (!dataListeners.isEmpty() && !replicationStatusListeners.isEmpty()) {
+            unsubscribeListeners();
+        }
 
         for (CorfuRuntime runtime : sourceRuntimes) {
             runtime.shutdown();
