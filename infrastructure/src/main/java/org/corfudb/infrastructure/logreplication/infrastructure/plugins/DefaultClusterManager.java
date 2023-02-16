@@ -27,6 +27,7 @@ import org.corfudb.runtime.view.Address;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -38,7 +39,6 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.stream.Collectors;
 
-import static org.corfudb.common.util.URLUtils.getVersionFormattedHostAddress;
 
 /**
  * This class extends CorfuReplicationClusterManagerAdapter, provides topology config API
@@ -63,6 +63,7 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
     public static final ClusterUuidMsg TP_SINGLE_SOURCE_SINK = ClusterUuidMsg.newBuilder().setLsb(7L).setMsb(7L).build();
     public static final ClusterUuidMsg TP_MULTI_SINK = ClusterUuidMsg.newBuilder().setLsb(8L).setMsb(8L).build();
     public static final ClusterUuidMsg TP_MULTI_SOURCE = ClusterUuidMsg.newBuilder().setLsb(9L).setMsb(9L).build();
+    public static final ClusterUuidMsg TP_MIXED_MODEL = ClusterUuidMsg.newBuilder().setLsb(10L).setMsb(10L).build();
 
     @Getter
     private long configId;
@@ -366,6 +367,42 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
         waitForTopologyInit.countDown();
     }
 
+    private void createMultiSinkMixedModelTopology() {
+        topologyConfig = initConfig();
+        Map<ClusterDescriptor, Set<LogReplication.ReplicationModel>> remoteSourceToReplicationModels = new HashMap<>();
+        Map<ClusterDescriptor, Set<LogReplication.ReplicationModel>> remoteSinkToReplicationModels = new HashMap<>();
+        Set<ClusterDescriptor> connectionEndPoints = new HashSet<>();
+
+        ClusterDescriptor localCluster = findLocalCluster();
+        if (DefaultClusterConfig.getSourceClusterIds().contains(localCluster.getClusterId())) {
+            remoteSinkToReplicationModels.put(topologyConfig.getRemoteSinkClusters().values().stream()
+                    .filter(cluster -> cluster.getClusterId().equals(DefaultClusterConfig.getSinkClusterIds().get(0)))
+                    .findFirst().get(),
+                    addModel(Collections.singletonList(LogReplication.ReplicationModel.FULL_TABLE)));
+            remoteSinkToReplicationModels.put(topologyConfig.getRemoteSinkClusters().values().stream()
+                            .filter(cluster -> cluster.getClusterId().equals(DefaultClusterConfig.getSinkClusterIds().get(1)))
+                            .findFirst().get(),
+                    addModel(Collections.singletonList(LogReplication.ReplicationModel.LOGICAL_GROUPS)));
+            remoteSinkToReplicationModels.put(topologyConfig.getRemoteSinkClusters().values().stream()
+                            .filter(cluster -> cluster.getClusterId().equals(DefaultClusterConfig.getSinkClusterIds().get(2)))
+                            .findFirst().get(),
+                    addModel(Collections.singletonList(LogReplication.ReplicationModel.LOGICAL_GROUPS)));
+        } else {
+            // One Source cluster that supports both FULL_TABLE and LOGICAL_GROUPS replication model
+            remoteSourceToReplicationModels.put(topologyConfig.getRemoteSourceClusters().values().stream()
+                    .filter(cluster -> cluster.getClusterId().equals(DefaultClusterConfig.getSourceClusterIds().get(0)))
+                    .findFirst().get(),
+                    addModel(Arrays.asList(LogReplication.ReplicationModel.FULL_TABLE,
+                            LogReplication.ReplicationModel.LOGICAL_GROUPS)));
+        }
+        log.info("new Topology single-source-multi-sink with mixed models: source: {} sink: {} connectionEndpoints: {}",
+                remoteSourceToReplicationModels, remoteSinkToReplicationModels, connectionEndPoints);
+
+        topologyConfig = new TopologyDescriptor(++configId, remoteSinkToReplicationModels, remoteSourceToReplicationModels,
+                topologyConfig.getAllClustersInTopology(), connectionEndPoints, localNodeId);
+        waitForTopologyInit.countDown();
+    }
+
 
     /**
      * Create a new topology config, which changes one of the sink as the source,
@@ -649,6 +686,8 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
                     clusterManager.createSingleSourceMultiSinkTopology();
                 } else if (entry.getKey().equals(TP_MULTI_SOURCE)) {
                     clusterManager.createMultiSourceSingleSinkTopology();
+                } else if (entry.getKey().equals(TP_MIXED_MODEL)) {
+                    clusterManager.createMultiSinkMixedModelTopology();
                 }
             } else {
                 log.info("onNext :: operation={}, key={}, payload={}, metadata={}", entry.getOperation().name(),
