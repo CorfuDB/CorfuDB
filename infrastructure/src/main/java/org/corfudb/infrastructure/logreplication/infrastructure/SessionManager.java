@@ -67,6 +67,8 @@ public class SessionManager {
 
     private final LogReplicationConfigManager configManager;
 
+    private final LogReplicationClientConfigListener clientConfigListener;
+
     @Getter
     private final Set<LogReplicationSession> sessions = new CopyOnWriteArraySet<>();
 
@@ -81,8 +83,6 @@ public class SessionManager {
 
     @Getter
     private final LogReplicationMetadataManager metadataManager;
-
-    private final LogReplicationUpgradeManager upgradeManager;
 
     @Getter
     private final LogReplicationContext replicationContext;
@@ -120,7 +120,8 @@ public class SessionManager {
         this.metadataManager = new LogReplicationMetadataManager(corfuRuntime, topology.getTopologyConfigId());
         this.configManager = new LogReplicationConfigManager(runtime, serverContext,
                 topology.getLocalClusterDescriptor().getClusterId());
-        this.upgradeManager = upgradeManager;
+        this.clientConfigListener = new LogReplicationClientConfigListener(this,
+                configManager, corfuStore);
         this.replicationContext = new LogReplicationContext(configManager, topology.getTopologyConfigId(),
                 localCorfuEndpoint);
 
@@ -148,9 +149,17 @@ public class SessionManager {
         this.localCorfuEndpoint = lrNodeLocator.toEndpointUrl();
         this.metadataManager = new LogReplicationMetadataManager(corfuRuntime, topology.getTopologyConfigId());
         this.configManager = new LogReplicationConfigManager(runtime, topology.getLocalClusterDescriptor().getClusterId());
-        this.upgradeManager = null;
+        this.clientConfigListener = new LogReplicationClientConfigListener(this,
+                configManager, corfuStore);
         this.routerManager = new LogReplicationRouterManager(topology);
         this.replicationContext = new LogReplicationContext(configManager, topology.getTopologyConfigId(), localCorfuEndpoint);
+    }
+
+    /**
+     * Start client config listener from discovery service upon leadership acquired.
+     */
+    public void startClientConfigListener() {
+        this.clientConfigListener.start();
     }
 
     /**
@@ -237,6 +246,7 @@ public class SessionManager {
      *     Sink side: assigned grpc stream for subscriber registration
      */
     private void createSessions() {
+        newSessionsDiscovered.clear();
         for (ReplicationSubscriber subscriber : configManager.getRegisteredSubscribers()) {
             createOutgoingSessionsBySubscriber(subscriber);
             createIncomingSessionsBySubscriber(subscriber);
@@ -268,6 +278,7 @@ public class SessionManager {
                     txn.commit();
                     sessions.addAll(sessionsToAdd);
                     outgoingSessions.addAll(sessionsToAdd);
+                    newSessionsDiscovered.addAll(sessionsToAdd);
                     logNewlyAddedSessionInfo(sessionsToAdd);
                     return null;
                 } catch (TransactionAbortedException e) {
@@ -309,6 +320,7 @@ public class SessionManager {
                     txn.commit();
                     sessions.addAll(sessionsToAdd);
                     incomingSessions.addAll(sessionsToAdd);
+                    newSessionsDiscovered.addAll(sessionsToAdd);
                     logNewlyAddedSessionInfo(sessionsToAdd);
                     return null;
                 } catch (TransactionAbortedException e) {
@@ -511,6 +523,8 @@ public class SessionManager {
         if (replicationManager != null) {
             replicationManager.stop();
         }
+
+        clientConfigListener.stop();
     }
 
     /**
