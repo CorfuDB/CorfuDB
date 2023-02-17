@@ -23,9 +23,9 @@ import java.util.concurrent.CompletableFuture;
 public abstract class IServerChannelAdapter {
 
     @Getter
-    private final Map<LogReplicationSession, LogReplicationSourceServerRouter> incomingSessionToSourceServerRouter;
+    private final Map<LogReplicationSession, LogReplicationSourceServerRouter> sessionToSourceServerRouter;
     @Getter
-    private final Map<LogReplicationSession, LogReplicationSinkServerRouter> incomingSessionToSinkServerRouter;
+    private final Map<LogReplicationSession, LogReplicationSinkServerRouter> sessionToSinkServerRouter;
 
     @Getter
     private final ServerContext serverContext;
@@ -34,17 +34,17 @@ public abstract class IServerChannelAdapter {
      * Constructs a new {@link IServerChannelAdapter}
      *
      * @param serverContext
-     * @param incomingSessionToSourceServerRouter map of session-> source-server router. Using this, the adapter forwards the
+     * @param sessionToSourceServerRouter map of session-> source-server router. Using this, the adapter forwards the
      *                                   msg to the correct source router.
-     * @param incomingSessionToSinkServerRouter map of session-> sink-server router. Using this, the adapter forwards the
+     * @param sessionToSinkServerRouter map of session-> sink-server router. Using this, the adapter forwards the
      *                                  msg to the correct source router.
      */
     public IServerChannelAdapter(ServerContext serverContext,
-                                 Map<LogReplicationSession, LogReplicationSourceServerRouter> incomingSessionToSourceServerRouter,
-                                 Map<LogReplicationSession, LogReplicationSinkServerRouter> incomingSessionToSinkServerRouter) {
+                                 Map<LogReplicationSession, LogReplicationSourceServerRouter> sessionToSourceServerRouter,
+                                 Map<LogReplicationSession, LogReplicationSinkServerRouter> sessionToSinkServerRouter) {
         this.serverContext = serverContext;
-        this.incomingSessionToSourceServerRouter = incomingSessionToSourceServerRouter;
-        this.incomingSessionToSinkServerRouter = incomingSessionToSinkServerRouter;
+        this.sessionToSourceServerRouter = sessionToSourceServerRouter;
+        this.sessionToSinkServerRouter = sessionToSinkServerRouter;
     }
 
     public abstract void updateRouters(Map<LogReplicationSession, LogReplicationSourceServerRouter> sesionToSourceServerRouter,
@@ -73,10 +73,10 @@ public abstract class IServerChannelAdapter {
      */
     public void receive(CorfuMessage.ResponseMsg msg) {
         LogReplicationSession session = msg.getHeader().getSession();
-        if(incomingSessionToSourceServerRouter.containsKey(session)) {
-            incomingSessionToSourceServerRouter.get(session).receive(msg);
-        } else if(incomingSessionToSinkServerRouter.containsKey(session)){
-            incomingSessionToSinkServerRouter.get(session).receive(msg);
+        if(sessionToSourceServerRouter.containsKey(session)) {
+            sessionToSourceServerRouter.get(session).receive(msg);
+        } else if(sessionToSinkServerRouter.containsKey(session)){
+            sessionToSinkServerRouter.get(session).receive(msg);
         }
     }
 
@@ -86,10 +86,10 @@ public abstract class IServerChannelAdapter {
      */
     public void receive(CorfuMessage.RequestMsg msg) {
         LogReplicationSession session = msg.getHeader().getSession();
-        if(incomingSessionToSourceServerRouter.containsKey(session)) {
-            incomingSessionToSourceServerRouter.get(session).receive(msg);
-        } else if(incomingSessionToSinkServerRouter.containsKey(session)){
-            incomingSessionToSinkServerRouter.get(session).receive(msg);
+        if(sessionToSourceServerRouter.containsKey(session)) {
+            sessionToSourceServerRouter.get(session).receive(msg);
+        } else if(sessionToSinkServerRouter.containsKey(session)){
+            sessionToSinkServerRouter.get(session).receive(msg);
         }
     }
 

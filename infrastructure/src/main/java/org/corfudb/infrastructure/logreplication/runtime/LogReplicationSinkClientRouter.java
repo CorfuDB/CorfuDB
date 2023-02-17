@@ -59,12 +59,12 @@ public class LogReplicationSinkClientRouter extends LogReplicationSinkServerRout
     /**
      * The clients registered to this router.
      */
-    public final List<IClient> clientList;
+    private final List<IClient> clientList;
 
     /**
      * Whether or not this router is shutdown.
      */
-    public volatile boolean shutdown;
+    private volatile boolean shutdown;
 
     /**
      * A {@link CompletableFuture} which is completed when a connection,
@@ -79,19 +79,19 @@ public class LogReplicationSinkClientRouter extends LogReplicationSinkServerRout
      */
     @Getter
     @SuppressWarnings("checkstyle:abbreviation")
-    public AtomicLong requestID;
+    private AtomicLong requestID;
 
     /**
      * Sync call response timeout (milliseconds).
      */
     @Getter
     @Setter
-    public long timeoutResponse;
+    private long timeoutResponse;
 
     /**
      * The outstanding requests on this router.
      */
-    public final Map<Long, CompletableFuture> outstandingRequests;
+    private final Map<Long, CompletableFuture> outstandingRequests;
 
     /**
      * Remote cluster's clusterDescriptor
@@ -110,20 +110,26 @@ public class LogReplicationSinkClientRouter extends LogReplicationSinkServerRout
      * Adapter to the channel implementation
      */
     @Getter
-    IClientChannelAdapter channelAdapter;
+    private IClientChannelAdapter channelAdapter;
 
-    final String pluginFilePath;
+    /**
+     * File path having plugin config
+     */
+    private final String pluginFilePath;
 
     /**
      * Session to the remote cluster/endpoint
      */
-    LogReplicationSession session;
+    private LogReplicationSession session;
 
     /**
      * Triggers leadership request and create bidirectional streams to remote endpoints
      */
     private final SinkVerifyRemoteLeader verifyLeadership;
 
+    /**
+     * Server that processes the lr requests.
+     */
     private LogReplicationServer lrServer;
 
 
@@ -132,18 +138,26 @@ public class LogReplicationSinkClientRouter extends LogReplicationSinkServerRout
      * Log Replication Client Constructor
      *
      * @param remoteCluster the remote source cluster
-     * @param localClusterId local cluster ID
+     *
      * @param session replication session between current and remote cluster
      */
-
-    public LogReplicationSinkClientRouter(ClusterDescriptor remoteCluster, String localClusterId,
+    /**
+     * Log Replication Client Constructor
+     *
+     * @param remoteCluster the remote source cluster
+     * @param pluginFilePath file path having plugin config
+     * @param timeoutResponse response timeout
+     * @param session replication session between current and remote cluster
+     * @param serverMap Map having BaseServer and LogReplicationServer
+     */
+    public LogReplicationSinkClientRouter(ClusterDescriptor remoteCluster,
                                             String pluginFilePath, long timeoutResponse, LogReplicationSession session,
                                           Map<Class, AbstractServer> serverMap) {
         super(serverMap);
         this.lrServer = (LogReplicationServer) serverMap.get(LogReplicationServer.class);
         this.timeoutResponse = timeoutResponse;
         this.remoteClusterDescriptor = remoteCluster;
-        this.localClusterId = localClusterId;
+        this.localClusterId = session.getSinkClusterId();
 
         this.clientList = new ArrayList<>();
         this.requestID = new AtomicLong();
