@@ -37,8 +37,10 @@ import org.corfudb.utils.lock.states.LockState;
 import javax.annotation.Nonnull;
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileReader;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.time.Duration;
@@ -46,9 +48,11 @@ import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Properties;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -75,6 +79,10 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
      * Fraction of Lease Duration for Lease Renewal
      */
     private static final int RENEWAL_LEASE_FRACTION = 4;
+
+    private static final int CONFIG_RETRIES = 10;
+
+    private static final int CONFIG_RETRY_DURATION_SECONDS = 30;
 
     /**
      * Fraction of Lease Duration for Lease Monitoring
@@ -217,8 +225,8 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         try {
             log.info("Start Log Replication Discovery Service");
 
+            setupLocalNodeIdWithRetries();
             fetchTopology();
-            this.localNodeId = clusterManagerAdapter.getLocalNodeId();
             processDiscoveredTopology(topologyDescriptor, true);
 
             while (shouldRun) {
@@ -793,6 +801,41 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         lockAcquireSample.ifPresent(LongTaskTimer.Sample::stop);
     }
 
+    private void setLocalNodeId() {
+        // Retrieve system-specific node id
+        LogReplicationPluginConfig config = new LogReplicationPluginConfig(serverContext.getPluginConfigFilePath());
+        String nodeIdFilePath = config.getNodeIdFilePath();
+
+        // TODO[V2]: this code should come from plugin
+        if (nodeIdFilePath != null) {
+            File nodeIdFile = new File(nodeIdFilePath);
+            try (BufferedReader bufferedReader = new BufferedReader(new FileReader(nodeIdFile))) {
+                String line = bufferedReader.readLine();
+                localNodeId = line.split("=")[1].trim().toLowerCase();
+                log.info("Local node id={}", localNodeId);
+            } catch (IOException e) {
+                log.error("setupLocalNodeId failed", e);
+                throw new IllegalStateException(e.getCause());
+            }
+        } else {
+            log.error("setupLocalNodeId failed, because nodeId file path is missing!");
+            DefaultClusterConfig defaultClusterConfig = new DefaultClusterConfig();
+
+            // For testing purpose, it uses the default host to assign node id
+            if (getLocalHost().equals(defaultClusterConfig.getDefaultHost())) {
+                localNodeId = defaultClusterConfig.getDefaultNodeId(localEndpoint);
+
+                if (localNodeId == null) {
+                    throw new IllegalStateException("SetupLocalNodeId failed for testing");
+                }
+
+                log.info("Default node id={} for testing", localNodeId);
+            } else {
+                throw new IllegalArgumentException("NodeId file path is missing");
+            }
+        }
+    }
+
     @Override
     public Set<LogReplicationSession> getOutgoingSessions() {
         return sessionManager.getOutgoingSessions();
@@ -801,5 +844,40 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
     @Override
     public Set<LogReplicationSession> getIncomingSessions() {
         return sessionManager.getIncomingSessions();
+    }
+
+    private Optional<String> getCorfuSaaSEndpoint() {
+        final String pluginConfigFilePath = serverContext.getPluginConfigFilePath();
+        if (pluginConfigFilePath != null) {
+            return extractEndpoint(pluginConfigFilePath);
+        }
+        log.warn("No plugin path found");
+        return Optional.empty();
+    }
+
+    private Optional<String> extractEndpoint(String path) {
+        try (InputStream input = new FileInputStream(path)) {
+            Properties prop = new Properties();
+            prop.load(input);
+            String endpoint = prop.getProperty("saas_endpoint");
+            return Optional.of(endpoint);
+        } catch (IOException e) {
+            log.warn("Error extracting saas endpoint");
+            return Optional.empty();
+        }
+    }
+
+    private void setupLocalNodeIdWithRetries() throws InterruptedException {
+        for (int i = 0; i < CONFIG_RETRIES; i++) {
+            try {
+                setLocalNodeId();
+            }
+            catch (IllegalStateException ise) {
+                TimeUnit.SECONDS.sleep(CONFIG_RETRY_DURATION_SECONDS);
+                continue;
+            }
+            return;
+        }
+        throw new RetryExhaustedException("Failed to fetch local node id within provided period");
     }
 }
