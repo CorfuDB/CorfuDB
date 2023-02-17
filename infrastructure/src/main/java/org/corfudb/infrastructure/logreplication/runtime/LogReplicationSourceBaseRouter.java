@@ -39,7 +39,7 @@ import static org.corfudb.protocols.service.CorfuProtocolMessage.getDefaultProto
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getRequestMsg;
 
 @Slf4j
-public class LogReplicationBaseSourceRouter implements IClientRouter {
+public class LogReplicationSourceBaseRouter implements IClientRouter {
 
     public static String REMOTE_LEADER = "REMOTE_LEADER";
 
@@ -51,12 +51,12 @@ public class LogReplicationBaseSourceRouter implements IClientRouter {
     /**
      * The clients registered to this router.
      */
-    public final List<IClient> clientList;
+    private final List<IClient> clientList;
 
     /**
      * Whether or not this router is shutdown.
      */
-    public volatile boolean shutdown;
+    private volatile boolean shutdown;
 
     /**
      * A {@link CompletableFuture} which is completed when a connection,
@@ -71,19 +71,19 @@ public class LogReplicationBaseSourceRouter implements IClientRouter {
      */
     @Getter
     @SuppressWarnings("checkstyle:abbreviation")
-    public AtomicLong requestID;
+    private AtomicLong requestID;
 
     /**
      * Sync call response timeout (milliseconds).
      */
     @Getter
     @Setter
-    public long timeoutResponse;
+    private long timeoutResponse;
 
     /**
      * The outstanding requests on this router.
      */
-    public final Map<Long, CompletableFuture> outstandingRequests;
+    protected final Map<Long, CompletableFuture> outstandingRequests;
 
     /**
      * Runtime FSM, to insert connectivity events
@@ -101,18 +101,31 @@ public class LogReplicationBaseSourceRouter implements IClientRouter {
      */
     protected final CorfuReplicationManager replicationManager;
 
+    /**
+     * local cluster ID
+     */
     protected String localClusterId;
 
+    /**
+     * If the current cluster is the connection starter
+     */
     protected boolean isConnectionInitiator;
 
+    /**
+     * Client Transport adapter
+     */
     @Setter
     protected IClientChannelAdapter clientChannelAdapter;
 
+    /**
+     * Server transport adapter
+     */
     @Setter
     protected IServerChannelAdapter serverChannelAdapter;
 
-    protected final String pluginFilePath;
-
+    /**
+     * session to which the router belongs.
+     */
     @Getter
     LogReplicationSession session;
 
@@ -120,20 +133,18 @@ public class LogReplicationBaseSourceRouter implements IClientRouter {
      * Log Replication Client Constructor
      *
      * @param remoteCluster the remote source cluster
-     * @param localClusterId local cluster ID
      * @param parameters runtime parameters (including connection settings)
      * @param replicationManager replicationManager to start FSM
      * @param session replication session between current and remote cluster
      */
-    public LogReplicationBaseSourceRouter(ClusterDescriptor remoteCluster, String localClusterId,
+    public LogReplicationSourceBaseRouter(ClusterDescriptor remoteCluster,
                                           LogReplicationRuntimeParameters parameters, CorfuReplicationManager replicationManager,
                                           LogReplicationSession session, boolean isConnectionInitiator) {
         this.timeoutResponse = parameters.getRequestTimeout().toMillis();
         this.remoteClusterDescriptor = remoteCluster;
-        this.localClusterId = localClusterId;
+        this.localClusterId = session.getSourceClusterId();
         this.replicationManager = replicationManager;
         this.session = session;
-        this.pluginFilePath = parameters.getPluginFilePath();
 
         this.handlerMap = new ConcurrentHashMap<>();
         this.clientList = new ArrayList<>();
