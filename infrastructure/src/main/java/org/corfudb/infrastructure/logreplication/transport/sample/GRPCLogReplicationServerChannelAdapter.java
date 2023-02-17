@@ -52,8 +52,8 @@ public class GRPCLogReplicationServerChannelAdapter extends IServerChannelAdapte
     @Override
     public void updateRouters(Map<LogReplicationSession, LogReplicationSourceServerRouter> sessionToSourceServerRouter,
                               Map<LogReplicationSession, LogReplicationSinkServerRouter> sessionToSinkServerRouter) {
-        this.getIncomingSessionToSourceServerRouter().putAll(sessionToSourceServerRouter);
-        this.getIncomingSessionToSinkServerRouter().putAll(sessionToSinkServerRouter);
+        this.getSessionToSourceServerRouter().putAll(sessionToSourceServerRouter);
+        this.getSessionToSinkServerRouter().putAll(sessionToSinkServerRouter);
         this.service.updateRouterInfo(sessionToSourceServerRouter, sessionToSinkServerRouter);
     }
 

@@ -70,7 +70,7 @@ public class LogReplicationClientTest {
 //        doReturn(mockedSessionToFsm).when(replicationManager).getRemoteSesionToRuntime();
         doReturn(PLUGIN_PATH).when(lrRuntimeParameters).getPluginFilePath();
         doReturn(UUID.randomUUID()).when(lrRuntimeParameters).getClientId();
-        lrClient = spy(new LogReplicationSourceClientRouter(sampleCluster, SAMPLE_CLUSTER, lrRuntimeParameters, replicationManager,session));
+        lrClient = spy(new LogReplicationSourceClientRouter(sampleCluster, lrRuntimeParameters, replicationManager,session));
         lrClient.setRuntimeFSM(lrFsm);
 
         lrClientHandler = spy(new LogReplicationHandler(session));
