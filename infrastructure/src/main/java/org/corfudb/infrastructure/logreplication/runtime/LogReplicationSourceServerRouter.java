@@ -24,7 +24,7 @@ import java.util.Map;
 import java.util.Optional;
 
 @Slf4j
-public class LogReplicationSourceServerRouter extends LogReplicationBaseSourceRouter implements IServerRouter {
+public class LogReplicationSourceServerRouter extends LogReplicationSourceBaseRouter implements IServerRouter {
 
     /**
      * The epoch of this router. This is managed by the base server implementation.
@@ -41,10 +41,10 @@ public class LogReplicationSourceServerRouter extends LogReplicationBaseSourceRo
     /** Construct a new {@link LogReplicationSourceServerRouter}.
      *
      */
-    public LogReplicationSourceServerRouter(ClusterDescriptor remoteCluster, String localClusterId,
+    public LogReplicationSourceServerRouter(ClusterDescriptor remoteCluster,
                                             LogReplicationRuntimeParameters parameters, CorfuReplicationManager replicationManager,
                                             LogReplicationSession session, Map<Class, AbstractServer> serverMap) {
-        super(remoteCluster, localClusterId, parameters, replicationManager, session, false);
+        super(remoteCluster, parameters, replicationManager, session, false);
         this.serverEpoch = ((BaseServer) serverMap.get(BaseServer.class)).serverContext.getServerEpoch();
         this.msgHandlerMap = new EnumMap<>(CorfuMessage.RequestPayloadMsg.PayloadCase.class);
 

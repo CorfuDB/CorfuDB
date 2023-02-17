@@ -3,7 +3,8 @@ package org.corfudb.infrastructure.logreplication.transport.sample;
 import io.grpc.stub.StreamObserver;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.tuple.Pair;
-import org.corfudb.infrastructure.logreplication.LogReplicationChannelGrpc;
+import org.corfudb.infrastructure.logreplication.LogReplicationGrpc;
+import org.corfudb.infrastructure.logreplication.LogReplicationGrpc;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSinkServerRouter;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSourceServerRouter;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
@@ -25,7 +26,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * @author annym 05/15/20
  */
 @Slf4j
-public class GRPCLogReplicationServerHandler extends LogReplicationChannelGrpc.LogReplicationChannelImplBase {
+public class GRPCLogReplicationServerHandler extends LogReplicationGrpc.LogReplicationImplBase {
 
     /*
      * Map of session to SINK Router (internal to Corfu)

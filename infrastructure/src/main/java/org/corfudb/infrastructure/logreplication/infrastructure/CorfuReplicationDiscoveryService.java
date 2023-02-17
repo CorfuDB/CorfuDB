@@ -173,7 +173,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
      * When a non-leader node is called to do the enforcedSnapshotSync, it will write the event to
      * the shared event-table and the leader node will be notified to do the work.
      */
-    private LogReplicationEventListener logReplicationEventListener = null;
+    private LogReplicationEventListener logReplicationEventListener;
 
     private final Map<Class, AbstractServer> serverMap = new HashMap<>();
 

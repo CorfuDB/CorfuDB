@@ -22,22 +22,24 @@ import java.util.Optional;
  * Log Replication Server communication.
  */
 @Slf4j
-public class LogReplicationSourceClientRouter extends LogReplicationBaseSourceRouter implements LogReplicationClientRouter {
+public class LogReplicationSourceClientRouter extends LogReplicationSourceBaseRouter implements LogReplicationClientRouter {
+
+    private final String pluginFilePath;
 
 
     /**
      * Log Replication Client Constructor
      *
      * @param remoteCluster the remote source cluster
-     * @param localClusterId local cluster ID
      * @param parameters runtime parameters (including connection settings)
      * @param replicationManager replicationManager to start FSM
      * @param session replication session between current and remote cluster
      */
-    public LogReplicationSourceClientRouter(ClusterDescriptor remoteCluster, String localClusterId,
+    public LogReplicationSourceClientRouter(ClusterDescriptor remoteCluster,
                                             LogReplicationRuntimeParameters parameters, CorfuReplicationManager replicationManager,
                                             LogReplicationSession session) {
-        super(remoteCluster, localClusterId, parameters, replicationManager, session, true);
+        super(remoteCluster, parameters, replicationManager, session, true);
+        pluginFilePath = parameters.getPluginFilePath();
     }
 
 
