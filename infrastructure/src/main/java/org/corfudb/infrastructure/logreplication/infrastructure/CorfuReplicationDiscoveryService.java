@@ -420,6 +420,10 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
 
         setupLogReplicationServer();
 
+        if (isSource()) {
+            sessionManager.startClientConfigListener();
+        }
+
         sessionManager.startConnectionReceivingRouters(isSource(), isSink(), serverMap, interClusterServerNode);
         sessionManager.connectToRemoteClusters(serverMap);
 
