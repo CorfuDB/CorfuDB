@@ -352,7 +352,7 @@ public class LogReplicationConfigManager {
         }
         // TODO (V2): Currently we add a default subscriber for logical group use case instead of listening on client
         //  registration. Subscriber should be added upon registration after grpc stream for session creation is added.
-//        registeredSubscribers.add(subscriber);
+        registeredSubscribers.add(subscriber);
     }
 
 
@@ -382,10 +382,11 @@ public class LogReplicationConfigManager {
         Set<String> impactedSinks = Stream.concat(recordedSinks.stream(), updatedSinks.stream())
                 .filter(sink -> !recordedSinks.contains(sink) || !updatedSinks.contains(sink))
                 .collect(Collectors.toSet());
+        // Update groupSinksMap first and then generate config, as config generation relies on groupSinksMap as well.
+        groupSinksMap.put(logicalGroup, updatedSinks);
         generateConfig(sessionToConfigMap.keySet().stream()
                 .filter(session -> impactedSinks.contains(session.getSinkClusterId()))
                 .collect(Collectors.toSet()));
-        groupSinksMap.put(logicalGroup, updatedSinks);
 
         log.info("Updated group to sinks map, group={}, updatedSinks={}", logicalGroup, updatedSinks);
 

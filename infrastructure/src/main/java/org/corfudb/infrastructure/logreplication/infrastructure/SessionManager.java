@@ -2,6 +2,7 @@ package org.corfudb.infrastructure.logreplication.infrastructure;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Sets;
+import com.google.protobuf.TextFormat;
 import com.google.protobuf.Timestamp;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -248,6 +249,8 @@ public class SessionManager {
                             if (!sessions.contains(session)) {
                                 sessionsToAdd.add(session);
                                 metadataManager.addSession(txn, session, topology.getTopologyConfigId(), false);
+                            } else {
+                                log.warn("Trying to create an existed session: {}", TextFormat.shortDebugString(session));
                             }
                         }
                     }
