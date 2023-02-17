@@ -2,7 +2,6 @@ package org.corfudb.infrastructure.logreplication.runtime;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.Getter;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
@@ -144,7 +143,7 @@ public class CorfuLogReplicationRuntime {
      */
     private final LinkedBlockingQueue<LogReplicationRuntimeEvent> eventQueue = new LinkedBlockingQueue<>();
 
-    private final LogReplicationBaseSourceRouter router;
+    private final LogReplicationSourceBaseRouter router;
 
     @Getter
     private final LogReplicationSourceManager sourceManager;
@@ -166,7 +165,7 @@ public class CorfuLogReplicationRuntime {
     public CorfuLogReplicationRuntime(LogReplicationRuntimeParameters parameters,
                                       LogReplicationMetadataManager metadataManager, LogReplicationUpgradeManager upgradeManager,
                                       LogReplicationSession session, LogReplicationContext replicationContext,
-                                      LogReplicationBaseSourceRouter router, boolean isConnectionStarter) {
+                                      LogReplicationSourceBaseRouter router, boolean isConnectionStarter) {
         this.remoteClusterId = session.getSinkClusterId();
         this.session = session;
         this.router = router;

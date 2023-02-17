@@ -12,9 +12,9 @@ import io.grpc.stub.StreamObserver;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.tuple.Pair;
-import org.corfudb.infrastructure.logreplication.LogReplicationChannelGrpc;
-import org.corfudb.infrastructure.logreplication.LogReplicationChannelGrpc.LogReplicationChannelBlockingStub;
-import org.corfudb.infrastructure.logreplication.LogReplicationChannelGrpc.LogReplicationChannelStub;
+import org.corfudb.infrastructure.logreplication.LogReplicationGrpc;
+import org.corfudb.infrastructure.logreplication.LogReplicationGrpc.LogReplicationBlockingStub;
+import org.corfudb.infrastructure.logreplication.LogReplicationGrpc.LogReplicationStub;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.infrastructure.logreplication.infrastructure.NodeDescriptor;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSinkClientRouter;
@@ -58,18 +58,17 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
 
     private final int MAX_STREAMS_IN_CHANNEL = 100;
 
-    private static Map<ManagedChannel, Set<LogReplicationSession>> channelToStreamsMap = new HashMap<>();
+    private static final Map<ManagedChannel, Set<LogReplicationSession>> channelToStreamsMap = new HashMap<>();
     private static final ReentrantLock lock = new ReentrantLock();
 
-    private final Map<String, Set<ManagedChannel>> nodeIdToChannelMap;
-    private final Map<LogReplicationSession, LogReplicationChannelBlockingStub> blockingStubMap;
-    private final Map<LogReplicationSession, LogReplicationChannelStub> asyncStubMap;
+    private static final Map<String, Set<ManagedChannel>> nodeIdToChannelMap = new HashMap<>();
+    private final Map<LogReplicationSession, LogReplicationBlockingStub> sessionToBlockingStubMap;
+    private final Map<LogReplicationSession, LogReplicationStub> sessionToAsyncStubMap;
     private final ExecutorService executorService;
 
-    private final ConcurrentMap<LogReplicationSession, StreamObserver<RequestMsg>> requestObserverMap;
     private final ConcurrentMap<LogReplicationSession, StreamObserver<ResponseMsg>> responseObserverMap;
     private final ConcurrentMap<Pair<LogReplicationSession, Long>, StreamObserver<RequestMsg>> replicationReqObserverMap;
-    private final ConcurrentMap<Pair<LogReplicationSession, Long>, StreamObserver<ResponseMsg>> replicationResObserverMap;
+
 
     /** A {@link CompletableFuture} which is completed when a connection to a remote leader is set,
      * and  messages can be sent to the remote node.
@@ -86,15 +85,12 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
             LogReplicationSourceClientRouter sourceRouter, LogReplicationSinkClientRouter sinkRouter ) {
         super(localClusterId, remoteClusterDescriptor, sourceRouter, sinkRouter);
 
-        this.nodeIdToChannelMap = new HashMap<>();
-        this.blockingStubMap = new HashMap<>();
-        this.asyncStubMap = new HashMap<>();
+        this.sessionToBlockingStubMap = new HashMap<>();
+        this.sessionToAsyncStubMap = new HashMap<>();
         this.executorService = Executors.newSingleThreadExecutor();
         this.connectionFuture = new CompletableFuture<>();
-        this.requestObserverMap = new ConcurrentHashMap<>();
         this.responseObserverMap = new ConcurrentHashMap<>();
         this.replicationReqObserverMap = new ConcurrentHashMap<>();
-        this.replicationResObserverMap = new ConcurrentHashMap<>();
         context = Context.current();
     }
 
@@ -124,8 +120,8 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
                 channelToStreamsMap.get(channel).add(session);
                 lock.unlock();
 
-                blockingStubMap.put(session, LogReplicationChannelGrpc.newBlockingStub(channel));
-                asyncStubMap.put(session, LogReplicationChannelGrpc.newStub(channel));
+                sessionToBlockingStubMap.put(session, LogReplicationGrpc.newBlockingStub(channel));
+                sessionToAsyncStubMap.put(session, LogReplicationGrpc.newStub(channel));
                 onConnectionUp(node.getNodeId());
             } catch (Exception e) {
                 log.error("Error: {} :::: {}", e.getCause(), e.getStackTrace());
@@ -137,7 +133,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
     private Pair<Boolean, ManagedChannel> canReuseChannel(String nodeId) {
         if(!nodeIdToChannelMap.isEmpty()) {
             Set<ManagedChannel> channels = nodeIdToChannelMap.get(nodeId);
-            if (!channels.isEmpty()) {
+            if (channels != null && !channels.isEmpty()) {
                 for (ManagedChannel channel : channels) {
                     if (channelToStreamsMap.get(channel).size() < MAX_STREAMS_IN_CHANNEL && !channel.getState(false).equals(ConnectivityState.SHUTDOWN)) {
                         return Pair.of(true, channel);
@@ -186,8 +182,8 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
                 channelToStreamsMap.get(channel).add(session);
                 lock.unlock();
 
-                blockingStubMap.put(session, LogReplicationChannelGrpc.newBlockingStub(channel));
-                asyncStubMap.put(session, LogReplicationChannelGrpc.newStub(channel));
+                sessionToBlockingStubMap.put(session, LogReplicationGrpc.newBlockingStub(channel));
+                sessionToAsyncStubMap.put(session, LogReplicationGrpc.newStub(channel));
                 onConnectionUp(nodeId);
             } catch (Exception e) {
                 log.error("Error: {} :::: {}", e.getCause(), e.getStackTrace());
@@ -254,10 +250,8 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
                 }
             };
 
-            requestObserverMap.put(sessionMsg, requestObserver);
-
-            if(asyncStubMap.containsKey(sessionMsg)) {
-                StreamObserver<ResponseMsg> responseObserver = asyncStubMap.get(sessionMsg).subscribeAndStartreplication(requestObserver);
+            if(sessionToAsyncStubMap.containsKey(sessionMsg)) {
+                StreamObserver<ResponseMsg> responseObserver = sessionToAsyncStubMap.get(sessionMsg).subscribeAndStartreplication(requestObserver);
                 responseObserverMap.put(sessionMsg, responseObserver);
             } else {
                 log.error("No stub found for remote node {}@{}. Message dropped type={}",
@@ -266,18 +260,15 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
             }
         }
 
-        if (requestObserverMap.containsKey(sessionMsg)) {
-            // Send negotiation and log replication ACKs across channel
-            responseObserverMap.get(sessionMsg).onNext(response);
-        }
+        responseObserverMap.get(sessionMsg).onNext(response);
     }
 
     private void queryLeadership(String nodeId, RequestMsg request) {
         LogReplicationSession session = request.getHeader().getSession();
         try {
             log.info("queryLeadership for session {}", session);
-            if (blockingStubMap.containsKey(session)) {
-                ResponseMsg response = blockingStubMap.get(session).withWaitForReady().queryLeadership(request);
+            if (sessionToBlockingStubMap.containsKey(session)) {
+                ResponseMsg response = sessionToBlockingStubMap.get(session).withWaitForReady().queryLeadership(request);
                 receive(response);
             } else {
                 log.warn("Stub not found for session {}. Dropping message of type {}",
@@ -294,8 +285,8 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
     private void requestMetadata(String nodeId, RequestMsg request) {
         LogReplicationSession session = request.getHeader().getSession();
         try {
-            if (blockingStubMap.containsKey(session)) {
-                ResponseMsg response = blockingStubMap.get(session).withWaitForReady().negotiate(request);
+            if (sessionToBlockingStubMap.containsKey(session)) {
+                ResponseMsg response = sessionToBlockingStubMap.get(session).withWaitForReady().negotiate(request);
                 receive(response);
             } else {
                 log.warn("Stub not found for remote endpoint {}. Dropping message of type {}",
@@ -341,10 +332,9 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
                     replicationReqObserverMap.remove(Pair.of(sessionMsg, requestId));
                 }
             };
-            replicationResObserverMap.put(Pair.of(sessionMsg, requestId), responseObserver);
 
-            if(asyncStubMap.containsKey(sessionMsg)) {
-                StreamObserver<RequestMsg> requestObserver = asyncStubMap.get(sessionMsg).replicate(responseObserver);
+            if(sessionToAsyncStubMap.containsKey(sessionMsg)) {
+                StreamObserver<RequestMsg> requestObserver = sessionToAsyncStubMap.get(sessionMsg).replicate(responseObserver);
                 replicationReqObserverMap.put(Pair.of(sessionMsg, requestId), requestObserver);
             } else {
                 log.error("No stub found for remote node {}@{}. Message dropped type={}",
@@ -355,10 +345,9 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
 
         log.info("Send replication entry: {} to node {}@{}", request.getHeader().getRequestId(),
                 nodeId, getRemoteClusterDescriptor().getEndpointByNodeId(nodeId));
-        if (replicationResObserverMap.containsKey(Pair.of(sessionMsg, requestId))) {
-            // Send log replication entries across channel
-            replicationReqObserverMap.get(Pair.of(sessionMsg, requestId)).onNext(request);
-        }
+
+        // Send log replication entries across channel
+        replicationReqObserverMap.get(Pair.of(sessionMsg, requestId)).onNext(request);
     }
 
     @Override
@@ -385,7 +374,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
         // No-op
     }
 
-    private void onServiceUnavailable(Throwable t, String nodeId, LogReplicationSession sessionMsg) {
+    private synchronized void onServiceUnavailable(Throwable t, String nodeId, LogReplicationSession sessionMsg) {
         Set<ManagedChannel> allChannelsToNode = nodeIdToChannelMap.get(nodeId);
 
         allChannelsToNode.stream().forEach(channel -> {

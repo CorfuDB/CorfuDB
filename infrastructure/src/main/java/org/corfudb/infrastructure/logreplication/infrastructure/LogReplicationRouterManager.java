@@ -4,7 +4,7 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.AbstractServer;
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
-import org.corfudb.infrastructure.logreplication.runtime.LogReplicationBaseSourceRouter;
+import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSourceBaseRouter;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationHandler;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSinkClientRouter;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSinkServerRouter;
@@ -18,7 +18,7 @@ import java.util.Map;
 @Slf4j
 public class LogReplicationRouterManager {
 
-    private final Map<LogReplicationSession, LogReplicationBaseSourceRouter> replicationSessionToRouterSource;
+    private final Map<LogReplicationSession, LogReplicationSourceBaseRouter> replicationSessionToRouterSource;
     private final Map<LogReplicationSession, LogReplicationSinkServerRouter> replicationSessionToRouterSink;
 
     @Setter
@@ -34,7 +34,7 @@ public class LogReplicationRouterManager {
      * Creates a source router if not already created:
      * A source-client router if cluster is connection starter else a source-server router
      */
-    public LogReplicationBaseSourceRouter getOrCreateSourceRouter(LogReplicationSession session,
+    public LogReplicationSourceBaseRouter getOrCreateSourceRouter(LogReplicationSession session,
                                                                   Map<Class, AbstractServer> serverMap,
                                                                   boolean isConnectionStarter,
                                                                   LogReplicationRuntimeParameters params,
@@ -43,15 +43,11 @@ public class LogReplicationRouterManager {
         if (replicationSessionToRouterSource.containsKey(session)) {
             return replicationSessionToRouterSource.get(session);
         }
-        LogReplicationBaseSourceRouter router;
+        LogReplicationSourceBaseRouter router;
         if (isConnectionStarter) {
-            router = new LogReplicationSourceClientRouter(remote,
-                    topology.getLocalClusterDescriptor().getClusterId(), params, replicationManager,
-                    session);
+            router = new LogReplicationSourceClientRouter(remote, params, replicationManager, session);
         } else {
-            router = new LogReplicationSourceServerRouter(remote,
-                    topology.getLocalClusterDescriptor().getClusterId(), params, replicationManager,
-                    session, serverMap);
+            router = new LogReplicationSourceServerRouter(remote, params, replicationManager, session, serverMap);
         }
         replicationSessionToRouterSource.put(session, router);
         return router;
@@ -72,7 +68,7 @@ public class LogReplicationRouterManager {
         ClusterDescriptor remoteSource = topology.getRemoteSourceClusters().get(session.getSourceClusterId());
         if(isConnectionStarter) {
             LogReplicationSinkClientRouter sinkClientRouter = new LogReplicationSinkClientRouter(remoteSource,
-                    topology.getLocalClusterDescriptor().getClusterId(), pluginFilePath, timeoutResponse, session, serverMap);
+                    pluginFilePath, timeoutResponse, session, serverMap);
             sinkClientRouter.addClient(new LogReplicationHandler(session));
             router = sinkClientRouter;
         } else {

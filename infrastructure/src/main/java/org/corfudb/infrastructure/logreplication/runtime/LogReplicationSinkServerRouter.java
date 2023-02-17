@@ -31,11 +31,11 @@ import java.util.Optional;
 @Slf4j
 public class LogReplicationSinkServerRouter implements IServerRouter {
 
+    /**
+     * Server transport adapter
+     */
     @Getter
     private IServerChannelAdapter serverAdapter;
-
-    @Setter
-    IClientChannelAdapter clientAdapter;
 
     /**
      * This map stores the mapping from message type to netty server handler.
