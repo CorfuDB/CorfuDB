@@ -366,7 +366,10 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         if (topology.getLocalClusterDescriptor() != null && topology.getLocalNodeDescriptor() != null) {
             if (update) {
                 topologyDescriptor = topology;
-                localCorfuEndpoint = getCorfuEndpoint(getLocalHost(), topology.getLocalClusterDescriptor().getCorfuPort());
+                int port = 9000;
+                localCorfuEndpoint = getCorfuSaaSEndpoint()
+                        .orElseGet(() ->
+                                getCorfuEndpoint(getLocalHost(), port));
             }
             return true;
         }
