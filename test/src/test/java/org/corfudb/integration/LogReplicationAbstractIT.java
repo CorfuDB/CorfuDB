@@ -418,7 +418,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
         }
     }
 
-    class SnapshotSyncPluginListener implements StreamListener {
+    static class SnapshotSyncPluginListener implements StreamListener {
 
         @Getter
         Set<String> updates = new HashSet<>();
