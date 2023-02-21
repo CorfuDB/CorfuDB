@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.SessionManager;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager;
+import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultSnapshotSyncPlugin;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatus;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SyncStatus;
@@ -12,7 +13,10 @@ import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.Sy
 import org.corfudb.infrastructure.logreplication.proto.Sample;
 import org.corfudb.infrastructure.logreplication.proto.Sample.StringKey;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
+import org.corfudb.integration.LogReplicationAbstractIT.SnapshotSyncPluginListener;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.ExampleSchemas;
+import org.corfudb.runtime.ExampleSchemas.SnapshotSyncPluginValue;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.LogReplication.ReplicationSubscriber;
 import org.corfudb.runtime.LogReplicationLogicalGroupClient;
@@ -23,15 +27,18 @@ import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.test.SampleSchema.SampleGroupMsgA;
 import org.corfudb.test.SampleSchema.SampleGroupMsgB;
 import org.corfudb.test.SampleSchema.ValueFieldTagOne;
+import org.junit.Before;
 import org.junit.Test;
 
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.REPLICATION_STATUS_TABLE_NAME;
+import static org.junit.Assert.fail;
 
 
 @Slf4j
@@ -76,11 +83,14 @@ public class LogReplicationLogicalGroupIT extends CorfuReplicationMultiSourceSin
 
     private final List<Table<StringKey, SampleGroupMsgB, Message>> sinkTablesGroupB = new ArrayList<>();
 
-    @Test
-    public void testLogicalGroupReplicationEndToEnd() throws Exception {
+    @Before
+    public void setUp() throws Exception {
         setUp(numSource, numSink, DefaultClusterManager.TP_MIXED_MODEL);
         openLogReplicationStatusTable();
+    }
 
+    @Test
+    public void testLogicalGroupReplicationEndToEnd() throws Exception {
         // Register client and add group destinations
         CorfuRuntime clientRuntime = getClientRuntime();
         LogReplicationLogicalGroupClient logicalGroupClient =
@@ -135,8 +145,80 @@ public class LogReplicationLogicalGroupIT extends CorfuReplicationMultiSourceSin
     }
 
     @Test
-    public void testGroupDestinationChange() {
-        // TODO
+    public void testGroupDestinationChange() throws Exception {
+        // Register client and add group destinations
+        CorfuRuntime clientRuntime = getClientRuntime();
+        LogReplicationLogicalGroupClient logicalGroupClient =
+                new LogReplicationLogicalGroupClient(clientRuntime, SAMPLE_CLIENT_NAME);
+        logicalGroupClient.addDestination(GROUP_A, DefaultClusterConfig.getSinkClusterIds().get(SINK2_INDEX));
+        logicalGroupClient.addDestination(GROUP_B, DefaultClusterConfig.getSinkClusterIds().get(SINK3_INDEX));
+
+        // Open tables for replication on Source side
+        int numTables = 2;
+        openFederatedTable(numTables, sourceCorfuStores.get(SOURCE_INDEX), srcFederatedTables);
+        openGroupATable(numTables, sourceCorfuStores.get(SOURCE_INDEX), srcTablesGroupA);
+        openGroupBTable(numTables, sourceCorfuStores.get(SOURCE_INDEX), srcTablesGroupB);
+        openFederatedTable(numTables, sinkCorfuStores.get(SINK1_INDEX), sinkFederatedTables);
+        openGroupATable(numTables, sinkCorfuStores.get(SINK2_INDEX), sinkTablesGroupA);
+        openGroupBTable(numTables, sinkCorfuStores.get(SINK3_INDEX), sinkTablesGroupB);
+
+        // Subscribe snapshot plugin listener on each Sink cluster, Sink1 will only have 1 snapshot sync while Sink2
+        // and Sink3 will have 2 snapshot sync for each, where 1 snapshot sync will update the listener twice.
+        CountDownLatch latchSink1 = new CountDownLatch(2);
+        SnapshotSyncPluginListener snapshotSyncPluginListenerSink1 = new SnapshotSyncPluginListener(latchSink1);
+        subscribeToSnapshotSyncPluginTable(sinkCorfuStores.get(SINK1_INDEX), snapshotSyncPluginListenerSink1);
+
+        CountDownLatch latchSink2 = new CountDownLatch(4);
+        SnapshotSyncPluginListener snapshotSyncPluginListenerSink2 = new SnapshotSyncPluginListener(latchSink2);
+        subscribeToSnapshotSyncPluginTable(sinkCorfuStores.get(SINK2_INDEX), snapshotSyncPluginListenerSink2);
+
+        CountDownLatch latchSink3 = new CountDownLatch(4);
+        SnapshotSyncPluginListener snapshotSyncPluginListenerSink3 = new SnapshotSyncPluginListener(latchSink3);
+        subscribeToSnapshotSyncPluginTable(sinkCorfuStores.get(SINK3_INDEX), snapshotSyncPluginListenerSink3);
+
+        // Write data to Source side tables
+        writeDataOnSource(0, NUM_WRITES);
+
+        // Start log replication for all sessions
+        startReplicationServers();
+
+        // Verify all the sessions' snapshot sync completed
+        verifyInLogEntrySyncState(SINK1_INDEX, SessionManager.getDefaultSubscriber());
+        // TODO: should be replaced by real client name after Sink session creation workflow is introduced
+        verifyInLogEntrySyncState(SINK2_INDEX, SessionManager.getDefaultLogicalGroupSubscriber());
+        verifyInLogEntrySyncState(SINK3_INDEX, SessionManager.getDefaultLogicalGroupSubscriber());
+
+        // Verify tables' content on Sink side
+        verifyFederatedTableDataOnSink(sinkCorfuStores.get(SINK1_INDEX), NUM_WRITES, sinkFederatedTables);
+        verifyGroupATableDataOnSink(sinkCorfuStores.get(SINK2_INDEX), NUM_WRITES, sinkTablesGroupA);
+        verifyGroupBTableDataOnSink(sinkCorfuStores.get(SINK3_INDEX), NUM_WRITES, sinkTablesGroupB);
+
+        // Add groupA to Sink3 and verify the groupA tables' data is successfully replicated to Sink3.
+        logicalGroupClient.addDestination(GROUP_A, DefaultClusterConfig.getSinkClusterIds().get(SINK3_INDEX));
+        List<Table<StringKey, SampleGroupMsgA, Message>> sinkTablesGroupAOnSink3 = new ArrayList<>();
+        openGroupATable(numTables, sinkCorfuStores.get(SINK3_INDEX), sinkTablesGroupAOnSink3);
+        verifyGroupATableDataOnSink(sinkCorfuStores.get(SINK3_INDEX), NUM_WRITES, sinkTablesGroupAOnSink3);
+
+        // Write more data for log entry sync
+        writeDataOnSource(NUM_WRITES, NUM_WRITES);
+
+        // Verify tables' content on Sink side
+        int targetWrites = 2 * NUM_WRITES;
+        verifyFederatedTableDataOnSink(sinkCorfuStores.get(SINK1_INDEX), targetWrites, sinkFederatedTables);
+        verifyGroupATableDataOnSink(sinkCorfuStores.get(SINK2_INDEX), targetWrites, sinkTablesGroupA);
+        verifyGroupATableDataOnSink(sinkCorfuStores.get(SINK3_INDEX), targetWrites, sinkTablesGroupAOnSink3);
+        verifyGroupBTableDataOnSink(sinkCorfuStores.get(SINK3_INDEX), targetWrites, sinkTablesGroupB);
+
+        // Add groupB to Sink2 and verify the groupB tables' data is successfully replicated to Sink2.
+        logicalGroupClient.addDestination(GROUP_B, DefaultClusterConfig.getSinkClusterIds().get(SINK2_INDEX));
+        List<Table<StringKey, SampleGroupMsgB, Message>> sinkTablesGroupBOnSink2 = new ArrayList<>();
+        openGroupBTable(numTables, sinkCorfuStores.get(SINK2_INDEX), sinkTablesGroupBOnSink2);
+        verifyGroupBTableDataOnSink(sinkCorfuStores.get(SINK2_INDEX), targetWrites, sinkTablesGroupBOnSink2);
+
+        // Check Sink clusters snapshot plugin listeners received expected updates.
+        latchSink1.await();
+        latchSink2.await();
+        latchSink3.await();
     }
 
     /**
@@ -359,5 +441,16 @@ public class LogReplicationLogicalGroupIT extends CorfuReplicationMultiSourceSin
                 }
             }
         });
+    }
+
+    private void subscribeToSnapshotSyncPluginTable(CorfuStore sinkCorfuStore, SnapshotSyncPluginListener listener) {
+        try {
+            sinkCorfuStore.openTable(DefaultSnapshotSyncPlugin.NAMESPACE,
+                    DefaultSnapshotSyncPlugin.TABLE_NAME, ExampleSchemas.Uuid.class, SnapshotSyncPluginValue.class,
+                    SnapshotSyncPluginValue.class, TableOptions.fromProtoSchema(SnapshotSyncPluginValue.class));
+            sinkCorfuStore.subscribeListener(listener, DefaultSnapshotSyncPlugin.NAMESPACE, DefaultSnapshotSyncPlugin.TAG);
+        } catch (Exception e) {
+            fail("Exception while attempting to subscribe to snapshot sync plugin table");
+        }
     }
 }
