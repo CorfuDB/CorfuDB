@@ -381,6 +381,10 @@ public class LogReplicationLogicalGroupClientTest extends AbstractViewTest {
         Assert.assertEquals(expectedNumberRegisteredGroups1, sourceMetadataTable.count());
     }
 
+    /**
+     * Test sample usage of client APIs.
+     *
+     */
     @Test
     public void testClientOperations() {
         final String logicalGroup = "LOGICAL-GROUP";
