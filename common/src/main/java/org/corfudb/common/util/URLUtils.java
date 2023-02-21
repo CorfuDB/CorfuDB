@@ -63,8 +63,15 @@ public final class URLUtils {
      *
      * @param host host address that needs formatting
      * @return version-formatted address
+     * @throws IllegalArgumentException if the parameter host is null or empty
      */
     public static String getVersionFormattedHostAddress(String host) {
+
+        // In LR-SaaS, host could be null.
+        if (host == null || host.isEmpty()) {
+            throw new IllegalArgumentException("getVersionFormattedHostAddress: " +
+                    "host is either null or empty.");
+        }
 
         // getByName(host) fails when host has scope/interface in it like ([....%eth0])
         // remove the trailing names %eth0 or %en0 if present
