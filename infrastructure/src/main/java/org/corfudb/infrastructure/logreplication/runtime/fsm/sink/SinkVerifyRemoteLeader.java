@@ -46,11 +46,9 @@ public class SinkVerifyRemoteLeader {
         this.router = router;
         this.connectedNodes = new HashSet<>();
 
-        String remoteClusterId = session.getSourceClusterId();
-
         this.communicationFSMConsumer = Executors.newSingleThreadExecutor(new
                 ThreadFactoryBuilder().setNameFormat(
-                "sink-consumer-"+remoteClusterId).build());
+                "sink-consumer-"+session.hashCode()).build());
 
 
         communicationFSMConsumer.submit(this::consume);

@@ -174,7 +174,7 @@ public class CorfuLogReplicationRuntime {
                 metadataManager, upgradeManager, session, replicationContext);
         this.connectedNodes = new HashSet<>();
 
-        ThreadFactory threadFactory = new ThreadFactoryBuilder().setNameFormat("runtime-fsm-worker-"+remoteClusterId)
+        ThreadFactory threadFactory = new ThreadFactoryBuilder().setNameFormat("runtime-fsm-worker-"+session.hashCode())
             .build();
 
         this.communicationFSMWorkers = new ThreadPoolExecutor(1, 1, 0L,
@@ -182,7 +182,7 @@ public class CorfuLogReplicationRuntime {
 
         this.communicationFSMConsumer = Executors.newSingleThreadExecutor(new
                 ThreadFactoryBuilder().setNameFormat(
-                    "runtime-fsm-consumer-"+remoteClusterId).build());
+                    "runtime-fsm-consumer-"+session.hashCode()).build());
 
         initializeStates(metadataManager, upgradeManager);
         this.state = states.get(LogReplicationRuntimeStateType.WAITING_FOR_CONNECTIVITY);
