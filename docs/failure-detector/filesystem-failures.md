@@ -64,7 +64,7 @@ For instance, there are multiple possible scenarios of failures that could happe
    To achieve this, it will systematically collect detailed statistics from the FileSystemAgent. 
    If the analysis of these statistics reveals any instances of failures, such as a DataCorruptionException, 
    the DecisionMakerAgent will implement a mitigation strategy to exclude the affected node from participating  
-   in the current cycle of failure detection int he cluster.
+   in the current cycle of failure detection in the cluster.
 
  - The NodeState, which serves as a representation of the status of the node, 
    includes a information of the FileSystem statistics. 
@@ -99,6 +99,13 @@ For instance, there are multiple possible scenarios of failures that could happe
      - which will replace corrupted data with the consistent data that the node will collect from the cluster
    
  - Until the node would have issues with ReadOnly file system or the disk partition is not mounted, the node will stay in the unresponsiveList in the layout 
+
+**Changes in `BatchProcessor`:**
+ - BatchProcessor will change its state to ERROR in case of exceptions in `BatchProcessor#process()` method
+ - FileSystemAgent will collect the status of BatchProcessor
+ - DecisionMakerAgent will detect if a node in a failed state the same way how we detect if a disk is in read only mode.
+   If so, the node will be added to the unresponsive list.
+
 
 **Testing**
 We will be able to add above scenarios to our test suite, since FileSystemStats contains just information (boolean values) 
