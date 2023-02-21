@@ -329,6 +329,11 @@ public class LogReplicationConfigManager {
                 ReplicationSubscriber subscriber = ReplicationSubscriber.newBuilder()
                         .setClientName(clientName).setModel(model).build();
                 String groupName = entry.getKey().getGroupName();
+                // TODO (V2): currently we don't support ccustomized client name, default logical group subscriber
+                //  should be removed after the grpc stream for Sink session creation is created.
+                if (model.equals(ReplicationModel.LOGICAL_GROUPS)) {
+                    subscriber = SessionManager.getDefaultLogicalGroupSubscriber();
+                }
                 if (registeredSubscribers.contains(subscriber)) {
                     groupSinksMap.put(groupName, new HashSet<>(entry.getPayload().getDestinationIdsList()));
                 } else {

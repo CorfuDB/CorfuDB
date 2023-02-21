@@ -24,14 +24,12 @@ import java.util.Set;
 import static org.corfudb.infrastructure.logreplication.config.LogReplicationConfig.CLIENT_CONFIG_TAG;
 import static org.corfudb.runtime.LogReplicationLogicalGroupClient.LR_MODEL_METADATA_TABLE_NAME;
 import static org.corfudb.runtime.LogReplicationLogicalGroupClient.LR_REGISTRATION_TABLE_NAME;
+import static org.corfudb.runtime.view.ObjectsView.DEFAULT_LOGICAL_GROUP_CLIENT;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 
 @Slf4j
 public class LogReplicationClientConfigListener extends StreamListenerResumeOrFullSync {
-
-    // TODO (V2): This field should be removed after the rpc stream is added for Sink side session creation.
-    private static final String DEFAULT_LOGICAL_GROUP_CLIENT = "00000000-0000-0000-0000-0000000000001";
 
     /**
      * Tables that this stream listener will be listening to.
