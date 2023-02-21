@@ -40,6 +40,8 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArraySet;
 
+import static org.corfudb.runtime.view.ObjectsView.DEFAULT_LOGICAL_GROUP_CLIENT;
+
 /**
  * Manage log replication sessions for multiple replication models.
  *
@@ -53,9 +55,6 @@ public class SessionManager {
     // Represents default client for LR V1, i.e., use case where tables are tagged with
     // 'is_federated' flag, yet no client is specified in proto
     private static final String DEFAULT_CLIENT = "00000000-0000-0000-0000-000000000000";
-
-    // TODO (V2): This field should be removed after the rpc stream is added for Sink side session creation.
-    private static final String DEFAULT_LOGICAL_GROUP_CLIENT = "00000000-0000-0000-0000-0000000000001";
 
     private final CorfuStore corfuStore;
 
