@@ -44,14 +44,18 @@ public class NodeDescriptor {
     private final String nodeId;      // Represents the node's identifier as tracked by the Topology Provider
 
     public NodeDescriptor(String host, String port, String siteId, String connectionId, String nodeId) {
-        this.host = (host == null) ? "" : host ;
-        this.port = (port == null) ? "" : port;
+        this.host = host ;
+        this.port = port;
         this.clusterId = siteId;
         this.connectionId = connectionId;
         this.nodeId = nodeId;
     }
 
     public String getEndpoint() {
+        // TODO: once Chetan's fix is merged, revisit to handle the exception
+        if (host == null || port == null) {
+            return "";
+        }
         return getVersionFormattedEndpointURL(host, port);
     }
 
