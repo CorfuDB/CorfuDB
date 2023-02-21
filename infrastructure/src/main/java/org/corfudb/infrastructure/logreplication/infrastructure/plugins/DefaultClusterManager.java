@@ -416,13 +416,29 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
             if(!isSinkConnectionStarter) {
                 connectionEndPoints.addAll(topologyConfig.getRemoteSinkClusters().values());
             }
-        } else {
-            // One Source cluster that supports both FULL_TABLE and LOGICAL_GROUPS replication model
+        } else if (localCluster.getClusterId() == DefaultClusterConfig.getSinkClusterIds().get(0)) {
             remoteSourceToReplicationModels.put(topologyConfig.getRemoteSourceClusters().values().stream()
-                    .filter(cluster -> cluster.getClusterId().equals(DefaultClusterConfig.getSourceClusterIds().get(0)))
-                    .findFirst().get(),
-                    addModel(Arrays.asList(LogReplication.ReplicationModel.FULL_TABLE,
-                            LogReplication.ReplicationModel.LOGICAL_GROUPS)));
+                            .filter(cluster -> cluster.getClusterId().equals(DefaultClusterConfig.getSourceClusterIds().get(0)))
+                            .findFirst().get(),
+                    addModel(Collections.singletonList(LogReplication.ReplicationModel.FULL_TABLE)));
+            if(isSinkConnectionStarter) {
+                connectionEndPoints.addAll(remoteSourceToReplicationModels.keySet());
+            }
+
+        } else if (localCluster.getClusterId() == DefaultClusterConfig.getSinkClusterIds().get(1)) {
+            remoteSourceToReplicationModels.put(topologyConfig.getRemoteSourceClusters().values().stream()
+                            .filter(cluster -> cluster.getClusterId().equals(DefaultClusterConfig.getSourceClusterIds().get(0)))
+                            .findFirst().get(),
+                    addModel(Collections.singletonList(LogReplication.ReplicationModel.LOGICAL_GROUPS)));
+            if(isSinkConnectionStarter) {
+                connectionEndPoints.addAll(remoteSourceToReplicationModels.keySet());
+            }
+        } else if (localCluster.getClusterId() == DefaultClusterConfig.getSinkClusterIds().get(2)) {
+
+            remoteSourceToReplicationModels.put(topologyConfig.getRemoteSourceClusters().values().stream()
+                            .filter(cluster -> cluster.getClusterId().equals(DefaultClusterConfig.getSourceClusterIds().get(0)))
+                            .findFirst().get(),
+                    addModel(Collections.singletonList(LogReplication.ReplicationModel.LOGICAL_GROUPS)));
             if(isSinkConnectionStarter) {
                 connectionEndPoints.addAll(remoteSourceToReplicationModels.keySet());
             }
