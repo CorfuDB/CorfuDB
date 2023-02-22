@@ -8,6 +8,7 @@ import org.mockito.Mockito;
 import java.net.InetSocketAddress;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
 
 /**
@@ -37,6 +38,7 @@ public class URLUtilsTest {
     private static final String IPV6_ENDPOINT_URL_3_SHORT_MALFORMED = "::1:9000";
     private static final String IPV6_ENDPOINT_URL_MALFORMED_1 = "0:0:0:0:0:0:0:1:9000";
     private static final String IPV6_ENDPOINT_URL_MALFORMED_2 = "0:0:0:0:0:0:0:2:9001";
+    private static final String EMPTY_STRING = "";
 
     /**
      * Utility method to get a mock ChannelHandlerContext object.
@@ -107,6 +109,14 @@ public class URLUtilsTest {
         // Should return version-formatted IPv6 Address with '[' and ']'
         assertThat(URLUtils.getVersionFormattedHostAddress(IPV6_ADDRESS_2_MALFORMED))
                 .isEqualTo(IPV6_ADDRESS_2_SHORT);
+
+        // Empty Host Address should throw IllegalArgumentException
+        assertThatThrownBy(() -> URLUtils.getVersionFormattedHostAddress(EMPTY_STRING)).
+                isInstanceOf(IllegalArgumentException.class);
+
+        // null Host Address should throw IllegalArgumentException
+        assertThatThrownBy(() -> URLUtils.getVersionFormattedHostAddress(null)).
+                isInstanceOf(IllegalArgumentException.class);
     }
 
     /**
