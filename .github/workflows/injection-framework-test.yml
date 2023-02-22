@@ -4,7 +4,7 @@ name: Injection Framework Test
 jobs:
   injection_framework_test:
     # https://docs.github.com/en/free-pro-team@latest/actions/reference/workflow-syntax-for-github-actions#jobsjob_idruns-on
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-latest
 
     env:
       PKG_USERNAME: ${{ secrets.pkg_username }}
