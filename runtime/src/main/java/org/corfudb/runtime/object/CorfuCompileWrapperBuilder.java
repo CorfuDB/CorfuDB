@@ -19,6 +19,9 @@ public class CorfuCompileWrapperBuilder {
     static final String PERSISTENT_CORFU_TABLE_CLASS_NAME = "org.corfudb.runtime.collections.PersistentCorfuTable";
     static final String IMMUTABLE_CORFU_TABLE_CLASS_NAME = "org.corfudb.runtime.collections.ImmutableCorfuTable";
 
+    static final String PERSISTED_CORFU_TABLE_CLASS_NAME = "org.corfudb.runtime.collections.PersistedCorfuTable";
+    static final String DISKBACKED_CORFU_TABLE_CLASS_NAME = "org.corfudb.runtime.collections.DiskBackedCorfuTable";
+
     /**
      * Returns a wrapper for the underlying SMR Object
      *
@@ -54,6 +57,20 @@ public class CorfuCompileWrapperBuilder {
             // Note: args are used when invoking the internal immutable data structure constructor
             wrapperObject.setProxy$CORFUSMR(new MVOCorfuCompileProxy<>(rt, streamID,
                     immutableClass, args, serializer, streamTags, wrapperObject, objectOpenOption));
+            return (T) wrapperObject;
+        } else if (type.getName().equals(PERSISTED_CORFU_TABLE_CLASS_NAME)) {
+            // TODO: make general - This should also get cleaned up
+            Class<T> coreClass = (Class<T>)
+                    Class.forName(DISKBACKED_CORFU_TABLE_CLASS_NAME);
+
+            Class<ICorfuSMR<T>> wrapperClass = (Class<ICorfuSMR<T>>) Class.forName(type.getName());
+
+            // Instantiate a new instance of this class.
+            ICorfuSMR<T> wrapperObject = (ICorfuSMR<T>) ReflectionUtils.
+                    findMatchingConstructor(wrapperClass.getDeclaredConstructors(), new Object[0]);
+
+            wrapperObject.setProxy$CORFUSMR(new MVOCorfuCompileProxy<>(rt, streamID,
+                    coreClass, args, serializer, streamTags, wrapperObject, objectOpenOption));
             return (T) wrapperObject;
         }
 

@@ -11,7 +11,5 @@ public interface ICorfuSMRSnapshotProxy<T> {
 
     void logUpdate(@NonNull SMREntry updateEntry);
 
-    long getVersion();
-
-    T get();
+    void release();
 }

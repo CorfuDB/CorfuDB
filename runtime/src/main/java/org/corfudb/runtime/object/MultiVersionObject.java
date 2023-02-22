@@ -20,6 +20,7 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.StampedLock;
 import java.util.function.Supplier;
 
@@ -54,10 +55,6 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
      */
     private final Supplier<T> newObjectFn;
 
-    /**
-     * A fixed instance of a new instance of this object.
-     */
-    private final T newInstanceObject;
 
     private final ObjectOpenOption objectOpenOption;
 
@@ -72,6 +69,9 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
      * MVOCache has no versions associated with this underlying object.
      */
     private volatile T currentObject;
+
+
+    private volatile ISMRSnapshot<T> currentSnapshot = null;
 
     /**
      * All versions up to (and including) materializedUpTo have had their versions
@@ -97,6 +97,8 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
     /**
      * The MVOCache used to store and retrieve underlying object versions.
      */
+    // TODO(Zach): MVOCache type should be T extends ISMRSnapshot<T> but this
+    //  doesn't work as is since T extends ICorfuSMR<T> here, and ISMRSnapshot / ICorfuSMR are unrelated.
     private final MVOCache<T> mvoCache;
 
     private final Logger correctnessLogger = LoggerFactory.getLogger("correctness");
@@ -128,8 +130,8 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
         this.objectOpenOption = objectOpenOption;
         this.addressSpace = new StreamAddressSpace();
 
-        this.newInstanceObject = newObjectFn.get();
         this.currentObject = newObjectFn.get();
+
         this.mvoCache = corfuRuntime.getObjectsView().getMvoCache();
         this.trimRetry = corfuRuntime.getParameters().getTrimRetry();
         wrapperObject.closeWrapper();
@@ -146,9 +148,10 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
         // query of a non-transactional access - The instance will always be without updates.
         // A timestamp of Address.NON_ADDRESS corresponds to a global tail that sees no
         // updates. In both cases, we can serve the snapshot immediately.
-        if (timestamp == Address.NON_EXIST || timestamp == Address.NON_ADDRESS) {
-            return new SnapshotProxy<>(newInstanceObject, timestamp, upcallTargetMap);
-        }
+        //if (timestamp == Address.NON_EXIST || timestamp == Address.NON_ADDRESS) {
+        //    //TODO(Zach): can this check be eliminated? This is a problem for disk-backed Corfu.
+        //    return new SnapshotProxy<>(newInstanceObject, timestamp, upcallTargetMap);
+        //}
 
         final VersionedObjectIdentifier voId = new VersionedObjectIdentifier(getID(), timestamp);
         long lockTs = lock.tryOptimisticRead();
@@ -213,7 +216,7 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
             }
 
             correctnessLogger.trace(CORRECTNESS_LOG_MSG, streamTs);
-            return new SnapshotProxy<>(currentObject, streamTs, upcallTargetMap);
+            return new SnapshotProxy<>(currentSnapshot, streamTs, upcallTargetMap);
         } finally {
             lock.unlock(lockTs);
         }
@@ -259,24 +262,34 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
                     log.trace("SnapshotProxy[{}] optimistic request at {}", Utils.toReadableId(getID()), streamTs);
                 }
 
-                T versionedObject;
+                ISMRSnapshot<T> versionedObject;
 
                 // The latest visible version for the provided timestamp is equal to what is maintained
                 // by the MVO. In this case, there is no need to query the cache. This check is required
                 // since the MVOCache might have evicted all versions associated with this object, even
                 // though streamTs is the most recent tail for this stream.
                 if (streamTs == materializedUpTo) {
-                    versionedObject = currentObject;
+                    versionedObject = currentSnapshot;
                 } else {
                     versionedObject = mvoCache.get(voId).orElseThrow(() -> new TrimmedException(streamTs,
                             String.format("Trimmed address %s has been evicted from MVOCache. StreamAddressSpace: %s.",
                                     streamTs, addressSpace.toString())));
                 }
 
+                // TODO(Zach): Snapshot needs to be acquired before validating the lock!
+                // Make as test case?
+                SnapshotProxy<T> snapshotProxy = new SnapshotProxy<>(versionedObject, streamTs, upcallTargetMap);
+
                 if (lock.validate(lockTs)) {
                     correctnessLogger.trace(CORRECTNESS_LOG_MSG, streamTs);
-                    return Optional.of(new SnapshotProxy<>(versionedObject, streamTs, upcallTargetMap));
+                    return Optional.of(snapshotProxy);
+                } else {
+                    // Lock was not valid, so release the consumed snapshot.
+                    snapshotProxy.release();
                 }
+
+                // TODO(Zach): finally block?
+
             }
 
             return Optional.empty();
@@ -296,6 +309,9 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
         if (log.isTraceEnabled()) {
             log.trace("Sync[{}] to {}", Utils.toReadableId(getID()), timestamp);
         }
+
+        // TODO(Zach): address NO_CACHE option for disk-backed - consume()/release() not quite correct
+        AtomicBoolean isCurrentObjectDirty = new AtomicBoolean(false);
 
         Runnable syncStreamRunnable = () ->
             smrStream.streamUpToInList(timestamp)
@@ -321,7 +337,19 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
                         // If we observe a new version, place the previous one into the MVOCache.
                         if (globalAddress > materializedUpTo && objectOpenOption == ObjectOpenOption.CACHE) {
                             final VersionedObjectIdentifier voId = new VersionedObjectIdentifier(getID(), materializedUpTo);
-                            mvoCache.put(voId, currentObject);
+
+                            if (currentSnapshot == null ) {
+                                currentSnapshot = currentObject.getSnapshot();
+                            }
+
+                            mvoCache.put(voId, currentSnapshot);
+
+                            // Skip the first as it has already been stored below
+                            if (isCurrentObjectDirty.get()) {
+                                currentSnapshot = currentObject.getSnapshot();
+                            }
+
+
                         }
 
                         // In the case where addressUpdates corresponds to a HOLE, getSmrEntryList() will
@@ -331,6 +359,7 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
                         addressSpace.addAddress(globalAddress);
                         materializedUpTo = globalAddress;
                         resolvedUpTo = globalAddress;
+                        isCurrentObjectDirty.set(true);
                     } catch (TrimmedException e) {
                         // The caller catches this TrimmedException and resets the object before retrying.
                         throw e;
@@ -341,6 +370,11 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
                 });
 
         MicroMeterUtils.time(syncStreamRunnable, "mvo.sync.timer", STREAM_ID_TAG_NAME, getID().toString());
+
+        // TODO(Zach): Move into runnable
+        if (isCurrentObjectDirty.get() || currentSnapshot == null) {
+            currentSnapshot = currentObject.getSnapshot();
+        }
     }
 
     /**
@@ -359,6 +393,7 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
             throw new IllegalStateException("Unknown upcall " + updateEntry.getSMRMethod());
         }
 
+        // TODO(Zach): Return this for disk-backed???
         currentObject = (T) target.upcall(currentObject, updateEntry.getSMRArguments());
     }
 

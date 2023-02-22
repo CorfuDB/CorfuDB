@@ -4,6 +4,7 @@ import io.netty.buffer.Unpooled;
 import org.corfudb.util.serializer.ISerializer;
 import org.rocksdb.ReadOptions;
 import org.rocksdb.RocksDB;
+import org.rocksdb.Snapshot;
 
 import javax.annotation.concurrent.NotThreadSafe;
 import java.util.AbstractMap;
@@ -43,17 +44,26 @@ public class RocksDbEntryIterator<K, V> implements Iterator<Map.Entry<K, V>>, Au
     final private ReadOptions readOptions;
 
     public RocksDbEntryIterator(RocksDB rocksDB, ISerializer serializer, boolean loadValues) {
-        // Start iterator at the current snapshot
-        readOptions = new ReadOptions();
-        readOptions.setSnapshot(null);
-        this.wrappedRocksIterator = new WrappedRocksIterator(rocksDB.newIterator(readOptions));
-        this.serializer = serializer;
-        wrappedRocksIterator.seekToFirst();
-        this.loadValues = loadValues;
+        this(rocksDB, serializer, null, loadValues);
     }
 
     public RocksDbEntryIterator(RocksDB rocksDB, ISerializer serializer) {
         this(rocksDB, serializer, true);
+    }
+
+    public RocksDbEntryIterator(RocksDB rocksDB, ISerializer serializer, Snapshot snapshot) {
+        this(rocksDB, serializer, snapshot, true);
+    }
+
+    public RocksDbEntryIterator(RocksDB rocksDB, ISerializer serializer, Snapshot snapshot, boolean loadValues) {
+        // Start iterator at the current snapshot
+        readOptions = new ReadOptions();
+        readOptions.setSnapshot(snapshot);
+        this.wrappedRocksIterator = new WrappedRocksIterator(rocksDB.newIterator(readOptions));
+        this.serializer = serializer;
+        wrappedRocksIterator.seekToFirst();
+        this.loadValues = loadValues;
+
     }
 
     /**

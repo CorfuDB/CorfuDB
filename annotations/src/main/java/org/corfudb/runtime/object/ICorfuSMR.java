@@ -80,6 +80,14 @@ public interface ICorfuSMR<T>
     }
 
     /**
+     *
+     * @return ISMRSnapshot
+     */
+    default ISMRSnapshot<T> getSnapshot() {
+        throw new IllegalStateException("ObjectAnnotationProcessor Issue.");
+    }
+
+    /**
      * {@inheritDoc}
      */
     @Override

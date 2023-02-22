@@ -31,7 +31,7 @@ public class MVOCache<T extends ICorfuSMR<T>> {
      * A collection of strong references to all versioned objects and their state.
      */
     @Getter
-    private final Cache<VersionedObjectIdentifier, T> objectCache;
+    private final Cache<VersionedObjectIdentifier, ISMRSnapshot<T>> objectCache;
 
     public MVOCache(@Nonnull CorfuRuntime corfuRuntime) {
 
@@ -53,8 +53,11 @@ public class MVOCache<T extends ICorfuSMR<T>> {
                 .map(registry -> GuavaCacheMetrics.monitor(registry, objectCache, "mvo_cache"));
     }
 
-    private void handleEviction(RemovalNotification<VersionedObjectIdentifier, T> notification) {
+    private void handleEviction(RemovalNotification<VersionedObjectIdentifier, ISMRSnapshot<T>> notification) {
         log.trace("handleEviction: evicting {} cause {}", notification.getKey(), notification.getCause());
+
+        // TODO(Zach): Confirm that all cached snapshots must eventually go through here.
+        notification.getValue().release();
     }
 
     /**
@@ -68,7 +71,7 @@ public class MVOCache<T extends ICorfuSMR<T>> {
      * @param voId The desired object version.
      * @return An optional containing the corresponding versioned object, if present.
      */
-    public Optional<T> get(@Nonnull VersionedObjectIdentifier voId) {
+    public Optional<ISMRSnapshot<T>> get(@Nonnull VersionedObjectIdentifier voId) {
         if (log.isTraceEnabled()) {
             log.trace("MVOCache: performing a get for {}", voId.toString());
         }
@@ -81,7 +84,7 @@ public class MVOCache<T extends ICorfuSMR<T>> {
      * @param voId   The version of the object being placed into the cache.
      * @param object The actual underlying object corresponding to this voId.
      */
-    public void put(@Nonnull VersionedObjectIdentifier voId, @Nonnull T object) {
+    public void put(@Nonnull VersionedObjectIdentifier voId, @Nonnull ISMRSnapshot<T> object) {
         if (log.isTraceEnabled()) {
             log.trace("MVOCache: performing a put for {}", voId.toString());
         }

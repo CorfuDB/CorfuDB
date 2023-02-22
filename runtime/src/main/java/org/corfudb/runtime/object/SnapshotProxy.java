@@ -12,6 +12,8 @@ import java.util.function.LongConsumer;
 @Slf4j
 public class SnapshotProxy<T> implements ICorfuSMRSnapshotProxy<T> {
 
+    private final ISMRSnapshot<T> snapshotWrapper;
+
     private T snapshot;
 
     private final long baseSnapshotVersion;
@@ -20,7 +22,17 @@ public class SnapshotProxy<T> implements ICorfuSMRSnapshotProxy<T> {
 
     public SnapshotProxy(@NonNull final T snapshot, final long baseSnapshotVersion,
                          @NonNull final Map<String, ICorfuSMRUpcallTarget<T>> upcallTargetMap) {
+        this.snapshotWrapper = null;
         this.snapshot = snapshot;
+        this.baseSnapshotVersion = baseSnapshotVersion;
+        this.upcallTargetMap = upcallTargetMap;
+    }
+
+    public SnapshotProxy(@NonNull final ISMRSnapshot<T> snapshot, final long baseSnapshotVersion,
+                         @NonNull final Map<String, ICorfuSMRUpcallTarget<T>> upcallTargetMap) {
+        // TODO(Zach): Where to call release()?
+        this.snapshotWrapper = snapshot;
+        this.snapshot = snapshot.consume();
         this.baseSnapshotVersion = baseSnapshotVersion;
         this.upcallTargetMap = upcallTargetMap;
     }
@@ -41,11 +53,9 @@ public class SnapshotProxy<T> implements ICorfuSMRSnapshotProxy<T> {
         snapshot = (T) target.upcall(snapshot, updateEntry.getSMRArguments());
     }
 
-    public long getVersion() {
-        return baseSnapshotVersion;
-    }
-
-    public T get() {
-        return snapshot;
+    public void release() {
+        // TODO(Zach): better alternative for this - How to ensure that resources are cleaned?
+        // Implement closeable?
+        snapshotWrapper.release();
     }
 }
