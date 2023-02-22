@@ -14,6 +14,7 @@ import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
 import org.corfudb.runtime.collections.CorfuStreamEntry;
 import org.corfudb.runtime.collections.StreamListenerResumeOrFullSync;
+import org.corfudb.runtime.exceptions.StreamingException;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -67,7 +68,13 @@ public class LogReplicationClientConfigListener extends StreamListenerResumeOrFu
         configManager.generateConfig(sessionManager.getSessions());
 
         log.info("Start log replication listener for client config tables from {}", timestamp);
-        corfuStore.subscribeListener(this, CORFU_SYSTEM_NAMESPACE, CLIENT_CONFIG_TAG, tablesOfInterest, timestamp);
+        try {
+            corfuStore.subscribeListener(this, CORFU_SYSTEM_NAMESPACE, CLIENT_CONFIG_TAG, tablesOfInterest, timestamp);
+        } catch (StreamingException e) {
+            if (e.getCause() == null) {
+                log.error("Stream listener already registered!");
+            }
+        }
     }
 
     /**
