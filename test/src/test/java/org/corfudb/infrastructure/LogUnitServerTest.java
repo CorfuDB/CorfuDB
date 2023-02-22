@@ -36,6 +36,8 @@ import java.util.concurrent.CompletableFuture;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.corfudb.infrastructure.LogUnitServerAssertions.assertThat;
+import static org.corfudb.infrastructure.log.Segment.VERSION;
+import static org.corfudb.infrastructure.log.SegmentUtils.getByteBufferWithMetaData;
 import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getReadLogRequestMsg;
 import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getTailRequestMsg;
 import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getTrimLogRequestMsg;
@@ -465,7 +467,7 @@ public class LogUnitServerTest extends AbstractServerTest {
         assertThat(entry.getGlobalAddress()).isEqualTo(globalAddress);
     }
 
-    private String createLogFile(String path, int version, boolean noVerify) throws Exception {
+    private String createLogFile(String path, int version) throws Exception {
         // Generate a log file and manually change the version
         File logDir = new File(path + File.separator + "log");
         logDir.mkdir();
@@ -475,20 +477,20 @@ public class LogUnitServerTest extends AbstractServerTest {
         File logFile = new File(logFilePath);
         logFile.createNewFile();
         RandomAccessFile file = new RandomAccessFile(logFile, "rw");
-        writeHeader(file.getChannel(), version, noVerify);
+        writeHeader(file.getChannel(), version);
         file.close();
 
         return logFile.getAbsolutePath();
     }
 
-    public void writeHeader(FileChannel fileChannel, int version, boolean verify) throws Exception {
+    public void writeHeader(FileChannel fileChannel, int version) throws Exception {
 
         LogHeader header = LogHeader.newBuilder()
                 .setVersion(version)
-                .setVerifyChecksum(verify)
+                .setVerifyChecksum(true)
                 .build();
 
-        ByteBuffer buf = StreamLogFiles.getByteBufferWithMetaData(header);
+        ByteBuffer buf = getByteBufferWithMetaData(header);
         do {
             fileChannel.write(buf);
         } while (buf.hasRemaining());
@@ -499,29 +501,12 @@ public class LogUnitServerTest extends AbstractServerTest {
     public void testInvalidLogVersion() throws Exception {
         // Create a log file with an invalid version
         String tempDir = PARAMETERS.TEST_TEMP_DIR;
-        createLogFile(tempDir, StreamLogFiles.VERSION + 1, false);
+        createLogFile(tempDir, VERSION + 1);
 
         // Start a new logging version
         ServerContextBuilder builder = new ServerContextBuilder();
         builder.setMemory(false);
         builder.setLogPath(tempDir);
-        ServerContext context = builder.build();
-        LogUnitServer logunit = new LogUnitServer(context);
-    }
-
-    @Test(expected = RuntimeException.class)
-    public void testVerifyWithNoVerifyLog() throws Exception {
-        boolean noVerify = true;
-
-        // Generate a log file without computing the checksum for log entries
-        String tempDir = PARAMETERS.TEST_TEMP_DIR;
-        createLogFile(tempDir, StreamLogFiles.VERSION + 1, noVerify);
-
-        // Start a new logging version
-        ServerContextBuilder builder = new ServerContextBuilder();
-        builder.setMemory(false);
-        builder.setLogPath(tempDir);
-        builder.setNoVerify(!noVerify);
         ServerContext context = builder.build();
         LogUnitServer logunit = new LogUnitServer(context);
     }

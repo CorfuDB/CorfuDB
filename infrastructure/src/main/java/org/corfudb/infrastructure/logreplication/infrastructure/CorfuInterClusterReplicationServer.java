@@ -127,8 +127,6 @@ public class CorfuInterClusterReplicationServer implements Runnable {
                     + "              Set the logging level, valid levels are: \n"
                     + "                                                                          "
                     + "              ALL,ERROR,WARN,INFO,DEBUG,TRACE,OFF [default: INFO].\n"
-                    + " -n, --no-verify                                                          "
-                    + "              Disable checksum computation and verification.\n"
                     + " -N, --no-sync                                                            "
                     + "              Disable syncing writes to secondary storage.\n"
                     + " -e, --enable-tls                                                         "
