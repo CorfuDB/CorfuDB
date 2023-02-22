@@ -90,7 +90,7 @@ public class LogReplicationLogicalGroupIT extends CorfuReplicationMultiSourceSin
     }
 
     @Test
-    public void testLogicalGroupReplicationEndToEnd() throws Exception {
+    public void testBasicLogicalGroupReplication() throws Exception {
         // Register client and add group destinations
         CorfuRuntime clientRuntime = getClientRuntime();
         LogReplicationLogicalGroupClient logicalGroupClient =
