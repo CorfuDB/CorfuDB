@@ -395,7 +395,7 @@ public class SessionManager {
 
         if (!incomingConnections.isEmpty()) {
             newSessionsDiscovered.stream()
-                    .filter(session -> outgoingSessions.contains(session))
+                    .filter(outgoingSessions::contains)
                     .filter(session -> incomingConnections.contains(session.getSinkClusterId()))
                     .forEach(session -> {
                         sessionToSourceServer.put(session,
