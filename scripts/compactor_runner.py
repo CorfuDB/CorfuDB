@@ -27,8 +27,8 @@ from subprocess import check_call, check_output, STDOUT
 import time
 import yaml
 
-COMPACTOR_CONTROLS_CLASS_NAME = "org.corfudb.compactor.CorfuCompactorControls"
-COMPACTOR_CHECKPOINTER_CLASS_NAME = "org.corfudb.compactor.CorfuCompactorCheckpointer"
+COMPACTOR_CONTROLS_CLASS_NAME = "org.corfudb.compactor.CompactorController"
+COMPACTOR_CHECKPOINTER_CLASS_NAME = "org.corfudb.compactor.CompactorCheckpointer"
 COMPACTOR_BULK_READ_SIZE = 50
 COMPACTOR_JVM_XMX = 1024
 FORCE_DISABLE_CHECKPOINTING = "FORCE_DISABLE_CHECKPOINTING"
