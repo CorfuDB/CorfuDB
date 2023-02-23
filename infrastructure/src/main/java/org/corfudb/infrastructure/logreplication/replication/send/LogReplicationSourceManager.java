@@ -6,6 +6,7 @@ import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.DataSender;
+import org.corfudb.infrastructure.logreplication.infrastructure.CorfuSaasEndpointProvider;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationUpgradeManager;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
@@ -90,7 +91,8 @@ public class LogReplicationSourceManager {
                 .cacheDisabled(true)
                 .maxWriteSize(params.getMaxWriteSize())
                 .build());
-        runtime.parseConfigurationString(params.getLocalCorfuEndpoint()).connect();
+        String endpoint = CorfuSaasEndpointProvider.getCorfuSaasEndpoint().orElseGet(params::getLocalCorfuEndpoint);
+        runtime.parseConfigurationString(endpoint).connect();
 
         this.parameters = params;
 

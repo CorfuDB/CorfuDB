@@ -367,7 +367,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
             if (update) {
                 topologyDescriptor = topology;
                 int port = 9000;
-                localCorfuEndpoint = getCorfuSaaSEndpoint()
+                localCorfuEndpoint = CorfuSaasEndpointProvider.getCorfuSaasEndpoint()
                         .orElseGet(() ->
                                 getCorfuEndpoint(getLocalHost(), port));
             }
@@ -833,27 +833,6 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
     @Override
     public Set<LogReplicationSession> getIncomingSessions() {
         return sessionManager.getIncomingSessions();
-    }
-
-    private Optional<String> getCorfuSaaSEndpoint() {
-        final String pluginConfigFilePath = serverContext.getPluginConfigFilePath();
-        if (pluginConfigFilePath != null) {
-            return extractEndpoint(pluginConfigFilePath);
-        }
-        log.warn("No plugin path found");
-        return Optional.empty();
-    }
-
-    private Optional<String> extractEndpoint(String path) {
-        try (InputStream input = new FileInputStream(path)) {
-            Properties prop = new Properties();
-            prop.load(input);
-            String endpoint = prop.getProperty("saas_endpoint");
-            return Optional.ofNullable(endpoint);
-        } catch (IOException e) {
-            log.warn("Error extracting saas endpoint");
-            return Optional.empty();
-        }
     }
 
     private void setupLocalNodeIdWithRetries() throws InterruptedException {
