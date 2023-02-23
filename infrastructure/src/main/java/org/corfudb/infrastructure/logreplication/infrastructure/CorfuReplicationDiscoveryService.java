@@ -863,7 +863,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
             Properties prop = new Properties();
             prop.load(input);
             String endpoint = prop.getProperty("saas_endpoint");
-            return Optional.of(endpoint);
+            return Optional.ofNullable(endpoint);
         } catch (IOException e) {
             log.warn("Error extracting saas endpoint");
             return Optional.empty();
