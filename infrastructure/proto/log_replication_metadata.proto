@@ -49,7 +49,7 @@ message ReplicationMetadata {
   int64 lastLogEntryApplied = 7;
   org.corfudb.runtime.UuidMsg currentSnapshotCycleId = 8;
   int64 currentCycleMinShadowStreamTs = 9;
-  SyncType snapshotSyncType = 10;
+  SnapshotSyncType snapshotSyncType = 10;
   int64 snapshotSyncCompleteTime = 11;
   int64 lastLogEntryBatchProcessed = 12;
 }
@@ -113,6 +113,11 @@ message ReplicationInfo {
   SnapshotSyncInfo snapshotSyncInfo = 3;
 }
 
+enum SnapshotSyncType {
+  DEFAULT = 0;
+  FORCED = 1;
+}
+
 /*
  * Snapshot Sync Info
  *
@@ -122,10 +127,6 @@ message ReplicationInfo {
  * the log entry sync.
  */
 message SnapshotSyncInfo {
-  enum SnapshotSyncType {
-    DEFAULT = 0;
-    FORCED = 1;
-  }
   SnapshotSyncType type = 1;
   SyncStatus status = 2;
   string snapshotRequestId = 3;

@@ -314,7 +314,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
                 .isEqualTo(LogReplicationMetadata.SyncStatus.ONGOING);
 
         assertThat(replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getType())
-                .isEqualTo(LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType.DEFAULT);
+                .isEqualTo(LogReplicationMetadata.SnapshotSyncType.DEFAULT);
         assertThat(replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus())
                 .isEqualTo(LogReplicationMetadata.SyncStatus.COMPLETED);
 
@@ -370,7 +370,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
                 .isEqualTo(LogReplicationMetadata.SyncStatus.ONGOING);
 
         assertThat(replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getType())
-                .isEqualTo(LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType.DEFAULT);
+                .isEqualTo(LogReplicationMetadata.SnapshotSyncType.DEFAULT);
         assertThat(replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus())
                 .isEqualTo(LogReplicationMetadata.SyncStatus.COMPLETED);
 
@@ -444,7 +444,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
                 .isEqualTo(LogReplicationMetadata.SyncStatus.ONGOING);
 
         assertThat(replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getType())
-                .isEqualTo(LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType.DEFAULT);
+                .isEqualTo(LogReplicationMetadata.SnapshotSyncType.DEFAULT);
         assertThat(replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus())
                 .isEqualTo(LogReplicationMetadata.SyncStatus.COMPLETED);
     }
@@ -503,7 +503,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
             .isEqualTo(LogReplicationMetadata.SyncStatus.ONGOING);
 
         assertThat(replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getType())
-            .isEqualTo(LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType.DEFAULT);
+            .isEqualTo(LogReplicationMetadata.SnapshotSyncType.DEFAULT);
         assertThat(replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus())
             .isEqualTo(LogReplicationMetadata.SyncStatus.COMPLETED);
         log.info("Snapshot Sync was successful");
@@ -566,7 +566,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
             .isEqualTo(LogReplicationMetadata.SyncStatus.ONGOING);
 
         assertThat(replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getType())
-            .isEqualTo(LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType.DEFAULT);
+            .isEqualTo(LogReplicationMetadata.SnapshotSyncType.DEFAULT);
         assertThat(replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus())
             .isEqualTo(LogReplicationMetadata.SyncStatus.COMPLETED);
         log.info("Snapshot Sync successful");
@@ -598,7 +598,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         }
 
         assertThat(replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getType())
-            .isEqualTo(LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType.DEFAULT);
+            .isEqualTo(LogReplicationMetadata.SnapshotSyncType.DEFAULT);
         assertThat(replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus())
             .isEqualTo(LogReplicationMetadata.SyncStatus.COMPLETED);
 
@@ -1394,7 +1394,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
                 .isEqualTo(LogReplicationMetadata.SyncStatus.ONGOING);
 
         assertThat(replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getType())
-                .isEqualTo(LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType.DEFAULT);
+                .isEqualTo(LogReplicationMetadata.SnapshotSyncType.DEFAULT);
         assertThat(replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus())
                 .isEqualTo(LogReplicationMetadata.SyncStatus.COMPLETED);
 
@@ -1469,7 +1469,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         assertThat(replicationStatus.getSourceStatus().getReplicationInfo().getStatus())
                 .isEqualTo(LogReplicationMetadata.SyncStatus.ONGOING);
         assertThat(replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getType())
-                .isEqualTo(LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType.FORCED);
+                .isEqualTo(LogReplicationMetadata.SnapshotSyncType.FORCED);
         assertThat(replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus())
                 .isEqualTo(LogReplicationMetadata.SyncStatus.COMPLETED);
     }

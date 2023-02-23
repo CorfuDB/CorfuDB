@@ -182,7 +182,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
         Sleep.sleepUninterruptibly(Duration.ofSeconds(LogReplicationAckReader.ACKED_TS_READ_INTERVAL_SECONDS + 1));
 
         long remainingEntriesToSend = verifyReplicationStatus(SyncType.LOG_ENTRY,
-                LogReplicationMetadata.SyncStatus.ONGOING, LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType.DEFAULT,
+                LogReplicationMetadata.SyncStatus.ONGOING, LogReplicationMetadata.SnapshotSyncType.DEFAULT,
                 LogReplicationMetadata.SyncStatus.COMPLETED);
        assertThat(remainingEntriesToSend).isEqualTo(0L);
 
@@ -205,7 +205,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
         // While the TX log is growing, the remaining entries to send can be changing during this time, as it is computed
         // wrt. the tail of the log and this varies depending on how fast we are catching the tail of the log.
         verifyReplicationStatus(SyncType.LOG_ENTRY,
-                SyncStatus.ONGOING, SnapshotSyncInfo.SnapshotSyncType.DEFAULT,
+                SyncStatus.ONGOING, LogReplicationMetadata.SnapshotSyncType.DEFAULT,
                 SyncStatus.COMPLETED);
 
         stopWrites.set(true);
@@ -219,13 +219,13 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
         Sleep.sleepUninterruptibly(Duration.ofSeconds(LogReplicationAckReader.ACKED_TS_READ_INTERVAL_SECONDS + delta));
 
         remainingEntriesToSend = verifyReplicationStatus(SyncType.LOG_ENTRY,
-                LogReplicationMetadata.SyncStatus.ONGOING, LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType.DEFAULT,
+                LogReplicationMetadata.SyncStatus.ONGOING, LogReplicationMetadata.SnapshotSyncType.DEFAULT,
                 LogReplicationMetadata.SyncStatus.COMPLETED);
         assertThat(remainingEntriesToSend).isEqualTo(0L);
     }
 
     private long verifyReplicationStatus(SyncType targetSyncType, SyncStatus targetSyncStatus,
-                                         SnapshotSyncInfo.SnapshotSyncType targetSnapshotSyncType,
+                                         LogReplicationMetadata.SnapshotSyncType targetSnapshotSyncType,
                                          SyncStatus targetSnapshotSyncStatus) {
 
         LogReplicationSession session = LogReplicationSession.newBuilder()
