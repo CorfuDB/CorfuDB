@@ -91,8 +91,8 @@ The variable *r holds the last runtime obtrained, and *o holds the last router o
 
 
 ; Util functions to get a host or port from an endpoint string.
-(defn get-port [endpoint] (URLUtils/getPortFromEndpointURL (endpoint)))
-(defn get-host [endpoint] (URLUtils/getVersionFormattedHostAddress (endpoint)))
+(defn get-port [endpoint] (Integer/parseInt (URLUtils/getPortFromEndpointURL endpoint)))
+(defn get-host [endpoint] (URLUtils/getHostFromEndpointURL endpoint))
 
 ; Get a runtime or a router, and add it to the runtime/router corfuTable
 (defn add-client ([client] (.. *o (addClient client)))
