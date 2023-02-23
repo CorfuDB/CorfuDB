@@ -9,6 +9,7 @@ import org.corfudb.common.config.ConfigParamNames;
 import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.logreplication.config.LogReplicationConfig;
+import org.corfudb.infrastructure.logreplication.infrastructure.CorfuSaasEndpointProvider;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.ISnapshotSyncPlugin;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
@@ -123,6 +124,7 @@ public class LogReplicationSinkManager implements DataReceiver {
                                      LogReplicationContext replicationContext) {
 
         this.replicationContext = replicationContext;
+        String endpoint = CorfuSaasEndpointProvider.getCorfuSaasEndpoint().orElseGet(() -> localCorfuEndpoint);
         this.runtime = CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder()
                 .trustStore((String) serverContext.getServerConfig().get(ConfigParamNames.TRUST_STORE))
                 .tsPasswordFile((String) serverContext.getServerConfig().get(ConfigParamNames.TRUST_STORE_PASS_FILE))
@@ -132,7 +134,7 @@ public class LogReplicationSinkManager implements DataReceiver {
                 .maxCacheEntries(replicationContext.getConfig(session).getMaxCacheSize())
                 .maxWriteSize(serverContext.getMaxWriteSize())
                 .build())
-                .parseConfigurationString(localCorfuEndpoint).connect();
+                .parseConfigurationString(endpoint).connect();
         this.pluginConfigFilePath = serverContext.getPluginConfigFilePath();
         this.topologyConfigId = replicationContext.getTopologyConfigId();
         this.session = session;

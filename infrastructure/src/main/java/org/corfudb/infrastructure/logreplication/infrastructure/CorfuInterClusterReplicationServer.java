@@ -235,6 +235,7 @@ public class CorfuInterClusterReplicationServer implements Runnable {
 
         configureMetrics(opts, serverContext.getLocalEndpoint());
 
+        CorfuSaasEndpointProvider.init(serverContext.getPluginConfigFilePath());
         // Register shutdown handler
         Thread shutdownThread = new Thread(this::cleanShutdown);
         shutdownThread.setName("ShutdownThread");
