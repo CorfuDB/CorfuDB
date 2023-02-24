@@ -1,7 +1,6 @@
 package org.corfudb.infrastructure.logreplication.infrastructure;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.Sets;
 import com.google.protobuf.Timestamp;
 import io.micrometer.core.instrument.LongTaskTimer;
 import lombok.Getter;
