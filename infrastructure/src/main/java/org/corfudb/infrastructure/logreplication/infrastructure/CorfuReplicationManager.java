@@ -70,7 +70,7 @@ public class CorfuReplicationManager {
      * If local cluster is a source, creates a runtime and a sourceRouter
      * If local cluster is a sink, creates a router.
      */
-    public void startConnection(LogReplicationSession session, Map<Class, AbstractServer> serverMap) {
+    public void startConnection(LogReplicationSession session, Map<Class, AbstractServer> serverMap, boolean isSource) {
 
         ClusterDescriptor remote;
         if (session.getSinkClusterId().equals(topology.getLocalClusterDescriptor().getClusterId())) {
@@ -80,8 +80,7 @@ public class CorfuReplicationManager {
         }
 
         log.info("Starting connection to remote {} for session {} ", remote, session);
-        if (!topology.getRemoteSinkClusters().isEmpty() &&
-                topology.getRemoteSinkClusters().containsKey(remote.getClusterId())) {
+        if (isSource) {
             LogReplicationSourceBaseRouter router = createSourceRouter(session, serverMap, true);
             try {
                 IRetry.build(IntervalRetry.class, () -> {
@@ -97,8 +96,7 @@ public class CorfuReplicationManager {
             } catch (InterruptedException e) {
                 log.error("Unrecoverable exception when attempting to connect to remote session.", e);
             }
-        } else if (!topology.getRemoteSourceClusters().isEmpty() &&
-                topology.getRemoteSourceClusters().containsKey(remote.getClusterId())) {
+        } else {
             LogReplicationSinkServerRouter router = routerManager.getOrCreateSinkRouter(session, serverMap, true,
                     pluginFilePath, corfuRuntime.getParameters().getRequestTimeout().toMillis());
             try {
@@ -115,8 +113,6 @@ public class CorfuReplicationManager {
             } catch (InterruptedException e) {
                 log.error("Unrecoverable exception when attempting to connect to remote session.", e);
             }
-        } else {
-            log.warn("Not connecting to cluster {} as it is neither a source nor a sink to the current cluster", remote);
         }
     }
 
