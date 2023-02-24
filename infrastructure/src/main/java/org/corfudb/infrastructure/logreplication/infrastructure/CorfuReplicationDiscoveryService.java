@@ -559,7 +559,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         }
 
         if (isValid) {
-            onRemoteClusterAddRemove(discoveredTopology);
+            onTopologyChange(discoveredTopology);
         } else {
             // Stop Log Replication in case this node was previously SOURCE but no longer belongs to the Topology
             stopLogReplication();
@@ -572,8 +572,8 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
      *
      * @param newTopology the new discovered topology
      */
-    private void onRemoteClusterAddRemove(TopologyDescriptor newTopology) {
-        log.debug("Remote Cluster has been added or removed");
+    private void onTopologyChange(TopologyDescriptor newTopology) {
+        log.debug("A role change or a remote cluster may have been added or removed");
 
         if(isLeader.get()) {
             // refresh the session so new sessions are added and stale sessions are stopped.
