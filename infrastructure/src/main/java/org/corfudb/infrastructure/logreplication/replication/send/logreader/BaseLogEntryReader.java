@@ -37,9 +37,6 @@ public abstract class BaseLogEntryReader extends LogEntryReader {
 
     private final LogReplication.LogReplicationEntryType MSG_TYPE = LogReplication.LogReplicationEntryType.LOG_ENTRY_MESSAGE;
 
-    // Set of UUIDs for the streams to replicate
-    protected Set<UUID> streamUUIDs;
-
     // Opaque Stream wrapper for the stream to track for a given replication model
     private ModelBasedOpaqueStream modelBasedOpaqueStream;
 
@@ -82,21 +79,14 @@ public abstract class BaseLogEntryReader extends LogEntryReader {
         this.session = replicationSession;
         this.replicationContext = replicationContext;
 
-        // Get UUIDs for streams to replicate
-        refreshStreamUUIDs();
         log.info("Total of {} streams to replicate at initialization. Streams to replicate={}, Session={}",
-                this.streamUUIDs.size(), replicationContext.getConfig(session).getStreamsToReplicate(),
+                getStreamUUIDs().size(),
+                replicationContext.getConfig(session).getStreamsToReplicate(),
                 TextFormat.shortDebugString(session));
 
         //create an opaque stream for transaction stream
         modelBasedOpaqueStream = new ModelBasedOpaqueStream(runtime);
     }
-
-    /**
-     * Get streams to replicate from config and convert them into stream ids. This method will be invoked at
-     * constructor and when LogReplicationConfig is synced with registry table.
-     */
-    protected abstract void refreshStreamUUIDs();
 
     private LogReplication.LogReplicationEntryMsg generateMessageWithOpaqueEntryList(
         List<OpaqueEntry> opaqueEntryList, UUID logEntryRequestId) {
@@ -147,18 +137,18 @@ public abstract class BaseLogEntryReader extends LogEntryReader {
         // It is possible that tables corresponding to some streams to replicate were not opened when LogReplicationConfig
         // was initialized. So these streams will be missing from the list of streams to replicate. Check the registry
         // table and add them to the list in that case.
-        if (!streamUUIDs.containsAll(txEntryStreamIds)) {
+        if (!getStreamUUIDs().containsAll(txEntryStreamIds)) {
             log.info("There could be additional streams to replicate in tx stream. Checking with registry table.");
             replicationContext.refresh();
-            refreshStreamUUIDs();
             // TODO: Add log message here for the newly found streams when we support incremental refresh.
         }
         // If none of the streams in the transaction entry are specified to be replicated, this is an invalid entry, skip
-        if (Collections.disjoint(streamUUIDs, txEntryStreamIds)) {
-            log.trace("TX Stream entry[{}] :: contains none of the streams of interest, streams={} [ignored]", entry.getVersion(), txEntryStreamIds);
+        if (Collections.disjoint(getStreamUUIDs(), txEntryStreamIds)) {
+            log.trace("TX Stream entry[{}] :: contains none of the streams of interest, streams={} [ignored]",
+                    entry.getVersion(), txEntryStreamIds);
             return false;
         } else {
-            Set<UUID> ignoredTxStreams = txEntryStreamIds.stream().filter(id -> !streamUUIDs.contains(id))
+            Set<UUID> ignoredTxStreams = txEntryStreamIds.stream().filter(id -> !getStreamUUIDs().contains(id))
                 .collect(Collectors.toSet());
             txEntryStreamIds.removeAll(ignoredTxStreams);
             log.debug("TX Stream entry[{}] :: replicate[{}]={}, ignore[{}]={} [valid]", entry.getVersion(),
@@ -253,10 +243,19 @@ public abstract class BaseLogEntryReader extends LogEntryReader {
      */
     private OpaqueEntry filterTransactionEntry(OpaqueEntry opaqueEntry) {
         Map<UUID, List<SMREntry>> filteredTxEntryMap = opaqueEntry.getEntries().entrySet().stream()
-            .filter(entry -> streamUUIDs.contains(entry.getKey()))
+            .filter(entry -> getStreamUUIDs().contains(entry.getKey()))
             .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
 
         return new OpaqueEntry(opaqueEntry.getVersion(), filteredTxEntryMap);
+    }
+
+    /**
+     * Helper method for getting UUIDs of streams to replicate from config manager.
+     *
+     * @return UUIDs of streams to replicate
+     */
+    private Set<UUID> getStreamUUIDs() {
+        return replicationContext.getConfig(session).getDataStreamToTagsMap().keySet();
     }
 
     private Optional<DistributionSummary> configureMessageSizeDistributionSummary() {
@@ -286,7 +285,6 @@ public abstract class BaseLogEntryReader extends LogEntryReader {
     public void reset(long lastSentBaseSnapshotTimestamp, long lastAckedTimestamp) {
         // Sync with registry when entering into IN_LOG_ENTRY_SYNC state
         replicationContext.refresh();
-        refreshStreamUUIDs();
         this.currentProcessedEntryMetadata = new StreamIteratorMetadata(Address.NON_ADDRESS, false);
         setGlobalBaseSnapshot(lastSentBaseSnapshotTimestamp, lastAckedTimestamp);
         lastOpaqueEntry = null;
