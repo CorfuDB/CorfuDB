@@ -432,6 +432,25 @@ public class LogReplicationLogicalGroupIT extends CorfuReplicationMultiSourceSin
         latchSink1.await();
         latchSink2.await();
         latchSink3.await();
+
+        // Remove groupB from Sink3 and verify groupB tables' data no longer replicated to Sink3
+        logicalGroupClient.removeDestination(GROUP_B, DefaultClusterConfig.getSinkClusterIds().get(SINK3_INDEX));
+        for (int i = targetWrites; i < targetWrites + NUM_WRITES; i++) {
+            StringKey key = StringKey.newBuilder().setKey(String.valueOf(i)).build();
+            SampleGroupMsgB groupBTablePayload = SampleGroupMsgB.newBuilder().setPayload(String.valueOf(i)).build();
+
+            try (TxnContext txn = sourceCorfuStores.get(SOURCE_INDEX).txn(NAMESPACE)) {
+                for (Table<StringKey, SampleGroupMsgB, Message> table : srcTablesGroupB) {
+                    txn.putRecord(table, key, groupBTablePayload, null);
+                }
+                txn.commit();
+            }
+        }
+
+        // groupB is only targeting Sink2 now, so the incremental data should be replicated to Sink2 only.
+        verifyGroupBTableDataOnSink(sinkCorfuStores.get(SINK2_INDEX),
+                targetWrites + NUM_WRITES, sinkTablesGroupBOnSink2);
+        verifyGroupBTableDataOnSink(sinkCorfuStores.get(SINK3_INDEX), targetWrites, sinkTablesGroupB);
     }
 
     /**
@@ -638,6 +657,7 @@ public class LogReplicationLogicalGroupIT extends CorfuReplicationMultiSourceSin
             // Wait until data is fully replicated
             while (table.count() != expectedConsecutiveWrites) {
                 // Block until expected number of entries is reached
+                log.debug("table count: {}, expectedConsecutiveWrites: {}", table.count(), expectedConsecutiveWrites);
             }
 
             log.info("Number updates on Sink Map {} :: {} ", table.getFullyQualifiedTableName(), expectedConsecutiveWrites);

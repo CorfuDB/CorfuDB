@@ -4,9 +4,6 @@ import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationCo
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.CorfuRuntime;
 
-import java.util.HashSet;
-import java.util.Set;
-
 import javax.annotation.concurrent.NotThreadSafe;
 
 @NotThreadSafe
@@ -19,14 +16,5 @@ public class StreamsLogEntryReader extends BaseLogEntryReader {
     public StreamsLogEntryReader(CorfuRuntime runtime, LogReplicationSession replicationSession,
                                  LogReplicationContext replicationContext) {
         super(runtime, replicationSession, replicationContext);
-    }
-
-    @Override
-    protected void refreshStreamUUIDs() {
-        Set<String> streams = replicationContext.getConfig(session).getStreamsToReplicate();
-        streamUUIDs = new HashSet<>();
-        for (String s : streams) {
-            streamUUIDs.add(CorfuRuntime.getStreamID(s));
-        }
     }
 }

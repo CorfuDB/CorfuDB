@@ -4,9 +4,6 @@ import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationCo
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 
-import java.util.HashSet;
-import java.util.Set;
-
 
 /**
  * Log entry reader implementation for Logical Grouping Replication Model.
@@ -20,14 +17,5 @@ public class LogicalGroupLogEntryReader extends BaseLogEntryReader {
     public LogicalGroupLogEntryReader(CorfuRuntime runtime, LogReplicationSession session,
                                       LogReplicationContext replicationContext) {
         super(runtime, session, replicationContext);
-    }
-
-    @Override
-    protected void refreshStreamUUIDs() {
-        Set<String> streams = replicationContext.getConfig(session).getStreamsToReplicate();
-        streamUUIDs = new HashSet<>();
-        for (String s : streams) {
-            streamUUIDs.add(CorfuRuntime.getStreamID(s));
-        }
     }
 }
