@@ -215,14 +215,13 @@ public class LogReplicationConfigManager {
                     Set<String> relatedStreams = logicalGroupToStreams.getOrDefault(logicalGroup, new HashSet<>());
                     relatedStreams.add(tableName);
                     logicalGroupToStreams.put(logicalGroup, relatedStreams);
+                    // Collect tags for this stream
+                    List<UUID> tags = streamToTagsMap.getOrDefault(streamId, new ArrayList<>());
+                    tags.addAll(entry.getValue().getMetadata().getTableOptions().getStreamTagList().stream()
+                            .map(streamTag -> TableRegistry.getStreamIdForStreamTag(entry.getKey().getNamespace(), streamTag))
+                            .collect(Collectors.toList()));
+                    streamToTagsMap.put(streamId, tags);
                 }
-
-                // Collect tags for this stream
-                List<UUID> tags = streamToTagsMap.getOrDefault(streamId, new ArrayList<>());
-                tags.addAll(entry.getValue().getMetadata().getTableOptions().getStreamTagList().stream()
-                        .map(streamTag -> TableRegistry.getStreamIdForStreamTag(entry.getKey().getNamespace(), streamTag))
-                        .collect(Collectors.toList()));
-                streamToTagsMap.put(streamId, tags);
             }
         });
 

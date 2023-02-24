@@ -24,12 +24,6 @@ public class RoutingQueuesLogEntryReader extends BaseLogEntryReader {
     }
 
     @Override
-    protected void refreshStreamUUIDs() {
-        throw new IllegalStateException("Unexpected workflow encountered.  Stream UUIDs cannot be refreshed for this " +
-            "model");
-    }
-
-    @Override
     public LogReplicationEntryMsg read(UUID logEntryRequestId) throws TrimmedException {
         // Reads from the queue corresponding to this destination.  The queue contains addresses in the main queue
         // from where the actual data(payload) is to be read.
