@@ -16,7 +16,9 @@ import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 
 import static org.corfudb.security.tls.TlsTestContext.CLIENT_CERT;
+import static org.corfudb.security.tls.TlsTestContext.CLIENT_CERT_ECDSA_EXPIRED;
 import static org.corfudb.security.tls.TlsTestContext.CLIENT_TRUST_NO_SERVER;
+import static org.corfudb.security.tls.TlsTestContext.CLIENT_TRUST_ECDSA_EXPIRED_NO_SERVER;
 import static org.corfudb.security.tls.TlsTestContext.CLIENT_TRUST_WITH_SERVER;
 import static org.corfudb.security.tls.TlsTestContext.SERVER_CERT;
 import static org.corfudb.security.tls.TlsTestContext.SERVER_TRUST_NO_CLIENT;
@@ -26,11 +28,26 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 public class ReloadableTrustManagerTest {
 
     @Test
-    public void testServerCheckClient() throws Exception {
+    public void testServerCheckClientRSA() throws Exception {
         withDisabledCheckExpiry(() -> {
             ReloadableTrustManager manager = new ReloadableTrustManager(SERVER_TRUST_WITH_CLIENT);
             X509Certificate cert = getCertificate(CLIENT_CERT, true);
             manager.checkClientTrusted(new X509Certificate[]{cert}, "RSA");
+        });
+    }
+
+    /**
+     * Test that server can validate the expired client certificate of type ECDSA
+     * when certificate expiry check is disabled.
+     *
+     * @throws Exception any exceptions caught while validating the certificate
+     */
+    @Test
+    public void testServerCheckClientEC() throws Exception {
+        withDisabledCheckExpiry(() -> {
+            ReloadableTrustManager manager = new ReloadableTrustManager(CLIENT_TRUST_ECDSA_EXPIRED_NO_SERVER);
+            X509Certificate cert = getCertificate(CLIENT_CERT_ECDSA_EXPIRED, false);
+            manager.checkClientTrusted(new X509Certificate[]{cert}, "ECDHE_RSA");
         });
     }
 

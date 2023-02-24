@@ -507,6 +507,7 @@ public class AbstractIT extends AbstractCorfuTest {
         private String metricsConfigFile = "";
         private boolean single = true;
         private boolean tlsEnabled = false;
+        private boolean tlsMutualAuthEnabled = false;
         private boolean noAutoCommit = true;
         private String keyStore = null;
         private String keyStorePassword = null;
@@ -515,6 +516,7 @@ public class AbstractIT extends AbstractCorfuTest {
         private String trustStore = null;
         private String logSizeLimitPercentage = null;
         private String trustStorePassword = null;
+        private String disableCertExpiryCheckFile = null;
         private String compressionCodec = null;
         private boolean disableHost = false;
         private String networkInterface = null;
@@ -574,6 +576,12 @@ public class AbstractIT extends AbstractCorfuTest {
                 if (trustStorePassword != null) {
                     command.append(" -w ").append(trustStorePassword);
                 }
+                if (tlsMutualAuthEnabled) {
+                    command.append(" -b");
+                }
+                if (disableCertExpiryCheckFile != null) {
+                    command.append(" --disable-cert-expiry-check-file=").append(disableCertExpiryCheckFile);
+                }
             }
 
             if (networkInterface != null) {
@@ -628,11 +636,13 @@ public class AbstractIT extends AbstractCorfuTest {
         private int port = DEFAULT_LOG_REPLICATION_PORT;
         private String metricsConfigFile = "";
         private boolean tlsEnabled = false;
+        private boolean tlsMutualAuthEnabled = false;
         private String keyStore = null;
         private String keyStorePassword = null;
         private String logLevel = "INFO";
         private String trustStore = null;
         private String trustStorePassword = null;
+        private String disableCertExpiryCheckFile = null;
         private String compressionCodec = null;
         private String pluginConfigFilePath = null;
         private String logPath = null;
@@ -678,6 +688,12 @@ public class AbstractIT extends AbstractCorfuTest {
                 }
                 if (trustStorePassword != null) {
                     command.append(" -w ").append(trustStorePassword);
+                }
+                if (tlsMutualAuthEnabled) {
+                    command.append(" -b");
+                }
+                if (disableCertExpiryCheckFile != null) {
+                    command.append(" --disable-cert-expiry-check-file=").append(disableCertExpiryCheckFile);
                 }
             }
 
