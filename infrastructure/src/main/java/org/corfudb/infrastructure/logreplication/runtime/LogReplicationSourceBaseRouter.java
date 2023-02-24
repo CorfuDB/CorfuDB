@@ -456,7 +456,11 @@ public class LogReplicationSourceBaseRouter implements IClientRouter {
      * @param clusterDescriptor remote cluster descriptor
      */
     public synchronized void onClusterChange(ClusterDescriptor clusterDescriptor) {
-        this.clientChannelAdapter.clusterChangeNotification(clusterDescriptor);
+        // this currently is not implemented on the plugin side.
+        //TODO: Shama to check the correct behaviour
+        if(this.clientChannelAdapter != null) {
+            this.clientChannelAdapter.clusterChangeNotification(clusterDescriptor);
+        }
     }
 
     public Optional<String> getRemoteLeaderNodeId() {
