@@ -26,6 +26,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -191,9 +192,13 @@ public class Table<K extends Message, V extends Message, M extends Message> {
     @Nullable
     protected void deleteRecord(@Nonnull final K key) {
         if (!corfuTable.containsKey(key)) {
-            log.warn("Deleting a non-existent key {}", key);
+            log.warn("Deleting a non-existent key {} with hash {}", key, Objects.hash(key));
+            log.warn("Printing all keys");
+            Set<K> keys = keySet();
+            keys.forEach(k -> log.warn("key {} has hash {}", k, Objects.hash(k)));
             return;
         }
+
         corfuTable.delete(key);
     }
 
