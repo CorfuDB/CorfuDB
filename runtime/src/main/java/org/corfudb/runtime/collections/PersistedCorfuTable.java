@@ -1,8 +1,6 @@
 package org.corfudb.runtime.collections;
 
 import com.google.common.collect.ImmutableMap;
-import org.corfudb.runtime.collections.ICorfuTable;
-import org.corfudb.runtime.collections.Index;
 import org.corfudb.runtime.object.ICorfuExecutionContext;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.ICorfuSMRProxy;
@@ -17,7 +15,7 @@ import java.util.stream.Stream;
 
 public class PersistedCorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<PersistedCorfuTable<K, V>> {
 
-    private ICorfuSMRProxy<DiskBackedCorfuTable<K, V>> proxy;
+    private MVOCorfuCompileProxy<DiskBackedCorfuTable<K, V>> proxy;
 
     private final Map<String, ICorfuSMRUpcallTarget<DiskBackedCorfuTable<K, V>>> upcallTargetMap
             = ImmutableMap.<String, ICorfuSMRUpcallTarget<DiskBackedCorfuTable<K, V>>>builder()
@@ -28,7 +26,7 @@ public class PersistedCorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<P
 
     @Override
     public <R> void setProxy$CORFUSMR(ICorfuSMRProxy<R> proxy) {
-        this.proxy = (ICorfuSMRProxy<DiskBackedCorfuTable<K, V>>) proxy;
+        this.proxy = (MVOCorfuCompileProxy<DiskBackedCorfuTable<K, V>>) proxy;
     }
 
     @Override
@@ -56,7 +54,7 @@ public class PersistedCorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<P
 
     @Override
     public void close() {
-        // TODO(Zach):
+        proxy.getUnderlyingMVO().getCurrentObject().close();
     }
 
     @Override

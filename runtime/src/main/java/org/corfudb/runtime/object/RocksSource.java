@@ -16,12 +16,10 @@ import java.util.function.Function;
 
 @Slf4j
 @AllArgsConstructor
-public class RocksDBContext<T extends ICorfuSMR<T>> implements IRocksDBContext<T> {
+public class RocksSource<T extends ICorfuSMR<T> & ViewGenerator<T>> implements RocksTableApi<T> {
 
     private final OptimisticTransactionDB rocksDb;
     private final WriteOptions writeOptions;
-    private final String absolutePath;
-    private final Options dbOptions;
 
     @Override
     public byte[] get(@NonNull ByteBuf keyPayload) throws RocksDBException {
@@ -50,13 +48,13 @@ public class RocksDBContext<T extends ICorfuSMR<T>> implements IRocksDBContext<T
 
     @Override
     public void close() throws RocksDBException {
-        rocksDb.close();
-        RocksDB.destroyDB(absolutePath, dbOptions);
-        log.info("Cleared RocksDB data on {}", absolutePath);
     }
 
-    @Override
-    public ISMRSnapshot<T> getSnapshot(@NonNull Function<IRocksDBContext<T>, T> instanceProducer) {
-        return new DiskBackedSMRSnapshot<>(rocksDb, writeOptions, instanceProducer);
+    public ISMRSnapshot<T> getSnapshot(@NonNull T instance) {
+        return new DiskBackedSMRSnapshot<>(rocksDb, instance);
+    }
+
+    public RocksDB getRocksDb() {
+        return this.rocksDb;
     }
 }

@@ -2,6 +2,7 @@ package org.corfudb.runtime.object;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.protocols.logprotocol.SMREntry;
@@ -68,6 +69,7 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
      * so that a version is always available to sync from, as it is possible that the
      * MVOCache has no versions associated with this underlying object.
      */
+    @Getter
     private volatile T currentObject;
 
 
@@ -285,11 +287,11 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
                     return Optional.of(snapshotProxy);
                 } else {
                     // Lock was not valid, so release the consumed snapshot.
+                    // This only happens under a read lock.
                     snapshotProxy.release();
                 }
 
                 // TODO(Zach): finally block?
-
             }
 
             return Optional.empty();
@@ -338,7 +340,7 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
                         if (globalAddress > materializedUpTo && objectOpenOption == ObjectOpenOption.CACHE) {
                             final VersionedObjectIdentifier voId = new VersionedObjectIdentifier(getID(), materializedUpTo);
 
-                            if (currentSnapshot == null ) {
+                            if (currentSnapshot == null) {
                                 currentSnapshot = currentObject.getSnapshot();
                             }
 
@@ -348,8 +350,6 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
                             if (isCurrentObjectDirty.get()) {
                                 currentSnapshot = currentObject.getSnapshot();
                             }
-
-
                         }
 
                         // In the case where addressUpdates corresponds to a HOLE, getSmrEntryList() will

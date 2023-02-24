@@ -14,7 +14,7 @@ import org.rocksdb.WriteOptions;
 
 import java.util.function.Function;
 
-public class RocksDBTxnContext<T extends ICorfuSMR<T>> implements IRocksDBContext<T> {
+public class RocksTx<T extends ICorfuSMR<T>> implements RocksTableApi<T> {
 
     private final OptimisticTransactionDB rocksDb;
     private final WriteOptions writeOptions;
@@ -22,15 +22,13 @@ public class RocksDBTxnContext<T extends ICorfuSMR<T>> implements IRocksDBContex
     private final Transaction txn;
     private final ReadOptions readOptions;
 
-    public RocksDBTxnContext(@NonNull OptimisticTransactionDB rocksDb,
-                             @NonNull WriteOptions writeOptions,
-                             @NonNull Snapshot snapshot,
-                             @NonNull ReadOptions readOptions) {
+    public RocksTx(@NonNull OptimisticTransactionDB rocksDb,
+                   @NonNull WriteOptions writeOptions,
+                   @NonNull Snapshot snapshot) {
         this.rocksDb = rocksDb;
         this.writeOptions = writeOptions;
         this.snapshot = snapshot;
-        this.readOptions = readOptions;
-
+        this.readOptions = new ReadOptions().setSnapshot(snapshot);
         this.txn = rocksDb.beginTransaction(writeOptions);
     }
 
@@ -70,10 +68,5 @@ public class RocksDBTxnContext<T extends ICorfuSMR<T>> implements IRocksDBContex
         // TODO(Zach): Anything else here?
         txn.rollback();
         readOptions.close();
-    }
-
-    @Override
-    public ISMRSnapshot<T> getSnapshot(@NonNull Function<IRocksDBContext<T>, T> instanceProducer) {
-        throw new UnsupportedOperationException();
     }
 }

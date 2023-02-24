@@ -8,7 +8,7 @@ import org.rocksdb.RocksDBException;
 
 import java.util.function.Function;
 
-public interface IRocksDBContext<T extends ICorfuSMR<T>> {
+public interface RocksTableApi<T extends ICorfuSMR<T>> {
 
     byte[] get(@NonNull ByteBuf keyPayload) throws RocksDBException;
 
@@ -19,6 +19,4 @@ public interface IRocksDBContext<T extends ICorfuSMR<T>> {
     <K, V> RocksDbEntryIterator<K,V> getIterator(@NonNull ISerializer serializer);
 
     void close() throws RocksDBException;
-
-    ISMRSnapshot<T> getSnapshot(@NonNull Function<IRocksDBContext<T>, T> instanceProducer);
 }

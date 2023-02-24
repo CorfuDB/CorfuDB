@@ -13,7 +13,6 @@ import java.util.UUID;
  */
 public interface ICorfuSMR<T>
         extends ICorfuExecutionContext<T>, ICorfuVersionPolicy, AutoCloseable {
-
     /** The suffix for all precompiled SMR wrapper classes. */
     String CORFUSMR_SUFFIX = "$CORFUSMR";
 

@@ -24,6 +24,7 @@ import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.runtime.object.ConsistencyOptions;
 import org.corfudb.runtime.object.ICorfuVersionPolicy;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.Address;
@@ -67,6 +68,7 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
 
     private static final String nonExistingKey = "nonExistingKey";
     private static final String defaultNewMapEntry = "newEntry";
+    private static final boolean ENABLE_READ_YOUR_WRITES = true;
 
     public PersistedCorfuTableTest() {
         AbstractViewTest.initEventGroup();
@@ -124,18 +126,24 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
         public final String payload;
     }
 
-    private PersistedCorfuTable<String, String> setupTable(String streamName) {
+    private PersistedCorfuTable<String, String> setupTable(String streamName, boolean readYourWrites) {
         final Path persistedCacheLocation = Paths.get(diskBackedDirectory, streamName);
         final Options options = new Options().setCreateIfMissing(true);
+        final ConsistencyOptions consistencyOptions = ConsistencyOptions.builder()
+                .readYourWrites(readYourWrites).build();
         return getDefaultRuntime().getObjectsView().build()
                 .setTypeToken(new TypeToken<PersistedCorfuTable<String, String>>() {})
-                .setArguments(persistedCacheLocation, options, new PojoSerializer(String.class), getRuntime())
+                .setArguments(persistedCacheLocation, options, consistencyOptions, new PojoSerializer(String.class), getRuntime())
                 .setStreamName(streamName)
                 .open();
     }
 
+    private PersistedCorfuTable<String, String> setupTable(boolean readYourWrites) {
+        return setupTable(defaultTableName, readYourWrites);
+    }
+
     private PersistedCorfuTable<String, String> setupTable() {
-        return setupTable(defaultTableName);
+        return setupTable(defaultTableName, ENABLE_READ_YOUR_WRITES);
     }
 
     /**
@@ -395,7 +403,19 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
         }
     }
 
-    ////////////////////////////////////
+    @Property(tries = NUM_OF_TRIES)
+    void noReadYourOwnWrites(@ForAll @Size(SAMPLE_SIZE) Set<String> intended) throws Exception {
+        resetTests();
+        try (final PersistedCorfuTable<String, String> table = setupTable(!ENABLE_READ_YOUR_WRITES)) {
+            executeTx(() -> {
+                assertThat(table.get(defaultNewMapEntry)).isNull();
+                table.insert(defaultNewMapEntry, defaultNewMapEntry);
+                assertThat(table.get(defaultNewMapEntry)).isEqualTo(null);
+            });
+
+        }
+    }
+        ////////////////////////////////////
 
     /**
      * Verify RocksDB persisted cache is cleaned up
@@ -404,7 +424,7 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
     void verifyPersistedCacheCleanUp() {
         resetTests();
         assertThat(persistedCacheLocation).doesNotExist();
-        try (final PersistedCorfuTable<String, String> table1 = setupTable(alternateTableName)) {
+        try (final PersistedCorfuTable<String, String> table1 = setupTable(alternateTableName, ENABLE_READ_YOUR_WRITES)) {
             table1.insert(defaultNewMapEntry, defaultNewMapEntry);
             assertThat(persistedCacheLocation).exists();
             table1.close();
