@@ -555,6 +555,11 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
                     topologyDescriptor.getTopologyConfigId(), event.getTopologyConfig().getTopologyConfigId());
             return;
         }
+        if (event.getTopologyConfig().equals(topologyDescriptor)) {
+            log.debug("Duplicate topology received. Current topology {} received topology {}. Skipping the update.",
+                    topologyDescriptor, event.getTopologyConfig());
+            return;
+        }
 
         log.debug("Received topology change, topology={}", event.getTopologyConfig());
 
