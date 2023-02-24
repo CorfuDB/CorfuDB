@@ -512,7 +512,7 @@ public class SessionManager {
             newSessionsDiscovered.stream()
                     .filter(session -> topology.getRemoteClusterEndpoints().containsKey(session.getSourceClusterId()) ||
                             topology.getRemoteClusterEndpoints().containsKey(session.getSinkClusterId()))
-                    .forEach(session -> replicationManager.startConnection(session, serverMap));
+                    .forEach(session -> replicationManager.startConnection(session, serverMap, outgoingSessions.contains(session)));
     }
 
     /**
