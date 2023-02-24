@@ -68,7 +68,7 @@ public class CorfuReplicationMultiSourceSinkIT extends AbstractIT {
     protected final List<Table<Sample.StringKey, SampleSchema.ValueFieldTagOne, Message>> srcTables = new ArrayList<>();
     protected final List<Table<Sample.StringKey, SampleSchema.ValueFieldTagOne, Message>> sinkTables = new ArrayList<>();
 
-    protected static final String NAMESPACE = "LR_Test";
+    protected static final String NAMESPACE = "LR-Test";
 
     protected static final String STREAM_TAG = "tag_one";
 

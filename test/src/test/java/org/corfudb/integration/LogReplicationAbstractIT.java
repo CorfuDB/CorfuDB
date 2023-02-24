@@ -905,7 +905,6 @@ public class LogReplicationAbstractIT extends AbstractIT {
         public synchronized void onNext(CorfuStreamEntries results) {
             log.info("StreamingSinkListener:: onNext {} with entry size {}", results, results.getEntries().size());
             numTxLatch.countDown();
-
             results.getEntries().forEach((schema, entries) -> {
                 if (tablesToListenTo.contains(CorfuRuntime.getStreamID(NAMESPACE + "$" + schema.getTableName()))) {
                     messages.addAll(entries);

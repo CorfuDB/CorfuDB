@@ -31,8 +31,12 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.lang.reflect.InvocationTargetException;
+
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
@@ -58,6 +62,8 @@ public class LogReplicationLogicalGroupIT extends CorfuReplicationMultiSourceSin
     private static final String GROUPA_TABLE_PREFIX = "GroupA_Table00";
 
     private static final String GROUPB_TABLE_PREFIX = "GroupB_Table00";
+
+    private static final String STREAMING_TAG = "tag_one";
 
     private static final int SOURCE_INDEX = 0;
 
@@ -135,22 +141,36 @@ public class LogReplicationLogicalGroupIT extends CorfuReplicationMultiSourceSin
     }
 
     /**
-     * This test has the similar workflow as testNewStreamsInLogEntrySync() in
-     * {@link LogReplicationDynamicStreamIT}, with Logical Group feature.
+     * This IT has the similar workflow as
+     * {@link org.corfudb.integration.LogReplicationDynamicStreamIT#testNewStreamsInLogEntrySync()},
+     * with LOGICAL_GROUP replication model.
+     *
+     * This IT tests the log replication is successfully replicated when one
+     * of the table (table Group B in this IT) is opened during log entry sync status.
+     *
+     * @throws Exception
      */
     @Test
-    public void testNewStreamsInLogEntrySync() throws Exception {
-        clientInitialization();
+    public void testNewTablesInLogEntrySync() throws Exception {
+        // Register client and add group destinations
+        CorfuRuntime clientRuntime = getClientRuntime();
+        LogReplicationLogicalGroupClient logicalGroupClient =
+                new LogReplicationLogicalGroupClient(clientRuntime, SAMPLE_CLIENT_NAME);
+        logicalGroupClient.addDestination(GROUP_A, DefaultClusterConfig.getSinkClusterIds().get(SINK2_INDEX));
+        logicalGroupClient.addDestination(GROUP_B, DefaultClusterConfig.getSinkClusterIds().get(SINK3_INDEX));
 
+        // Open federated tables and Group A tables on source side
         int numTables = 2;
         openFederatedTable(numTables, sourceCorfuStores.get(SOURCE_INDEX), srcFederatedTables);
         openGroupATable(numTables, sourceCorfuStores.get(SOURCE_INDEX), srcTablesGroupA);
         openFederatedTable(numTables, sinkCorfuStores.get(SINK1_INDEX), sinkFederatedTables);
         openGroupATable(numTables, sinkCorfuStores.get(SINK2_INDEX), sinkTablesGroupA);
 
+        // Write data to federated tables and Group A tables on source side
         for (int i = 0; i < NUM_WRITES; i++) {
             StringKey key = StringKey.newBuilder().setKey(String.valueOf(i)).build();
-            ValueFieldTagOne federatedTablePayload = ValueFieldTagOne.newBuilder().setPayload(String.valueOf(i)).build();
+            ValueFieldTagOne federatedTablePayload =
+                    ValueFieldTagOne.newBuilder().setPayload(String.valueOf(i)).build();
             SampleGroupMsgA groupATablePayload = SampleGroupMsgA.newBuilder().setPayload(String.valueOf(i)).build();
 
             try (TxnContext txn = sourceCorfuStores.get(SOURCE_INDEX).txn(NAMESPACE)) {
@@ -164,16 +184,22 @@ public class LogReplicationLogicalGroupIT extends CorfuReplicationMultiSourceSin
             }
         }
 
+        // Start log replication
         startReplicationServers();
 
+        // Verify all the sessions' snapshot sync completed
+        verifyInLogEntrySyncState(SINK1_INDEX, SessionManager.getDefaultSubscriber());
+        verifyInLogEntrySyncState(SINK2_INDEX, SessionManager.getDefaultLogicalGroupSubscriber());
+        verifyInLogEntrySyncState(SINK3_INDEX, SessionManager.getDefaultLogicalGroupSubscriber());
+
+        // Verify the data of federated tables and Group A tables is in the sink
         verifyFederatedTableDataOnSink(sinkCorfuStores.get(SINK1_INDEX), NUM_WRITES, sinkFederatedTables);
         verifyGroupATableDataOnSink(sinkCorfuStores.get(SINK2_INDEX), NUM_WRITES, sinkTablesGroupA);
 
-        verifyInLogEntrySyncState(SINK1_INDEX, SessionManager.getDefaultSubscriber());
-        verifyInLogEntrySyncState(SINK2_INDEX, SessionManager.getDefaultLogicalGroupSubscriber());
-
+        // Open Group B tables on source
         openGroupBTable(numTables, sourceCorfuStores.get(SOURCE_INDEX), srcTablesGroupB);
 
+        // Write data to Group B tables
         for (int i = 0; i < NUM_WRITES; i++) {
             StringKey key = StringKey.newBuilder().setKey(String.valueOf(i)).build();
             SampleGroupMsgB groupBTablePayload = SampleGroupMsgB.newBuilder().setPayload(String.valueOf(i)).build();
@@ -186,175 +212,500 @@ public class LogReplicationLogicalGroupIT extends CorfuReplicationMultiSourceSin
             }
         }
 
+        // Open group B tables on sink side
         openGroupBTable(numTables, sinkCorfuStores.get(SINK3_INDEX), sinkTablesGroupB);
+
+        // Verify the data in Group B tables on source side is successfully replicated to Group B tables on sink side
         verifyGroupBTableDataOnSink(sinkCorfuStores.get(SINK3_INDEX), NUM_WRITES, sinkTablesGroupB);
     }
 
     /**
-     * This test has the same workflow as testSinkLocalWritesClearing() in
-     * {@link LogReplicationDynamicStreamIT}, with Logical Group feature.
+     * This IT has the same workflow as
+     * {@link org.corfudb.integration.LogReplicationDynamicStreamIT#testSinkLocalWritesClearing()},
+     * with LOGICAL_GROUP replication model.
+     *
+     * This IT tests the local write data on the sink side is overwritten
+     * during snapshot sync.
+     *
+     * In this IT, sinkFederatedTable, sinkTablesGroupA,
+     * and sinkTablesGroupB have NUM_WRITES/2 local data before log replication.
+     *
+     * srcFederatedTables have NUM_WRITES data on source, so it has NUM_WRITES data
+     * after log replication. Same applies to srcTablesGroupA.
+     * Since srcTablesGroupB has no data on source, it has no data after log replication.
+     *
+     * @throws Exception
      */
     @Test
     public void testLocalWrite() throws Exception {
-        // Set up the runtimes to each server and the model
-        setUp(numSource, numSink, DefaultClusterManager.TP_MIXED_MODEL);
-        // Register client
-        clientInitialization();
+        // Register client and add group destinations
+        CorfuRuntime clientRuntime = getClientRuntime();
+        LogReplicationLogicalGroupClient logicalGroupClient =
+                new LogReplicationLogicalGroupClient(clientRuntime, SAMPLE_CLIENT_NAME);
+        logicalGroupClient.addDestination(GROUP_A, DefaultClusterConfig.getSinkClusterIds().get(SINK2_INDEX));
+        logicalGroupClient.addDestination(GROUP_B, DefaultClusterConfig.getSinkClusterIds().get(SINK3_INDEX));
 
-        // Open tables on sources and sinks
-        openTablesOnSource(true, true, false);
-        openTablesOnSink(true, true, false);
+        // Open federated tables, Group A tables on source side and sink side
+        int numTables = 2;
+        openFederatedTable(numTables, sourceCorfuStores.get(SOURCE_INDEX), srcFederatedTables);
+        openGroupATable(numTables, sourceCorfuStores.get(SOURCE_INDEX), srcTablesGroupA);
+        openFederatedTable(numTables, sinkCorfuStores.get(SINK1_INDEX), sinkFederatedTables);
+        openGroupATable(numTables, sinkCorfuStores.get(SINK2_INDEX), sinkTablesGroupA);
 
-        // Write data on Sources
+        // Write data to federated tables, Group A table on source side
         for (int i = 0; i < NUM_WRITES; i++) {
-            Sample.StringKey key = Sample.StringKey.newBuilder().setKey(String.valueOf(i)).build();
-            ValueFieldTagOne federatedTablePayload = ValueFieldTagOne.newBuilder().setPayload(String.valueOf(i)).build();
+            StringKey key = StringKey.newBuilder().setKey(String.valueOf(i)).build();
+            ValueFieldTagOne federatedTablePayload =
+                    ValueFieldTagOne.newBuilder().setPayload(String.valueOf(i)).build();
             SampleGroupMsgA groupATablePayload = SampleGroupMsgA.newBuilder().setPayload(String.valueOf(i)).build();
-            try (TxnContext txn = sourceCorfuStores.get(0).txn(NAMESPACE)) {
-                txn.putRecord(srcFederatedTables.get(0), key, federatedTablePayload, null);
-                txn.putRecord(srcTablesGroupA.get(0), key, groupATablePayload, null);
+
+            try (TxnContext txn = sourceCorfuStores.get(SOURCE_INDEX).txn(NAMESPACE)) {
+                for (int j = 0; j < srcFederatedTables.size(); j++) {
+                    txn.putRecord(srcFederatedTables.get(j), key, federatedTablePayload, null);
+                }
+                for (int j = 0; j < srcTablesGroupA.size(); j++) {
+                    txn.putRecord(srcTablesGroupA.get(j), key, groupATablePayload, null);
+                }
                 txn.commit();
             }
         }
 
-        // Write local data on Sinks
-        for (int i = NUM_WRITES; i < NUM_WRITES + NUM_WRITES/2 ; i++) {
-            Sample.StringKey key = Sample.StringKey.newBuilder().setKey(String.valueOf(i)).build();
-            ValueFieldTagOne federatedTablePayload = ValueFieldTagOne.newBuilder().setPayload(String.valueOf(i)).build();
-            SampleGroupMsgA groupATablePayload = SampleGroupMsgA.newBuilder().setPayload(String.valueOf(i)).build();
-            try (TxnContext txn = sinkCorfuStores.get(0).txn(NAMESPACE)) {
-                txn.putRecord(sinkFederatedTables.get(0), key, federatedTablePayload, null);
-                txn.putRecord(sinkTablesGroupA.get(0), key, groupATablePayload, null);
-                txn.commit();
-            }
-        }
+        // Open Group B tables on sink
+        openGroupBTable(numTables, sinkCorfuStores.get(SINK3_INDEX), sinkTablesGroupB);
 
-        // Open table on sink
-        openTablesOnSink(false, false, true);
+        // Write local data to tables on sink
+        writeDataOnSink(NUM_WRITES, NUM_WRITES/2);
 
-        // Write local data on sink
-        for (int i = 0; i < NUM_WRITES; i++) {
-            Sample.StringKey key = Sample.StringKey.newBuilder().setKey(String.valueOf(i)).build();
-            SampleGroupMsgB groupBTablePayload = SampleGroupMsgB.newBuilder().setPayload(String.valueOf(i)).build();
-            try (TxnContext txn = sinkCorfuStores.get(0).txn(NAMESPACE)) {
-                txn.putRecord(sinkTablesGroupB.get(0), key, groupBTablePayload, null);
-                txn.commit();
-            }
-        }
-
-        // Start the LR
+        // Start log replication
         startReplicationServers();
+
+        // Verify all the sessions' snapshot sync completed
+        verifyInLogEntrySyncState(SINK1_INDEX, SessionManager.getDefaultSubscriber());
+        verifyInLogEntrySyncState(SINK2_INDEX, SessionManager.getDefaultLogicalGroupSubscriber());
+        verifyInLogEntrySyncState(SINK3_INDEX, SessionManager.getDefaultLogicalGroupSubscriber());
 
         // Verify that the data is replicated
         verifyFederatedTableDataOnSink(sinkCorfuStores.get(SINK1_INDEX), NUM_WRITES, sinkFederatedTables);
         verifyGroupATableDataOnSink(sinkCorfuStores.get(SINK2_INDEX), NUM_WRITES, sinkTablesGroupA);
-        // Verify that the local data is overwritten after replication
+        // Verify that the local data is overwritten after replication(GroupB tables do not have data on Source)
         verifyGroupBTableDataOnSink(sinkCorfuStores.get(SINK3_INDEX), 0, sinkTablesGroupB);
 
         // Verify that the local data is overwritten after replication
-        for (int i = NUM_WRITES; i < NUM_WRITES + NUM_WRITES/2 ; i++) {
+        for (int i = NUM_WRITES; i < NUM_WRITES + NUM_WRITES/2; i++) {
             Sample.StringKey key = Sample.StringKey.newBuilder().setKey(String.valueOf(i)).build();
-            try (TxnContext txn = sinkCorfuStores.get(0).txn(NAMESPACE)) {
-                assertThat(txn.getRecord(sinkFederatedTables.get(0), key).getPayload()).isNull();
-                assertThat(txn.getRecord(sinkTablesGroupA.get(0), key).getPayload()).isNull();
+            try (TxnContext txn = sinkCorfuStores.get(SINK1_INDEX).txn(NAMESPACE)) {
+                for (int j = 0; j < sinkFederatedTables.size(); j++) {
+                    assertThat(txn.getRecord(sinkFederatedTables.get(j), key).getPayload()).isNull();
+                }
+                txn.commit();
+            }
+        }
+
+        for (int i = NUM_WRITES; i < NUM_WRITES + NUM_WRITES/2; i++) {
+            Sample.StringKey key = Sample.StringKey.newBuilder().setKey(String.valueOf(i)).build();
+            try (TxnContext txn = sinkCorfuStores.get(SINK2_INDEX).txn(NAMESPACE)) {
+                for (int j = 0; j < sinkTablesGroupA.size(); j++) {
+                    assertThat(txn.getRecord(sinkTablesGroupA.get(j), key).getPayload()).isNull();
+                }
                 txn.commit();
             }
         }
     }
 
     /**
-     * This test has the similar workflow as testSnapshotAndLogEntrySync() in
-     * {@link LogReplicationDynamicStreamIT}, with Logical Group feature.
+     * This IT has the similar workflow as
+     * {@link org.corfudb.integration.LogReplicationDynamicStreamIT#testSnapshotAndLogEntrySync()}, with
+     * LOGICAL_GROUP replication model.
+     *
+     * This IT tests the correctness of log replication if
+     * only source tables(srcFederatedTables, srcTablesGroupA,
+     * srcTablesGroupB) are opened before log replication.
+     *
+     * @throws Exception
      */
     @Test
     public void testSourceNewTablesReplication() throws Exception {
-        // Open tables on source
-        openTablesOnSource(true, true, true);
+        // Register client and add group destinations
+        CorfuRuntime clientRuntime = getClientRuntime();
+        LogReplicationLogicalGroupClient logicalGroupClient =
+                new LogReplicationLogicalGroupClient(clientRuntime, SAMPLE_CLIENT_NAME);
+        logicalGroupClient.addDestination(GROUP_A, DefaultClusterConfig.getSinkClusterIds().get(SINK2_INDEX));
+        logicalGroupClient.addDestination(GROUP_B, DefaultClusterConfig.getSinkClusterIds().get(SINK3_INDEX));
 
-        //Initialize Client and set the destination
-        clientInitialization();
+        // Open tables for replication on Source side
+        int numTables = 2;
+        openFederatedTable(numTables, sourceCorfuStores.get(SOURCE_INDEX), srcFederatedTables);
+        openGroupATable(numTables, sourceCorfuStores.get(SOURCE_INDEX), srcTablesGroupA);
+        openGroupBTable(numTables, sourceCorfuStores.get(SOURCE_INDEX), srcTablesGroupB);
 
         // Write data to tables opened on each source cluster
         writeDataOnSource(0, NUM_WRITES);
 
-        // Assert that data is in the source
-        for (int i = 0; i < NUM_WRITES; i++) {
-            Sample.StringKey key = Sample.StringKey.newBuilder().setKey(String.valueOf(i)).build();
-            try (TxnContext txn = sourceCorfuStores.get(0).txn(NAMESPACE)) {
-                assertThat(txn.getRecord(srcFederatedTables.get(0), key).getPayload()).isNotNull();
-                assertThat(txn.getRecord(srcTablesGroupA.get(0), key).getPayload()).isNotNull();
-                assertThat(txn.getRecord(srcTablesGroupB.get(0), key).getPayload()).isNotNull();
-                txn.commit();
-            }
-        }
-
-        // Start the replication
+        // Start log replication
         startReplicationServers();
 
+        // Verify all the sessions' snapshot sync completed
+        verifyInLogEntrySyncState(SINK1_INDEX, SessionManager.getDefaultSubscriber());
+        verifyInLogEntrySyncState(SINK2_INDEX, SessionManager.getDefaultLogicalGroupSubscriber());
+        verifyInLogEntrySyncState(SINK3_INDEX, SessionManager.getDefaultLogicalGroupSubscriber());
+
         // Open tables on sink
-        openTablesOnSink(true, true, true);
+        openFederatedTable(numTables, sinkCorfuStores.get(SINK1_INDEX), sinkFederatedTables);
+        openGroupATable(numTables, sinkCorfuStores.get(SINK2_INDEX), sinkTablesGroupA);
+        openGroupBTable(numTables, sinkCorfuStores.get(SINK3_INDEX), sinkTablesGroupB);
 
-        while (sinkFederatedTables.get(0).count() != NUM_WRITES) {
-            // Block until expected number of entries is reached
-        }
-        while (sinkTablesGroupA.get(0).count() != NUM_WRITES) {
-            // Block until expected number of entries is reached
-        }
-        while (sinkTablesGroupB.get(0).count() != NUM_WRITES) {
-            // Block until expected number of entries is reached
-        }
+        // Verify the data is in tables on the sink side
+        verifyFederatedTableDataOnSink(sinkCorfuStores.get(SINK1_INDEX), NUM_WRITES, sinkFederatedTables);
+        verifyGroupATableDataOnSink(sinkCorfuStores.get(SINK2_INDEX), NUM_WRITES, sinkTablesGroupA);
+        verifyGroupBTableDataOnSink(sinkCorfuStores.get(SINK3_INDEX), NUM_WRITES, sinkTablesGroupB);
 
-        // Assert that data is in the sink
-        for (int i = 0; i < NUM_WRITES; i++) {
-            Sample.StringKey key = Sample.StringKey.newBuilder().setKey(String.valueOf(i)).build();
-            try (TxnContext txn = sinkCorfuStores.get(0).txn(NAMESPACE)) {
-                assertThat(txn.getRecord(sinkFederatedTables.get(0), key).getPayload()).isNotNull();
-                assertThat(txn.getRecord(sinkTablesGroupA.get(0), key).getPayload());
-                assertThat(txn.getRecord(sinkTablesGroupB.get(0), key).getPayload());
-                txn.commit();
-            }
-        }
-
+        // Write data on source side
         writeDataOnSource(NUM_WRITES, NUM_WRITES);
 
-        // Assert that data is in the source
-        for (int i = 0; i < 2 * NUM_WRITES; i++) {
-            Sample.StringKey key = Sample.StringKey.newBuilder().setKey(String.valueOf(i)).build();
-            try (TxnContext txn = sourceCorfuStores.get(0).txn(NAMESPACE)) {
-                assertThat(txn.getRecord(srcFederatedTables.get(0), key).getPayload()).isNotNull();
-                assertThat(txn.getRecord(srcTablesGroupA.get(0), key).getPayload());
-                assertThat(txn.getRecord(srcTablesGroupB.get(0), key).getPayload());
+        // Verify the data is in the tables on the sink side
+        verifyFederatedTableDataOnSink(sinkCorfuStores.get(SINK1_INDEX),
+                2 * NUM_WRITES, sinkFederatedTables);
+        verifyGroupATableDataOnSink(sinkCorfuStores.get(SINK2_INDEX),
+                2 * NUM_WRITES, sinkTablesGroupA);
+        verifyGroupBTableDataOnSink(sinkCorfuStores.get(SINK3_INDEX),
+                2 * NUM_WRITES, sinkTablesGroupB);
+    }
+
+    /**
+     * This IT has the similar workflow as
+     * {@link org.corfudb.integration.LogReplicationDynamicStreamIT#testSinkStreamingLogEntrySync()},
+     * with LOGICAL_GROUP replication model.
+     *
+     * (1) Perform Snapshot sync
+     * (2) After snapshot sync, open new tables on source side and sink side
+     * (3) Initiate testing stream listeners and subscribe to tag_one on Sink
+     * (4) Write some entries to the tables on Source
+     * (5) Verify testing stream listeners get all the update
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testSinkStreamingLogEntrySync() throws Exception {
+        // Register client and add group destinations
+        CorfuRuntime clientRuntime = getClientRuntime();
+        LogReplicationLogicalGroupClient logicalGroupClient =
+                new LogReplicationLogicalGroupClient(clientRuntime, SAMPLE_CLIENT_NAME);
+        logicalGroupClient.addDestination(GROUP_A, DefaultClusterConfig.getSinkClusterIds().get(SINK2_INDEX));
+        logicalGroupClient.addDestination(GROUP_B, DefaultClusterConfig.getSinkClusterIds().get(SINK3_INDEX));
+
+        // Open tables for replication on Source side
+        int numTables = 2;
+        openFederatedTable(numTables, sourceCorfuStores.get(SOURCE_INDEX), srcFederatedTables);
+        openGroupATable(numTables, sourceCorfuStores.get(SOURCE_INDEX), srcTablesGroupA);
+        openGroupBTable(numTables, sourceCorfuStores.get(SOURCE_INDEX), srcTablesGroupB);
+        openFederatedTable(numTables, sinkCorfuStores.get(SINK1_INDEX), sinkFederatedTables);
+        openGroupATable(numTables, sinkCorfuStores.get(SINK2_INDEX), sinkTablesGroupA);
+        openGroupBTable(numTables, sinkCorfuStores.get(SINK3_INDEX), sinkTablesGroupB);
+
+        // Write data to tables on source side
+        writeDataOnSource(0, NUM_WRITES);
+
+        // Start log replication
+        startReplicationServers();
+
+        // Verify all the sessions' snapshot sync completed
+        verifyInLogEntrySyncState(SINK1_INDEX, SessionManager.getDefaultSubscriber());
+        verifyInLogEntrySyncState(SINK2_INDEX, SessionManager.getDefaultLogicalGroupSubscriber());
+        verifyInLogEntrySyncState(SINK3_INDEX, SessionManager.getDefaultLogicalGroupSubscriber());
+
+        // Verify tables' content on Sink side
+        verifyFederatedTableDataOnSink(sinkCorfuStores.get(SINK1_INDEX), NUM_WRITES, sinkFederatedTables);
+        verifyGroupATableDataOnSink(sinkCorfuStores.get(SINK2_INDEX), NUM_WRITES, sinkTablesGroupA);
+        verifyGroupBTableDataOnSink(sinkCorfuStores.get(SINK3_INDEX), NUM_WRITES, sinkTablesGroupB);
+
+        // Initialize tableName UUID's sets and tableName's lists for stream listener
+        Set<UUID> tableNameForFederatedForLogEntry = new HashSet<>();
+        List<String> tableNameSubscribeForFederatedForLogEntry = new ArrayList<>();
+        Set<UUID> tableNameForGroupAForLogEntry = new HashSet<>();
+        List<String> tableNameSubscribeForGroupAForLogEntry = new ArrayList<>();
+        Set<UUID> tableNameForGroupBForLogEntry = new HashSet<>();
+        List<String> tableNameSubscribeForGroupBForLogEntry = new ArrayList<>();
+
+        // Open new tables on source side and sink side, and add tableName to the above data structures
+        for (int i = numTables + 1; i <= 2 * numTables; i++) {
+            String tableName = FEDERATED_TABLE_PREFIX + i;
+            Table<StringKey, ValueFieldTagOne, Message> federatedTable = sourceCorfuStores.get(SOURCE_INDEX).openTable(
+                    NAMESPACE,
+                    tableName,
+                    StringKey.class,
+                    ValueFieldTagOne.class,
+                    null,
+                    TableOptions.fromProtoSchema(ValueFieldTagOne.class)
+            );
+            tableNameForFederatedForLogEntry.add(CorfuRuntime.getStreamID(federatedTable.getFullyQualifiedTableName()));
+            tableNameSubscribeForFederatedForLogEntry.add(tableName);
+            srcFederatedTables.add(federatedTable);
+        }
+
+        for (int i = numTables + 1; i <= 2 * numTables; i++) {
+            String tableName = FEDERATED_TABLE_PREFIX + i;
+            Table<StringKey, ValueFieldTagOne, Message> federatedTable = sinkCorfuStores.get(SINK1_INDEX).openTable(
+                    NAMESPACE,
+                    tableName,
+                    StringKey.class,
+                    ValueFieldTagOne.class,
+                    null,
+                    TableOptions.fromProtoSchema(ValueFieldTagOne.class)
+            );
+            sinkFederatedTables.add(federatedTable);
+        }
+
+        for (int i = numTables + 1; i <= 2 * numTables; i++) {
+            String tableName = GROUPA_TABLE_PREFIX + i;
+            Table<StringKey, SampleGroupMsgA, Message> groupATable = sourceCorfuStores.get(SOURCE_INDEX).openTable(
+                    NAMESPACE,
+                    tableName,
+                    StringKey.class,
+                    SampleGroupMsgA.class,
+                    null,
+                    TableOptions.fromProtoSchema(SampleGroupMsgA.class)
+            );
+            tableNameForGroupAForLogEntry.add(CorfuRuntime.getStreamID(groupATable.getFullyQualifiedTableName()));
+            tableNameSubscribeForGroupAForLogEntry.add(tableName);
+            srcTablesGroupA.add(groupATable);
+        }
+
+        for (int i = numTables + 1; i <= 2 * numTables; i++) {
+            String tableName = GROUPA_TABLE_PREFIX + i;
+            Table<StringKey, SampleGroupMsgA, Message> groupATable = sinkCorfuStores.get(SINK2_INDEX).openTable(
+                    NAMESPACE,
+                    tableName,
+                    StringKey.class,
+                    SampleGroupMsgA.class,
+                    null,
+                    TableOptions.fromProtoSchema(SampleGroupMsgA.class)
+            );
+            sinkTablesGroupA.add(groupATable);
+        }
+
+        for (int i = numTables + 1; i <= 2 * numTables; i++) {
+            String tableName = GROUPB_TABLE_PREFIX + i;
+            Table<StringKey, SampleGroupMsgB, Message> groupBTable = sourceCorfuStores.get(SOURCE_INDEX).openTable(
+                    NAMESPACE,
+                    tableName,
+                    StringKey.class,
+                    SampleGroupMsgB.class,
+                    null,
+                    TableOptions.fromProtoSchema(SampleGroupMsgB.class)
+            );
+            tableNameForGroupBForLogEntry.add(CorfuRuntime.getStreamID(groupBTable.getFullyQualifiedTableName()));
+            tableNameSubscribeForGroupBForLogEntry.add(tableName);
+            srcTablesGroupB.add(groupBTable);
+        }
+
+        for (int i = numTables + 1; i <= 2 * numTables; i++) {
+            String tableName = GROUPB_TABLE_PREFIX + i;
+            Table<StringKey, SampleGroupMsgB, Message> groupBTable = sinkCorfuStores.get(SINK3_INDEX).openTable(
+                    NAMESPACE,
+                    tableName,
+                    StringKey.class,
+                    SampleGroupMsgB.class,
+                    null,
+                    TableOptions.fromProtoSchema(SampleGroupMsgB.class)
+            );
+            sinkTablesGroupB.add(groupBTable);
+        }
+
+        // Initialize testing stream listeners
+        int expectedMessageSizeForLogEntry = NUM_WRITES * numTables;
+        CountDownLatch streamingSinkSnapshotCompletionForFederatedLogEntry = new CountDownLatch(NUM_WRITES);
+        CountDownLatch numTxLatchForFederatedLogEntry = new CountDownLatch(NUM_WRITES);
+        CountDownLatch streamingSinkSnapshotCompletionForGroupALogEntry = new CountDownLatch(NUM_WRITES);
+        CountDownLatch numTxLatchForGroupALogEntry = new CountDownLatch(NUM_WRITES);
+        CountDownLatch streamingSinkSnapshotCompletionForGroupBLogEntry = new CountDownLatch(NUM_WRITES);
+        CountDownLatch numTxLatchForGroupBLogEntry = new CountDownLatch(NUM_WRITES);
+        LogReplicationAbstractIT.StreamingSinkListener listenerForFederatedLogEntry =
+                new LogReplicationAbstractIT.StreamingSinkListener(streamingSinkSnapshotCompletionForFederatedLogEntry,
+                numTxLatchForFederatedLogEntry, tableNameForFederatedForLogEntry);
+        LogReplicationAbstractIT.StreamingSinkListener listenerForGroupALogEntry =
+                new LogReplicationAbstractIT.StreamingSinkListener(streamingSinkSnapshotCompletionForGroupALogEntry,
+                numTxLatchForGroupALogEntry, tableNameForGroupAForLogEntry);
+        LogReplicationAbstractIT.StreamingSinkListener listenerForGroupBLogEntry =
+                new LogReplicationAbstractIT.StreamingSinkListener(streamingSinkSnapshotCompletionForGroupBLogEntry,
+                numTxLatchForGroupBLogEntry, tableNameForGroupBForLogEntry);
+
+        // Subscribe the listeners on the sink side
+        sinkCorfuStores.get(SINK1_INDEX).subscribeListener(listenerForFederatedLogEntry, NAMESPACE, STREAMING_TAG,
+                tableNameSubscribeForFederatedForLogEntry);
+        sinkCorfuStores.get(SINK2_INDEX).subscribeListener(listenerForGroupALogEntry, NAMESPACE, STREAMING_TAG,
+                tableNameSubscribeForGroupAForLogEntry);
+        sinkCorfuStores.get(SINK3_INDEX).subscribeListener(listenerForGroupBLogEntry, NAMESPACE, STREAMING_TAG,
+                tableNameSubscribeForGroupBForLogEntry);
+
+        // Write new entries to the tables
+        for (int i = 0; i < NUM_WRITES; i++) {
+            StringKey key = StringKey.newBuilder().setKey(String.valueOf(i)).build();
+            ValueFieldTagOne federatedTablePayload =
+                    ValueFieldTagOne.newBuilder().setPayload(String.valueOf(i)).build();
+            SampleGroupMsgA groupATablePayload = SampleGroupMsgA.newBuilder().setPayload(String.valueOf(i)).build();
+            SampleGroupMsgB groupBTablePayload = SampleGroupMsgB.newBuilder().setPayload(String.valueOf(i)).build();
+
+            try (TxnContext txn = sourceCorfuStores.get(SOURCE_INDEX).txn(NAMESPACE)) {
+                for (int j = 2; j < srcFederatedTables.size(); j++) {
+                    txn.putRecord(srcFederatedTables.get(j), key, federatedTablePayload, null);
+                }
+                for (int j = 2; j < srcTablesGroupA.size(); j++) {
+                    txn.putRecord(srcTablesGroupA.get(j), key, groupATablePayload, null);
+                }
+                for (int j = 2; j < srcTablesGroupB.size(); j++) {
+                    txn.putRecord(srcTablesGroupB.get(j), key, groupBTablePayload, null);
+                }
                 txn.commit();
             }
         }
 
-        // Wait until data is fully replicated
-        while (sinkFederatedTables.get(0).count() != 2 * NUM_WRITES) {
-            // Block until expected number of entries is reached
-        }
-        while (sinkTablesGroupA.get(0).count() != 2 * NUM_WRITES) {
-            // Block until expected number of entries is reached
-        }
-        while (sinkTablesGroupB.get(0).count() != 2 * NUM_WRITES) {
-            // Block until expected number of entries is reached
-        }
+        // Verify tables' content on Sink side
+        verifyFederatedTableDataOnSink(sinkCorfuStores.get(SINK1_INDEX), NUM_WRITES, sinkFederatedTables);
+        verifyGroupATableDataOnSink(sinkCorfuStores.get(SINK2_INDEX), NUM_WRITES, sinkTablesGroupA);
+        verifyGroupBTableDataOnSink(sinkCorfuStores.get(SINK3_INDEX), NUM_WRITES, sinkTablesGroupB);
 
-        assertThat(sinkFederatedTables.get(0).count()).isEqualTo(2 * NUM_WRITES);
-        assertThat(sinkTablesGroupA.get(0).count()).isEqualTo(2 * NUM_WRITES);
-        assertThat(sinkTablesGroupB.get(0).count()).isEqualTo(2 * NUM_WRITES);
+        // Wait until listeners get all the update
+        streamingSinkSnapshotCompletionForFederatedLogEntry.await();
+        streamingSinkSnapshotCompletionForGroupALogEntry.await();
+        streamingSinkSnapshotCompletionForGroupBLogEntry.await();
 
-        int targetWrites = 2 * NUM_WRITES;
+        numTxLatchForFederatedLogEntry.await();
+        numTxLatchForGroupALogEntry.await();
+        numTxLatchForGroupBLogEntry.await();
 
-        verifyFederatedTableDataOnSink(sinkCorfuStores.get(SINK1_INDEX), targetWrites, sinkFederatedTables);
-        verifyGroupATableDataOnSink(sinkCorfuStores.get(SINK2_INDEX), targetWrites, sinkTablesGroupA);
-        verifyGroupBTableDataOnSink(sinkCorfuStores.get(SINK3_INDEX), targetWrites, sinkTablesGroupB);
-
-
+        // Verify the listeners get all the update
+        assertThat(listenerForFederatedLogEntry.messages).hasSize(expectedMessageSizeForLogEntry);
+        assertThat(listenerForGroupALogEntry.messages).hasSize(expectedMessageSizeForLogEntry);
+        assertThat(listenerForGroupBLogEntry.messages).hasSize(expectedMessageSizeForLogEntry);
     }
 
+    /**
+     * This IT has the similar workflow as
+     * {@link org.corfudb.integration.LogReplicationDynamicStreamIT#testSinkStreamingSnapshotSync()},
+     * with LOGICAL_GROUP replication model.
+     *
+     * (1) Open tables with tag_one on Source and Sink
+     * (2) Initiate testing stream listeners and subscribe to tag_one on Sink
+     * (3) Write some entries to the tables on Source
+     * (4) Start log replication snapshot sync and verify the test listener received all the updates
+     *
+     * @throws Exception
+     */
     @Test
-    public void testSinkSideStreaming() {
-        // TODO
+    public void testSinkStreamingSnapshotSync() throws Exception {
+        // Register client and add group destinations
+        CorfuRuntime clientRuntime = getClientRuntime();
+        LogReplicationLogicalGroupClient logicalGroupClient =
+                new LogReplicationLogicalGroupClient(clientRuntime, SAMPLE_CLIENT_NAME);
+        logicalGroupClient.addDestination(GROUP_A, DefaultClusterConfig.getSinkClusterIds().get(SINK2_INDEX));
+        logicalGroupClient.addDestination(GROUP_B, DefaultClusterConfig.getSinkClusterIds().get(SINK3_INDEX));
+
+        // Initialize the lists for the tableName of federated, group A, and group B tables
+        Set<UUID> tableNameForFederated = new HashSet<>();
+        Set<UUID> tableNameForGroupA = new HashSet<>();
+        Set<UUID> tableNameForGroupB = new HashSet<>();
+
+        // Open tables on source side, and add the tableName to the lists that store the tableName
+        int numTables = 2;
+        for (int i = 1; i <= numTables; i++) {
+            String tableName = FEDERATED_TABLE_PREFIX + i;
+            Table<StringKey, ValueFieldTagOne, Message> federatedTable = sourceCorfuStores.get(SOURCE_INDEX).openTable(
+                    NAMESPACE,
+                    tableName,
+                    StringKey.class,
+                    ValueFieldTagOne.class,
+                    null,
+                    TableOptions.fromProtoSchema(ValueFieldTagOne.class)
+            );
+            tableNameForFederated.add(CorfuRuntime.getStreamID(federatedTable.getFullyQualifiedTableName()));
+            srcFederatedTables.add(federatedTable);
+        }
+
+        for (int i = 1; i <= numTables; i++) {
+            String tableName = GROUPA_TABLE_PREFIX + i;
+            Table<StringKey, SampleGroupMsgA, Message> groupATable = sourceCorfuStores.get(SOURCE_INDEX).openTable(
+                    NAMESPACE,
+                    tableName,
+                    StringKey.class,
+                    SampleGroupMsgA.class,
+                    null,
+                    TableOptions.fromProtoSchema(SampleGroupMsgA.class)
+            );
+            tableNameForGroupA.add(CorfuRuntime.getStreamID(groupATable.getFullyQualifiedTableName()));
+            srcTablesGroupA.add(groupATable);
+        }
+
+        for (int i = 1; i <= numTables; i++) {
+            String tableName = GROUPB_TABLE_PREFIX + i;
+            Table<StringKey, SampleGroupMsgB, Message> groupBTable = sourceCorfuStores.get(SOURCE_INDEX).openTable(
+                    NAMESPACE,
+                    tableName,
+                    StringKey.class,
+                    SampleGroupMsgB.class,
+                    null,
+                    TableOptions.fromProtoSchema(SampleGroupMsgB.class)
+            );
+            tableNameForGroupB.add(CorfuRuntime.getStreamID(groupBTable.getFullyQualifiedTableName()));
+            srcTablesGroupB.add(groupBTable);
+        }
+
+        // Open tables on sink side
+        openFederatedTable(numTables, sinkCorfuStores.get(SINK1_INDEX), sinkFederatedTables);
+        openGroupATable(numTables, sinkCorfuStores.get(SINK2_INDEX), sinkTablesGroupA);
+        openGroupBTable(numTables, sinkCorfuStores.get(SINK3_INDEX), sinkTablesGroupB);
+
+        // Initialize the streamListeners for each sink
+        int expectedMessageSize = numTables * (NUM_WRITES + 1);
+        CountDownLatch streamingSinkSnapshotCompletionForFederated = new CountDownLatch(expectedMessageSize);
+        CountDownLatch numTxLatchForFederated = new CountDownLatch(numTables);
+        CountDownLatch streamingSinkSnapshotCompletionForGroupA = new CountDownLatch(expectedMessageSize);
+        CountDownLatch numTxLatchForGroupA = new CountDownLatch(numTables);
+        CountDownLatch streamingSinkSnapshotCompletionForGroupB = new CountDownLatch(expectedMessageSize);
+        CountDownLatch numTxLatchForGroupB = new CountDownLatch(numTables);
+        LogReplicationAbstractIT.StreamingSinkListener listenerForFederated =
+                new LogReplicationAbstractIT.StreamingSinkListener(streamingSinkSnapshotCompletionForFederated,
+                numTxLatchForFederated, tableNameForFederated);
+        LogReplicationAbstractIT.StreamingSinkListener listenerForGroupA =
+                new LogReplicationAbstractIT.StreamingSinkListener(streamingSinkSnapshotCompletionForGroupA,
+                numTxLatchForGroupA, tableNameForGroupA);
+        LogReplicationAbstractIT.StreamingSinkListener listenerForGroupB =
+                new LogReplicationAbstractIT.StreamingSinkListener(streamingSinkSnapshotCompletionForGroupB,
+                numTxLatchForGroupB, tableNameForGroupB);
+
+        // Subscribe the listeners on the sink side
+        sinkCorfuStores.get(SINK1_INDEX).subscribeListener(listenerForFederated, NAMESPACE, STREAMING_TAG);
+        sinkCorfuStores.get(SINK2_INDEX).subscribeListener(listenerForGroupA, NAMESPACE, STREAMING_TAG);
+        sinkCorfuStores.get(SINK3_INDEX).subscribeListener(listenerForGroupB, NAMESPACE, STREAMING_TAG);
+
+        // Write the data to tables on source side
+        writeDataOnSource(0, NUM_WRITES);
+
+        // Start log replication
+        startReplicationServers();
+
+        // Verify all the sessions' snapshot sync completed
+        verifyInLogEntrySyncState(SINK1_INDEX, SessionManager.getDefaultSubscriber());
+        verifyInLogEntrySyncState(SINK2_INDEX, SessionManager.getDefaultLogicalGroupSubscriber());
+        verifyInLogEntrySyncState(SINK3_INDEX, SessionManager.getDefaultLogicalGroupSubscriber());
+
+        // Verify the data is successfully replicated
+        verifyFederatedTableDataOnSink(sinkCorfuStores.get(SINK1_INDEX), NUM_WRITES, sinkFederatedTables);
+        verifyGroupATableDataOnSink(sinkCorfuStores.get(SINK2_INDEX), NUM_WRITES, sinkTablesGroupA);
+        verifyGroupBTableDataOnSink(sinkCorfuStores.get(SINK3_INDEX), NUM_WRITES, sinkTablesGroupB);
+
+        // Wait until listeners get all the update
+        streamingSinkSnapshotCompletionForFederated.await();
+        streamingSinkSnapshotCompletionForGroupA.await();
+        streamingSinkSnapshotCompletionForGroupB.await();
+
+        numTxLatchForFederated.await();
+        numTxLatchForGroupA.await();
+        numTxLatchForGroupB.await();
+
+        // Verify the listeners get all the update
+        assertThat(listenerForFederated.messages).hasSize(expectedMessageSize);
+        assertThat(listenerForGroupA.messages).hasSize(expectedMessageSize);
+        assertThat(listenerForGroupB.messages).hasSize(expectedMessageSize);
     }
 
     @Test
@@ -435,6 +786,7 @@ public class LogReplicationLogicalGroupIT extends CorfuReplicationMultiSourceSin
 
         // Remove groupB from Sink3 and verify groupB tables' data no longer replicated to Sink3
         logicalGroupClient.removeDestination(GROUP_B, DefaultClusterConfig.getSinkClusterIds().get(SINK3_INDEX));
+        TimeUnit.SECONDS.sleep(3);
         for (int i = targetWrites; i < targetWrites + NUM_WRITES; i++) {
             StringKey key = StringKey.newBuilder().setKey(String.valueOf(i)).build();
             SampleGroupMsgB groupBTablePayload = SampleGroupMsgB.newBuilder().setPayload(String.valueOf(i)).build();
@@ -601,7 +953,6 @@ public class LogReplicationLogicalGroupIT extends CorfuReplicationMultiSourceSin
                                   List<Table<StringKey, ValueFieldTagOne, Message>> sinkTables) {
         sinkTables.forEach(table -> {
             log.info("Verify Data on Sink's Table {}", table.getFullyQualifiedTableName());
-
             // Wait until data is fully replicated
             while (table.count() != expectedConsecutiveWrites) {
                 // Block until expected number of entries is reached
@@ -688,85 +1039,37 @@ public class LogReplicationLogicalGroupIT extends CorfuReplicationMultiSourceSin
     }
 
     /**
-     * A helper method for the testSourceNewTablesReplication(). It opens the federated table,
-     * table for group A, table for group B on the Source.
+     * This helper function is for testLocalWrite(), since the local data needs to be written
+     * on the sink side before log replication.
+     * @param startNum
+     * @param numWrites
      */
-    private void openTablesOnSource(boolean federated, boolean groupA, boolean groupB) throws InvocationTargetException, NoSuchMethodException, IllegalAccessException {
-        Table<Sample.StringKey, ValueFieldTagOne, Message> federatedTable;
-        Table<Sample.StringKey, SampleGroupMsgA, Message> tableGroupA;
-        Table<Sample.StringKey, SampleGroupMsgB, Message> tableGroupB;
-        CorfuStore srcCorfuStore = sourceCorfuStores.get(0);
-        int federatedTableIndex = 0;
-        int groupATableIndex = 1;
-        int groupBTableIndex = 2;
+    private void writeDataOnSink(int startNum, int numWrites) {
+        for (int i = startNum; i < startNum + numWrites; i++) {
+            StringKey key = StringKey.newBuilder().setKey(String.valueOf(i)).build();
+            ValueFieldTagOne federatedTablePayload =
+                    ValueFieldTagOne.newBuilder().setPayload(String.valueOf(i)).build();
+            SampleGroupMsgA groupATablePayload = SampleGroupMsgA.newBuilder().setPayload(String.valueOf(i)).build();
+            SampleGroupMsgB groupBTablePayload = SampleGroupMsgB.newBuilder().setPayload(String.valueOf(i)).build();
 
-        if (federated) {
-            federatedTable = srcCorfuStore.openTable(NAMESPACE, tableNames.get(federatedTableIndex),
-                    Sample.StringKey.class, ValueFieldTagOne.class,
-                    null, TableOptions.fromProtoSchema(ValueFieldTagOne.class));
-            srcFederatedTables.add(federatedTable);
+            try (TxnContext txn = sinkCorfuStores.get(SINK1_INDEX).txn(NAMESPACE)) {
+                for (int j = 0; j < sinkFederatedTables.size(); j++) {
+                    txn.putRecord(sinkFederatedTables.get(j), key, federatedTablePayload, null);
+                }
+                txn.commit();
+            }
+            try (TxnContext txn = sinkCorfuStores.get(SINK2_INDEX).txn(NAMESPACE)) {
+                for (int j = 0; j < sinkTablesGroupA.size(); j++) {
+                    txn.putRecord(sinkTablesGroupA.get(j), key, groupATablePayload, null);
+                }
+                txn.commit();
+            }
+            try (TxnContext txn = sinkCorfuStores.get(SINK3_INDEX).txn(NAMESPACE)) {
+                for (int j = 0; j < sinkTablesGroupB.size(); j++) {
+                    txn.putRecord(sinkTablesGroupB.get(j), key, groupBTablePayload, null);
+                }
+                txn.commit();
+            }
         }
-
-        if (groupA) {
-            tableGroupA = srcCorfuStore.openTable(NAMESPACE, tableNames.get(groupATableIndex),
-                    Sample.StringKey.class, SampleGroupMsgA.class,
-                    null, TableOptions.fromProtoSchema(SampleGroupMsgA.class));
-            srcTablesGroupA.add(tableGroupA);
-        }
-
-        if (groupB) {
-            tableGroupB = srcCorfuStore.openTable(NAMESPACE, tableNames.get(groupBTableIndex),
-                    Sample.StringKey.class, SampleGroupMsgB.class,
-                    null, TableOptions.fromProtoSchema(SampleGroupMsgB.class));
-            srcTablesGroupB.add(tableGroupB);
-        }
-    }
-
-    /**
-     * A helper method for the testSourceNewTablesReplication(). It opens the federated table,
-     * table for group A, table for group B on the sink.
-     */
-    private void openTablesOnSink(boolean federated, boolean groupA, boolean groupB) throws InvocationTargetException, NoSuchMethodException, IllegalAccessException {
-        Table<Sample.StringKey, ValueFieldTagOne, Message> federatedTable;
-        Table<Sample.StringKey, SampleGroupMsgA, Message> tableGroupA;
-        Table<Sample.StringKey, SampleGroupMsgB, Message> tableGroupB;
-
-        int federatedTableIndex = 0;
-        int groupATableIndex = 1;
-        int groupBTableIndex = 2;
-
-        if (federated) {
-            federatedTable = sinkCorfuStores.get(federatedTableIndex).openTable(NAMESPACE, tableNames.get(federatedTableIndex),
-                    Sample.StringKey.class, ValueFieldTagOne.class,
-                    null, TableOptions.fromProtoSchema(ValueFieldTagOne.class));
-            sinkFederatedTables.add(federatedTable);
-        }
-
-        if (groupA) {
-            tableGroupA = sinkCorfuStores.get(groupATableIndex).openTable(NAMESPACE, tableNames.get(groupATableIndex),
-                    Sample.StringKey.class, SampleGroupMsgA.class,
-                    null, TableOptions.fromProtoSchema(SampleGroupMsgA.class));
-            sinkTablesGroupA.add(tableGroupA);
-        }
-
-        if (groupB) {
-            tableGroupB = sinkCorfuStores.get(groupBTableIndex).openTable(NAMESPACE, tableNames.get(groupBTableIndex),
-                    Sample.StringKey.class, SampleGroupMsgB.class,
-                    null, TableOptions.fromProtoSchema(SampleGroupMsgB.class));
-            sinkTablesGroupB.add(tableGroupB);
-        }
-    }
-
-    /**
-     * A helper method for testSourceNewTablesReplication(). It initializes a client, then add the destinations
-     * to logical group A and B.
-     */
-    private void clientInitialization() throws InvocationTargetException, NoSuchMethodException, IllegalAccessException {
-        CorfuRuntime clientRuntime = getClientRuntime();
-        LogReplicationLogicalGroupClient logicalGroupClient =
-                new LogReplicationLogicalGroupClient(clientRuntime, SAMPLE_CLIENT_NAME);
-        logicalGroupClient.addDestination(GROUP_A, DefaultClusterConfig.getSinkClusterIds().get(1));
-        logicalGroupClient.addDestination(GROUP_A, DefaultClusterConfig.getSinkClusterIds().get(2));
-        logicalGroupClient.addDestination(GROUP_B, DefaultClusterConfig.getSinkClusterIds().get(2));
     }
 }
