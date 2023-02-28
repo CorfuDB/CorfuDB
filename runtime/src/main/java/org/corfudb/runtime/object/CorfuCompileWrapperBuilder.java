@@ -56,7 +56,8 @@ public class CorfuCompileWrapperBuilder {
 
             // Note: args are used when invoking the internal immutable data structure constructor
             wrapperObject.setProxy$CORFUSMR(new MVOCorfuCompileProxy<>(rt, streamID,
-                    immutableClass, args, serializer, streamTags, wrapperObject, objectOpenOption));
+                    immutableClass, args, serializer, streamTags, wrapperObject, objectOpenOption,
+                    rt.getObjectsView().getMvoCache()));
             return (T) wrapperObject;
         } else if (type.getName().equals(PERSISTED_CORFU_TABLE_CLASS_NAME)) {
             // TODO: make general - This should also get cleaned up
@@ -69,8 +70,10 @@ public class CorfuCompileWrapperBuilder {
             ICorfuSMR<T> wrapperObject = (ICorfuSMR<T>) ReflectionUtils.
                     findMatchingConstructor(wrapperClass.getDeclaredConstructors(), new Object[0]);
 
+            MVOCache<T> mvoCache = new MVOCache<>();
             wrapperObject.setProxy$CORFUSMR(new MVOCorfuCompileProxy<>(rt, streamID,
-                    coreClass, args, serializer, streamTags, wrapperObject, objectOpenOption));
+                    coreClass, args, serializer, streamTags, wrapperObject, objectOpenOption,
+                    mvoCache));
             return (T) wrapperObject;
         }
 

@@ -149,7 +149,8 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
                 runtime.getSerializers().getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE),
                 new HashSet<UUID>(),
                 table,
-                ObjectOpenOption.CACHE
+                ObjectOpenOption.CACHE,
+                rt.getObjectsView().getMvoCache()
                 ));
 
         return table;

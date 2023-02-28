@@ -235,17 +235,16 @@ public class DiskBackedCorfuTable<K, V> implements ICorfuSMR<DiskBackedCorfuTabl
         return tableSource.getSnapshot(this);
     }
 
-    @Override
-    public DiskBackedCorfuTable<K, V> generateView(RocksTableApi<DiskBackedCorfuTable<K, V>> view) {
+    private DiskBackedCorfuTable<K, V> newView(RocksTableApi<DiskBackedCorfuTable<K, V>> view) {
         return toBuilder().tableView(view).build();
     }
 
     @Override
-    public DiskBackedCorfuTable<K, V> generateTx(Snapshot snapshot) {
+    public DiskBackedCorfuTable<K, V> newView(Snapshot snapshot) {
         if (consistencyOptions.isReadYourWrites()) {
-            return generateView(new RocksTx<>(rocksDb, writeOptions, snapshot));
+            return newView(new RocksTx<>(rocksDb, writeOptions, snapshot));
         } else {
-            return generateView(new RocksStubTx<>(rocksDb, snapshot));
+            return newView(new RocksStubTx<>(rocksDb, snapshot));
         }
     }
 }

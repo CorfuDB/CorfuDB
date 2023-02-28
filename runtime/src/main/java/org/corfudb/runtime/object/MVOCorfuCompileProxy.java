@@ -50,7 +50,7 @@ public class MVOCorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRPr
 
     public MVOCorfuCompileProxy(CorfuRuntime rt, UUID streamID, Class<T> type, Object[] args,
                                 ISerializer serializer, Set<UUID> streamTags, ICorfuSMR<T> wrapperObject,
-                                ObjectOpenOption objectOpenOption) {
+                                ObjectOpenOption objectOpenOption, MVOCache<T> mvoCache) {
         this.rt = rt;
         this.streamID = streamID;
         this.type = type;
@@ -64,7 +64,8 @@ public class MVOCorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRPr
                 this::getNewInstance,
                 new StreamViewSMRAdapter(rt, rt.getStreamsView().getUnsafe(streamID)),
                 wrapperObject,
-                objectOpenOption);
+                objectOpenOption,
+                mvoCache);
     }
 
     @Override

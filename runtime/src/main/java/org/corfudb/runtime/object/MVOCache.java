@@ -12,6 +12,7 @@ import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.runtime.CorfuRuntime;
 
 import javax.annotation.Nonnull;
+import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -27,12 +28,25 @@ import java.util.stream.Collectors;
 @Slf4j
 public class MVOCache<T extends ICorfuSMR<T>> {
 
+    private final Duration MAX_TX_DURATION = Duration.ofMinutes(15);
+
     /**
      * A collection of strong references to all versioned objects and their state.
      */
     @Getter
-    private final Cache<VersionedObjectIdentifier, ISMRSnapshot<T>> objectCache;
+    final Cache<VersionedObjectIdentifier, ISMRSnapshot<T>> objectCache;
 
+    public MVOCache() {
+        this.objectCache = CacheBuilder.newBuilder()
+                .expireAfterWrite(MAX_TX_DURATION)
+                .removalListener(this::handleEviction)
+                .recordStats()
+                .build();
+
+        MeterRegistryProvider.getInstance()
+                .map(registry -> GuavaCacheMetrics.monitor(registry, objectCache, "mvo_cache"));
+
+    }
     public MVOCache(@Nonnull CorfuRuntime corfuRuntime) {
 
         // If not explicitly set by user, it takes default value in CorfuRuntimeParameters
@@ -53,7 +67,12 @@ public class MVOCache<T extends ICorfuSMR<T>> {
                 .map(registry -> GuavaCacheMetrics.monitor(registry, objectCache, "mvo_cache"));
     }
 
-    private void handleEviction(RemovalNotification<VersionedObjectIdentifier, ISMRSnapshot<T>> notification) {
+
+    public void handleSnapshotEviction(RemovalNotification<VersionedObjectIdentifier, ISMRSnapshot<T>> notification) {
+        notification.getValue().release();
+    }
+
+    public void handleEviction(RemovalNotification<VersionedObjectIdentifier, ISMRSnapshot<T>> notification) {
         log.trace("handleEviction: evicting {} cause {}", notification.getKey(), notification.getCause());
 
         // TODO(Zach): Confirm that all cached snapshots must eventually go through here.

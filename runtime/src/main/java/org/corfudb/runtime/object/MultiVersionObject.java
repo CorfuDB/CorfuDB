@@ -72,7 +72,6 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
     @Getter
     private volatile T currentObject;
 
-
     private volatile ISMRSnapshot<T> currentSnapshot = null;
 
     /**
@@ -124,7 +123,7 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
      */
     public MultiVersionObject(@Nonnull CorfuRuntime corfuRuntime, @Nonnull Supplier<T> newObjectFn,
                               @Nonnull StreamViewSMRAdapter smrStream, @Nonnull ICorfuSMR<T> wrapperObject,
-                              @Nonnull ObjectOpenOption objectOpenOption) {
+                              @Nonnull ObjectOpenOption objectOpenOption, @Nonnull MVOCache<T> mvoCache) {
         this.lock = new StampedLock();
         this.smrStream = smrStream;
         this.upcallTargetMap = wrapperObject.getSMRUpcallMap();
@@ -134,7 +133,7 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
 
         this.currentObject = newObjectFn.get();
 
-        this.mvoCache = corfuRuntime.getObjectsView().getMvoCache();
+        this.mvoCache = mvoCache;
         this.trimRetry = corfuRuntime.getParameters().getTrimRetry();
         wrapperObject.closeWrapper();
     }
