@@ -42,8 +42,8 @@ public class CorfuReplicationE2EIT extends LogReplicationAbstractIT {
 
     /**
      * Test Log Replication End to End for snapshot and log entry sync. These tests emulate two sites,
-     * one active and one standby. The active site is represented by one Corfu Database and one LogReplication Server,
-     * and the standby the same. Data is written into the active datastore and log replication is initiated to test
+     * one source and one sink. The source site is represented by one Corfu Database and one LogReplication Server,
+     * and the sink the same. Data is written into the source datastore and log replication is initiated to test
      * snapshot sync and afterwards incremental updates are written to evaluate log entry sync.
      *
      * The transport (communication) layer is based on a plugin architecture. We have two sample plugins:
@@ -57,26 +57,26 @@ public class CorfuReplicationE2EIT extends LogReplicationAbstractIT {
     @Test
     public void testLogReplicationEndToEnd() throws Exception {
         log.debug("Using plugin :: {}", pluginConfigFilePath);
-        testEndToEndSnapshotAndLogEntrySyncUFO(false, true);
+        testEndToEndSnapshotAndLogEntrySyncUFO(false, true, 1);
     }
 
     @Test
     public void testSnapshotSyncMultipleTables() throws Exception {
         log.debug("Using plugin :: {}", pluginConfigFilePath);
         final int totalNumMaps = 3;
-        testEndToEndSnapshotAndLogEntrySyncUFO(totalNumMaps, false, true);
+        testEndToEndSnapshotAndLogEntrySyncUFO(totalNumMaps, false, true, 1);
     }
 
     @Test
     public void testDiskBasedLogReplicationEndToEnd() throws Exception {
         log.debug("Using plugin :: {}", pluginConfigFilePath);
-        testEndToEndSnapshotAndLogEntrySyncUFO(true, true);
+        testEndToEndSnapshotAndLogEntrySyncUFO(true, true, 1);
     }
 
     @Test
     public void testDiskBasedSnapshotSyncMultipleTables() throws Exception {
         log.debug("Using plugin :: {}", pluginConfigFilePath);
         final int totalNumMaps = 3;
-        testEndToEndSnapshotAndLogEntrySyncUFO(totalNumMaps, true, true);
+        testEndToEndSnapshotAndLogEntrySyncUFO(totalNumMaps, true, true, 1);
     }
 }

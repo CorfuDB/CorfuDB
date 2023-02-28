@@ -12,9 +12,9 @@ import org.corfudb.infrastructure.logreplication.DataSender;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent.LogReplicationEventType;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationFSM;
+import org.corfudb.infrastructure.logreplication.replication.send.logreader.SnapshotReader;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.ReadProcessor;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.SnapshotReadMessage;
-import org.corfudb.infrastructure.logreplication.replication.send.logreader.SnapshotReader;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
@@ -184,7 +184,7 @@ public class SnapshotSender {
                 snapshotSyncAck.get(DEFAULT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
                 snapshotSyncTransferComplete(snapshotSyncEventId);
             } catch (Exception e) {
-                log.warn("Caught exception while sending data to standby.", e);
+                log.warn("Caught exception while sending data to sink.", e);
                 snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.UNKNOWN);
             }
         }

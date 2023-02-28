@@ -1,8 +1,8 @@
 package org.corfudb.infrastructure.logreplication.replication.fsm;
 
 import com.google.protobuf.ByteString;
-import org.corfudb.infrastructure.logreplication.replication.send.logreader.SnapshotReadMessage;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.SnapshotReader;
+import org.corfudb.infrastructure.logreplication.replication.send.logreader.SnapshotReadMessage;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMetadataMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
@@ -21,9 +21,7 @@ import static org.corfudb.protocols.service.CorfuProtocolLogReplication.getLrEnt
  * This reader attempts to access n entries in the log in a continuous address space and
  * wraps the payload in the LogReplicationEntry.
  */
-public class TestSnapshotReader implements SnapshotReader {
-
-    private long topologyConfigId = 0;
+public class TestSnapshotReader extends SnapshotReader {
 
     private TestReaderConfiguration config;
 
@@ -74,11 +72,6 @@ public class TestSnapshotReader implements SnapshotReader {
     @Override
     public void reset(long snapshotTimestamp) {
         globalIndex = 0;
-    }
-
-    @Override
-    public void setTopologyConfigId(long topologyConfigId) {
-        this.topologyConfigId = topologyConfigId;
     }
 
     public void setBatchSize(int batchSize) {

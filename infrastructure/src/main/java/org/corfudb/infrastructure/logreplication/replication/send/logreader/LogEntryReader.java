@@ -1,6 +1,6 @@
 package org.corfudb.infrastructure.logreplication.replication.send.logreader;
 
-import org.corfudb.runtime.LogReplication;
+import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 
 import java.util.UUID;
 
@@ -9,7 +9,9 @@ import java.util.UUID;
  *
  * A log entry reader provides the functionality for reading incremental updates from Corfu.
  */
-public interface LogEntryReader {
+public abstract class LogEntryReader {
+
+    protected long topologyConfigId;
 
     /**
      * Read a Log Entry.
@@ -18,13 +20,31 @@ public interface LogEntryReader {
      *
      * @return a log replication entry.
      */
-    LogReplication.LogReplicationEntryMsg read(UUID logEntryRequestId);
+    public abstract LogReplicationEntryMsg read(UUID logEntryRequestId);
 
-    void reset(long lastSentBaseSnapshotTimestamp, long lastAckedTimestamp);
+    public abstract void reset(long lastSentBaseSnapshotTimestamp, long lastAckedTimestamp);
 
-    void setTopologyConfigId(long topologyConfigId);
+    public abstract StreamIteratorMetadata getCurrentProcessedEntryMetadata();
 
-    boolean hasMessageExceededSize();
+    public void setTopologyConfigId(long topologyConfigId) {
+        this.topologyConfigId = topologyConfigId;
+    }
 
-    StreamsLogEntryReader.StreamIteratorMetadata getCurrentProcessedEntryMetadata();
+    public class StreamIteratorMetadata {
+        private long timestamp;
+        private boolean streamsToReplicatePresent;
+
+        public StreamIteratorMetadata(long timestamp, boolean streamsToReplicatePresent) {
+            this.timestamp = timestamp;
+            this.streamsToReplicatePresent = streamsToReplicatePresent;
+        }
+
+        public long getTimestamp() {
+            return timestamp;
+        }
+
+        public boolean isStreamsToReplicatePresent() {
+            return streamsToReplicatePresent;
+        }
+    }
 }
