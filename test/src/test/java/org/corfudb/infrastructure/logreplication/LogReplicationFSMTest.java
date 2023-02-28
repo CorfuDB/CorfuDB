@@ -2,6 +2,8 @@ package org.corfudb.infrastructure.logreplication;
 
 import static java.lang.Thread.sleep;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.NAMESPACE;
+import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.REPLICATION_STATUS_TABLE_NAME;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
@@ -17,11 +19,13 @@ import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.google.protobuf.ByteString;
+import com.google.protobuf.Message;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.compression.Codec;
 import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationAckReader;
 import org.corfudb.infrastructure.logreplication.replication.fsm.EmptyDataSender;
@@ -55,6 +59,7 @@ import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.TableRegistry;
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -158,6 +163,44 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         // Next transition might not be to INITIALIZED, as IN_LOG_ENTRY_SYNC state might have enqueued
         // a continuation before the stop is enqueued.
         transition(LogReplicationEventType.REPLICATION_STOP, LogReplicationStateType.INITIALIZED, true);
+    }
+
+    /**
+     * Verify the lastSyncType flag is being initialized properly.
+     *
+     */
+    @Test
+    public void testFullSyncStatusOnInit() throws Exception {
+        initLogReplicationFSM(ReaderImplementation.EMPTY);
+
+        final Table<LogReplicationSession, LogReplicationMetadata.ReplicationStatus, Message> statusTable =
+                this.corfuStore.getTable(NAMESPACE, REPLICATION_STATUS_TABLE_NAME);
+
+        // Initial state: Initialized
+        LogReplicationState initState = fsm.getState();
+        assertThat(initState.getType()).isEqualTo(LogReplicationStateType.INITIALIZED);
+
+        transitionAvailable.acquire();
+
+        // Transition #1: Replication Stop (without any replication having started)
+        transition(LogReplicationEventType.REPLICATION_STOP, LogReplicationStateType.INITIALIZED);
+
+        // Default sync value is null so replication status should not be set at all.
+        final int expectedStatusTableLength = 0;
+        Assert.assertEquals(expectedStatusTableLength, statusTable.count());
+
+        // Transition #2: SNAPSHOT Sync Start
+        transition(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST, LogReplicationStateType.IN_SNAPSHOT_SYNC);
+
+        // Sync value should now reflect change to SNAPSHOT sync.
+        Assert.assertEquals(LogReplicationMetadata.SyncType.SNAPSHOT,
+                statusTable.entryStream()
+                        .findAny()
+                        .get()
+                        .getPayload()
+                        .getSourceStatus()
+                        .getReplicationInfo()
+                        .getSyncType());
     }
 
     /**

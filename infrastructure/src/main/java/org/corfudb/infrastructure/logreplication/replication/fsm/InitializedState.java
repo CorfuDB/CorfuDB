@@ -77,8 +77,13 @@ public class InitializedState implements LogReplicationState {
 
     @Override
     public void onExit(LogReplicationState to) {
+        LogReplicationStateType type = to.getType();
+        LogReplicationMetadata.SyncType toSyncType =
+                type.equals(LogReplicationStateType.IN_SNAPSHOT_SYNC) ? LogReplicationMetadata.SyncType.SNAPSHOT :
+                type.equals(LogReplicationStateType.IN_LOG_ENTRY_SYNC) ? LogReplicationMetadata.SyncType.LOG_ENTRY :
+                null;
         if (to != this && to.getType() != LogReplicationStateType.ERROR) {
-            fsm.getAckReader().startSyncStatusUpdatePeriodicTask();
+            fsm.getAckReader().startSyncStatusUpdatePeriodicTask(toSyncType);
         }
     }
 
