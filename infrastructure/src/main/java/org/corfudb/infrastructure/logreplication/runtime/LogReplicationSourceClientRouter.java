@@ -18,8 +18,10 @@ import java.net.URLClassLoader;
 import java.util.Optional;
 
 /**
- * This Client Router is used when a custom (client-defined) transport layer is specified for
- * Log Replication Server communication.
+ * Interacts with the custom transport layer and the Log replication SOURCE components.
+ *
+ * Being the connection initiator, this class implements the connection related handles.
+ * The messages are forwarded to/from Log replication Source components via LogReplicationSourceBaseRouter.
  */
 @Slf4j
 public class LogReplicationSourceClientRouter extends LogReplicationSourceBaseRouter implements LogReplicationClientRouter {
@@ -54,6 +56,7 @@ public class LogReplicationSourceClientRouter extends LogReplicationSourceBaseRo
 
     public void receive(CorfuMessage.RequestMsg msg) {
         // no-op when Source is the connection starter
+        throw new UnsupportedOperationException();
     }
 
     /**

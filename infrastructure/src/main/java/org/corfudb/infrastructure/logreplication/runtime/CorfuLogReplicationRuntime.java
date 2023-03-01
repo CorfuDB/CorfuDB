@@ -170,7 +170,7 @@ public class CorfuLogReplicationRuntime {
         this.session = session;
         this.router = router;
         this.router.addClient(new LogReplicationHandler(session));
-        this.sourceManager = new LogReplicationSourceManager(parameters, new LogReplicationClient(router, session.getSinkClusterId(), session),
+        this.sourceManager = new LogReplicationSourceManager(parameters, new LogReplicationClient(router, session),
                 metadataManager, upgradeManager, session, replicationContext);
         this.connectedNodes = new HashSet<>();
 
