@@ -53,7 +53,7 @@ public class LogReplicationAckReader {
     // Last ack'd timestamp from Receiver
     private long lastAckedTimestamp = Address.NON_ADDRESS;
 
-    // Sync Type for which last Ack was received. Default to LOG_ENTRY as this is the initial FSM state
+    // Sync Type for which last Ack was received.
     private SyncType lastSyncType = null;
 
     private LogEntryReader logEntryReader;
@@ -446,9 +446,9 @@ public class LogReplicationAckReader {
     /**
      * Start periodic replication status update task (completion percentage)
      */
-    public void startSyncStatusUpdatePeriodicTask(SyncType toStateTransition) {
+    public void startSyncStatusUpdatePeriodicTask(SyncType syncType) {
         log.info("Start sync status update periodic task");
-        lastSyncType = toStateTransition;
+        lastSyncType = syncType;
         lastAckedTsPoller = Executors.newSingleThreadScheduledExecutor(
                 new ThreadFactoryBuilder().setNameFormat("ack-timestamp-reader-"+ session.hashCode()).build());
         lastAckedTsPoller.scheduleWithFixedDelay(new TsPollingTask(), 0, ACKED_TS_READ_INTERVAL_SECONDS,
