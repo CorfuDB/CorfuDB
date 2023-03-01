@@ -15,6 +15,9 @@ import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * This class manages all the session routers
+ */
 @Slf4j
 public class LogReplicationRouterManager {
 
@@ -93,7 +96,7 @@ public class LogReplicationRouterManager {
      */
     public void stopSinkClientRouter(LogReplicationSession session) {
         // if Sink is connection starter, stop the router.
-        if (replicationSessionToRouterSink.get(session) instanceof  LogReplicationSinkClientRouter) {
+        if (replicationSessionToRouterSink.get(session) instanceof LogReplicationSinkClientRouter) {
             log.info("Stopping the SINK client router for session {}", session);
             ((LogReplicationSinkClientRouter) replicationSessionToRouterSink.get(session)).stop();
         }

@@ -140,7 +140,7 @@ public class GRPCLogReplicationServerHandler extends LogReplicationGrpc.LogRepli
     }
 
     @Override
-    public StreamObserver<ResponseMsg> subscribeAndStartreplication(StreamObserver<RequestMsg> responseObserver) {
+    public StreamObserver<ResponseMsg> subscribeAndStartReplication(StreamObserver<RequestMsg> responseObserver) {
 
         return new StreamObserver<ResponseMsg>() {
             LogReplicationSession session;

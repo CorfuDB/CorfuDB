@@ -38,6 +38,12 @@ import static org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getDefaultProtocolVersionMsg;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getRequestMsg;
 
+/**
+ * A Base Source Router, which interfaces between the Log replication Source components (FSMs, AckReader, etc) and the
+ * custom transport adapter
+ *
+ * This class is inherited by both LogReplicationSourceClientRouter and LogReplicationSourceServerRouter.
+ */
 @Slf4j
 public class LogReplicationSourceBaseRouter implements IClientRouter {
 
@@ -121,13 +127,14 @@ public class LogReplicationSourceBaseRouter implements IClientRouter {
      * Server transport adapter
      */
     @Setter
+    @Getter
     protected IServerChannelAdapter serverChannelAdapter;
 
     /**
      * session to which the router belongs.
      */
     @Getter
-    LogReplicationSession session;
+    protected LogReplicationSession session;
 
     /**
      * Log Replication Client Constructor
@@ -444,20 +451,18 @@ public class LogReplicationSourceBaseRouter implements IClientRouter {
                 message.getPayloadCase().equals(CorfuMessage.RequestPayloadMsg.PayloadCase.LR_LEADERSHIP_QUERY);
     }
 
-    public void startReplication(String nodeId) {
+    protected void startReplication(String nodeId) {
         replicationManager.startLogReplicationRuntime(session);
         log.debug("runtimeFSM started for session {}", session);
         runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.ON_CONNECTION_UP, nodeId));
     }
 
     /**
-     * Cluster Change Callback.
+     * A callback for Cluster Change, like a node added/removed from the remote cluster.
      *
      * @param clusterDescriptor remote cluster descriptor
      */
     public synchronized void onClusterChange(ClusterDescriptor clusterDescriptor) {
-        // this currently is not implemented on the plugin side.
-        //TODO: Shama to check the correct behaviour
         if(this.clientChannelAdapter != null) {
             this.clientChannelAdapter.clusterChangeNotification(clusterDescriptor);
         }
