@@ -81,7 +81,7 @@ public class LogReplicationSinkServerRouter implements IServerRouter {
 
     @Override
     public void sendResponse(ResponseMsg response, ChannelHandlerContext ctx) {
-        log.trace("Ready to send response {}", response.getPayload().getPayloadCase());
+        log.info("In SinkServerRouter Ready to send response {}", response.getPayload().getPayloadCase());
         try {
                 serverAdapter.send(response);
             log.trace("Sent response: {}", response);

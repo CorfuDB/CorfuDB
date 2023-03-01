@@ -39,7 +39,7 @@ public class GRPCLogReplicationServerChannelAdapter extends IServerChannelAdapte
     public GRPCLogReplicationServerChannelAdapter(ServerContext serverContext,
                                                   Map<LogReplicationSession, LogReplicationSourceServerRouter> sessionToSourceServer,
                                                   Map<LogReplicationSession, LogReplicationSinkServerRouter> sessionToSinkServer) {
-        super(serverContext, sessionToSourceServer, sessionToSinkServer);
+        super(sessionToSourceServer, sessionToSinkServer);
         this.service = new GRPCLogReplicationServerHandler(sessionToSourceServer, sessionToSinkServer);
         this.port = Integer.parseInt((String) serverContext.getServerConfig().get("<port>"));
         // The executor of GRPCLogReplicationServerHandler needs to be single-threaded, otherwise the ordering of

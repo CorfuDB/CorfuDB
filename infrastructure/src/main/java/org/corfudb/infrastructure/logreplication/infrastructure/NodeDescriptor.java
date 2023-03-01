@@ -44,7 +44,7 @@ public class NodeDescriptor {
     private final String nodeId;      // Represents the node's identifier as tracked by the Topology Provider
 
     public NodeDescriptor(String host, String port, String siteId, String connectionId, String nodeId) {
-        this.host = host ;
+        this.host = host;
         this.port = port;
         this.clusterId = siteId;
         this.connectionId = connectionId;

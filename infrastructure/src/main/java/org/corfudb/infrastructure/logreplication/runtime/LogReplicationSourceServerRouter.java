@@ -15,6 +15,7 @@ import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRunti
 import org.corfudb.infrastructure.logreplication.transport.server.IServerChannelAdapter;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.proto.service.CorfuMessage;
+import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg.PayloadCase;
 import org.corfudb.runtime.view.Layout;
 
 import java.util.ArrayList;
@@ -23,6 +24,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+/**
+ * Interacts with the custom transport layer and the Log replication SOURCE components.
+ *
+ * Being the connection receiver, this router receives messages from the transport layer and forward to the
+ * Log Replication Source components via LogReplicationSourceBaseRouter.
+ */
 @Slf4j
 public class LogReplicationSourceServerRouter extends LogReplicationSourceBaseRouter implements IServerRouter {
 
@@ -86,7 +93,7 @@ public class LogReplicationSourceServerRouter extends LogReplicationSourceBaseRo
 
     @Override
     public void setServerContext(ServerContext serverContext) {
-
+        //serverContext is not used by Log Replication.
     }
 
     // ================================================
@@ -104,7 +111,7 @@ public class LogReplicationSourceServerRouter extends LogReplicationSourceBaseRo
         if (handler == null) {
             // The message was unregistered, we are dropping it.
             log.warn("Received unregistered message {}, dropping", message);
-        } else {
+        } else if (message.getPayload().getPayloadCase().equals(PayloadCase.LR_LEADERSHIP_QUERY)){
             if (validateEpoch(message.getHeader())) {
                 // Route the message to the handler.
                 if (log.isTraceEnabled()) {
@@ -123,6 +130,8 @@ public class LogReplicationSourceServerRouter extends LogReplicationSourceBaseRo
                 String remoteLeaderId = message.getHeader().getSession().getSinkClusterId();
                 runtimeFSM.setRemoteLeaderNodeId(remoteLeaderId);
             }
+        } else {
+            throw new UnsupportedOperationException("Received " + message.getPayload().getPayloadCase());
         }
     }
 

@@ -203,7 +203,7 @@ public class SinkVerifyRemoteLeader {
                 CorfuMessage.ResponsePayloadMsg.newBuilder().setLrSubscribeRequest(
                         LogReplication.SubscribeToReplicationMsg.newBuilder().build()).build();
 
-        log.info("Sending the subscribe msg {}", payload);
+        log.info("Sending the subscribe msg {} for session {}", payload, session);
         router.sendResponse(payload, getRemoteLeaderNodeId().get());
     }
 

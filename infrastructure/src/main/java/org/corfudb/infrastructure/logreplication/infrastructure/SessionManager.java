@@ -301,6 +301,10 @@ public class SessionManager {
                 .build();
     }
 
+    /**
+     * If local cluster is SOURCE for any session: start the source client router and initiate connection to remote sinks
+     * If local cluster is SINK for any session: start the sink client router and initiate connection to remote sources.
+     */
     public void startConnectionReceivingRouters(boolean isSource, boolean isSink, Map<Class, AbstractServer> serverMap,
                                                 CorfuInterClusterReplicationServerNode interClusterServerNode) {
 
