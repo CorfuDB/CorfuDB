@@ -543,9 +543,10 @@ public class LogReplicationSinkClientRouter extends LogReplicationSinkServerRout
      *
      * @param clusterDescriptor remote cluster descriptor
      */
-
     public synchronized void onClusterChange(ClusterDescriptor clusterDescriptor) {
-        //no-op. Any topology change notification goes to discovery-service
+        if (channelAdapter != null) {
+            channelAdapter.clusterChangeNotification(clusterDescriptor);
+        }
     }
 
     public Optional<String> getRemoteLeaderNodeId() {

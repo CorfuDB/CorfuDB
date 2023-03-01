@@ -33,8 +33,8 @@ public class LogReplicationClient extends AbstractClient {
 
     private final LogReplicationSession replicationSession;
 
-    public LogReplicationClient(IClientRouter router, String clusterId, LogReplicationSession replicationSession) {
-        super(router, 0, UUID.fromString(clusterId));
+    public LogReplicationClient(IClientRouter router, LogReplicationSession replicationSession) {
+        super(router, 0, UUID.fromString(replicationSession.getSinkClusterId()));
         this.replicationSession = replicationSession;
         setRouter(router);
     }

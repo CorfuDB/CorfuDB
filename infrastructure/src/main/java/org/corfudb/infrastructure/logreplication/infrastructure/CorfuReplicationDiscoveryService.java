@@ -406,10 +406,12 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
     }
 
     /**
-     * This method is only called on the leader node and it triggers the start of log replication and on topology change
+     * This method is only called on the leader node and is triggered on the start of log replication and on topology change
      * <p>
-     * Depending on the role of the cluster to which this leader node belongs (Source, Sink or both), it will start
-     * respective components
+     * Depending on the role of the cluster to which this leader node belongs (Source, Sink or both), it will create
+     * respective components, and trigger connection if local cluster is the connection starter to any remote cluster,
+     * else we wait to receive a connection request.
+     * Replication starts after connection to/from a remote cluster is successful.
      */
     private void onLeadershipAcquire() {
         if (!isSource() && !isSink()) {
@@ -422,6 +424,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         sessionManager.startConnectionReceivingRouters(isSource(), isSink(), serverMap, interClusterServerNode);
         sessionManager.connectToRemoteClusters(serverMap);
 
+        // record metrics about the lock aquired.
         lockAcquireSample = recordLockAcquire();
         processCountOnLockAcquire();
     }

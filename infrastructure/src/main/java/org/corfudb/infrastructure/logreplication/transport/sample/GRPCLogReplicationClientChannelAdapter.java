@@ -251,7 +251,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
             };
 
             if(sessionToAsyncStubMap.containsKey(sessionMsg)) {
-                StreamObserver<ResponseMsg> responseObserver = sessionToAsyncStubMap.get(sessionMsg).subscribeAndStartreplication(requestObserver);
+                StreamObserver<ResponseMsg> responseObserver = sessionToAsyncStubMap.get(sessionMsg).subscribeAndStartReplication(requestObserver);
                 responseObserverMap.put(sessionMsg, responseObserver);
             } else {
                 log.error("No stub found for remote node {}@{}. Message dropped type={}",

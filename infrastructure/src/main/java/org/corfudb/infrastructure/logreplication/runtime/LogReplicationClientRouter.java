@@ -2,6 +2,11 @@ package org.corfudb.infrastructure.logreplication.runtime;
 
 import org.corfudb.runtime.proto.service.CorfuMessage;
 
+/**
+ * An interface that is implemented by Log Replication client routers (The connection starters).
+ * This interface forwards the connection notifications and received messages to above replication components.
+ *
+ */
 public interface LogReplicationClientRouter {
 
     /**
