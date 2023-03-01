@@ -43,5 +43,4 @@ class FailureDetectorServiceTest {
             assertEquals("Wrong epoch. [expected=123]", ex.getMessage());
         });
     }
-
 }
