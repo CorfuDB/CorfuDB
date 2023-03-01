@@ -57,4 +57,7 @@ public class TableParameters<K extends Message, V extends Message, M extends Mes
     // like stream_tags, secondary indexes, backup_restore, log replication etc
     @Getter
     private final CorfuOptions.SchemaOptions schemaOptions;
+
+    @Getter
+    private final boolean secondaryIndexesDisabled;
 }
