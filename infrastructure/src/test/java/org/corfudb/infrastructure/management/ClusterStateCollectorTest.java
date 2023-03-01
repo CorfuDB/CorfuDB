@@ -17,6 +17,9 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.infrastructure.NodeNames.A;
+import static org.corfudb.infrastructure.NodeNames.B;
+import static org.corfudb.infrastructure.NodeNames.C;
 import static org.corfudb.infrastructure.management.NodeStateTestUtil.nodeState;
 import static org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.ConnectionStatus.FAILED;
 import static org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.ConnectionStatus.OK;
@@ -37,33 +40,33 @@ public class ClusterStateCollectorTest {
      */
     @Test
     public void testAggregatedState() {
-        final String localEndpoint = "a";
+        final String localEndpoint = A;
 
         ClusterState predefinedCluster = ClusterState.buildClusterState(
                 localEndpoint,
                 ImmutableList.of(),
-                nodeState("a", epoch, OK, OK, FAILED),
-                nodeState("b", epoch, OK, OK, FAILED),
-                NodeState.getUnavailableNodeState("c")
+                nodeState(localEndpoint, epoch, OK, OK, FAILED),
+                nodeState(B, epoch, OK, OK, FAILED),
+                NodeState.getUnavailableNodeState(C)
         );
 
         Map<String, CompletableFuture<NodeState>> clusterConnectivity = new HashMap<>();
 
         CompletableFuture<NodeState> nodeAStateCf = CompletableFuture.completedFuture(
-                predefinedCluster.getNode("a").get()
+                predefinedCluster.getNode(localEndpoint).get()
         );
 
         CompletableFuture<NodeState> nodeBStateCf = CompletableFuture.completedFuture(
-                predefinedCluster.getNode("b").get()
+                predefinedCluster.getNode(B).get()
         );
 
         final int newEpoch = 10;
         CompletableFuture<NodeState> wrongEpochCf = new CompletableFuture<>();
         wrongEpochCf.completeExceptionally(new WrongEpochException(newEpoch));
 
-        clusterConnectivity.put("a", nodeAStateCf);
-        clusterConnectivity.put("b", nodeBStateCf);
-        clusterConnectivity.put("c", wrongEpochCf);
+        clusterConnectivity.put(localEndpoint, nodeAStateCf);
+        clusterConnectivity.put(B, nodeBStateCf);
+        clusterConnectivity.put(C, wrongEpochCf);
 
         ClusterStateCollector collector = ClusterStateCollector.builder()
                 .localEndpoint(localEndpoint)
@@ -78,14 +81,14 @@ public class ClusterStateCollectorTest {
         NodeState localNodeState = clusterState.getNode(localEndpoint).get();
         NodeConnectivity localNodeConnectivity = localNodeState.getConnectivity();
         assertThat(localNodeState.isConnected()).isTrue();
-        assertThat(localNodeConnectivity.getConnectedNodes()).containsExactly("a", "b", "c");
+        assertThat(localNodeConnectivity.getConnectedNodes()).containsExactly(localEndpoint, B, C);
         assertThat(localNodeConnectivity.getFailedNodes()).isEmpty();
 
-        NodeState nodeBState = clusterState.getNode("b").get();
+        NodeState nodeBState = clusterState.getNode(B).get();
         NodeConnectivity nodeBConnectivity = nodeBState.getConnectivity();
-        assertThat(nodeBConnectivity.getConnectedNodes()).containsExactly("a", "b");
+        assertThat(nodeBConnectivity.getConnectedNodes()).containsExactly(A, B);
 
-        NodeState nodeCState = clusterState.getNode("c").get();
+        NodeState nodeCState = clusterState.getNode(C).get();
         assertThat(nodeCState.isConnected()).isFalse();
     }
 
@@ -94,7 +97,7 @@ public class ClusterStateCollectorTest {
      */
     @Test
     public void testWrongEpochs() {
-        final String localEndpoint = "a";
+        final String localEndpoint = A;
 
         Map<String, CompletableFuture<NodeState>> clusterConnectivity = new HashMap<>();
 
@@ -103,11 +106,11 @@ public class ClusterStateCollectorTest {
         wrongEpochCf.completeExceptionally(new WrongEpochException(newEpoch));
 
         CompletableFuture<NodeState> nodeAState = CompletableFuture.completedFuture(
-                NodeState.getUnavailableNodeState("c")
+                NodeState.getUnavailableNodeState(C)
         );
 
-        clusterConnectivity.put("a", nodeAState);
-        clusterConnectivity.put("c", wrongEpochCf);
+        clusterConnectivity.put(localEndpoint, nodeAState);
+        clusterConnectivity.put(C, wrongEpochCf);
 
         ClusterStateCollector collector = ClusterStateCollector.builder()
                 .localEndpoint(localEndpoint)
@@ -117,7 +120,7 @@ public class ClusterStateCollectorTest {
 
         ImmutableMap<String, Long> wrongEpochs = collector.collectWrongEpochs();
         assertThat(wrongEpochs.size()).isOne();
-        assertThat(wrongEpochs.get("c")).isEqualTo(newEpoch);
+        assertThat(wrongEpochs.get(C)).isEqualTo(newEpoch);
     }
 
 }

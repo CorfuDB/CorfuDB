@@ -4,6 +4,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.BatchProcessor;
+import org.corfudb.infrastructure.BatchProcessor.BatchProcessorContext;
 import org.corfudb.infrastructure.BatchWriterOperation;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
@@ -119,7 +120,7 @@ public class BatchProcessorTest {
     @Before
     public void setup() {
         mockStreamLog = mock(StreamLog.class);
-        batchProcessor = new BatchProcessor(mockStreamLog, DEFAULT_SEAL_EPOCH, true);
+        batchProcessor = new BatchProcessor(mockStreamLog, new BatchProcessorContext(), DEFAULT_SEAL_EPOCH, true);
     }
 
     /**

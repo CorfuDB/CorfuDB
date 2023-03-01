@@ -1,8 +1,10 @@
 package org.corfudb.infrastructure.management.failuredetector;
 
+import com.google.common.collect.ImmutableMap;
 import org.corfudb.infrastructure.LayoutBasedTestHelper;
 import org.corfudb.infrastructure.NodeNames;
 import org.corfudb.infrastructure.ServerContext;
+import org.corfudb.infrastructure.management.PollReport;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.view.Layout;
@@ -24,10 +26,22 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 class EpochHandlerTest extends LayoutBasedTestHelper {
+
+    @Test
+    void testWrongEpochIsEmpty(){
+        PollReport pollReportMock = mock(PollReport.class);
+        when(pollReportMock.getWrongEpochs()).thenReturn(ImmutableMap.of());
+
+        Layout oldLayout = mock(Layout.class);
+        Layout newLayout = buildHandler().correctWrongEpochs(pollReportMock, oldLayout).join();
+        assertEquals(oldLayout, newLayout);
+    }
 
     @Test
     void fetchLatestLayoutEmpty() {
@@ -168,7 +182,7 @@ class EpochHandlerTest extends LayoutBasedTestHelper {
         assertFalse(result);
     }
 
-    private EpochHandler buildHandler() {
+    public static EpochHandler buildHandler() {
         final int threads = 5;
         ExecutorService fdWorker = Executors.newFixedThreadPool(threads);
         return EpochHandler.builder()

@@ -5,6 +5,7 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.BatchProcessor.BatchProcessorContext;
 import org.corfudb.infrastructure.LogUnitServer.LogUnitServerConfig;
 import org.corfudb.infrastructure.ResourceQuota;
 import org.corfudb.infrastructure.ServerContext;
@@ -13,6 +14,7 @@ import org.corfudb.infrastructure.health.Issue;
 import org.corfudb.infrastructure.log.FileSystemAgent.PartitionAgent.PartitionAttribute;
 import org.corfudb.infrastructure.log.StreamLog.PersistenceMode;
 import org.corfudb.runtime.exceptions.LogUnitException;
+import org.corfudb.runtime.proto.FileSystemStats.BatchProcessorStatus;
 
 import java.io.File;
 import java.io.IOException;
@@ -26,7 +28,6 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Optional;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
@@ -50,10 +51,11 @@ public final class FileSystemAgent {
 
     private final PartitionAttribute partitionAttribute;
 
-    @Getter
     private final ScheduledExecutorService scheduler;
 
-    private FileSystemAgent(FileSystemConfig config) {
+    private final Optional<PartitionAgent> maybePartitionAgent;
+
+    private FileSystemAgent(FileSystemConfig config, BatchProcessorContext batchProcessorContext) {
         this.config = config;
 
         long initialLogSize;
@@ -62,12 +64,17 @@ public final class FileSystemAgent {
             initialLogSize = 0;
             logSizeLimit = Long.MAX_VALUE;
 
-            partitionAttribute = new PartitionAttribute(false, Long.MAX_VALUE, Long.MAX_VALUE);
+            maybePartitionAgent = Optional.empty();
+            partitionAttribute = new PartitionAttribute(
+                    false, Long.MAX_VALUE, Long.MAX_VALUE, batchProcessorContext.getStatus()
+            );
         } else {
             initialLogSize = estimateSize();
             logSizeLimit = getLogSizeLimit();
 
-            partitionAttribute = new PartitionAgent(config).getPartitionAttribute();
+            PartitionAgent partitionAgent = new PartitionAgent(config, batchProcessorContext);
+            maybePartitionAgent = Optional.of(partitionAgent);
+            partitionAttribute = partitionAgent.getPartitionAttribute();
         }
 
         logSizeQuota = new ResourceQuota("LogSizeQuota", logSizeLimit);
@@ -101,13 +108,15 @@ public final class FileSystemAgent {
 
     }
 
-    public static void init(FileSystemConfig config) {
-        instance = Optional.of(new FileSystemAgent(config));
+    public static FileSystemAgent init(FileSystemConfig config, BatchProcessorContext batchProcessorContext) {
+        FileSystemAgent fsAgent = new FileSystemAgent(config, batchProcessorContext);
+        instance = Optional.of(fsAgent);
+        return fsAgent;
     }
 
-    public static void shutdown() {
-        PartitionAgent.shutdown();
-        instance.ifPresent(i -> i.getScheduler().shutdown());
+    public void shutdown() {
+        maybePartitionAgent.ifPresent(PartitionAgent::shutdown);
+        scheduler.shutdown();
     }
 
     public static ResourceQuota getResourceQuota() {
@@ -223,12 +232,14 @@ public final class FileSystemAgent {
         private final FileSystemConfig config;
 
         // A single thread scheduler that has a single instance of execution at any given time.
-        private static final ScheduledExecutorService scheduler =
-                Executors.newSingleThreadScheduledExecutor();
-        private static ScheduledFuture<?> scheduledFuture = null;
+        private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
 
-        public PartitionAgent(FileSystemConfig config) {
+        private final BatchProcessorContext batchProcessorContext;
+
+        public PartitionAgent(FileSystemConfig config, BatchProcessorContext batchProcessorContext) {
             this.config = config;
+            this.batchProcessorContext = batchProcessorContext;
+
             // Joins root directory with its first sub path to get log partition.
             // For example, "/" + "config"
             logPartition = Paths.get(config.logDir.getRoot().toString(),
@@ -242,9 +253,7 @@ public final class FileSystemAgent {
          * seconds after the previous set task is completed.
          */
         private void initializeScheduler() {
-            scheduledFuture = scheduler.scheduleWithFixedDelay(
-                    this::setPartitionAttribute, NO_DELAY, UPDATE_INTERVAL, SECONDS
-            );
+            scheduler.scheduleWithFixedDelay(this::setPartitionAttribute, NO_DELAY, UPDATE_INTERVAL, SECONDS);
         }
 
         /**
@@ -261,7 +270,8 @@ public final class FileSystemAgent {
                 partitionAttribute = new PartitionAttribute(
                         fileStore.isReadOnly() || !logDirectoryFile.canWrite(),
                         fileStore.getUsableSpace(),
-                        fileStore.getTotalSpace()
+                        fileStore.getTotalSpace(),
+                        batchProcessorContext.getStatus()
                 );
                 log.info("setPartitionAttribute: fetched PartitionAttribute successfully. " +
                         "{}", partitionAttribute);
@@ -283,15 +293,14 @@ public final class FileSystemAgent {
             private final boolean readOnly;
             private final long availableSpace;
             private final long totalSpace;
+            private final BatchProcessorStatus batchProcessorStatus;
         }
 
         /**
          * Clean up
          */
-        public static void shutdown() {
-            if (scheduledFuture != null) {
-                scheduledFuture.cancel(true);
-            }
+        public void shutdown() {
+            scheduler.shutdown();
         }
     }
 }

@@ -42,12 +42,11 @@ import java.util.stream.Collectors;
  * Responsive members: All endpoints that are responding to heartbeats. This list can be derived by
  * excluding unresponsiveServers from all endpoints.
  * For every poll method call invoked, it starts a polling round and generates a poll report.
- * Each polling round comprises of "failureThreshold" number of iterations.
+ * Each polling round comprises "failureThreshold" number of iterations.
  * - We asynchronously poll every known responsive member in the layout.
  * - Poll result aggregation.
  * - If we complete an iteration without detecting failures, we end the round successfully.
  * The management Server ensures only one instance of this class and hence this is NOT thread safe.
- * Created by zlokhandwala on 11/29/17.
  */
 @Slf4j
 public class FailureDetector implements IDetector {

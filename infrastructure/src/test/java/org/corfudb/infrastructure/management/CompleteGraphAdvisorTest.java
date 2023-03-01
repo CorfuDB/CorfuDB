@@ -1,5 +1,13 @@
 package org.corfudb.infrastructure.management;
 
+import com.google.common.collect.ImmutableList;
+import org.corfudb.protocols.wireprotocol.ClusterState;
+import org.corfudb.protocols.wireprotocol.NodeState;
+import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank;
+import org.junit.Test;
+
+import java.util.Optional;
+
 import static org.corfudb.infrastructure.management.NodeStateTestUtil.A;
 import static org.corfudb.infrastructure.management.NodeStateTestUtil.B;
 import static org.corfudb.infrastructure.management.NodeStateTestUtil.C;
@@ -10,14 +18,6 @@ import static org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivit
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
-
-import com.google.common.collect.ImmutableList;
-import org.corfudb.protocols.wireprotocol.ClusterState;
-import org.corfudb.protocols.wireprotocol.NodeState;
-import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank;
-import org.junit.Test;
-
-import java.util.Optional;
 
 public class CompleteGraphAdvisorTest {
 
@@ -35,7 +35,7 @@ public class CompleteGraphAdvisorTest {
 
         ClusterState clusterState = buildClusterState(
                 localEndpoint,
-                ImmutableList.of("b"),
+                ImmutableList.of(B),
                 nodeState(A, epoch, OK, OK, OK),
                 nodeState(B, epoch, OK, OK, FAILED),
                 nodeState(C, epoch, OK, FAILED, OK)
@@ -47,38 +47,38 @@ public class CompleteGraphAdvisorTest {
 
     @Test
     public void testFailedServer_disconnected_c() {
-        final String localEndpoint = "a";
+        final String localEndpoint = A;
         CompleteGraphAdvisor advisor = new CompleteGraphAdvisor(localEndpoint);
 
         ClusterState clusterState = buildClusterState(
                 localEndpoint,
                 ImmutableList.of(),
-                nodeState("a", epoch, OK, OK, FAILED),
-                nodeState("b", epoch, OK, OK, FAILED),
-                NodeState.getUnavailableNodeState("c")
+                nodeState(localEndpoint, epoch, OK, OK, FAILED),
+                nodeState(B, epoch, OK, OK, FAILED),
+                NodeState.getUnavailableNodeState(C)
         );
 
         Optional<NodeRank> failedServer = advisor.failedServer(clusterState);
         assertTrue(failedServer.isPresent());
-        assertEquals(new NodeRank("c", 0), failedServer.get());
+        assertEquals(new NodeRank(C, 0), failedServer.get());
     }
 
     @Test
     public void testFailedServer_asymmetricFailureBetween_b_c() {
-        final String localEndpoint = "a";
+        final String localEndpoint = A;
         CompleteGraphAdvisor advisor = new CompleteGraphAdvisor(localEndpoint);
 
         ClusterState clusterState = buildClusterState(
                 localEndpoint,
                 ImmutableList.of(),
-                nodeState("a", epoch, OK, OK, OK),
-                nodeState("b", epoch, OK, OK, FAILED),
-                nodeState("c", epoch, OK, FAILED, OK)
+                nodeState(localEndpoint, epoch, OK, OK, OK),
+                nodeState(B, epoch, OK, OK, FAILED),
+                nodeState(C, epoch, OK, FAILED, OK)
         );
 
         Optional<NodeRank> failedServer = advisor.failedServer(clusterState);
         assertTrue(failedServer.isPresent());
-        assertEquals(new NodeRank("c", 2), failedServer.get());
+        assertEquals(new NodeRank(C, 2), failedServer.get());
     }
 
     /**
@@ -87,20 +87,20 @@ public class CompleteGraphAdvisorTest {
      */
     @Test
     public void testFailedServer_allDisconnected_from_b_perspective() {
-        final String localEndpoint = "b";
+        final String localEndpoint = B;
         CompleteGraphAdvisor advisor = new CompleteGraphAdvisor(localEndpoint);
 
         ClusterState clusterState = buildClusterState(
                 localEndpoint,
                 ImmutableList.of(),
-                NodeState.getUnavailableNodeState("a"),
-                nodeState("b", epoch, OK, OK, OK),
-                NodeState.getUnavailableNodeState("c")
+                NodeState.getUnavailableNodeState(A),
+                nodeState(localEndpoint, epoch, OK, OK, OK),
+                NodeState.getUnavailableNodeState(C)
         );
 
         Optional<NodeRank> failedServer = advisor.failedServer(clusterState);
         assertTrue(failedServer.isPresent());
-        assertEquals(new NodeRank("c", 0), failedServer.get());
+        assertEquals(new NodeRank(C, 0), failedServer.get());
     }
 
     /**
@@ -111,37 +111,37 @@ public class CompleteGraphAdvisorTest {
      */
     @Test
     public void testFailureDetectionForThreeNodes_asymmetricPartition_b_c_disconnectedFromEachOther() {
-        CompleteGraphAdvisor nodeAAdvisor = new CompleteGraphAdvisor("a");
-        CompleteGraphAdvisor nodeBAdvisor = new CompleteGraphAdvisor("b");
-        CompleteGraphAdvisor nodeCAdvisor = new CompleteGraphAdvisor("c");
+        CompleteGraphAdvisor nodeAAdvisor = new CompleteGraphAdvisor(A);
+        CompleteGraphAdvisor nodeBAdvisor = new CompleteGraphAdvisor(B);
+        CompleteGraphAdvisor nodeCAdvisor = new CompleteGraphAdvisor(C);
 
         ClusterState nodeAClusterState = buildClusterState(
-                "a",
+                A,
                 ImmutableList.of(),
-                nodeState("a", epoch, OK, OK, OK),
-                nodeState("b", epoch, OK, OK, FAILED),
-                nodeState("c", epoch, OK, FAILED, OK)
+                nodeState(A, epoch, OK, OK, OK),
+                nodeState(B, epoch, OK, OK, FAILED),
+                nodeState(C, epoch, OK, FAILED, OK)
         );
 
         ClusterState nodeBClusterState = buildClusterState(
-                "b",
+                B,
                 ImmutableList.of(),
-                nodeState("a", epoch, OK, OK, OK),
-                nodeState("b", epoch, OK, OK, FAILED),
-                NodeState.getUnavailableNodeState("c")
+                nodeState(A, epoch, OK, OK, OK),
+                nodeState(B, epoch, OK, OK, FAILED),
+                NodeState.getUnavailableNodeState(C)
         );
         ClusterState nodeCClusterState = buildClusterState(
-                "c",
+                C,
                 ImmutableList.of(),
-                nodeState("a", epoch, OK, OK, OK),
-                NodeState.getUnavailableNodeState("b"),
-                nodeState("c", epoch, OK, FAILED, OK)
+                nodeState(A, epoch, OK, OK, OK),
+                NodeState.getUnavailableNodeState(B),
+                nodeState(C, epoch, OK, FAILED, OK)
         );
 
         //Node A is a decision maker, it excludes node C from the cluster
         Optional<NodeRank> nodeAFailedServer = nodeAAdvisor.failedServer(nodeAClusterState);
         assertTrue(nodeAFailedServer.isPresent());
-        assertEquals(new NodeRank("c", 2), nodeAFailedServer.get());
+        assertEquals(new NodeRank(C, 2), nodeAFailedServer.get());
 
         //Node B can detect that node C has failed
         // (but in the end node C will be ignored by Node B because of a decision maker)
@@ -156,15 +156,15 @@ public class CompleteGraphAdvisorTest {
 
     @Test
     public void testHealedServer() {
-        final String localEndpoint = "c";
+        final String localEndpoint = C;
         CompleteGraphAdvisor advisor = new CompleteGraphAdvisor(localEndpoint);
 
         ClusterState clusterState = buildClusterState(
                 localEndpoint,
                 ImmutableList.of(localEndpoint),
-                nodeState("a", epoch, OK, FAILED, OK),
-                nodeState("b", epoch, FAILED, OK, OK),
-                nodeState("c", epoch, OK, OK, OK)
+                nodeState(A, epoch, OK, FAILED, OK),
+                nodeState(B, epoch, FAILED, OK, OK),
+                nodeState(localEndpoint, epoch, OK, OK, OK)
         );
 
         Optional<NodeRank> healedServer = advisor.healedServer(clusterState);

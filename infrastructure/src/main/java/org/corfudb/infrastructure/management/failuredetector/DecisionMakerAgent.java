@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure.management.failuredetector;
 
+import com.google.common.annotations.VisibleForTesting;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.management.ClusterAdvisor;
@@ -29,13 +30,13 @@ public class DecisionMakerAgent {
             return Optional.empty();
         }
 
-        Set<String> writableNodes = writableNodes();
+        Set<String> healthyNodes = healthyNodes();
 
         return clusterAdvisor
-                .findDecisionMaker(clusterState, writableNodes)
+                .findDecisionMaker(clusterState, healthyNodes)
                 .map(NodeRank::getEndpoint)
                 //filter out read-only nodes
-                .filter(writableNodes::contains)
+                .filter(healthyNodes::contains)
                 //give up if a decision maker is not a local node, then the decision maker not found
                 .filter(decisionMaker -> {
                     boolean isDmALocalNode = decisionMaker.equals(clusterState.getLocalEndpoint());
@@ -48,12 +49,19 @@ public class DecisionMakerAgent {
                 });
     }
 
-    private Set<String> writableNodes() {
+    /**
+     * Provides a set of healthy nodes in the cluster.
+     * If any node has missing information about it's state (like file system stats),
+     * we can't have that node in the list of healthy nodes
+     * @return a set of healthy nodes
+     */
+    @VisibleForTesting
+    Set<String> healthyNodes() {
         Set<String> healthyNodes = new HashSet<>();
 
         for (NodeState node : clusterState.getNodes().values()) {
             node.getFileSystem().ifPresent(fsStats -> {
-                if (fsStats.getPartitionAttributeStats().isWritable()) {
+                if (fsStats.isOk()) {
                     healthyNodes.add(node.getConnectivity().getEndpoint());
                 }
             });

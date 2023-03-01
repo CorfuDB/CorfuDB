@@ -5,7 +5,6 @@ import com.google.common.collect.ImmutableMap;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
-import org.corfudb.runtime.view.Layout;
 import org.junit.Test;
 
 import java.util.Optional;
@@ -23,23 +22,23 @@ public class ClusterStateTest {
 
     @Test
     public void isReady() {
-        final String localEndpoint = "a";
+        final String localEndpoint = A;
         final long epoch1 = 1;
         final long epoch2 = 2;
 
         ClusterState invalidClusterState = ClusterState.buildClusterState(
                 localEndpoint,
                 ImmutableList.of(),
-                nodeState("a", epoch1, OK),
-                nodeState("b", epoch2, OK)
+                nodeState(localEndpoint, epoch1, OK),
+                nodeState(B, epoch2, OK)
         );
         assertThat(invalidClusterState.isReady()).isFalse();
 
         ClusterState validClusterState = ClusterState.buildClusterState(
                 localEndpoint,
                 ImmutableList.of(),
-                nodeState("a", epoch1, OK),
-                nodeState("b", epoch1, OK)
+                nodeState(localEndpoint, epoch1, OK),
+                nodeState(B, epoch1, OK)
         );
         assertThat(validClusterState.isReady()).isTrue();
     }

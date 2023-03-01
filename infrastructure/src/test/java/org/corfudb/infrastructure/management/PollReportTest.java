@@ -11,6 +11,9 @@ import org.junit.Test;
 import java.time.Duration;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.infrastructure.NodeNames.A;
+import static org.corfudb.infrastructure.NodeNames.B;
+import static org.corfudb.infrastructure.NodeNames.C;
 import static org.corfudb.infrastructure.management.NodeStateTestUtil.nodeState;
 import static org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.ConnectionStatus.FAILED;
 import static org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.ConnectionStatus.OK;
@@ -23,49 +26,47 @@ public class PollReportTest {
 
     @Test
     public void testConnectionStatusesOneNode() {
-        final String localEndpoint = "a";
+        final String localEndpoint = A;
 
         ClusterState clusterState = ClusterState.buildClusterState(
-                localEndpoint, ImmutableList.of(), nodeState("a", epoch, OK)
+                localEndpoint, ImmutableList.of(), nodeState(localEndpoint, epoch, OK)
         );
 
         final long epoch = 1;
-        final Duration duration = Duration.ofSeconds(1);
         PollReport pollReport = PollReport.builder()
-                .pingResponsiveServers(ImmutableList.of("a"))
-                .wrongEpochs(ImmutableMap.of("a", epoch))
+                .pingResponsiveServers(ImmutableList.of(localEndpoint))
+                .wrongEpochs(ImmutableMap.of(localEndpoint, epoch))
                 .clusterState(clusterState)
                 .elapsedTime(Duration.ZERO)
                 .build();
 
         assertThat(pollReport.getReachableNodes()).isEmpty();
-        assertThat(pollReport.getAllReachableNodes()).containsExactly("a");
+        assertThat(pollReport.getAllReachableNodes()).containsExactly(localEndpoint);
     }
 
     @Test
     public void testConnectionStatuses() {
-        final String localEndpoint = "a";
+        final String localEndpoint = A;
 
         ClusterState clusterState = ClusterState.buildClusterState(
                 localEndpoint,
                 ImmutableList.of(),
-                nodeState("a", epoch, OK, FAILED, FAILED),
-                NodeState.getUnavailableNodeState("b"),
-                NodeState.getUnavailableNodeState("c")
+                nodeState(localEndpoint, epoch, OK, FAILED, FAILED),
+                NodeState.getUnavailableNodeState(B),
+                NodeState.getUnavailableNodeState(C)
         );
 
         final long epoch = 1;
-        final Duration duration = Duration.ofSeconds(1);
         PollReport pollReport = PollReport.builder()
-                .pingResponsiveServers(ImmutableList.of("a", "b", "c"))
-                .wrongEpochs(ImmutableMap.of("b", epoch))
+                .pingResponsiveServers(ImmutableList.of(A, B, C))
+                .wrongEpochs(ImmutableMap.of(B, epoch))
                 .clusterState(clusterState)
                 .elapsedTime(Duration.ZERO)
                 .build();
 
-        assertThat(pollReport.getReachableNodes()).containsExactly("a");
-        assertThat(pollReport.getAllReachableNodes()).containsExactly("a", "b");
-        assertThat(pollReport.getFailedNodes()).containsExactly("c");
+        assertThat(pollReport.getReachableNodes()).containsExactly(localEndpoint);
+        assertThat(pollReport.getAllReachableNodes()).containsExactly(localEndpoint, B);
+        assertThat(pollReport.getFailedNodes()).containsExactly(C);
     }
 
     /**
@@ -74,46 +75,45 @@ public class PollReportTest {
      */
     @Test
     public void testInconsistencyBetweenClusterStateAndWrongEpochs() {
-        final String localEndpoint = "a";
+        final String localEndpoint = A;
 
         ClusterState clusterState = ClusterState.buildClusterState(
                 localEndpoint,
                 ImmutableList.of(),
-                nodeState("a", epoch, OK, FAILED, FAILED),
-                nodeState("b", epoch, OK, OK, FAILED),
-                NodeState.getUnavailableNodeState("c")
+                nodeState(localEndpoint, epoch, OK, FAILED, FAILED),
+                nodeState(B, epoch, OK, OK, FAILED),
+                NodeState.getUnavailableNodeState(C)
         );
 
         final long epoch = 1;
-        final Duration duration = Duration.ofSeconds(1);
         PollReport pollReport = PollReport.builder()
-                .pingResponsiveServers(ImmutableList.of("a", "b", "c"))
-                .wrongEpochs(ImmutableMap.of("b", epoch))
+                .pingResponsiveServers(ImmutableList.of(A, B, C))
+                .wrongEpochs(ImmutableMap.of(B, epoch))
                 .clusterState(clusterState)
                 .elapsedTime(Duration.ZERO)
                 .build();
 
-        assertThat(pollReport.getReachableNodes()).containsExactly("a");
-        assertThat(pollReport.getAllReachableNodes()).containsExactly("a", "b");
-        assertThat(pollReport.getFailedNodes()).containsExactly("c");
+        assertThat(pollReport.getReachableNodes()).containsExactly(localEndpoint);
+        assertThat(pollReport.getAllReachableNodes()).containsExactly(localEndpoint, B);
+        assertThat(pollReport.getFailedNodes()).containsExactly(C);
     }
 
     @Test
     public void testIsSlotUnfilled() {
-        final String localEndpoint = "a";
+        final String localEndpoint = A;
 
         ClusterState clusterState = ClusterState.buildClusterState(
                 localEndpoint,
                 ImmutableList.of(),
-                nodeState("a", epoch, OK, OK, FAILED),
-                nodeState("b", epoch, OK, OK, FAILED),
-                NodeState.getUnavailableNodeState("c")
+                nodeState(localEndpoint, epoch, OK, OK, FAILED),
+                nodeState(B, epoch, OK, OK, FAILED),
+                NodeState.getUnavailableNodeState(C)
         );
 
         final long epoch = 1;
         PollReport pollReport = PollReport.builder()
-                .pingResponsiveServers(ImmutableList.of("a", "b", "c"))
-                .wrongEpochs(ImmutableMap.of("a", epoch, "b", epoch, "c", epoch))
+                .pingResponsiveServers(ImmutableList.of(localEndpoint, B, C))
+                .wrongEpochs(ImmutableMap.of(localEndpoint, epoch, B, epoch, C, epoch))
                 .clusterState(clusterState)
                 .elapsedTime(Duration.ZERO)
                 .build();

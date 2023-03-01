@@ -11,6 +11,10 @@ public class NodeNames {
     public static final String A = NodeName.a.name();
     public static final String B = NodeName.b.name();
     public static final String C = NodeName.c.name();
+    public static final String D = NodeName.d.name();
+    public static final String E = NodeName.e.name();
+    public static final String F = NodeName.f.name();
+    public static final String G = NodeName.g.name();
 
     private NodeNames() {
         //prevent creating instances

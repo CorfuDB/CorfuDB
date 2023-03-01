@@ -54,12 +54,24 @@ public class NodeRank implements Comparable<NodeRank>, NodeRanking {
     @ToString
     public static class NodeRankByPartitionAttributes implements Comparable<NodeRankByPartitionAttributes>, NodeRanking {
         private final String endpoint;
-        private final PartitionAttributeStats attr;
+        private final FileSystemStats fsStats;
 
         @Override
         public int compareTo(NodeRankByPartitionAttributes other) {
-            //Descending order
-            int readOnly = Boolean.compare(other.attr.isReadOnly(), attr.isReadOnly());
+            int batchProcessorError = Boolean.compare(
+                    fsStats.getBatchProcessorStats().isError(),
+                    other.getFsStats().getBatchProcessorStats().isError()
+            );
+
+            if (batchProcessorError != 0) {
+                return batchProcessorError;
+            }
+
+            int readOnly = Boolean.compare(
+                    fsStats.getPartitionAttributeStats().isReadOnly(),
+                    other.fsStats.getPartitionAttributeStats().isReadOnly()
+            );
+
             if (readOnly != 0) {
                 return readOnly;
             }

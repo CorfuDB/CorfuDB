@@ -11,4 +11,10 @@ message PartitionAttributeStatsMsg {
   bool is_read_only = 1;
   int64 available_space = 2;
   int64 total_space = 3;
+  BatchProcessorStatus batch_processor_status = 4;
+}
+
+enum BatchProcessorStatus {
+  OK = 0;
+  ERROR = 1;
 }

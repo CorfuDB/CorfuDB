@@ -31,8 +31,7 @@ public class FileSystemAdvisor {
             }
 
             node.getFileSystem()
-                    .map(FileSystemStats::getPartitionAttributeStats)
-                    .filter(PartitionAttributeStats::isReadOnly)
+                    .filter(FileSystemStats::hasError)
                     .map(attr -> new NodeRankByPartitionAttributes(nodeEndpoint, attr))
                     .ifPresent(set::add);
         }
@@ -50,11 +49,8 @@ public class FileSystemAdvisor {
         Optional<FileSystemStats> maybeFileSystem = getFileSystemStats(clusterState);
 
         return maybeFileSystem
-                .filter(fileSystem -> fileSystem.getPartitionAttributeStats().isWritable())
-                .map(fileSystem -> new NodeRankByPartitionAttributes(
-                        clusterState.getLocalEndpoint(),
-                        fileSystem.getPartitionAttributeStats()
-                ));
+                .filter(FileSystemStats::isOk)
+                .map(fileSystem -> new NodeRankByPartitionAttributes(clusterState.getLocalEndpoint(), fileSystem));
     }
 
     private Optional<FileSystemStats> getFileSystemStats(ClusterState clusterState) {

@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure.log;
 
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.BatchProcessor.BatchProcessorContext;
 import org.corfudb.infrastructure.log.FileSystemAgent.FileSystemConfig;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
@@ -35,11 +36,12 @@ public class InMemoryStreamLog implements StreamLog {
     private volatile long startingAddress;
     private volatile LogMetadata logMetadata;
     private AtomicLong committedTail;
+    private final FileSystemAgent fsAgent;
 
     /**
      * Returns an object that stores a stream log in memory.
      */
-    public InMemoryStreamLog() {
+    public InMemoryStreamLog(BatchProcessorContext batchProcessorContext) {
         logCache = new ConcurrentHashMap<>();
         trimmed = ConcurrentHashMap.newKeySet();
         startingAddress = 0;
@@ -50,7 +52,7 @@ public class InMemoryStreamLog implements StreamLog {
         double unlimited = 100;
         long reservedSpace = 0;
         FileSystemConfig config = new FileSystemConfig(dummyLogDir, unlimited, reservedSpace, PersistenceMode.MEMORY);
-        FileSystemAgent.init(config);
+        fsAgent = FileSystemAgent.init(config, batchProcessorContext);
     }
 
     @Override
@@ -194,7 +196,7 @@ public class InMemoryStreamLog implements StreamLog {
     @Override
     public void close() {
         logCache = new HashMap<>();
-        FileSystemAgent.shutdown();
+        fsAgent.shutdown();
     }
 
     @Override

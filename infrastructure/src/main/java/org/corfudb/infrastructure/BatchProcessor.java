@@ -17,11 +17,13 @@ import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.runtime.exceptions.QuotaExceededException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
+import org.corfudb.runtime.proto.FileSystemStats.BatchProcessorStatus;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
 import org.corfudb.runtime.view.Layout;
 
 import javax.annotation.Nonnull;
+import java.lang.Thread.UncaughtExceptionHandler;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -31,6 +33,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 import static org.corfudb.protocols.CorfuProtocolLogData.getLogData;
@@ -57,6 +60,8 @@ public class BatchProcessor implements AutoCloseable {
      */
     private long sealEpoch;
 
+    private final BatchProcessorContext context;
+
     /**
      * Returns a new BatchProcessor for a stream log.
      *
@@ -64,17 +69,27 @@ public class BatchProcessor implements AutoCloseable {
      * @param sealEpoch All operations stamped with epoch less than the epochWaterMark are discarded.
      * @param sync      If true, the batch writer will sync writes to secondary storage
      */
-    public BatchProcessor(StreamLog streamLog, long sealEpoch, boolean sync) {
+    public BatchProcessor(StreamLog streamLog, BatchProcessorContext context, long sealEpoch, boolean sync) {
         this.sealEpoch = sealEpoch;
         this.sync = sync;
         this.streamLog = streamLog;
+        this.context = context;
 
         BATCH_SIZE = 50;
         operationsQueue = new LinkedBlockingQueue<>();
+
+        //Change batch processor status to error
+        // and throw an exception to prevent batch processor from serving requests
+        UncaughtExceptionHandler errorHandler = (t, e) -> {
+            context.setErrorStatus();
+            throw new IllegalStateException(e);
+        };
+
         processorService = Executors
                 .newSingleThreadExecutor(new ThreadFactoryBuilder()
                         .setDaemon(false)
                         .setNameFormat("LogUnit-BatchProcessor-%d")
+                        .setUncaughtExceptionHandler(errorHandler)
                         .build());
 
         processorService.submit(this::process);
@@ -230,6 +245,7 @@ public class BatchProcessor implements AutoCloseable {
             }
         } catch (Exception e) {
             log.error("Caught exception in the write processor ", e);
+            context.setErrorStatus();
         }
     }
 
@@ -242,6 +258,18 @@ public class BatchProcessor implements AutoCloseable {
                     TimeUnit.MILLISECONDS);
         } catch (InterruptedException e) {
             throw new UnrecoverableCorfuInterruptedError("BatchProcessor close interrupted.", e);
+        }
+    }
+
+    public static class BatchProcessorContext {
+        private final AtomicReference<BatchProcessorStatus> status = new AtomicReference<>(BatchProcessorStatus.OK);
+
+        private void setErrorStatus() {
+            status.set(BatchProcessorStatus.ERROR);
+        }
+
+        public BatchProcessorStatus getStatus() {
+            return status.get();
         }
     }
 }
