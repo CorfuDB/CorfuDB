@@ -223,7 +223,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         try {
             log.info("Start Log Replication Discovery Service");
 
-            setupLocalNodeIdWithRetries();
+            setLocalNodeId();
             fetchTopology();
             processDiscoveredTopology(topologyDescriptor, true);
 
@@ -832,19 +832,5 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
     @Override
     public Set<LogReplicationSession> getIncomingSessions() {
         return sessionManager.getIncomingSessions();
-    }
-
-    private void setupLocalNodeIdWithRetries() throws InterruptedException {
-        for (int i = 0; i < CONFIG_RETRIES; i++) {
-            try {
-                setLocalNodeId();
-            }
-            catch (IllegalStateException ise) {
-                TimeUnit.SECONDS.sleep(CONFIG_RETRY_DURATION_SECONDS);
-                continue;
-            }
-            return;
-        }
-        throw new RetryExhaustedException("Failed to fetch local node id within provided period");
     }
 }
