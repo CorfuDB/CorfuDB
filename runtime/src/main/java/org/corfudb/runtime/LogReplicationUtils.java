@@ -15,6 +15,7 @@ import org.corfudb.runtime.collections.StreamListener;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TableSchema;
 import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.runtime.exceptions.StreamingException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
@@ -117,10 +118,10 @@ public class LogReplicationUtils {
         private CorfuStoreMetadata.Timestamp getValidSubscriptionTimestamp() {
 
             // Number of milliseconds to wait before each retry
-            int backoff_retry_duration_ms = 5;
+            int backoffRetryDurationMs = 5;
 
             // Max duration at which the wait time must be capped (2 minutes)
-            int max_duration_threshold_mins = 2;
+            int maxDurationThresholdMins = 2;
 
             // Retry until a timeout of max_duration_threshold_mins
             try {
@@ -145,7 +146,7 @@ public class LogReplicationUtils {
 
                         // Snapshot sync was not in progress at the client's read timestamp.  Invoke the client callback
                         // to set the baseline at this timestamp.
-                        clientListener.mergeTableOnInitialSubscription(multiTableReadTimestamp);
+                        clientListener.mergeTableOnSubscription(multiTableReadTimestamp);
 
                         // Return this timestamp.  The client's listener must be subscribed at this timestamp.
                         return multiTableReadTimestamp;
@@ -154,8 +155,8 @@ public class LogReplicationUtils {
                         throw new RetryNeededException();
                     }
                 }).setOptions(x -> {
-                    x.setBackoffDuration(Duration.ofMillis(backoff_retry_duration_ms));
-                    x.setMaxRetryThreshold(Duration.ofMinutes(max_duration_threshold_mins));
+                    x.setBackoffDuration(Duration.ofMillis(backoffRetryDurationMs));
+                    x.setMaxRetryThreshold(Duration.ofMinutes(maxDurationThresholdMins));
                 }).run();
             } catch (InterruptedException e) {
                 log.error("Failed to get a valid subscription timestamp.", e);
@@ -191,16 +192,19 @@ public class LogReplicationUtils {
 
                 CorfuStoreEntry<ReplicationStatusKey, ReplicationStatusVal, Message> entry = entries.get(0);
                 txn.commit();
-                return entry.getPayload().getDataConsistent() ? false : true;
+                return !entry.getPayload().getDataConsistent();
             } catch (TransactionAbortedException e) {
                 // Since this is a read-only transaction, the abort can only be if this version of the table is not
                 // available in the JVM's cache.  The underlying cause for this error is TrimmedException
+                // Logging the exception for debugging purposes.
+                log.warn("Check for snapshot sync status failed with TX Abort.  Cause is: ", e.getCause());
                 Preconditions.checkState(e.getCause() instanceof TrimmedException);
 
-                // This means that there have been updates to the Replication Status table after the above timestamp,
-                // and this snapshot has been evicted from the cache of the JVM.  We cannot tell the status of snapshot
-                // sync at this timestamp.  Return true so that caller retries the check with a later timestamp.
-                return true;
+                // This means that there have been updates to the Replication Status table after the timestamp at
+                // which the check was performed, these updates have been read in the JVM's cache and this version
+                // has been evicted from the cache.  We cannot tell the status of snapshot sync.  Throw the exception
+                // so that the caller retries the check with a later timestamp.
+                throw e;
             }
         }
 
@@ -209,7 +213,7 @@ public class LogReplicationUtils {
          * invokes notifyAll().
          * @param timestamp
          */
-        private void waitSnapshotSyncCompletion(CorfuStoreMetadata.Timestamp timestamp) {
+        private void waitSnapshotSyncCompletion(CorfuStoreMetadata.Timestamp timestamp) throws InterruptedException {
             SnapshotSyncCompletionListener snapshotSyncCompletionListener = new SnapshotSyncCompletionListener(timestamp);
             corfuStore.subscribeListener(snapshotSyncCompletionListener, CORFU_SYSTEM_NAMESPACE, LR_STATUS_STREAM_TAG,
                     Arrays.asList(REPLICATION_STATUS_TABLE), timestamp);
@@ -218,10 +222,10 @@ public class LogReplicationUtils {
                 while (!snapshotSyncCompletionListener.isSnapshotSyncComplete()) {
                     try {
                         timestamp.wait();
-                    } catch (Exception e) {
+                    } catch (InterruptedException e) {
                         log.error("Exception while waiting for snapshot sync to complete", e);
                         corfuStore.unsubscribeListener(snapshotSyncCompletionListener);
-                        throw new RuntimeException(e);
+                        throw e;
                     }
                 }
                 corfuStore.unsubscribeListener(snapshotSyncCompletionListener);
@@ -262,7 +266,8 @@ public class LogReplicationUtils {
 
         @Override
         public void onError(Throwable throwable) {
-            throw new RuntimeException(throwable);
+            log.error("Encountered an error while waiting for snapshot sync to complete.", throwable);
+            throw new StreamingException(throwable);
         }
 
     }
