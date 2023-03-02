@@ -552,7 +552,7 @@ public class LogReplicationMultiNamespaceStreamingIT extends AbstractIT {
         }
 
         @Override
-        protected void mergeTableOnInitialSubscription(CorfuStoreMetadata.Timestamp timestamp) {
+        protected void mergeTableOnSubscription(CorfuStoreMetadata.Timestamp timestamp) {
             List<CorfuStoreEntry<SampleSchema.Uuid, SampleSchema.SampleTableAMsg, SampleSchema.Uuid>> entries;
             try (TxnContext txnContext = store.txn(namespace, IsolationLevel.snapshot(timestamp))) {
                entries = txnContext.executeQuery(userTableName, p -> true);

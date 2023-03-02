@@ -65,37 +65,43 @@ public abstract class LRMultiNamespaceListener implements StreamListener {
     //      -------- Methods to be implemented on the client/application  ---------------
 
     /**
-     * Callback invoked when a snapshot sync start has been detected.
+     * Invoked when a snapshot sync start has been detected.
      */
     protected abstract void onSnapshotSyncStart();
 
     /**
-     * Callback invoked when an ongoing snapshot sync completes
+     * Invoked when an ongoing snapshot sync completes
      */
     protected abstract void onSnapshotSyncComplete();
 
     /**
-     * Callback invoked when data updates are received during a snapshot sync.  These updates will be the writes
+     * Invoked when data updates are received during a snapshot sync.  These updates will be the writes
      * received as part of the snapshot sync
      * @param results Entries received in a single transaction as part of a snapshot sync
      */
     protected abstract void processUpdateInSnapshotSync(CorfuStreamEntries results);
 
     /**
-     * Callback invoked when data updates are received as part of a LogEntry Sync.
+     * Invoked when data updates are received as part of a LogEntry Sync.
      * @param results Entries received in a single transaction as part of a log entry sync
      */
     protected abstract void processUpdateInLogEntrySync(CorfuStreamEntries results);
 
     /**
-     *
+     * Invoked by the Corfu runtime when this listener is being subscribed for receiving updates.  This method should
+     * start a read-only transaction invoking getTable() on all application tables which will be
+     * modified in this listener and the replicated LR tables and return the commit timestamp of the transaction.
+     * The timestamp will be the max of the tails of all tables on which getTable() was performed.
+     * @return Timestamp commit timestamp of the read-only transaction
      */
     protected abstract Timestamp performMultiTableReads();
 
     /**
-     *
+     * Invoked by the Corfu runtime when this listener is being subscribed for receiving updates.  This method merges
+     * (constructs a baseline) of the replicated LR tables as seen at the given timestamp.
+     * @param timestamp timestamp at which the replicated tables must be read to form the baseline
      */
-    protected abstract void mergeTableOnInitialSubscription(Timestamp timestamp);
+    protected abstract void mergeTableOnSubscription(Timestamp timestamp);
 
     /**
      * Callback to indicate that an error or exception has occurred while streaming or that the stream is
