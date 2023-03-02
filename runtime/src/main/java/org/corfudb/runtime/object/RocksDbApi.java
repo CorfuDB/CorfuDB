@@ -6,9 +6,7 @@ import org.corfudb.runtime.collections.RocksDbEntryIterator;
 import org.corfudb.util.serializer.ISerializer;
 import org.rocksdb.RocksDBException;
 
-import java.util.function.Function;
-
-public interface RocksTableApi<T extends ICorfuSMR<T>> {
+public interface RocksDbApi<T extends ICorfuSMR<T>> {
 
     byte[] get(@NonNull ByteBuf keyPayload) throws RocksDBException;
 
@@ -16,7 +14,9 @@ public interface RocksTableApi<T extends ICorfuSMR<T>> {
 
     void delete(@NonNull ByteBuf keyPayload) throws RocksDBException;
 
-    <K, V> RocksDbEntryIterator<K,V> getIterator(@NonNull ISerializer serializer);
+    <K, V> RocksDbEntryIterator<K, V> getIterator(@NonNull ISerializer serializer);
+
+    ISMRSnapshot<T> getSnapshot(@NonNull ViewGenerator<T> viewGenerator);
 
     void close() throws RocksDBException;
 }

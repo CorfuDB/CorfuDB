@@ -12,21 +12,17 @@ import org.rocksdb.Snapshot;
 import org.rocksdb.Transaction;
 import org.rocksdb.WriteOptions;
 
-import java.util.function.Function;
-
-public class RocksTx<T extends ICorfuSMR<T>> implements RocksTableApi<T> {
+public class RocksDbTx<T extends ICorfuSMR<T>> implements RocksDbApi<T> {
 
     private final OptimisticTransactionDB rocksDb;
-    private final WriteOptions writeOptions;
     private final Snapshot snapshot;
     private final Transaction txn;
     private final ReadOptions readOptions;
 
-    public RocksTx(@NonNull OptimisticTransactionDB rocksDb,
-                   @NonNull WriteOptions writeOptions,
-                   @NonNull Snapshot snapshot) {
+    public RocksDbTx(@NonNull OptimisticTransactionDB rocksDb,
+                     @NonNull WriteOptions writeOptions,
+                     @NonNull Snapshot snapshot) {
         this.rocksDb = rocksDb;
-        this.writeOptions = writeOptions;
         this.snapshot = snapshot;
         this.readOptions = new ReadOptions().setSnapshot(snapshot);
         this.txn = rocksDb.beginTransaction(writeOptions);
@@ -65,8 +61,13 @@ public class RocksTx<T extends ICorfuSMR<T>> implements RocksTableApi<T> {
 
     @Override
     public void close() throws RocksDBException {
-        // TODO(Zach): Anything else here?
+        // TODO(Zach): How to make sure readOptions are not leaked if thread dies?
         txn.rollback();
         readOptions.close();
+    }
+
+    @Override
+    public ISMRSnapshot<T> getSnapshot(@NonNull ViewGenerator<T> viewGenerator) {
+        throw new UnsupportedOperationException();
     }
 }

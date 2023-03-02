@@ -1,7 +1,7 @@
 package org.corfudb.runtime.object;
 
-import org.rocksdb.Snapshot;
+import lombok.NonNull;
 
 public interface ViewGenerator<T extends ICorfuSMR<T>> {
-    T newView(Snapshot snapshot);
+    T newView(@NonNull RocksDbApi<T> rocksApi);
 }

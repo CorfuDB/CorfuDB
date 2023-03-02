@@ -12,20 +12,16 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.object.ConsistencyOptions;
 import org.corfudb.runtime.object.ICorfuSMR;
-import org.corfudb.runtime.object.RocksStubTx;
-import org.corfudb.runtime.object.RocksTableApi;
+import org.corfudb.runtime.object.RocksDbApi;
 import org.corfudb.runtime.object.ISMRSnapshot;
-import org.corfudb.runtime.object.RocksSource;
-import org.corfudb.runtime.object.RocksTx;
+import org.corfudb.runtime.object.RocksDbStore;
 import org.corfudb.runtime.object.ViewGenerator;
 import org.corfudb.util.serializer.ISerializer;
 import org.rocksdb.CompactionOptionsUniversal;
 import org.rocksdb.CompressionType;
-import org.rocksdb.OptimisticTransactionDB;
 import org.rocksdb.Options;
 import org.rocksdb.RocksDB;
 import org.rocksdb.RocksDBException;
-import org.rocksdb.Snapshot;
 import org.rocksdb.WriteOptions;
 
 import java.nio.file.Path;
@@ -34,7 +30,6 @@ import java.util.Optional;
 import java.util.Spliterator;
 import java.util.Spliterators;
 import java.util.concurrent.ThreadLocalRandom;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
@@ -58,7 +53,7 @@ public class DiskBackedCorfuTable<K, V> implements ICorfuSMR<DiskBackedCorfuTabl
     }
 
     /**
-     * A set of options defined for disk-backed {@link PersistedStreamingMap}.
+     * A set of options defined for {@link DiskBackedCorfuTable}.
      *
      * For a set of options that dictate RocksDB memory usage can be found here:
      * https://github.com/facebook/rocksdb/wiki/Memory-usage-in-RocksDB
@@ -73,7 +68,7 @@ public class DiskBackedCorfuTable<K, V> implements ICorfuSMR<DiskBackedCorfuTabl
      * Write Buffer: Also known as memtable is defined by the ColumnFamilyOptions
      *               option. The default is 64 MB.
      */
-    public static Options getPersistedStreamingMapOptions() {
+    public static Options getDiskBackedCorfuTableOptions() {
         final int maxSizeAmplificationPercent = 50;
         final Options options = new Options();
 
@@ -88,15 +83,9 @@ public class DiskBackedCorfuTable<K, V> implements ICorfuSMR<DiskBackedCorfuTabl
         return options;
     }
 
-    private final AtomicInteger dataSetSize = new AtomicInteger();
     private final CorfuRuntime corfuRuntime;
     private final ISerializer serializer;
-    private final RocksTableApi<DiskBackedCorfuTable<K, V>> tableView;
-    private final RocksSource<DiskBackedCorfuTable<K, V>> tableSource;
-    private final String absolutePathString;
-    private final Options rocksDbOptions;
-    private final ConsistencyOptions consistencyOptions;
-    private final OptimisticTransactionDB rocksDb;
+    private final RocksDbApi<DiskBackedCorfuTable<K, V>> rocksApi;
 
     public DiskBackedCorfuTable(@NonNull Path dataPath,
                                 @NonNull Options rocksDbOptions,
@@ -112,18 +101,8 @@ public class DiskBackedCorfuTable<K, V> implements ICorfuSMR<DiskBackedCorfuTabl
                                 @NonNull ConsistencyOptions consistencyOptions,
                                 @NonNull ISerializer serializer,
                                 @NonNull CorfuRuntime corfuRuntime) {
-        this.absolutePathString = dataPath.toFile().getAbsolutePath();
-        this.rocksDbOptions = rocksDbOptions;
-        this.consistencyOptions = consistencyOptions;
-
         try {
-            RocksDB.destroyDB(this.absolutePathString, this.rocksDbOptions);
-            this.rocksDb = OptimisticTransactionDB.open(rocksDbOptions, dataPath.toFile().getAbsolutePath());
-            this.tableSource = new RocksSource<>(
-                    this.rocksDb,
-                    this.writeOptions
-            );
-            this.tableView = this.tableSource;
+            this.rocksApi = new RocksDbStore<>(dataPath, rocksDbOptions, writeOptions, consistencyOptions);
         } catch (RocksDBException e) {
             throw new UnrecoverableCorfuError(e);
         }
@@ -141,7 +120,7 @@ public class DiskBackedCorfuTable<K, V> implements ICorfuSMR<DiskBackedCorfuTabl
         try {
             // Serialize in the try-catch block to release ByteBuf when an exception occurs.
             serializer.serialize(key, keyPayload);
-            byte[] value = tableView.get(keyPayload);
+            byte[] value = rocksApi.get(keyPayload);
             if (value == null) {
                 return null;
             }
@@ -160,7 +139,7 @@ public class DiskBackedCorfuTable<K, V> implements ICorfuSMR<DiskBackedCorfuTabl
         try {
             // Serialize in the try-catch block to release ByteBuf when an exception occurs.
             serializer.serialize(key, keyPayload);
-            byte[] value = tableView.get(keyPayload);
+            byte[] value = rocksApi.get(keyPayload);
             return value != null;
         } catch (RocksDBException ex) {
             throw new UnrecoverableCorfuError(ex);
@@ -180,7 +159,7 @@ public class DiskBackedCorfuTable<K, V> implements ICorfuSMR<DiskBackedCorfuTabl
             // Serialize in the try-catch block to release ByteBuf when an exception occurs.
             serializer.serialize(key, keyPayload);
             serializer.serialize(value, valuePayload);
-            tableView.insert(keyPayload, valuePayload);
+            rocksApi.insert(keyPayload, valuePayload);
             return this;
         } catch (RocksDBException ex) {
             throw new UnrecoverableCorfuError(ex);
@@ -197,7 +176,7 @@ public class DiskBackedCorfuTable<K, V> implements ICorfuSMR<DiskBackedCorfuTabl
         try {
             // Serialize in the try-catch block to release ByteBuf when an exception occurs.
             serializer.serialize(key, keyPayload);
-            tableView.delete(keyPayload);
+            rocksApi.delete(keyPayload);
             return this;
         } catch (RocksDBException ex) {
             throw new UnrecoverableCorfuError(ex);
@@ -207,19 +186,25 @@ public class DiskBackedCorfuTable<K, V> implements ICorfuSMR<DiskBackedCorfuTabl
     }
 
     public Stream<Map.Entry<K, V>> entryStream() {
-        final RocksDbEntryIterator<K, V> entryIterator = tableView.getIterator(serializer);
+        final RocksDbEntryIterator<K, V> entryIterator = rocksApi.getIterator(serializer);
         Stream<Map.Entry<K, V>> resStream = StreamSupport.stream(Spliterators.spliteratorUnknownSize(entryIterator,
                 Spliterator.ORDERED), false);
         resStream.onClose(entryIterator::close);
         return resStream;
     }
 
+    public int size() {
+        return entryStream().map(entry -> 1).reduce(0, Integer::sum);
+    }
+
+    public boolean isEmpty() {
+        return size() == 0;
+    }
+
     @Override
     public void close() {
         try {
-            rocksDb.close();
-            RocksDB.destroyDB(absolutePathString, rocksDbOptions);
-            log.info("Cleared RocksDB data on {}", absolutePathString);
+            rocksApi.close();
         } catch (RocksDBException e) {
             throw new UnrecoverableCorfuError(e);
         }
@@ -232,19 +217,11 @@ public class DiskBackedCorfuTable<K, V> implements ICorfuSMR<DiskBackedCorfuTabl
 
     @Override
     public ISMRSnapshot<DiskBackedCorfuTable<K, V>> getSnapshot() {
-        return tableSource.getSnapshot(this);
-    }
-
-    private DiskBackedCorfuTable<K, V> newView(RocksTableApi<DiskBackedCorfuTable<K, V>> view) {
-        return toBuilder().tableView(view).build();
+        return rocksApi.getSnapshot(this);
     }
 
     @Override
-    public DiskBackedCorfuTable<K, V> newView(Snapshot snapshot) {
-        if (consistencyOptions.isReadYourWrites()) {
-            return newView(new RocksTx<>(rocksDb, writeOptions, snapshot));
-        } else {
-            return newView(new RocksStubTx<>(rocksDb, snapshot));
-        }
+    public DiskBackedCorfuTable<K, V> newView(@NonNull RocksDbApi<DiskBackedCorfuTable<K, V>> rocksApi) {
+        return toBuilder().rocksApi(rocksApi).build();
     }
 }

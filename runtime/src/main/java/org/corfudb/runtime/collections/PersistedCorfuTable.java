@@ -87,12 +87,12 @@ public class PersistedCorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<P
 
     @Override
     public int size() {
-        throw new UnsupportedOperationException();
+        return proxy.access(DiskBackedCorfuTable::size, null);
     }
 
     @Override
     public boolean isEmpty() {
-        throw new UnsupportedOperationException();
+        return proxy.access(DiskBackedCorfuTable::isEmpty, null);
     }
 
     @Override

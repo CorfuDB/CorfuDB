@@ -1,7 +1,6 @@
 package org.corfudb.runtime.object;
 
 import io.netty.buffer.ByteBuf;
-import lombok.AllArgsConstructor;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.collections.RocksDbEntryIterator;
@@ -12,14 +11,29 @@ import org.rocksdb.RocksDB;
 import org.rocksdb.RocksDBException;
 import org.rocksdb.WriteOptions;
 
-import java.util.function.Function;
+import java.nio.file.Path;
 
 @Slf4j
-@AllArgsConstructor
-public class RocksSource<T extends ICorfuSMR<T> & ViewGenerator<T>> implements RocksTableApi<T> {
+public class RocksDbStore<T extends ICorfuSMR<T>> implements RocksDbApi<T> {
 
     private final OptimisticTransactionDB rocksDb;
     private final WriteOptions writeOptions;
+    private final String absolutePathString;
+    private final Options rocksDbOptions;
+    private final ConsistencyOptions consistencyOptions;
+
+    public RocksDbStore(@NonNull Path dataPath,
+                        @NonNull Options rocksDbOptions,
+                        @NonNull WriteOptions writeOptions,
+                        @NonNull ConsistencyOptions consistencyOptions) throws RocksDBException {
+        this.absolutePathString = dataPath.toFile().getAbsolutePath();
+        this.rocksDbOptions = rocksDbOptions;
+        this.writeOptions = writeOptions;
+        this.consistencyOptions = consistencyOptions;
+
+        RocksDB.destroyDB(this.absolutePathString, this.rocksDbOptions);
+        this.rocksDb = OptimisticTransactionDB.open(rocksDbOptions, absolutePathString);
+    }
 
     @Override
     public byte[] get(@NonNull ByteBuf keyPayload) throws RocksDBException {
@@ -41,20 +55,19 @@ public class RocksSource<T extends ICorfuSMR<T> & ViewGenerator<T>> implements R
     }
 
     @Override
-    public <K, V> RocksDbEntryIterator<K,V> getIterator(@NonNull ISerializer serializer) {
+    public <K, V> RocksDbEntryIterator<K, V> getIterator(@NonNull ISerializer serializer) {
         return new RocksDbEntryIterator<>(rocksDb, serializer);
     }
 
-
     @Override
     public void close() throws RocksDBException {
+        rocksDb.close();
+        RocksDB.destroyDB(absolutePathString, rocksDbOptions);
+        log.info("Cleared RocksDB data on {}", absolutePathString);
     }
 
-    public ISMRSnapshot<T> getSnapshot(@NonNull T instance) {
-        return new DiskBackedSMRSnapshot<>(rocksDb, instance);
-    }
-
-    public RocksDB getRocksDb() {
-        return this.rocksDb;
+    @Override
+    public ISMRSnapshot<T> getSnapshot(@NonNull ViewGenerator<T> viewGenerator) {
+        return new DiskBackedSMRSnapshot<>(rocksDb, writeOptions, consistencyOptions, viewGenerator);
     }
 }
