@@ -1,12 +1,8 @@
 package org.corfudb.infrastructure;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Builder.Default;
 import lombok.Getter;
 import lombok.NonNull;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.health.Component;
 import org.corfudb.infrastructure.health.HealthMonitor;
@@ -141,7 +137,7 @@ public class RemoteMonitoringService implements ManagementService {
         FileSystemAdvisor fsAdvisor = new FileSystemAdvisor();
 
         EpochHandler epochHandler = EpochHandler.builder()
-                .corfuRuntime(getCorfuRuntime())
+                .runtimeSingletonResource(runtimeSingletonResource)
                 .serverContext(serverContext)
                 .failureDetectorWorker(failureDetectorWorker)
                 .build();
@@ -169,13 +165,13 @@ public class RemoteMonitoringService implements ManagementService {
                 .failureDetectorWorker(failureDetectorWorker)
                 .build();
 
-        FailureDetectorService fdService = FailureDetectorService.builder()
+        this.fdService = FailureDetectorService.builder()
                 .epochHandler(epochHandler)
                 .failuresAgent(failuresAgent)
                 .healingAgent(healingAgent)
                 .sequencerBootstrapper(sequencerBootstrapper)
+                .failureDetectorWorker(failureDetectorWorker)
                 .build();
-        this.fdService = fdService;
     }
 
     private CorfuRuntime getCorfuRuntime() {

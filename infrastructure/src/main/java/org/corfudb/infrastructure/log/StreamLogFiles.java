@@ -797,7 +797,7 @@ public class StreamLogFiles implements StreamLog {
                 readCh = getChannel(a, true);
 
                 SegmentHandle sh = new SegmentHandle(segment, writeCh, readCh, a);
-                openSegments.ifPresent(counter -> counter.incrementAndGet());
+                openSegments.ifPresent(AtomicLong::incrementAndGet);
                 // The first time we open a file we should read to the end, to load the
                 // map of entries we already have.
                 // Once the segment address space is loaded, it should be ready to accept writes.

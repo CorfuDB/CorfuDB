@@ -5,9 +5,9 @@ import org.corfudb.infrastructure.LayoutBasedTestHelper;
 import org.corfudb.infrastructure.NodeNames;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.management.PollReport;
-import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.util.concurrent.SingletonResource;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
@@ -186,7 +186,7 @@ class EpochHandlerTest extends LayoutBasedTestHelper {
         final int threads = 5;
         ExecutorService fdWorker = Executors.newFixedThreadPool(threads);
         return EpochHandler.builder()
-                .corfuRuntime(Mockito.mock(CorfuRuntime.class))
+                .runtimeSingletonResource(Mockito.mock(SingletonResource.class))
                 .serverContext(Mockito.mock(ServerContext.class))
                 .failureDetectorWorker(fdWorker)
                 .build();

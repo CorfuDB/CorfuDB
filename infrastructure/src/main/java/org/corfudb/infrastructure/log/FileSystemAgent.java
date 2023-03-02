@@ -75,10 +75,12 @@ public final class FileSystemAgent {
             PartitionAgent partitionAgent = new PartitionAgent(config, batchProcessorContext);
             maybePartitionAgent = Optional.of(partitionAgent);
             partitionAttribute = partitionAgent.getPartitionAttribute();
+            partitionAgent.shutdown();
         }
 
         logSizeQuota = new ResourceQuota("LogSizeQuota", logSizeLimit);
         logSizeQuota.consume(initialLogSize);
+
         scheduler = Executors.newSingleThreadScheduledExecutor();
         scheduler.scheduleWithFixedDelay(
                 this::reportQuotaExceeded, INIT_DELAY, DELAY_NUM, DELAY_UNITS);
@@ -97,7 +99,7 @@ public final class FileSystemAgent {
     private void reportQuotaExceeded() {
         try {
             Issue issue = Issue.createIssue(LOG_UNIT, Issue.IssueId.QUOTA_EXCEEDED_ERROR, "Quota exceeded");
-            if (!getResourceQuota().hasAvailable()) {
+            if (!logSizeQuota.hasAvailable()) {
                 HealthMonitor.reportIssue(issue);
             } else {
                 HealthMonitor.resolveIssue(issue);
@@ -260,7 +262,7 @@ public final class FileSystemAgent {
          * Sets PartitionAttribute's fields with the values from log file and the log partition.
          */
         private void setPartitionAttribute() {
-            log.info("setPartitionAttribute: fetching PartitionAttribute.");
+            log.trace("setPartitionAttribute: fetching PartitionAttribute.");
             try {
                 // Log path to check if it is in readOnly mode
                 File logDirectoryFile = config.logDir.toFile();
@@ -273,7 +275,7 @@ public final class FileSystemAgent {
                         fileStore.getTotalSpace(),
                         batchProcessorContext.getStatus()
                 );
-                log.info("setPartitionAttribute: fetched PartitionAttribute successfully. " +
+                log.trace("setPartitionAttribute: fetched PartitionAttribute successfully. " +
                         "{}", partitionAttribute);
 
             } catch (Exception ex) {
