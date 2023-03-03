@@ -45,7 +45,7 @@ class FileSystemAdvisorTest {
     }
 
     @Test
-    public void noHealedServerBpError() {
+    public void weCanHealServerWithBpError() {
         final long epoch = 0;
         final String localEndpoint = NodeNames.C;
         PartitionAttributeStats attributes = new PartitionAttributeStats(false, 100, 200);
@@ -62,7 +62,9 @@ class FileSystemAdvisorTest {
         FileSystemAdvisor advisor = new FileSystemAdvisor();
         Optional<NodeRankByPartitionAttributes> maybeHealedNode = advisor.healedServer(cluster);
 
-        assertFalse(maybeHealedNode.isPresent());
+        NodeRankByPartitionAttributes expected = new NodeRankByPartitionAttributes(localEndpoint, fsStats);
+        assertTrue(maybeHealedNode.isPresent());
+        assertEquals(expected , maybeHealedNode.get());
     }
 
     @Test

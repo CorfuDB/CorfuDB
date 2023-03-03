@@ -32,6 +32,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
@@ -78,24 +79,21 @@ public class BatchProcessor implements AutoCloseable {
         BATCH_SIZE = 50;
         operationsQueue = new LinkedBlockingQueue<>();
 
-        //Change batch processor status to error
-        // and throw an exception to prevent batch processor from serving requests
-        UncaughtExceptionHandler errorHandler = (t, e) -> {
-            context.setErrorStatus();
-            throw new IllegalStateException(e);
-        };
-
-        processorService = Executors
-                .newSingleThreadExecutor(new ThreadFactoryBuilder()
-                        .setDaemon(false)
-                        .setNameFormat("LogUnit-BatchProcessor-%d")
-                        .setUncaughtExceptionHandler(errorHandler)
-                        .build());
-
-        processorService.submit(this::process);
+        processorService = newExecutorService();
         if (sealEpoch != Layout.INVALID_EPOCH) {
             HealthMonitor.resolveIssue(Issue.createInitIssue(Component.LOG_UNIT));
         }
+    }
+
+    private ExecutorService newExecutorService() {
+        ThreadFactory threadFactory = new ThreadFactoryBuilder()
+                .setDaemon(false)
+                .setNameFormat("LogUnit-BatchProcessor-%d")
+                .build();
+        ExecutorService executor = Executors.newSingleThreadExecutor(threadFactory);
+
+        processorService.submit(this::process);
+        return executor;
     }
 
     private void recordRunnable(Runnable runnable, Optional<Timer> timer) {
@@ -261,11 +259,21 @@ public class BatchProcessor implements AutoCloseable {
         }
     }
 
+    public void restart() {
+        operationsQueue.clear();
+        context.setOkStatus();
+        processorService.submit(this::process);
+    }
+
     public static class BatchProcessorContext {
         private final AtomicReference<BatchProcessorStatus> status = new AtomicReference<>(BatchProcessorStatus.OK);
 
         private void setErrorStatus() {
             status.set(BatchProcessorStatus.ERROR);
+        }
+
+        public void setOkStatus() {
+            status.set(BatchProcessorStatus.OK);
         }
 
         public BatchProcessorStatus getStatus() {

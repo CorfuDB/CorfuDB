@@ -520,6 +520,8 @@ public class LogUnitServer extends AbstractServer {
 
         serverContext.setLogUnitEpochWaterMark(req.getPayload().getResetLogUnitRequest().getEpoch());
 
+        batchProcessor.restart();
+
         batchProcessor.addTask(BatchWriterOperation.Type.RESET, req)
                 .thenRun(() -> {
                     dataCache.invalidateAll();
