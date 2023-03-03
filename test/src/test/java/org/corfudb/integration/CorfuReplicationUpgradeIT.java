@@ -145,8 +145,7 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         log.info(">> Upgrading the sink site ...");
         pluginConfigFilePath = TEST_PLUGIN_CONFIG_PATH_SINK;
         upgradeSite(false, corfuStoreSink);
-        verifyVersion(corfuStoreSink, UPGRADE_VERSION_STRING, true);
-        verifyVersion(corfuStoreSource, VERSION_STRING, false);
+        verifyRollingUpgrade();
 
         // Verify that subsequent log entry sync is successful
         log.info("Write more data on the source");
@@ -248,8 +247,7 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         log.info(">> Upgrading the sink site ...");
         pluginConfigFilePath = TEST_PLUGIN_CONFIG_PATH_SINK;
         upgradeSite(false, corfuStoreSink);
-        verifyVersion(corfuStoreSink, UPGRADE_VERSION_STRING, true);
-        verifyVersion(corfuStoreSource, VERSION_STRING, false);
+        verifyRollingUpgrade();
 
         latchSnapshotSyncPlugin = new CountDownLatch(2);
         snapshotSyncPluginListener = new SnapshotSyncPluginListener(latchSnapshotSyncPlugin);
@@ -357,8 +355,7 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         log.info(">> Upgrading the sink site ...");
         pluginConfigFilePath = TEST_PLUGIN_CONFIG_PATH_SINK;
         upgradeSite(false, corfuStoreSink);
-        verifyVersion(corfuStoreSink, UPGRADE_VERSION_STRING, true);
-        verifyVersion(corfuStoreSource, VERSION_STRING, false);
+        verifyRollingUpgrade();
         log.info(">> Plugin config verified after sink upgrade");
 
         // Upgrading the source site will force a snapshot sync
@@ -374,8 +371,10 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         log.info(">> Upgrading the source site ...");
         pluginConfigFilePath = TEST_PLUGIN_CONFIG_PATH_SOURCE;
         upgradeSite(true, corfuStoreSource);
-        verifyVersion(corfuStoreSource, UPGRADE_VERSION_STRING, true);
-        verifyVersion(corfuStoreSink, UPGRADE_VERSION_STRING, true);
+        verifyRollingUpgrade();
+
+        // Force snapshot sync using checkpoint operation
+        snaphotByCheckpointing();
 
         // Verify that snapshot sync was triggered by checking the number of
         // updates to the ReplicationStatus table on the sink.
@@ -481,8 +480,7 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
             streamsToReplicateSink.add(TABLE_PREFIX + i);
         }
         upgradeSite(false, corfuStoreSink);
-        verifyVersion(corfuStoreSink, UPGRADE_VERSION_STRING, true);
-        verifyVersion(corfuStoreSource, VERSION_STRING, false);
+        verifyRollingUpgrade();
 
         List<String> sourceOnlyStreams = streamsToReplicateSource.stream()
                 .filter(s -> !streamsToReplicateSink.contains(s))
@@ -603,8 +601,7 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         }
         pluginConfigFilePath = TEST_PLUGIN_CONFIG_PATH_SINK;
         upgradeSite(false, corfuStoreSink);
-        verifyVersion(corfuStoreSink, UPGRADE_VERSION_STRING, true);
-        verifyVersion(corfuStoreSource, VERSION_STRING, false);
+        verifyRollingUpgrade();
 
         latchSnapshotSyncPlugin = new CountDownLatch(2);
         snapshotSyncPluginListener = new SnapshotSyncPluginListener(latchSnapshotSyncPlugin);
@@ -719,6 +716,9 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         log.info(">> Wait ... Snapshot log replication in progress ...");
         verifyDataOnSink(NUM_WRITES);
 
+        // Force snapshot sync using checkpoint operation
+        snaphotByCheckpointing();
+
         // Verify that snapshot sync was triggered by checking the number of
         // updates to the ReplicationStatus table on the sink.
         latchSnapshotSyncPlugin.await();
@@ -735,8 +735,7 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         }
         pluginConfigFilePath = TEST_PLUGIN_CONFIG_PATH_SINK;
         upgradeSite(false, corfuStoreSink);
-        verifyVersion(corfuStoreSink, UPGRADE_VERSION_STRING, true);
-        verifyVersion(corfuStoreSource, VERSION_STRING, false);
+        verifyRollingUpgrade();
 
         List<String> sourceOnlyStreams = streamsToReplicateSource.stream()
                 .filter(s -> !streamsToReplicateSink.contains(s))
@@ -782,8 +781,10 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         pluginConfigFilePath = TEST_PLUGIN_CONFIG_PATH_SINK;
         openMapsAfterUpgradeSource(sourceOnlyStreams, sinkOnlyStreams);
         upgradeSite(true, corfuStoreSource);
-        verifyVersion(corfuStoreSink, UPGRADE_VERSION_STRING, true);
-        verifyVersion(corfuStoreSource, UPGRADE_VERSION_STRING, true);
+        verifyRollingUpgrade();
+
+        // Force snapshot sync using checkpoint operation
+        snaphotByCheckpointing();
 
         // Verify that snapshot sync was triggered by checking the number of
         // updates to the ReplicationStatus table on the sink.
@@ -939,34 +940,6 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         }
     }
 
-    private void verifyVersion(CorfuStore corfuStore, String expectedVersion, boolean isUpgraded) throws Exception {
-        openVersionTables();
-        LogReplicationStreams.VersionString versionStringKey =
-                LogReplicationStreams.VersionString.newBuilder()
-                        .setName(VERSION_KEY).build();
-
-        String actualVersion = "";
-        boolean actualUpgradedFlag = false;
-
-        while (!Objects.equals(expectedVersion, actualVersion)) {
-            try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-                if (txn.getRecord(LOG_REPLICATION_PLUGIN_VERSION_TABLE,
-                        versionStringKey) != null && txn.getRecord(LOG_REPLICATION_PLUGIN_VERSION_TABLE,
-                        versionStringKey).getPayload() != null) {
-                    LogReplicationStreams.Version version = (LogReplicationStreams.Version)
-                            txn.getRecord(LOG_REPLICATION_PLUGIN_VERSION_TABLE,
-                                    versionStringKey).getPayload();
-                    actualVersion = version.getVersion();
-                    actualUpgradedFlag = version.getIsUpgraded();
-                }
-                txn.commit();
-            }
-        }
-        Assert.assertEquals(expectedVersion, actualVersion);
-        Assert.assertEquals(isUpgraded, actualUpgradedFlag);
-        log.info("Verified version");
-    }
-
     /**
      * Code coverage test for the simple LRRollingUpgradeHandler to test if we are able to successfully
      * 1. Simulate startRollingUpgrade()
@@ -1008,4 +981,30 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
             sinkReplicationServer.destroy();
         }
     }
+
+    private void verifyRollingUpgrade() {
+        DefaultAdapterForUpgradeSource defaultAdapterForUpgradeSource = new DefaultAdapterForUpgradeSource(sourceRuntime);
+        defaultAdapterForUpgradeSource.startRollingUpgrade(corfuStoreSource);
+        LRRollingUpgradeHandler rollingUpgradeHandler = new LRRollingUpgradeHandler(defaultAdapterForUpgradeSource);
+
+        try (TxnContext txnContext = corfuStoreSource.txn(DefaultAdapterForUpgradeSource.NAMESPACE)) {
+            Assert.assertTrue(rollingUpgradeHandler.isLRUpgradeInProgress(txnContext));
+        }
+
+        defaultAdapterForUpgradeSource.endRollingUpgrade(corfuStoreSource);
+
+        try (TxnContext txnContext = corfuStoreSource.txn(DefaultAdapterForUpgradeSource.NAMESPACE)) {
+            Assert.assertFalse(rollingUpgradeHandler.isLRUpgradeInProgress(txnContext));
+        }
+    }
+
+    // TODO: Remove after checkpointing implemented for rolling upgrade.
+    private void snaphotByCheckpointing() throws Exception {
+        stopSourceLogReplicator();
+        checkpointAndTrim(true);
+        initSingleSourceSinkCluster();
+        pluginConfigFilePath = TEST_PLUGIN_CONFIG_PATH_SOURCE;
+        startSourceLogReplicator();
+    }
 }
+
