@@ -54,17 +54,11 @@ public class LogReplicationUtils {
     private static final int DEFAULT_BUFFER_SIZE = -1;
 
     public LogReplicationUtils(CorfuStore corfuStore) {
-        try {
-            this.corfuStore = corfuStore;
-            corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, REPLICATION_STATUS_TABLE, ReplicationStatusKey.class,
-                    ReplicationStatusVal.class, null, TableOptions.fromProtoSchema(ReplicationStatusVal.class));
-            schedulerThread = Executors.newSingleThreadScheduledExecutor(new ThreadFactoryBuilder()
-                    .setNameFormat(LogReplicationUtils.class.getName())
-                    .build());
-        } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
-            log.error("Failed to open the replication status table", e);
-            throw new UnrecoverableCorfuError(e);
-        }
+        this.corfuStore = corfuStore;
+
+        schedulerThread = Executors.newSingleThreadScheduledExecutor(new ThreadFactoryBuilder()
+            .setNameFormat(LogReplicationUtils.class.getName())
+            .build());
     }
 
     public void subscribe(@Nonnull LRMultiNamespaceListener clientListener, @Nonnull String namespace,
@@ -95,6 +89,17 @@ public class LogReplicationUtils {
             this.streamTag = streamTag;
             this.tablesOfInterest = tablesOfInterest;
             this.bufferSize = bufferSize;
+            openReplicationStatusTable();
+        }
+
+        private void openReplicationStatusTable() {
+            try {
+                corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, REPLICATION_STATUS_TABLE, ReplicationStatusKey.class,
+                    ReplicationStatusVal.class, null, TableOptions.fromProtoSchema(ReplicationStatusVal.class));
+            } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
+                log.error("Failed to open the replication status table", e);
+                throw new UnrecoverableCorfuError(e);
+            }
         }
 
         @Override
