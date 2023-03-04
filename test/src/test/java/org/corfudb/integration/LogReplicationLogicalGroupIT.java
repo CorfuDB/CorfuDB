@@ -32,6 +32,7 @@ import org.junit.Test;
 
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -95,8 +96,10 @@ public class LogReplicationLogicalGroupIT extends CorfuReplicationMultiSourceSin
         CorfuRuntime clientRuntime = getClientRuntime();
         LogReplicationLogicalGroupClient logicalGroupClient =
                 new LogReplicationLogicalGroupClient(clientRuntime, SAMPLE_CLIENT_NAME);
-        logicalGroupClient.addDestination(GROUP_A, DefaultClusterConfig.getSinkClusterIds().get(SINK2_INDEX));
-        logicalGroupClient.addDestination(GROUP_B, DefaultClusterConfig.getSinkClusterIds().get(SINK3_INDEX));
+        logicalGroupClient.setDestinations(GROUP_A,
+                Collections.singletonList(DefaultClusterConfig.getSinkClusterIds().get(SINK2_INDEX)));
+        logicalGroupClient.setDestinations(GROUP_B,
+                Collections.singletonList(DefaultClusterConfig.getSinkClusterIds().get(SINK3_INDEX)));
 
         // Open tables for replication on Source side
         int numTables = 2;
@@ -150,8 +153,10 @@ public class LogReplicationLogicalGroupIT extends CorfuReplicationMultiSourceSin
         CorfuRuntime clientRuntime = getClientRuntime();
         LogReplicationLogicalGroupClient logicalGroupClient =
                 new LogReplicationLogicalGroupClient(clientRuntime, SAMPLE_CLIENT_NAME);
-        logicalGroupClient.addDestination(GROUP_A, DefaultClusterConfig.getSinkClusterIds().get(SINK2_INDEX));
-        logicalGroupClient.addDestination(GROUP_B, DefaultClusterConfig.getSinkClusterIds().get(SINK3_INDEX));
+        logicalGroupClient.setDestinations(GROUP_A, Collections
+                .singletonList(DefaultClusterConfig.getSinkClusterIds().get(SINK2_INDEX)));
+        logicalGroupClient.setDestinations(GROUP_B,
+                Collections.singletonList(DefaultClusterConfig.getSinkClusterIds().get(SINK3_INDEX)));
 
         // Open tables for replication on Source side
         int numTables = 2;
@@ -194,7 +199,8 @@ public class LogReplicationLogicalGroupIT extends CorfuReplicationMultiSourceSin
         verifyGroupBTableDataOnSink(sinkCorfuStores.get(SINK3_INDEX), NUM_WRITES, sinkTablesGroupB);
 
         // Add groupA to Sink3 and verify the groupA tables' data is successfully replicated to Sink3.
-        logicalGroupClient.addDestination(GROUP_A, DefaultClusterConfig.getSinkClusterIds().get(SINK3_INDEX));
+        logicalGroupClient.addDestinations(GROUP_A,
+                Collections.singletonList(DefaultClusterConfig.getSinkClusterIds().get(SINK3_INDEX)));
         List<Table<StringKey, SampleGroupMsgA, Message>> sinkTablesGroupAOnSink3 = new ArrayList<>();
         openGroupATable(numTables, sinkCorfuStores.get(SINK3_INDEX), sinkTablesGroupAOnSink3);
         verifyGroupATableDataOnSink(sinkCorfuStores.get(SINK3_INDEX), NUM_WRITES, sinkTablesGroupAOnSink3);
@@ -210,7 +216,8 @@ public class LogReplicationLogicalGroupIT extends CorfuReplicationMultiSourceSin
         verifyGroupBTableDataOnSink(sinkCorfuStores.get(SINK3_INDEX), targetWrites, sinkTablesGroupB);
 
         // Add groupB to Sink2 and verify the groupB tables' data is successfully replicated to Sink2.
-        logicalGroupClient.addDestination(GROUP_B, DefaultClusterConfig.getSinkClusterIds().get(SINK2_INDEX));
+        logicalGroupClient.addDestinations(GROUP_B,
+                Collections.singletonList(DefaultClusterConfig.getSinkClusterIds().get(SINK2_INDEX)));
         List<Table<StringKey, SampleGroupMsgB, Message>> sinkTablesGroupBOnSink2 = new ArrayList<>();
         openGroupBTable(numTables, sinkCorfuStores.get(SINK2_INDEX), sinkTablesGroupBOnSink2);
         verifyGroupBTableDataOnSink(sinkCorfuStores.get(SINK2_INDEX), targetWrites, sinkTablesGroupBOnSink2);
@@ -221,7 +228,8 @@ public class LogReplicationLogicalGroupIT extends CorfuReplicationMultiSourceSin
         latchSink3.await();
 
         // Remove groupB from Sink3 and verify groupB tables' data no longer replicated to Sink3
-        logicalGroupClient.removeDestination(GROUP_B, DefaultClusterConfig.getSinkClusterIds().get(SINK3_INDEX));
+        logicalGroupClient.removeDestinations(GROUP_B,
+                Collections.singletonList(DefaultClusterConfig.getSinkClusterIds().get(SINK3_INDEX)));
         for (int i = targetWrites; i < targetWrites + NUM_WRITES; i++) {
             StringKey key = StringKey.newBuilder().setKey(String.valueOf(i)).build();
             SampleGroupMsgB groupBTablePayload = SampleGroupMsgB.newBuilder().setPayload(String.valueOf(i)).build();
