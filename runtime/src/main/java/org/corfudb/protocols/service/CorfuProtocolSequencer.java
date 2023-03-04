@@ -17,6 +17,8 @@ import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg;
 import org.corfudb.runtime.proto.service.Sequencer.BootstrapSequencerRequestMsg;
 import org.corfudb.runtime.proto.service.Sequencer.BootstrapSequencerResponseMsg;
+import org.corfudb.runtime.proto.service.Sequencer.SequencerDeleteStreamsRequestMsg;
+import org.corfudb.runtime.proto.service.Sequencer.SequencerDeleteStreamsResponseMsg;
 import org.corfudb.runtime.proto.service.Sequencer.SequencerMetricsRequestMsg;
 import org.corfudb.runtime.proto.service.Sequencer.SequencerMetricsResponseMsg;
 import org.corfudb.runtime.proto.service.Sequencer.SequencerTrimRequestMsg;
@@ -252,6 +254,35 @@ public final class CorfuProtocolSequencer {
     public static ResponsePayloadMsg getSequencerTrimResponseMsg() {
         return ResponsePayloadMsg.newBuilder()
                 .setSequencerTrimResponse(SequencerTrimResponseMsg.getDefaultInstance())
+                .build();
+    }
+
+    /**
+     * Returns a new {@link RequestPayloadMsg} Protobuf object consisting of a
+     * {@link SequencerDeleteStreamsRequestMsg} object with the list of stream Ids from the parameter.
+     *
+     * @param streamIds the list of stream Ids required on the SequencerDeleteStreamsRequestMsg.
+     * @return a new {@link RequestPayloadMsg} Protobuf object
+     */
+    public static RequestPayloadMsg getSequencerDeleteStreamsRequestMsg(List<UUID> streamIds) {
+        return RequestPayloadMsg.newBuilder().setSequencerDeleteStreamsRequest(
+                SequencerDeleteStreamsRequestMsg
+                        .newBuilder().addAllStreamIds(streamIds.stream()
+                                .map(CorfuProtocolCommon::getUuidMsg)
+                                .collect(Collectors.toList()))
+                        .build())
+                .build();
+    }
+
+    /**
+     * Returns a new {@link ResponsePayloadMsg} Protobuf object consisting of a default
+     * {@link SequencerDeleteStreamsResponseMsg} object.
+     *
+     * @return the {@link ResponsePayloadMsg} Protobuf object
+     */
+    public static ResponsePayloadMsg getSequencerDeleteStreamsResponseMsg() {
+        return ResponsePayloadMsg.newBuilder()
+                .setSequencerDeleteStreamsResponse(SequencerDeleteStreamsResponseMsg.getDefaultInstance())
                 .build();
     }
 

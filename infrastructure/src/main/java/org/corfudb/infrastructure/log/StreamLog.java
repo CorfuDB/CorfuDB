@@ -63,6 +63,12 @@ public interface StreamLog {
     void compact();
 
     /**
+     * Remove the address space of given streams
+     * @param streamIds the id of streams to remove
+     */
+    void deleteStreams(List<UUID> streamIds);
+
+    /**
      * Get the global tail and stream tails.
      */
     TailsResponse getTails(List<UUID> streams);

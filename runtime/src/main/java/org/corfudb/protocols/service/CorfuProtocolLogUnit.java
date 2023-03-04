@@ -7,6 +7,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.CorfuProtocolCommon;
 import org.corfudb.protocols.CorfuProtocolLogData;
 import org.corfudb.protocols.wireprotocol.InspectAddressesResponse;
 import org.corfudb.protocols.wireprotocol.KnownAddressResponse;
@@ -30,6 +31,8 @@ import org.corfudb.runtime.proto.service.LogUnit.KnownAddressRequestMsg;
 import org.corfudb.runtime.proto.service.LogUnit.KnownAddressResponseMsg;
 import org.corfudb.runtime.proto.service.LogUnit.LogAddressSpaceRequestMsg;
 import org.corfudb.runtime.proto.service.LogUnit.LogAddressSpaceResponseMsg;
+import org.corfudb.runtime.proto.service.LogUnit.LogUnitDeleteStreamsRequestMsg;
+import org.corfudb.runtime.proto.service.LogUnit.LogUnitDeleteStreamsResponseMsg;
 import org.corfudb.runtime.proto.service.LogUnit.RangeWriteLogRequestMsg;
 import org.corfudb.runtime.proto.service.LogUnit.RangeWriteLogResponseMsg;
 import org.corfudb.runtime.proto.service.LogUnit.ReadLogRequestMsg;
@@ -348,6 +351,32 @@ public final class CorfuProtocolLogUnit {
     public static ResponsePayloadMsg getFlushCacheResponseMsg() {
         return ResponsePayloadMsg.newBuilder()
                 .setFlushCacheResponse(FlushCacheResponseMsg.getDefaultInstance())
+                .build();
+    }
+
+    /**
+     * Returns a LOG_UNIT_DELETE_STREAMS request that can be sent by the client.
+     *
+     * @return  a RequestPayloadMsg containing the LOG_UNIT_DELETE_STREAMS request
+     */
+    public static RequestPayloadMsg getLogUnitDeleteStreamsRequestMsg(List<UUID> streamIds) {
+        return RequestPayloadMsg.newBuilder().setLogUnitDeleteStreamsRequest(
+                LogUnitDeleteStreamsRequestMsg
+                        .newBuilder().addAllStreamIds(streamIds.stream()
+                                .map(CorfuProtocolCommon::getUuidMsg)
+                                .collect(Collectors.toList()))
+                        .build())
+                .build();
+    }
+
+    /**
+     * Returns a LOG_UNIT_DELETE_STREAMS response that can be sent by the server.
+     *
+     * @return  a ResponsePayloadMsg containing the LOG_UNIT_DELETE_STREAMS response
+     */
+    public static ResponsePayloadMsg getLogUnitDeleteStreamsResponseMsg() {
+        return ResponsePayloadMsg.newBuilder()
+                .setLogUnitDeleteStreamsResponse(LogUnitDeleteStreamsResponseMsg.getDefaultInstance())
                 .build();
     }
 

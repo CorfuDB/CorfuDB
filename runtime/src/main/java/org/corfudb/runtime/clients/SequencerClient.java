@@ -16,6 +16,7 @@ import java.util.concurrent.CompletableFuture;
 
 import static org.corfudb.protocols.service.CorfuProtocolSequencer.getBootstrapSequencerRequestMsg;
 import static org.corfudb.protocols.service.CorfuProtocolSequencer.getDefaultSequencerMetricsRequestMsg;
+import static org.corfudb.protocols.service.CorfuProtocolSequencer.getSequencerDeleteStreamsRequestMsg;
 import static org.corfudb.protocols.service.CorfuProtocolSequencer.getSequencerTrimRequestMsg;
 import static org.corfudb.protocols.service.CorfuProtocolSequencer.getStreamsAddressRequestMsg;
 import static org.corfudb.protocols.service.CorfuProtocolSequencer.getTokenRequestMsg;
@@ -81,6 +82,12 @@ public class SequencerClient extends AbstractClient {
 
     public CompletableFuture<Void> trimCache(Long address) {
         return sendRequestWithFuture(getSequencerTrimRequestMsg(address),
+                ClusterIdCheck.CHECK, EpochCheck.CHECK);
+    }
+
+    public CompletableFuture<Boolean> deleteStreams(List<UUID> streamIds) {
+        return sendRequestWithFuture(
+                getSequencerDeleteStreamsRequestMsg(streamIds),
                 ClusterIdCheck.CHECK, EpochCheck.CHECK);
     }
 

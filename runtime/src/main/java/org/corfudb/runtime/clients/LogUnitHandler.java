@@ -168,6 +168,19 @@ public class LogUnitHandler implements IClient, IHandler<LogUnitClient> {
     }
 
     /**
+     * Handle a delete streams response from the server.
+     *
+     * @param msg      The flush cache response message.
+     * @param ctx      The context the message was sent under.
+     * @param router   A reference to the router.
+     * @return Always True, since the deletion was successful.
+     */
+    @ResponseHandler(type = PayloadCase.LOG_UNIT_DELETE_STREAMS_RESPONSE)
+    private static Object handleDeleteStreamsResponse(ResponseMsg msg, ChannelHandlerContext ctx, IClientRouter router) {
+        return true;
+    }
+
+    /**
      * Handle a log address space response from the server.
      *
      * @param msg      The log address space response message.

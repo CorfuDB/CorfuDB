@@ -221,6 +221,11 @@ public class InMemoryStreamLog implements StreamLog {
     }
 
     @Override
+    public synchronized void deleteStreams(List<UUID> streamIds) {
+        logMetadata.deleteStreams(streamIds);
+    }
+
+    @Override
     public void reset() {
         startingAddress = 0;
         logMetadata = new LogMetadata();

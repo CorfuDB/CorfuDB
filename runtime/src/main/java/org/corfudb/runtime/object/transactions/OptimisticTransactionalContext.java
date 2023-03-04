@@ -72,7 +72,6 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                                                 Object[] conflictObject) {
         long startAccessTime = System.nanoTime();
         try {
-            log.debug("Access[{},{}] conflictObj={}", this, proxy, conflictObject);
 
             // First, we add this access to the read set
             addToReadSet(proxy, conflictObject);

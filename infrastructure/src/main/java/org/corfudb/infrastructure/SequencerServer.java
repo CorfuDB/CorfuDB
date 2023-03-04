@@ -66,6 +66,7 @@ import static org.corfudb.protocols.CorfuProtocolTxResolution.getTxResolutionInf
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getHeaderMsg;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getResponseMsg;
 import static org.corfudb.protocols.service.CorfuProtocolSequencer.getBootstrapSequencerResponseMsg;
+import static org.corfudb.protocols.service.CorfuProtocolSequencer.getSequencerDeleteStreamsResponseMsg;
 import static org.corfudb.protocols.service.CorfuProtocolSequencer.getSequencerMetricsResponseMsg;
 import static org.corfudb.protocols.service.CorfuProtocolSequencer.getSequencerTrimResponseMsg;
 import static org.corfudb.protocols.service.CorfuProtocolSequencer.getTokenResponseMsg;
@@ -592,6 +593,29 @@ public class SequencerServer extends AbstractServer {
                 ClusterIdCheck.CHECK, EpochCheck.IGNORE);
         r.sendResponse(getResponseMsg(responseHeader,
                 getBootstrapSequencerResponseMsg(true)), ctx);
+    }
+
+    /**
+     * Delete streams from in-memory maps
+     */
+    @RequestHandler(type = PayloadCase.SEQUENCER_DELETE_STREAMS_REQUEST)
+    private void handleDeleteStreams(@Nonnull RequestMsg req,
+                               @Nonnull ChannelHandlerContext ctx,
+                               @Nonnull IServerRouter r) {
+        List<UUID> streamsToDelete = req.getPayload().getSequencerDeleteStreamsRequest()
+                .getStreamIdsList().stream().map(CorfuProtocolCommon::getUUID).collect(Collectors.toList());
+        log.info("Start deleting streams [{}]", streamsToDelete);
+        for (UUID uuid : streamsToDelete) {
+            if (!streamsAddressMap.containsKey(uuid)) {
+                log.warn("Stream to delete [{}] does not exist", uuid);
+            }
+            streamTailToGlobalTailMap.remove(uuid);
+            streamsAddressMap.remove(uuid);
+        }
+        log.info("Done deleting {} streams from sequencer maps.", streamsToDelete.size());
+
+        HeaderMsg responseHeader = getHeaderMsg(req.getHeader(), ClusterIdCheck.CHECK, EpochCheck.IGNORE);
+        r.sendResponse(getResponseMsg(responseHeader, getSequencerDeleteStreamsResponseMsg()), ctx);
     }
 
     /**

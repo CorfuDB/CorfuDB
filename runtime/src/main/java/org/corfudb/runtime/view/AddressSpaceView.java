@@ -51,6 +51,7 @@ import java.util.Map.Entry;
 import java.util.NavigableSet;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
@@ -678,6 +679,29 @@ public class AddressSpaceView extends AbstractView implements AutoCloseable {
                 }
             }
         }
+    }
+
+    /**
+     * Delete the address space of given streams from Sequencer server and Log unit server.
+     *
+     * @param streamIds the UUID of streams to delete
+     */
+    public void deleteStreamFromServerCache(List<UUID> streamIds) {
+        log.info("deleteStreamFromServerCache [{}]", streamIds);
+
+        layoutHelper(e -> {
+            e.getLayout().segments.stream()
+                    .flatMap(seg -> seg.getStripes().stream())
+                    .flatMap(stripe -> stripe.getLogServers().stream())
+                    .map(e::getLogUnitClient)
+                    .map(logUnitClient -> logUnitClient.deleteStreams(streamIds))
+                    .forEach(CFUtils::getUninterruptibly);
+            return null;
+        });
+        log.info("deleted {} from all log unit servers", streamIds);
+
+        runtime.getSequencerView().deleteStreams(streamIds);
+        log.info("deleted {} from primary sequencer server", streamIds);
     }
 
     /**

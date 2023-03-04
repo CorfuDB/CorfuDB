@@ -158,4 +158,12 @@ public class LogMetadata {
             streamAddressMap.getValue().trim(address);
         }
     }
+
+    public void deleteStreams(List<UUID> streamIds) {
+        log.info("deleteStreams: delete streams {}", streamIds);
+        for (UUID uuid : streamIds) {
+            streamTails.remove(uuid);
+            streamsAddressSpaceMap.remove(uuid);
+        }
+    }
 }

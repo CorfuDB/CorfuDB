@@ -137,3 +137,10 @@ message ResetLogUnitRequestMsg {
 
 message ResetLogUnitResponseMsg {
 }
+
+message LogUnitDeleteStreamsRequestMsg {
+  repeated UuidMsg streamIds = 1;
+}
+
+message LogUnitDeleteStreamsResponseMsg {
+}

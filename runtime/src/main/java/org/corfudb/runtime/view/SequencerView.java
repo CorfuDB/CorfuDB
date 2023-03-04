@@ -141,4 +141,9 @@ public class SequencerView extends AbstractView {
     public void trimCache(long address) {
         runtime.getLayoutView().getRuntimeLayout().getPrimarySequencerClient().trimCache(address);
     }
+
+    public void deleteStreams(List<UUID> streamIds) {
+        layoutHelper(e -> CFUtils.getUninterruptibly(e.getPrimarySequencerClient()
+                .deleteStreams(streamIds)));
+    }
 }

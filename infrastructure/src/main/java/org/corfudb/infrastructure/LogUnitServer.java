@@ -14,6 +14,7 @@ import org.corfudb.infrastructure.log.InMemoryStreamLog;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.log.StreamLogCompaction;
 import org.corfudb.infrastructure.log.StreamLogFiles;
+import org.corfudb.protocols.CorfuProtocolCommon;
 import org.corfudb.protocols.CorfuProtocolLogData;
 import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
 import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
@@ -59,6 +60,7 @@ import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getFlushCacheRe
 import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getInspectAddressesResponseMsg;
 import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getKnownAddressResponseMsg;
 import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getLogAddressSpaceResponseMsg;
+import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getLogUnitDeleteStreamsResponseMsg;
 import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getRangeWriteLogResponseMsg;
 import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getReadLogResponseMsg;
 import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getResetLogUnitResponseMsg;
@@ -451,6 +453,19 @@ public class LogUnitServer extends AbstractServer {
         // Note: we reuse the request header as the ignore_cluster_id and
         // ignore_epoch fields are the same in both cases.
         router.sendResponse(getResponseMsg(getHeaderMsg(req.getHeader()), getCompactResponseMsg()), ctx);
+    }
+
+    @RequestHandler(type = PayloadCase.LOG_UNIT_DELETE_STREAMS_REQUEST)
+    private void handleDeleteStreamsRequest(RequestMsg req, ChannelHandlerContext ctx, IServerRouter router) {
+        log.debug("handleDeleteStreamsRequest: {}", TextFormat.shortDebugString(req));
+
+        List<UUID> streamIds = req.getPayload().getLogUnitDeleteStreamsRequest().getStreamIdsList()
+                .stream().map(CorfuProtocolCommon::getUUID).collect(Collectors.toList());
+        streamLog.deleteStreams(streamIds);
+
+        // Note: we reuse the request header as the ignore_cluster_id and
+        // ignore_epoch fields are the same in both cases.
+        router.sendResponse(getResponseMsg(getHeaderMsg(req.getHeader()), getLogUnitDeleteStreamsResponseMsg()), ctx);
     }
 
     @RequestHandler(type = PayloadCase.FLUSH_CACHE_REQUEST)

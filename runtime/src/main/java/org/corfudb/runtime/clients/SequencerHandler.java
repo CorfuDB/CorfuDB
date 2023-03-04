@@ -124,4 +124,19 @@ public class SequencerHandler implements IClient, IHandler<SequencerClient> {
                 msg.getPayload().getStreamsAddressResponse().getEpoch(),
                 msg.getPayload().getStreamsAddressResponse().getAddressMapList());
     }
+
+    /**
+     * Handle a sequencer delete streams response from the server.
+     *
+     * @param msg      The sequencer metrics response message.
+     * @param ctx      The context the message was sent under.
+     * @param router   A reference to the router.
+     * @return Always True, since the stream deletion were successful.
+     */
+    @ResponseHandler(type = PayloadCase.SEQUENCER_DELETE_STREAMS_RESPONSE)
+    private static Object handleDeleteStreamsResponse(ResponseMsg msg,
+                                                      ChannelHandlerContext ctx,
+                                                      IClientRouter router) {
+        return true;
+    }
 }

@@ -9,6 +9,7 @@ import com.google.protobuf.Message;
 import com.google.protobuf.ProtocolStringList;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuOptions;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.TableDescriptors;
@@ -32,11 +33,14 @@ import org.corfudb.runtime.view.ObjectsView.StreamTagInfo;
 import org.corfudb.util.GitRepositoryState;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.ProtobufSerializer;
+import org.corfudb.util.serializer.Serializers;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+import java.lang.reflect.Array;
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Deque;
@@ -461,6 +465,9 @@ public class TableRegistry {
      * @return Fully qualified table name.
      */
     public static String getFullyQualifiedTableName(String namespace, String tableName) {
+        if (namespace.isEmpty()) {
+            return tableName;
+        }
         return namespace + "$" + tableName;
     }
 
@@ -673,9 +680,88 @@ public class TableRegistry {
      * @param namespace Namespace of the table.
      * @param tableName Name of the table.
      */
-    public void deleteTable(String namespace, String tableName) {
+    public void clearTable(String namespace, String tableName) {
         Table<Message, Message, Message> table = getTable(namespace, tableName);
         table.clearAll();
+    }
+
+    /**
+     * Clear the table by appending CLEAR to the stream. Start a transaction to delete the
+     * table from RegistryTable, and remove the table and its checkpoint stream from the
+     * sequencer server and log unit server to clean up the in-mem maps.
+     *
+     * @param namespace Namespace of the table.
+     * @param tableName Name of the table.
+     */
+    public void dropTable(String namespace, String tableName) {
+        log.info("Invoking dropTable {}${}", namespace, tableName);
+
+        UUID streamId = CorfuRuntime.getStreamID(getFullyQualifiedTableName(namespace, tableName));
+        UUID cpStreamId = CorfuRuntime.getCheckpointStreamIdFromId(streamId);
+        List<UUID> streamsToDelete = Arrays.asList(streamId, cpStreamId);
+
+        // Clear the stream address space from Sequencer server cache and Log unit cache.
+        // This step is needed to support reopening a dropped table.
+        runtime.getAddressSpaceView().deleteStreamFromServerCache(streamsToDelete);
+
+        // Append 'clear' SMR to the stream so that if the stream is not trimmed yet and is
+        // reloaded in Sequencer, the re-opened table will appear as an empty stream. If the
+        // stream has been trimmed, it will either be deleted already (LogUnit server not restarted),
+        // or not be loaded at all (a trimmed stream won't be loaded upon LogUnit server restart).
+        clearAndUnregisterTable(namespace, tableName);
+
+        log.info("Done dropping table {}${}", namespace, tableName);
+    }
+
+    private void clearAndUnregisterTable(String namespace, String tableName) {
+        TableName tableNameKey = TableName.newBuilder()
+                .setNamespace(namespace)
+                .setTableName(tableName)
+                .build();
+
+        // Since this is an internal transaction, retry a few times before giving up.
+        int numRetries = 9;
+        while (numRetries-- > 0) {
+            if (TransactionalContext.isInTransaction()) {
+                throw new IllegalThreadStateException("clearAndUnregisterTable: Called on an existing transaction");
+            }
+            try {
+                this.runtime.getObjectsView().TXBuild()
+                        .type(TransactionType.WRITE_AFTER_WRITE)
+                        .build()
+                        .begin();
+
+                // Append 'clear' SMR update to the table stream
+                UUID streamId = CorfuRuntime.getStreamID(getFullyQualifiedTableName(namespace, tableName));
+                SMREntry entry = new SMREntry("clear", new Array[0], Serializers.PRIMITIVE);
+                TransactionalContext.getCurrentContext().logUpdate(streamId, entry);
+
+                // Delete the table from RegistryTable
+                CorfuRecord<TableDescriptors, TableMetadata> oldRecord =
+                        this.registryTable.get(tableNameKey);
+                if (oldRecord == null || oldRecord.getPayload() == null) {
+                    log.warn("The table to unregister {} does not exist in RegistryTable.", tableNameKey);
+                } else {
+                    this.registryTable.delete(tableNameKey);
+                }
+
+                this.runtime.getObjectsView().TXEnd();
+
+                log.info("Successfully cleared and unregister table {}${}", namespace, tableName);
+                break;
+            } catch (TransactionAbortedException txAbort) {
+                if (numRetries <= 0) {
+                    log.error("Failed to clear and unregister the {} table. This table is left in corrupted state!",
+                            tableNameKey);
+                    throw txAbort;
+                }
+                log.info("unregisterTable: commit failed. Will retry {} times. Cause {}", numRetries, txAbort);
+            } finally {
+                if (TransactionalContext.isInTransaction()) { // Transaction failed or an exception occurred.
+                    this.runtime.getObjectsView().TXAbort(); // clear Txn context so thread can be reused.
+                }
+            }
+        }
     }
 
     /**

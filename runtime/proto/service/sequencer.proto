@@ -138,3 +138,10 @@ message StreamsAddressResponseMsg {
   int64 epoch = 2;
   repeated UuidToStreamAddressSpacePairMsg address_map = 3;
 }
+
+message SequencerDeleteStreamsRequestMsg {
+  repeated UuidMsg streamIds = 1;
+}
+
+message SequencerDeleteStreamsResponseMsg {
+}

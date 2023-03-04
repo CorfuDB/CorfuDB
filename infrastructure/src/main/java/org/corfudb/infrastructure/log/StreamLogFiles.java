@@ -328,6 +328,15 @@ public class StreamLogFiles implements StreamLog {
     }
 
     /**
+     * Remove the address space of given streams
+     * @param streamIds the id of streams to remove
+     */
+    @Override
+    public synchronized void deleteStreams(List<UUID> streamIds) {
+        logMetadata.deleteStreams(streamIds);
+    }
+
+    /**
      * Return a SegmentHandle for a corresponding log address.
      *
      * @param address global log address.

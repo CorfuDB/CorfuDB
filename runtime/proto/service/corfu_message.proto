@@ -63,6 +63,7 @@ message RequestPayloadMsg {
     SequencerTrimRequestMsg sequencer_trim_request = 32;
     SequencerMetricsRequestMsg sequencer_metrics_request = 33;
     StreamsAddressRequestMsg streams_address_request = 34;
+    SequencerDeleteStreamsRequestMsg sequencer_delete_streams_request = 35;
 
     // LogUnit Requests
     WriteLogRequestMsg write_log_request = 40;
@@ -79,6 +80,7 @@ message RequestPayloadMsg {
     CommittedTailRequestMsg committed_tail_request = 51;
     UpdateCommittedTailRequestMsg update_committed_tail_request = 52;
     ResetLogUnitRequestMsg reset_log_unit_request = 53;
+    LogUnitDeleteStreamsRequestMsg log_unit_delete_streams_request = 54;
 
     // Management Requests
     QueryNodeRequestMsg query_node_request = 60;
@@ -117,6 +119,7 @@ message ResponsePayloadMsg {
     SequencerTrimResponseMsg sequencer_trim_response = 32;
     SequencerMetricsResponseMsg sequencer_metrics_response = 33;
     StreamsAddressResponseMsg streams_address_response = 34;
+    SequencerDeleteStreamsResponseMsg sequencer_delete_streams_response = 35;
 
     // LogUnit Responses
     WriteLogResponseMsg write_log_response = 40;
@@ -133,6 +136,7 @@ message ResponsePayloadMsg {
     CommittedTailResponseMsg committed_tail_response = 51;
     UpdateCommittedTailResponseMsg update_committed_tail_response = 52;
     ResetLogUnitResponseMsg reset_log_unit_response = 53;
+    LogUnitDeleteStreamsResponseMsg log_unit_delete_streams_response = 54;
 
     // Management Responses
     QueryNodeResponseMsg query_node_response = 60;

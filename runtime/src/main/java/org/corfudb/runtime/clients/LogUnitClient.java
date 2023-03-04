@@ -27,6 +27,7 @@ import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getFlushCacheRe
 import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getInspectAddressesRequestMsg;
 import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getKnownAddressRequestMsg;
 import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getLogAddressSpaceRequestMsg;
+import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getLogUnitDeleteStreamsRequestMsg;
 import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getRangeWriteLogRequestMsg;
 import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getReadLogRequestMsg;
 import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getResetLogUnitRequestMsg;
@@ -225,6 +226,15 @@ public class LogUnitClient extends AbstractClient {
      */
     public CompletableFuture<Void> compact() {
         return sendRequestWithFuture(getCompactRequestMsg(), ClusterIdCheck.CHECK, EpochCheck.IGNORE);
+    }
+
+    /**
+     * Send a delete stream requests that will delete the stream address space.
+     * @param streamIds a list of streams to delete
+     */
+    public CompletableFuture<Void> deleteStreams(List<UUID> streamIds) {
+        return sendRequestWithFuture(getLogUnitDeleteStreamsRequestMsg(streamIds),
+                ClusterIdCheck.CHECK, EpochCheck.IGNORE);
     }
 
     /**

@@ -29,6 +29,7 @@ import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.ICorfuVersionPolicy;
 import org.corfudb.runtime.proto.RpcCommon;
 import org.corfudb.runtime.view.ObjectOpenOption;
@@ -46,6 +47,7 @@ import org.junit.Test;
 import org.rocksdb.Options;
 
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;
@@ -57,6 +59,7 @@ import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
@@ -86,6 +89,16 @@ public class CorfuStoreIT extends AbstractIT {
                 .setPort(port)
                 .setLogPath(getCorfuServerLogPath(host, port))
                 .setSingle(true)
+                .runServer();
+    }
+
+    private Process runSinglePersistentServer(String host, int port, boolean disableLogUnitServerCache) throws IOException {
+        return new AbstractIT.CorfuServerRunner()
+                .setHost(host)
+                .setPort(port)
+                .setLogPath(getCorfuServerLogPath(host, port))
+                .setSingle(true)
+                .setDisableLogUnitServerCache(disableLogUnitServerCache)
                 .runServer();
     }
 
@@ -427,7 +440,7 @@ public class CorfuStoreIT extends AbstractIT {
                 ManagedResources.newBuilder().setCreateUser("CreateUser").build());
         tx.commit();
 
-        corfuStore.deleteTable(nsxManager, tableName);
+        corfuStore.clearTable(nsxManager, tableName);
 
         MultiCheckpointWriter<PersistentCorfuTable<?, ?>> mcw = new MultiCheckpointWriter<>();
         PersistentCorfuTable<Uuid, CorfuRecord<SampleSchema.EventInfo, ManagedResources>> corfuTable =
@@ -461,6 +474,566 @@ public class CorfuStoreIT extends AbstractIT {
                 ManagedResources.newBuilder().setCreateUser("CreateUser").build());
         tx.commit();
 
+        assertThat(shutdownCorfuServer(corfuServer)).isTrue();
+    }
+
+    /**
+     * step 1 - write data into tableA and tableB
+     * step 2 - start a new corfu runtime, drop tableB, verify data in tableA and tableB
+     * step 3 - restart corfu server, start a new corfu runtime, verify data in tableA and tableB
+     */
+    @Test
+    public void basicDropTableTest() throws Exception {
+        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort, true);
+
+        // PHASE 1 - Start a Corfu runtime & a CorfuStore instance
+        runtime = createRuntime(singleNodeEndpoint);
+
+        // Creating Corfu Store using a connected corfu client.
+        CorfuStore corfuStore = new CorfuStore(runtime);
+
+        // Define a namespace for the table.
+        final String namespace = "test-namespace";
+        // Define table names.
+        final String tableNameA = "test-table-a";
+        final String tableNameB = "test-table-b";
+
+        // Create & Register the table.
+        // This is required to initialize the table for the current corfu client.
+        Table<Uuid, Uuid, Uuid> tableA = corfuStore.openTable(
+                namespace,
+                tableNameA,
+                Uuid.class,
+                Uuid.class,
+                null,
+                TableOptions.builder().build());
+        Table<Uuid, Uuid, Uuid> tableB = corfuStore.openTable(
+                namespace,
+                tableNameB,
+                Uuid.class,
+                Uuid.class,
+                null,
+                TableOptions.builder().build());
+
+        Uuid key1 = Uuid.newBuilder().setLsb(1L).setMsb(1L).build();
+        Uuid key2 = Uuid.newBuilder().setLsb(2L).setMsb(2L).build();
+
+        TxnContext tx = corfuStore.txn(namespace);
+        tx.putRecord(tableA, key1, key1, null);
+        tx.commit();
+
+        tx = corfuStore.txn(namespace);
+        tx.putRecord(tableB, key2, key2, null);
+        tx.commit();
+
+        runtime.shutdown();
+
+        // ---------------------------------------------------------------------------------------------
+
+        runtime = createRuntime(singleNodeEndpoint);
+
+        corfuStore = new CorfuStore(runtime);
+        corfuStore.dropTable(namespace, tableNameB);
+
+        // Re-Create & Register the table.
+        // This is required to initialize the table for the current corfu client.
+        corfuStore.openTable(
+                namespace,
+                tableNameA,
+                Uuid.class,
+                Uuid.class,
+                null,
+                TableOptions.builder().build());
+        corfuStore.openTable(
+                namespace,
+                tableNameB,
+                Uuid.class,
+                Uuid.class,
+                null,
+                TableOptions.builder().build());
+
+        tx = corfuStore.txn(namespace);
+        assertThat(tx.getRecord(tableNameA, key1).getPayload()).isEqualTo(key1);
+        assertThat(tx.getRecord(tableNameB, key2).getPayload()).isNull();
+        tx.commit();
+        runtime.shutdown();
+
+        // ---------------------------------------------------------------------------------------------
+        // Restart Corfu Server
+        assertThat(shutdownCorfuServer(corfuServer)).isTrue();
+        runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort, true);
+
+        // Reopen the dropped table
+        runtime = createRuntime(singleNodeEndpoint);
+
+        corfuStore = new CorfuStore(runtime);
+
+        // Re-Create & Register the table.
+        // This is required to initialize the table for the current corfu client.
+        corfuStore.openTable(
+                namespace,
+                tableNameA,
+                Uuid.class,
+                Uuid.class,
+                null,
+                TableOptions.builder().build());
+        corfuStore.openTable(
+                namespace,
+                tableNameB,
+                Uuid.class,
+                Uuid.class,
+                null,
+                TableOptions.builder().build());
+
+        tx = corfuStore.txn(namespace);
+        assertThat(tx.getRecord(tableNameA, key1).getPayload()).isEqualTo(key1);
+        assertThat(tx.getRecord(tableNameB, key2).getPayload()).isNull();
+        tx.commit();
+
+        runtime.shutdown();
+        assertThat(shutdownCorfuServer(corfuServer)).isTrue();
+    }
+
+    @Test
+    public void dropUnregisteredRawCorfuTableTest() throws Exception {
+        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort, true);
+
+        runtime = createRuntime(singleNodeEndpoint);
+        CorfuStore corfuStore = new CorfuStore(runtime);
+
+        // Define table names.
+        final String tableNameA = "test-table-a";
+
+        CorfuTable<String, String> tableA = runtime.getObjectsView()
+                .build()
+                .setStreamName(tableNameA)
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
+                })
+                .open();
+
+        String key1 = "key1";
+        String value1 = "value1";
+        tableA.put(key1, value1);
+
+        corfuStore.dropTable("", tableNameA);
+        runtime.shutdown();
+
+        // Restart Corfu Server
+        assertThat(shutdownCorfuServer(corfuServer)).isTrue();
+        runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort, true);
+
+        // Reopen the dropped table
+        runtime = createRuntime(singleNodeEndpoint);
+
+        // Re-Create & Register the table.
+        // This is required to initialize the table for the current corfu client.
+        tableA = runtime.getObjectsView()
+                .build()
+                .setStreamName(tableNameA)
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
+                })
+                .open();
+
+        assertThat(tableA.get(key1)).isNull();
+        runtime.shutdown();
+        assertThat(shutdownCorfuServer(corfuServer)).isTrue();
+    }
+
+    /**
+     * step 1 - write data into tableA, checkpoint tableA, trim the log
+     * step 2 - open new corfu runtime, call dropTable on tableA, reopen and read tableA, verify it's empty
+     */
+    @Test
+    public void dropTableTestWithCheckpointing() throws Exception {
+        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort, true);
+
+        // PHASE 1 - Start a Corfu runtime & a CorfuStore instance
+        runtime = createRuntime(singleNodeEndpoint);
+
+        // Creating Corfu Store using a connected corfu client.
+        CorfuStore corfuStore = new CorfuStore(runtime);
+
+        // Define a namespace for the table.
+        final String namespace = "test-namespace";
+        // Define table names.
+        final String tableNameA = "test-table-a";
+
+        // Create & Register the table.
+        // This is required to initialize the table for the current corfu client.
+        Table<Uuid, Uuid, Uuid> tableA = corfuStore.openTable(
+                namespace,
+                tableNameA,
+                Uuid.class,
+                Uuid.class,
+                null,
+                TableOptions.builder().build());
+
+        Uuid key1 = Uuid.newBuilder().setLsb(1L).setMsb(1L).build();
+
+        TxnContext tx = corfuStore.txn(namespace);
+        tx.putRecord(tableA, key1, key1, null);
+        tx.commit();
+
+        // Checkpoint table A and trim
+        MultiCheckpointWriter<PersistentCorfuTable<?, ?>> mcw = new MultiCheckpointWriter<>();
+        PersistentCorfuTable<Uuid, CorfuRecord<Uuid, Uuid>> corfuTableA =
+                createCorfuTable(runtime, tableA.getFullyQualifiedTableName());
+        mcw.addMap(corfuTableA);
+        mcw.addMap(runtime.getTableRegistry().getRegistryTable());
+        mcw.addMap(runtime.getTableRegistry().getProtobufDescriptorTable());
+        Token trimPoint = mcw.appendCheckpoints(runtime, "checkpointer");
+        runtime.getAddressSpaceView().prefixTrim(trimPoint);
+        runtime.shutdown();
+
+        // ---------------------------------------------------------------------------------------------
+
+        runtime = createRuntime(singleNodeEndpoint);
+        corfuStore = new CorfuStore(runtime);
+
+        corfuStore.dropTable(namespace, tableNameA);
+
+        corfuStore.openTable(
+                namespace,
+                tableNameA,
+                Uuid.class,
+                Uuid.class,
+                null,
+                TableOptions.builder().build());
+
+        tx = corfuStore.txn(namespace);
+        assertThat(tx.getRecord(tableNameA, key1).getPayload()).isNull();
+        tx.commit();
+        runtime.shutdown();
+        shutdownCorfuServer(corfuServer);
+    }
+
+    /**
+     * step 1 - write data into tableA, call dropTable on tableA, reopen tableA
+     * step 2 - restart corfu server, verify tableA is empty
+     */
+    @Test
+    public void dropTableTestWithReopening() throws Exception {
+        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort, true);
+
+        // PHASE 1 - Start a Corfu runtime & a CorfuStore instance
+        runtime = createRuntime(singleNodeEndpoint);
+
+        // Creating Corfu Store using a connected corfu client.
+        CorfuStore corfuStore = new CorfuStore(runtime);
+
+        // Define a namespace for the table.
+        final String namespace = "test-namespace";
+        // Define table names.
+        final String tableNameA = "test-table-a";
+
+        // Create & Register the table.
+        // This is required to initialize the table for the current corfu client.
+        Table<Uuid, Uuid, Uuid> tableA = corfuStore.openTable(
+                namespace,
+                tableNameA,
+                Uuid.class,
+                Uuid.class,
+                null,
+                TableOptions.builder().build());
+
+        Uuid key1 = Uuid.newBuilder().setLsb(1L).setMsb(1L).build();
+
+        TxnContext tx = corfuStore.txn(namespace);
+        tx.putRecord(tableA, key1, key1, null);
+        tx.commit();
+
+        corfuStore.dropTable(namespace, tableNameA);
+
+        corfuStore.openTable(
+                namespace,
+                tableNameA,
+                Uuid.class,
+                Uuid.class,
+                null,
+                TableOptions.builder().build());
+        tx = corfuStore.txn(namespace);
+        assertThat(tx.getRecord(tableNameA, key1).getPayload()).isNull();
+        tx.commit();
+
+        runtime.shutdown();
+        shutdownCorfuServer(corfuServer);
+
+        // ---------------------------------------------------------------------------------------------
+        corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
+        TimeUnit.SECONDS.sleep(1);
+        runtime = createRuntime(singleNodeEndpoint);
+        corfuStore = new CorfuStore(runtime);
+
+        corfuStore.openTable(
+                namespace,
+                tableNameA,
+                Uuid.class,
+                Uuid.class,
+                null,
+                TableOptions.builder().build());
+
+        tx = corfuStore.txn(namespace);
+        assertThat(tx.getRecord(tableNameA, key1).getPayload()).isNull();
+        tx.commit();
+        runtime.shutdown();
+        shutdownCorfuServer(corfuServer);
+    }
+
+    /**
+     * step 1 - open tableA, write data into tableA, then drop tableA
+     * step 2 - restart corfu server, reopen and read tableA, verify that it's empty
+     */
+    @Test
+    @SuppressWarnings("checkstyle:magicnumber")
+    public void restartServerAfterDroppingTableTest() throws Exception {
+        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
+        runtime = createRuntime(singleNodeEndpoint);
+        CorfuStore corfuStore = new CorfuStore(runtime);
+
+        final String namespace = "test-namespace";
+        final String tableNameA = "test-table-a";
+
+        Table<Uuid, Uuid, Uuid> tableA = corfuStore.openTable(
+                namespace,
+                tableNameA,
+                Uuid.class,
+                Uuid.class,
+                null,
+                TableOptions.builder().build());
+        Uuid key1 = Uuid.newBuilder().setLsb(1L).setMsb(1L).build();
+        TxnContext tx = corfuStore.txn(namespace);
+        tx.putRecord(tableA, key1, key1, null);
+        tx.commit();
+
+        corfuStore.dropTable(namespace, tableNameA);
+
+        corfuStore.openTable(
+                namespace,
+                tableNameA,
+                Uuid.class,
+                Uuid.class,
+                null,
+                TableOptions.builder().build());
+        tx = corfuStore.txn(namespace);
+        assertThat(tx.getRecord(tableNameA, key1).getPayload()).isNull();
+        tx.commit();
+        runtime.shutdown();
+        shutdownCorfuServer(corfuServer);
+
+        // Restart Corfu Server
+        corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
+        TimeUnit.SECONDS.sleep(1);
+        runtime = createRuntime(singleNodeEndpoint);
+        corfuStore = new CorfuStore(runtime);
+        corfuStore.openTable(
+                namespace,
+                tableNameA,
+                Uuid.class,
+                Uuid.class,
+                null,
+                TableOptions.builder().build());
+        tx = corfuStore.txn(namespace);
+        // The table should be empty after the restart
+        assertThat(tx.getRecord(tableNameA, key1).getPayload()).isNull();
+        tx.commit();
+        runtime.shutdown();
+        shutdownCorfuServer(corfuServer);
+    }
+
+    /**
+     * step 1 - write data into tableA and tableB, only checkpoint tableA, trim the log
+     * step 2 - call dropTable on tableB, read tableB and verify it's empty
+     */
+    @Test
+    public void dropATrimmedTableTest() throws Exception {
+        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort, true);
+
+        // PHASE 1 - Start a Corfu runtime & a CorfuStore instance
+        runtime = createRuntime(singleNodeEndpoint);
+
+        // Creating Corfu Store using a connected corfu client.
+        CorfuStore corfuStore = new CorfuStore(runtime);
+
+        // Define a namespace for the table.
+        final String namespace = "test-namespace";
+        // Define table names.
+        final String tableNameA = "test-table-a";
+        final String tableNameB = "test-table-b";
+
+        // Create & Register the table.
+        // This is required to initialize the table for the current corfu client.
+        Table<Uuid, Uuid, Uuid> tableA = corfuStore.openTable(
+                namespace,
+                tableNameA,
+                Uuid.class,
+                Uuid.class,
+                null,
+                TableOptions.builder().build());
+        Table<Uuid, Uuid, Uuid> tableB = corfuStore.openTable(
+                namespace,
+                tableNameB,
+                Uuid.class,
+                Uuid.class,
+                null,
+                TableOptions.builder().build());
+
+        Uuid key1 = Uuid.newBuilder().setLsb(1L).setMsb(1L).build();
+        Uuid key2 = Uuid.newBuilder().setLsb(2L).setMsb(2L).build();
+
+        TxnContext tx = corfuStore.txn(namespace);
+        tx.putRecord(tableA, key1, key1, null);
+        tx.commit();
+
+        tx = corfuStore.txn(namespace);
+        tx.putRecord(tableB, key2, key2, null);
+        tx.commit();
+
+        // Checkpoint table A and trim
+        MultiCheckpointWriter<PersistentCorfuTable<?, ?>> mcw = new MultiCheckpointWriter<>();
+        PersistentCorfuTable<Uuid, CorfuRecord<Uuid, Uuid>> corfuTableA =
+                createCorfuTable(runtime, tableA.getFullyQualifiedTableName());
+        mcw.addMap(corfuTableA);
+        mcw.addMap(runtime.getTableRegistry().getRegistryTable());
+        mcw.addMap(runtime.getTableRegistry().getProtobufDescriptorTable());
+        Token trimPoint = mcw.appendCheckpoints(runtime, "checkpointer");
+        runtime.getAddressSpaceView().prefixTrim(trimPoint);
+
+        corfuStore.dropTable(namespace, tableNameB);
+
+        corfuStore.openTable(
+                namespace,
+                tableNameB,
+                Uuid.class,
+                Uuid.class,
+                null,
+                TableOptions.builder().build());
+        tx = corfuStore.txn(namespace);
+        assertThat(tx.getRecord(tableNameA, key1).getPayload()).isEqualTo(key1);
+        assertThat(tx.getRecord(tableNameB, key2).getPayload()).isNull();
+        tx.commit();
+        runtime.shutdown();
+        shutdownCorfuServer(corfuServer);
+    }
+
+    /**
+     * Thread 1                      Thread 2
+     * --------------------------------------------------------
+     * Write key1 to table
+     *                               Verify key1 is in table
+     * Drop table
+     *                               Verify key1 is not in table
+     * Compactor trims table
+     *                               Verify key1 is not in table
+     *                               Write key2 to table, and verify TAE with invalid stream set
+     */
+    @Test
+    public void differentRuntimeReadingDroppedTableTest() throws Exception {
+
+        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort, true);
+
+        runtime = createRuntime(singleNodeEndpoint);
+        CorfuStore corfuStore = new CorfuStore(runtime);
+
+        // Define a namespace for the table.
+        final String namespace = "test-namespace";
+        // Define table names.
+        final String tableName = "test-table";
+
+        Table<Uuid, Uuid, Uuid> table = corfuStore.openTable(
+                namespace,
+                tableName,
+                Uuid.class,
+                Uuid.class,
+                null,
+                TableOptions.builder().build());
+
+        Uuid key = Uuid.newBuilder().setLsb(1L).setMsb(1L).build();
+        TxnContext tx = corfuStore.txn(namespace);
+        tx.putRecord(table, key, key, null);
+        tx.commit();
+
+        CountDownLatch latch1 = new CountDownLatch(1);
+        CountDownLatch latch2 = new CountDownLatch(1);
+        CountDownLatch latch3 = new CountDownLatch(1);
+
+        Thread secondRuntimeThread = new Thread(() -> {
+            CorfuRuntime runtime2 = createRuntime(singleNodeEndpoint);
+            CorfuStore corfuStore2 = new CorfuStore(runtime2);
+
+            Table table2;
+            try {
+                table2 = corfuStore2.openTable(
+                        namespace,
+                        tableName,
+                        Uuid.class,
+                        Uuid.class,
+                        null,
+                        TableOptions.builder().build());
+            } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
+                throw new RuntimeException(e);
+            }
+
+            TxnContext tx2 = corfuStore2.txn(namespace);
+            assertThat(tx2.getRecord(tableName, key).getPayload()).isEqualTo(key);
+            tx2.commit();
+
+            latch1.countDown();
+
+            try {
+                latch2.await();
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+
+            tx2 = corfuStore2.txn(namespace);
+            assertThat(tx2.getRecord(tableName, key).getPayload()).isNull();
+            tx2.commit();
+
+            try {
+                latch3.await();
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+
+            Token trimToken = runtime2.getAddressSpaceView().getTrimMark();
+            runtime2.getObjectsView().gc(trimToken.getSequence());
+
+            tx2 = corfuStore2.txn(namespace);
+            assertThat(tx2.getRecord(tableName, key).getPayload()).isNull();
+            tx2.commit();
+
+            boolean exception = false;
+            try {
+                TxnContext tx3 = corfuStore2.txn(namespace);
+                Uuid key2 = Uuid.newBuilder().setLsb(2L).setMsb(2L).build();
+                tx3.putRecord(table2, key2, key2, null);
+                tx3.commit();
+            } catch (TransactionAbortedException tae) {
+                exception = true;
+            }
+            assertThat(exception).isTrue();
+            runtime2.shutdown();
+        });
+        secondRuntimeThread.start();
+
+        latch1.await();
+
+        corfuStore.dropTable(namespace, tableName);
+        latch2.countDown();
+        runtime.shutdown();
+
+        // Checkpoint table B and trim.
+        runtime = createRuntime(singleNodeEndpoint);
+        MultiCheckpointWriter<PersistentCorfuTable<?, ?>> mcw = new MultiCheckpointWriter<>();
+        mcw.addMap(runtime.getTableRegistry().getRegistryTable());
+        mcw.addMap(runtime.getTableRegistry().getProtobufDescriptorTable());
+        Token trimPoint = mcw.appendCheckpoints(runtime, "checkpointer");
+        runtime.getAddressSpaceView().prefixTrim(trimPoint);
+        runtime.shutdown();
+
+        latch3.countDown();
+
+        secondRuntimeThread.join();
         assertThat(shutdownCorfuServer(corfuServer)).isTrue();
     }
 
