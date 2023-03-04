@@ -45,6 +45,8 @@ message TableMetadata {
 
     // Extract the schema options defined at the table level for easy lookup.
     SchemaOptions table_options = 4;
+
+    bool isDropped = 5;
 }
 
 // Record to be persisted containing the value and the metadata.

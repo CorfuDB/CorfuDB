@@ -4,6 +4,7 @@ import com.google.protobuf.ByteString;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
+import org.corfudb.runtime.proto.RpcCommon;
 import org.corfudb.runtime.proto.TxResolution.TxResolutionInfoMsg;
 import org.corfudb.runtime.proto.TxResolution.UuidToListOfBytesPairMsg;
 
@@ -41,6 +42,10 @@ public final class CorfuProtocolTxResolution {
                                 .map(ByteString::toByteArray)
                                 .collect(Collectors.toSet())
                 ));
+    }
+
+    private static List<UUID> getUUIDs(List<RpcCommon.UuidMsg> streamIds) {
+        return streamIds.stream().map(CorfuProtocolCommon::getUUID).collect(Collectors.toList());
     }
 
     /**
@@ -88,6 +93,9 @@ public final class CorfuProtocolTxResolution {
             );
         });
 
+        txResolutionInfo.getCreateSet().forEach(uuid -> txResolutionInfoBuilder.addCreateSet(getUuidMsg(uuid)));
+        txResolutionInfo.getDeleteSet().forEach(uuid -> txResolutionInfoBuilder.addDeleteSet(getUuidMsg(uuid)));
+
         return txResolutionInfoBuilder.setTxId(getUuidMsg(txResolutionInfo.getTXid()))
                 .setSnapshotTimestamp(getTokenMsg(txResolutionInfo.getSnapshotTimestamp()))
                 .build();
@@ -105,7 +113,9 @@ public final class CorfuProtocolTxResolution {
                 Token.of(msg.getSnapshotTimestamp().getEpoch(),
                         msg.getSnapshotTimestamp().getSequence()),
                 getConflictsMap(msg.getConflictSetList()),
-                getConflictsMap(msg.getWriteConflictParamsSetList())
+                getConflictsMap(msg.getWriteConflictParamsSetList()),
+                getUUIDs(msg.getCreateSetList()),
+                getUUIDs(msg.getDeleteSetList())
         );
     }
 }

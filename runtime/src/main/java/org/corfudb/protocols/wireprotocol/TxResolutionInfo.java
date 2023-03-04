@@ -1,6 +1,7 @@
 package org.corfudb.protocols.wireprotocol;
 
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -32,6 +33,12 @@ public class TxResolutionInfo {
     @Getter
     final Map<UUID, Set<byte[]>>  writeConflictParams;
 
+    @Getter
+    final List<UUID> createSet;
+
+    @Getter
+    final List<UUID> deleteSet;
+
     /**
      * Constructor for TxResolutionInfo.
      *
@@ -43,6 +50,8 @@ public class TxResolutionInfo {
         this.snapshotTimestamp = snapshotTimestamp;
         this.conflictSet = Collections.emptyMap();
         this.writeConflictParams = Collections.emptyMap();
+        this.createSet = Collections.emptyList();
+        this.deleteSet = Collections.emptyList();
     }
 
     /**
@@ -54,11 +63,13 @@ public class TxResolutionInfo {
      * @param writeConflictParams map of write conflict parameters, arranged by stream IDs
      */
     public TxResolutionInfo(UUID txId, Token snapshotTimestamp, Map<UUID, Set<byte[]>>
-            conflictMap, Map<UUID, Set<byte[]>> writeConflictParams) {
+            conflictMap, Map<UUID, Set<byte[]>> writeConflictParams, List<UUID> createSet, List<UUID> deleteSet) {
         this.TXid = txId;
         this.snapshotTimestamp = snapshotTimestamp;
         this.conflictSet = conflictMap;
         this.writeConflictParams = writeConflictParams;
+        this.createSet = createSet;
+        this.deleteSet = deleteSet;
     }
 
     @Override

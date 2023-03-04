@@ -25,4 +25,6 @@ message TxResolutionInfoMsg {
   // A set of poisoned streams, which have a conflict against all updates.
   repeated UuidToListOfBytesPairMsg conflict_set = 3;
   repeated UuidToListOfBytesPairMsg write_conflict_params_set = 4;
+  repeated UuidMsg createSet = 5;
+  repeated UuidMsg deleteSet = 6;
 }
