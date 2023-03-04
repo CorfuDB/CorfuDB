@@ -30,6 +30,7 @@ import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -55,15 +56,14 @@ import static org.corfudb.protocols.CorfuProtocolTxResolution.getTxResolutionInf
 public final class CorfuProtocolSequencer {
     // It stores the EnumBiMap of the Java and Protobuf TokenTypes for efficient conversions.
     private static final EnumBiMap<TokenType, TokenResponseMsg.TokenType> tokenResponseTypeMap =
-            EnumBiMap.create(ImmutableMap.of(
-                    TokenType.NORMAL, TokenResponseMsg.TokenType.TX_NORMAL,
-                    TokenType.TX_ABORT_CONFLICT, TokenResponseMsg.TokenType.TX_ABORT_CONFLICT,
-                    TokenType.TX_ABORT_NEWSEQ, TokenResponseMsg.TokenType.TX_ABORT_NEWSEQ,
-
-                    TokenType.TX_ABORT_SEQ_OVERFLOW,
-                    TokenResponseMsg.TokenType.TX_ABORT_SEQ_OVERFLOW,
-
-                    TokenType.TX_ABORT_SEQ_TRIM, TokenResponseMsg.TokenType.TX_ABORT_SEQ_TRIM)
+            EnumBiMap.create(ImmutableMap.<TokenType, TokenResponseMsg.TokenType>builder()
+                    .put(TokenType.NORMAL, TokenResponseMsg.TokenType.TX_NORMAL)
+                    .put(TokenType.TX_ABORT_CONFLICT, TokenResponseMsg.TokenType.TX_ABORT_CONFLICT)
+                    .put(TokenType.TX_ABORT_NEWSEQ, TokenResponseMsg.TokenType.TX_ABORT_NEWSEQ)
+                    .put(TokenType.TX_ABORT_SEQ_OVERFLOW, TokenResponseMsg.TokenType.TX_ABORT_SEQ_OVERFLOW)
+                    .put(TokenType.TX_ABORT_SEQ_TRIM, TokenResponseMsg.TokenType.TX_ABORT_SEQ_TRIM)
+                    .put(TokenType.TX_ABORT_INVALID_STREAM, TokenResponseMsg.TokenType.TX_ABORT_INVALID_STREAM)
+                    .build()
             );
 
     /**
@@ -169,6 +169,27 @@ public final class CorfuProtocolSequencer {
      * Returns the Protobuf {@link ResponsePayloadMsg} object with the {@link TokenResponseMsg} payload
      * constructed from the given parameters.
      *
+     * @param type           the {@link TokenType} of the response object.
+     * @param invalidStreams           the set of illegal streams.
+     * @return the Protobuf {@link ResponsePayloadMsg} object
+     */
+    public static ResponsePayloadMsg getTokenResponseMsg(TokenType type,
+                                                         Set<UUID> invalidStreams) {
+        return ResponsePayloadMsg.newBuilder()
+                .setTokenResponse(TokenResponseMsg.newBuilder()
+                        .setRespType(tokenResponseTypeMap.get(type))
+                        .addAllInvalidStreams(invalidStreams
+                                .stream()
+                                .map(CorfuProtocolCommon::getUuidMsg)
+                                .collect(Collectors.toSet()))
+                        .build())
+                .build();
+    }
+
+    /**
+     * Returns the Protobuf {@link ResponsePayloadMsg} object with the {@link TokenResponseMsg} payload
+     * constructed from the given parameters.
+     *
      * @param token          the response token
      * @param backPointerMap the backPointerMap of UUID to Long type
      * @return the Protobuf {@link ResponsePayloadMsg} object
@@ -195,7 +216,9 @@ public final class CorfuProtocolSequencer {
                 msg.getBackpointerMapList().stream().collect(Collectors.<UuidToLongPairMsg, UUID, Long>toMap(
                         entry -> getUUID(entry.getKey()), UuidToLongPairMsg::getValue)),
                 msg.getStreamTailsList().stream().collect(Collectors.<UuidToLongPairMsg, UUID, Long>toMap(
-                        entry -> getUUID(entry.getKey()), UuidToLongPairMsg::getValue))
+                        entry -> getUUID(entry.getKey()), UuidToLongPairMsg::getValue)),
+                msg.getInvalidStreamsList().stream().map(CorfuProtocolCommon::getUUID)
+                        .collect(Collectors.toSet())
         );
     }
 

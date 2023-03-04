@@ -72,7 +72,6 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                                                 Object[] conflictObject) {
         long startAccessTime = System.nanoTime();
         try {
-            log.debug("Access[{},{}] conflictObj={}", this, proxy, conflictObject);
 
             // First, we add this access to the read set
             addToReadSet(proxy, conflictObject);
@@ -214,6 +213,16 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         addToWriteSet(streamId, updateEntries);
     }
 
+    @Override
+    public void addToCreateSet(UUID streamId) {
+        super.addToCreateSet(streamId);
+    }
+
+    @Override
+    public void addToDeleteSet(UUID streamId) {
+        super.addToDeleteSet(streamId);
+    }
+
     /**
      * Commit a transaction into this transaction by merging the read/write
      * sets.
@@ -303,7 +312,9 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
             new TxResolutionInfo(getTransactionID(),
                 getSnapshotTimestamp(),
                 conflictSet.getHashedConflictSet(),
-                getWriteSetInfo().getHashedConflictSet());
+                getWriteSetInfo().getHashedConflictSet(),
+                getCreateSet(),
+                getDeleteSet());
 
         try {
             address = this.transaction.runtime.getStreamsView()

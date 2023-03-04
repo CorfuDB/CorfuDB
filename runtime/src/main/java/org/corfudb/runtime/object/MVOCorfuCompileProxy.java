@@ -213,7 +213,7 @@ public class MVOCorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRPr
                 context.getTransactionID(), snapshotTimestamp);
         final TransactionAbortedException tae = new TransactionAbortedException(txInfo,
                 TokenResponse.NO_CONFLICT_KEY, getStreamID(), Address.NON_ADDRESS,
-                abortCause, e, context);
+                TokenResponse.NO_INVALID_STREAM, abortCause, e, context);
         context.abortTransaction(tae);
 
         throw tae;

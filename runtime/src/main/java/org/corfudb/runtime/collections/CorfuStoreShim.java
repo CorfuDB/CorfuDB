@@ -97,7 +97,7 @@ public class CorfuStoreShim {
      * @param tableName Table name.
      */
     public void deleteTable(String namespace, String tableName) {
-        corfuStore.deleteTable(namespace, tableName);
+        corfuStore.clearTable(namespace, tableName);
     }
 
     /**

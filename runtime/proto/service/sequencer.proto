@@ -59,6 +59,10 @@ message TokenResponseMsg {
     // Sent when a transaction aborts because it has an old version (i.e. older than
     // the trim mark). This is to detect slow transactions
     TX_ABORT_SEQ_TRIM = 4;
+
+    // Sent when a transaction aborts because it tries to open a stream which already
+    // exists in Sequencer's stream address space map
+    TX_ABORT_INVALID_STREAM = 5;
   }
 
   // The cause/type of response.
@@ -77,6 +81,8 @@ message TokenResponseMsg {
   repeated UuidToLongPairMsg backpointer_map = 5;
 
   repeated UuidToLongPairMsg stream_tails = 6;
+
+  repeated UuidMsg invalid_streams = 7;
 }
 
 // SequencerRecoveryMsg
