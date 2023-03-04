@@ -3,11 +3,14 @@ package org.corfudb.infrastructure;
 import lombok.extern.slf4j.Slf4j;
 import org.assertj.core.api.Assertions;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
+import org.corfudb.infrastructure.logreplication.infrastructure.CorfuReplicationManager;
 import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClient;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientRouter;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationHandler;
+import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSourceClientRouter;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRuntimeEvent;
+import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationLeadershipLossResponseMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationLeadershipResponseMsg;
@@ -21,7 +24,10 @@ import org.junit.Before;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRuntimeEvent.LogReplicationRuntimeEventType;
@@ -37,9 +43,11 @@ import static org.mockito.Mockito.verify;
 @Slf4j
 public class LogReplicationClientTest {
 
-    private final static String SAMPLE_CLUSTER = "CLUSTER";
+    private static final String SAMPLE_CLUSTER = "CLUSTER";
+    private static final int SAMPLE_PORT = 0;
+    private final static String PLUGIN_PATH = "pluginPath";
 
-    LogReplicationClientRouter lrClient;
+    LogReplicationSourceClientRouter lrClient;
     LogReplicationRuntimeParameters lrRuntimeParameters;
     CorfuLogReplicationRuntime lrFsm;
     LogReplicationHandler lrClientHandler;
@@ -51,10 +59,21 @@ public class LogReplicationClientTest {
         handlerMap = spy(new ConcurrentHashMap<>());
         lrFsm = mock(CorfuLogReplicationRuntime.class);
         lrRuntimeParameters = mock(LogReplicationRuntimeParameters.class);
-        doReturn(new ClusterDescriptor(SAMPLE_CLUSTER)).when(lrRuntimeParameters).getRemoteClusterDescriptor();
-        lrClient = spy(new LogReplicationClientRouter(lrRuntimeParameters, lrFsm));
+        ClusterDescriptor sampleCluster = new ClusterDescriptor(SAMPLE_CLUSTER, SAMPLE_PORT, new ArrayList<>());
+        doReturn(sampleCluster).when(lrRuntimeParameters).getRemoteClusterDescriptor();
+        CorfuReplicationManager replicationManager = mock(CorfuReplicationManager.class);
+        LogReplicationSession session = LogReplicationSession. newBuilder()
+                .setSinkClusterId(SAMPLE_CLUSTER).setSourceClusterId(SAMPLE_CLUSTER).build();
 
-        lrClientHandler = spy(new LogReplicationHandler());
+        Map<LogReplicationSession, CorfuLogReplicationRuntime> mockedSessionToFsm = new HashMap<>();
+        mockedSessionToFsm.put(session, lrFsm);
+//        doReturn(mockedSessionToFsm).when(replicationManager).getRemoteSesionToRuntime();
+        doReturn(PLUGIN_PATH).when(lrRuntimeParameters).getPluginFilePath();
+        doReturn(UUID.randomUUID()).when(lrRuntimeParameters).getClientId();
+        lrClient = spy(new LogReplicationSourceClientRouter(sampleCluster, lrRuntimeParameters, replicationManager,session));
+        lrClient.setRuntimeFSM(lrFsm);
+
+        lrClientHandler = spy(new LogReplicationHandler(session));
         responseHandler = spy(lrClientHandler.createResponseHandlers(lrClientHandler, handlerMap));
         lrClientHandler.setResponseHandler(responseHandler);
         lrClient.addClient(lrClientHandler);
