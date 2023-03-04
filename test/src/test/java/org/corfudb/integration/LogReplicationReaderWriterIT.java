@@ -569,6 +569,8 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
         dstWriterRuntime.parseConfigurationString(WRITER_ENDPOINT);
         dstWriterRuntime.connect();
 
+        openStreams(dstTables, dstCorfuStore);
+
         for (String name : srcHashMap.keySet()) {
             IStreamView srcSV = srcReaderRuntime.getStreamsView().getUnsafe(CorfuRuntime.getStreamID(name), options);
             IStreamView dstSV = dstWriterRuntime.getStreamsView().getUnsafe(CorfuRuntime.getStreamID(name), options);
@@ -585,7 +587,6 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
         }
 
         printTails("after writing to dst", srcDataRuntime, dstDataRuntime);
-        openStreams(dstTables, dstCorfuStore);
         verifyData("after writing to dst", dstTables, srcHashMap, dstCorfuStore);
     }
 
@@ -633,12 +634,13 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
         CorfuRuntime dstWriterRuntime = CorfuRuntime.fromParameters(params);
         dstWriterRuntime.parseConfigurationString(WRITER_ENDPOINT);
         dstWriterRuntime.connect();
+
+        openStreams(dstTables, dstCorfuStore, NUM_STREAMS, serializer);
+
         //play messages at dst server
         writeLogEntryMsgs(msgQ, srcHashMap.keySet(), dstWriterRuntime);
 
         //verify data with hashtable
-        openStreams(dstTables, dstCorfuStore, NUM_STREAMS, serializer);
-
         dstDataRuntime.getSerializers().registerSerializer(serializer);
         verifyData("after log writing at dst", dstTables, srcHashMap, dstCorfuStore);
 

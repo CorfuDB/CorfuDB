@@ -3,8 +3,10 @@ package org.corfudb.runtime.object.transactions;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import javax.annotation.Nullable;
 
@@ -140,6 +142,9 @@ public abstract class AbstractTransactionalContext implements
     @Getter
     private final ConflictSetInfo readSetInfo = new ConflictSetInfo();
 
+    @Getter final List<UUID> createSet = new ArrayList<>();
+    @Getter final List<UUID> deleteSet = new ArrayList<>();
+
     // TODO: Make into a class?
     protected final Map<ICorfuSMRProxyInternal<?>, ICorfuSMRSnapshotProxy<?>> snapshotProxyMap = new HashMap<>();
 
@@ -250,7 +255,7 @@ public abstract class AbstractTransactionalContext implements
                             new TransactionAbortedException(
                                     new TxResolutionInfo(getTransactionID(), snapshotTimestamp),
                                     TokenResponse.NO_CONFLICT_KEY, proxy.getStreamID(),
-                                    Address.NON_ADDRESS, AbortCause.TRIM, te, this);
+                                    Address.NON_ADDRESS, TokenResponse.NO_ILLEGAL_STREAM, AbortCause.TRIM, te, this);
                     abortTransaction(tae);
                     throw tae;
                 }
@@ -420,6 +425,14 @@ public abstract class AbstractTransactionalContext implements
 
     public void addToWriteSet(UUID streamId, List<SMREntry> updateEntries) {
         getWriteSetInfo().add(streamId, updateEntries);
+    }
+
+    public void addToCreateSet(UUID streamId) {
+        createSet.add(streamId);
+    }
+
+    public void addToDeleteSet(UUID streamId) {
+        deleteSet.add(streamId);
     }
 
     void mergeWriteSetInto(WriteSetInfo other) {

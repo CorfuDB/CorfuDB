@@ -173,7 +173,9 @@ public class StreamsView extends AbstractView {
                     throw new TransactionAbortedException(
                             conflictInfo,
                             tokenResponse.getConflictKey(), tokenResponse.getConflictStream(),
-                            tokenResponse.getToken().getSequence(), abortCause,
+                            tokenResponse.getToken().getSequence(),
+                            tokenResponse.getIllegalStreams(),
+                            abortCause,
                             TransactionalContext.getCurrentContext());
                 }
 
@@ -205,6 +207,7 @@ public class StreamsView extends AbstractView {
                             conflictInfo,
                             tokenResponse.getConflictKey(), tokenResponse.getConflictStream(),
                             tokenResponse.getToken().getSequence(),
+                            tokenResponse.getIllegalStreams(),
                             AbortCause.NEW_SEQUENCER, // in the future perhaps define a new AbortCause?
                             TransactionalContext.getCurrentContext());
                 }
@@ -256,6 +259,9 @@ public class StreamsView extends AbstractView {
                 break;
             case TX_ABORT_SEQ_TRIM:
                 abortCause = AbortCause.SEQUENCER_TRIM;
+                break;
+            case TX_ABORT_ILLEGAL_STREAM:
+                abortCause = AbortCause.ILLEGAL_STREAM;
                 break;
         }
 

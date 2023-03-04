@@ -165,13 +165,32 @@ public class CorfuStore {
     }
 
     /**
-     * Deletes a table instance. [NOT SUPPORTED.]
+     * Clear all entries of a table.
      *
      * @param namespace Namespace of the table.
      * @param tableName Table name.
      */
-    public void deleteTable(String namespace, String tableName) {
-        runtime.getTableRegistry().deleteTable(namespace, tableName);
+    public void clearTable(String namespace, String tableName) {
+        runtime.getTableRegistry().clearTable(namespace, tableName);
+    }
+
+    /**
+     * Drops a table. It includes deleting all table entries, marking it as dropped
+     * in RegistryTable, and deleting its stream address space in sequencer server.
+     * It does not proactively release the local client memory held by this table or
+     * its snapshots. Note that if a table is dropped and reopened by the same
+     * CorfuStore instance, the snapshots in MVOCache created before the dropTable()
+     * could still be accessed, if not yet evicted. This is an expected behavior and
+     * the table access is consistent.
+     *
+     * The table does not need to be opened by this CorfuStore instance in oder to
+     * run the dropTable().
+     *
+     * @param namespace namespace this table
+     * @param tableName name this table
+     */
+    public void dropTable(String namespace, String tableName) {
+        runtime.getTableRegistry().dropTable(namespace, tableName);
     }
 
     /**

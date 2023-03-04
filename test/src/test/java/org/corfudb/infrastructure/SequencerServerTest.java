@@ -348,7 +348,7 @@ public class SequencerServerTest extends AbstractServerTest {
         assertThat(future.join())
                 .isEqualTo(new TokenResponse(TokenType.NORMAL, TokenResponse.NO_CONFLICT_KEY,
                         TokenResponse.NO_CONFLICT_STREAM, new Token(newEpoch, num - 1),
-                        Collections.emptyMap(), Collections.emptyMap()));
+                        Collections.emptyMap(), Collections.emptyMap(), Collections.emptySet()));
     }
 
 }
