@@ -82,7 +82,7 @@ For instance, there are multiple possible scenarios of failures that could happe
    figure out if a local node is a decision maker node. 
    If those parameters are met then the agent will trigger the layout update to exclude a node from the cluster
 
- - Current design of the Failre Detector (with Disk ReadOnly Failures) allows to enrich 
+ - Current design of the Failre Detector (with Disk ReadOnly Failure) allows to enrich 
    current FileSystemStats with the new types of failures to have disk probes in it and effectively handle more disk issues
 
 **Changes in `LogUnitServer`:**
@@ -92,7 +92,7 @@ For instance, there are multiple possible scenarios of failures that could happe
  - LogUnitServer changes `AbstractServer#ServerState` which will indicate whether a node is ready to handle queries or not
    in case of disk issues
 
- - Until Failure Detector solves the issue with FileSystem (which allows us to survive DataCorruptionException):
+ - Failure Detector solves issues with FileSystem with the following steps:
      - by detecting the failure 
      - and then healing the node by executing `HealNodeWorkflow` 
      - which will reset `StreamLogFiles` and triggers data transfer 

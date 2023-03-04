@@ -80,6 +80,8 @@ public class BatchProcessor implements AutoCloseable {
         operationsQueue = new LinkedBlockingQueue<>();
 
         processorService = newExecutorService();
+        processorService.submit(this::process);
+
         if (sealEpoch != Layout.INVALID_EPOCH) {
             HealthMonitor.resolveIssue(Issue.createInitIssue(Component.LOG_UNIT));
         }
@@ -90,10 +92,8 @@ public class BatchProcessor implements AutoCloseable {
                 .setDaemon(false)
                 .setNameFormat("LogUnit-BatchProcessor-%d")
                 .build();
-        ExecutorService executor = Executors.newSingleThreadExecutor(threadFactory);
 
-        processorService.submit(this::process);
-        return executor;
+        return Executors.newSingleThreadExecutor(threadFactory);
     }
 
     private void recordRunnable(Runnable runnable, Optional<Timer> timer) {
