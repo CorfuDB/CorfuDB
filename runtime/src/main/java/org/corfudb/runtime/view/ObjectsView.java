@@ -125,7 +125,7 @@ public class ObjectsView extends AbstractView {
                     context.getTransactionID(), context.getSnapshotTimestamp());
             context.abortTransaction(new TransactionAbortedException(
                     txInfo, TokenResponse.NO_CONFLICT_KEY, TokenResponse.NO_CONFLICT_STREAM,
-                    Address.NON_ADDRESS, AbortCause.USER, context));
+                    Address.NON_ADDRESS, TokenResponse.NO_ILLEGAL_STREAM, AbortCause.USER, context));
             TransactionalContext.removeContext();
         }
     }

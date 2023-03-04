@@ -25,6 +25,8 @@ import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TokenType;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.UnreachableClusterException;
 import org.corfudb.runtime.proto.RpcCommon.StreamAddressRangeMsg;
 import org.corfudb.runtime.proto.RpcCommon.UuidMsg;
 import org.corfudb.runtime.proto.RpcCommon.UuidToStreamAddressSpacePairMsg;
@@ -36,6 +38,7 @@ import org.corfudb.runtime.proto.service.Sequencer.StreamsAddressRequestMsg;
 import org.corfudb.runtime.proto.service.Sequencer.TokenRequestMsg;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.Utils;
 
@@ -49,6 +52,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -171,6 +175,17 @@ public class SequencerServer extends AbstractServer {
     @Getter
     private long globalLogTail;
 
+    private final Runnable runtimeSystemDownHandler = () -> {
+        log.warn("Sequencer Server: Runtime stalled. Invoking systemDownHandler after {} "
+                + "unsuccessful tries.", SYSTEM_DOWN_HANDLER_TRIGGER_LIMIT);
+        throw new UnreachableClusterException("Runtime stalled. Invoking systemDownHandler after "
+                + SYSTEM_DOWN_HANDLER_TRIGGER_LIMIT + " unsuccessful tries.");
+    };
+
+    private static final int SYSTEM_DOWN_HANDLER_TRIGGER_LIMIT = 60;
+
+    private final ExecutorService corfuRuntimeExecutor;
+
     /**
      * Note: This setter method is only used for testing, since we want to
      * keep sequencerEpoch private volatile.
@@ -204,6 +219,7 @@ public class SequencerServer extends AbstractServer {
 
         // Sequencer server is single threaded by current design
         executor = serverContext.getExecutorService(1, "sequencer-");
+        corfuRuntimeExecutor = serverContext.getExecutorService(1, "sequencer-runtime-");
 
         globalLogTail = sequencerFactoryHelper.getGlobalLogTail();
         cache = sequencerFactoryHelper.getSequencerServerCache(
@@ -260,6 +276,7 @@ public class SequencerServer extends AbstractServer {
     public void shutdown() {
         super.shutdown();
         executor.shutdown();
+        corfuRuntimeExecutor.shutdown();
         healthReportScheduler.shutdown();
         HealthMonitor.reportIssue(Issue.createInitIssue(Component.SEQUENCER));
     }
@@ -588,10 +605,37 @@ public class SequencerServer extends AbstractServer {
                 " sequencerEpoch = {}", globalLogTail, streamTailToGlobalTailMap.size(),
                 streamTailToGlobalTailMap, sequencerEpoch);
 
+        CompletableFuture<Set<UUID>> getInactiveStreamsFuture = CompletableFuture.supplyAsync(() ->
+                getInactiveStreams(Collections.unmodifiableSet(streamsAddressMap.keySet())), corfuRuntimeExecutor)
+                .exceptionally(ex -> {
+                    log.error("Failed to get inactive streams.", ex);
+                    return Collections.emptySet();});
+        getInactiveStreamsFuture.thenRunAsync(() -> deleteStreams(getInactiveStreamsFuture.join()), executor)
+                .exceptionally(ex -> {
+                    log.error("Failed to delete streams during sequencer reset.");
+                    return null;});
+
         HeaderMsg responseHeader = getHeaderMsg(req.getHeader(),
                 ClusterIdCheck.CHECK, EpochCheck.IGNORE);
         r.sendResponse(getResponseMsg(responseHeader,
                 getBootstrapSequencerResponseMsg(true)), ctx);
+    }
+
+    /**
+     * Delete streams from in-memory maps
+     *
+     * @param streamsToDelete a list of streams to delete
+     */
+    private void deleteStreams(Set<UUID> streamsToDelete) {
+        log.info("Start deleting streams [{}]", streamsToDelete);
+        for (UUID uuid : streamsToDelete) {
+            if (!streamsAddressMap.containsKey(uuid)) {
+                log.warn("Stream to delete [{}] does not exist", uuid);
+            }
+            streamTailToGlobalTailMap.remove(uuid);
+            streamsAddressMap.remove(uuid);
+        }
+        log.info("Done deleting {} streams from sequencer maps.", streamsToDelete.size());
     }
 
     /**
@@ -723,6 +767,16 @@ public class SequencerServer extends AbstractServer {
      */
     private void handleAllocation(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
         final TokenRequestMsg tokenRequest = req.getPayload().getTokenRequest();
+        final TxResolutionInfo txResolutionInfo = getTxResolutionInfo(tokenRequest.getTxnResolution());
+
+        // handle stream creation
+        Set<UUID> illegalStreams = getIllegalStreamsFromRequest(txResolutionInfo);
+        if (!illegalStreams.isEmpty()) {
+            ResponseMsg response = getResponseMsg(getHeaderMsg(req.getHeader()),
+                    getTokenResponseMsg(TokenType.TX_ABORT_ILLEGAL_STREAM, illegalStreams));
+            r.sendResponse(response, ctx);
+            return;
+        }
 
         // extend the tail of the global log by the requested # of tokens
         // currentTail is the first available position in the global log
@@ -784,11 +838,30 @@ public class SequencerServer extends AbstractServer {
         Token newToken = new Token(sequencerEpoch, globalLogTail);
         globalLogTail = newTail;
 
+        // handle delete stream
+        if (!txResolutionInfo.getDeleteSet().isEmpty()) {
+            deleteStreams(txResolutionInfo.getDeleteSet());
+        }
+
         // Note: we reuse the request header as the ignore_cluster_id and
         // ignore_epoch fields are the same in both cases.
         ResponseMsg response = getResponseMsg(
                 getHeaderMsg(req.getHeader()), getTokenResponseMsg(newToken, backPointerMap.build()));
         r.sendResponse(response, ctx);
+    }
+
+    private Set<UUID> getIllegalStreamsFromRequest(TxResolutionInfo txResolutionInfo) {
+
+        Set<UUID> illegalStreams = Collections.emptySet();
+        if (!txResolutionInfo.getCreateSet().isEmpty()) {
+            illegalStreams = txResolutionInfo.getCreateSet()
+                .stream()
+                .filter(streamId -> streamTailToGlobalTailMap.containsKey(streamId) &&
+                        streamTailToGlobalTailMap.get(streamId) != Address.NON_ADDRESS)
+                .collect(Collectors.toSet());
+        }
+
+        return illegalStreams;
     }
 
     /**
@@ -863,6 +936,50 @@ public class SequencerServer extends AbstractServer {
         }
 
         return requestedAddressSpaces;
+    }
+
+    /**
+     * Get a list of inactive streams. A stream is inactive if it's not a real Object stream or a checkpoint stream.
+     *
+     * @return a list of all inactive streams
+     */
+    private Set<UUID> getInactiveStreams(Set<UUID> existingStreams) {
+        if (existingStreams.isEmpty()) {
+            return Collections.emptySet();
+        }
+
+        CorfuRuntime corfuRuntime = getNewCorfuRuntime();
+
+        List<UUID> realStreams = corfuRuntime.getTableRegistry().listTables().stream()
+            .map(tableName -> CorfuRuntime.getStreamID(TableRegistry.getFullyQualifiedTableName(
+                tableName.getNamespace(), tableName.getTableName())))
+            .collect(Collectors.toList());
+        List<UUID> checkpointStreams = realStreams.stream()
+            .map(CorfuRuntime::getCheckpointStreamIdFromId)
+            .collect(Collectors.toList());
+
+        Set<UUID> inactiveStreams = existingStreams.stream()
+            .filter(stream -> !realStreams.contains(stream) && !checkpointStreams.contains(stream))
+            .collect(Collectors.toSet());
+
+        corfuRuntime.shutdown();
+        return inactiveStreams;
+    }
+
+    private CorfuRuntime getNewCorfuRuntime() {
+        final CorfuRuntime.CorfuRuntimeParameters params =
+                serverContext.getManagementRuntimeParameters();
+        params.setSystemDownHandlerTriggerLimit(SYSTEM_DOWN_HANDLER_TRIGGER_LIMIT);
+        final CorfuRuntime runtime = CorfuRuntime.fromParameters(params);
+        final Layout managementLayout = serverContext.copyManagementLayout();
+        // Runtime can be set up either using the layout or the bootstrapEndpoint address.
+        if (managementLayout != null) {
+            managementLayout.getLayoutServers().forEach(runtime::addLayoutServer);
+        }
+        runtime.connect();
+        log.info("getCorfuRuntime: Corfu Runtime connected successfully");
+        params.setSystemDownHandler(runtimeSystemDownHandler);
+        return runtime;
     }
 
     /**

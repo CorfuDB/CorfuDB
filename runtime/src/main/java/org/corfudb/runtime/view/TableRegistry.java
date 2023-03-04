@@ -9,6 +9,7 @@ import com.google.protobuf.Message;
 import com.google.protobuf.ProtocolStringList;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuOptions;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.TableDescriptors;
@@ -24,6 +25,7 @@ import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TableParameters;
 import org.corfudb.runtime.collections.streaming.StreamingManager;
+import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.SerializerException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.transactions.TransactionType;
@@ -32,11 +34,14 @@ import org.corfudb.runtime.view.ObjectsView.StreamTagInfo;
 import org.corfudb.util.GitRepositoryState;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.ProtobufSerializer;
+import org.corfudb.util.serializer.Serializers;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+import java.lang.reflect.Array;
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Deque;
@@ -77,6 +82,12 @@ public class TableRegistry {
     public static final String CORFU_SYSTEM_NAMESPACE = "CorfuSystem";
     public static final String REGISTRY_TABLE_NAME = "RegistryTable";
     public static final String PROTOBUF_DESCRIPTOR_TABLE_NAME = "ProtobufDescriptorTable";
+
+    public static final List<TableName> protectedRawStreamTables = Arrays.asList(
+            TableName.newBuilder().setNamespace(CORFU_SYSTEM_NAMESPACE)
+                    .setTableName(REGISTRY_TABLE_NAME).build(),
+            TableName.newBuilder().setNamespace(CORFU_SYSTEM_NAMESPACE)
+                    .setTableName(PROTOBUF_DESCRIPTOR_TABLE_NAME).build());
 
     /**
      * A common prefix for all string based stream tags defined in protobuf.
@@ -242,6 +253,7 @@ public class TableRegistry {
         }
         TableMetadata tableMetadata = metadataBuilder.build();
 
+        boolean dropBeforeOpen = false;
         int numRetries = 9; // Since this is an internal transaction, retry a few times before giving up.
         while (numRetries-- > 0) {
             // Schema validation to ensure that there is either proper modification of the schema across open calls.
@@ -260,6 +272,11 @@ public class TableRegistry {
                 throw new IllegalThreadStateException("openTable: Called on an existing transaction");
             }
             try {
+                if (dropBeforeOpen) {
+                    log.info("Dropping the {}${} before opening.", namespace, tableName);
+                    dropTable(namespace, tableName);
+                }
+
                 this.runtime.getObjectsView().TXBuild()
                         .type(TransactionType.WRITE_AFTER_WRITE)
                         .build()
@@ -269,12 +286,25 @@ public class TableRegistry {
                 CorfuRecord<TableDescriptors, TableMetadata> newRecord =
                         new CorfuRecord<>(tableDescriptors, tableMetadata);
                 boolean protoFileChanged = tryUpdateTableSchemas(allDescriptors);
+
                 if (oldRecord == null || protoFileChanged || tableRecordChanged(oldRecord, newRecord)) {
+                    // If this is adding a new table rather than updating an existing table,
+                    // add it to the createSet to let sequencer verify its legitimacy
+                    if (oldRecord == null && !protectedRawStreamTables.contains(tableNameKey)) {
+                        UUID streamId = CorfuRuntime.getStreamID(getFullyQualifiedTableName(tableNameKey));
+                        TransactionalContext.getCurrentContext().addToCreateSet(streamId);
+                    }
                     this.registryTable.insert(tableNameKey, newRecord);
                 }
+
                 this.runtime.getObjectsView().TXEnd();
                 break;
             } catch (TransactionAbortedException txAbort) {
+                if (txAbort.getAbortCause() == AbortCause.ILLEGAL_STREAM) {
+                    // Sequencer detects that this stream already exists. In this case, drop the table, then retry
+                    dropBeforeOpen = true;
+                }
+
                 if (numRetries <= 0) {
                     throw txAbort;
                 }
@@ -578,6 +608,8 @@ public class TableRegistry {
 
         log.info("openTable: opening {}${} with stream tags {}", namespace, tableName, streamTagInfoForTable);
 
+        registerTable(namespace, tableName, kClass, vClass, mClass, tableOptions);
+
         // Open and return table instance.
         Table<K, V, M> table = new Table<>(
                 TableParameters.<K, V, M>builder()
@@ -596,7 +628,6 @@ public class TableRegistry {
                 mapSupplier);
         tableMap.put(fullyQualifiedTableName, (Table<Message, Message, Message>) table);
 
-        registerTable(namespace, tableName, kClass, vClass, mClass, tableOptions);
         return table;
     }
 
@@ -672,9 +703,77 @@ public class TableRegistry {
      * @param namespace Namespace of the table.
      * @param tableName Name of the table.
      */
-    public void deleteTable(String namespace, String tableName) {
+    public void clearTable(String namespace, String tableName) {
         Table<Message, Message, Message> table = getTable(namespace, tableName);
         table.clearAll();
+    }
+
+    /**
+     * Clear the table by appending CLEAR to the stream. Start a transaction to delete
+     * the entry in RegistryTable, and add this table and its checkpoint stream to the
+     * transaction's deleteSet, which instructs the sequencer to clean up the in-mem maps.
+     *
+     * @param namespace Namespace of the table.
+     * @param tableName Name of the table.
+     */
+    public void dropTable(String namespace, String tableName) {
+        log.info("Invoking dropTable {}${}", namespace, tableName);
+        clearAndUnregisterTable(namespace, tableName);
+
+        String fullyQualifiedTableName = getFullyQualifiedTableName(namespace, tableName);
+        tableMap.remove(fullyQualifiedTableName);
+        log.info("Done dropping table {}${}", namespace, tableName);
+    }
+
+    private void clearAndUnregisterTable(String namespace, String tableName) {
+        TableName tableNameKey = TableName.newBuilder()
+                .setNamespace(namespace)
+                .setTableName(tableName)
+                .build();
+
+        // Mark this table as dropped in RegistryTable
+        int numRetries = 9; // Since this is an internal transaction, retry a few times before giving up.
+        while (numRetries-- > 0) {
+            if (TransactionalContext.isInTransaction()) {
+                throw new IllegalThreadStateException("openTable: Called on an existing transaction");
+            }
+            try {
+                this.runtime.getObjectsView().TXBuild()
+                        .type(TransactionType.WRITE_AFTER_WRITE)
+                        .build()
+                        .begin();
+
+                // Clear table data
+                UUID streamId = CorfuRuntime.getStreamID(getFullyQualifiedTableName(namespace, tableName));
+                SMREntry entry = new SMREntry("clear", new Array[0], Serializers.PRIMITIVE);
+                TransactionalContext.getCurrentContext().logUpdate(streamId, entry);
+
+                UUID cpStreamId = CorfuRuntime.getCheckpointStreamIdFromId(streamId);
+                TransactionalContext.getCurrentContext().addToDeleteSet(streamId);
+                TransactionalContext.getCurrentContext().addToDeleteSet(cpStreamId);
+
+                CorfuRecord<TableDescriptors, TableMetadata> oldRecord =
+                        this.registryTable.get(tableNameKey);
+                if (oldRecord == null || oldRecord.getPayload() == null) {
+                    log.warn("unregistering non-exist table {}", tableNameKey);
+                }
+                this.registryTable.delete(tableNameKey);
+                this.runtime.getObjectsView().TXEnd();
+
+                log.info("Successfully cleared and unregister table {}${}", namespace, tableName);
+                break;
+            } catch (TransactionAbortedException txAbort) {
+                if (numRetries <= 0) {
+                    log.error("Failed to drop the {} table. This table is left in corrupted state!", tableNameKey);
+                    throw txAbort;
+                }
+                log.info("unregisterTable: commit failed. Will retry {} times. Cause {}", numRetries, txAbort);
+            } finally {
+                if (TransactionalContext.isInTransaction()) { // Transaction failed or an exception occurred.
+                    this.runtime.getObjectsView().TXAbort(); // clear Txn context so thread can be reused.
+                }
+            }
+        }
     }
 
     /**

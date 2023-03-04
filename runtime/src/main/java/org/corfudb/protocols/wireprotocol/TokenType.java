@@ -25,7 +25,9 @@ public enum TokenType {
 
     // Sent when a transaction aborts because it has an old version (i.e. older than
     // the trim mark). This is to detect slow transactions
-    TX_ABORT_SEQ_TRIM((byte) 4);
+    TX_ABORT_SEQ_TRIM((byte) 4),
+
+    TX_ABORT_ILLEGAL_STREAM((byte) 5);
 
     final int val;
 }

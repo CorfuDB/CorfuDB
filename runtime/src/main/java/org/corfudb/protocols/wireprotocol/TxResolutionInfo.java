@@ -32,6 +32,12 @@ public class TxResolutionInfo {
     @Getter
     final Map<UUID, Set<byte[]>>  writeConflictParams;
 
+    @Getter
+    final Set<UUID> createSet;
+
+    @Getter
+    final Set<UUID> deleteSet;
+
     /**
      * Constructor for TxResolutionInfo.
      *
@@ -43,6 +49,8 @@ public class TxResolutionInfo {
         this.snapshotTimestamp = snapshotTimestamp;
         this.conflictSet = Collections.emptyMap();
         this.writeConflictParams = Collections.emptyMap();
+        this.createSet = Collections.emptySet();
+        this.deleteSet = Collections.emptySet();
     }
 
     /**
@@ -54,11 +62,13 @@ public class TxResolutionInfo {
      * @param writeConflictParams map of write conflict parameters, arranged by stream IDs
      */
     public TxResolutionInfo(UUID txId, Token snapshotTimestamp, Map<UUID, Set<byte[]>>
-            conflictMap, Map<UUID, Set<byte[]>> writeConflictParams) {
+            conflictMap, Map<UUID, Set<byte[]>> writeConflictParams, Set<UUID> createSet, Set<UUID> deleteSet) {
         this.TXid = txId;
         this.snapshotTimestamp = snapshotTimestamp;
         this.conflictSet = conflictMap;
         this.writeConflictParams = writeConflictParams;
+        this.createSet = createSet;
+        this.deleteSet = deleteSet;
     }
 
     @Override

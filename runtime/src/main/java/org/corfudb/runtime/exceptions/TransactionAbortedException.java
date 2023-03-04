@@ -1,5 +1,7 @@
 package org.corfudb.runtime.exceptions;
 
+import java.util.Collections;
+import java.util.Set;
 import java.util.UUID;
 
 import lombok.Getter;
@@ -51,20 +53,21 @@ public class TransactionAbortedException extends RuntimeException {
      * @param abortCause cause
      */
     public TransactionAbortedException(TxResolutionInfo txResolutionInfo,
-            byte[] conflictKey, UUID conflictStream, Long offendingAddress, AbortCause abortCause,
-            AbstractTransactionalContext context) {
-        this(txResolutionInfo, conflictKey, conflictStream, offendingAddress, abortCause, null, context);
+            byte[] conflictKey, UUID conflictStream, Long offendingAddress, Set<UUID> illegalStreams,
+           AbortCause abortCause, AbstractTransactionalContext context) {
+        this(txResolutionInfo, conflictKey, conflictStream, offendingAddress, illegalStreams, abortCause,
+                null, context);
     }
 
     public TransactionAbortedException(TxResolutionInfo txResolutionInfo,
             AbortCause abortCause, Throwable cause, AbstractTransactionalContext context) {
         this(txResolutionInfo, TokenResponse.NO_CONFLICT_KEY, TokenResponse.NO_CONFLICT_STREAM,
-                Address.NON_ADDRESS, abortCause, cause, context);
+                Address.NON_ADDRESS, Collections.emptySet(), abortCause, cause, context);
     }
 
     public TransactionAbortedException(TxResolutionInfo txResolutionInfo,
             byte[] conflictKey, UUID conflictStream, Long offendingAddress,
-            AbortCause abortCause, Throwable cause, AbstractTransactionalContext context) {
+            Set<UUID> illegalStreams, AbortCause abortCause, Throwable cause, AbstractTransactionalContext context) {
         super("TX ABORT "
                 + " | Snapshot Time = " + txResolutionInfo.getSnapshotTimestamp()
                 + " | Failed Transaction ID = " + txResolutionInfo.getTXid()
@@ -72,6 +75,7 @@ public class TransactionAbortedException extends RuntimeException {
                 + " | Conflict Key = " + Utils.bytesToHex(conflictKey)
                 + " | Conflict Stream = " + conflictStream
                 + " | Cause = " + abortCause
+                + " | Illegal Streams = " + illegalStreams
                 + " | Time = " + (context == null ? "Unknown" :
                 System.currentTimeMillis() -
                 context.getStartTime()) + " ms"

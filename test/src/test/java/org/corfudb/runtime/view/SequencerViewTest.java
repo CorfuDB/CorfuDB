@@ -153,6 +153,6 @@ public class SequencerViewTest extends AbstractViewTest {
         // This is then retried internally and returned with a valid response.
         assertThat(r.getSequencerView().getStreamAddressSpace(
                 new StreamAddressRange(streamA,  tokenCount, Address.NON_ADDRESS)))
-                .isEqualTo(expectedMap);
+                .isEqualTo(new StreamAddressSpace());
     }
 }

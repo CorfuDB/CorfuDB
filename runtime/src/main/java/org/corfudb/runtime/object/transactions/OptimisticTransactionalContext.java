@@ -214,6 +214,16 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         addToWriteSet(streamId, updateEntries);
     }
 
+    @Override
+    public void addToCreateSet(UUID streamId) {
+        super.addToCreateSet(streamId);
+    }
+
+    @Override
+    public void addToDeleteSet(UUID streamId) {
+        super.addToDeleteSet(streamId);
+    }
+
     /**
      * Commit a transaction into this transaction by merging the read/write
      * sets.
@@ -303,7 +313,9 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
             new TxResolutionInfo(getTransactionID(),
                 getSnapshotTimestamp(),
                 conflictSet.getHashedConflictSet(),
-                getWriteSetInfo().getHashedConflictSet());
+                getWriteSetInfo().getHashedConflictSet(),
+                getCreateSet(),
+                getDeleteSet());
 
         try {
             address = this.transaction.runtime.getStreamsView()

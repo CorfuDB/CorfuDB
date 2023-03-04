@@ -8,6 +8,7 @@ import lombok.Getter;
 
 import java.util.Collections;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -19,6 +20,8 @@ public class TokenResponse implements IToken {
 
     public static byte[] NO_CONFLICT_KEY = new byte[]{0};
     public static UUID NO_CONFLICT_STREAM = new UUID(0, 0);
+
+    public static Set<UUID> NO_ILLEGAL_STREAM = Collections.emptySet();
 
     /**
      * Constructor for TokenResponse.
@@ -33,6 +36,7 @@ public class TokenResponse implements IToken {
         this.token = token;
         this.backpointerMap = backpointerMap;
         this.streamTails = Collections.emptyMap();
+        this.illegalStreams = Collections.emptySet();
     }
 
     /** the cause/type of response. */
@@ -52,6 +56,9 @@ public class TokenResponse implements IToken {
 
     @Getter(AccessLevel.NONE)
     final Map<UUID, Long> streamTails;
+
+    @Getter
+    final Set<UUID> illegalStreams;
 
     @Override
     public long getSequence() {
