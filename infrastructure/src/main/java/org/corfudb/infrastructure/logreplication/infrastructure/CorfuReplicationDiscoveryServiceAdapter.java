@@ -3,6 +3,7 @@ package org.corfudb.infrastructure.logreplication.infrastructure;
 import org.corfudb.runtime.LogReplication.ReplicationStatus;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -28,6 +29,11 @@ public interface CorfuReplicationDiscoveryServiceAdapter {
      * Enforce snapshotFullSync
      */
     UUID forceSnapshotSync(LogReplicationSession session) throws LogReplicationDiscoveryServiceException;
+
+    /**
+     * Enforce snapshotFullSync for rolling upgrade
+     */
+    List<UUID> rollingUpgradeForceSnapshot() throws LogReplicationDiscoveryServiceException;
 
     // TODO [V2]: Remove this when localNodeId moves to plugin
     String getLocalNodeId();
