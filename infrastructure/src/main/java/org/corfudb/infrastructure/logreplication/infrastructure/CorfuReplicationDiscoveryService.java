@@ -41,7 +41,9 @@ import java.net.URL;
 import java.net.URLClassLoader;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -707,6 +709,14 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
 
         sessionManager.getMetadataManager().addEvent(key, event);
         return forceSyncId;
+    }
+
+    public List<UUID> rollingUpgradeForceSnapshot() throws LogReplicationDiscoveryServiceException {
+        List<UUID> forceSyncIds = new ArrayList<>();
+        for (LogReplicationSession session : sessionManager.getSessions()) {
+            forceSyncIds.add(forceSnapshotSync(session));
+        }
+        return forceSyncIds;
     }
 
     public void shutdown() {

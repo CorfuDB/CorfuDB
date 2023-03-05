@@ -35,6 +35,7 @@ public class DiscoveryServiceEvent {
         DISCOVERED_TOPOLOGY,
         ACQUIRE_LOCK,
         RELEASE_LOCK,
-        ENFORCE_SNAPSHOT_SYNC
+        ENFORCE_SNAPSHOT_SYNC,
+        ROLLING_UPGRADE_ENFORCE_SNAPSHOT_SYNC
     }
 }

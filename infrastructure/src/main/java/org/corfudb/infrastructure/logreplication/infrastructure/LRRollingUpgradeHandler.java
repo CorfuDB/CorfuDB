@@ -1,7 +1,10 @@
 package org.corfudb.infrastructure.logreplication.infrastructure;
 
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.ILogReplicationVersionAdapter;
+import org.corfudb.runtime.ExampleSchemas;
+import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TxnContext;
 
 /**
@@ -81,5 +84,17 @@ public class LRRollingUpgradeHandler {
      */
     public void migrateData(TxnContext txnContext) {
         // Data migration to be added here.
+    }
+
+    /**
+     * Add flag to event table to trigger snapshot sync.
+     */
+    public static void eventSnapshotSyncRollingUpgrade(TxnContext txnContext) {
+        log.info("Forced snapshot sync will be triggered due to completion of rolling upgrade");
+        Table<ExampleSchemas.ClusterUuidMsg, ExampleSchemas.ClusterUuidMsg, ExampleSchemas.ClusterUuidMsg>  configTable =
+                txnContext.getTable(DefaultClusterManager.CONFIG_TABLE_NAME);
+        txnContext.putRecord(configTable, DefaultClusterManager.OP_ROLLING_UPGRADE_ENFORCE_SNAPSHOT_SYNC,
+                DefaultClusterManager.OP_ROLLING_UPGRADE_ENFORCE_SNAPSHOT_SYNC, DefaultClusterManager.OP_ROLLING_UPGRADE_ENFORCE_SNAPSHOT_SYNC);
+        txnContext.commit();
     }
 }
