@@ -56,6 +56,14 @@ public class NodeRank implements Comparable<NodeRank>, NodeRanking {
         private final String endpoint;
         private final FileSystemStats fsStats;
 
+        /**
+         * Sort nodes according to batch processor and disk read only status,
+         * the node with a healthy batch processor goes higher than the node with the batch processor with the error status,
+         * the same is true for disk read only nodes.
+         *
+         * @param other the object to be compared.
+         * @return comparison result
+         */
         @Override
         public int compareTo(NodeRankByPartitionAttributes other) {
             int batchProcessorError = Boolean.compare(
