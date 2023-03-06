@@ -25,13 +25,11 @@ import org.corfudb.runtime.CorfuStoreMetadata.TableDescriptors;
 import org.corfudb.runtime.CorfuStoreMetadata.TableMetadata;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.collections.CorfuDynamicKey;
-import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuDynamicRecord;
+import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.exceptions.SerializerException;
-import org.corfudb.runtime.object.MVOCache;
 import org.corfudb.runtime.view.ObjectOpenOption;
-import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.util.serializer.ProtobufSerializer.MessageType;
 
 import java.io.IOException;
@@ -81,13 +79,13 @@ public class DynamicProtobufSerializer implements ISerializer {
      * This map is generated on initialization.
      * Maps the fileDescriptorProto name to the FileDescriptorProto.
      */
-    private final ConcurrentMap<String, FileDescriptorProto> fdProtoMap = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, FileDescriptorProto> fdProtoMap;
 
     /**
      * This map is generated on initialization.
      * Maps the Message name to the name of the FileDescriptorProto containing it.
      */
-    protected final ConcurrentMap<String, String> messagesFdProtoNameMap = new ConcurrentHashMap<>();
+    protected final ConcurrentMap<String, String> messagesFdProtoNameMap;
 
     /**
      * This is used as a file descriptor cache. Used for optimization.
@@ -105,6 +103,8 @@ public class DynamicProtobufSerializer implements ISerializer {
 
     public DynamicProtobufSerializer(CorfuRuntime corfuRuntime) {
         this.type = ProtobufSerializer.PROTOBUF_SERIALIZER_CODE;
+        this.fdProtoMap = new ConcurrentHashMap<>();
+        this.messagesFdProtoNameMap = new ConcurrentHashMap<>();
 
         // Create or get a protobuf serializer to read the table registry.
         ISerializer protobufSerializer;
@@ -168,10 +168,29 @@ public class DynamicProtobufSerializer implements ISerializer {
             cachedProtobufDescriptorTable.put(entry.getKey(), entry.getValue());
         }
 
-        // Remove the protobuf serializer and reset the cache
+        // Remove the protobuf serializer
         corfuRuntime.getSerializers().clearCustomSerializers();
-        corfuRuntime.getObjectsView().getMvoCache().shutdown();
-        corfuRuntime.getObjectsView().setMvoCache(new MVOCache(corfuRuntime));
+    }
+
+    /**
+     *
+     * @param cachedRegistryTable - pre-constructed cache of the entire RegistryTable
+     * @param cachedProtobufDescriptorTable pre-constructed cache of the ProtobufDescriptorTable
+     */
+    public DynamicProtobufSerializer(
+            ConcurrentMap<TableName,
+                    CorfuRecord<TableDescriptors, TableMetadata>> cachedRegistryTable,
+            ConcurrentMap<ProtobufFileName,
+                    CorfuRecord<ProtobufFileDescriptor, TableMetadata>> cachedProtobufDescriptorTable) {
+        this.type = ProtobufSerializer.PROTOBUF_SERIALIZER_CODE;
+        this.cachedRegistryTable = cachedRegistryTable;
+        this.cachedProtobufDescriptorTable = cachedProtobufDescriptorTable;
+        this.fdProtoMap = new ConcurrentHashMap<>();
+        this.messagesFdProtoNameMap = new ConcurrentHashMap<>();
+        cachedProtobufDescriptorTable.forEach((fdName, fileDescriptorProto) -> {
+            populateFileDescriptorProtosInMessage(fileDescriptorProto, fdProtoMap);
+            identifyMessageTypesinFileDescriptorProto(fileDescriptorProto.getPayload().getFileDescriptor());
+        });
     }
 
     /**
@@ -179,21 +198,39 @@ public class DynamicProtobufSerializer implements ISerializer {
      *
      * @return Protobuf Serializer.
      */
-    private ISerializer createProtobufSerializer() {
+    public static ISerializer createProtobufSerializer() {
         ConcurrentMap<String, Class<? extends Message>> classMap = new ConcurrentHashMap<>();
 
         // Register the schemas of TableName, TableDescriptors, TableMetadata, ProtobufFilename/Descriptor
         // to be able to understand registry table.
         classMap.put(getTypeUrl(TableName.getDescriptor()), TableName.class);
         classMap.put(getTypeUrl(TableDescriptors.getDescriptor()),
-            TableDescriptors.class);
+                TableDescriptors.class);
         classMap.put(getTypeUrl(TableMetadata.getDescriptor()),
-            TableMetadata.class);
+                TableMetadata.class);
         classMap.put(getTypeUrl(ProtobufFileName.getDescriptor()),
-            ProtobufFileName.class);
+                ProtobufFileName.class);
         classMap.put(getTypeUrl(ProtobufFileDescriptor.getDescriptor()),
-            ProtobufFileDescriptor.class);
+                ProtobufFileDescriptor.class);
         return new ProtobufSerializer(classMap);
+    }
+
+    /**
+     * @param fileDescriptorProto the input protobuf file descriptor
+     * @param fdProtoMap the destination map to which we extract the types into
+     */
+    public static void populateFileDescriptorProtosInMessage(
+            CorfuRecord<ProtobufFileDescriptor, TableMetadata> fileDescriptorProto,
+            ConcurrentMap<String, FileDescriptorProto> fdProtoMap) {
+        String protoFileName = fileDescriptorProto.getPayload().getFileDescriptor().getName();
+        // Since corfu_options is something within repo, the path gets truncated on insert.
+        // However dynamicProtobufSerializer fails since the full path is needed.
+        if (protoFileName.equals("corfu_options.proto")) {
+            fdProtoMap.putIfAbsent(protoFileName, fileDescriptorProto.getPayload().getFileDescriptor());
+            // Until the truncating issue can be addressed, manually add both paths.
+            protoFileName = "corfudb/runtime/corfu_options.proto";
+        }
+        fdProtoMap.putIfAbsent(protoFileName, fileDescriptorProto.getPayload().getFileDescriptor());
     }
 
     /**

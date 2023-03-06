@@ -111,6 +111,8 @@ public class StreamLogFiles implements StreamLog {
 
     private final String logUnitSizeMetricName = "logunit.size";
     private final String logUnitTrimMarkMetricName = "logunit.trimmark";
+
+    private static final String invalidEntry = "Invalid entry";
     /**
      * Prevents corfu from reading and executing maintenance
      * operations (reset log unit and stream log compaction) in parallel
@@ -351,10 +353,15 @@ public class StreamLogFiles implements StreamLog {
         return address < dataStore.getStartingAddress();
     }
 
+    /**
+     * Verify that it is okay to open Log Files. The file directory and header must be valid.
+     *
+     */
     private void verifyLogs() {
         String[] extension = {"log"};
         File dir = logDir.toFile();
 
+        // if the file directory doesn't exist
         if (!dir.exists()) {
             throw new UnrecoverableCorfuError("Stream log data directory doesn't exists");
         }
@@ -445,7 +452,7 @@ public class StreamLogFiles implements StreamLog {
         log.info("trimPrefix: completed, end segment {}", endSegment);
     }
 
-    private LogData getLogData(LogEntry entry) {
+    public static LogData getLogData(LogEntry entry) {
         ByteBuffer entryData = ByteBuffer.wrap(entry.getData().toByteArray());
 
         int ldCodecType = entry.hasCodecType() ? entry.getCodecType() : Codec.Type.NONE.getId();
@@ -454,7 +461,7 @@ public class StreamLogFiles implements StreamLog {
                 .DataType.typeMap.get((byte) entry.getDataType().getNumber()),
                 Unpooled.wrappedBuffer(entryData.array()), ldCodecType);
 
-        logData.setBackpointerMap(getUUIDLongMap(entry.getBackpointersMap()));
+        logData.setBackpointerMap(getUuidLongMap(entry.getBackpointersMap()));
         logData.setGlobalAddress(entry.getGlobalAddress());
         logData.setEpoch(entry.getEpoch());
 
@@ -506,6 +513,10 @@ public class StreamLogFiles implements StreamLog {
      * @throws IOException IO exception
      */
     private Metadata parseMetadata(FileChannel fileChannel, String segmentFile) throws IOException {
+        return parseMetadata(this, fileChannel, segmentFile);
+    }
+
+    public static Metadata parseMetadata(StreamLogFiles streamLogFiles, FileChannel fileChannel, String segmentFile) throws IOException {
         long actualMetaDataSize = fileChannel.size() - fileChannel.position();
         if (actualMetaDataSize < METADATA_SIZE) {
             log.warn("Metadata has wrong size. Actual size: {}, expected: {}",
@@ -523,14 +534,14 @@ public class StreamLogFiles implements StreamLog {
         try {
             metadata = Metadata.parseFrom(buf.array());
         } catch (InvalidProtocolBufferException e) {
-            String errorMessage = getDataCorruptionErrorMessage("Can't parse metadata",
+            String errorMessage = getDataCorruptionErrorMessage(streamLogFiles, "Can't parse metadata",
                     fileChannel, segmentFile
             );
             throw new DataCorruptionException(errorMessage, e);
         }
 
         if (metadata.getLengthChecksum() != Checksum.getChecksum(metadata.getLength())) {
-            String errorMessage = getDataCorruptionErrorMessage("Metadata: invalid length checksum",
+            String errorMessage = getDataCorruptionErrorMessage(streamLogFiles, "Metadata: invalid length checksum",
                     fileChannel, segmentFile
             );
             throw new DataCorruptionException(errorMessage);
@@ -539,15 +550,28 @@ public class StreamLogFiles implements StreamLog {
         return metadata;
     }
 
+    /**
+     * If there is a problem with the file, throw an error message.
+     *
+     * @param message   The error message.
+     * @param fileChannel   The fileChannel opened.
+     * @param segmentFile   The segmentFile.
+     * @throws IOException IO exception
+     */
     private String getDataCorruptionErrorMessage(
+            String message, FileChannel fileChannel, String segmentFile) throws IOException {
+        return getDataCorruptionErrorMessage(this, message, fileChannel, segmentFile);
+    }
+
+    public static String getDataCorruptionErrorMessage(StreamLogFiles streamLogFiles,
             String message, FileChannel fileChannel, String segmentFile) throws IOException {
         return message +
                 ". Segment File: " + segmentFile +
                 ". File size: " + fileChannel.size() +
                 ". File position: " + fileChannel.position() +
-                ". Global tail: " + logMetadata.getGlobalTail() +
-                ". Tail segment: " + dataStore.getTailSegment() +
-                ". Stream tails size: " + logMetadata.getStreamTails().size();
+                ". Global tail: " + streamLogFiles.logMetadata.getGlobalTail() +
+                ". Tail segment: " + streamLogFiles.dataStore.getTailSegment() +
+                ". Stream tails size: " + streamLogFiles.logMetadata.getStreamTails().size();
     }
 
     /**
@@ -558,7 +582,7 @@ public class StreamLogFiles implements StreamLog {
      * @return ByteBuffer for the payload
      * @throws IOException IO exception
      */
-    private ByteBuffer getPayloadForMetadata(FileChannel fileChannel, Metadata metadata) throws IOException {
+    public static ByteBuffer getPayloadForMetadata(FileChannel fileChannel, Metadata metadata) throws IOException {
         if (fileChannel.size() - fileChannel.position() < metadata.getLength()) {
             return null;
         }
@@ -571,14 +595,19 @@ public class StreamLogFiles implements StreamLog {
 
     /**
      * Parse the logfile header, or create it, or recreate it if it was
-     * partially written.
+     * partially written. The logfile header tells us information about the logfile and is located in the beginning.
      *
      * @param channel file channel
+     * @param segmentFile segment file
      * @return log header
      * @throws IOException IO exception
      */
     private LogHeader parseHeader(FileChannel channel, String segmentFile) throws IOException {
-        Metadata metadata = parseMetadata(channel, segmentFile);
+        return parseHeader(this, channel, segmentFile);
+    }
+
+    public static LogHeader parseHeader(StreamLogFiles streamLogFiles, FileChannel channel, String segmentFile) throws IOException {
+        Metadata metadata = parseMetadata(streamLogFiles, channel, segmentFile);
         if (metadata == null) {
             // Partial write on the metadata for the header
             // Rewind the channel position to the beginning of the file
@@ -595,7 +624,7 @@ public class StreamLogFiles implements StreamLog {
         }
 
         if (Checksum.getChecksum(buffer.array()) != metadata.getPayloadChecksum()) {
-            String errorMessage = getDataCorruptionErrorMessage("Invalid metadata checksum",
+            String errorMessage = getDataCorruptionErrorMessage(streamLogFiles, "Invalid metadata checksum",
                     channel, segmentFile
             );
             throw new DataCorruptionException(errorMessage);
@@ -606,7 +635,7 @@ public class StreamLogFiles implements StreamLog {
         try {
             header = LogHeader.parseFrom(buffer.array());
         } catch (InvalidProtocolBufferException e) {
-            String errorMessage = getDataCorruptionErrorMessage("Invalid header",
+            String errorMessage = getDataCorruptionErrorMessage(streamLogFiles, "Invalid header",
                     channel, segmentFile
             );
             throw new DataCorruptionException(errorMessage, e);
@@ -616,14 +645,21 @@ public class StreamLogFiles implements StreamLog {
     }
 
     /**
-     * Parse an entry.
+     * Parse an entry. Log entries are located after the header and metadata sections and are single
+     * records in a logfile.
      *
      * @param channel  file channel
      * @param metadata meta data
+     * @param fileName file name
      * @return an log entry
      * @throws IOException IO exception
      */
     private LogEntry parseEntry(FileChannel channel, Metadata metadata, String fileName)
+            throws IOException {
+
+        return parseEntry(this, channel, metadata, fileName);
+    }
+    public static LogEntry parseEntry(StreamLogFiles streamLogFiles, FileChannel channel, Metadata metadata, String fileName)
             throws IOException {
 
         if (metadata == null) {
@@ -640,20 +676,20 @@ public class StreamLogFiles implements StreamLog {
             return null;
         }
 
-        if (verify && metadata.getPayloadChecksum() != Checksum.getChecksum(buffer.array())) {
-            String errorMessage = getDataCorruptionErrorMessage(
+        if (streamLogFiles != null && streamLogFiles.verify &&
+                metadata.getPayloadChecksum() != Checksum.getChecksum(buffer.array())) {
+            String errorMessage = getDataCorruptionErrorMessage(streamLogFiles,
                     "Checksum mismatch detected while trying to read file",
                     channel, fileName
             );
             throw new DataCorruptionException(errorMessage);
         }
 
-
         LogEntry entry;
         try {
             entry = LogEntry.parseFrom(buffer.array());
         } catch (InvalidProtocolBufferException e) {
-            String errorMessage = getDataCorruptionErrorMessage("Invalid entry",
+            String errorMessage = getDataCorruptionErrorMessage(streamLogFiles, invalidEntry,
                     channel, fileName
             );
             throw new DataCorruptionException(errorMessage, e);
@@ -724,17 +760,28 @@ public class StreamLogFiles implements StreamLog {
         }
 
         try {
-            ByteBuffer entryBuf = ByteBuffer.allocate(metaData.length);
-            fileChannel.read(entryBuf, metaData.offset);
-            LogData logData = getLogData(LogEntry.parseFrom(entryBuf.array()));
-            MicroMeterUtils.measure(metaData.length, "logunit.read.throughput");
-            return logData;
+            return readLogDataFromFile(fileChannel, metaData);
         } catch (InvalidProtocolBufferException e) {
-            String errorMessage = getDataCorruptionErrorMessage("Invalid entry",
+            String errorMessage = getDataCorruptionErrorMessage(invalidEntry,
                     fileChannel, segment.getFileName()
             );
             throw new DataCorruptionException(errorMessage, e);
         }
+    }
+
+    /**
+     * Given a metadata and file handles return a formed logData
+     * @param fileChannel
+     * @param metaData
+     * @return LogData from the file at the specified LogEntry's metadata
+     * @throws IOException in case of an error in reading the file
+     */
+    public static LogData readLogDataFromFile(FileChannel fileChannel, AddressMetaData metaData) throws IOException {
+        ByteBuffer entryBuf = ByteBuffer.allocate(metaData.length);
+        fileChannel.read(entryBuf, metaData.offset);
+        LogData logData = getLogData(LogEntry.parseFrom(entryBuf.array()));
+        MicroMeterUtils.measure(metaData.length, "logunit.read.throughput");
+        return logData;
     }
 
     @Nullable
@@ -828,7 +875,7 @@ public class StreamLogFiles implements StreamLog {
     }
 
     @SuppressWarnings("checkstyle:abbreviationaswordinname")  // Due to deprecation
-    private Map<UUID, Long> getUUIDLongMap(Map<String, Long> stringLongMap) {
+    public static Map<UUID, Long> getUuidLongMap(Map<String, Long> stringLongMap) {
         Map<UUID, Long> uuidLongMap = new HashMap<>();
 
         for (Map.Entry<String, Long> entry : stringLongMap.entrySet()) {
