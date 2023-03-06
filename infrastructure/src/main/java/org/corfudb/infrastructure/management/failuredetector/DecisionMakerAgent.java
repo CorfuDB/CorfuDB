@@ -35,7 +35,7 @@ public class DecisionMakerAgent {
         return clusterAdvisor
                 .findDecisionMaker(clusterState, healthyNodes)
                 .map(NodeRank::getEndpoint)
-                //filter out read-only nodes
+                //filter out unhealthy nodes
                 .filter(healthyNodes::contains)
                 //give up if a decision maker is not a local node, then the decision maker not found
                 .filter(decisionMaker -> {

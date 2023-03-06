@@ -83,6 +83,7 @@ public final class CorfuProtocolManagement {
                             .build();
             FileSystemStatsMsg fsStatsMsg = FileSystemStatsMsg.newBuilder()
                     .setPartitionAttributeStats(partitionAttributeStatsMsg)
+                    .setBatchProcessorStatus(fsStats.getBatchProcessorStats().getStatus())
                     .build();
 
             responseBuilder.setFileSystem(fsStatsMsg);

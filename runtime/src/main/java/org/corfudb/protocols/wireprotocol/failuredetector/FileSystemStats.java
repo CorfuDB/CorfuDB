@@ -48,6 +48,7 @@ public class FileSystemStats {
     @EqualsAndHashCode
     @ToString
     public static class BatchProcessorStats {
+        @Getter
         private final BatchProcessorStatus status;
 
         public static final BatchProcessorStats OK = new BatchProcessorStats(BatchProcessorStatus.OK);

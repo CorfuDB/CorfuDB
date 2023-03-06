@@ -32,7 +32,7 @@ public class FileSystemAdvisor {
 
             node.getFileSystem()
                     .filter(FileSystemStats::hasError)
-                    .map(attr -> new NodeRankByPartitionAttributes(nodeEndpoint, attr))
+                    .map(fsStats -> new NodeRankByPartitionAttributes(nodeEndpoint, fsStats))
                     .ifPresent(set::add);
         }
 
