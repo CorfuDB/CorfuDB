@@ -110,6 +110,13 @@ For instance, there are multiple possible scenarios of failures that could happe
 **Testing**
 We will be able to add above scenarios to our test suite, since FileSystemStats contains just information (boolean values) 
 about the failure (if DataCorruptionException happened) we can emulate the entire cycle of additional failure detection scenarios.
+Like following:
+ - BatchProcessorTest#testRestart(): will test proper status of batch processor in case of exceptions in the operations
+ - FileSystemAdvisorTest: covers the algorithm of finding failed/healed nodes
+ - NodeRankTest: checks proper ordering of the nodes in the list according to their state
+ - DecisionMakerAgentTest: checks that the correct decision maker was chosen
+ - FailureDetectorServiceTest: tests overall FD mechanism
+ - FailureAgentTest: checks the algorithm of finding failed nodes
 
 
 ### Local Node Failure Detection Sequence Diagram

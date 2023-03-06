@@ -50,7 +50,7 @@ public class BatchProcessor implements AutoCloseable {
     private final int BATCH_SIZE;
     private final boolean sync;
     private final StreamLog streamLog;
-    private final BlockingQueue<BatchWriterOperation> operationsQueue;
+    private final BlockingQueue<BatchWriterOperation<?>> operationsQueue;
     private final ExecutorService processorService;
 
     /**
@@ -71,13 +71,18 @@ public class BatchProcessor implements AutoCloseable {
      * @param sync      If true, the batch writer will sync writes to secondary storage
      */
     public BatchProcessor(StreamLog streamLog, BatchProcessorContext context, long sealEpoch, boolean sync) {
+        this(new LinkedBlockingQueue<>(), streamLog, context, sealEpoch, sync);
+    }
+
+    public BatchProcessor(BlockingQueue<BatchWriterOperation<?>> operationsQueue, StreamLog streamLog,
+                          BatchProcessorContext context, long sealEpoch, boolean sync) {
         this.sealEpoch = sealEpoch;
         this.sync = sync;
         this.streamLog = streamLog;
         this.context = context;
 
         BATCH_SIZE = 50;
-        operationsQueue = new LinkedBlockingQueue<>();
+        this.operationsQueue = operationsQueue;
 
         processorService = newExecutorService();
         processorService.submit(this::process);

@@ -216,6 +216,7 @@ public final class FileSystemAgent {
      * readOnly, availableSpace and totalSpace that are refreshed every
      * {@link PartitionAttribute#UPDATE_INTERVAL} seconds using the
      * {@link PartitionAttribute#scheduler}.
+     * Also, it contains other file-system related state, like batch processor context
      */
     public static class PartitionAgent {
 

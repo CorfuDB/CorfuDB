@@ -16,6 +16,7 @@ import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.exceptions.QuotaExceededException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
+import org.corfudb.runtime.proto.FileSystemStats.BatchProcessorStatus;
 import org.corfudb.runtime.proto.service.LogUnit;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Before;
@@ -24,10 +25,13 @@ import org.junit.Test;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -55,7 +59,10 @@ public class BatchProcessorTest {
 
     @Rule
     public MockitoRule mockito = MockitoJUnit.rule();
+
     private BatchProcessor batchProcessor;
+    private BatchProcessorContext bpContext;
+
     private StreamLog mockStreamLog;
     private final AtomicInteger requestCounter = new AtomicInteger();
     private final long DEFAULT_SEAL_EPOCH = 1L;
@@ -66,7 +73,7 @@ public class BatchProcessorTest {
      * with default values. Note that the sealEpoch in BatchProcessor
      * should be equal to the epoch in request header.
      *
-     * @return   the corresponding HeaderMsg
+     * @return the corresponding HeaderMsg
      */
     private HeaderMsg getBasicHeader(ClusterIdCheck ignoreClusterId, EpochCheck ignoreEpoch) {
         return getHeaderMsg(requestCounter.incrementAndGet(), PriorityLevel.NORMAL, DEFAULT_SEAL_EPOCH,
@@ -78,7 +85,7 @@ public class BatchProcessorTest {
      * with default values. Note that the sealEpoch in BatchProcessor
      * should be equal to the epoch in request header.
      *
-     * @return   the corresponding HeaderMsg
+     * @return the corresponding HeaderMsg
      */
     private HeaderMsg getHeaderHighPriority(ClusterIdCheck ignoreClusterId, EpochCheck ignoreEpoch) {
         return getHeaderMsg(requestCounter.incrementAndGet(), PriorityLevel.HIGH, DEFAULT_SEAL_EPOCH,
@@ -91,7 +98,7 @@ public class BatchProcessorTest {
      * this header is only used to construct RESET request, which is just
      * took for convenience in some exceptional cases.
      *
-     * @return   the corresponding HeaderMsg
+     * @return the corresponding HeaderMsg
      */
     private HeaderMsg getResetHeaderLargerEpoch() {
         return getHeaderMsg(requestCounter.incrementAndGet(), PriorityLevel.NORMAL, LARGER_SEAL_EPOCH,
@@ -102,7 +109,7 @@ public class BatchProcessorTest {
      * A helper method that creates a sample LogData object with default values.
      *
      * @param address LogData's global address (global tail)
-     * @return        the corresponding HeaderMsg
+     * @return the corresponding HeaderMsg
      */
     private LogData getDefaultLogData(long address) {
         ByteBuf b = Unpooled.buffer();
@@ -120,7 +127,8 @@ public class BatchProcessorTest {
     @Before
     public void setup() {
         mockStreamLog = mock(StreamLog.class);
-        batchProcessor = new BatchProcessor(mockStreamLog, new BatchProcessorContext(), DEFAULT_SEAL_EPOCH, true);
+        bpContext = new BatchProcessorContext();
+        batchProcessor = new BatchProcessor(mockStreamLog, bpContext, DEFAULT_SEAL_EPOCH, true);
     }
 
     /**
@@ -134,6 +142,7 @@ public class BatchProcessorTest {
                 getTrimLogRequestMsg(new Token(epoch, sequence)));
 
         batchProcessor.addTask(BatchWriterOperation.Type.PREFIX_TRIM, request).join();
+        assertEquals(BatchProcessorStatus.OK, bpContext.getStatus());
         verify(mockStreamLog).prefixTrim(sequence);
     }
 
@@ -147,6 +156,7 @@ public class BatchProcessorTest {
                 getWriteLogRequestMsg(logData));
 
         batchProcessor.addTask(BatchWriterOperation.Type.WRITE, request).join();
+        assertEquals(BatchProcessorStatus.OK, bpContext.getStatus());
         verify(mockStreamLog).append(0L, logData);
     }
 
@@ -165,6 +175,7 @@ public class BatchProcessorTest {
         RequestMsg request = getRequestMsg(getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.CHECK),
                 getRangeWriteLogRequestMsg(entries));
         batchProcessor.addTask(BatchWriterOperation.Type.RANGE_WRITE, request).join();
+        assertEquals(BatchProcessorStatus.OK, bpContext.getStatus());
         verify(mockStreamLog).append(entries);
     }
 
@@ -177,7 +188,23 @@ public class BatchProcessorTest {
         RequestMsg request = getRequestMsg(getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.IGNORE),
                 getResetLogUnitRequestMsg(epochWaterMark));
         batchProcessor.addTask(BatchWriterOperation.Type.RESET, request).join();
+        assertEquals(BatchProcessorStatus.OK, bpContext.getStatus());
         verify(mockStreamLog).reset();
+    }
+
+    @Test
+    public void testRestart() throws Exception {
+        BlockingQueue<BatchWriterOperation<?>> queue = mock(BlockingQueue.class);
+        String errMsg = "Dummy IO exception";
+        when(queue.take()).thenThrow(new IllegalStateException(errMsg));
+        when(queue.poll()).thenThrow(new IllegalStateException(errMsg));
+
+        try(BatchProcessor bp = new BatchProcessor(queue, mockStreamLog, bpContext, DEFAULT_SEAL_EPOCH, true)) {
+            TimeUnit.SECONDS.sleep(1);
+            assertEquals(BatchProcessorStatus.ERROR, bpContext.getStatus());
+            bp.restart();
+            assertEquals(BatchProcessorStatus.OK, bpContext.getStatus());
+        }
     }
 
     /**
@@ -189,6 +216,7 @@ public class BatchProcessorTest {
                 getTailRequestMsg(LogUnit.TailRequestMsg.Type.LOG_TAIL));
 
         Object ret = batchProcessor.addTask(BatchWriterOperation.Type.TAILS_QUERY, request).join();
+        assertEquals(BatchProcessorStatus.OK, bpContext.getStatus());
         verify(mockStreamLog).getLogTail();
         assertThat(ret).isInstanceOf(TailsResponse.class);
     }
@@ -203,6 +231,7 @@ public class BatchProcessorTest {
 
         when(mockStreamLog.getAllTails()).thenReturn(new TailsResponse(0L));
         Object ret = batchProcessor.addTask(BatchWriterOperation.Type.TAILS_QUERY, request).join();
+        assertEquals(BatchProcessorStatus.OK, bpContext.getStatus());
         verify(mockStreamLog).getAllTails();
         assertThat(ret).isInstanceOf(TailsResponse.class);
     }
@@ -222,6 +251,7 @@ public class BatchProcessorTest {
         assertEquals(DEFAULT_SEAL_EPOCH, ((StreamsAddressResponse) ret).getEpoch());
         assertEquals(0L, ((StreamsAddressResponse) ret).getLogTail());
         assertThat(((StreamsAddressResponse) ret).getAddressMap()).isEmpty();
+        assertEquals(BatchProcessorStatus.OK, bpContext.getStatus());
     }
 
 
@@ -235,6 +265,7 @@ public class BatchProcessorTest {
 
         try {
             batchProcessor.addTask(BatchWriterOperation.Type.WRITE, request).join();
+            assertEquals(BatchProcessorStatus.OK, bpContext.getStatus());
         } catch (CompletionException e) {
             throw e.getCause();
         }
@@ -259,6 +290,7 @@ public class BatchProcessorTest {
         verify(mockStreamLog).reset();
         try {
             batchProcessor.addTask(BatchWriterOperation.Type.RESET, badRequest).join();
+            assertEquals(BatchProcessorStatus.OK, bpContext.getStatus());
         } catch (CompletionException e) {
             throw e.getCause();
         }
@@ -278,9 +310,11 @@ public class BatchProcessorTest {
 
         when(mockStreamLog.quotaExceeded()).thenReturn(true);
         batchProcessor.addTask(BatchWriterOperation.Type.RESET, goodRequest).join();
+        assertEquals(BatchProcessorStatus.OK, bpContext.getStatus());
         verify(mockStreamLog).reset();
-        try{
+        try {
             batchProcessor.addTask(BatchWriterOperation.Type.RESET, badRequest).join();
+            assertEquals(BatchProcessorStatus.OK, bpContext.getStatus());
         } catch (CompletionException e) {
             throw e.getCause();
         }
