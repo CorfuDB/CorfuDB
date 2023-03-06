@@ -23,6 +23,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class NodeRankTest {
 
+    public static final BatchProcessorStatus BP_STATUS_OK = BatchProcessorStatus.BP_STATUS_OK;
+    public static final BatchProcessorStatus BP_STATUS_ERROR = BatchProcessorStatus.BP_STATUS_ERROR;
+
     @Test
     public void testSortingByNumberOfConnections() {
         NodeRank rank1 = new NodeRank(A, 1);
@@ -43,10 +46,9 @@ public class NodeRankTest {
 
     @Test
     public void testPartitionAttributesOrdering() {
-        BatchProcessorStatus ok = BatchProcessorStatus.OK;
-        NodeRankByPartitionAttributes attrA = buildAttributes(A, true, ok);
-        NodeRankByPartitionAttributes attrB = buildAttributes(B, true, ok);
-        NodeRankByPartitionAttributes attrC = buildAttributes(C, false, ok);
+        NodeRankByPartitionAttributes attrA = buildAttributes(A, true, BP_STATUS_OK);
+        NodeRankByPartitionAttributes attrB = buildAttributes(B, true, BP_STATUS_OK);
+        NodeRankByPartitionAttributes attrC = buildAttributes(C, false, BP_STATUS_OK);
 
         TreeSet<NodeRankByPartitionAttributes> set = new TreeSet<>();
         set.add(attrA);
@@ -61,12 +63,9 @@ public class NodeRankTest {
 
     @Test
     public void testPartitionAttributesBatchProcessorStatus() {
-        BatchProcessorStatus ok = BatchProcessorStatus.OK;
-        BatchProcessorStatus err = BatchProcessorStatus.ERROR;
-
-        NodeRankByPartitionAttributes attrA = buildAttributes(A, false, err);
-        NodeRankByPartitionAttributes attrB = buildAttributes(B, false, ok);
-        NodeRankByPartitionAttributes attrC = buildAttributes(C, false, ok);
+        NodeRankByPartitionAttributes attrA = buildAttributes(A, false, BP_STATUS_ERROR);
+        NodeRankByPartitionAttributes attrB = buildAttributes(B, false, BP_STATUS_OK);
+        NodeRankByPartitionAttributes attrC = buildAttributes(C, false, BP_STATUS_OK);
 
         TreeSet<NodeRankByPartitionAttributes> set = new TreeSet<>();
         set.add(attrA);
@@ -81,16 +80,13 @@ public class NodeRankTest {
 
     @Test
     public void testPartitionAttributesTotalOrdering() {
-        BatchProcessorStatus ok = BatchProcessorStatus.OK;
-        BatchProcessorStatus err = BatchProcessorStatus.ERROR;
+        NodeRankByPartitionAttributes attrA = buildAttributes(A, false, BP_STATUS_ERROR);
+        NodeRankByPartitionAttributes attrB = buildAttributes(NodeNames.B, true, BP_STATUS_OK);
 
-        NodeRankByPartitionAttributes attrA = buildAttributes(A, false, err);
-        NodeRankByPartitionAttributes attrB = buildAttributes(NodeNames.B, true, ok);
+        NodeRankByPartitionAttributes attrC = buildAttributes(C, false, BP_STATUS_OK);
 
-        NodeRankByPartitionAttributes attrC = buildAttributes(C, false, ok);
-
-        NodeRankByPartitionAttributes attrD = buildAttributes(NodeNames.D, false, err);
-        NodeRankByPartitionAttributes attrE = buildAttributes(NodeNames.E, true, err);
+        NodeRankByPartitionAttributes attrD = buildAttributes(NodeNames.D, false, BP_STATUS_ERROR);
+        NodeRankByPartitionAttributes attrE = buildAttributes(NodeNames.E, true, BP_STATUS_ERROR);
 
         TreeSet<NodeRankByPartitionAttributes> set = new TreeSet<>();
         set.add(attrA);

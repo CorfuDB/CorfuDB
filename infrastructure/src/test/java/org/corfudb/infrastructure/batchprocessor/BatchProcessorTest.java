@@ -56,6 +56,8 @@ import static org.mockito.Mockito.when;
 
 @Slf4j
 public class BatchProcessorTest {
+    private  static final BatchProcessorStatus BP_STATUS_OK = BatchProcessorStatus.BP_STATUS_OK;
+    private static final BatchProcessorStatus BP_STATUS_ERROR = BatchProcessorStatus.BP_STATUS_ERROR;
 
     @Rule
     public MockitoRule mockito = MockitoJUnit.rule();
@@ -142,7 +144,7 @@ public class BatchProcessorTest {
                 getTrimLogRequestMsg(new Token(epoch, sequence)));
 
         batchProcessor.addTask(BatchWriterOperation.Type.PREFIX_TRIM, request).join();
-        assertEquals(BatchProcessorStatus.OK, bpContext.getStatus());
+        assertEquals(BP_STATUS_OK, bpContext.getStatus());
         verify(mockStreamLog).prefixTrim(sequence);
     }
 
@@ -156,7 +158,7 @@ public class BatchProcessorTest {
                 getWriteLogRequestMsg(logData));
 
         batchProcessor.addTask(BatchWriterOperation.Type.WRITE, request).join();
-        assertEquals(BatchProcessorStatus.OK, bpContext.getStatus());
+        assertEquals(BP_STATUS_OK, bpContext.getStatus());
         verify(mockStreamLog).append(0L, logData);
     }
 
@@ -175,7 +177,7 @@ public class BatchProcessorTest {
         RequestMsg request = getRequestMsg(getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.CHECK),
                 getRangeWriteLogRequestMsg(entries));
         batchProcessor.addTask(BatchWriterOperation.Type.RANGE_WRITE, request).join();
-        assertEquals(BatchProcessorStatus.OK, bpContext.getStatus());
+        assertEquals(BP_STATUS_OK, bpContext.getStatus());
         verify(mockStreamLog).append(entries);
     }
 
@@ -188,7 +190,7 @@ public class BatchProcessorTest {
         RequestMsg request = getRequestMsg(getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.IGNORE),
                 getResetLogUnitRequestMsg(epochWaterMark));
         batchProcessor.addTask(BatchWriterOperation.Type.RESET, request).join();
-        assertEquals(BatchProcessorStatus.OK, bpContext.getStatus());
+        assertEquals(BP_STATUS_OK, bpContext.getStatus());
         verify(mockStreamLog).reset();
     }
 
@@ -201,9 +203,9 @@ public class BatchProcessorTest {
 
         try(BatchProcessor bp = new BatchProcessor(queue, mockStreamLog, bpContext, DEFAULT_SEAL_EPOCH, true)) {
             TimeUnit.SECONDS.sleep(1);
-            assertEquals(BatchProcessorStatus.ERROR, bpContext.getStatus());
+            assertEquals(BP_STATUS_ERROR, bpContext.getStatus());
             bp.restart();
-            assertEquals(BatchProcessorStatus.OK, bpContext.getStatus());
+            assertEquals(BP_STATUS_OK, bpContext.getStatus());
         }
     }
 
@@ -216,7 +218,7 @@ public class BatchProcessorTest {
                 getTailRequestMsg(LogUnit.TailRequestMsg.Type.LOG_TAIL));
 
         Object ret = batchProcessor.addTask(BatchWriterOperation.Type.TAILS_QUERY, request).join();
-        assertEquals(BatchProcessorStatus.OK, bpContext.getStatus());
+        assertEquals(BP_STATUS_OK, bpContext.getStatus());
         verify(mockStreamLog).getLogTail();
         assertThat(ret).isInstanceOf(TailsResponse.class);
     }
@@ -231,7 +233,7 @@ public class BatchProcessorTest {
 
         when(mockStreamLog.getAllTails()).thenReturn(new TailsResponse(0L));
         Object ret = batchProcessor.addTask(BatchWriterOperation.Type.TAILS_QUERY, request).join();
-        assertEquals(BatchProcessorStatus.OK, bpContext.getStatus());
+        assertEquals(BP_STATUS_OK, bpContext.getStatus());
         verify(mockStreamLog).getAllTails();
         assertThat(ret).isInstanceOf(TailsResponse.class);
     }
@@ -251,7 +253,7 @@ public class BatchProcessorTest {
         assertEquals(DEFAULT_SEAL_EPOCH, ((StreamsAddressResponse) ret).getEpoch());
         assertEquals(0L, ((StreamsAddressResponse) ret).getLogTail());
         assertThat(((StreamsAddressResponse) ret).getAddressMap()).isEmpty();
-        assertEquals(BatchProcessorStatus.OK, bpContext.getStatus());
+        assertEquals(BP_STATUS_OK, bpContext.getStatus());
     }
 
 
@@ -265,7 +267,7 @@ public class BatchProcessorTest {
 
         try {
             batchProcessor.addTask(BatchWriterOperation.Type.WRITE, request).join();
-            assertEquals(BatchProcessorStatus.OK, bpContext.getStatus());
+            assertEquals(BP_STATUS_OK, bpContext.getStatus());
         } catch (CompletionException e) {
             throw e.getCause();
         }
@@ -290,7 +292,7 @@ public class BatchProcessorTest {
         verify(mockStreamLog).reset();
         try {
             batchProcessor.addTask(BatchWriterOperation.Type.RESET, badRequest).join();
-            assertEquals(BatchProcessorStatus.OK, bpContext.getStatus());
+            assertEquals(BP_STATUS_OK, bpContext.getStatus());
         } catch (CompletionException e) {
             throw e.getCause();
         }
@@ -310,11 +312,11 @@ public class BatchProcessorTest {
 
         when(mockStreamLog.quotaExceeded()).thenReturn(true);
         batchProcessor.addTask(BatchWriterOperation.Type.RESET, goodRequest).join();
-        assertEquals(BatchProcessorStatus.OK, bpContext.getStatus());
+        assertEquals(BP_STATUS_OK, bpContext.getStatus());
         verify(mockStreamLog).reset();
         try {
             batchProcessor.addTask(BatchWriterOperation.Type.RESET, badRequest).join();
-            assertEquals(BatchProcessorStatus.OK, bpContext.getStatus());
+            assertEquals(BP_STATUS_OK, bpContext.getStatus());
         } catch (CompletionException e) {
             throw e.getCause();
         }

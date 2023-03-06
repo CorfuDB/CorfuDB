@@ -51,15 +51,15 @@ public class FileSystemStats {
         @Getter
         private final BatchProcessorStatus status;
 
-        public static final BatchProcessorStats OK = new BatchProcessorStats(BatchProcessorStatus.OK);
-        public static final BatchProcessorStats ERR = new BatchProcessorStats(BatchProcessorStatus.ERROR);
+        public static final BatchProcessorStats OK = new BatchProcessorStats(BatchProcessorStatus.BP_STATUS_OK);
+        public static final BatchProcessorStats ERR = new BatchProcessorStats(BatchProcessorStatus.BP_STATUS_ERROR);
 
         public boolean isError() {
-            return status == BatchProcessorStatus.ERROR;
+            return status == BatchProcessorStatus.BP_STATUS_ERROR;
         }
 
         public boolean isOk() {
-            return status == BatchProcessorStatus.OK;
+            return status == BatchProcessorStatus.BP_STATUS_OK;
         }
     }
 }
