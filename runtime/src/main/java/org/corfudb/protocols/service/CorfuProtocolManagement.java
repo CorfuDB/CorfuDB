@@ -111,7 +111,7 @@ public final class CorfuProtocolManagement {
                     partitionAttributeStatsMsg.getTotalSpace()
             );
 
-            BatchProcessorStats bpStats = new BatchProcessorStats(partitionAttributeStatsMsg.getBatchProcessorStatus());
+            BatchProcessorStats bpStats = new BatchProcessorStats(msg.getFileSystem().getBatchProcessorStatus());
             FileSystemStats fsStats = new FileSystemStats(partitionAttributeStats, bpStats);
             maybeFsStats = Optional.of(fsStats);
         } else {
