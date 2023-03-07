@@ -1,9 +1,9 @@
-name: Corfu Integration Test
+name: Log Replication Integration Test
 
 on: pull_request
 
 jobs:
-  corfu_integration_test:
+  lr_integration_test:
     # https://docs.github.com/en/free-pro-team@latest/actions/reference/workflow-syntax-for-github-actions#jobsjob_idruns-on
     runs-on: ubuntu-latest
 
@@ -31,5 +31,5 @@ jobs:
       - name: build corfu
         run: ./mvnw install -DskipTests=true -Dmaven.javadoc.skip=true -B -V -T 1C -q
 
-      - name: run corfu integration tests
-        run: ./mvnw -pl :test clean verify -Pit -DskipTests
+      - name: run lr integration tests
+        run: ./mvnw -pl :test clean verify -Plr -DskipTests
