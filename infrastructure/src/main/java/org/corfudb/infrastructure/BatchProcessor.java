@@ -266,8 +266,11 @@ public class BatchProcessor implements AutoCloseable {
 
     public void restart() {
         operationsQueue.clear();
-        context.setOkStatus();
-        processorService.submit(this::process);
+
+        if (context.getStatus() == BatchProcessorStatus.BP_STATUS_ERROR) {
+            context.setOkStatus();
+            processorService.submit(this::process);
+        }
     }
 
     public static class BatchProcessorContext {
