@@ -43,12 +43,10 @@ public class DeltaStreamTest {
 
     @Test
     public void badArguments() {
-        assertThatThrownBy(() -> new DeltaStream(addressSpaceView, streamId,
-                -2, 0))
+        assertThatThrownBy(() -> createDeltaStream(-2, 0))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("lastAddressRead -2 must be >= -1");
-        assertThatThrownBy(() -> new DeltaStream(addressSpaceView, streamId,
-                0, 0))
+        assertThatThrownBy(() -> createDeltaStream(0,0))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("The size must be greater than 0");
     }
