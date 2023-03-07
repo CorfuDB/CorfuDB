@@ -11,6 +11,7 @@ import java.util.AbstractMap;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.concurrent.locks.StampedLock;
 
 /**
  *
@@ -24,7 +25,7 @@ public class RocksDbEntryIterator<K, V> implements Iterator<Map.Entry<K, V>>, Au
     /**
      * A reference to the underlying RocksDb iterator
      */
-    final private WrappedRocksIterator wrappedRocksIterator;
+    final private CheckedRocksIterator wrappedRocksIterator;
 
     /**
      * Serializer to serialize/deserialize the key/values
@@ -44,26 +45,24 @@ public class RocksDbEntryIterator<K, V> implements Iterator<Map.Entry<K, V>>, Au
     final private ReadOptions readOptions;
 
     public RocksDbEntryIterator(RocksDB rocksDB, ISerializer serializer, boolean loadValues) {
-        this(rocksDB, serializer, null, loadValues);
+        this(rocksDB, serializer, new ReadOptions(), loadValues);
     }
 
     public RocksDbEntryIterator(RocksDB rocksDB, ISerializer serializer) {
         this(rocksDB, serializer, true);
     }
 
-    public RocksDbEntryIterator(RocksDB rocksDB, ISerializer serializer, Snapshot snapshot) {
-        this(rocksDB, serializer, snapshot, true);
+    public RocksDbEntryIterator(RocksDB rocksDB, ISerializer serializer, ReadOptions readOptions, boolean loadValues) {
+        throw new UnsupportedOperationException();
     }
 
-    public RocksDbEntryIterator(RocksDB rocksDB, ISerializer serializer, Snapshot snapshot, boolean loadValues) {
-        // Start iterator at the current snapshot
-        readOptions = new ReadOptions();
-        readOptions.setSnapshot(snapshot);
-        this.wrappedRocksIterator = new WrappedRocksIterator(rocksDB.newIterator(readOptions));
+    public RocksDbEntryIterator(RocksDB rocksDB, ISerializer serializer,
+                                ReadOptions readOptions, StampedLock lock) {
+        this.readOptions = readOptions;
+        this.wrappedRocksIterator = new CheckedRocksIterator(rocksDB, lock, readOptions);
         this.serializer = serializer;
+        this.loadValues = true;
         wrappedRocksIterator.seekToFirst();
-        this.loadValues = loadValues;
-
     }
 
     /**
@@ -83,7 +82,7 @@ public class RocksDbEntryIterator<K, V> implements Iterator<Map.Entry<K, V>>, Au
         if (next == null && wrappedRocksIterator.isOpen()) {
             // close the iterator if it has fully consumed.
             wrappedRocksIterator.close();
-            readOptions.close();
+            //readOptions.close();
         }
 
         return next != null;
@@ -111,7 +110,10 @@ public class RocksDbEntryIterator<K, V> implements Iterator<Map.Entry<K, V>>, Au
         // Release the underlying RocksDB resources
         if (wrappedRocksIterator.isOpen()) {
             wrappedRocksIterator.close();
-            readOptions.close();
         }
+    }
+
+    public void invalidateIterator() {
+        wrappedRocksIterator.invalidateIterator();
     }
 }

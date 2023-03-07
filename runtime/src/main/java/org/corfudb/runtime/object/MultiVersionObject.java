@@ -100,6 +100,7 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
      */
     // TODO(Zach): MVOCache type should be T extends ISMRSnapshot<T> but this
     //  doesn't work as is since T extends ICorfuSMR<T> here, and ISMRSnapshot / ICorfuSMR are unrelated.
+    @Getter
     private final MVOCache<T> mvoCache;
 
     private final Logger correctnessLogger = LoggerFactory.getLogger("correctness");
@@ -340,14 +341,14 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
                             final VersionedObjectIdentifier voId = new VersionedObjectIdentifier(getID(), materializedUpTo);
 
                             if (currentSnapshot == null) {
-                                currentSnapshot = currentObject.getSnapshot();
+                                currentSnapshot = currentObject.getSnapshot(voId);
                             }
 
                             mvoCache.put(voId, currentSnapshot);
 
                             // Skip the first as it has already been stored below
                             if (isCurrentObjectDirty.get()) {
-                                currentSnapshot = currentObject.getSnapshot();
+                                currentSnapshot = currentObject.getSnapshot(voId);
                             }
                         }
 
@@ -372,7 +373,8 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
 
         // TODO(Zach): Move into runnable
         if (isCurrentObjectDirty.get() || currentSnapshot == null) {
-            currentSnapshot = currentObject.getSnapshot();
+            final VersionedObjectIdentifier voId = new VersionedObjectIdentifier(getID(), materializedUpTo);
+            currentSnapshot = currentObject.getSnapshot(voId);
         }
     }
 

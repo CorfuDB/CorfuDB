@@ -6,7 +6,6 @@ import com.google.common.reflect.TypeToken;
 import com.google.gson.Gson;
 import com.google.protobuf.Message;
 import io.netty.buffer.ByteBuf;
-
 import lombok.Builder;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
@@ -18,40 +17,42 @@ import net.jqwik.api.Provide;
 import net.jqwik.api.constraints.AlphaChars;
 import net.jqwik.api.constraints.Size;
 import net.jqwik.api.constraints.StringLength;
-import org.apache.commons.io.FileUtils;
-import org.apache.commons.lang.RandomStringUtils;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.CorfuStoreMetadata;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.object.ConsistencyOptions;
-import org.corfudb.runtime.object.ICorfuVersionPolicy;
+import org.corfudb.runtime.object.MVOCorfuCompileProxy;
 import org.corfudb.runtime.view.AbstractViewTest;
-import org.corfudb.runtime.view.Address;
 import org.corfudb.test.SampleSchema;
 import org.corfudb.test.SampleSchema.EventInfo;
 import org.corfudb.test.SampleSchema.Uuid;
 import org.corfudb.util.serializer.ISerializer;
-import org.corfudb.util.serializer.Serializers;
 import org.junit.jupiter.api.Assertions;
-import org.rocksdb.Env;
 import org.rocksdb.Options;
 import org.rocksdb.RocksDB;
 import org.rocksdb.RocksDBException;
-import org.rocksdb.SstFileManager;
+import org.apache.commons.lang3.function.Failable;
 
 import java.io.InvalidObjectException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.*;
+import java.time.Duration;
 import java.util.AbstractMap.SimpleEntry;
+import java.util.Collection;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
-import java.util.function.Supplier;
 import java.util.stream.Collectors;
-import java.util.stream.LongStream;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy;
 
 @Slf4j
 public class PersistedCorfuTableTest extends AbstractViewTest implements AutoCloseable {
@@ -400,6 +401,81 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
                 table.insert(defaultNewMapEntry, defaultNewMapEntry);
                 assertThat(table.get(defaultNewMapEntry)).isEqualTo(defaultNewMapEntry);
             });
+        }
+    }
+
+    @Property(tries = NUM_OF_TRIES)
+    void snapshotExpired() {
+        resetTests(CorfuRuntimeParameters.builder().mvoCacheExpiry(Duration.ofNanos(0)).build());
+        try (final PersistedCorfuTable<String, String> table = setupTable()) {
+            executeTx(() -> {
+                table.insert("a", "a");
+                table.get("a");
+            });
+
+            executeTx(() -> {
+                assertThat(table.get("a")).isEqualTo("a");
+
+                Thread t1 = new Thread(() -> {
+                    executeTx(() -> table.insert("a", "b"));
+                    executeTx(() -> table.get("a"));
+                });
+
+                t1.start();
+                Failable.run(t1::join);
+
+                ((MVOCorfuCompileProxy) table.getCorfuSMRProxy()).getUnderlyingMVO()
+                        .getMvoCache().getObjectCache().cleanUp();
+
+                assertThatThrownBy(() -> table.get("a"))
+                        .isInstanceOf(TransactionAbortedException.class);
+            });
+
+            executeTx(() -> {
+                assertThat(table.entryStream().count()).isEqualTo(1);
+
+                Thread t1 = new Thread(() -> {
+                    executeTx(() -> table.insert("a", "b"));
+                    executeTx(() -> table.get("a"));
+                });
+
+                t1.start();
+                Failable.run(t1::join);
+
+                ((MVOCorfuCompileProxy) table.getCorfuSMRProxy()).getUnderlyingMVO()
+                        .getMvoCache().getObjectCache().cleanUp();
+
+                assertThatThrownBy(() -> table.entryStream().count())
+                        .isInstanceOf(TransactionAbortedException.class);
+            });
+
+            executeTx(() -> {
+                table.insert("a", "a");
+                table.insert("b", "b");
+                table.insert("c", "c");
+                table.get("a");
+            });
+
+            executeTx(() -> {
+                assertThat(table.entryStream().count()).isEqualTo(3);
+
+                Stream<Map.Entry<String, String>> stream = table.entryStream();
+                Iterator<Map.Entry<String, String>> iterator = stream.iterator();
+
+                Thread t1 = new Thread(() -> {
+                    executeTx(() -> table.insert("a", "b"));
+                    executeTx(() -> table.get("a"));
+                });
+
+                t1.start();
+                Failable.run(t1::join);
+
+                ((MVOCorfuCompileProxy) table.getCorfuSMRProxy()).getUnderlyingMVO()
+                        .getMvoCache().getObjectCache().cleanUp();
+                assertThatThrownBy(iterator::next)
+                        .isInstanceOf(TrimmedException.class);
+            });
+
         }
     }
 

@@ -67,7 +67,7 @@ public class RocksDbStore<T extends ICorfuSMR<T>> implements RocksDbApi<T> {
     }
 
     @Override
-    public ISMRSnapshot<T> getSnapshot(@NonNull ViewGenerator<T> viewGenerator) {
-        return new DiskBackedSMRSnapshot<>(rocksDb, writeOptions, consistencyOptions, viewGenerator);
+    public ISMRSnapshot<T> getSnapshot(@NonNull ViewGenerator<T> viewGenerator, VersionedObjectIdentifier version) {
+        return new DiskBackedSMRSnapshot<>(rocksDb, writeOptions, consistencyOptions, version, viewGenerator);
     }
 }

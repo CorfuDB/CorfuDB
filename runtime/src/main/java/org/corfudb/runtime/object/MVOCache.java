@@ -28,27 +28,25 @@ import java.util.stream.Collectors;
 @Slf4j
 public class MVOCache<T extends ICorfuSMR<T>> {
 
-    private final Duration MAX_TX_DURATION = Duration.ofMinutes(15);
-
     /**
      * A collection of strong references to all versioned objects and their state.
      */
     @Getter
     final Cache<VersionedObjectIdentifier, ISMRSnapshot<T>> objectCache;
 
-    public MVOCache() {
+    public MVOCache(Duration expireAfter) {
+        // See https://github.com/google/guava/wiki/CachesExplained#when-does-cleanup-happen
         this.objectCache = CacheBuilder.newBuilder()
-                .expireAfterWrite(MAX_TX_DURATION)
+                .expireAfterWrite(expireAfter)
                 .removalListener(this::handleEviction)
                 .recordStats()
                 .build();
 
         MeterRegistryProvider.getInstance()
                 .map(registry -> GuavaCacheMetrics.monitor(registry, objectCache, "mvo_cache"));
-
     }
-    public MVOCache(@Nonnull CorfuRuntime corfuRuntime) {
 
+    public MVOCache(@Nonnull CorfuRuntime corfuRuntime) {
         // If not explicitly set by user, it takes default value in CorfuRuntimeParameters
         long maxCacheSize = corfuRuntime.getParameters().getMaxMvoCacheEntries();
         if (corfuRuntime.getParameters().isCacheDisabled()) {
@@ -65,11 +63,6 @@ public class MVOCache<T extends ICorfuSMR<T>> {
 
         MeterRegistryProvider.getInstance()
                 .map(registry -> GuavaCacheMetrics.monitor(registry, objectCache, "mvo_cache"));
-    }
-
-
-    public void handleSnapshotEviction(RemovalNotification<VersionedObjectIdentifier, ISMRSnapshot<T>> notification) {
-        notification.getValue().release();
     }
 
     public void handleEviction(RemovalNotification<VersionedObjectIdentifier, ISMRSnapshot<T>> notification) {
@@ -104,8 +97,9 @@ public class MVOCache<T extends ICorfuSMR<T>> {
      * @param object The actual underlying object corresponding to this voId.
      */
     public void put(@Nonnull VersionedObjectIdentifier voId, @Nonnull ISMRSnapshot<T> object) {
+        objectCache.cleanUp();
         if (log.isTraceEnabled()) {
-            log.trace("MVOCache: performing a put for {}", voId.toString());
+            log.trace("MVOCache: performing a put for {}", voId);
         }
 
         objectCache.put(voId, object);

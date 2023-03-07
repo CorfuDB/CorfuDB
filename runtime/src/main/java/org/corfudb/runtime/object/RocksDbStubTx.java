@@ -12,14 +12,14 @@ import org.rocksdb.Snapshot;
 
 public class RocksDbStubTx<T extends ICorfuSMR<T>> implements RocksDbApi<T> {
     private final OptimisticTransactionDB rocksDb;
-    private final Snapshot snapshot;
+    private final DiskBackedSMRSnapshot snapshot;
     private final ReadOptions readOptions;
 
     public RocksDbStubTx(@NonNull OptimisticTransactionDB rocksDb,
-                         @NonNull Snapshot snapshot) {
+                         @NonNull DiskBackedSMRSnapshot snapshot) {
         this.rocksDb = rocksDb;
         this.snapshot = snapshot;
-        this.readOptions = new ReadOptions().setSnapshot(snapshot);
+        this.readOptions = new ReadOptions();
     }
 
 
@@ -41,7 +41,7 @@ public class RocksDbStubTx<T extends ICorfuSMR<T>> implements RocksDbApi<T> {
 
     @Override
     public <K, V> RocksDbEntryIterator<K,V> getIterator(@NonNull ISerializer serializer) {
-        return new RocksDbEntryIterator<>(rocksDb, serializer, snapshot);
+        return new RocksDbEntryIterator<>(rocksDb, serializer, readOptions, true);
     }
 
     @Override
@@ -51,7 +51,7 @@ public class RocksDbStubTx<T extends ICorfuSMR<T>> implements RocksDbApi<T> {
     }
 
     @Override
-    public ISMRSnapshot<T> getSnapshot(@NonNull ViewGenerator<T> viewGenerator) {
+    public ISMRSnapshot<T> getSnapshot(@NonNull ViewGenerator<T> viewGenerator, VersionedObjectIdentifier version) {
         throw new UnsupportedOperationException();
     }
 }

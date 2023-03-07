@@ -15,6 +15,7 @@ import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.RocksDbApi;
 import org.corfudb.runtime.object.ISMRSnapshot;
 import org.corfudb.runtime.object.RocksDbStore;
+import org.corfudb.runtime.object.VersionedObjectIdentifier;
 import org.corfudb.runtime.object.ViewGenerator;
 import org.corfudb.util.serializer.ISerializer;
 import org.rocksdb.CompactionOptionsUniversal;
@@ -187,8 +188,8 @@ public class DiskBackedCorfuTable<K, V> implements ICorfuSMR<DiskBackedCorfuTabl
 
     public Stream<Map.Entry<K, V>> entryStream() {
         final RocksDbEntryIterator<K, V> entryIterator = rocksApi.getIterator(serializer);
-        Stream<Map.Entry<K, V>> resStream = StreamSupport.stream(Spliterators.spliteratorUnknownSize(entryIterator,
-                Spliterator.ORDERED), false);
+        Stream<Map.Entry<K, V>> resStream = StreamSupport.stream(
+                Spliterators.spliteratorUnknownSize(entryIterator, Spliterator.ORDERED), false);
         resStream.onClose(entryIterator::close);
         return resStream;
     }
@@ -216,8 +217,8 @@ public class DiskBackedCorfuTable<K, V> implements ICorfuSMR<DiskBackedCorfuTabl
     }
 
     @Override
-    public ISMRSnapshot<DiskBackedCorfuTable<K, V>> getSnapshot() {
-        return rocksApi.getSnapshot(this);
+    public ISMRSnapshot<DiskBackedCorfuTable<K, V>> getSnapshot(VersionedObjectIdentifier version) {
+        return rocksApi.getSnapshot(this, version);
     }
 
     @Override

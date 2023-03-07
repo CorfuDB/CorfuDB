@@ -1,41 +1,75 @@
 package org.corfudb.runtime.object;
 
 import lombok.NonNull;
+import org.apache.commons.lang3.exception.ExceptionUtils;
+import org.corfudb.runtime.collections.RocksDbEntryIterator;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.util.serializer.ISerializer;
+import org.junit.Assert;
 import org.rocksdb.OptimisticTransactionDB;
+import org.rocksdb.ReadOptions;
 import org.rocksdb.Snapshot;
 import org.rocksdb.WriteOptions;
 
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Set;
+import java.util.WeakHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.StampedLock;
+import java.util.function.Function;
 
 public class DiskBackedSMRSnapshot<T extends ICorfuSMR<T>> implements ISMRSnapshot<T>{
-
+    private final StampedLock lock = new StampedLock();
     private final OptimisticTransactionDB rocksDb;
+
+    private final ReadOptions readOptions;
     private final WriteOptions writeOptions;
+    private final Snapshot snapshot;
+
     private final ConsistencyOptions consistencyOptions;
     private final ViewGenerator<T> viewGenerator;
-    private final Snapshot snapshot;
     private final AtomicInteger refCnt;
+    public final VersionedObjectIdentifier version;
+
+    private final Set<RocksDbEntryIterator> set;
 
     public DiskBackedSMRSnapshot(@NonNull OptimisticTransactionDB rocksDb,
                                  @NonNull WriteOptions writeOptions,
                                  @NonNull ConsistencyOptions consistencyOptions,
+                                 @NonNull VersionedObjectIdentifier version,
                                  @NonNull ViewGenerator<T> viewGenerator) {
         this.rocksDb = rocksDb;
         this.writeOptions = writeOptions;
         this.viewGenerator = viewGenerator;
         this.consistencyOptions = consistencyOptions;
         this.snapshot = rocksDb.getSnapshot();
-
         this.refCnt = new AtomicInteger(1); // TODO(Zach):
+        this.readOptions = new ReadOptions().setSnapshot(this.snapshot);
+        this.version = version;
+        this.set = Collections.newSetFromMap(new WeakHashMap<>());
     }
 
+    public <V> V executeInSnapshot(Function<ReadOptions, V> function) {
+        long stamp = lock.readLock();
+        try {
+            if (!this.readOptions.isOwningHandle()) {
+                throw new TrimmedException("Snapshot is not longer active " + version);
+            }
+            return function.apply(this.readOptions);
+        } finally {
+            lock.unlockRead(stamp);
+        }
+    }
     public T consume() {
         RocksDbApi<T> rocksTx;
 
         if (consistencyOptions.isReadYourWrites()) {
-            rocksTx = new RocksDbTx<>(rocksDb, writeOptions, snapshot);
+            rocksTx = new RocksDbTx<>(rocksDb, writeOptions, this);
         } else {
-            rocksTx = new RocksDbStubTx<>(rocksDb, snapshot);
+            rocksTx = new RocksDbStubTx<>(rocksDb, this);
         }
 
         final T view = viewGenerator.newView(rocksTx);
@@ -44,7 +78,16 @@ public class DiskBackedSMRSnapshot<T extends ICorfuSMR<T>> implements ISMRSnapsh
     }
 
     public void release() {
-        // TODO(Zach): release when 0?
+        long stamp = lock.writeLock();
         rocksDb.releaseSnapshot(snapshot);
+        set.forEach(RocksDbEntryIterator::invalidateIterator);
+        readOptions.close();
+        lock.unlockWrite(stamp);
+    }
+
+    public <K, V> RocksDbEntryIterator<K, V> newIterator(ISerializer serializer) {
+        RocksDbEntryIterator<K, V> iterator = new RocksDbEntryIterator<>(rocksDb, serializer, readOptions, lock);
+        set.add(iterator);
+        return iterator;
     }
 }

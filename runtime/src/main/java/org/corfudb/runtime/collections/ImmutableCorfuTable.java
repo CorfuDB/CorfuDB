@@ -14,6 +14,7 @@ import org.corfudb.runtime.object.ICorfuExecutionContext;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.ISMRSnapshot;
 import org.corfudb.runtime.object.InMemorySMRSnapshot;
+import org.corfudb.runtime.object.VersionedObjectIdentifier;
 
 import javax.annotation.Nonnull;
 import java.util.Collections;
@@ -61,7 +62,7 @@ public class ImmutableCorfuTable<K, V> implements ICorfuSMR<ImmutableCorfuTable<
     }
 
     @Override
-    public ISMRSnapshot<ImmutableCorfuTable<K, V>> getSnapshot() {
+    public ISMRSnapshot<ImmutableCorfuTable<K, V>> getSnapshot(VersionedObjectIdentifier version) {
         return new InMemorySMRSnapshot<>(this);
     }
 

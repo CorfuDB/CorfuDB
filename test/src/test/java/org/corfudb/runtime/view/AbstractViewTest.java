@@ -22,6 +22,7 @@ import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
 import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
+import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters.CorfuRuntimeParametersBuilder;
 import org.corfudb.runtime.clients.BaseHandler;
 import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.clients.LayoutHandler;
@@ -40,6 +41,7 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 
 import javax.annotation.Nonnull;
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Map;
@@ -193,6 +195,14 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
        //         .setCacheDisabled(true); // Disable cache during unit tests to fully stress the system.
         runtime.getAddressSpaceView().resetCaches();
     }
+
+    public void resetTests(CorfuRuntimeParameters corfuRuntimeParameters) {
+        runtime.shutdown();
+        runtime = CorfuRuntime.fromParameters(corfuRuntimeParameters).parseConfigurationString(getDefaultConfigurationString());
+        runtime.getAddressSpaceView().resetCaches();
+    }
+
+
 
     @After
     public void cleanupBuffers() {

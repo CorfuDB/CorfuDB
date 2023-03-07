@@ -4,6 +4,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
 import lombok.NonNull;
 import org.corfudb.runtime.collections.RocksDbEntryIterator;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.serializer.ISerializer;
 import org.rocksdb.OptimisticTransactionDB;
 import org.rocksdb.ReadOptions;
@@ -13,26 +14,29 @@ import org.rocksdb.Transaction;
 import org.rocksdb.WriteOptions;
 
 public class RocksDbTx<T extends ICorfuSMR<T>> implements RocksDbApi<T> {
-
     private final OptimisticTransactionDB rocksDb;
-    private final Snapshot snapshot;
+    private final DiskBackedSMRSnapshot<T> snapshot;
     private final Transaction txn;
-    private final ReadOptions readOptions;
 
     public RocksDbTx(@NonNull OptimisticTransactionDB rocksDb,
                      @NonNull WriteOptions writeOptions,
-                     @NonNull Snapshot snapshot) {
+                     @NonNull DiskBackedSMRSnapshot<T> snapshot) {
         this.rocksDb = rocksDb;
         this.snapshot = snapshot;
-        this.readOptions = new ReadOptions().setSnapshot(snapshot);
         this.txn = rocksDb.beginTransaction(writeOptions);
     }
 
 
     @Override
     public byte[] get(@NonNull ByteBuf keyPayload) throws RocksDBException {
-        return txn.get(readOptions, ByteBufUtil.getBytes(
-                keyPayload, keyPayload.arrayOffset(), keyPayload.readableBytes(), false));
+        return snapshot.executeInSnapshot(readOptions -> {
+            try {
+                return txn.get(readOptions, ByteBufUtil.getBytes(
+                        keyPayload, keyPayload.arrayOffset(), keyPayload.readableBytes(), false));
+            } catch (RocksDBException e) {
+                throw new UnrecoverableCorfuError(e);
+            }
+        });
     }
 
     @Override
@@ -56,18 +60,17 @@ public class RocksDbTx<T extends ICorfuSMR<T>> implements RocksDbApi<T> {
 
     @Override
     public <K, V> RocksDbEntryIterator<K,V> getIterator(@NonNull ISerializer serializer) {
-        return new RocksDbEntryIterator<>(rocksDb, serializer, snapshot);
+        return this.snapshot.newIterator(serializer);
     }
 
     @Override
     public void close() throws RocksDBException {
         // TODO(Zach): How to make sure readOptions are not leaked if thread dies?
         txn.rollback();
-        readOptions.close();
     }
 
     @Override
-    public ISMRSnapshot<T> getSnapshot(@NonNull ViewGenerator<T> viewGenerator) {
+    public ISMRSnapshot<T> getSnapshot(@NonNull ViewGenerator<T> viewGenerator, VersionedObjectIdentifier version) {
         throw new UnsupportedOperationException();
     }
 }

@@ -80,9 +80,10 @@ public interface ICorfuSMR<T>
 
     /**
      *
+     * @param version version
      * @return ISMRSnapshot
      */
-    default ISMRSnapshot<T> getSnapshot() {
+    default ISMRSnapshot<T> getSnapshot(VersionedObjectIdentifier version) {
         throw new IllegalStateException("ObjectAnnotationProcessor Issue.");
     }
 
