@@ -12,7 +12,7 @@ import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
-import org.corfudb.runtime.LRMultiNamespaceListener;
+import org.corfudb.runtime.LogReplicationDataListener;
 import org.corfudb.runtime.LogReplicationUtils;
 import org.corfudb.runtime.Queue;
 import org.corfudb.runtime.view.Address;
@@ -48,7 +48,7 @@ public class CorfuStore {
 
     private final CorfuStoreMetrics corfuStoreMetrics;
 
-    private final LogReplicationUtils logReplicationUtils;
+    private LogReplicationUtils logReplicationUtils;
 
     /**
      * Creates a new CorfuStore.
@@ -59,7 +59,6 @@ public class CorfuStore {
     public CorfuStore(@Nonnull final CorfuRuntime runtime) {
         this.runtime = runtime;
         this.corfuStoreMetrics = new CorfuStoreMetrics();
-        this.logReplicationUtils = new LogReplicationUtils(this);
     }
 
     /**
@@ -352,9 +351,12 @@ public class CorfuStore {
      * @param streamTag        only updates of tables with the stream tag will be polled
      * @param tablesOfInterest only updates from these tables of interest will be sent to listener
      */
-    public void subscribeLRCrossNamespaceListener(@Nonnull LRMultiNamespaceListener streamListener,
+    public void subscribeLRCrossNamespaceListener(@Nonnull LogReplicationDataListener streamListener,
                                          @Nonnull String namespace, @Nonnull String streamTag,
                                          @Nonnull List<String> tablesOfInterest) {
+        if (logReplicationUtils == null) {
+            logReplicationUtils = new LogReplicationUtils(this);
+        }
         logReplicationUtils.subscribe(streamListener, namespace, streamTag, tablesOfInterest);
     }
 
@@ -373,9 +375,12 @@ public class CorfuStore {
      * @param tablesOfInterest only updates from these tables of interest will be sent to listener
      * @param bufferSize       maximum size of buffered transaction entries
      */
-    public void subscribeLRCrossNamespaceListener(@Nonnull LRMultiNamespaceListener streamListener,
+    public void subscribeLRCrossNamespaceListener(@Nonnull LogReplicationDataListener streamListener,
                                                   @Nonnull String namespace, @Nonnull String streamTag,
                                                   @Nonnull List<String> tablesOfInterest, int bufferSize) {
+        if (logReplicationUtils == null) {
+            logReplicationUtils = new LogReplicationUtils(this);
+        }
         logReplicationUtils.subscribe(streamListener, namespace, streamTag, tablesOfInterest, bufferSize);
     }
 
@@ -394,7 +399,7 @@ public class CorfuStore {
      * @param streamTag        only updates of tables with the stream tag will be polled
      * @param bufferSize       maximum size of buffered transaction entries
      */
-    public void subscribeLRCrossNamespaceListener(@Nonnull LRMultiNamespaceListener streamListener,
+    public void subscribeLRCrossNamespaceListener(@Nonnull LogReplicationDataListener streamListener,
                                                   @Nonnull String namespace, @Nonnull String streamTag, int bufferSize) {
         List<String> tablesOfInterest = getTablesOfInterest(namespace, streamTag);
         subscribeLRCrossNamespaceListener(streamListener, namespace, streamTag, tablesOfInterest, bufferSize);

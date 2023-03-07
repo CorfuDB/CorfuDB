@@ -14,14 +14,17 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import static org.corfudb.runtime.LogReplicationUtils.REPLICATION_STATUS_TABLE;
 
 /**
- * This is the callback interface that any client subscribing to updates across the LR Status Table
- * (ReplicationStatus) and application-specific tables must implement.
+ * This is the interface that a client must subscribe to if it needs to observe and bifurcate the data updates received
+ * through Log Replication based on Log Entry and Snapshot Sync.
+ *
  *
  * This interface sees ordered updates from :
  * 1. client-streams from client-Namespace, and,
  * 2. LrStatusTable from corfuSystem-Namespace.
+ *
+ * The client implementing this interface will only observe the data updates from client streams
  */
-public abstract class LRMultiNamespaceListener implements StreamListener {
+public abstract class LogReplicationDataListener implements StreamListener {
 
     private final AtomicBoolean snapshotSyncInProgress = new AtomicBoolean(false);
 
