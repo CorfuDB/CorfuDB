@@ -6,7 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.runtime.CorfuStoreMetadata;
-import org.corfudb.runtime.LRMultiNamespaceListener;
+import org.corfudb.runtime.LogReplicationDataListener;
 import org.corfudb.runtime.LogReplication.ReplicationStatusKey;
 import org.corfudb.runtime.LogReplication.ReplicationStatusVal;
 import org.corfudb.runtime.collections.CorfuStore;
@@ -38,7 +38,7 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 import static org.junit.Assert.fail;
 
 @Slf4j
-public class LogReplicationMultiNamespaceStreamingIT extends AbstractIT {
+public class LogReplicationDataListenerIT extends AbstractIT {
 
     private final String corfuSingleNodeHost;
     private final int corfuStringNodePort;
@@ -60,7 +60,7 @@ public class LogReplicationMultiNamespaceStreamingIT extends AbstractIT {
     Table<SampleSchema.Uuid, SampleSchema.SampleTableAMsg, SampleSchema.Uuid> userDataTable;
     Table<ReplicationStatusKey, ReplicationStatusVal, Message> replicationStatusTable;
 
-    public LogReplicationMultiNamespaceStreamingIT() {
+    public LogReplicationDataListenerIT() {
         corfuSingleNodeHost = PROPERTIES.getProperty("corfuSingleNodeHost");
         corfuStringNodePort = Integer.valueOf(PROPERTIES.getProperty("corfuSingleNodePort"));
         singleNodeEndpoint = String.format("%s:%d", corfuSingleNodeHost, corfuStringNodePort);
@@ -495,7 +495,7 @@ public class LogReplicationMultiNamespaceStreamingIT extends AbstractIT {
         }
     }
 
-    private class LRTestListener extends LRMultiNamespaceListener {
+    private class LRTestListener extends LogReplicationDataListener {
         private CountDownLatch countDownLatch;
 
         // Updates received through streaming
