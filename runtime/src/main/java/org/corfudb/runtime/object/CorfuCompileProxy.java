@@ -60,15 +60,6 @@ import static java.lang.Long.min;
 public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxyInternal<T> {
 
     /**
-     * The underlying object. This object stores the actual
-     * state as well as the version of the object. It also
-     * provides locks to access the object safely from a
-     * multi-threaded context.
-     */
-    @Getter
-    VersionLockedObject<T> underlyingObject;
-
-    /**
      * The CorfuRuntime. This allows us to interact with the
      * Corfu log.
      */
@@ -133,12 +124,6 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
         this.serializer = serializer;
         this.streamTags = streamTags;
         this.objectOpenOption = objectOpenOption;
-
-        // Since the VLO is thread safe we don't need to use a thread safe stream implementation
-        // because the VLO will control access to the stream
-        underlyingObject = new VersionLockedObject<T>(this::getNewInstance,
-                new StreamViewSMRAdapter(rt, rt.getStreamsView().getUnsafe(streamID)),
-                wrapperObject);
     }
 
     /**
@@ -146,7 +131,7 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
      */
     @Override
     public  <R> R passThrough(Function<T, R> method) {
-        return underlyingObject.passThrough(method);
+        throw new UnsupportedOperationException();
     }
 
     /**
@@ -161,46 +146,7 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
 
     private <R> R accessInner(ICorfuSMRAccess<R, T> accessMethod,
                               Object[] conflictObject) {
-        if (TransactionalContext.isInTransaction()) {
-            try {
-                return TransactionalContext.getCurrentContext()
-                        .access(this, accessMethod, conflictObject);
-            } catch (Exception e) {
-                log.error("Access[{}]", this, e);
-                this.abortTransaction(e);
-            }
-        }
-
-        // Linearize this read against a timestamp
-        AtomicLong timestamp = new AtomicLong(rt.getSequencerView().query(getStreamID()));
-
-        log.debug("Access[{}] conflictObj={} version={}", this, conflictObject, timestamp);
-
-        // Perform underlying access
-        return underlyingObject.access(o -> o.getVersionUnsafe() >= timestamp.get()
-                        && !o.isOptimisticallyModifiedUnsafe(),
-                o -> {
-                    for (int x = 0; x < rt.getParameters().getTrimRetry(); x++) {
-                        try {
-                            o.syncObjectUnsafe(timestamp.get());
-                            break;
-                        } catch (TrimmedException te) {
-                            log.info("accessInner: Encountered trimmed address space " +
-                                            "while accessing version {} of stream {} on attempt {}",
-                                    timestamp.get(), getStreamID(), x);
-
-                            o.resetUnsafe();
-
-                            if (x == (rt.getParameters().getTrimRetry() - 1)) {
-                                throw te;
-                            }
-
-                            timestamp.set(rt.getSequencerView().query(getStreamID()));
-                        }
-                    }
-                },
-                o -> accessMethod.access(o),
-                a -> {});
+        throw new UnsupportedOperationException();
     }
 
     /**
@@ -216,28 +162,7 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
 
     private long logUpdateInner(String smrUpdateFunction, final boolean keepUpcallResult,
                                 Object[] conflictObject, Object... args) {
-        // If we aren't coming from a transactional context,
-        // redirect us to a transactional context first.
-        if (TransactionalContext.isInTransaction()) {
-            try {
-                // We generate an entry to avoid exposing the serializer to the tx context.
-                SMREntry entry = new SMREntry(smrUpdateFunction, args, serializer);
-                return TransactionalContext.getCurrentContext()
-                        .logUpdate(this, entry, conflictObject);
-            } catch (Exception e) {
-                log.warn("Update[{}]", this, e);
-                this.abortTransaction(e);
-            }
-        }
-
-        // If we aren't in a transaction, we can just write the modification.
-        // We need to add the acquired token into the pending upcall list.
-        SMREntry smrEntry = new SMREntry(smrUpdateFunction, args, serializer);
-        long address = underlyingObject.logUpdate(smrEntry, keepUpcallResult);
-        log.trace("Update[{}] {}@{} ({}) conflictObj={}",
-                this, smrUpdateFunction, address, args, conflictObject);
-        correctnessLogger.trace("Version, {}", address);
-        return address;
+        throw new UnsupportedOperationException();
     }
 
     /**
@@ -249,63 +174,7 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
     }
 
     private <R> R getUpcallResultInner(long timestamp, Object[] conflictObject) {
-        // If we aren't coming from a transactional context,
-        // redirect us to a transactional context first.
-        if (TransactionalContext.isInTransaction()) {
-            // Monotonic objects leverage a no-op optimistic stream,
-            // therefore, we must stub the upcall result.
-            if (underlyingObject.isMonotonicObject()) {
-                return null;
-            }
-
-            try {
-                return (R) TransactionalContext.getCurrentContext()
-                        .getUpcallResult(this, timestamp, conflictObject);
-            } catch (Exception e) {
-                log.warn("UpcallResult[{}] Exception: {}", this, e);
-                this.abortTransaction(e);
-            }
-        }
-
-        // Check first if we have the upcall, if we do
-        // we can service the request right away.
-        if (underlyingObject.getUpcallResults().containsKey(timestamp)) {
-            log.trace("Upcall[{}] {} Direct", this, timestamp);
-            R ret = (R) underlyingObject.getUpcallResults().get(timestamp);
-            underlyingObject.getUpcallResults().remove(timestamp);
-            return ret == VersionLockedObject.NullValue.NULL_VALUE ? null : ret;
-        }
-
-        return underlyingObject.update(o -> {
-            for (int x = 0; x < rt.getParameters().getTrimRetry(); x++) {
-                try {
-                    o.syncObjectUnsafe(timestamp);
-                    if (o.getUpcallResults().containsKey(timestamp)) {
-                        log.trace("Upcall[{}] {} Sync'd", this, timestamp);
-                        R ret = (R) o.getUpcallResults().get(timestamp);
-                        o.getUpcallResults().remove(timestamp);
-                        return ret == VersionLockedObject.NullValue.NULL_VALUE ? null : ret;
-                    }
-
-                    // The version is already ahead, but we don't have the result.
-                    // The only way to get the correct result
-                    // of the upcall would be to rollback. For now, we throw an exception
-                    // since this is generally not expected. --- and probably a bug if it happens.
-                    throw new RuntimeException("Attempted to get the result "
-                            + "of an upcall@" + timestamp + " but we are @"
-                            + underlyingObject.getVersionUnsafe()
-                            + " and we don't have a copy");
-                } catch (TrimmedException ex) {
-                    log.info("getUpcallResultInner: Encountered trimmed address space " +
-                                    "while accessing version {} of stream {} on attempt {}",
-                            timestamp, getStreamID(), x);
-                    // We encountered a TRIM during sync, reset the object
-                    o.resetUnsafe();
-                }
-            }
-
-            throw new TrimmedUpcallException(timestamp);
-        });
+        throw new UnsupportedOperationException();
     }
 
     /**
@@ -390,8 +259,7 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
      */
     @Override
     public long getVersion() {
-        return access(o -> underlyingObject.getVersionUnsafe(),
-                null);
+        throw new UnsupportedOperationException();
     }
 
     /**
@@ -453,7 +321,7 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
 
     @Override
     public boolean isMonotonicObject() {
-        return underlyingObject.isMonotonicObject();
+        throw new UnsupportedOperationException();
     }
 
     @Override

@@ -159,11 +159,6 @@ public class MVOCorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRPr
         return 0;
     }
 
-    @Override
-    public VersionLockedObject<T> getUnderlyingObject() {
-        return null;
-    }
-
     private T getNewInstance() {
         try {
             T ret = (T) ReflectionUtils

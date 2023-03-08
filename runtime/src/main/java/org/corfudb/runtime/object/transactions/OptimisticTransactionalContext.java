@@ -85,33 +85,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                 // Next, we sync the object, which will bring the object
                 // to the correct version, reflecting any optimistic
                 // updates.
-                return proxy
-                        .getUnderlyingObject()
-                        .access(o -> {
-                                    WriteSetSMRStream stream = o.getOptimisticStreamUnsafe();
-
-                                    // Obtain the stream position as when transaction context last
-                                    // remembered it.
-                                    long streamReadPosition = knownStreamsPosition.getOrDefault(proxy.getStreamID(), ts);
-
-                                    return (
-                                            (stream == null || stream.isStreamCurrentContextThreadCurrentContext())
-                                                    && (stream != null && getWriteSetEntrySize(proxy.getStreamID()) == stream.pos() + 1
-                                                    || (getWriteSetEntrySize(proxy.getStreamID()) == 0 /* No updates. */
-                                                    && o.getVersionUnsafe() == streamReadPosition) /* Match timestamp. */
-                                            )
-                                    );
-                                },
-                                o -> {
-                                    // inside syncObjectUnsafe, depending on the object
-                                    // version, we may need to undo or redo
-                                    // committed changes, or apply forward committed changes.
-                                    syncWithRetryUnsafe(o, getSnapshotTimestamp(), proxy,
-                                            o::setUncommittedChanges);
-                                },
-                                accessFunction::access,
-                                version -> updateKnownStreamPosition(proxy, version)
-                        );
+                throw new UnsupportedOperationException();
             } else {
                 return getAndCacheSnapshotProxy(proxy, ts)
                         .access(accessFunction, version -> updateKnownStreamPosition(proxy, version));
@@ -150,18 +124,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         // Otherwise, we need to sync the object
         // Get snapshot timestamp in advance so it is not performed under the VLO lock
         Token ts = getSnapshotTimestamp();
-        return proxy.getUnderlyingObject().update(o -> {
-            log.trace("Upcall[{}] {} Sync'd", this,  timestamp);
-            syncWithRetryUnsafe(o, ts, proxy, o::setUncommittedChanges);
-            SMREntry wrapper2 = getWriteSetEntryList(proxy.getStreamID()).get((int)timestamp);
-            if (wrapper2 != null && wrapper2.isHaveUpcallResult()) {
-                return wrapper2.getUpcallResult();
-            }
-            // If we still don't have the upcall, this must be a bug.
-            throw new RuntimeException("Tried to get upcall during a transaction but"
-                    + " we don't have it even after an optimistic sync (asked for " + timestamp
-                    + " we have 0-" + (getWriteSetEntryList(proxy.getStreamID()).size() - 1) + ")");
-        });
+        throw new UnsupportedOperationException();
     }
 
     /** Logs an update. In the case of an optimistic transaction, this update

@@ -17,14 +17,6 @@ import org.corfudb.util.serializer.ISerializer;
 @SuppressWarnings("checkstyle:abbreviation")
 public interface ICorfuSMRProxyInternal<T extends ICorfuSMR<T>> extends ICorfuSMRProxy<T> {
 
-    /**
-     * Directly get the state of the object the proxy is managing,
-     * without causing a sync.
-     *
-     * @return the underlying object
-     */
-    VersionLockedObject<T> getUnderlyingObject();
-
     boolean isMonotonicObject();
 
     boolean isMonotonicStreamAccess();

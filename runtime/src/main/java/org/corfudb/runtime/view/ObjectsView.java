@@ -231,8 +231,7 @@ public class ObjectsView extends AbstractView {
     public void gc(long trimMark) {
         for (Object obj : getObjectCache().values()) {
             if (((ICorfuSMR) obj).getCorfuSMRProxy() instanceof CorfuCompileProxy) {
-                ((CorfuCompileProxy) ((ICorfuSMR) obj).
-                        getCorfuSMRProxy()).getUnderlyingObject().gc(trimMark);
+                throw new UnsupportedOperationException();
             } else {
                 // MVOCorfuCompileProxy
                 ((MVOCorfuCompileProxy) ((ICorfuSMR) obj).

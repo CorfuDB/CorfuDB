@@ -6,7 +6,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import javax.annotation.Nullable;
 
 import com.google.common.base.Preconditions;
 import lombok.Getter;
@@ -16,19 +15,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.Token;
-import org.corfudb.protocols.wireprotocol.TokenResponse;
-import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.collections.TxnContext;
-import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.ICorfuSMRAccess;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
 import org.corfudb.runtime.object.ICorfuSMRSnapshotProxy;
 import org.corfudb.runtime.object.MVOCorfuCompileProxy;
-import org.corfudb.runtime.object.VersionLockedObject;
 import org.corfudb.runtime.object.transactions.TransactionalContext.PreCommitListener;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.util.Utils;
@@ -219,44 +213,6 @@ public abstract class AbstractTransactionalContext implements
     public abstract <T extends ICorfuSMR<T>> Object getUpcallResult(ICorfuSMRProxyInternal<T> proxy,
                                                                      long timestamp,
                                                                      Object[] conflictObject);
-
-    public void syncWithRetryUnsafe(VersionLockedObject vlo,
-                                    Token snapshotTimestamp,
-                                    ICorfuSMRProxyInternal proxy,
-                                    @Nullable Runnable optimisticStreamSetter) {
-        for (int x = 0; x < this.transaction.getRuntime().getParameters().getTrimRetry(); x++) {
-            try {
-                if (optimisticStreamSetter != null) {
-                    // Swap ourselves to be the active optimistic stream.
-                    // Inside setAsOptimisticStream, if there are
-                    // currently optimistic updates on the object, we
-                    // roll them back.  Then, we set this context as  the
-                    // object's new optimistic context.
-                    optimisticStreamSetter.run();
-                }
-                vlo.syncObjectUnsafe(snapshotTimestamp.getSequence());
-                break;
-            } catch (TrimmedException te) {
-                log.info("syncWithRetryUnsafe: Encountered trimmed address space " +
-                                "for snapshot {} of stream {} with pointer={} on attempt {}",
-                        snapshotTimestamp.getSequence(), vlo.getID(), vlo.getVersionUnsafe(), x);
-
-                // If a trim is encountered, we must reset the object
-                vlo.resetUnsafe();
-                if (!te.isRetriable()
-                        || x == this.transaction.getRuntime().getParameters().getTrimRetry() - 1) {
-                    // abort the transaction
-                    TransactionAbortedException tae =
-                            new TransactionAbortedException(
-                                    new TxResolutionInfo(getTransactionID(), snapshotTimestamp),
-                                    TokenResponse.NO_CONFLICT_KEY, proxy.getStreamID(),
-                                    Address.NON_ADDRESS, AbortCause.TRIM, te, this);
-                    abortTransaction(tae);
-                    throw tae;
-                }
-            }
-        }
-    }
 
     /**
      * Log an SMR update to the Corfu log.
