@@ -3,7 +3,7 @@ package org.corfudb.infrastructure.logreplication.replication.send;
 import com.google.protobuf.TextFormat;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.DataSender;
-import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClient;
+import org.corfudb.infrastructure.logreplication.transport.IClientServerRouter;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
 import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
@@ -14,16 +14,16 @@ import java.util.concurrent.CompletableFuture;
 @Slf4j
 public class CorfuDataSender implements DataSender {
 
-    private final LogReplicationClient client;
+    private final IClientServerRouter router;
 
-    public CorfuDataSender(LogReplicationClient client) {
-        this.client = client;
+    public CorfuDataSender(IClientServerRouter router) {
+        this.router = router;
     }
 
     @Override
     public CompletableFuture<LogReplicationEntryMsg> send(LogReplicationEntryMsg message) {
         log.trace("Send single log entry for request {}", TextFormat.shortDebugString(message.getMetadata()));
-        return client.sendLogEntry(message);
+        return router.sendLogEntry(message);
     }
 
     @Override
@@ -45,7 +45,7 @@ public class CorfuDataSender implements DataSender {
 
     @Override
     public CompletableFuture<LogReplicationMetadataResponseMsg> sendMetadataRequest() {
-        return client.sendMetadataRequest();
+        return router.sendMetadataRequest();
     }
 
     @Override
