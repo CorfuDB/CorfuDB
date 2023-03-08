@@ -13,6 +13,7 @@ import org.corfudb.infrastructure.RequestHandler;
 import org.corfudb.infrastructure.RequestHandlerMethods;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationMetadata;
+import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSinkServerRouter;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationSinkManager;
 import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
@@ -331,6 +332,13 @@ public class LogReplicationServer extends AbstractServer {
     }
 
     public void setLeadership(boolean leader) {
+        // Leadership change can come asynchronously from sinkClientRouter when SINK is the connection starter and the router is
+        // shutting down, and also from discoveryService when connection receiver and is no longer the leader.
+        // Ignore redundant updates.
+        if(leader == isLeader.get()) {
+            return;
+        }
+
         isLeader.set(leader);
 
         if (isLeader.get()) {

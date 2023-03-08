@@ -143,7 +143,7 @@ public class CorfuLogReplicationRuntime {
      */
     private final LinkedBlockingQueue<LogReplicationRuntimeEvent> eventQueue = new LinkedBlockingQueue<>();
 
-    private final LogReplicationClientRouter router;
+    private final LogReplicationSourceBaseRouter router;
 
     @Getter
     private final LogReplicationSourceManager sourceManager;
@@ -156,21 +156,25 @@ public class CorfuLogReplicationRuntime {
     @Getter
     public final LogReplicationSession session;
 
+    @Getter
+    private final boolean isConnectionStarter;
+
     /**
      * Default Constructor
      */
     public CorfuLogReplicationRuntime(LogReplicationRuntimeParameters parameters,
                                       LogReplicationMetadataManager metadataManager, LogReplicationUpgradeManager upgradeManager,
-                                      LogReplicationSession session, LogReplicationContext replicationContext) {
+                                      LogReplicationSession session, LogReplicationContext replicationContext,
+                                      LogReplicationSourceBaseRouter router, boolean isConnectionStarter) {
         this.remoteClusterId = session.getSinkClusterId();
         this.session = session;
-        this.router = new LogReplicationClientRouter(parameters, this);
-        this.router.addClient(new LogReplicationHandler());
-        this.sourceManager = new LogReplicationSourceManager(parameters, new LogReplicationClient(router, session.getSinkClusterId()),
+        this.router = router;
+        this.router.addClient(new LogReplicationHandler(session));
+        this.sourceManager = new LogReplicationSourceManager(parameters, new LogReplicationClient(router, session),
                 metadataManager, upgradeManager, session, replicationContext);
         this.connectedNodes = new HashSet<>();
 
-        ThreadFactory threadFactory = new ThreadFactoryBuilder().setNameFormat("runtime-fsm-worker-"+remoteClusterId)
+        ThreadFactory threadFactory = new ThreadFactoryBuilder().setNameFormat("runtime-fsm-worker-"+session.hashCode())
             .build();
 
         this.communicationFSMWorkers = new ThreadPoolExecutor(1, 1, 0L,
@@ -178,10 +182,11 @@ public class CorfuLogReplicationRuntime {
 
         this.communicationFSMConsumer = Executors.newSingleThreadExecutor(new
                 ThreadFactoryBuilder().setNameFormat(
-                    "runtime-fsm-consumer-"+remoteClusterId).build());
+                    "runtime-fsm-consumer-"+session.hashCode()).build());
 
         initializeStates(metadataManager, upgradeManager);
         this.state = states.get(LogReplicationRuntimeStateType.WAITING_FOR_CONNECTIVITY);
+        this.isConnectionStarter = isConnectionStarter;
 
         log.info("Log Replication Runtime State Machine initialized");
     }
@@ -193,7 +198,6 @@ public class CorfuLogReplicationRuntime {
         log.info("Start Log Replication Runtime to remote {}", session.getSinkClusterId());
         // Start Consumer Thread for this state machine (dedicated thread for event consumption)
         communicationFSMConsumer.submit(this::consume);
-        router.connect();
     }
 
     /**

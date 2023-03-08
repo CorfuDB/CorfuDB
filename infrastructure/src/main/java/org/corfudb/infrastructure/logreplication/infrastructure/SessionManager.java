@@ -4,9 +4,12 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Sets;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.AbstractServer;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatus;
+import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSinkServerRouter;
+import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSourceServerRouter;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationUpgradeManager;
 import org.corfudb.runtime.CorfuRuntime;
@@ -24,9 +27,11 @@ import org.corfudb.util.retry.IntervalRetry;
 import org.corfudb.util.retry.RetryNeededException;
 
 import javax.annotation.Nonnull;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Manage log replication sessions for multiple replication models.
@@ -46,18 +51,20 @@ public class SessionManager {
 
     private final CorfuRuntime runtime;
 
-    private String localCorfuEndpoint;
+    private final String localCorfuEndpoint;
 
     private CorfuReplicationManager replicationManager;
 
-    private LogReplicationConfigManager configManager;
+    private final LogReplicationConfigManager configManager;
 
     @Getter
-    private Set<LogReplicationSession> sessions = new HashSet<>();
+    private final Set<LogReplicationSession> sessions = new HashSet<>();
 
-    private Set<LogReplicationSession> incomingSessions = new HashSet<>();
+    private final Set<LogReplicationSession> incomingSessions = new HashSet<>();
 
-    private Set<LogReplicationSession> outgoingSessions = new HashSet<>();
+    private final Set<LogReplicationSession> outgoingSessions = new HashSet<>();
+
+    private final Set<LogReplicationSession> newSessionsDiscovered = new HashSet<>();
 
     @Getter
     private TopologyDescriptor topology;
@@ -69,6 +76,8 @@ public class SessionManager {
 
     @Getter
     private final LogReplicationContext replicationContext;
+
+    private final LogReplicationRouterManager routerManager;
 
     /**
      * Constructor
@@ -101,9 +110,13 @@ public class SessionManager {
         this.metadataManager = new LogReplicationMetadataManager(corfuRuntime, topology.getTopologyConfigId());
         this.configManager = new LogReplicationConfigManager(runtime, serverContext);
         this.upgradeManager = upgradeManager;
-        replicationContext = new LogReplicationContext(configManager, topology.getTopologyConfigId(), localCorfuEndpoint);
+        this.replicationContext = new LogReplicationContext(configManager, topology.getTopologyConfigId(),
+                localCorfuEndpoint);
 
-        createSessions();
+        this.routerManager = new LogReplicationRouterManager(topology);
+        this.replicationManager = new CorfuReplicationManager(topology, metadataManager,
+                configManager.getServerContext().getPluginConfigFilePath(), runtime, upgradeManager,
+                replicationContext, routerManager);
     }
 
     /**
@@ -125,9 +138,8 @@ public class SessionManager {
         this.metadataManager = new LogReplicationMetadataManager(corfuRuntime, topology.getTopologyConfigId());
         this.configManager = new LogReplicationConfigManager(runtime);
         this.upgradeManager = null;
-        replicationContext = new LogReplicationContext(configManager, topology.getTopologyConfigId(), localCorfuEndpoint);
-
-        createSessions();
+        this.routerManager = new LogReplicationRouterManager(topology);
+        this.replicationContext = new LogReplicationContext(configManager, topology.getTopologyConfigId(), localCorfuEndpoint);
     }
 
     /**
@@ -135,22 +147,16 @@ public class SessionManager {
      *
      * @param newTopology   the new discovered topology
      */
-    // TODO [V2]: In the connectionModel PR, ensure that refresh is called by the leader node only. Otherwise the
-    //  metadata/status tables will be overwritten by all the nodes in the cluster
     public synchronized void refresh(@Nonnull TopologyDescriptor newTopology) {
 
-        // TODO V2: Make this method a no-op if the new topology has not changed.  Need to override equals and
-        //  hashcode in all TopologyDescriptor and all its members.  It is being taken care of in a subsequent PR
-        //  which contains changes to the Connection Model.
+        Set<String> newRemoteSources = newTopology.getRemoteSourceClusters().keySet();
+        Set<String> currentRemoteSources = topology.getRemoteSourceClusters().keySet();
+        Set<String> remoteSourcesToRemove = Sets.difference(currentRemoteSources, newRemoteSources);
+        Set<String> remoteSourceClustersUnchanged = Sets.intersection(newRemoteSources, currentRemoteSources);
 
-        Set<String> newSources = newTopology.getRemoteSourceClusters().keySet();
-        Set<String> currentSources = topology.getRemoteSourceClusters().keySet();
-        Set<String> sourcesToRemove = Sets.difference(currentSources, newSources);
-
-        Set<String> newSinks = newTopology.getRemoteSinkClusters().keySet();
-        Set<String> currentSinks = topology.getRemoteSinkClusters().keySet();
-        Set<String> sinksToRemove = Sets.difference(currentSinks, newSinks);
-        Set<String> sinkClustersUnchanged = Sets.intersection(newSinks, currentSinks);
+        Set<String> newRemoteSinks = newTopology.getRemoteSinkClusters().keySet();
+        Set<String> currentRemoteSinks = topology.getRemoteSinkClusters().keySet();
+        Set<String> remoteSinksToRemove = Sets.difference(currentRemoteSinks, newRemoteSinks);
 
         Set<LogReplicationSession> sessionsToRemove = new HashSet<>();
         Set<LogReplicationSession> sessionsUnchanged = new HashSet<>();
@@ -159,16 +165,18 @@ public class SessionManager {
             IRetry.build(IntervalRetry.class, () -> {
                 try (TxnContext txn = corfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
                     sessions.forEach(session -> {
-                        if (sinksToRemove.contains(session.getSinkClusterId()) ||
-                                sourcesToRemove.contains(session.getSourceClusterId())) {
+                        if (remoteSinksToRemove.contains(session.getSinkClusterId()) ||
+                                remoteSourcesToRemove.contains(session.getSourceClusterId())) {
                             sessionsToRemove.add(session);
                             metadataManager.removeSession(txn, session);
-                        }
-
-                        if(sinkClustersUnchanged.contains(session.getSinkClusterId())) {
+                        } else {
                             sessionsUnchanged.add(session);
-                            metadataManager.updateReplicationMetadataField(txn, session,
-                                ReplicationMetadata.TOPOLOGYCONFIGID_FIELD_NUMBER, newTopology.getTopologyConfigId());
+
+                            //update topologyId for sink sessions
+                            if (remoteSourceClustersUnchanged.contains(session.getSourceClusterId())) {
+                                metadataManager.updateReplicationMetadataField(txn, session,
+                                        ReplicationMetadata.TOPOLOGYCONFIGID_FIELD_NUMBER, newTopology.getTopologyConfigId());
+                            }
                         }
                     });
                     txn.commit();
@@ -181,9 +189,8 @@ public class SessionManager {
                 replicationContext.setTopologyConfigId(topology.getTopologyConfigId());
                 metadataManager.setTopologyConfigId(topology.getTopologyConfigId());
 
-                stopReplication(sessionsToRemove);
-
-                updateReplicationParameters(sessionsUnchanged);
+                stopSessions(sessionsToRemove);
+                updateReplicationParameters(Sets.intersection(sessionsUnchanged, outgoingSessions));
                 createSessions();
                 return null;
             }).run();
@@ -198,9 +205,11 @@ public class SessionManager {
             return;
         }
         for (LogReplicationSession session : sessionsUnchanged) {
-            ClusterDescriptor cluster = topology.getRemoteSinkClusters().get(session.getSinkClusterId());
+            ClusterDescriptor cluster = topology.getRemoteSinkClusters().get(session.getSourceClusterId());
             replicationManager.refreshRuntime(session, cluster, topology.getTopologyConfigId());
         }
+
+        replicationManager.updateTopology(topology);
     }
 
     /**
@@ -209,8 +218,12 @@ public class SessionManager {
      */
     private void createSessions() {
         Set<LogReplicationSession> sessionsToAdd = new HashSet<>();
+        // sessions where the local cluster is the Sink
         Set<LogReplicationSession> incomingSessionsToAdd = new HashSet<>();
+        // sessions where the local cluster is the Source
         Set<LogReplicationSession> outgoingSessionsToAdd = new HashSet<>();
+        // clear any prior session.
+        newSessionsDiscovered.clear();
 
         try {
             String localClusterId = topology.getLocalClusterDescriptor().getClusterId();
@@ -219,7 +232,6 @@ public class SessionManager {
                 try (TxnContext txn = corfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
 
                     for(ClusterDescriptor remoteSinkCluster : topology.getRemoteSinkClusters().values()) {
-                        // TODO(V2): for now only creating sessions for FULL TABLE replication model (assumed as default)
                         LogReplicationSession session = constructSession(localClusterId, remoteSinkCluster.clusterId);
                         if (!sessions.contains(session)) {
                             sessionsToAdd.add(session);
@@ -229,7 +241,6 @@ public class SessionManager {
                     }
 
                     for(ClusterDescriptor remoteSourceCluster : topology.getRemoteSourceClusters().values()) {
-                        // TODO(V2): for now only creating sessions for FULL TABLE replication model (assumed as default)
                         LogReplicationSession session = constructSession(remoteSourceCluster.getClusterId(), localClusterId);
                         if (!sessions.contains(session)) {
                             sessionsToAdd.add(session);
@@ -237,18 +248,8 @@ public class SessionManager {
                             metadataManager.addSession(txn, session, topology.getTopologyConfigId(), true);
                         }
                     }
-                    txn.commit();
 
-                    sessions.addAll(sessionsToAdd);
-                    // TODO(V2): The below method logs a mapping of a session's hashcode to the session itself.  This
-                    //  is because LR names worker threads corresponding to a session using its hashcode.
-                    //  To identify the remote cluster and replication information while debugging, we need a view of
-                    //  the whole session object.  However, this method of logging the mapping has limitations
-                    //  because the mapping is only printed when the session is created for the first time.  If the
-                    //  logs have rolled over, the information is lost.  We need a permanent store/log of this mapping.
-                    logNewlyAddedSessionInfo(sessionsToAdd);
-                    incomingSessions.addAll(incomingSessionsToAdd);
-                    outgoingSessions.addAll(outgoingSessionsToAdd);
+                    txn.commit();
                     return null;
                 } catch (TransactionAbortedException e) {
                     log.error("Failed to create sessions.  Retrying.", e);
@@ -259,6 +260,19 @@ public class SessionManager {
             log.error("Unrecoverable Corfu Error when creating the sessions", e);
             throw new UnrecoverableCorfuInterruptedError(e);
         }
+
+        newSessionsDiscovered.addAll(sessionsToAdd);
+        sessions.addAll(sessionsToAdd);
+        incomingSessions.addAll(incomingSessionsToAdd);
+        outgoingSessions.addAll(outgoingSessionsToAdd);
+
+        // TODO(V2): The below method logs a mapping of a session's hashcode to the session itself.  This
+        //  is because LR names worker threads corresponding to a session using its hashcode.
+        //  To identify the remote cluster and replication information while debugging, we need a view of
+        //  the whole session object.  However, this method of logging the mapping has limitations
+        //  because the mapping is only printed when the session is created for the first time.  If the
+        //  logs have rolled over, the information is lost.  We need a permanent store/log of this mapping.
+        logNewlyAddedSessionInfo(sessionsToAdd);
 
         log.info("Total sessions={}, outgoing={}, incoming={}, sessions={}", sessions.size(), outgoingSessions.size(),
                 incomingSessions.size(), sessions);
@@ -275,12 +289,87 @@ public class SessionManager {
     /**
      * Construct session.
      */
+    // TODO(V2): for now only creating sessions for FULL TABLE replication model (assumed as default)
     private LogReplicationSession constructSession(String sourceClusterId, String sinkClusterId) {
         return LogReplicationSession.newBuilder()
                 .setSourceClusterId(sourceClusterId)
                 .setSinkClusterId(sinkClusterId)
                 .setSubscriber(getDefaultSubscriber())
                 .build();
+    }
+
+    /**
+     * If local cluster is SOURCE for any session: start the source client router and initiate connection to remote sinks
+     * If local cluster is SINK for any session: start the sink client router and initiate connection to remote sources.
+     */
+    public void startConnectionReceivingRouters(boolean isSource, boolean isSink, Map<Class, AbstractServer> serverMap,
+                                                CorfuInterClusterReplicationServerNode interClusterServerNode) {
+
+        Map<LogReplicationSession, LogReplicationSourceServerRouter> sessionToSourceServer = new HashMap<>();
+        Map<LogReplicationSession, LogReplicationSinkServerRouter> sessionToSinkServer = new HashMap<>();
+
+        if (isSource) {
+            createSourceReceivingComponents(sessionToSourceServer, serverMap);
+        }
+
+        if(isSink) {
+            createSinkReceivingComponents(sessionToSinkServer, serverMap);
+        }
+
+        // create connection receiving routers to pass to the interClusterServerNode.
+        // The incoming messages will be routed to the appropriate router in the transport layer adapter.
+        if(isConnectionReceiver()) {
+            interClusterServerNode.setRouterAndStartServer(sessionToSourceServer, sessionToSinkServer);
+        }
+    }
+
+    // create SOURCE routers and runtime if the cluster is not a connection starter
+    private void createSourceReceivingComponents(Map<LogReplicationSession, LogReplicationSourceServerRouter> sessionToSourceServer,
+                                                 Map<Class, AbstractServer> serverMap) {
+        log.info("Starting Source (sender/replicator) components");
+
+        // find remote sink clusters which will connect to the local cluster
+        Set<String> incomingConnections = new HashSet<>(topology.getRemoteSinkClusters().keySet());
+        topology.getRemoteClusterEndpoints().keySet().forEach(incomingConnections::remove);
+
+        if (!incomingConnections.isEmpty()) {
+            newSessionsDiscovered.stream()
+                    .filter(session -> outgoingSessions.contains(session))
+                    .filter(session -> incomingConnections.contains(session.getSinkClusterId()))
+                    .forEach(session -> {
+                        sessionToSourceServer.put(session,
+                                (LogReplicationSourceServerRouter) replicationManager.createSourceRouter(
+                                        session, serverMap, false)
+                        );
+                    });
+        } else {
+            log.debug("No remote SINK cluster expected to connect to the local cluster");
+        }
+    }
+
+    // create SINK routers if the cluster is not a connection starter
+    private void createSinkReceivingComponents(Map<LogReplicationSession, LogReplicationSinkServerRouter> sessionToSinkServe,
+                                               Map<Class, AbstractServer> serverMap) {
+        log.info("Starting Sink (receiver) components");
+
+        // find remote source clusters which will connect to the local cluster
+        Set<String> incomingConnections = new HashSet<>(topology.getRemoteSourceClusters().keySet());
+        topology.getRemoteClusterEndpoints().keySet().forEach(incomingConnections::remove);
+
+        if (!incomingConnections.isEmpty()) {
+            log.debug("starting sink and wait for connection from remote sources: {}", incomingConnections);
+            newSessionsDiscovered.stream()
+                    .filter(session -> incomingSessions.contains(session))
+                    .filter(session -> incomingConnections.contains(session.getSourceClusterId()))
+                    .forEach(session -> {
+                        sessionToSinkServe.put(session,
+                                routerManager.getOrCreateSinkRouter(session, serverMap,false,
+                                        configManager.getServerContext().getPluginConfigFilePath(),
+                                        runtime.getParameters().getRequestTimeout().toMillis()));
+                    });
+        } else {
+            log.debug("No remote SOURCE cluster expected to connect to the local cluster");
+        }
     }
 
     /**
@@ -302,13 +391,6 @@ public class SessionManager {
     }
 
     /**
-     * Reset replication status for all sessions
-     */
-    public void resetReplicationStatus() {
-        metadataManager.resetReplicationStatus();
-    }
-
-    /**
      * Retrieve replication status for all sessions
      *
      * @return  map of replication status per session
@@ -324,37 +406,44 @@ public class SessionManager {
                 .build();
     }
 
-    public void stopReplication() {
+    public void stopSessions() {
         log.info("Stopping log replication.");
+        stopSessions(sessions);
         replicationManager.stop();
     }
 
-    private void stopReplication(Set<LogReplicationSession> sessions) {
+    /**
+     * Stop replication for outgoing sessions and clear in-memory route info for incoming sessions
+     * @param sessions
+     */
+    private void stopSessions(Set<LogReplicationSession> sessions) {
         if (replicationManager != null) {
-            replicationManager.stop(sessions);
+            // stop replication fsm and source router for outgoing sessions
+            replicationManager.stop(sessions.stream().filter(outgoingSessions::contains).collect(Collectors.toSet()));
+            // clear sink router information
+            sessions.stream().filter(incomingSessions::contains)
+                    .forEach(session -> {
+                        // stop connection starter sink routers
+                        if (topology.getRemoteClusterEndpoints().containsKey(session.getSourceClusterId())) {
+                            routerManager.stopSinkClientRouter(session);
+                        }
+                        routerManager.clearRouterInfo(session);
+                    });
         }
 
         sessions.forEach(session -> {
             this.sessions.remove(session);
             this.outgoingSessions.remove(session);
+            this.incomingSessions.remove(session);
         });
 
     }
 
-    public synchronized void startReplication() {
-
-        log.info("Start replication for all sessions count={}", outgoingSessions.size());
-
-        if(replicationManager == null) {
-            this.replicationManager = new CorfuReplicationManager(topology.getLocalNodeDescriptor(),
-                    metadataManager, configManager.getServerContext().getPluginConfigFilePath(), runtime, upgradeManager);
-        }
-
-        createSessions();
-        outgoingSessions.forEach(session -> {
-            ClusterDescriptor remoteClusterDescriptor = topology.getRemoteSinkClusters().get(session.getSinkClusterId());
-            replicationManager.start(remoteClusterDescriptor, session, replicationContext);
-        });
+    public synchronized void connectToRemoteClusters(Map<Class, AbstractServer> serverMap) {
+            newSessionsDiscovered.stream()
+                    .filter(session -> topology.getRemoteClusterEndpoints().containsKey(session.getSourceClusterId()) ||
+                            topology.getRemoteClusterEndpoints().containsKey(session.getSinkClusterId()))
+                    .forEach(session -> replicationManager.startConnection(session, serverMap, outgoingSessions.contains(session)));
     }
 
     /**
@@ -373,5 +462,16 @@ public class SessionManager {
      */
     public void enforceSnapshotSync(DiscoveryServiceEvent event) {
         replicationManager.enforceSnapshotSync(event);
+    }
+
+    public boolean isConnectionReceiver() {
+        Set<String> connectionEndpoints = topology.getRemoteClusterEndpoints().keySet();
+        for(LogReplicationSession session : sessions) {
+            if (!connectionEndpoints.contains(session.getSinkClusterId()) &&
+                    !connectionEndpoints.contains(session.getSourceClusterId())) {
+                return true;
+            }
+        }
+        return false;
     }
 }
