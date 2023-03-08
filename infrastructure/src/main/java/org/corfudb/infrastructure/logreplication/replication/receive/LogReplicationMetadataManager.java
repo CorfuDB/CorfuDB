@@ -229,7 +229,7 @@ public class LogReplicationMetadataManager {
         ReplicationMetadata updatedMetadata = entry.getPayload().toBuilder().setField(fd, value).build();
         txn.putRecord(metadataTable, session, updatedMetadata, null);
 
-        log.debug("Update metadata field {}, value={}, session={}", fd.getFullName(), value);
+        log.debug("Update metadata field {}, value={}, session={}", fd.getFullName(), value, session);
     }
 
     /**

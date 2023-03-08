@@ -162,15 +162,16 @@ public class SessionManager {
     }
 
     /**
-     * Refresh sessions based on new topoloogy
+     * Refresh sessions based on new topology
      *
-     * @param newTopology   the new discovered topology
+     * @param newTopology the newly discovered topology
      */
     public synchronized void refresh(@Nonnull TopologyDescriptor newTopology) {
 
         Set<String> newSources = newTopology.getRemoteSourceClusters().keySet();
         Set<String> currentSources = topology.getRemoteSourceClusters().keySet();
         Set<String> sourcesToRemove = Sets.difference(currentSources, newSources);
+        Set<String> sourceClustersUnchanged = Sets.intersection(newSources, currentSources);
 
         Set<String> newSinks = newTopology.getRemoteSinkClusters().keySet();
         Set<String> currentSinks = topology.getRemoteSinkClusters().keySet();
@@ -190,10 +191,14 @@ public class SessionManager {
                             metadataManager.removeSession(txn, session);
                         }
 
-                        if(sinkClustersUnchanged.contains(session.getSinkClusterId())) {
+                        if(sinkClustersUnchanged.contains(session.getSinkClusterId()) ||
+                                sourceClustersUnchanged.contains(session.getSourceClusterId())) {
                             sessionsUnchanged.add(session);
-                            metadataManager.updateReplicationMetadataField(txn, session,
-                                ReplicationMetadata.TOPOLOGYCONFIGID_FIELD_NUMBER, newTopology.getTopologyConfigId());
+                            if (sourceClustersUnchanged.contains(session.getSourceClusterId())) {
+                                metadataManager.updateReplicationMetadataField(txn, session,
+                                        ReplicationMetadata.TOPOLOGYCONFIGID_FIELD_NUMBER,
+                                        newTopology.getTopologyConfigId());
+                            }
                         }
                     });
                     txn.commit();
@@ -205,6 +210,8 @@ public class SessionManager {
                 topology = newTopology;
                 replicationContext.setTopologyConfigId(topology.getTopologyConfigId());
                 metadataManager.setTopologyConfigId(topology.getTopologyConfigId());
+
+                log.debug("Session unchanged: {}", sessionsUnchanged);
 
                 stopSessions(sessionsToRemove);
                 updateReplicationParameters(sessionsUnchanged);
@@ -222,13 +229,10 @@ public class SessionManager {
             return;
         }
         for (LogReplicationSession session : sessionsUnchanged) {
-            ClusterDescriptor cluster;
             if (session.getSourceClusterId().equals(topology.getLocalClusterDescriptor().getClusterId())) {
-                cluster = topology.getRemoteSinkClusters().get(session.getSourceClusterId());
-            } else {
-                cluster = topology.getRemoteSinkClusters().get(session.getSinkClusterId());
+                ClusterDescriptor cluster = topology.getRemoteSinkClusters().get(session.getSourceClusterId());
+                replicationManager.refreshRuntime(session, cluster, topology.getTopologyConfigId());
             }
-            replicationManager.refreshRuntime(session, cluster, topology.getTopologyConfigId());
         }
 
         replicationManager.updateTopology(topology);
@@ -313,6 +317,8 @@ public class SessionManager {
                             if (!sessions.contains(session)) {
                                 sessionsToAdd.add(session);
                                 metadataManager.addSession(txn, session, topology.getTopologyConfigId(), true);
+                            } else {
+                                log.warn("Trying to create an existed session: {}", TextFormat.shortDebugString(session));
                             }
                         }
                     }
