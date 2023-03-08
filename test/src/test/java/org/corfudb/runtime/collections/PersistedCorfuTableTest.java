@@ -456,11 +456,13 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
                 table.get("a");
             });
 
+            final int tableSize = 3;
             executeTx(() -> {
-                assertThat(table.entryStream().count()).isEqualTo(3);
+                assertThat(table.entryStream().count()).isEqualTo(tableSize);
 
                 Stream<Map.Entry<String, String>> stream = table.entryStream();
                 Iterator<Map.Entry<String, String>> iterator = stream.iterator();
+                assertThat(iterator.next()).isNotNull();
 
                 Thread t1 = new Thread(() -> {
                     executeTx(() -> table.insert("a", "b"));
