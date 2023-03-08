@@ -169,9 +169,10 @@ public class CorfuLogReplicationRuntime {
         this.remoteClusterId = session.getSinkClusterId();
         this.session = session;
         this.router = router;
+        // Shama this will be gone
         this.router.addClient(new LogReplicationHandler(session));
-        this.sourceManager = new LogReplicationSourceManager(parameters, new LogReplicationClient(router, session),
-                metadataManager, upgradeManager, session, replicationContext);
+        this.sourceManager = new LogReplicationSourceManager(parameters,router, metadataManager, upgradeManager,
+                session, replicationContext);
         this.connectedNodes = new HashSet<>();
 
         ThreadFactory threadFactory = new ThreadFactoryBuilder().setNameFormat("runtime-fsm-worker-"+session.hashCode())

@@ -3,7 +3,7 @@ package org.corfudb.infrastructure;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.extern.slf4j.Slf4j;
 import org.assertj.core.api.Assertions;
-import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationServer;
+import org.corfudb.infrastructure.logreplication.infrastructure.msgHandlers.LogReplicationServer;
 import org.corfudb.infrastructure.logreplication.infrastructure.SessionManager;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;

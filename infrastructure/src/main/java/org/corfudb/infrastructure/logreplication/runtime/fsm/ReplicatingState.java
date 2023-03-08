@@ -41,6 +41,7 @@ public class ReplicatingState implements LogReplicationRuntimeState {
 
                 // If the leader is the node that became unavailable, verify new leader and attempt to reconnect.
                 if (fsm.getRemoteLeaderNodeId().isPresent() && fsm.getRemoteLeaderNodeId().get().equals(nodeIdDown)) {
+                    // Shama -> change the working..GM should not connect to LM
                     log.warn("Connection to remote leader id={} is down. Attempt to reconnect.", nodeIdDown);
                     fsm.resetRemoteLeaderNodeId();
                     // If remaining connections verify leadership on connected endpoints, otherwise, return to init
