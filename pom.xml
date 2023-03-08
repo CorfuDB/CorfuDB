@@ -14,9 +14,8 @@
         <module>corfudb-tools</module>
         <module>generator</module>
         <module>coverage</module>
-        <module>annotationProcessor</module>
-        <module>annotations</module>
         <module>samples</module>
+	<module>annotations</module>
         <module>debian</module>
         <module>test</module>
         <module>it</module>

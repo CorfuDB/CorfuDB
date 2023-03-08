@@ -100,11 +100,6 @@
             <artifactId>annotations</artifactId>
             <version>${project.version}</version>
         </dependency>
-        <dependency>
-            <groupId>org.corfudb</groupId>
-            <artifactId>annotation-processor</artifactId>
-            <version>${project.version}</version>
-        </dependency>
 
         <dependency>
             <groupId>com.esotericsoftware</groupId>
