@@ -1,10 +1,12 @@
 package org.corfudb.infrastructure.logreplication.runtime;
 
+import com.google.protobuf.Any;
 import com.google.protobuf.TextFormat;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.logreplication.infrastructure.msgHandlers.LogReplicationMsgHandler;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.clients.ClientResponseHandler;
 import org.corfudb.runtime.clients.ClientResponseHandler.Handler;
@@ -26,7 +28,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * A client to the Log Replication Server
  */
 @Slf4j
-public class LogReplicationHandler implements IClient, IHandler<LogReplicationClient> {
+public class LogReplicationHandler implements IClient, IHandler<> {
 
     @Setter
     @Getter
@@ -62,43 +64,34 @@ public class LogReplicationHandler implements IClient, IHandler<LogReplicationCl
      * Handle an ACK from Log Replication server.
      *
      * @param response The ack message
-     * @param ctx      The context the message was sent under
      * @param router   A reference to the router
      */
-    @ResponseHandler(type = PayloadCase.LR_ENTRY_ACK)
+    @LogReplicationMsgHandler(type = "lr_leadership_loss")
     private static Object handleLogReplicationAck(@Nonnull ResponseMsg response,
-                                                  @Nonnull ChannelHandlerContext ctx,
                                                   @Nonnull IClientRouter router) {
         log.debug("Handle log replication ACK {}", response);
         return response.getPayload().getLrEntryAck();
     }
 
-    @ResponseHandler(type = PayloadCase.LR_METADATA_RESPONSE)
+    @LogReplicationMsgHandler(type = "lr_metadata_response")
     private static Object handleLogReplicationMetadata(@Nonnull ResponseMsg response,
-                                                       @Nonnull ChannelHandlerContext ctx,
                                                        @Nonnull IClientRouter router) {
         log.debug("Handle log replication Metadata Response");
         return response.getPayload().getLrMetadataResponse();
     }
 
-    @ResponseHandler(type = PayloadCase.LR_LEADERSHIP_RESPONSE)
+    @LogReplicationMsgHandler(type = "lr_leadership_response")
     private static Object handleLogReplicationQueryLeadershipResponse(@Nonnull ResponseMsg response,
-                                                                      @Nonnull ChannelHandlerContext ctx,
                                                                       @Nonnull IClientRouter router) {
         log.trace("Handle log replication query leadership response msg {}", TextFormat.shortDebugString(response));
         return response.getPayload().getLrLeadershipResponse();
     }
 
-    @ResponseHandler(type = PayloadCase.LR_LEADERSHIP_LOSS)
+    @LogReplicationMsgHandler(type = "lr_leadership_loss")
     private static Object handleLogReplicationLeadershipLoss(@Nonnull ResponseMsg response,
-                                                             @Nonnull ChannelHandlerContext ctx,
                                                              @Nonnull IClientRouter router) {
         log.debug("Handle log replication leadership loss msg {}", TextFormat.shortDebugString(response));
         return response.getPayload().getLrLeadershipLoss();
     }
 
-    @Override
-    public LogReplicationClient getClient(long epoch, UUID clusterID) {
-        return new LogReplicationClient(router, epoch, replicationSession);
-    }
 }

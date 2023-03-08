@@ -1,12 +1,15 @@
 package org.corfudb.infrastructure.logreplication.runtime;
 
+import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.infrastructure.logreplication.infrastructure.CorfuReplicationManager;
+import org.corfudb.infrastructure.logreplication.infrastructure.msgHandlers.LogReplicationAbstractServer;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRuntimeEvent;
+import org.corfudb.infrastructure.logreplication.transport.IClientServerRouter;
 import org.corfudb.infrastructure.logreplication.transport.client.ChannelAdapterException;
 import org.corfudb.infrastructure.logreplication.transport.client.IClientChannelAdapter;
 import org.corfudb.infrastructure.logreplication.transport.server.IServerChannelAdapter;
@@ -45,19 +48,14 @@ import static org.corfudb.protocols.service.CorfuProtocolMessage.getRequestMsg;
  * This class is inherited by both LogReplicationSourceClientRouter and LogReplicationSourceServerRouter.
  */
 @Slf4j
-public class LogReplicationSourceBaseRouter implements IClientRouter {
+public class LogReplicationSourceBaseRouter implements IClientServerRouter {
 
     public static String REMOTE_LEADER = "REMOTE_LEADER";
 
     /**
      * The handlers registered to this router.
      */
-    protected final Map<CorfuMessage.ResponsePayloadMsg.PayloadCase, IClient> handlerMap;
-
-    /**
-     * The clients registered to this router.
-     */
-    private final List<IClient> clientList;
+    protected final Map<String, LogReplicationAbstractServer> handlerMap;
 
     /**
      * Whether or not this router is shutdown.
@@ -65,19 +63,19 @@ public class LogReplicationSourceBaseRouter implements IClientRouter {
     private volatile boolean shutdown;
 
     /**
-     * A {@link CompletableFuture} which is completed when a connection,
+     * A map of remoteCluster to {@link CompletableFuture} which is completed when a connection,
      * including a successful handshake completes and messages can be sent
      * to the remote node.
      */
     @Getter
-    protected volatile CompletableFuture<Void> remoteLeaderConnectionFuture;
+    protected volatile Map<String, CompletableFuture<Void>> remoteClusterIdToLeaderConnectionFuture;
 
     /**
-     * The current request ID.
+     * A map of session to the current requestID for the session.
      */
     @Getter
     @SuppressWarnings("checkstyle:abbreviation")
-    private AtomicLong requestID;
+    private Map<LogReplicationSession,AtomicLong> sessionToRequestIdCounter;
 
     /**
      * Sync call response timeout (milliseconds).
@@ -89,18 +87,18 @@ public class LogReplicationSourceBaseRouter implements IClientRouter {
     /**
      * The outstanding requests on this router.
      */
-    protected final Map<Long, CompletableFuture> outstandingRequests;
+    protected final Map<LogReplicationSession, Map<Long, CompletableFuture>> sessionToOutstandingRequests;
 
     /**
      * Runtime FSM, to insert connectivity events
      */
     @Getter
-    protected CorfuLogReplicationRuntime runtimeFSM;
+    protected Map<LogReplicationSession, CorfuLogReplicationRuntime> sessionToRuntimeFSM;
 
     /**
      * Remote cluster's clusterDescriptor
      */
-    protected ClusterDescriptor remoteClusterDescriptor;
+    protected Map<LogReplicationSession, ClusterDescriptor> sessionToRemoteClusterDescriptor;
 
     /**
      * The replicationManager
@@ -115,7 +113,7 @@ public class LogReplicationSourceBaseRouter implements IClientRouter {
     /**
      * If the current cluster is the connection starter
      */
-    protected boolean isConnectionInitiator;
+    protected Map<LogReplicationSession, Boolean> sessionToIsConnectionInitiator;
 
     /**
      * Client Transport adapter
@@ -135,6 +133,7 @@ public class LogReplicationSourceBaseRouter implements IClientRouter {
      */
     @Getter
     protected LogReplicationSession session;
+    // Shama: session should be removed
 
     /**
      * Log Replication Client Constructor
@@ -148,26 +147,27 @@ public class LogReplicationSourceBaseRouter implements IClientRouter {
                                           LogReplicationRuntimeParameters parameters, CorfuReplicationManager replicationManager,
                                           LogReplicationSession session, boolean isConnectionInitiator) {
         this.timeoutResponse = parameters.getRequestTimeout().toMillis();
-        this.remoteClusterDescriptor = remoteCluster;
         this.localClusterId = session.getSourceClusterId();
         this.replicationManager = replicationManager;
-        this.session = session;
 
+        this.sessionToRemoteClusterDescriptor = new ConcurrentHashMap<>();
         this.handlerMap = new ConcurrentHashMap<>();
-        this.clientList = new ArrayList<>();
-        this.requestID = new AtomicLong();
-        this.outstandingRequests = new ConcurrentHashMap<>();
-        this.remoteLeaderConnectionFuture = new CompletableFuture<>();
-        this.isConnectionInitiator = isConnectionInitiator;
+        this.sessionToRequestIdCounter = new ConcurrentHashMap<>();
+        this.sessionToOutstandingRequests = new ConcurrentHashMap<>();
+        this.sessionToRuntimeFSM = new ConcurrentHashMap<>();
+        this.remoteClusterIdToLeaderConnectionFuture = new ConcurrentHashMap<>();
+        this.sessionToIsConnectionInitiator = new ConcurrentHashMap<>();
         this.clientChannelAdapter = null;
         this.serverChannelAdapter = null;
     }
+
+    public viof
 
 
     // ------------------- IClientRouter Interface ----------------------
 
     @Override
-    public IClientRouter addClient(IClient client) {
+    private IClientRouter addClient(IClient client) {
         // Set the client's router to this instance.
         client.setRouter(this);
 
@@ -298,44 +298,6 @@ public class LogReplicationSourceBaseRouter implements IClientRouter {
         return f;
     }
 
-    /**
-     * Send a request message and get a completable future to be fulfilled by the reply.
-     *
-     * @param payload
-     * @param epoch
-     * @param clusterId
-     * @param priority
-     * @param ignoreClusterId
-     * @param ignoreEpoch
-     * @param <T> The type of completable to return.
-     * @return A completable future which will be fulfilled by the reply,
-     * or a timeout in the case there is no response.
-     */
-    @Override
-    public <T> CompletableFuture<T> sendRequestAndGetCompletable(CorfuMessage.RequestPayloadMsg payload, long epoch, RpcCommon.UuidMsg clusterId,
-                                                                 org.corfudb.runtime.proto.service.CorfuMessage.PriorityLevel priority,
-                                                                 CorfuProtocolMessage.ClusterIdCheck ignoreClusterId, CorfuProtocolMessage.EpochCheck ignoreEpoch) {
-        // This is an empty stub. This method is not being used anywhere in the LR framework.
-        return null;
-    }
-
-    /**
-     * Send a one way message, without adding a completable future.
-     *
-     * @param payload
-     * @param epoch
-     * @param clusterId
-     * @param priority
-     * @param ignoreClusterId
-     * @param ignoreEpoch
-     */
-    @Override
-    public void sendRequest(CorfuMessage.RequestPayloadMsg payload, long epoch, RpcCommon.UuidMsg clusterId,
-                            org.corfudb.runtime.proto.service.CorfuMessage.PriorityLevel priority,
-                            CorfuProtocolMessage.ClusterIdCheck ignoreClusterId, CorfuProtocolMessage.EpochCheck ignoreEpoch) {
-        // This is an empty stub. This method is not being used anywhere in the LR framework.
-    }
-
     @Override
     public <T> void completeRequest(long requestID, T completion) {
         log.trace("Complete request: {}...outstandingRequests {}", requestID, outstandingRequests);
@@ -392,16 +354,19 @@ public class LogReplicationSourceBaseRouter implements IClientRouter {
     }
 
     @Override
-    public void setTimeoutConnect(long timeoutConnect) {
-    }
-
-    @Override
-    public void setTimeoutRetry(long timeoutRetry) {
-    }
-
-    @Override
     public void setTimeoutResponse(long timeoutResponse) {
         this.timeoutResponse = timeoutResponse;
+    }
+
+    @Override
+    public void sendResponse(CorfuMessage.ResponseMsg response) {
+        log.info("Ready to send response {}", response.getPayload().getPayloadCase());
+        try {
+            this.serverChannelAdapter.send(response);
+            log.info("Sent response: {}", response);
+        } catch (IllegalArgumentException e) {
+            log.warn("Illegal response type. Ignoring message.", e);
+        }
     }
 
 
