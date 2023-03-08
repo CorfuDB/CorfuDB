@@ -21,8 +21,10 @@ import org.corfudb.util.serializer.ISerializer;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.time.Duration;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.Deque;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -241,23 +243,26 @@ public class Table<K extends Message, V extends Message, M extends Message> {
 
     private void initializeCorfuTable(CorfuRuntime runtime) {
         SMRObject.Builder<? extends ICorfuTable<K, CorfuRecord<V, M>>> builder;
+        final Deque<Object> arguments = new ArrayDeque<>();
+
+        if (!tableParameters.isSecondaryIndexesDisabled()) {
+            arguments.add(new ProtobufIndexer(
+                    tableParameters.getValueSchema(),
+                    tableParameters.getSchemaOptions()));
+        }
 
         if (streamingMapSupplier == null) {
             // PersistentCorfuTable
             builder = runtime.getObjectsView().build()
                     .setTypeToken(new TypeToken<PersistentCorfuTable<K, CorfuRecord<V, M>>>() {})
-                    .setArguments(new ProtobufIndexer(
-                            tableParameters.getValueSchema(),
-                            tableParameters.getSchemaOptions()));
+                    .setArguments(arguments.toArray());
         } else {
+            arguments.add(streamingMapSupplier);
+            arguments.add(ICorfuVersionPolicy.MONOTONIC);
             // Disk-backed CorfuTable
             builder = runtime.getObjectsView().build()
                     .setTypeToken(new TypeToken<CorfuTable<K, CorfuRecord<V, M>>>() {})
-                    .setArguments(new ProtobufIndexer(
-                                    tableParameters.getValueSchema(),
-                                    tableParameters.getSchemaOptions()),
-                            streamingMapSupplier,
-                            ICorfuVersionPolicy.MONOTONIC);
+                    .setArguments(arguments.toArray());
         }
 
         this.corfuTable = builder.setStreamName(this.fullyQualifiedTableName)
