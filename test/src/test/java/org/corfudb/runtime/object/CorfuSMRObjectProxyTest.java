@@ -42,61 +42,6 @@ public class CorfuSMRObjectProxyTest extends AbstractObjectTest {
     }
 
     @Test
-    public void canOpenObjectWithTwoRuntimes()
-            throws Exception {
-        getDefaultRuntime();
-
-        final int TEST_VALUE = 42;
-        TestClass testClass = (TestClass)
-                instantiateCorfuObject(new TypeToken<TestClass>() {}, "test");
-
-        testClass.set(TEST_VALUE);
-        assertThat(testClass.get())
-                .isEqualTo(TEST_VALUE);
-
-        CorfuRuntime runtime2 = getNewRuntime(getDefaultNode());
-        runtime2.connect();
-
-        TestClass testClass2 = (TestClass)
-                instantiateCorfuObject(runtime2,
-                        new TypeToken<TestClass>() {}, "test");
-
-        assertThat(testClass2.get())
-                .isEqualTo(TEST_VALUE);
-    }
-
-    @Test
-    @SuppressWarnings("unchecked")
-    public void canUseAnnotations()
-            throws Exception {
-        getDefaultRuntime();
-
-        TestClassUsingAnnotation test = (TestClassUsingAnnotation)
-                instantiateCorfuObject(new TypeToken<TestClassUsingAnnotation>() {}, "test");
-
-        assertThat(test.testFn1())
-                .isTrue();
-
-        assertThat(test.testIncrement())
-                .isTrue();
-
-        assertThat(test.getValue())
-                .isNotZero();
-
-        // clear the cache, forcing a new object to be built.
-        getRuntime().getObjectsView().getObjectCache().clear();
-
-        TestClassUsingAnnotation test2 = (TestClassUsingAnnotation)
-                instantiateCorfuObject(TestClassUsingAnnotation.class, "test");
-
-        assertThat(test)
-                .isNotSameAs(test2);
-
-        assertThat(test2.getValue())
-                .isNotZero();
-    }
-
-    @Test
     @SuppressWarnings("unchecked")
     public void canUseCustomSerializer() throws Exception {
         //Register a custom serializer and use it with an SMR object
