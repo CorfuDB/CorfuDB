@@ -4,6 +4,7 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.LogReplicationListener;
 import org.corfudb.runtime.collections.StreamListener;
 
 import org.corfudb.runtime.exceptions.StreamingException;
@@ -102,32 +103,14 @@ public class StreamingManager {
      * 'streamTag' within the application namespace.
      *
      * @param streamListener   client listener for callback
-     * @param namespace        namespace of application tables on which updates should be received
-     * @param streamTag        only updates of application tables with the stream tag will be polled
-     * @param tablesOfInterest only updates from these tables will be returned
-     * @param lastAddress      last processed address, new notifications start from lastAddress + 1
-     */
-    public void subscribeAcrossNamespaces(@Nonnull StreamListener streamListener, @Nonnull String namespace,
-                                          @Nonnull String streamTag, @Nonnull List<String> tablesOfInterest,
-                                          long lastAddress) {
-        subscribeAcrossNamespaces(streamListener, namespace, streamTag, tablesOfInterest, lastAddress,
-            defaultBufferSize);
-    }
-
-    /**
-     * This subscription is exclusive to Log Replication(LR).  It is used for subscribing to transaction updates across
-     * LR's metadata table(ReplicationStatus) in the CorfuSystem namespace and application-specific tables containing
-     * 'streamTag' within the application namespace.
-     *
-     * @param streamListener   client listener for callback
      * @param namespace       namespace of application tables on which updates should be received
      * @param streamTag       only updates of application tables with the stream tag will be polled
      * @param tablesOfInterest only updates from these tables will be returned
      * @param lastAddress      last processed address, new notifications start from lastAddress + 1
      */
-    public void subscribeAcrossNamespaces(@Nonnull StreamListener streamListener, @Nonnull String namespace,
-                                          @Nonnull String streamTag, @Nonnull List<String> tablesOfInterest,
-                                          long lastAddress, int bufferSize) {
+    public void subscribeLogReplicationListener(@Nonnull LogReplicationListener streamListener, @Nonnull String namespace,
+                                                @Nonnull String streamTag, @Nonnull List<String> tablesOfInterest,
+                                                long lastAddress, int bufferSize) {
         Map<String, List<String>> nsToTableName = new HashMap<>();
         nsToTableName.put(namespace, tablesOfInterest);
         nsToTableName.put(CORFU_SYSTEM_NAMESPACE, Arrays.asList(REPLICATION_STATUS_TABLE));
@@ -135,7 +118,8 @@ public class StreamingManager {
         Map<String, String> nsToStreamTags = new HashMap<>();
         nsToStreamTags.put(namespace, streamTag);
         nsToStreamTags.put(CORFU_SYSTEM_NAMESPACE, LR_STATUS_STREAM_TAG);
-        this.scheduler.addLRTask(streamListener, nsToStreamTags, nsToTableName, lastAddress, bufferSize);
+        this.scheduler.addLRTask(streamListener, nsToStreamTags, nsToTableName, lastAddress,
+                bufferSize == 0 ? defaultBufferSize : bufferSize);
     }
 
 
