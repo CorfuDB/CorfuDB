@@ -68,7 +68,7 @@ public class DistributedCheckpointerUnitTest {
         doNothing().when(txn).putRecord(any(), any(), any(), any());
         doNothing().when(txn).delete(anyString(), any(TableName.class));
         when(txn.commit()).thenReturn(Timestamp.getDefaultInstance());
-        when(cpw.getCorfuTable()).thenReturn(mock(CorfuTable.class));
+        when(cpw.getCorfuTable()).thenReturn(mock(PersistentCorfuTable.class));
     }
 
     @Test

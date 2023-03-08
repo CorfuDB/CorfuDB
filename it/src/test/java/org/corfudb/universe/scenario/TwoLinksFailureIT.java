@@ -1,6 +1,6 @@
 package org.corfudb.universe.scenario;
 
-import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.view.ClusterStatusReport;
 import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
 import org.corfudb.universe.GenericIntegrationTest;
@@ -42,10 +42,10 @@ public class TwoLinksFailureIT extends GenericIntegrationTest {
 
             CorfuClient corfuClient = corfuCluster.getLocalCorfuClient();
 
-            CorfuTable<String, String> table = corfuClient
+           PersistentCorfuTable<String, String> table = corfuClient
                     .createDefaultCorfuTable(DEFAULT_STREAM_NAME);
             for (int i = 0; i < DEFAULT_TABLE_ITER; i++) {
-                table.put(String.valueOf(i), String.valueOf(i));
+                table.insert(String.valueOf(i), String.valueOf(i));
             }
 
             //Should fail two links and then heal

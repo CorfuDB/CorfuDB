@@ -42,8 +42,6 @@ public class RocksDbEntryIterator<K, V> implements Iterator<Map.Entry<K, V>>, Au
      */
     private final boolean loadValues;
 
-    final private ReadOptions readOptions;
-
     public RocksDbEntryIterator(RocksDB rocksDB, ISerializer serializer, boolean loadValues) {
         this(rocksDB, serializer, new ReadOptions(), loadValues);
     }
@@ -58,7 +56,6 @@ public class RocksDbEntryIterator<K, V> implements Iterator<Map.Entry<K, V>>, Au
 
     public RocksDbEntryIterator(RocksDB rocksDB, ISerializer serializer,
                                 ReadOptions readOptions, StampedLock lock) {
-        this.readOptions = readOptions;
         this.wrappedRocksIterator = new CheckedRocksIterator(rocksDB, lock, readOptions);
         this.serializer = serializer;
         this.loadValues = true;

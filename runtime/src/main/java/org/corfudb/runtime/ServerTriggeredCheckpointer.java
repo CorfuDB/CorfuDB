@@ -54,7 +54,7 @@ public class ServerTriggeredCheckpointer extends DistributedCheckpointer {
     private CheckpointWriter<ICorfuTable<?,?>> getCheckpointWriter(TableName tableName,
                                                               KeyDynamicProtobufSerializer keyDynamicProtobufSerializer) {
         UUID streamId = CorfuRuntime.getStreamID(TableRegistry.getFullyQualifiedTableName(tableName));
-        CorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord> corfuTable = openTable(tableName, keyDynamicProtobufSerializer,
+        PersistentCorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord> corfuTable = openTable(tableName, keyDynamicProtobufSerializer,
                 checkpointerBuilder.cpRuntime.get());
         CheckpointWriter<ICorfuTable<?,?>> cpw =
                 new CheckpointWriter(checkpointerBuilder.cpRuntime.get(), streamId, "ServerCheckpointer", corfuTable);
@@ -62,13 +62,13 @@ public class ServerTriggeredCheckpointer extends DistributedCheckpointer {
         return cpw;
     }
 
-    private CorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord> openTable(TableName tableName,
+    private PersistentCorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord> openTable(TableName tableName,
                                                                             ISerializer serializer,
                                                                             CorfuRuntime rt) {
         log.info("Opening table {} in namespace {}", tableName.getTableName(), tableName.getNamespace());
-        SMRObject.Builder<CorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord>> corfuTableBuilder =
+        SMRObject.Builder<PersistentCorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord>> corfuTableBuilder =
                 rt.getObjectsView().build()
-                        .setTypeToken(new TypeToken<CorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord>>() {
+                        .setTypeToken(new TypeToken<PersistentCorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord>>() {
                         })
                         .setStreamName(TableRegistry.getFullyQualifiedTableName(tableName.getNamespace(), tableName.getTableName()))
                         .setSerializer(serializer)

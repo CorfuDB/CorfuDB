@@ -7,7 +7,7 @@ import com.google.common.reflect.TypeToken;
 import java.io.IOException;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.util.serializer.Serializers;
 
@@ -18,9 +18,9 @@ public class LogReplicationTest {
 
     private final int ITERATIONS = 10;
 
-    private CorfuTable<String, String> table1;
-    private CorfuTable<String, String> table2;
-    private CorfuTable<String, String> table3;
+    private PersistentCorfuTable<String, String> table1;
+    private PersistentCorfuTable<String, String> table2;
+    private PersistentCorfuTable<String, String> table3;
     private CorfuRuntime runtime;
 
     public LogReplicationTest(String endpoint) {
@@ -59,7 +59,7 @@ public class LogReplicationTest {
                 .build()
                 .setStreamName("Table001")
                 .setStreamTags(ObjectsView.getLogReplicatorStreamId())
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {
                 })
                 .setSerializer(Serializers.PRIMITIVE)
                 .open();
@@ -67,7 +67,7 @@ public class LogReplicationTest {
                 .build()
                 .setStreamName("Table002")
                 .setStreamTags(ObjectsView.getLogReplicatorStreamId())
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {
                 })
                 .setSerializer(Serializers.PRIMITIVE)
                 .open();
@@ -75,7 +75,7 @@ public class LogReplicationTest {
                 .build()
                 .setStreamName("Table003")
                 .setStreamTags(ObjectsView.getLogReplicatorStreamId())
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {
                 })
                 .setSerializer(Serializers.PRIMITIVE)
                 .open();
@@ -96,9 +96,10 @@ public class LogReplicationTest {
         for(int i=0; i < ITERATIONS; i++) {
             try {
                 runtime.getObjectsView().TXBegin();
-                table1.put("T1_K" + i, "T4_V" + i);
-                table2.put("T2_K" + i, "T5_V" + i);
-                table3.put("T3_K" + i, "T6_V" +i);
+                table1.insert("T1_K" + i, "T4_V" + i);
+                table2.insert("T2_K" + i, "T5_V" + i);
+                table3.insert("T3_K" + i, "T6_V" +i);
+                table3.size();
             } finally {
                 runtime.getObjectsView().TXEnd();
             }

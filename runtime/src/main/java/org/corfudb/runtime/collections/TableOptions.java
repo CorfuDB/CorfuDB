@@ -16,7 +16,7 @@ import java.util.Optional;
 public class TableOptions {
 
     /**
-     * If this path is set, {@link CorfuStore} will utilize disk-backed {@link CorfuTable}.
+     * If this path is set, {@link CorfuStore} will utilize disk-backed {@link ICorfuTable}.
      */
     private final Path persistentDataPath;
 

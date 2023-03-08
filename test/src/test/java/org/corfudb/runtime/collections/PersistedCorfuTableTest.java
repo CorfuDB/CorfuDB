@@ -464,6 +464,9 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
                 Iterator<Map.Entry<String, String>> iterator = stream.iterator();
                 assertThat(iterator.next()).isNotNull();
 
+                assertThat(iterator.next()).isNotNull();
+                // has next failed?
+
                 Thread t1 = new Thread(() -> {
                     executeTx(() -> table.insert("a", "b"));
                     executeTx(() -> table.get("a"));

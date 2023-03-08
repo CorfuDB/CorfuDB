@@ -6,7 +6,7 @@ import com.google.common.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
-import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters.CorfuRuntimeParametersBuilder;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
@@ -137,6 +137,7 @@ public class SecurityIT extends AbstractIT {
 
         // CorfuTable stats before usage
         final int initialSize = testTable.size();
+        // TODO(vjeko): java.lang.NullPointerException: snapshotView is marked non-null but is null
 
         // Put key values in CorfuTable
         final int count = 100;
@@ -186,6 +187,7 @@ public class SecurityIT extends AbstractIT {
 
         // CorfuTable stats before usage
         final int initialSize = testTable.size();
+        // TODO(vjeko): java.lang.NullPointerException: snapshotView is marked non-null but is null
 
         // Put key values in CorfuTable
         final int count = 100;

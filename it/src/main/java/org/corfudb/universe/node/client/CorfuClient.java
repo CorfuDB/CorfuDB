@@ -1,7 +1,8 @@
 package org.corfudb.universe.node.client;
 
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.exceptions.UnreachableClusterException;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.LayoutView;
@@ -22,7 +23,7 @@ public interface CorfuClient extends Node {
      * @param streamName stream name of the table
      * @return CorfuTable object created by runtime
      */
-    <K, V> CorfuTable<K, V> createDefaultCorfuTable(String streamName);
+    <K, V> PersistentCorfuTable<K, V> createDefaultCorfuTable(String streamName);
 
     /**
      * See {@link CorfuRuntime#connect()}

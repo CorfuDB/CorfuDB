@@ -227,8 +227,7 @@ public class Table<K extends Message, V extends Message, M extends Message> {
             // Evict all versions of this Table from MVOCache
             runtime.getObjectsView().getMvoCache().invalidateAllVersionsOf(getStreamUUID());
         } else {
-            // Disk-backed CorfuTable
-            oid = new ObjectsView.ObjectID(getStreamUUID(), CorfuTable.class);
+            throw new UnsupportedOperationException();
         }
 
         Object tableObject = runtime.getObjectsView().getObjectCache().remove(oid);
@@ -251,13 +250,7 @@ public class Table<K extends Message, V extends Message, M extends Message> {
                             tableParameters.getSchemaOptions()));
         } else {
             // Disk-backed CorfuTable
-            builder = runtime.getObjectsView().build()
-                    .setTypeToken(new TypeToken<CorfuTable<K, CorfuRecord<V, M>>>() {})
-                    .setArguments(new ProtobufIndexer(
-                                    tableParameters.getValueSchema(),
-                                    tableParameters.getSchemaOptions()),
-                            streamingMapSupplier,
-                            ICorfuVersionPolicy.MONOTONIC);
+            throw new UnsupportedOperationException();
         }
 
         this.corfuTable = builder.setStreamName(this.fullyQualifiedTableName)

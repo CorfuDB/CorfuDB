@@ -20,7 +20,7 @@ import org.corfudb.runtime.collections.CorfuDynamicRecord;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStoreEntry;
-import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.collections.IsolationLevel;
 import org.corfudb.runtime.collections.PersistedStreamingMap;
@@ -291,11 +291,9 @@ public class CorfuStoreIT extends AbstractIT {
             if (diskBased) {
                 final Path persistedCacheLocation = Paths.get(tempDiskPath + tableName.getTableName());
                 final Options options = new Options().setCreateIfMissing(true);
-                final Supplier<StreamingMap<CorfuDynamicKey, CorfuDynamicRecord>> mapSupplier = () -> new PersistedStreamingMap<>(
-                        persistedCacheLocation, options,
-                        dynamicProtobufSerializer, runtimeC);
-                corfuTableBuilder.setArguments(mapSupplier, ICorfuVersionPolicy.MONOTONIC)
-                        .setTypeToken(new TypeToken<CorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>() {});
+                // TODO(vjeko): Fix me.
+                corfuTableBuilder.setArguments()
+                        .setTypeToken(new TypeToken<PersistentCorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>() {});
             }
 
             mcw = new MultiCheckpointWriter<>();
