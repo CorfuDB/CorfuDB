@@ -15,7 +15,9 @@ import static org.corfudb.runtime.LogReplicationUtils.REPLICATION_STATUS_TABLE;
 
 /**
  * This is the interface that a client must subscribe to if it needs to observe and bifurcate the data updates received
- * through Log Replication based on Log Entry and Snapshot Sync.
+ * on Log Entry and Snapshot Sync.  The client's usecase is that it maintains a 'merged table' which contains data
+ * received through replication and local updates.  Log Replicator does not write to this merged table.  This
+ * listener will observe the writes and apply them to merged table based on the client implementation.
  *
  *
  * This interface sees ordered updates from :
@@ -24,7 +26,7 @@ import static org.corfudb.runtime.LogReplicationUtils.REPLICATION_STATUS_TABLE;
  *
  * The client implementing this interface will only observe the data updates from client streams
  */
-public abstract class LogReplicationDataListener implements StreamListener {
+public abstract class LogReplicationListener implements StreamListener {
 
     private final AtomicBoolean snapshotSyncInProgress = new AtomicBoolean(false);
 
@@ -92,19 +94,18 @@ public abstract class LogReplicationDataListener implements StreamListener {
 
     /**
      * Invoked by the Corfu runtime when this listener is being subscribed for receiving updates.  This method should
-     * start a read-only transaction invoking getTable() on all application tables which will be
-     * modified in this listener and the replicated LR tables and return the commit timestamp of the transaction.
-     * The timestamp will be the max of the tails of all tables on which getTable() was performed.
+     * perform a full-sync(read) on all application tables which the client is interested in merging together.  The
+     * commit timestamp of the read must be returned.
      * @return Timestamp commit timestamp of the read-only transaction
      */
-    protected abstract Timestamp performMultiTableReads();
+    protected abstract Timestamp performFullSync();
 
     /**
-     * Invoked by the Corfu runtime when this listener is being subscribed for receiving updates.  This method merges
-     * (constructs a baseline) of the replicated LR tables as seen at the given timestamp.
-     * @param timestamp timestamp at which the replicated tables must be read to form the baseline
+     * Invoked by the Corfu runtime when this listener is being subscribed for receiving updates.  This method should
+     * merge all application tables the client is interested in.  It constructs a baseline of the merged tables at
+     * @param timestamp timestamp at which the application tables must be read and merged to form the baseline
      */
-    protected abstract void mergeTableOnSubscription(Timestamp timestamp);
+    protected abstract void mergeTables(Timestamp timestamp);
 
     /**
      * Callback to indicate that an error or exception has occurred while streaming or that the stream is

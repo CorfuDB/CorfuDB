@@ -6,9 +6,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.runtime.CorfuStoreMetadata;
-import org.corfudb.runtime.LogReplicationDataListener;
 import org.corfudb.runtime.LogReplication.ReplicationStatusKey;
 import org.corfudb.runtime.LogReplication.ReplicationStatusVal;
+import org.corfudb.runtime.LogReplicationListener;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStoreEntry;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
@@ -38,7 +38,7 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 import static org.junit.Assert.fail;
 
 @Slf4j
-public class LogReplicationDataListenerIT extends AbstractIT {
+public class LogReplicationListenerIT extends AbstractIT {
 
     private final String corfuSingleNodeHost;
     private final int corfuStringNodePort;
@@ -60,7 +60,7 @@ public class LogReplicationDataListenerIT extends AbstractIT {
     Table<SampleSchema.Uuid, SampleSchema.SampleTableAMsg, SampleSchema.Uuid> userDataTable;
     Table<ReplicationStatusKey, ReplicationStatusVal, Message> replicationStatusTable;
 
-    public LogReplicationDataListenerIT() {
+    public LogReplicationListenerIT() {
         corfuSingleNodeHost = PROPERTIES.getProperty("corfuSingleNodeHost");
         corfuStringNodePort = Integer.valueOf(PROPERTIES.getProperty("corfuSingleNodePort"));
         singleNodeEndpoint = String.format("%s:%d", corfuSingleNodeHost, corfuStringNodePort);
@@ -95,7 +95,7 @@ public class LogReplicationDataListenerIT extends AbstractIT {
         lrListener = new LRTestListener(countDownLatch);
 
         // Subscribe the listener
-        store.subscribeLRCrossNamespaceListener(lrListener, namespace, userTag, Arrays.asList(userTableName));
+        store.subscribeLogReplicationListener(lrListener, namespace, userTag, Arrays.asList(userTableName));
 
         // Write numUpdates records in the table
         writeToDataTable(numUpdates, 0);
@@ -130,7 +130,7 @@ public class LogReplicationDataListenerIT extends AbstractIT {
         CountDownLatch countDownLatch = new CountDownLatch(numStreamingUpdates);
 
         lrListener = new LRTestListener(countDownLatch);
-        store.subscribeLRCrossNamespaceListener(lrListener, namespace, userTag, Arrays.asList(userTableName));
+        store.subscribeLogReplicationListener(lrListener, namespace, userTag, Arrays.asList(userTableName));
 
         writeToDataTableMultipleUpdatesInATx(numUpdates, 0);
 
@@ -159,7 +159,7 @@ public class LogReplicationDataListenerIT extends AbstractIT {
         lrListener = new LRTestListener(countDownLatch);
 
         // Subscribe a listener with a buffer size of 10
-        store.subscribeLRCrossNamespaceListener(lrListener, namespace, userTag, bufferSize);
+        store.subscribeLogReplicationListener(lrListener, namespace, userTag, bufferSize);
 
         log.info("Write data on both tables");
         writeToDataTable(numUpdates, 0);
@@ -193,7 +193,7 @@ public class LogReplicationDataListenerIT extends AbstractIT {
 
         CountDownLatch countDownLatch = new CountDownLatch(numExpectedStreamingUpdates);
         lrListener = new LRTestListener(countDownLatch);
-        store.subscribeLRCrossNamespaceListener(lrListener, namespace, userTag, Arrays.asList(userTableName));
+        store.subscribeLogReplicationListener(lrListener, namespace, userTag, Arrays.asList(userTableName));
 
         log.info("Write data concurrently on both tables");
         writeDataAndToggleDataConsistentConcurrently(numIterations, numWritesToDataTable);
@@ -230,7 +230,7 @@ public class LogReplicationDataListenerIT extends AbstractIT {
         lrListener = new LRTestListener(countDownLatch);
 
         // Subscribe the listener at the obtained timestamp
-        store.subscribeLRCrossNamespaceListener(lrListener, namespace, userTag, Arrays.asList(userTableName));
+        store.subscribeLogReplicationListener(lrListener, namespace, userTag, Arrays.asList(userTableName));
 
         log.info("Write updates to the data table after subscription");
         writeToDataTable(newUpdates, numUpdates);
@@ -257,7 +257,7 @@ public class LogReplicationDataListenerIT extends AbstractIT {
         openTables();
 
         lrListener = new LRTestListener(new CountDownLatch(0));
-        store.subscribeLRCrossNamespaceListener(lrListener, namespace, userTag, Arrays.asList(userTableName));
+        store.subscribeLogReplicationListener(lrListener, namespace, userTag, Arrays.asList(userTableName));
 
         // Write to a redundant table to which the listener has not subscribed
         writeToNonSubscribedSystemTable();
@@ -287,7 +287,7 @@ public class LogReplicationDataListenerIT extends AbstractIT {
         lrListener = new LRTestListener(lrCountDownLatch);
 
         store.subscribeListener(listener, namespace, userTag, Arrays.asList(userTableName));
-        store.subscribeLRCrossNamespaceListener(lrListener, namespace, userTag, Arrays.asList(userTableName));
+        store.subscribeLogReplicationListener(lrListener, namespace, userTag, Arrays.asList(userTableName));
 
         writeToDataTable(numUpdates, 0);
 
@@ -495,7 +495,7 @@ public class LogReplicationDataListenerIT extends AbstractIT {
         }
     }
 
-    private class LRTestListener extends LogReplicationDataListener {
+    private class LRTestListener extends LogReplicationListener {
         private CountDownLatch countDownLatch;
 
         // Updates received through streaming
@@ -544,7 +544,7 @@ public class LogReplicationDataListenerIT extends AbstractIT {
         }
 
         @Override
-        protected CorfuStoreMetadata.Timestamp performMultiTableReads() {
+        protected CorfuStoreMetadata.Timestamp performFullSync() {
             try (TxnContext txnContext = store.txn(namespace)) {
                 txnContext.getTable(userTableName);
                 return txnContext.commit();
@@ -552,7 +552,7 @@ public class LogReplicationDataListenerIT extends AbstractIT {
         }
 
         @Override
-        protected void mergeTableOnSubscription(CorfuStoreMetadata.Timestamp timestamp) {
+        protected void mergeTables(CorfuStoreMetadata.Timestamp timestamp) {
             List<CorfuStoreEntry<SampleSchema.Uuid, SampleSchema.SampleTableAMsg, SampleSchema.Uuid>> entries;
             try (TxnContext txnContext = store.txn(namespace, IsolationLevel.snapshot(timestamp))) {
                entries = txnContext.executeQuery(userTableName, p -> true);

@@ -47,51 +47,43 @@ public class LogReplicationUtils {
 
     public static final String REPLICATION_STATUS_TABLE = "LogReplicationStatus";
 
-    private CorfuStore corfuStore;
-
     private ScheduledExecutorService schedulerThread;
 
-    private static final int DEFAULT_BUFFER_SIZE = -1;
-
-    // Max time for which the thread waiting for snapshot sync completion will wait - 10 seconds
-    private static final int SNAPSHOT_SYNC_COMPLETION_WAIT_TIMEOUT_MS = 10000;
-
-    public LogReplicationUtils(CorfuStore corfuStore) {
-        this.corfuStore = corfuStore;
+    public LogReplicationUtils() {
 
         schedulerThread = Executors.newSingleThreadScheduledExecutor(new ThreadFactoryBuilder()
             .setNameFormat(LogReplicationUtils.class.getName())
             .build());
     }
 
-    public void subscribe(@Nonnull LogReplicationDataListener clientListener, @Nonnull String namespace,
-                          @Nonnull String streamTag, @Nonnull List<String> tablesOfInterest) {
+    public void subscribe(@Nonnull LogReplicationListener clientListener, @Nonnull String namespace,
+                          @Nonnull String streamTag, @Nonnull List<String> tablesOfInterest, int bufferSize,
+                          CorfuStore corfuStore) {
         SubscriptionTask subscriptionTask = new SubscriptionTask(clientListener, namespace, streamTag,
-                tablesOfInterest, DEFAULT_BUFFER_SIZE);
+                tablesOfInterest, bufferSize, corfuStore);
         schedulerThread.schedule(subscriptionTask, 0, TimeUnit.MILLISECONDS);
     }
 
-    public void subscribe(@Nonnull LogReplicationDataListener clientListener, @Nonnull String namespace,
-                          @Nonnull String streamTag, @Nonnull List<String> tablesOfInterest, int bufferSize) {
-        SubscriptionTask subscriptionTask = new SubscriptionTask(clientListener, namespace, streamTag,
-                tablesOfInterest, bufferSize);
-        schedulerThread.schedule(subscriptionTask, 0, TimeUnit.MILLISECONDS);
+    public void shutdown() {
+        schedulerThread.shutdown();
     }
 
     private class SubscriptionTask implements Runnable {
-        private LogReplicationDataListener clientListener;
+        private LogReplicationListener clientListener;
         private String namespace;
         private String streamTag;
         private List<String> tablesOfInterest;
         private int bufferSize;
+        private CorfuStore corfuStore;
 
-        SubscriptionTask(LogReplicationDataListener clientListener, String namespace, String streamTag,
-                         List<String> tablesOfInterest, int bufferSize) {
+        SubscriptionTask(LogReplicationListener clientListener, String namespace, String streamTag,
+                         List<String> tablesOfInterest, int bufferSize, CorfuStore corfuStore) {
             this.clientListener = clientListener;
             this.namespace = namespace;
             this.streamTag = streamTag;
             this.tablesOfInterest = tablesOfInterest;
             this.bufferSize = bufferSize;
+            this.corfuStore = corfuStore;
             openReplicationStatusTable();
         }
 
@@ -108,14 +100,8 @@ public class LogReplicationUtils {
         @Override
         public void run() {
             CorfuStoreMetadata.Timestamp timestamp = getValidSubscriptionTimestamp();
-
-            if (bufferSize == DEFAULT_BUFFER_SIZE) {
-                corfuStore.getRuntime().getTableRegistry().getStreamingManager().subscribeAcrossNamespaces(clientListener,
-                        namespace, streamTag, tablesOfInterest, timestamp.getSequence());
-            } else {
-                corfuStore.getRuntime().getTableRegistry().getStreamingManager().subscribeAcrossNamespaces(clientListener,
-                        namespace, streamTag, tablesOfInterest, timestamp.getSequence(), bufferSize);
-            }
+            corfuStore.getRuntime().getTableRegistry().getStreamingManager().subscribeLogReplicationListener(clientListener,
+                    namespace, streamTag, tablesOfInterest, timestamp.getSequence(), bufferSize);
         }
 
         /**
@@ -135,28 +121,29 @@ public class LogReplicationUtils {
             try {
                 return IRetry.build(ExponentialBackoffRetry.class, () -> {
                     try {
-                        // Check if snapshot sync is currently in progress.  If in progress, wait for it to finish
-                        CorfuStoreMetadata.Timestamp latestTimestamp = getTimestamp();
-                        if (checkSnapshotSyncOngoing(latestTimestamp)) {
-                            waitSnapshotSyncCompletion(latestTimestamp);
+                        // Check if snapshot sync is currently in progress and get the current timestamp if so.
+                        CorfuStoreMetadata.Timestamp currentTimestamp = getOngoingSnapshotSyncTimestamp();
+                        if (currentTimestamp != null) {
+                            waitSnapshotSyncCompletion(currentTimestamp);
                         }
 
-                        // Invoke the client callback for multi table reads.  This will read all tables the client is
-                        // interested in and return a timestamp.  Verify if snapshot sync was in progress at that
-                        // timestamp.  If in progress, wait for it to complete and retry the whole workflow.
-                        CorfuStoreMetadata.Timestamp multiTableReadTimestamp = clientListener.performMultiTableReads();
-                        if (checkSnapshotSyncOngoing(multiTableReadTimestamp)) {
+                        // Invoke the client callback for reading all application tables of interest.
+                        // This will read all tables the client is interested in and return a timestamp.  Verify if
+                        // snapshot sync was not in progress at that timestamp.  If in progress, retry the whole
+                        // workflow and wait for it to complete
+                        CorfuStoreMetadata.Timestamp fullSyncTimestamp = clientListener.performFullSync();
+                        if (checkSnapshotSyncOngoing(fullSyncTimestamp)) {
                             log.info("Snapshot sync was going on during multi table read.  Rerun the checks and " +
                                 "re-trigger multiTable read");
                             throw new RetryNeededException();
                         }
 
                         // Snapshot sync was not in progress at the client's read timestamp.  Invoke the client callback
-                        // to set the baseline at this timestamp.
-                        clientListener.mergeTableOnSubscription(multiTableReadTimestamp);
+                        // to merge its tables and set the baseline at this timestamp.
+                        clientListener.mergeTables(fullSyncTimestamp);
 
                         // Return this timestamp.  The client's listener must be subscribed at this timestamp.
-                        return multiTableReadTimestamp;
+                        return fullSyncTimestamp;
                     } catch (Exception e) {
                         log.error("Error while attempting to get a valid subscription timestamp.  Retrying.", e);
                         throw new RetryNeededException();
@@ -173,17 +160,35 @@ public class LogReplicationUtils {
         }
 
         /**
-         * Gets the tail of the Replication Status table by committing a read-only transaction on it
-         * @return Timestamp
+         * Gets the current timestamp if snapshot sync is ongoing.  Otherwise returns null
          */
-        private CorfuStoreMetadata.Timestamp getTimestamp() {
+        private CorfuStoreMetadata.Timestamp getOngoingSnapshotSyncTimestamp() {
+            CorfuStoreEntry<ReplicationStatusKey, ReplicationStatusVal, Message> entry;
+            CorfuStoreMetadata.Timestamp timestamp;
+
             try (TxnContext txnContext = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-                txnContext.getTable(REPLICATION_STATUS_TABLE);
-                return txnContext.commit();
-            } catch(Exception e) {
-                log.error("Read-only transaction failed.", e);
-                throw e;
+                List<CorfuStoreEntry<ReplicationStatusKey, ReplicationStatusVal, Message>> entries =
+                    txnContext.executeQuery(REPLICATION_STATUS_TABLE, p -> true);
+
+                // In LR V1, it is a valid assumption that the size of replication status table will be 1 as there is
+                // only 1 remote cluster.  This implementation will change in LR V2
+                Preconditions.checkState(entries.size() == 1);
+                entry = entries.get(0);
+
+                // Touch the key so that a conflict is detected with any concurrent updates and the transaction
+                // aborts.
+                txnContext.touch(REPLICATION_STATUS_TABLE, entry.getKey());
+                timestamp = txnContext.commit();
+            } catch (TransactionAbortedException tae) {
+                log.warn("Transaction to check for ongoing snapshot sync aborted", tae);
+                throw tae;
             }
+
+            if (entry.getPayload().getDataConsistent()) {
+                // Snapshot sync is not in progress, return null
+                return null;
+            }
+            return timestamp;
         }
 
         /**
@@ -231,13 +236,15 @@ public class LogReplicationUtils {
             corfuStore.subscribeListener(snapshotSyncCompletionListener, CORFU_SYSTEM_NAMESPACE, LR_STATUS_STREAM_TAG,
                     Arrays.asList(REPLICATION_STATUS_TABLE), timestamp);
 
-            if (snapshotSyncCompletionLatch.await(SNAPSHOT_SYNC_COMPLETION_WAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS) == false) {
+            if (!snapshotSyncCompletionLatch.await(
+                    corfuStore.getRuntime().getParameters().getSnapshotSyncCompletionWaitTimeMs(),
+                        TimeUnit.MILLISECONDS)) {
                 log.warn("Snapshot Apply has not completed after {} seconds.  Restarting the check.",
-                        SNAPSHOT_SYNC_COMPLETION_WAIT_TIMEOUT_MS);
+                        corfuStore.getRuntime().getParameters().getSnapshotSyncCompletionWaitTimeMs());
                 corfuStore.unsubscribeListener(snapshotSyncCompletionListener);
                 throw new StreamingException("Timed out waiting for snapshot sync to complete.  Restarting the check");
             }
-            Preconditions.checkState(true == snapshotSyncCompletionListener.getSnapshotSyncComplete().get());
+            Preconditions.checkState(snapshotSyncCompletionListener.getSnapshotSyncComplete().get());
             corfuStore.unsubscribeListener(snapshotSyncCompletionListener);
         }
     }
@@ -258,14 +265,14 @@ public class LogReplicationUtils {
         public void onNext(CorfuStreamEntries results) {
             Map<TableSchema, List<CorfuStreamEntry>> entries = results.getEntries();
             for (TableSchema tableSchema : entries.keySet()) {
-                if (tableSchema.getTableName().equals(REPLICATION_STATUS_TABLE)) {
-                    for (CorfuStreamEntry entry : entries.get(tableSchema)) {
-                        ReplicationStatusVal status = (ReplicationStatusVal) entry.getPayload();
-                        if (status.getDataConsistent()) {
-                            // Snapshot Sync has ended.  Notify the waiting thread to continue
-                            snapshotSyncComplete.set(true);
-                            countDownLatch.countDown();
-                        }
+                for (CorfuStreamEntry entry : entries.get(tableSchema)) {
+                    // As this is an internal listener and Replication Status table is only table of interest, it is
+                    // safe to assume that updates from only that table are received
+                    ReplicationStatusVal status = (ReplicationStatusVal) entry.getPayload();
+                    if (status.getDataConsistent()) {
+                        // Snapshot Sync has ended.  Notify the waiting thread to continue
+                        snapshotSyncComplete.set(true);
+                        countDownLatch.countDown();
                     }
                 }
             }

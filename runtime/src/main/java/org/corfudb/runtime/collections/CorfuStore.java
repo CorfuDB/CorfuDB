@@ -12,8 +12,7 @@ import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
-import org.corfudb.runtime.LogReplicationDataListener;
-import org.corfudb.runtime.LogReplicationUtils;
+import org.corfudb.runtime.LogReplicationListener;
 import org.corfudb.runtime.Queue;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.TableRegistry;
@@ -48,7 +47,7 @@ public class CorfuStore {
 
     private final CorfuStoreMetrics corfuStoreMetrics;
 
-    private LogReplicationUtils logReplicationUtils;
+    //private LogReplicationUtils logReplicationUtils;
 
     /**
      * Creates a new CorfuStore.
@@ -337,75 +336,6 @@ public class CorfuStore {
     }
 
     /**
-     * Subscription API exclusively for Log Replicator(LR).  It is used for subscribing to transaction updates across
-     * LR's metadata table(ReplicationStatus) in the CorfuSystem namespace and application-specific tables containing
-     * 'streamTag' within the application namespace.
-     * Objects returned will honor transactional boundaries and will maintain the order of log data
-     * across the application namespace and corfu system namespace.
-     * <p>
-     * Note: if memory is a consideration consider using the other version of subscribe that is
-     * able to specify the size of buffered transactions entries.
-     *
-     * @param streamListener   callback context
-     * @param namespace        the application namespace to subscribe to
-     * @param streamTag        only updates of tables with the stream tag will be polled
-     * @param tablesOfInterest only updates from these tables of interest will be sent to listener
-     */
-    public void subscribeLRCrossNamespaceListener(@Nonnull LogReplicationDataListener streamListener,
-                                         @Nonnull String namespace, @Nonnull String streamTag,
-                                         @Nonnull List<String> tablesOfInterest) {
-        if (logReplicationUtils == null) {
-            logReplicationUtils = new LogReplicationUtils(this);
-        }
-        logReplicationUtils.subscribe(streamListener, namespace, streamTag, tablesOfInterest);
-    }
-
-    /**
-     * Subscription API exclusively for Log Replicator(LR).  It is used for subscribing to transaction updates across
-     * LR's metadata table(ReplicationStatus) in the CorfuSystem namespace and application-specific tables containing
-     * 'streamTag' within the application namespace.
-     * Objects returned will honor transactional boundaries and will maintain the order of log data
-     * across the application namespace and corfu system namespace.
-     * <p>
-     *
-     *
-     * @param streamListener   callback context
-     * @param namespace        the application namespace to subscribe to
-     * @param streamTag        only updates of tables with the stream tag will be polled
-     * @param tablesOfInterest only updates from these tables of interest will be sent to listener
-     * @param bufferSize       maximum size of buffered transaction entries
-     */
-    public void subscribeLRCrossNamespaceListener(@Nonnull LogReplicationDataListener streamListener,
-                                                  @Nonnull String namespace, @Nonnull String streamTag,
-                                                  @Nonnull List<String> tablesOfInterest, int bufferSize) {
-        if (logReplicationUtils == null) {
-            logReplicationUtils = new LogReplicationUtils(this);
-        }
-        logReplicationUtils.subscribe(streamListener, namespace, streamTag, tablesOfInterest, bufferSize);
-    }
-
-    /**
-     * Subscription API exclusively for Log Replicator(LR).  It is used for subscribing to transaction updates across
-     * LR's metadata table(ReplicationStatus) in the CorfuSystem namespace and application-specific tables containing
-     * 'streamTag' within the application namespace.
-     * Objects returned will honor transactional boundaries and will maintain the order of log data
-     * across the application namespace and corfu system namespace
-     *
-     * Note: all tables belonging to this stream tag must have been previously opened or subscription
-     * will fail.
-     *
-     * @param streamListener   client listener for callback
-     * @param namespace        the CorfuStore namespace to subscribe to
-     * @param streamTag        only updates of tables with the stream tag will be polled
-     * @param bufferSize       maximum size of buffered transaction entries
-     */
-    public void subscribeLRCrossNamespaceListener(@Nonnull LogReplicationDataListener streamListener,
-                                                  @Nonnull String namespace, @Nonnull String streamTag, int bufferSize) {
-        List<String> tablesOfInterest = getTablesOfInterest(namespace, streamTag);
-        subscribeLRCrossNamespaceListener(streamListener, namespace, streamTag, tablesOfInterest, bufferSize);
-    }
-
-    /**
      * Subscribe to transaction updates on specific tables with the streamTag in the namespace.
      * Objects returned will honor transactional boundaries.
      *
@@ -445,19 +375,6 @@ public class CorfuStore {
     }
 
     /**
-     * Get names of opened tables under the given namespace and stream tag.
-     *
-     * @param namespace
-     * @param streamTag
-     * @return table names (without namespace prefix)
-     */
-    private List<String> getTablesOfInterest(@Nonnull String namespace, @Nonnull String streamTag) {
-        List<String> tablesOfInterest = runtime.getTableRegistry().listTables(namespace, streamTag);
-        log.info("Tag[{}${}] :: Subscribing to {} tables - {}", namespace, streamTag, tablesOfInterest.size(), tablesOfInterest);
-        return tablesOfInterest;
-    }
-
-    /**
      * Subscribe to transaction updates on all tables with the specified streamTag and namespace.
      * Objects returned will honor transactional boundaries.
      * <p>
@@ -476,6 +393,85 @@ public class CorfuStore {
                                   @Nonnull String streamTag, @Nullable Timestamp timestamp) {
         List<String> tablesOfInterest = getTablesOfInterest(namespace, streamTag);
         subscribeListener(streamListener, namespace, streamTag, tablesOfInterest, timestamp);
+    }
+
+    /**
+     * Subscription API exclusively for Log Replicator(LR).  It is used for subscribing to transaction updates across
+     * LR's metadata table(ReplicationStatus) in the CorfuSystem namespace and application-specific tables containing
+     * 'streamTag' within the application namespace.
+     * Objects returned will honor transactional boundaries and will maintain the order of log data
+     * across the application namespace and corfu system namespace.
+     * <p>
+     * Note: if memory is a consideration consider using the other version of subscribe that is
+     * able to specify the size of buffered transactions entries.
+     *
+     * @param streamListener   callback context
+     * @param namespace        the application namespace to subscribe to
+     * @param streamTag        only updates of tables with the stream tag will be polled
+     * @param tablesOfInterest only updates from these tables of interest will be sent to listener
+     */
+    public void subscribeLogReplicationListener(@Nonnull LogReplicationListener streamListener,
+                                                  @Nonnull String namespace, @Nonnull String streamTag,
+                                                  @Nonnull List<String> tablesOfInterest) {
+        int uninitializedBufferSize = 0;
+        runtime.getTableRegistry().getLogReplicationUtils().subscribe(streamListener, namespace, streamTag,
+                tablesOfInterest, uninitializedBufferSize, this);
+    }
+
+    /**
+     * Subscription API exclusively for Log Replicator(LR).  It is used for subscribing to transaction updates across
+     * LR's metadata table(ReplicationStatus) in the CorfuSystem namespace and application-specific tables containing
+     * 'streamTag' within the application namespace.
+     * Objects returned will honor transactional boundaries and will maintain the order of log data
+     * across the application namespace and corfu system namespace.
+     * <p>
+     *
+     *
+     * @param streamListener   callback context
+     * @param namespace        the application namespace to subscribe to
+     * @param streamTag        only updates of tables with the stream tag will be polled
+     * @param tablesOfInterest only updates from these tables of interest will be sent to listener
+     * @param bufferSize       maximum size of buffered transaction entries
+     */
+    public void subscribeLogReplicationListener(@Nonnull LogReplicationListener streamListener,
+                                                  @Nonnull String namespace, @Nonnull String streamTag,
+                                                  @Nonnull List<String> tablesOfInterest, int bufferSize) {
+        runtime.getTableRegistry().getLogReplicationUtils().subscribe(streamListener, namespace, streamTag,
+                tablesOfInterest, bufferSize, this);
+    }
+
+    /**
+     * Subscription API exclusively for Log Replicator(LR).  It is used for subscribing to transaction updates across
+     * LR's metadata table(ReplicationStatus) in the CorfuSystem namespace and application-specific tables containing
+     * 'streamTag' within the application namespace.
+     * Objects returned will honor transactional boundaries and will maintain the order of log data
+     * across the application namespace and corfu system namespace
+     *
+     * Note: all tables belonging to this stream tag must have been previously opened or subscription
+     * will fail.
+     *
+     * @param streamListener   client listener for callback
+     * @param namespace        the CorfuStore namespace to subscribe to
+     * @param streamTag        only updates of tables with the stream tag will be polled
+     * @param bufferSize       maximum size of buffered transaction entries
+     */
+    public void subscribeLogReplicationListener(@Nonnull LogReplicationListener streamListener,
+                                                  @Nonnull String namespace, @Nonnull String streamTag, int bufferSize) {
+        List<String> tablesOfInterest = getTablesOfInterest(namespace, streamTag);
+        subscribeLogReplicationListener(streamListener, namespace, streamTag, tablesOfInterest, bufferSize);
+    }
+
+    /**
+     * Get names of opened tables under the given namespace and stream tag.
+     *
+     * @param namespace
+     * @param streamTag
+     * @return table names (without namespace prefix)
+     */
+    private List<String> getTablesOfInterest(@Nonnull String namespace, @Nonnull String streamTag) {
+        List<String> tablesOfInterest = runtime.getTableRegistry().listTables(namespace, streamTag);
+        log.info("Tag[{}${}] :: Subscribing to {} tables - {}", namespace, streamTag, tablesOfInterest.size(), tablesOfInterest);
+        return tablesOfInterest;
     }
 
     /**
