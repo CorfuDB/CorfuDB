@@ -555,7 +555,7 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
     }
 
     /**
-     * Check {@link PersistedStreamingMap} integration with {@link CorfuStore}.
+     * Check {@link PersistedCorfuTable} integration with {@link CorfuStore}.
      */
     void dataStoreIntegration(
             @ForAll @StringLength(min = STRING_MIN, max = STRING_MAX) @AlphaChars String namespace,

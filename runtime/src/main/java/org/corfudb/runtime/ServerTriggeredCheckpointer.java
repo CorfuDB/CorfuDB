@@ -77,11 +77,7 @@ public class ServerTriggeredCheckpointer extends DistributedCheckpointer {
             String persistentCacheDirName = String.format("compactor_%s_%s",
                     tableName.getNamespace(), tableName.getTableName());
             Path persistedCacheLocation = Paths.get(this.checkpointerBuilder.persistedCacheRoot.get()).resolve(persistentCacheDirName);
-            Supplier<StreamingMap<CorfuDynamicKey, OpaqueCorfuDynamicRecord>> mapSupplier =
-                    () -> new PersistedStreamingMap<>(
-                            persistedCacheLocation, PersistedStreamingMap.getPersistedStreamingMapOptions(),
-                            serializer, rt);
-            corfuTableBuilder.setArguments(mapSupplier, ICorfuVersionPolicy.MONOTONIC);
+            // TODO(vjeko): Integrate with the new disk backed Corfu.
         }
         return corfuTableBuilder.open();
     }

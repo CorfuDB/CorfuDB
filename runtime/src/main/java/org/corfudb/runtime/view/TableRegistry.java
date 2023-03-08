@@ -17,9 +17,7 @@ import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.CorfuStoreMetadata.ProtobufFileName;
 import org.corfudb.runtime.CorfuStoreMetadata.ProtobufFileDescriptor;
 import org.corfudb.runtime.collections.CorfuRecord;
-import org.corfudb.runtime.collections.PersistedStreamingMap;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
-import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TableParameters;
@@ -545,12 +543,8 @@ public class TableRegistry {
 
         String fullyQualifiedTableName = getFullyQualifiedTableName(namespace, tableName);
 
-        Supplier<StreamingMap<K, V>> mapSupplier = null;
         if (tableOptions.getPersistentDataPath().isPresent()) {
-            mapSupplier = () -> new PersistedStreamingMap<>(
-                    tableOptions.getPersistentDataPath().get(),
-                    PersistedStreamingMap.getPersistedStreamingMapOptions(),
-                    protobufSerializer, this.runtime);
+            // TODO(vjeko): Integrate with UFO.
         }
 
         CorfuOptions.SchemaOptions tableSchemaOptions;
@@ -592,8 +586,7 @@ public class TableRegistry {
                         .build(),
                 this.runtime,
                 this.protobufSerializer,
-                streamTagIdsForTable,
-                mapSupplier);
+                streamTagIdsForTable);
         tableMap.put(fullyQualifiedTableName, (Table<Message, Message, Message>) table);
 
         registerTable(namespace, tableName, kClass, vClass, mClass, tableOptions);
@@ -754,12 +747,8 @@ public class TableRegistry {
             throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
 
         // In-memory PersistentCorfuTable does not need a map supplier
-        Supplier<StreamingMap<K, V>> mapSupplier = null;
         if (tableOptions.getPersistentDataPath().isPresent()) {
-            mapSupplier = () -> new PersistedStreamingMap<>(
-                    tableOptions.getPersistentDataPath().get(),
-                    PersistedStreamingMap.getPersistedStreamingMapOptions(),
-                    protobufSerializer, this.runtime);
+            // TODO(vjeko): Integrate with VLO.
         }
 
         CorfuOptions.SchemaOptions tableSchemaOptions;
@@ -784,7 +773,6 @@ public class TableRegistry {
                         .build(),
                 this.runtime,
                 this.protobufSerializer,
-                mapSupplier,
                 new HashSet<>(Collections.singletonList(LOG_REPLICATOR_STREAM_INFO.getStreamId())));
     }
 

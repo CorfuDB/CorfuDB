@@ -118,8 +118,7 @@ public class Table<K extends Message, V extends Message, M extends Message> {
     public Table(@Nonnull final TableParameters<K, V, M> tableParameters,
                  @Nonnull final CorfuRuntime corfuRuntime,
                  @Nonnull final ISerializer serializer,
-                 @NonNull final Set<UUID> streamTags,
-                 @Nullable final Supplier<StreamingMap<K, V>> streamingMapSupplier) {
+                 @NonNull final Set<UUID> streamTags) {
 
         this.namespace = tableParameters.getNamespace();
         this.fullyQualifiedTableName = tableParameters.getFullyQualifiedTableName();
@@ -147,14 +146,6 @@ public class Table<K extends Message, V extends Message, M extends Message> {
         } else {
             this.guidGenerator = null;
         }
-    }
-
-    public Table(@Nonnull final TableParameters<K, V, M> tableParameters,
-                 @Nonnull final CorfuRuntime corfuRuntime,
-                 @Nonnull final ISerializer serializer,
-                 @Nonnull final Supplier<StreamingMap<K, V>> streamingMapSupplier,
-                 @NonNull final Set<UUID> streamTags) {
-        this(tableParameters, corfuRuntime, serializer, streamTags, streamingMapSupplier);
     }
 
     /**
