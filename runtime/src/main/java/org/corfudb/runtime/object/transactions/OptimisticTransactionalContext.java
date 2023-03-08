@@ -12,7 +12,6 @@ import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.AppendException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.ICorfuSMRAccess;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
@@ -81,15 +80,8 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
             long ts = getSnapshotTimestamp().getSequence();
 
             // TODO: better proxy type check, or refactor to avoid.
-            if (proxy instanceof CorfuCompileProxy) {
-                // Next, we sync the object, which will bring the object
-                // to the correct version, reflecting any optimistic
-                // updates.
-                throw new UnsupportedOperationException();
-            } else {
-                return getAndCacheSnapshotProxy(proxy, ts)
-                        .access(accessFunction, version -> updateKnownStreamPosition(proxy, version));
-            }
+            return getAndCacheSnapshotProxy(proxy, ts)
+                    .access(accessFunction, version -> updateKnownStreamPosition(proxy, version));
         } finally {
             dbNanoTime += (System.nanoTime() - startAccessTime);
         }

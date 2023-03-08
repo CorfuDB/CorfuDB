@@ -5,7 +5,6 @@ import java.util.UUID;
 
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.ICorfuSMRAccess;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
@@ -34,17 +33,8 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
                                                 Object[] conflictObject) {
         long startAccessTime = System.nanoTime();
         try {
-            // TODO: better proxy type check, or refactor to avoid.
-            if (proxy instanceof CorfuCompileProxy) {
-                // In snapshot transactions, there are no conflicts.
-                // Hence, we do not need to add this access to a conflict set
-                // do not add: addToReadSet(proxy, conflictObject);
-                throw new UnsupportedOperationException();
-            } else {
-                return getAndCacheSnapshotProxy(proxy, getSnapshotTimestamp().getSequence())
-                        .access(accessFunction, version -> updateKnownStreamPosition(proxy, version));
-
-            }
+            return getAndCacheSnapshotProxy(proxy, getSnapshotTimestamp().getSequence())
+                    .access(accessFunction, version -> updateKnownStreamPosition(proxy, version));
         } finally {
             dbNanoTime += (System.nanoTime() - startAccessTime);
         }

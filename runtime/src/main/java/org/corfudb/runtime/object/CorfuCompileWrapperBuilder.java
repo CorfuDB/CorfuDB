@@ -78,20 +78,7 @@ public class CorfuCompileWrapperBuilder {
             return (T) wrapperObject;
         }
 
-        // Do we have a compiled wrapper for this type?
-        Class<ICorfuSMR<T>> wrapperClass = (Class<ICorfuSMR<T>>)
-                Class.forName(type.getName() + ICorfuSMR.CORFUSMR_SUFFIX);
-
-        // Instantiate a new instance of this class.
-        ICorfuSMR<T> wrapperObject = (ICorfuSMR<T>) ReflectionUtils.
-                findMatchingConstructor(wrapperClass.getDeclaredConstructors(), args);
-
-        // Now we create the proxy, which actually manages
-        // instances of this object. The wrapper delegates calls to the proxy.
-        wrapperObject.setCorfuSMRProxy(new CorfuCompileProxy<>(rt, streamID,
-                type, args, serializer, streamTags, wrapperObject, objectOpenOption));
-
-        return (T) wrapperObject;
+        throw new UnsupportedOperationException();
     }
 
     public static <T extends ICorfuSMR<T>> T getWrapper(SMRObject<T> smrObject) throws Exception {

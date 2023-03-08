@@ -48,7 +48,6 @@ import org.corfudb.runtime.collections.CorfuDynamicKey;
 import org.corfudb.runtime.collections.CorfuDynamicRecord;
 import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.collections.PersistedStreamingMap;
-import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.collections.StreamListener;
 import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.collections.Table;
@@ -141,19 +140,7 @@ public class CorfuStoreBrowserEditor {
             return corfuTableBuilder.open();
         } else {
             // TODO(vjeko): Migrate the logic.
-            SMRObject.Builder<PersistentCorfuTable<CorfuDynamicKey, CorfuDynamicRecord>> corfuTableBuilder =
-                    runtime.getObjectsView().build()
-                            .setTypeToken(new TypeToken<PersistentCorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>() {})
-                            .setStreamName(fullTableName)
-                            .setSerializer(dynamicProtobufSerializer);
-            final Options options = new Options().setCreateIfMissing(true);
-            final Supplier<StreamingMap<CorfuDynamicKey, CorfuDynamicRecord>> mapSupplier = () ->
-                    new PersistedStreamingMap<>(
-                            Paths.get(diskPath),
-                            options,
-                            dynamicProtobufSerializer, runtime);
-            corfuTableBuilder.setArguments(mapSupplier, ICorfuVersionPolicy.MONOTONIC);
-            return corfuTableBuilder.open();
+            throw new UnsupportedOperationException();
         }
     }
 

@@ -94,7 +94,6 @@ public class Table<K extends Message, V extends Message, M extends Message> {
     private final Set<UUID> streamTags;
 
     private final TableParameters<K, V, M> tableParameters;
-    private final Supplier<StreamingMap<K, V>> streamingMapSupplier;
     /**
      * In case this table is opened as a Queue, we need the Guid generator to support enqueue operations.
      */
@@ -134,7 +133,6 @@ public class Table<K extends Message, V extends Message, M extends Message> {
                 .orElse(MetadataOptions.builder().build());
 
         this.tableParameters = tableParameters;
-        this.streamingMapSupplier = streamingMapSupplier;
         this.serializer = serializer;
 
         initializeCorfuTable(corfuRuntime);
@@ -220,15 +218,12 @@ public class Table<K extends Message, V extends Message, M extends Message> {
 
         ObjectsView.ObjectID oid;
 
-        if (streamingMapSupplier == null) {
-            // PersistentCorfuTable
-            oid = new ObjectsView.ObjectID(getStreamUUID(), PersistentCorfuTable.class);
+        // PersistentCorfuTable
+        oid = new ObjectsView.ObjectID(getStreamUUID(), PersistentCorfuTable.class);
 
-            // Evict all versions of this Table from MVOCache
-            runtime.getObjectsView().getMvoCache().invalidateAllVersionsOf(getStreamUUID());
-        } else {
-            throw new UnsupportedOperationException();
-        }
+        // Evict all versions of this Table from MVOCache
+        runtime.getObjectsView().getMvoCache().invalidateAllVersionsOf(getStreamUUID());
+        // TODO(vjeko): Deal with the disk-baked tables.
 
         Object tableObject = runtime.getObjectsView().getObjectCache().remove(oid);
         if (tableObject == null) {
@@ -241,17 +236,14 @@ public class Table<K extends Message, V extends Message, M extends Message> {
     private void initializeCorfuTable(CorfuRuntime runtime) {
         SMRObject.Builder<? extends ICorfuTable<K, CorfuRecord<V, M>>> builder;
 
-        if (streamingMapSupplier == null) {
-            // PersistentCorfuTable
-            builder = runtime.getObjectsView().build()
-                    .setTypeToken(new TypeToken<PersistentCorfuTable<K, CorfuRecord<V, M>>>() {})
-                    .setArguments(new ProtobufIndexer(
-                            tableParameters.getValueSchema(),
-                            tableParameters.getSchemaOptions()));
-        } else {
-            // Disk-backed CorfuTable
-            throw new UnsupportedOperationException();
-        }
+        // PersistentCorfuTable
+        builder = runtime.getObjectsView().build()
+                .setTypeToken(new TypeToken<PersistentCorfuTable<K, CorfuRecord<V, M>>>() {})
+                .setArguments(new ProtobufIndexer(
+                        tableParameters.getValueSchema(),
+                        tableParameters.getSchemaOptions()));
+        // TODO(vjeko): Deal with the disk-baked tables.
+
 
         this.corfuTable = builder.setStreamName(this.fullyQualifiedTableName)
                 .setStreamTags(streamTags)

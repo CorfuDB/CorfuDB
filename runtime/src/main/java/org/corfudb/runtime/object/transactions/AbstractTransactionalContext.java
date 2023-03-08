@@ -17,7 +17,6 @@ import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.ICorfuSMRAccess;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
@@ -31,8 +30,7 @@ import org.corfudb.util.Utils;
  * Represents a transactional context. Transactional contexts
  * manage per-thread transaction state.
  *
- * <p>Recall from {@link CorfuCompileProxy} that an SMR object layer implements objects whose
- * history of updates
+ * <p>SMR object layer implements objects whose history of updates
  * are backed by a stream. If a Corfu object's method is an Accessor, it invokes the proxy's
  * access() method. Likewise, if a Corfu object's method is a Mutator or Accessor-Mutator,
  * it invokes the proxy's logUpdate() method.

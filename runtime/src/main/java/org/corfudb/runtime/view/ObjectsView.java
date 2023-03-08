@@ -18,7 +18,6 @@ import org.corfudb.runtime.exceptions.QuotaExceededException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.WriteSizeException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
-import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.MVOCache;
 import org.corfudb.runtime.object.MVOCorfuCompileProxy;
@@ -230,13 +229,10 @@ public class ObjectsView extends AbstractView {
      */
     public void gc(long trimMark) {
         for (Object obj : getObjectCache().values()) {
-            if (((ICorfuSMR) obj).getCorfuSMRProxy() instanceof CorfuCompileProxy) {
-                throw new UnsupportedOperationException();
-            } else {
-                // MVOCorfuCompileProxy
-                ((MVOCorfuCompileProxy) ((ICorfuSMR) obj).
-                        getCorfuSMRProxy()).getUnderlyingMVO().gc(trimMark);
-            }
+            // MVOCorfuCompileProxy
+            ((MVOCorfuCompileProxy) ((ICorfuSMR) obj).
+                    getCorfuSMRProxy()).getUnderlyingMVO().gc(trimMark);
+
         }
     }
 
