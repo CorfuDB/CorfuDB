@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatus;
+import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManagerOld;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationUpgradeManager;
 import org.corfudb.runtime.CorfuRuntime;
@@ -27,6 +28,8 @@ import javax.annotation.Nonnull;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+
+import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 /**
  * Manage log replication sessions for multiple replication models.
@@ -65,6 +68,9 @@ public class SessionManager {
     @Getter
     private final LogReplicationMetadataManager metadataManager;
 
+    @Getter
+    private final LogReplicationMetadataManagerOld metadataManagerOld;
+
     private final LogReplicationUpgradeManager upgradeManager;
 
     @Getter
@@ -99,8 +105,11 @@ public class SessionManager {
         this.localCorfuEndpoint = lrNodeLocator.toEndpointUrl();
 
         this.metadataManager = new LogReplicationMetadataManager(corfuRuntime, topology.getTopologyConfigId());
+        this.metadataManagerOld = new LogReplicationMetadataManagerOld(corfuRuntime, topology.getTopologyConfigId(),
+            topology.getLocalClusterDescriptor().getClusterId());
         this.configManager = new LogReplicationConfigManager(runtime, serverContext);
         this.upgradeManager = upgradeManager;
+        upgradeManager.getLrRollingUpgradeHandler().setOldMetadataManager(metadataManagerOld);
         replicationContext = new LogReplicationContext(configManager, topology.getTopologyConfigId(), localCorfuEndpoint);
 
         createSessions();
@@ -123,6 +132,8 @@ public class SessionManager {
             .build();
         this.localCorfuEndpoint = lrNodeLocator.toEndpointUrl();
         this.metadataManager = new LogReplicationMetadataManager(corfuRuntime, topology.getTopologyConfigId());
+        this.metadataManagerOld = new LogReplicationMetadataManagerOld(corfuRuntime, topology.getTopologyConfigId(),
+            topology.getLocalClusterDescriptor().getClusterId());
         this.configManager = new LogReplicationConfigManager(runtime);
         this.upgradeManager = null;
         replicationContext = new LogReplicationContext(configManager, topology.getTopologyConfigId(), localCorfuEndpoint);
@@ -305,7 +316,14 @@ public class SessionManager {
      * Reset replication status for all sessions
      */
     public void resetReplicationStatus() {
-        metadataManager.resetReplicationStatus();
+        //TODO pankti: Add retries
+        try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+            metadataManager.resetReplicationStatus(txn);
+            if (upgradeManager.getLrRollingUpgradeHandler().isLRUpgradeInProgress(txn)) {
+                metadataManagerOld.resetReplicationStatus(txn);
+            }
+            txn.commit();
+        }
     }
 
     /**

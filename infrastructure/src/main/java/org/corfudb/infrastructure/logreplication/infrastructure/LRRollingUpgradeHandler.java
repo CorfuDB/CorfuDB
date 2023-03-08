@@ -1,7 +1,10 @@
 package org.corfudb.infrastructure.logreplication.infrastructure;
 
+import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.ILogReplicationVersionAdapter;
+import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManagerOld;
 import org.corfudb.runtime.collections.TxnContext;
 
 /**
@@ -42,6 +45,11 @@ public class LRRollingUpgradeHandler {
 
     private volatile boolean isClusterAllAtV2 = false;
     ILogReplicationVersionAdapter versionAdapter;
+
+    @Getter
+    @Setter
+    LogReplicationMetadataManagerOld oldMetadataManager;
+
     public LRRollingUpgradeHandler(ILogReplicationVersionAdapter versionAdapter) {
         this.versionAdapter = versionAdapter;
     }

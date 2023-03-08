@@ -709,6 +709,12 @@ public class LogReplicationMetadataManagerOld {
         }
     }
 
+    public void resetReplicationStatus(TxnContext txn) {
+        log.info("syncStatus :: reset replication status");
+        replicationStatusTable.clearAll();
+    }
+
+
     @Override
     public String toString() {
         StringBuilder builder = new StringBuilder();

@@ -863,6 +863,14 @@ public class LogReplicationMetadataManager {
         }
     }
 
+    /**
+     * Reset replication status
+     * @return
+     */
+    public void resetReplicationStatus(TxnContext txn) {
+        txn.clear(statusTable);
+    }
+
     // ================================ Runtime Helper Functions ======================================
 
     public long getLogHead() {
