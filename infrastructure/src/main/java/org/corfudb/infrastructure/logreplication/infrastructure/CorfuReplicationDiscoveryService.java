@@ -770,6 +770,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
                 .build();
 
         sessionManager.getMetadataManager().addEvent(key, event);
+        sessionManager.getMetadataManagerOld().addEvent(key, event);
         return forceSyncId;
     }
 

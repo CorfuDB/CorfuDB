@@ -2,6 +2,7 @@ package org.corfudb.infrastructure.logreplication.infrastructure;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
+import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManagerOld;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
@@ -38,7 +39,9 @@ public class CorfuReplicationManager {
      */
     public CorfuReplicationManager(NodeDescriptor localNodeDescriptor,
                                    LogReplicationMetadataManager metadataManager,
-                                   String pluginFilePath, CorfuRuntime corfuRuntime, LogReplicationUpgradeManager upgradeManager) {
+                                   String pluginFilePath, CorfuRuntime corfuRuntime,
+                                   LogReplicationUpgradeManager upgradeManager,
+                                   LogReplicationMetadataManagerOld oldMetadataManager) {
         this.metadataManager = metadataManager;
         this.pluginFilePath = pluginFilePath;
         this.corfuRuntime = corfuRuntime;

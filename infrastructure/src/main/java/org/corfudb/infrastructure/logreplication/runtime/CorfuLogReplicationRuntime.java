@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
+import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManagerOld;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationUpgradeManager;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationSourceManager;
@@ -161,13 +162,14 @@ public class CorfuLogReplicationRuntime {
      */
     public CorfuLogReplicationRuntime(LogReplicationRuntimeParameters parameters,
                                       LogReplicationMetadataManager metadataManager, LogReplicationUpgradeManager upgradeManager,
-                                      LogReplicationSession session, LogReplicationContext replicationContext) {
+                                      LogReplicationSession session, LogReplicationContext replicationContext,
+                                      LogReplicationMetadataManagerOld oldMetadataManager) {
         this.remoteClusterId = session.getSinkClusterId();
         this.session = session;
         this.router = new LogReplicationClientRouter(parameters, this);
         this.router.addClient(new LogReplicationHandler());
         this.sourceManager = new LogReplicationSourceManager(parameters, new LogReplicationClient(router, session.getSinkClusterId()),
-                metadataManager, upgradeManager, session, replicationContext);
+                metadataManager, upgradeManager, session, replicationContext, oldMetadataManager);
         this.connectedNodes = new HashSet<>();
 
         ThreadFactory threadFactory = new ThreadFactoryBuilder().setNameFormat("runtime-fsm-worker-"+remoteClusterId)

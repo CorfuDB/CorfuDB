@@ -19,7 +19,7 @@ import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.Re
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEvent;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SnapshotSyncInfo;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SnapshotSyncType;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SyncStatus;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
@@ -861,6 +861,14 @@ public class LogReplicationMetadataManager {
             log.error("Unrecoverable exception when attempting to reset replication status", e);
             throw new UnrecoverableCorfuInterruptedError(e);
         }
+    }
+
+    /**
+     * Reset replication status
+     * @return
+     */
+    public void resetReplicationStatus(TxnContext txn) {
+        txn.clear(statusTable);
     }
 
     // ================================ Runtime Helper Functions ======================================

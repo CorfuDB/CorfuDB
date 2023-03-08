@@ -5,6 +5,8 @@ import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SyncType;
+import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManagerOld;
+import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SyncStatus;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
@@ -34,6 +36,7 @@ import java.util.concurrent.locks.ReentrantLock;
 @Slf4j
 public class LogReplicationAckReader {
     private final LogReplicationMetadataManager metadataManager;
+    private final LogReplicationMetadataManagerOld oldMetadataManager;
     private final CorfuRuntime runtime;
     private final LogReplicationSession session;
     private final LogReplicationContext replicationContext;
@@ -63,11 +66,13 @@ public class LogReplicationAckReader {
     private final Lock lock = new ReentrantLock();
 
     public LogReplicationAckReader(LogReplicationMetadataManager metadataManager, CorfuRuntime runtime,
-                                   LogReplicationSession session, LogReplicationContext replicationContext) {
+                                   LogReplicationSession session, LogReplicationContext replicationContext,
+                                   LogReplicationMetadataManagerOld oldMetadataManager) {
         this.metadataManager = metadataManager;
         this.runtime = runtime;
         this.session = session;
         this.replicationContext = replicationContext;
+        this.oldMetadataManager = oldMetadataManager;
     }
 
     public void setAckedTsAndSyncType(long ackedTs, SyncType syncType) {
@@ -352,6 +357,10 @@ public class LogReplicationAckReader {
                     lock.lock();
                     metadataManager.updateSnapshotSyncStatusCompleted(session,
                             calculateRemainingEntriesToSend(baseSnapshotTimestamp), baseSnapshotTimestamp);
+                    if (lrRollingUpgradeHandler.isLRUpgradeInProgress()) {
+                        oldMetadataManager.updateSnapshotSyncStatusCompleted(session.getSinkClusterId(),
+                                calculateRemainingEntriesToSend(baseSnapshotTimestamp), baseSnapshotTimestamp);
+                    }
                 } catch (TransactionAbortedException tae) {
                     log.error("Error while attempting to markSnapshotSyncInfoCompleted for remote session {}.",
                             session, tae);
@@ -379,6 +388,10 @@ public class LogReplicationAckReader {
                     long remainingEntriesToSend = calculateRemainingEntriesToSend(lastAckedTimestamp);
                     metadataManager.updateSnapshotSyncStatusOngoing(session, forced, eventId,
                             baseSnapshotTimestamp, remainingEntriesToSend);
+                    if (rollingUpgradeHandler.isLRUpgradeInProgress()) {
+                        oldMetadataManager.updateSnapshotSyncStatusOngoing(session.getSinkClusterId(), forced,
+                                eventId, baseSnapshotTimestamp, remainingEntriesToSend);
+                    }
                 } catch (TransactionAbortedException tae) {
                     log.error("Error while attempting to markSnapshotSyncInfoOngoing for event {}.", eventId, tae);
                     throw new RetryNeededException();
@@ -403,6 +416,10 @@ public class LogReplicationAckReader {
                 try {
                     lock.lock();
                     metadataManager.updateSyncStatus(session, SyncType.SNAPSHOT, SyncStatus.ONGOING);
+                    if (rollingUpgradeHandler.isLRUpgradeInProgress()) {
+                        oldMetadataManager.updateSyncStatus(session.getSinkClusterId(),
+                                LogReplication.ReplicationStatusVal.SyncType.SNAPSHOT, LogReplication.SyncStatus.ONGOING);
+                    }
                 } catch (TransactionAbortedException tae) {
                     log.error("Error while attempting to markSnapshotSyncInfoOngoing for session {}.", session, tae);
                     throw new RetryNeededException();
@@ -424,6 +441,9 @@ public class LogReplicationAckReader {
                 try {
                     lock.lock();
                     metadataManager.updateSyncStatus(session, lastSyncType, status);
+                    if (rollingUpgradeHandler.isLRUpgradeInProgress()) {
+                        oldMetadataManager.updateSyncStatus(session.getSinkClusterId(), lastSyncType, status);
+                    }
                 } catch (TransactionAbortedException tae) {
                     log.error("Error while attempting to markSyncStatus as {}.", status, tae);
                     throw new RetryNeededException();
@@ -475,6 +495,10 @@ public class LogReplicationAckReader {
                         lock.lock();
                         long entriesToSend = calculateRemainingEntriesToSend(lastAckedTimestamp);
                         metadataManager.setReplicationStatusTable(session, entriesToSend, lastSyncType);
+                        if (rollingUpgradeHandler.isLRUpgradeInProgress()) {
+                            oldMetadataManager.setReplicationStatusTable(session.getSinkClusterId(), entriesToSend,
+                                lastSyncType);
+                        }
                     } catch (TransactionAbortedException tae) {
                         log.error("Error while attempting to set replication status for remote session {} with " +
                                 "lastSyncType {}.", session, lastSyncType, tae);
