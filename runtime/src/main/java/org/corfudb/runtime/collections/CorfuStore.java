@@ -13,6 +13,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
 import org.corfudb.runtime.LogReplicationListener;
+import org.corfudb.runtime.LogReplicationUtils;
 import org.corfudb.runtime.Queue;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.TableRegistry;
@@ -47,7 +48,10 @@ public class CorfuStore {
 
     private final CorfuStoreMetrics corfuStoreMetrics;
 
-    //private LogReplicationUtils logReplicationUtils;
+    /**
+     * Helper class for Log Replication-specific workflows
+     */
+    LogReplicationUtils logReplicationUtils;
 
     /**
      * Creates a new CorfuStore.
@@ -414,8 +418,12 @@ public class CorfuStore {
                                                   @Nonnull String namespace, @Nonnull String streamTag,
                                                   @Nonnull List<String> tablesOfInterest) {
         int uninitializedBufferSize = 0;
-        runtime.getTableRegistry().getLogReplicationUtils().subscribe(streamListener, namespace, streamTag,
-                tablesOfInterest, uninitializedBufferSize, this);
+
+        if (logReplicationUtils == null) {
+            logReplicationUtils = new LogReplicationUtils();
+        }
+        logReplicationUtils.subscribe(streamListener, namespace, streamTag, tablesOfInterest, uninitializedBufferSize,
+                this);
     }
 
     /**
@@ -436,8 +444,10 @@ public class CorfuStore {
     public void subscribeLogReplicationListener(@Nonnull LogReplicationListener streamListener,
                                                   @Nonnull String namespace, @Nonnull String streamTag,
                                                   @Nonnull List<String> tablesOfInterest, int bufferSize) {
-        runtime.getTableRegistry().getLogReplicationUtils().subscribe(streamListener, namespace, streamTag,
-                tablesOfInterest, bufferSize, this);
+        if (logReplicationUtils == null) {
+            logReplicationUtils = new LogReplicationUtils();
+        }
+        logReplicationUtils.subscribe(streamListener, namespace, streamTag, tablesOfInterest, bufferSize, this);
     }
 
     /**
