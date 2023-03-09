@@ -10,7 +10,6 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.collections.vavr.TupleIterableWrapper;
-import org.corfudb.runtime.object.ICorfuExecutionContext;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.ISMRSnapshot;
 import org.corfudb.runtime.object.InMemorySMRSnapshot;
@@ -64,12 +63,6 @@ public class ImmutableCorfuTable<K, V> implements ICorfuSMR<ImmutableCorfuTable<
     @Override
     public ISMRSnapshot<ImmutableCorfuTable<K, V>> getSnapshot(VersionedObjectIdentifier version) {
         return new InMemorySMRSnapshot<>(this);
-    }
-
-    // TODO(Zach): Remove or replace
-    @Override
-    public ImmutableCorfuTable<K, V> getContext(ICorfuExecutionContext.Context context) {
-        return this;
     }
 
     /**

@@ -4,7 +4,6 @@ import com.google.common.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.collections.*;
-import org.corfudb.runtime.object.ICorfuVersionPolicy;
 import org.corfudb.runtime.view.ObjectOpenOption;
 import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.runtime.view.TableRegistry;
@@ -17,7 +16,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
-import java.util.function.Supplier;
 
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 

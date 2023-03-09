@@ -11,7 +11,6 @@ import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CheckpointWriter;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.Queue;
-import org.corfudb.runtime.object.ICorfuVersionPolicy;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.CorfuGuidGenerator;
 import org.corfudb.runtime.view.ObjectsView;
@@ -112,8 +111,6 @@ public class Table<K extends Message, V extends Message, M extends Message> {
      * @param corfuRuntime         connected instance of the Corfu Runtime
      * @param serializer           protobuf serializer
      * @param streamTags           set of UUIDs representing the streamTags
-     * @param streamingMapSupplier supplier of underlying map data structure.
-     *                             Only required for disk-backed CorfuTable
      */
     public Table(@Nonnull final TableParameters<K, V, M> tableParameters,
                  @Nonnull final CorfuRuntime corfuRuntime,

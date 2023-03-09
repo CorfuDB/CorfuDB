@@ -1,7 +1,6 @@
 package org.corfudb.runtime.collections;
 
 import com.google.common.collect.ImmutableMap;
-import org.corfudb.runtime.object.ICorfuExecutionContext;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.ICorfuSMRProxy;
 import org.corfudb.runtime.object.ICorfuSMRUpcallTarget;
@@ -97,11 +96,6 @@ public class PersistentCorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<
     @Override
     public <I> Iterable<Map.Entry<K, V>> getByIndex(@Nonnull final Index.Name indexName, I indexKey) {
         return proxy.access(corfuSmr -> corfuSmr.getByIndex(indexName, indexKey), null);
-    }
-
-    @Override
-    public PersistentCorfuTable<K, V> getContext(ICorfuExecutionContext.Context context) {
-        return null;
     }
 
     @Override

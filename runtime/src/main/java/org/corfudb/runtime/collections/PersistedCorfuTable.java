@@ -1,7 +1,6 @@
 package org.corfudb.runtime.collections;
 
 import com.google.common.collect.ImmutableMap;
-import org.corfudb.runtime.object.ICorfuExecutionContext;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.ICorfuSMRProxy;
 import org.corfudb.runtime.object.ICorfuSMRUpcallTarget;
@@ -99,12 +98,6 @@ public class PersistedCorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<P
     public <I> Iterable<Map.Entry<K, V>> getByIndex(@Nonnull final Index.Name indexName, I indexKey) {
         throw new UnsupportedOperationException();
     }
-
-    @Override
-    public PersistedCorfuTable<K, V> getContext(ICorfuExecutionContext.Context context) {
-        return null;
-    }
-
     @Override
     public Map<String, ICorfuSMRUpcallTarget<DiskBackedCorfuTable<K, V>>> getSMRUpcallMap() {
         return upcallTargetMap;

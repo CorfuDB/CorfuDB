@@ -212,11 +212,6 @@ public class DiskBackedCorfuTable<K, V> implements ICorfuSMR<DiskBackedCorfuTabl
     }
 
     @Override
-    public DiskBackedCorfuTable<K, V> getContext(Context context) {
-        return null;
-    }
-
-    @Override
     public ISMRSnapshot<DiskBackedCorfuTable<K, V>> getSnapshot(VersionedObjectIdentifier version) {
         return rocksApi.getSnapshot(this, version);
     }

@@ -11,8 +11,7 @@ import java.util.UUID;
  * @param <T> The type of the underlying object.
  * Created by mwei on 11/10/16.
  */
-public interface ICorfuSMR<T>
-        extends ICorfuExecutionContext<T>, ICorfuVersionPolicy, AutoCloseable {
+public interface ICorfuSMR<T> extends AutoCloseable {
     /** The suffix for all precompiled SMR wrapper classes. */
     String CORFUSMR_SUFFIX = "$CORFUSMR";
 
@@ -49,18 +48,6 @@ public interface ICorfuSMR<T>
      * @return A map from function names to SMR upcalls
      */
     default <R> Map<String, ICorfuSMRUpcallTarget<R>> getSMRUpcallMap() {
-        throw new IllegalStateException("ObjectAnnotationProcessor Issue.");
-    }
-
-    /** Get a map from strings (function names) to undo methods.
-     * @return The undo map. */
-    default Map<String, IUndoFunction<T>> getCorfuUndoMap() {
-        throw new IllegalStateException("ObjectAnnotationProcessor Issue.");
-    }
-
-    /** Get a map from strings (function names) to undoRecord methods.
-     * @return The undo record map. */
-    default Map<String, IUndoRecordFunction<T>> getCorfuUndoRecordMap() {
         throw new IllegalStateException("ObjectAnnotationProcessor Issue.");
     }
 
