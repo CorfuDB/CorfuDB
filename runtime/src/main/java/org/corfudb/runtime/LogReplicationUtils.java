@@ -269,7 +269,7 @@ public class LogReplicationUtils {
                     // As this is an internal listener and Replication Status table is only table of interest, it is
                     // safe to assume that updates from only that table are received
                     ReplicationStatusVal status = (ReplicationStatusVal) entry.getPayload();
-                    if (status.getDataConsistent()) {
+                    if (entry.getOperation() == CorfuStreamEntry.OperationType.UPDATE && status.getDataConsistent()) {
                         // Snapshot Sync has ended.  Notify the waiting thread to continue
                         snapshotSyncComplete.set(true);
                         countDownLatch.countDown();
