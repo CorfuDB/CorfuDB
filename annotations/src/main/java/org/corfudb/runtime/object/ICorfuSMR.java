@@ -21,12 +21,6 @@ public interface ICorfuSMR<T> extends AutoCloseable {
         throw new IllegalStateException("ObjectAnnotationProcessor Issue.");
     }
 
-    /** Set the proxy for this wrapper, to manage the state of the object.
-     * @param proxy The proxy to set for this wrapper. */
-    default void setCorfuSMRProxy(ICorfuSMRProxy<T> proxy) {
-        throw new IllegalStateException("ObjectAnnotationProcessor Issue.");
-    }
-
     /**
      * Set the proxy for this wrapper, to manage the state of the object.
      * @param proxy The proxy to set for this wrapper.
@@ -36,26 +30,12 @@ public interface ICorfuSMR<T> extends AutoCloseable {
         throw new IllegalStateException("ObjectAnnotationProcessor Issue.");
     }
 
-    /** Get a map from strings (function names) to SMR upcalls.
-     * @return The SMR upcall map. */
-    default Map<String, ICorfuSMRUpcallTarget<T>> getCorfuSMRUpcallMap() {
-        throw new IllegalStateException("ObjectAnnotationProcessor Issue.");
-    }
-
     /**
      * Get a map from strings (function names) to SMR upcalls.
      * @param <R> The return type for ICorfuSMRUpcallTargets
      * @return A map from function names to SMR upcalls
      */
     default <R> Map<String, ICorfuSMRUpcallTarget<R>> getSMRUpcallMap() {
-        throw new IllegalStateException("ObjectAnnotationProcessor Issue.");
-    }
-
-    /** Get a set of strings (function names) which result in a reset
-     * of the object.
-     * @return  The set of strings that cause a reset on the object.
-     */
-    default Set<String> getCorfuResetSet() {
         throw new IllegalStateException("ObjectAnnotationProcessor Issue.");
     }
 
@@ -80,13 +60,5 @@ public interface ICorfuSMR<T> extends AutoCloseable {
     @Override
     @PassThrough
     default void close() {
-    }
-
-    /**
-     * Same as {@link ICorfuSMR#close()}. However this method calls close
-     * on the actual (wrapper) object, and not the underlying one.
-     */
-    @DontInstrument
-    default void closeWrapper() {
     }
 }

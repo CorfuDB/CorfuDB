@@ -136,7 +136,6 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
 
         this.mvoCache = mvoCache;
         this.trimRetry = corfuRuntime.getParameters().getTrimRetry();
-        wrapperObject.closeWrapper();
     }
 
     /**
