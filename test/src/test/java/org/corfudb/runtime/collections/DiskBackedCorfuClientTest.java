@@ -565,17 +565,17 @@ public class DiskBackedCorfuClientTest extends AbstractViewTest implements AutoC
                     .withMessage("Secondary Index anotherKey is not defined.");
         }
         { // Negative test.
-            final Table<Uuid, ExampleValue, SampleSchema.ManagedResources> table1 =
-                    corfuStore.openTable(namespace, tableName,
+            final Table<Uuid, ExampleValue, SampleSchema.ManagedResources> table =
+                    corfuStore.openTable(namespace, tableName + tableName,
                             Uuid.class, ExampleValue.class,
                             SampleSchema.ManagedResources.class,
                             // TableOptions includes option to choose - Memory/Disk based corfu table.
                             TableOptions.fromProtoSchema(ExampleValue.class).toBuilder()
-                                    .persistentDataPath(Paths.get(diskBackedDirectory, tableName))
+                                    .persistentDataPath(Paths.get(diskBackedDirectory, tableName + tableName))
                                     .build());
 
             // Negative test. No throw.
-            table1.getByIndex(ANOTHER_KEY_INDEX, 0L);
+            table.getByIndex(ANOTHER_KEY_INDEX, 0L);
         }
     }
 

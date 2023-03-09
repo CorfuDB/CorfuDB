@@ -50,12 +50,15 @@ public class TableOptions {
             tableOptionsBuilder = tableOptions.toBuilder();
         }
 
-        V defaultValueMessage = (V) vClass.getMethod("getDefaultInstance").invoke(null);
-        return tableOptionsBuilder.schemaOptions(defaultValueMessage
-                .getDescriptorForType()
-                .getOptions()
-                .getExtension(CorfuOptions.tableSchema))
-                .build();
+        if (vClass != null) { // some test cases pass vClass as null to verify behavior
+            V defaultValueMessage = (V) vClass.getMethod("getDefaultInstance").invoke(null);
+            tableOptionsBuilder.schemaOptions(defaultValueMessage
+                    .getDescriptorForType()
+                    .getOptions()
+                    .getExtension(CorfuOptions.tableSchema));
+        }
+
+        return tableOptionsBuilder.build();
     }
 
     public static <V extends Message> TableOptions fromProtoSchema(@Nonnull Class<V> vClass)
