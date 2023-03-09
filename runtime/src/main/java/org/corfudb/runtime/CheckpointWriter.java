@@ -267,7 +267,7 @@ public class CheckpointWriter<T extends ICorfuTable<?, ?>> {
      *  Append an object to a stream without caching the entries.
      */
     private long nonCachedAppend(Object object, UUID ... streamIDs) {
-        return sv.append(object, null, CacheOption.WRITE_AROUND, streamIDs);
+        return sv.append(object, null, CacheOption.WRITE_AROUND, true, streamIDs);
     }
 
     /**
