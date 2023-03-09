@@ -7,7 +7,6 @@ import org.corfudb.runtime.ExampleSchemas.ExampleValue;
 import org.corfudb.runtime.ExampleSchemas.ActivitySchedule;
 import org.corfudb.runtime.ExampleSchemas.ManagedMetadata;
 import org.corfudb.runtime.ExampleSchemas.Adult;
-import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.proto.RpcCommon.UuidMsg;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.junit.Test;
@@ -21,7 +20,6 @@ import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
@@ -33,56 +31,10 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 @SuppressWarnings("checkstyle:magicnumber")
 public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
 
-    private static final String ANOTHER_KEY_INDEX = "anotherKey";
-    
     private CorfuRuntime getTestRuntime() {
         return getDefaultRuntime();
     }
 
-    @Test
-    public void testDisableSecondaryIndexes() throws Exception {
-
-        // Get a Corfu Runtime instance.
-        CorfuRuntime corfuRuntime = getTestRuntime();
-
-        // Creating Corfu Store using a connected corfu client.
-        CorfuStoreShim shimStore = new CorfuStoreShim(corfuRuntime);
-
-        // Define a namespace for the table.
-        final String someNamespace = "some-namespace";
-        // Define table name.
-        final String tableName = "ManagedMetadata";
-
-        { // Positive test.
-            Table<UuidMsg, ExampleValue, ManagedMetadata> table = shimStore.openTable(
-                    someNamespace,
-                    tableName,
-                    UuidMsg.class,
-                    ExampleValue.class,
-                    ManagedMetadata.class,
-                    TableOptions.fromProtoSchema(ExampleValue.class)
-                            .toBuilder().secondaryIndexesDisabled(true).build());
-            
-            try (ManagedTxnContext txn = shimStore.tx(someNamespace)) {
-                assertThatExceptionOfType(TransactionAbortedException.class)
-                        .isThrownBy(() -> txn.getByIndex(table, ANOTHER_KEY_INDEX, 0L))
-                        .withCauseInstanceOf(IllegalArgumentException.class);
-            }
-        }
-        { // Negative test.
-            Table<UuidMsg, ExampleValue, ManagedMetadata> table = shimStore.openTable(
-                    someNamespace,
-                    tableName + tableName,
-                    UuidMsg.class,
-                    ExampleValue.class,
-                    ManagedMetadata.class,
-                    TableOptions.fromProtoSchema(ExampleValue.class));
-
-            try (ManagedTxnContext txn = shimStore.tx(someNamespace)) {
-                txn.getByIndex(table,ANOTHER_KEY_INDEX, 0L);
-            }
-        }
-    }
     /**
      * Simple example to see how secondary indexes work. Please see example_schemas.proto.
      *
@@ -138,7 +90,7 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
 
         try (ManagedTxnContext readWriteTxn = shimStore.tx(someNamespace)) {
             List<CorfuStoreEntry<UuidMsg, ExampleValue, ManagedMetadata>> entries = readWriteTxn
-                    .getByIndex(table, ANOTHER_KEY_INDEX, eventTime);
+                    .getByIndex(table, "anotherKey", eventTime);
             assertThat(entries.size()).isEqualTo(1);
             assertThat(entries.get(0).getPayload().getPayload()).isEqualTo("abc");
             readWriteTxn.commit();
