@@ -5,7 +5,6 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
-import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.LogReplication.ReplicationStatusKey;
 import org.corfudb.runtime.LogReplication.ReplicationStatusVal;
 import org.corfudb.runtime.LogReplicationListener;
@@ -13,7 +12,6 @@ import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStoreEntry;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
 import org.corfudb.runtime.collections.CorfuStreamEntry;
-import org.corfudb.runtime.collections.IsolationLevel;
 import org.corfudb.runtime.collections.StreamListener;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
@@ -77,33 +75,57 @@ public class LogReplicationListenerIT extends AbstractIT {
         store = new CorfuStore(runtime);
     }
 
+    @Test
+    public void testWritesToDataTableStartInLogEntrySync() throws Exception {
+        testWritesToDataTable(false);
+    }
+
+    @Test
+    public void testWritesToDataTableStartInSnapshotSync() throws Exception {
+        testWritesToDataTable(true);
+    }
+
     /**
      * This test verifies that all data written to the user table is received in increasing order of the timestamps and
-     * the streaming updates match the data in the table.  Since subscription is asynchronous, streaming updates may
-     * arrive from an arbitrary timestamp(not immediately after subscription call returns).  But the final number of
-     * entries seen by mergeTableOnSubscription() + streaming updates must be equal to the total number of writes to
-     * the table.
+     * the streaming updates match the data in the table.  The final number of entries seen by performFullSync(if
+     * starting in snapshot sync) + streaming updates must be equal to the total
+     * number of writes to the table.
      * @throws Exception
      */
-    @Test
-    public void testWritesToDataTable() throws Exception {
+    private void testWritesToDataTable(boolean startInSnapshotSync) throws Exception {
         initializeCorfu();
         openTables();
 
+        // Start snapshot sync if requested
+        if (startInSnapshotSync) {
+            writeToStatusTable(false);
+        }
+
         final int numUpdates = 10;
         CountDownLatch countDownLatch = new CountDownLatch(numUpdates);
-        lrListener = new LRTestListener(countDownLatch);
+        lrListener = new LRTestListener(store, namespace, userTag, Arrays.asList(userTableName), countDownLatch);
 
         // Subscribe the listener
         store.subscribeLogReplicationListener(lrListener, namespace, userTag, Arrays.asList(userTableName));
 
-        // Write numUpdates records in the table
+        // End snapshot sync if it had been requested
+        if (startInSnapshotSync) {
+            writeToStatusTable(true);
+        }
+
+        // Write numUpdates records in the data table
         writeToDataTable(numUpdates, 0);
 
         // Wait for the data to arrive.  Since subscription is asynchronous, streaming updates may be lesser than
         // numUpdates.  But the final number of entries seen by mergeTableOnSubscription() + streaming updates must
         // be equal to numUpdates
         countDownLatch.await();
+
+        // If the test started when in log entry sync, performFullSync() should not find any existing data as no
+        // updates have been written prior to subscription.
+        if (!startInSnapshotSync) {
+            Assert.assertTrue(lrListener.getExistingEntries().isEmpty());
+        }
 
         // Verify the sequence(timestamp) of the streaming updates
         verifyUpdatesSequence(lrListener.getUpdates());
@@ -112,60 +134,108 @@ public class LogReplicationListenerIT extends AbstractIT {
         verifyData(lrListener.getUpdates(), lrListener.getExistingEntries());
     }
 
+    @Test
+    public void testMultipleWritesToDataTableInTxStartInLogEntrySync() throws Exception {
+        testMultipleWritesToDataTableInTx(false);
+    }
+
+    @Test
+    public void testMultipleWritesToDataTableInTxStartInSnapshotSync() throws Exception {
+        testMultipleWritesToDataTableInTx(true);
+    }
+
     /**
      * This test verifies that all data written to the user table is received in increasing order of the timestamps and
      * the streaming updates match the data in the table.  Multiple entries to the table are written in a single
      * transaction (batch size >1).
-     * Since subscription is asynchronous, streaming updates may arrive from an arbitrary timestamp(not immediately
-     * after subscription call returns).  But the final number of entries seen by mergeTableOnSubscription() +
-     * streaming updates must be equal to the total number of writes to the table.
+     * The final number of entries seen by performFullSync(if starting in snapshot sync) + streaming updates must be
+     * equal to the total number of writes to the table.
      */
-    @Test
-    public void testMultipleWritesToDataTableInTx() throws Exception {
+    private void testMultipleWritesToDataTableInTx(boolean startInSnapshotSync) throws Exception {
         initializeCorfu();
         openTables();
+
+        // Start snapshot sync if requested
+        if (startInSnapshotSync) {
+            writeToStatusTable(false);
+        }
 
         final int numUpdates = 10;
         final int numStreamingUpdates = 1;
         CountDownLatch countDownLatch = new CountDownLatch(numStreamingUpdates);
 
-        lrListener = new LRTestListener(countDownLatch);
+        lrListener = new LRTestListener(store, namespace, userTag, Arrays.asList(userTableName), countDownLatch);
         store.subscribeLogReplicationListener(lrListener, namespace, userTag, Arrays.asList(userTableName));
+
+        // End snapshot sync if it had been requested
+        if (startInSnapshotSync) {
+            writeToStatusTable(true);
+        }
 
         writeToDataTableMultipleUpdatesInATx(numUpdates, 0);
 
         countDownLatch.await();
+
+        // If the test started when in log entry sync, performFullSync() should not find any existing data as no
+        // updates have been written prior to subscription.
+        if (!startInSnapshotSync) {
+            Assert.assertTrue(lrListener.getExistingEntries().isEmpty());
+        }
+
         verifyUpdatesSequence(lrListener.getUpdates());
         verifyData(lrListener.getUpdates(), lrListener.getExistingEntries());
     }
 
+    @Test
+    public void testSubscriptionWithCustomBufferSizeStartInLogEntrySync() throws Exception {
+        testSubscriptionWithCustomBufferSize(false);
+    }
+
+    @Test
+    public void testSubscriptionWithCustomBufferSizeStartInSnapshotSync() throws Exception {
+        testSubscriptionWithCustomBufferSize(true);
+    }
 
     /**
      * This test verifies that a listener with a custom buffer size works as expected.  All data written to the
      * user table is received in increasing order of timestamps and the streaming updates match the data in the table.
-     * Since subscription is asynchronous, streaming updates may arrive from an arbitrary timestamp(not immediately
-     * after subscription call returns).  But the final number of entries seen by mergeTableOnSubscription() +
-     * streaming updates must be equal to the total number of writes to the table.
+     * The final number of entries seen by performFullSync(if starting in snapshot sync) + streaming updates must be
+     * equal to the total number of writes to the table.
      */
-    @Test
-    public void testDataWrittenWithCustomBufferSize() throws Exception {
+    private void testSubscriptionWithCustomBufferSize(boolean startInSnapshotSync) throws Exception {
         initializeCorfu();
         openTables();
+
+        // Start snapshot sync if requested
+        if (startInSnapshotSync) {
+            writeToStatusTable(false);
+        }
 
         final int bufferSize = 10;
         final int numUpdates = 50;
 
         CountDownLatch countDownLatch = new CountDownLatch(numUpdates);
-        lrListener = new LRTestListener(countDownLatch);
+        lrListener = new LRTestListener(store, namespace, userTag, bufferSize, countDownLatch);
 
         // Subscribe a listener with a buffer size of 10
         store.subscribeLogReplicationListener(lrListener, namespace, userTag, bufferSize);
 
-        log.info("Write data on both tables");
+        // End snapshot sync if it had been requested
+        if (startInSnapshotSync) {
+            writeToStatusTable(true);
+        }
+
+        log.info("Write updates to the data table");
         writeToDataTable(numUpdates, 0);
 
         log.info("Wait for data to arrive");
         countDownLatch.await();
+
+        // If the test started when in log entry sync, performFullSync() should not find any existing data as no
+        // updates have been written prior to subscription.
+        if (!startInSnapshotSync) {
+            Assert.assertTrue(lrListener.getExistingEntries().isEmpty());
+        }
 
         log.info("Verify the sequence of updates and received data");
         verifyUpdatesSequence(lrListener.getUpdates());
@@ -176,8 +246,8 @@ public class LogReplicationListenerIT extends AbstractIT {
      * This test simultates a concurrent toggling of the 'dataConsistent' flag along with writes to the data
      * table.  For every X writes to the data table, there is a concurrent write toggling this flag on the System
      * table.  This is repeated several times.  In the end, it is expected that the number of entries seen by
-     * mergeTableOnSubscription() + streaming updates must be equal to the total writes across all iterations.  The
-     * updates must also be in increasing order of timestamps.
+     * performFullSync() + streaming updates must be equal to the total writes across all iterations.  The updates
+     * must also be in increasing order of timestamps.
      * @throws Exception
      */
     @Test
@@ -192,7 +262,7 @@ public class LogReplicationListenerIT extends AbstractIT {
         final int numExpectedStreamingUpdates = numIterations * numWritesToDataTable;
 
         CountDownLatch countDownLatch = new CountDownLatch(numExpectedStreamingUpdates);
-        lrListener = new LRTestListener(countDownLatch);
+        lrListener = new LRTestListener(store, namespace, userTag, Arrays.asList(userTableName), countDownLatch);
         store.subscribeLogReplicationListener(lrListener, namespace, userTag, Arrays.asList(userTableName));
 
         log.info("Write data concurrently on both tables");
@@ -206,20 +276,34 @@ public class LogReplicationListenerIT extends AbstractIT {
         verifyData(lrListener.getUpdates(), lrListener.getExistingEntries());
     }
 
+    @Test
+    public void testSubscriptionAfterDataWrittenStartInLogEntrySync() throws Exception {
+        testSubscriptionAfterDataWritten(false);
+    }
+
+    @Test
+    public void testSubscriptionAfterDataWrittenStartInSnapshotSync() throws Exception {
+        testSubscriptionAfterDataWritten(true);
+    }
+
     /**
      * This test tests the behavior of subscription done after some data is written.  It has the following workflow:
      * 1. Write data to the table
      * 2. Subscribe for streaming updates
      * 3. Write more data
-     * In the end, it verifies that the number of entries observed in mergeTableOnSubscription() + streaming updates
-     * is the total of the writes in 1 and 3.
+     * In the end, it verifies that the number of entries observed in performFullSync(if starting in snapshot sync) +
+     * streaming updates is the total of the writes in 1 and 3.
      * Also verifies the order of streaming updates and the data seen in the listener.
      * @throws Exception
      */
-    @Test
-    public void testSubscriptionAfterDataWritten() throws Exception {
+    private void testSubscriptionAfterDataWritten(boolean startInSnapshotSync) throws Exception {
         initializeCorfu();
         openTables();
+
+        // Start snapshot sync if requested
+        if (startInSnapshotSync) {
+            writeToStatusTable(false);
+        }
 
         final int numUpdates = 10;
         writeToDataTable(numUpdates, 0);
@@ -227,16 +311,27 @@ public class LogReplicationListenerIT extends AbstractIT {
         final int newUpdates = 5;
         final int totalUpdates = numUpdates + newUpdates;
         CountDownLatch countDownLatch = new CountDownLatch(totalUpdates);
-        lrListener = new LRTestListener(countDownLatch);
+        lrListener = new LRTestListener(store, namespace, userTag, Arrays.asList(userTableName), countDownLatch);
 
         // Subscribe the listener at the obtained timestamp
         store.subscribeLogReplicationListener(lrListener, namespace, userTag, Arrays.asList(userTableName));
+
+        // End snapshot sync if it had been requested
+        if (startInSnapshotSync) {
+            writeToStatusTable(true);
+        }
 
         log.info("Write updates to the data table after subscription");
         writeToDataTable(newUpdates, numUpdates);
 
         log.info("Wait for subscription and for all updates to be received");
         countDownLatch.await();
+
+        // If the test started when in log entry sync, performFullSync() should only find the data written prior to
+        // subscription
+        if (!startInSnapshotSync) {
+            Assert.assertEquals(numUpdates, lrListener.getExistingEntries().size());
+        }
 
         log.info("Verify the sequence of updates");
         verifyUpdatesSequence(lrListener.getUpdates());
@@ -256,7 +351,7 @@ public class LogReplicationListenerIT extends AbstractIT {
         initializeCorfu();
         openTables();
 
-        lrListener = new LRTestListener(new CountDownLatch(0));
+        lrListener = new LRTestListener(store, namespace, userTag, Arrays.asList(userTableName), new CountDownLatch(0));
         store.subscribeLogReplicationListener(lrListener, namespace, userTag, Arrays.asList(userTableName));
 
         // Write to a redundant table to which the listener has not subscribed
@@ -284,7 +379,7 @@ public class LogReplicationListenerIT extends AbstractIT {
         listener = new TestListener(countDownLatch);
 
         CountDownLatch lrCountDownLatch = new CountDownLatch(numUpdates);
-        lrListener = new LRTestListener(lrCountDownLatch);
+        lrListener = new LRTestListener(store, namespace, userTag, Arrays.asList(userTableName), lrCountDownLatch);
 
         store.subscribeListener(listener, namespace, userTag, Arrays.asList(userTableName));
         store.subscribeLogReplicationListener(lrListener, namespace, userTag, Arrays.asList(userTableName));
@@ -375,6 +470,15 @@ public class LogReplicationListenerIT extends AbstractIT {
         }
     }
 
+    private void writeToStatusTable(boolean dataConsistent) {
+        try (TxnContext txn = store.txn(CORFU_SYSTEM_NAMESPACE)) {
+            ReplicationStatusKey key = ReplicationStatusKey.newBuilder().setClusterId(defaultClusterId).build();
+            ReplicationStatusVal val = ReplicationStatusVal.newBuilder().setDataConsistent(dataConsistent).build();
+            txn.putRecord(replicationStatusTable, key, val, null);
+            txn.commit();
+        }
+    }
+
     private void writeToDataTableMultipleUpdatesInATx(int numUpdates, int offset) {
         try (TxnContext txn = store.txn(namespace)) {
             for (int index = offset; index < (offset + numUpdates); index++) {
@@ -439,6 +543,7 @@ public class LogReplicationListenerIT extends AbstractIT {
 
         // Verify that the streaming data received for each table with the corresponding original table
         for (String tableName : updatesPerTable.keySet()) {
+            log.info("TableName {}", tableName);
             // Verify the actual data
             for (CorfuStreamEntry entry : updatesPerTable.get(tableName)) {
                     SampleSchema.Uuid key = (SampleSchema.Uuid) entry.getKey();
@@ -507,14 +612,22 @@ public class LogReplicationListenerIT extends AbstractIT {
         private final List<CorfuStoreEntry<SampleSchema.Uuid, SampleSchema.SampleTableAMsg, SampleSchema.Uuid>>
                 existingEntries = new ArrayList<>();
 
-        LRTestListener(CountDownLatch countDownLatch) {
+        LRTestListener(CorfuStore corfuStore, String namespace, String streamTag, List<String> tablesOfInterest,
+                       CountDownLatch countDownLatch) {
+            super(corfuStore, namespace, streamTag, tablesOfInterest);
+            this.countDownLatch = countDownLatch;
+        }
+
+        LRTestListener(CorfuStore corfuStore, String namespace, String streamTag, int bufferSize,
+                       CountDownLatch countDownLatch) {
+            super(corfuStore, namespace, streamTag, bufferSize);
             this.countDownLatch = countDownLatch;
         }
 
         @Override
         public void onError(Throwable throwable) {
             log.error("Error on listener", throwable);
-            fail("onError for CrossNamespaceListener: " + throwable.toString());
+            fail("onError for LRTestListener: " + throwable.toString());
         }
 
         @Override
@@ -528,43 +641,27 @@ public class LogReplicationListenerIT extends AbstractIT {
         }
 
         @Override
-        protected void processUpdateInSnapshotSync(CorfuStreamEntries results) {
+        protected void processUpdatesInSnapshotSync(CorfuStreamEntries results) {
             log.info("Processing updates in snapshot sync");
-            results.getEntries().forEach((key, val) -> countDownLatch.countDown());
             updates.add(results);
-            log.info("Snapshot Sync:  Total updates {}", updates.size());
+            results.getEntries().forEach((key, val) -> countDownLatch.countDown());
+
         }
 
         @Override
-        protected void processUpdateInLogEntrySync(CorfuStreamEntries results) {
+        protected void processUpdatesInLogEntrySync(CorfuStreamEntries results) {
             log.info("Processing updates in log entry sync");
-            results.getEntries().forEach((key, val) -> countDownLatch.countDown());
             updates.add(results);
-            log.info("Log Entry Sync: Total updates {}", updates.size());
+            results.getEntries().forEach((key, val) -> countDownLatch.countDown());
         }
 
         @Override
-        protected CorfuStoreMetadata.Timestamp performFullSync() {
-            try (TxnContext txnContext = store.txn(namespace)) {
-                txnContext.getTable(userTableName);
-                return txnContext.commit();
-            }
-        }
-
-        @Override
-        protected void mergeTables(CorfuStoreMetadata.Timestamp timestamp) {
-            List<CorfuStoreEntry<SampleSchema.Uuid, SampleSchema.SampleTableAMsg, SampleSchema.Uuid>> entries;
-            try (TxnContext txnContext = store.txn(namespace, IsolationLevel.snapshot(timestamp))) {
-               entries = txnContext.executeQuery(userTableName, p -> true);
-               txnContext.commit();
-            }
+        protected void performFullSync(TxnContext txnContext) {
+            List<CorfuStoreEntry<SampleSchema.Uuid, SampleSchema.SampleTableAMsg, SampleSchema.Uuid>> entries =
+                    txnContext.executeQuery(userTableName, p -> true);
             existingEntries.addAll(entries);
 
-            for (int i=0; i<existingEntries.size(); i++) {
-                countDownLatch.countDown();
-            }
-
-            log.info("Num initial entries = {}", existingEntries.size());
+            existingEntries.forEach(existingEntry -> countDownLatch.countDown());
         }
     }
 }
