@@ -31,27 +31,30 @@ public abstract class LogReplicationListener implements StreamListener {
     private final AtomicBoolean snapshotSyncInProgress = new AtomicBoolean(false);
 
     /**
-     * A corfu update can/may have multiple updates belonging to different streams.
-     * This callback will return those updates as a list grouped by their Stream UUIDs.
-     *
-     * Note: there is no order guarantee within the transaction boundaries.
+     * This is an internal method of this abstract listener and not exposed to clients.
      *
      * @param results is a map of stream UUID -> list of entries of this stream.
      */
     public final void onNext(CorfuStreamEntries results) {
+         // A corfu update can/may have multiple updates belonging to different streams.  This callback will return
+         // those updates as a list grouped by their Stream UUIDs.
+         // Note: there is no order guarantee within the transaction boundaries.
 
         Map<TableSchema, List<CorfuStreamEntry>> entries = results.getEntries();
 
         for (TableSchema tableSchema : entries.keySet()) {
             if (Objects.equals(tableSchema.getTableName(), REPLICATION_STATUS_TABLE)) {
                 for (CorfuStreamEntry entry : entries.get(tableSchema)) {
-                    ReplicationStatusVal status = (ReplicationStatusVal) entry.getPayload();
-                    if (!status.getDataConsistent()) {
-                        snapshotSyncInProgress.set(true);
-                        onSnapshotSyncStart();
-                    } else if (snapshotSyncInProgress.get()) {
-                        snapshotSyncInProgress.set(false);
-                        onSnapshotSyncComplete();
+                    // Ignore any update where the operation type != UPDATE
+                    if (entry.getOperation() == CorfuStreamEntry.OperationType.UPDATE) {
+                        ReplicationStatusVal status = (ReplicationStatusVal) entry.getPayload();
+                        if (!status.getDataConsistent()) {
+                            snapshotSyncInProgress.set(true);
+                            onSnapshotSyncStart();
+                        } else if (snapshotSyncInProgress.get()) {
+                            snapshotSyncInProgress.set(false);
+                            onSnapshotSyncComplete();
+                        }
                     }
                 }
                 // Data updates will not be received in the same transaction as Replication Status updates
