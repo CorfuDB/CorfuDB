@@ -4,22 +4,27 @@ import static java.lang.Thread.sleep;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.NAMESPACE;
 import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.REPLICATION_STATUS_TABLE_NAME;
+import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.LR_STATUS_STREAM_TAG;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Observable;
 import java.util.Observer;
 import java.util.Queue;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.google.protobuf.ByteString;
 import com.google.protobuf.Message;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.compression.Codec;
 import org.corfudb.common.util.ObservableValue;
@@ -52,6 +57,9 @@ import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.collections.CorfuStore;
+import org.corfudb.runtime.collections.CorfuStreamEntries;
+import org.corfudb.runtime.collections.CorfuStreamEntry;
+import org.corfudb.runtime.collections.StreamListener;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
@@ -166,15 +174,21 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
     }
 
     /**
-     * Verify the lastSyncType flag is being initialized properly.
+     * Verify the lastSyncType flag is being initialized properly and SnapshotSyncInfo
+     * reflects accurate sync type for snapshot sync.
      *
      */
     @Test
-    public void testFullSyncStatusOnInit() throws Exception {
+    public void testSyncStatusUpdatesForSnapshotOnInit() throws Exception {
+        final int UPDATE_TO_STATUS_TABLE_FROM_ON_ENTRY = 1;
         initLogReplicationFSM(ReaderImplementation.EMPTY);
 
         final Table<LogReplicationSession, LogReplicationMetadata.ReplicationStatus, Message> statusTable =
                 this.corfuStore.getTable(NAMESPACE, REPLICATION_STATUS_TABLE_NAME);
+
+        CountDownLatch statusTableLatch = new CountDownLatch(UPDATE_TO_STATUS_TABLE_FROM_ON_ENTRY);
+        TestStreamListener streamListener = new TestStreamListener(statusTableLatch);
+        corfuStore.subscribeListener(streamListener, NAMESPACE, LR_STATUS_STREAM_TAG);
 
         // Initial state: Initialized
         LogReplicationState initState = fsm.getState();
@@ -192,15 +206,85 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         // Transition #2: SNAPSHOT Sync Start
         transition(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST, LogReplicationStateType.IN_SNAPSHOT_SYNC);
 
-        // Sync value should now reflect change to SNAPSHOT sync.
-        Assert.assertEquals(LogReplicationMetadata.SyncType.SNAPSHOT,
-                statusTable.entryStream()
-                        .findAny()
-                        .get()
-                        .getPayload()
-                        .getSourceStatus()
-                        .getReplicationInfo()
-                        .getSyncType());
+        statusTableLatch.await();
+
+        Set<LogReplicationMetadata.SyncType> expectedSyncTypes = new HashSet<>(
+                Collections.singletonList(LogReplicationMetadata.SyncType.SNAPSHOT));
+        Set<LogReplicationMetadata.SyncType> actualSyncTypes = new HashSet<>();
+        List<LogReplicationMetadata.SyncStatus> actualSyncStatus = new ArrayList<>();
+
+        for (CorfuStreamEntries entries : streamListener.getEntries()) {
+            for (List<CorfuStreamEntry> entry : entries.getEntries().values()) {
+                LogReplicationMetadata.ReplicationStatus status = (LogReplicationMetadata.ReplicationStatus) entry.get(0).getPayload();
+                actualSyncTypes.add(status.getSourceStatus().getReplicationInfo().getSyncType());
+                actualSyncStatus.add(status.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus());
+            }
+        }
+
+        // Status starts as NOT_STARTED set by the polling task and gets updated in InSnapshotSyncState
+        LogReplicationMetadata.SyncStatus headStatus = LogReplicationMetadata.SyncStatus.NOT_STARTED;
+        LogReplicationMetadata.SyncStatus tailStatus = LogReplicationMetadata.SyncStatus.ONGOING;
+
+        Assert.assertEquals(expectedSyncTypes, actualSyncTypes);
+        Assert.assertEquals(headStatus, actualSyncStatus.get(0));
+        Assert.assertEquals(tailStatus, actualSyncStatus.get(actualSyncStatus.size() - 1));
+    }
+
+    /**
+     * Verify the lastSyncType flag is being initialized properly and SnapshotSyncInfo
+     * reflects accurate sync type for log entry sync.
+     *
+     */
+    @Test
+    public void testSyncStatusUpdatesForLogEntryOnInit() throws Exception {
+        final int UPDATE_TO_STATUS_TABLE_FROM_ON_ENTRY = 1;
+        initLogReplicationFSM(ReaderImplementation.EMPTY);
+
+        final Table<LogReplicationSession, LogReplicationMetadata.ReplicationStatus, Message> statusTable =
+                this.corfuStore.getTable(NAMESPACE, REPLICATION_STATUS_TABLE_NAME);
+
+        CountDownLatch statusTableLatch = new CountDownLatch(UPDATE_TO_STATUS_TABLE_FROM_ON_ENTRY);
+        TestStreamListener streamListener = new TestStreamListener(statusTableLatch);
+        corfuStore.subscribeListener(streamListener, NAMESPACE, LR_STATUS_STREAM_TAG);
+
+        // Initial state: Initialized
+        LogReplicationState initState = fsm.getState();
+        assertThat(initState.getType()).isEqualTo(LogReplicationStateType.INITIALIZED);
+
+        transitionAvailable.acquire();
+
+        // Transition #1: Replication Stop (without any replication having started)
+        transition(LogReplicationEventType.REPLICATION_STOP, LogReplicationStateType.INITIALIZED);
+
+        // Default sync value is null so replication status should not be set at all.
+        final int expectedStatusTableLength = 0;
+        Assert.assertEquals(expectedStatusTableLength, statusTable.count());
+
+        // Transition #2: Log Entry Sync Start
+        transition(LogReplicationEventType.LOG_ENTRY_SYNC_REQUEST, LogReplicationStateType.IN_LOG_ENTRY_SYNC);
+
+        statusTableLatch.await();
+
+        Set<LogReplicationMetadata.SyncType> expectedSyncTypes = new HashSet<>(
+                Collections.singletonList(LogReplicationMetadata.SyncType.LOG_ENTRY));
+        Set<LogReplicationMetadata.SyncType> actualSyncTypes = new HashSet<>();
+        List<LogReplicationMetadata.SyncStatus> actualSyncStatus = new ArrayList<>();
+
+        for (CorfuStreamEntries entries : streamListener.getEntries()) {
+            for (List<CorfuStreamEntry> entry : entries.getEntries().values()) {
+                LogReplicationMetadata.ReplicationStatus status = (LogReplicationMetadata.ReplicationStatus) entry.get(0).getPayload();
+                actualSyncTypes.add(status.getSourceStatus().getReplicationInfo().getSyncType());
+                actualSyncStatus.add(status.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus());
+            }
+        }
+
+        // Status starts as NOT_STARTED set by the polling task and gets updated in InLogEntrySyncState
+        LogReplicationMetadata.SyncStatus headStatus = LogReplicationMetadata.SyncStatus.NOT_STARTED;
+        LogReplicationMetadata.SyncStatus tailStatus = LogReplicationMetadata.SyncStatus.COMPLETED;
+
+        Assert.assertEquals(expectedSyncTypes, actualSyncTypes);
+        Assert.assertEquals(headStatus, actualSyncStatus.get(0));
+        Assert.assertEquals(tailStatus, actualSyncStatus.get(actualSyncStatus.size() - 1));
     }
 
     /**
@@ -655,6 +739,42 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
             // If number of messages in snapshot reaches the expected value force termination of SNAPSHOT_SYNC
             // log.debug("Insert event: " + LogReplicationEventType.REPLICATION_STOP);
             fsm.input(new LogReplicationEvent(LogReplicationEventType.REPLICATION_STOP));
+        }
+    }
+
+    /**
+     * StreamListener for updates to statusTable, utilizes countdown latch to count entries coming
+     * from markSnapshotSyncInfoOngoing and markSnapshotSyncInfoCompleted.
+     *
+     */
+    class TestStreamListener implements StreamListener {
+        @Getter
+        List<CorfuStreamEntries> entries = new ArrayList<>();
+
+        @Getter
+        Throwable throwable;
+
+        CountDownLatch countDownLatch;
+
+        public TestStreamListener(CountDownLatch countDownLatch) {
+            this.countDownLatch = countDownLatch;
+        }
+
+        public void onNext(CorfuStreamEntries results) {
+            entries.add(results);
+            for (List<CorfuStreamEntry> entry : results.getEntries().values()) {
+                LogReplicationMetadata.ReplicationStatus status = (LogReplicationMetadata.ReplicationStatus) entry.get(0).getPayload();
+                LogReplicationMetadata.SyncType syncType = status.getSourceStatus().getReplicationInfo().getSyncType();
+                LogReplicationMetadata.SyncStatus syncStatus = status.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus();
+                if ((syncType == LogReplicationMetadata.SyncType.LOG_ENTRY && syncStatus == LogReplicationMetadata.SyncStatus.COMPLETED)
+                        || syncType == LogReplicationMetadata.SyncType.SNAPSHOT && syncStatus == LogReplicationMetadata.SyncStatus.ONGOING) {
+                    countDownLatch.countDown();
+                }
+            }
+        }
+
+        public void onError(Throwable throwable) {
+            this.throwable = throwable;
         }
     }
 
