@@ -65,6 +65,11 @@ public class ImmutableCorfuTable<K, V> implements ICorfuSMR<ImmutableCorfuTable<
         return new InMemorySMRSnapshot<>(this);
     }
 
+    @Override
+    public void close() {
+        // Noop.
+    }
+
     /**
      * Get the value associated with the provided key.
      * @param key The key used to perform the query.

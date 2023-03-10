@@ -58,7 +58,5 @@ public interface ICorfuSMR<T> extends AutoCloseable {
      * {@inheritDoc}
      */
     @Override
-    @PassThrough
-    default void close() {
-    }
+    void close();
 }

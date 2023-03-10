@@ -70,11 +70,6 @@ public class MVOCorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRPr
     }
 
     @Override
-    public <R> R passThrough(Function<T, R> method) {
-        return null;
-    }
-
-    @Override
     public <R> R access(ICorfuSMRAccess<R, T> accessMethod, Object[] conflictObject) {
         return MicroMeterUtils.time(() -> accessInner(accessMethod, conflictObject),
                 "mvo.read.timer", "streamId", streamID.toString());
@@ -135,18 +130,8 @@ public class MVOCorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRPr
     }
 
     @Override
-    public <R> R getUpcallResult(long timestamp, Object[] conflictObject) {
-        return null;
-    }
-
-    @Override
     public UUID getStreamID() {
         return streamID;
-    }
-
-    @Override
-    public <R> R TXExecute(Supplier<R> txFunction) {
-        return null;
     }
 
     @Override

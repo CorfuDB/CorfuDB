@@ -65,8 +65,6 @@ public class SMRObject<T extends ICorfuSMR<T>> {
         @Getter
         private Class<T> type;
         @Getter
-        private CorfuRuntime runtime;
-        @Getter
         public UUID streamID;
         @Getter
         private Set<UUID> streamTags = new HashSet<>();
