@@ -207,6 +207,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         transition(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST, LogReplicationStateType.IN_SNAPSHOT_SYNC);
 
         statusTableLatch.await();
+        corfuStore.unsubscribeListener(streamListener);
 
         Set<LogReplicationMetadata.SyncType> expectedSyncTypes = new HashSet<>(
                 Collections.singletonList(LogReplicationMetadata.SyncType.SNAPSHOT));
@@ -264,6 +265,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         transition(LogReplicationEventType.LOG_ENTRY_SYNC_REQUEST, LogReplicationStateType.IN_LOG_ENTRY_SYNC);
 
         statusTableLatch.await();
+        corfuStore.unsubscribeListener(streamListener);
 
         Set<LogReplicationMetadata.SyncType> expectedSyncTypes = new HashSet<>(
                 Collections.singletonList(LogReplicationMetadata.SyncType.LOG_ENTRY));
