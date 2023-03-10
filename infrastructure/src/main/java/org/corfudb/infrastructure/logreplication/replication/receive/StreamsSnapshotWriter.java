@@ -42,6 +42,8 @@ import java.util.stream.Stream;
 
 import static org.corfudb.infrastructure.logreplication.config.LogReplicationConfig.MERGE_ONLY_STREAMS;
 import static org.corfudb.infrastructure.logreplication.config.LogReplicationConfig.REGISTRY_TABLE_ID;
+import static org.corfudb.infrastructure.logreplication.config.LogReplicationConfig.PROTOBUF_TABLE_ID;
+
 
 /**
  * This class represents the entity responsible for writing streams' snapshots into the sink cluster DB.
@@ -339,8 +341,8 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
         int numBatches = 1;
 
         for (SMREntry smrEntry : smrEntries) {
-            if (bufferSize + smrEntry.getSerializedSize() > metadataManager.getRuntime().getParameters()
-                    .getMaxWriteSize()) {
+            if (bufferSize + smrEntry.getSerializedSize() > metadataManager.getRuntime().getParameters().getMaxWriteSize()
+                || maxEntriesLimitReached(streamId, buffer)) {
                 try (TxnContext txnContext = metadataManager.getTxnContext()) {
                     updateLog(txnContext, buffer, streamId);
                     CorfuStoreMetadata.Timestamp ts = txnContext.commit();
@@ -364,6 +366,12 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
         }
         log.debug("Completed applying updates to stream {}.  {} entries applied across {} transactions.  ", streamId,
             smrEntries.size(), numBatches);
+    }
+
+    private boolean maxEntriesLimitReached(UUID streamId, List<SMREntry> buffer) {
+        log.info("size limit: {}", replicationContext.getConfig(session).getMaxSnapshotEntriesApplied());
+        return (streamId.equals(PROTOBUF_TABLE_ID) && buffer.size() ==
+                replicationContext.getConfig(session).getMaxSnapshotEntriesApplied());
     }
 
     /**

@@ -71,9 +71,6 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
     private static final int BATCH_SIZE = 2;
     private static final int WAIT_TIME = 100;
     private static final int TEST_TOPOLOGY_CONFIG_ID = 1;
-    private static final String TEST_LOCAL_CLUSTER_ID = "local_cluster";
-    private static final String TEST_LOCAL_ENDPOINT_PREFIX = "test:";
-
     private static final String LOCAL_SOURCE_CLUSTER_ID = "456e4567-e89b-12d3-a456-556642440001";
 
 

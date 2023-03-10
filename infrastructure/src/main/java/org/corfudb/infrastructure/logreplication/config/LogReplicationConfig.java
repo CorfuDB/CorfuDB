@@ -36,6 +36,9 @@ public abstract class LogReplicationConfig {
     // Percentage of log data per log replication message
     public static final int DATA_FRACTION_PER_MSG = 90;
 
+    // Default value for the max number of entries applied in a single transaction on Sink during snapshot sync
+    public static final int DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED = 50;
+
     // Stream tag that is used by a stream listener for getting updates from LR client configuration tables
     public static final String CLIENT_CONFIG_TAG = "lr_sessions";
 
@@ -67,6 +70,11 @@ public abstract class LogReplicationConfig {
      */
     private int maxDataSizePerMsg;
 
+    /**
+     * Max number of entries to be applied during a snapshot sync.  For special tables only.
+     */
+    private int maxSnapshotEntriesApplied;
+
     private LogReplicationSession session;
 
     // A map consisting of the streams to replicate for each supported replication model
@@ -87,10 +95,12 @@ public abstract class LogReplicationConfig {
             this.maxNumMsgPerBatch = DEFAULT_MAX_NUM_MSG_PER_BATCH;
             this.maxMsgSize = DEFAULT_MAX_DATA_MSG_SIZE;
             this.maxCacheSize = DEFAULT_MAX_CACHE_NUM_ENTRIES;
+            this.maxSnapshotEntriesApplied = DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED;
         } else {
             this.maxNumMsgPerBatch = serverContext.getLogReplicationMaxNumMsgPerBatch();
             this.maxMsgSize = serverContext.getLogReplicationMaxDataMessageSize();
             this.maxCacheSize = serverContext.getLogReplicationCacheMaxSize();
+            this.maxSnapshotEntriesApplied = serverContext.getMaxSnapshotEntriesApplied();
         }
         this.maxDataSizePerMsg = maxMsgSize * DATA_FRACTION_PER_MSG / 100;
 

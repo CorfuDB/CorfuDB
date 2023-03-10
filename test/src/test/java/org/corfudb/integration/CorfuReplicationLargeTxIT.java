@@ -13,11 +13,14 @@ import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TableSchema;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
+import org.corfudb.runtime.view.ObjectsView;
+import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.test.SampleSchema;
 import org.junit.Assert;
 import org.junit.Test;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -46,6 +49,8 @@ public class CorfuReplicationLargeTxIT extends LogReplicationAbstractIT {
 
     private static final int NUM_ENTRIES_PER_TABLE = 40;
     private static final int MAX_WRITE_SIZE = 13000;
+    // Max number of entries applied in a single transaction during snapshot sync
+    private static final int MAX_SNAPSHOT_ENTRIES_APPLIED = 1;
 
     /**
      * It was empirically determined that 40 entries in a table had a serialized size of 11K bytes approx.
@@ -78,9 +83,6 @@ public class CorfuReplicationLargeTxIT extends LogReplicationAbstractIT {
         log.debug("Open map on Source and Sink");
         openMaps(2, false);
 
-        // The max size of a payload in a transaction.
-        int maxWriteSize = MAX_WRITE_SIZE;
-
         log.debug("Write data to Source CorfuDB before LR is started ...");
         writeOnSender(0, numEntriesToWrite);
 
@@ -107,22 +109,36 @@ public class CorfuReplicationLargeTxIT extends LogReplicationAbstractIT {
         corfuStoreSink.subscribeListener(sinkListener, LogReplicationMetadataManager.NAMESPACE,
             LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
 
-        // Calculate the expected total number of streaming updates across all
-        // tables
+        // Calculate the expected total number of streaming updates across all tables
         int totalStreamingUpdates =
             expectedStreamingUpdatesPerTable * mapNameToMapSink.size();
 
-        CountDownLatch streamingUpdatesLatch =
-            new CountDownLatch(totalStreamingUpdates);
-        StreamingUpdateListener streamingUpdateListener =
-            new StreamingUpdateListener(streamingUpdatesLatch);
+        // MAX_SNAPSHOT_ENTRIES_APPLIED = 1.  So entries to the ProtobufDescriptor table will be applied in a batch
+        // of 1.  Hence, the number of transactions made = number of entries received from the Source Cluster(1 TX
+        // per entry).
+        int numExpectedTxOnProtobufDescriptorTable = sourceRuntime.getTableRegistry().getProtobufDescriptorTable().size();
+
+        // The number of entries in the protobuf descriptor table on Source(or numExpectedTxOnProtobufDescriptorTable)
+        // must not be equal to MAX_SNAPSHOT_ENTRIES_APPLIED.  Otherwise we cannot verify that it was applied in
+        // batches.
+        Assert.assertNotEquals(numExpectedTxOnProtobufDescriptorTable, MAX_SNAPSHOT_ENTRIES_APPLIED);
+        CountDownLatch protobufDescriptorTxLatch = new CountDownLatch(numExpectedTxOnProtobufDescriptorTable);
+        StreamingUpdateListener protobufDescriptorTxListener = new StreamingUpdateListener(protobufDescriptorTxLatch);
+        corfuStoreSink.subscribeListener(protobufDescriptorTxListener, TableRegistry.CORFU_SYSTEM_NAMESPACE,
+            ObjectsView.getLogReplicatorStreamId().toString(),
+            Arrays.asList(TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME));
+
+        CountDownLatch streamingUpdatesLatch = new CountDownLatch(totalStreamingUpdates);
+        StreamingUpdateListener streamingUpdateListener = new StreamingUpdateListener(streamingUpdatesLatch);
         corfuStoreSink.subscribeListener(streamingUpdateListener, NAMESPACE, TAG_ONE);
 
-        startLogReplicatorServersWithCustomMaxWriteSize(maxWriteSize);
+        // Start LR on both clusters with custom write sizes.
+        startLogReplicatorServersWithCustomMaxWriteSize();
 
         log.debug("Wait for snapshot sync to finish");
         statusUpdateLatch.await();
         streamingUpdatesLatch.await();
+        protobufDescriptorTxLatch.await();
 
         // Verify that updates were received for all replicated tables with data
         Assert.assertEquals(mapNameToMapSink.size(), streamingUpdateListener.getTableNameToUpdatesMap().size());
@@ -246,16 +262,15 @@ public class CorfuReplicationLargeTxIT extends LogReplicationAbstractIT {
         }
     }
 
-    private void startLogReplicatorServersWithCustomMaxWriteSize(
-        int maxWriteSize) throws Exception {
+    private void startLogReplicatorServersWithCustomMaxWriteSize() throws Exception {
         sourceReplicationServer =
             runReplicationServerCustomMaxWriteSize(sourceReplicationServerPort,
-                pluginConfigFilePath, maxWriteSize);
+                pluginConfigFilePath, MAX_WRITE_SIZE, MAX_SNAPSHOT_ENTRIES_APPLIED);
 
         // Start Log Replication Server on Sink Site
         sinkReplicationServer =
             runReplicationServerCustomMaxWriteSize(sinkReplicationServerPort,
-                pluginConfigFilePath, maxWriteSize);
+                pluginConfigFilePath, MAX_WRITE_SIZE, MAX_SNAPSHOT_ENTRIES_APPLIED);
     }
 
     private void shutDown() {
