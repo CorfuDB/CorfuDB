@@ -166,7 +166,6 @@ public class LogUnitServerTest {
                 .thenReturn(ImmutableMap.of(
                         "--cache-heap-ratio", "0.5",
                         "--memory", false,
-                        "--no-verify", false,
                         "--no-sync", false));
 
         // Prepare the LogUnitServerInitializer.

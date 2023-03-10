@@ -18,7 +18,6 @@ public class ServerContextBuilder {
     boolean single = true;
     boolean memory = true;
     String logPath = null;
-    boolean noVerify = false;
     boolean noSync = false;
     boolean noAutoCommit = true;
 
@@ -75,7 +74,6 @@ public class ServerContextBuilder {
             builder.put("--management-server", managementBootstrapEndpoint);
         }
          builder
-                 .put("--no-verify", noVerify)
                  .put("--no-sync", noSync)
                  .put("--no-auto-commit", true)
                  .put("--address", address)

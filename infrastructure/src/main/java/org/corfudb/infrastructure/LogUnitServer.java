@@ -577,7 +577,6 @@ public class LogUnitServer extends AbstractServer {
         private final double cacheSizeHeapRatio;
         private final long maxCacheSize;
         private final boolean memoryMode;
-        private final boolean noVerify;
         private final boolean noSync;
 
         /**
@@ -593,7 +592,6 @@ public class LogUnitServer extends AbstractServer {
                     .cacheSizeHeapRatio(cacheSizeHeapRatio)
                     .maxCacheSize((long) (Runtime.getRuntime().maxMemory() * cacheSizeHeapRatio))
                     .memoryMode(Boolean.parseBoolean(opts.get("--memory").toString()))
-                    .noVerify((Boolean) opts.get("--no-verify"))
                     .noSync((Boolean) opts.get("--no-sync"))
                     .build();
         }
@@ -612,7 +610,7 @@ public class LogUnitServer extends AbstractServer {
         StreamLog buildStreamLog(@Nonnull LogUnitServerConfig config,
                                  @Nonnull ServerContext serverContext,
                                  @Nonnull BatchProcessorContext batchProcessorContext) {
-            return new StreamLogFiles(serverContext, config.isNoVerify(), batchProcessorContext);
+            return new StreamLogFiles(serverContext, batchProcessorContext);
         }
 
         LogUnitServerCache buildLogUnitServerCache(@Nonnull LogUnitServerConfig config,
