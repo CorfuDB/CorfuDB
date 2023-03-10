@@ -43,9 +43,15 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
 import java.net.URLClassLoader;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
@@ -804,22 +810,49 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         lockAcquireSample.ifPresent(LongTaskTimer.Sample::stop);
     }
 
+
+    private void setSaasLocalNodeId() {
+
+    }
+
+
     private void setLocalNodeId() {
         // Retrieve system-specific node id
         LogReplicationPluginConfig config = new LogReplicationPluginConfig(serverContext.getPluginConfigFilePath());
         String nodeIdFilePath = config.getNodeIdFilePath();
-
         // TODO[V2]: this code should come from plugin
         if (nodeIdFilePath != null) {
-            File nodeIdFile = new File(nodeIdFilePath);
-            try (BufferedReader bufferedReader = new BufferedReader(new FileReader(nodeIdFile))) {
-                String line = bufferedReader.readLine();
-                localNodeId = line.split("=")[1].trim().toLowerCase();
-                log.info("Local node id={}", localNodeId);
-            } catch (IOException e) {
-                log.error("setupLocalNodeId failed", e);
-                throw new IllegalStateException(e.getCause());
+            String podName = System.getenv("POD_NAME");
+            if (podName != null) {
+                log.info("Saas env. Reading serial number from a shared file.");
+                try  {
+                    final int index = Integer.parseInt(podName.substring(podName.length() - 1));
+                    Path myPath = Paths.get(nodeIdFilePath);
+                    List<String> lines = Files.readAllLines(myPath, StandardCharsets.UTF_8);
+                    if (index >= lines.size()) {
+                        throw new IllegalStateException("Pod index and serial number mismatch");
+                    }
+                    String line = lines.get(index);
+                    localNodeId = line.split("=")[1].trim().toLowerCase();
+                    log.info("Saas Local node id={}", localNodeId);
+                } catch (IOException | InvalidPathException e) {
+                    throw new IllegalStateException(e.getCause());
+                } catch (NumberFormatException nfe) {
+                    throw new IllegalArgumentException(nfe.getCause());
+                }
             }
+            else {
+                File nodeIdFile = new File(nodeIdFilePath);
+                try (BufferedReader bufferedReader = new BufferedReader(new FileReader(nodeIdFile))) {
+                    String line = bufferedReader.readLine();
+                    localNodeId = line.split("=")[1].trim().toLowerCase();
+                    log.info("Local node id={}", localNodeId);
+                } catch (IOException e) {
+                    log.error("setupLocalNodeId failed", e);
+                    throw new IllegalStateException(e.getCause());
+                }
+            }
+
         } else {
             log.error("setupLocalNodeId failed, because nodeId file path is missing!");
             DefaultClusterConfig defaultClusterConfig = new DefaultClusterConfig();
