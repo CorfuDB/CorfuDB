@@ -7,11 +7,13 @@ import org.corfudb.infrastructure.management.ClusterAdvisor;
 import org.corfudb.infrastructure.management.CompleteGraphAdvisor;
 import org.corfudb.infrastructure.management.FileSystemAdvisor;
 import org.corfudb.infrastructure.management.PollReport;
+import org.corfudb.infrastructure.management.failuredetector.FailureDetectorDataStore.FailureDetectorDataStoreBuilder;
 import org.corfudb.infrastructure.management.failuredetector.FailuresAgent.FailuresAgentBuilder;
 import org.corfudb.infrastructure.management.failuredetector.HealingAgent.HealingAgentBuilder;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats;
+import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats.BatchProcessorStats;
 import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats.PartitionAttributeStats;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity;
 import org.corfudb.runtime.CorfuRuntime;
@@ -34,7 +36,7 @@ import static org.mockito.Mockito.when;
 public class FailureDetectorTestContext {
     public final String localEndpoint;
 
-    private FailureDetectorDataStore.FailureDetectorDataStoreBuilder fdDataStoreBuilder = FailureDetectorDataStore.builder();
+    private FailureDetectorDataStoreBuilder fdDataStoreBuilder = FailureDetectorDataStore.builder();
 
     private ClusterAdvisor advisor;
     private FileSystemAdvisor fsAdvisor;
@@ -78,7 +80,7 @@ public class FailureDetectorTestContext {
         clusterStateContext = new ClusterStateTestContext(localEndpoint);
     }
 
-    public void setupDataStore(Consumer<FailureDetectorDataStore.FailureDetectorDataStoreBuilder> setupTask) {
+    public void setupDataStore(Consumer<FailureDetectorDataStoreBuilder> setupTask) {
         setupTask.accept(fdDataStoreBuilder);
     }
 
@@ -146,12 +148,31 @@ public class FailureDetectorTestContext {
         }
 
         private FileSystemStats getFileSystemStats() {
-            PartitionAttributeStats attributes = new PartitionAttributeStats(false, 100, 200);
-            return new FileSystemStats(attributes);
+            return new FileSystemStats(writablePartitionAttrs(), BatchProcessorStats.OK);
+        }
+
+        public FileSystemStats getFileSystemStatsWithBpError() {
+            return new FileSystemStats(writablePartitionAttrs(), BatchProcessorStats.ERR);
+        }
+
+        public FileSystemStats getFileSystemStatsWithReadOnlyDisk() {
+            return new FileSystemStats(readOnlyPartitionAttrs(), BatchProcessorStats.ERR);
+        }
+
+        public FileSystemStats getFileSystemStatsWithReadOnlyAndBpError() {
+            return new FileSystemStats(readOnlyPartitionAttrs(), BatchProcessorStats.ERR);
         }
 
         public ClusterState getClusterState() {
             return state.nodes(nodes).build();
+        }
+
+        public PartitionAttributeStats writablePartitionAttrs() {
+            return new PartitionAttributeStats(false, 100, 200);
+        }
+
+        public PartitionAttributeStats readOnlyPartitionAttrs() {
+            return new PartitionAttributeStats(true, 100, 200);
         }
     }
 }

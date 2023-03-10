@@ -31,7 +31,6 @@ import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.exceptions.SerializerException;
 import org.corfudb.runtime.object.MVOCache;
 import org.corfudb.runtime.view.ObjectOpenOption;
-import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.util.serializer.ProtobufSerializer.MessageType;
 
 import java.io.IOException;

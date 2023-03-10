@@ -3,8 +3,14 @@ syntax = "proto3";
 package org.corfudb.runtime;
 option java_package = "org.corfudb.runtime.proto";
 
+enum BatchProcessorStatus {
+  BP_STATUS_OK = 0;
+  BP_STATUS_ERROR = 1;
+}
+
 message FileSystemStatsMsg {
-    PartitionAttributeStatsMsg partition_attribute_stats =1;
+    PartitionAttributeStatsMsg partition_attribute_stats = 1;
+    BatchProcessorStatus batch_processor_status = 2;
 }
 
 message PartitionAttributeStatsMsg {
@@ -12,3 +18,4 @@ message PartitionAttributeStatsMsg {
   int64 available_space = 2;
   int64 total_space = 3;
 }
+

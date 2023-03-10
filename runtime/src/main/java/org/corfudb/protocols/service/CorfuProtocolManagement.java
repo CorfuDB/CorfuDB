@@ -3,6 +3,7 @@ package org.corfudb.protocols.service;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats;
+import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats.BatchProcessorStats;
 import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats.PartitionAttributeStats;
 import org.corfudb.runtime.proto.FileSystemStats.FileSystemStatsMsg;
 import org.corfudb.runtime.proto.FileSystemStats.PartitionAttributeStatsMsg;
@@ -82,6 +83,7 @@ public final class CorfuProtocolManagement {
                             .build();
             FileSystemStatsMsg fsStatsMsg = FileSystemStatsMsg.newBuilder()
                     .setPartitionAttributeStats(partitionAttributeStatsMsg)
+                    .setBatchProcessorStatus(fsStats.getBatchProcessorStats().getStatus())
                     .build();
 
             responseBuilder.setFileSystem(fsStatsMsg);
@@ -110,7 +112,8 @@ public final class CorfuProtocolManagement {
                     partitionAttributeStatsMsg.getTotalSpace()
             );
 
-            FileSystemStats fsStats = new FileSystemStats(partitionAttributeStats);
+            BatchProcessorStats bpStats = new BatchProcessorStats(msg.getFileSystem().getBatchProcessorStatus());
+            FileSystemStats fsStats = new FileSystemStats(partitionAttributeStats, bpStats);
             maybeFsStats = Optional.of(fsStats);
         } else {
             maybeFsStats = Optional.empty();

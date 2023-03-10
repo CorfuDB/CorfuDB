@@ -8,9 +8,7 @@ import org.corfudb.runtime.view.Layout;
 import javax.annotation.Nonnull;
 
 /**
- * Detection Executors.
- * <p>
- * Created by zlokhandwala on 9/29/16.
+ * Detection Executors. Collect information about the cluster, aggregates it and provides in a form of a report.
  */
 public interface IDetector {
 

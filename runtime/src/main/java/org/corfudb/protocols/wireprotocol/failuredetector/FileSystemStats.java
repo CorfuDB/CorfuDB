@@ -5,6 +5,7 @@ import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.ToString;
+import org.corfudb.runtime.proto.FileSystemStats.BatchProcessorStatus;
 
 @AllArgsConstructor
 @EqualsAndHashCode
@@ -14,6 +15,19 @@ public class FileSystemStats {
 
     @NonNull
     private final PartitionAttributeStats partitionAttributeStats;
+    @NonNull
+    private final BatchProcessorStats batchProcessorStats;
+
+    public boolean hasError() {
+        boolean isReadOnly = partitionAttributeStats.isReadOnly();
+        boolean isBpError = batchProcessorStats.isError();
+
+        return isReadOnly || isBpError;
+    }
+
+    public boolean isOk() {
+        return !hasError();
+    }
 
     @AllArgsConstructor
     @Getter
@@ -24,9 +38,28 @@ public class FileSystemStats {
         private final long availableSpace;
         private final long totalSpace;
 
-
         public boolean isWritable() {
             return !readOnly;
+        }
+    }
+
+    @AllArgsConstructor
+    @Getter
+    @EqualsAndHashCode
+    @ToString
+    public static class BatchProcessorStats {
+        @Getter
+        private final BatchProcessorStatus status;
+
+        public static final BatchProcessorStats OK = new BatchProcessorStats(BatchProcessorStatus.BP_STATUS_OK);
+        public static final BatchProcessorStats ERR = new BatchProcessorStats(BatchProcessorStatus.BP_STATUS_ERROR);
+
+        public boolean isError() {
+            return status == BatchProcessorStatus.BP_STATUS_ERROR;
+        }
+
+        public boolean isOk() {
+            return status == BatchProcessorStatus.BP_STATUS_OK;
         }
     }
 }

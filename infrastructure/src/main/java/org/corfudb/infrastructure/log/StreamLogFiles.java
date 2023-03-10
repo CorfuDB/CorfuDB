@@ -15,6 +15,7 @@ import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
 import org.corfudb.common.compression.Codec;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
+import org.corfudb.infrastructure.BatchProcessor.BatchProcessorContext;
 import org.corfudb.infrastructure.ResourceQuota;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.log.FileSystemAgent.FileSystemConfig;
@@ -117,6 +118,8 @@ public class StreamLogFiles implements StreamLog {
      */
     private final ReadWriteLock resetLock = new ReentrantReadWriteLock();
 
+    private final FileSystemAgent fsAgent;
+
     /**
      * Returns a file-based stream log object.
      *
@@ -124,7 +127,7 @@ public class StreamLogFiles implements StreamLog {
      *                      segment and start address
      * @param noVerify      Disable checksum if true
      */
-    public StreamLogFiles(ServerContext serverContext, boolean noVerify) {
+    public StreamLogFiles(ServerContext serverContext, boolean noVerify, BatchProcessorContext batchProcessorContext) {
 
         logDir = Paths.get(serverContext.getServerConfig().get("--log-path").toString(), "log");
         writeChannels = new ConcurrentHashMap<>();
@@ -135,7 +138,7 @@ public class StreamLogFiles implements StreamLog {
         initStreamLogDirectory();
 
         FileSystemConfig config = new FileSystemConfig(serverContext);
-        FileSystemAgent.init(config);
+        this.fsAgent = FileSystemAgent.init(config, batchProcessorContext);
 
         logUnitSizeBytes = MicroMeterUtils.gauge(logUnitSizeMetricName + ".bytes", new AtomicDouble(0));
         logUnitSizeEntries = MicroMeterUtils.gauge(logUnitSizeMetricName + ".entries", new AtomicLong(0L));
@@ -794,7 +797,7 @@ public class StreamLogFiles implements StreamLog {
                 readCh = getChannel(a, true);
 
                 SegmentHandle sh = new SegmentHandle(segment, writeCh, readCh, a);
-                openSegments.ifPresent(counter -> counter.incrementAndGet());
+                openSegments.ifPresent(AtomicLong::incrementAndGet);
                 // The first time we open a file we should read to the end, to load the
                 // map of entries we already have.
                 // Once the segment address space is loaded, it should be ready to accept writes.
@@ -1229,7 +1232,7 @@ public class StreamLogFiles implements StreamLog {
 
     @Override
     public void close() {
-        FileSystemAgent.shutdown();
+        fsAgent.shutdown();
         for (SegmentHandle fh : writeChannels.values()) {
             fh.close();
         }
