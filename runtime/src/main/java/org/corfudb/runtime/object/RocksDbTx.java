@@ -7,13 +7,11 @@ import org.corfudb.runtime.collections.RocksDbEntryIterator;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.serializer.ISerializer;
 import org.rocksdb.OptimisticTransactionDB;
-import org.rocksdb.ReadOptions;
 import org.rocksdb.RocksDBException;
-import org.rocksdb.Snapshot;
 import org.rocksdb.Transaction;
 import org.rocksdb.WriteOptions;
 
-public class RocksDbTx<T extends ICorfuSMR<T>> implements RocksDbApi<T> {
+public class RocksDbTx<T extends SnapshotGenerator<T>> implements RocksDbApi<T> {
     private final OptimisticTransactionDB rocksDb;
     private final DiskBackedSMRSnapshot<T> snapshot;
     private final Transaction txn;

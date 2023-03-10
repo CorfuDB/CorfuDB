@@ -26,7 +26,7 @@ import java.util.stream.Collectors;
  * cache-related properties (LRU) under the hood.
  */
 @Slf4j
-public class MVOCache<T extends ICorfuSMR<T>> {
+public class MVOCache<T extends SnapshotGenerator<T>> {
 
     /**
      * A collection of strong references to all versioned objects and their state.

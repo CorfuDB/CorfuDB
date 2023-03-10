@@ -37,15 +37,15 @@ public class CorfuCompileWrapperBuilder {
      * @throws InstantiationException Cannot instantiate the object using the arguments and class.
      */
     @SuppressWarnings("checkstyle:abbreviation")
-    private static <T extends ICorfuSMR<T>> T getWrapper(Class<T> type, CorfuRuntime rt,
-                                                         UUID streamID, Object[] args,
-                                                         ISerializer serializer,
-                                                         Set<UUID> streamTags,
-                                                         ObjectOpenOption objectOpenOption) throws Exception {
+    private static <T extends ICorfuSMR<T>, X extends SnapshotGenerator<X>> T getWrapper(Class<T> type, CorfuRuntime rt,
+                                                                                         UUID streamID, Object[] args,
+                                                                                         ISerializer serializer,
+                                                                                         Set<UUID> streamTags,
+                                                                                         ObjectOpenOption objectOpenOption) throws Exception {
 
         if (type.getName().equals(PERSISTENT_CORFU_TABLE_CLASS_NAME)) {
             // TODO: make general - This should get cleaned up
-            Class<T> immutableClass = (Class<T>)
+            Class<X> immutableClass = (Class<X>)
                     Class.forName(IMMUTABLE_CORFU_TABLE_CLASS_NAME);
 
             Class<ICorfuSMR<T>> wrapperClass = (Class<ICorfuSMR<T>>) Class.forName(type.getName());
@@ -54,15 +54,15 @@ public class CorfuCompileWrapperBuilder {
             ICorfuSMR<T> wrapperObject = (ICorfuSMR<T>) ReflectionUtils.
                     findMatchingConstructor(wrapperClass.getDeclaredConstructors(), new Object[0]);
 
-            MVOCache<T> mvoCache = rt.getObjectsView().getMvoCache();
+            MVOCache<X> mvoCache = rt.getObjectsView().getMvoCache();
             // Note: args are used when invoking the internal immutable data structure constructor
-            wrapperObject.setProxy$CORFUSMR(new MVOCorfuCompileProxy<>(rt, streamID,
+            wrapperObject.setCorfuSMRProxy(new MVOCorfuCompileProxy<>(rt, streamID,
                     immutableClass, args, serializer, streamTags, wrapperObject, objectOpenOption,
                     mvoCache));
             return (T) wrapperObject;
         } else if (type.getName().equals(PERSISTED_CORFU_TABLE_CLASS_NAME)) {
             // TODO: make general - This should also get cleaned up
-            Class<T> coreClass = (Class<T>)
+            Class<X> coreClass = (Class<X>)
                     Class.forName(DISKBACKED_CORFU_TABLE_CLASS_NAME);
 
             Class<ICorfuSMR<T>> wrapperClass = (Class<ICorfuSMR<T>>) Class.forName(type.getName());
@@ -71,8 +71,8 @@ public class CorfuCompileWrapperBuilder {
             ICorfuSMR<T> wrapperObject = (ICorfuSMR<T>) ReflectionUtils.
                     findMatchingConstructor(wrapperClass.getDeclaredConstructors(), new Object[0]);
 
-            MVOCache<T> mvoCache = new MVOCache<>(rt.getParameters().getMvoCacheExpiry());
-            wrapperObject.setProxy$CORFUSMR(new MVOCorfuCompileProxy<>(rt, streamID,
+            MVOCache<X> mvoCache = new MVOCache<>(rt.getParameters().getMvoCacheExpiry());
+            wrapperObject.setCorfuSMRProxy(new MVOCorfuCompileProxy<>(rt, streamID,
                     coreClass, args, serializer, streamTags, wrapperObject, objectOpenOption,
                     mvoCache));
             return (T) wrapperObject;

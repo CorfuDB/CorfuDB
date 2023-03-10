@@ -33,7 +33,7 @@ import java.util.function.Supplier;
  * Created by jielu, munshedm, and zfrenette.
  */
 @Slf4j
-public class MultiVersionObject<T extends ICorfuSMR<T>> {
+public class MultiVersionObject<S extends SnapshotGenerator<S>> {
 
     /**
      * A lock, which controls access to modifications to the object.
@@ -49,12 +49,12 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
     /**
      * The upcall map for this object.
      */
-    private final Map<String, ICorfuSMRUpcallTarget<T>> upcallTargetMap;
+    private final Map<String, ICorfuSMRUpcallTarget<S>> upcallTargetMap;
 
     /**
      * A function that generates a new instance of this object.
      */
-    private final Supplier<T> newObjectFn;
+    private final Supplier<S> newObjectFn;
 
 
     private final ObjectOpenOption objectOpenOption;
@@ -70,9 +70,9 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
      * MVOCache has no versions associated with this underlying object.
      */
     @Getter
-    private volatile T currentObject;
+    private volatile S currentObject;
 
-    private volatile ISMRSnapshot<T> currentSnapshot = null;
+    private volatile ISMRSnapshot<S> currentSnapshot = null;
 
     /**
      * All versions up to (and including) materializedUpTo have had their versions
@@ -101,7 +101,7 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
     // TODO(Zach): MVOCache type should be T extends ISMRSnapshot<T> but this
     //  doesn't work as is since T extends ICorfuSMR<T> here, and ISMRSnapshot / ICorfuSMR are unrelated.
     @Getter
-    private final MVOCache<T> mvoCache;
+    private final MVOCache<S> mvoCache;
 
     private final Logger correctnessLogger = LoggerFactory.getLogger("correctness");
 
@@ -122,9 +122,10 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
      * @param smrStream     The stream View backing this object.
      * @param wrapperObject The wrapper over the actual object.
      */
-    public MultiVersionObject(@Nonnull CorfuRuntime corfuRuntime, @Nonnull Supplier<T> newObjectFn,
-                              @Nonnull StreamViewSMRAdapter smrStream, @Nonnull ICorfuSMR<T> wrapperObject,
-                              @Nonnull ObjectOpenOption objectOpenOption, @Nonnull MVOCache<T> mvoCache) {
+    public <T extends ICorfuSMR<T>> MultiVersionObject(
+            @Nonnull CorfuRuntime corfuRuntime, @Nonnull Supplier<S> newObjectFn,
+            @Nonnull StreamViewSMRAdapter smrStream, @Nonnull ICorfuSMR<T> wrapperObject,
+            @Nonnull ObjectOpenOption objectOpenOption, @Nonnull MVOCache<S> mvoCache) {
         this.lock = new StampedLock();
         this.smrStream = smrStream;
         this.upcallTargetMap = wrapperObject.getSMRUpcallMap();
@@ -144,7 +145,7 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
      * @param timestamp The desired version of the object.
      * @return A snapshot proxy containing the most recent state of the object for the provided timestamp.
      */
-    public ICorfuSMRSnapshotProxy<T> getSnapshotProxy(long timestamp) {
+    public ICorfuSMRSnapshotProxy<S> getSnapshotProxy(long timestamp) {
         // A timestamp of Address.NON_EXIST is currently only returned for a stream tail
         // query of a non-transactional access - The instance will always be without updates.
         // A timestamp of Address.NON_ADDRESS corresponds to a global tail that sees no
@@ -158,7 +159,7 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
         long lockTs = lock.tryOptimisticRead();
         if (lockTs != 0) {
             try {
-                Optional<ICorfuSMRSnapshotProxy<T>> snapshot = getFromCacheUnsafe(voId, lockTs);
+                Optional<ICorfuSMRSnapshotProxy<S>> snapshot = getFromCacheUnsafe(voId, lockTs);
                 if (snapshot.isPresent()) {
                     // Lock was validated within getFromCacheUnsafe.
                     return snapshot.get();
@@ -187,7 +188,7 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
             }
 
             // Check if our timestamp has since been materialized by another thread.
-            Optional<ICorfuSMRSnapshotProxy<T>> snapshot = getFromCacheUnsafe(voId, lockTs);
+            Optional<ICorfuSMRSnapshotProxy<S>> snapshot = getFromCacheUnsafe(voId, lockTs);
             if (snapshot.isPresent()) {
                 return snapshot.get();
             }
@@ -250,7 +251,7 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
      * @return If available, a snapshot proxy containing the most recent state of the object for
      * the provided timestamp.
      */
-    private Optional<ICorfuSMRSnapshotProxy<T>> getFromCacheUnsafe(@Nonnull VersionedObjectIdentifier voId, long lockTs) {
+    private Optional<ICorfuSMRSnapshotProxy<S>> getFromCacheUnsafe(@Nonnull VersionedObjectIdentifier voId, long lockTs) {
         long startTime = System.nanoTime();
 
         try {
@@ -263,7 +264,7 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
                     log.trace("SnapshotProxy[{}] optimistic request at {}", Utils.toReadableId(getID()), streamTs);
                 }
 
-                ISMRSnapshot<T> versionedObject;
+                ISMRSnapshot<S> versionedObject;
 
                 // The latest visible version for the provided timestamp is equal to what is maintained
                 // by the MVO. In this case, there is no need to query the cache. This check is required
@@ -279,7 +280,7 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
 
                 // TODO(Zach): Snapshot needs to be acquired before validating the lock!
                 // Make as test case?
-                SnapshotProxy<T> snapshotProxy = new SnapshotProxy<>(versionedObject, streamTs, upcallTargetMap);
+                SnapshotProxy<S> snapshotProxy = new SnapshotProxy<>(versionedObject, streamTs, upcallTargetMap);
 
                 if (lock.validate(lockTs)) {
                     correctnessLogger.trace(CORRECTNESS_LOG_MSG, streamTs);
@@ -387,14 +388,14 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
                     updateEntry.getSMRMethod(), updateEntry.getGlobalAddress(), updateEntry.getSMRArguments());
         }
 
-        final ICorfuSMRUpcallTarget<T> target = upcallTargetMap.get(updateEntry.getSMRMethod());
+        final ICorfuSMRUpcallTarget<S> target = upcallTargetMap.get(updateEntry.getSMRMethod());
 
         if (target == null) {
             throw new IllegalStateException("Unknown upcall " + updateEntry.getSMRMethod());
         }
 
         // TODO(Zach): Return this for disk-backed???
-        currentObject = (T) target.upcall(currentObject, updateEntry.getSMRArguments());
+        currentObject = (S) target.upcall(currentObject, updateEntry.getSMRArguments());
     }
 
     /**

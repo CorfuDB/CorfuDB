@@ -22,6 +22,7 @@ import org.corfudb.runtime.object.ICorfuSMRAccess;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
 import org.corfudb.runtime.object.ICorfuSMRSnapshotProxy;
 import org.corfudb.runtime.object.MVOCorfuCompileProxy;
+import org.corfudb.runtime.object.SnapshotGenerator;
 import org.corfudb.runtime.object.transactions.TransactionalContext.PreCommitListener;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.util.Utils;
@@ -150,10 +151,10 @@ public abstract class AbstractTransactionalContext implements
         AbstractTransactionalContext.log.trace("TXBegin[{}]", this);
     }
 
-    protected <T extends ICorfuSMR<T>> ICorfuSMRSnapshotProxy<T> getAndCacheSnapshotProxy(ICorfuSMRProxyInternal<T> proxy, long ts) {
+    protected <T extends ICorfuSMR<T>, X extends SnapshotGenerator<X>> ICorfuSMRSnapshotProxy<X> getAndCacheSnapshotProxy(ICorfuSMRProxyInternal<X> proxy, long ts) {
         // TODO: Refactor me to avoid casting on ICorfuSMRProxyInternal type.
-        ICorfuSMRSnapshotProxy<T> snapshotProxy = (ICorfuSMRSnapshotProxy<T>) snapshotProxyMap.get(proxy);
-        final MVOCorfuCompileProxy<T> persistentProxy = (MVOCorfuCompileProxy<T>) proxy;
+        ICorfuSMRSnapshotProxy<X> snapshotProxy = (ICorfuSMRSnapshotProxy<X>) snapshotProxyMap.get(proxy);
+        final MVOCorfuCompileProxy<T, X> persistentProxy = (MVOCorfuCompileProxy<T, X>) proxy;
         if (snapshotProxy == null) {
             snapshotProxy = persistentProxy.getUnderlyingMVO().getSnapshotProxy(ts);
             snapshotProxyMap.put(proxy, snapshotProxy);
@@ -166,21 +167,15 @@ public abstract class AbstractTransactionalContext implements
         Long val = knownStreamsPosition.get(proxy.getStreamID());
 
         if (val != null) {
-            if (proxy.isMonotonicStreamAccess()) {
-                Preconditions.checkState(val <= position,
-                        "new stream position %s has decreased from %s", position, val);
-            } else {
-                // This precondition is not valid for monotonic objects since multiple accesses
-                // performed by a transaction may not always see the same stream position.
-                // This can occur if another thread performs accesses at a later snapshot and
-                // interleaves with this transaction.
-                Preconditions.checkState(val == position,
-                        "inconsistent stream positions %s and %s", val, position);
-                return;
-            }
+            // This precondition is not valid for monotonic objects since multiple accesses
+            // performed by a transaction may not always see the same stream position.
+            // This can occur if another thread performs accesses at a later snapshot and
+            // interleaves with this transaction.
+            Preconditions.checkState(val == position,
+                    "inconsistent stream positions %s and %s", val, position);
+
         }
 
-        hasAccessedMonotonicObject = hasAccessedMonotonicObject || proxy.isMonotonicObject();
         knownStreamsPosition.put(proxy.getStreamID(), position);
     }
 
@@ -195,22 +190,8 @@ public abstract class AbstractTransactionalContext implements
      * @param <T>            The type of the proxy's underlying object.
      * @return The return value of the access function.
      */
-    public abstract <R, T extends ICorfuSMR<T>> R access(ICorfuSMRProxyInternal<T> proxy,
-                                                         ICorfuSMRAccess<R, T> accessFunction,
-                                                         Object[] conflictObject);
-
-    /**
-     * Get the result of an upcall.
-     *
-     * @param proxy          The proxy to retrieve the upcall for.
-     * @param timestamp      The timestamp to return the upcall for.
-     * @param conflictObject Fine-grained conflict information, if available.
-     * @param <T>            The type of the proxy's underlying object.
-     * @return The result of the upcall.
-     */
-    public abstract <T extends ICorfuSMR<T>> Object getUpcallResult(ICorfuSMRProxyInternal<T> proxy,
-                                                                     long timestamp,
-                                                                     Object[] conflictObject);
+    public abstract <R, T extends SnapshotGenerator<T>> R access(
+            ICorfuSMRProxyInternal<T> proxy, ICorfuSMRAccess<R, T> accessFunction, Object[] conflictObject);
 
     /**
      * Log an SMR update to the Corfu log.
@@ -221,9 +202,8 @@ public abstract class AbstractTransactionalContext implements
      * @param <T>            The type of the proxy's underlying object.
      * @return The address the update was written at.
      */
-    public abstract <T extends ICorfuSMR<T>> long logUpdate(ICorfuSMRProxyInternal<T> proxy,
-                                                             SMREntry updateEntry,
-                                                             Object[] conflictObject);
+    public abstract <T extends SnapshotGenerator<T>> long logUpdate(
+            ICorfuSMRProxyInternal<T> proxy, SMREntry updateEntry, Object[] conflictObject);
 
     public abstract void logUpdate(UUID streamId, SMREntry updateEntry);
 
@@ -337,7 +317,7 @@ public abstract class AbstractTransactionalContext implements
      * @param conflictObjects The fine-grained conflict information, if
      *                        available.
      */
-    public <T extends ICorfuSMR<T>> void addToReadSet(ICorfuSMRProxyInternal<T> proxy, Object[] conflictObjects) {
+    public <T extends ICorfuSMR<T>, X extends SnapshotGenerator<X>> void addToReadSet(ICorfuSMRProxyInternal<X> proxy, Object[] conflictObjects) {
         getReadSetInfo().add(proxy, conflictObjects);
     }
 
@@ -359,8 +339,8 @@ public abstract class AbstractTransactionalContext implements
      * @return a synthetic "address" in the write-set, to be used for
      *     checking upcall results
      */
-    <T extends ICorfuSMR<T>> long addToWriteSet(ICorfuSMRProxyInternal<T> proxy,
-                                                SMREntry updateEntry, Object[] conflictObjects) {
+    <T extends ICorfuSMR<T>, X extends SnapshotGenerator<X>> long addToWriteSet(ICorfuSMRProxyInternal<X> proxy,
+                                                                                SMREntry updateEntry, Object[] conflictObjects) {
         return getWriteSetInfo().add(proxy, updateEntry, conflictObjects);
     }
 

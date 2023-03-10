@@ -116,8 +116,8 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         // Only [:-1] and [:1] are present in the cache.
         Set<VersionedObjectIdentifier> cache = getRuntime().getObjectsView().getMvoCache().keySet();
         assertThat(cache).containsExactlyInAnyOrder(
-                new VersionedObjectIdentifier(tableFirstRuntime.getCorfuStreamID(), -1L),
-                new VersionedObjectIdentifier(tableFirstRuntime.getCorfuStreamID(), 1L)
+                new VersionedObjectIdentifier(tableFirstRuntime.getCorfuSMRProxy().getStreamID(), -1L),
+                new VersionedObjectIdentifier(tableFirstRuntime.getCorfuSMRProxy().getStreamID(), 1L)
         );
     }
 

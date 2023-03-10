@@ -9,8 +9,8 @@ import lombok.Getter;
 
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
-import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
+import org.corfudb.runtime.object.SnapshotGenerator;
 
 import static org.corfudb.runtime.object.transactions.TransactionalContext.getRootContext;
 
@@ -27,8 +27,8 @@ public class WriteSetInfo extends ConflictSetInfo {
     // The actual updates to mutated objects.
     MultiObjectSMREntry writeSet = new MultiObjectSMREntry();
 
-    public <T extends ICorfuSMR<T>> long add(ICorfuSMRProxyInternal<T> proxy,
-                                             SMREntry updateEntry, Object[] conflictObjects) {
+    public <T extends SnapshotGenerator<T>> long add(ICorfuSMRProxyInternal<T> proxy,
+                                                     SMREntry updateEntry, Object[] conflictObjects) {
         synchronized (getRootContext().getTransactionID()) {
 
             // Add the SMREntry to the list of updates for this stream.

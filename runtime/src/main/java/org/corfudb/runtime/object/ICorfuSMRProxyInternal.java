@@ -15,11 +15,7 @@ import org.corfudb.util.serializer.ISerializer;
  * <p>Created by mwei on 11/15/16.
  */
 @SuppressWarnings("checkstyle:abbreviation")
-public interface ICorfuSMRProxyInternal<T extends ICorfuSMR<T>> extends ICorfuSMRProxy<T> {
-
-    boolean isMonotonicObject();
-
-    boolean isMonotonicStreamAccess();
+public interface ICorfuSMRProxyInternal<T> extends ICorfuSMRProxy<T> {
 
     /**
      * Get the serializer used for serializing arguments in the

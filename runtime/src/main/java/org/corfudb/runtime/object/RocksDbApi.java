@@ -1,14 +1,12 @@
 package org.corfudb.runtime.object;
 
 import io.netty.buffer.ByteBuf;
-import jdk.nashorn.internal.runtime.Version;
 import lombok.NonNull;
 import org.corfudb.runtime.collections.RocksDbEntryIterator;
 import org.corfudb.util.serializer.ISerializer;
 import org.rocksdb.RocksDBException;
-import org.rocksdb.Snapshot;
 
-public interface RocksDbApi<T extends ICorfuSMR<T>> {
+public interface RocksDbApi<T extends SnapshotGenerator<T>> {
 
     byte[] get(@NonNull ByteBuf keyPayload) throws RocksDBException;
 

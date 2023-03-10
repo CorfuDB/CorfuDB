@@ -8,6 +8,7 @@ import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.ICorfuSMRAccess;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
+import org.corfudb.runtime.object.SnapshotGenerator;
 
 /**
  * A snapshot transactional context.
@@ -28,9 +29,8 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
      * {@inheritDoc}
      */
     @Override
-    public <R, T extends ICorfuSMR<T>> R access(ICorfuSMRProxyInternal<T> proxy,
-                                                ICorfuSMRAccess<R, T> accessFunction,
-                                                Object[] conflictObject) {
+    public <R, T extends SnapshotGenerator<T>> R access(
+            ICorfuSMRProxyInternal<T> proxy, ICorfuSMRAccess<R, T> accessFunction, Object[] conflictObject) {
         long startAccessTime = System.nanoTime();
         try {
             return getAndCacheSnapshotProxy(proxy, getSnapshotTimestamp().getSequence())
@@ -56,20 +56,6 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
     }
 
     /**
-     * Get the result of an upcall.
-     *
-     * @param proxy     The proxy to retrieve the upcall for.
-     * @param timestamp The timestamp to return the upcall for.
-     * @return The result of the upcall.
-     */
-    @Override
-    public <T extends ICorfuSMR<T>> Object getUpcallResult(ICorfuSMRProxyInternal<T> proxy,
-                                                            long timestamp,
-                                                            Object[] conflictObject) {
-        throw new UnsupportedOperationException("Can't get upcall during a read-only transaction!");
-    }
-
-    /**
      * Log an SMR update to the Corfu log.
      *
      * @param proxy       The proxy which generated the update.
@@ -77,9 +63,8 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
      * @return The address the update was written at.
      */
     @Override
-    public <T extends ICorfuSMR<T>> long logUpdate(ICorfuSMRProxyInternal<T> proxy,
-                                                    SMREntry updateEntry,
-                                                    Object[] conflictObject) {
+    public <T extends SnapshotGenerator<T>> long logUpdate(
+            ICorfuSMRProxyInternal<T> proxy, SMREntry updateEntry, Object[] conflictObject) {
         throw new UnsupportedOperationException(
                 "Can't modify object during a read-only transaction!");
     }

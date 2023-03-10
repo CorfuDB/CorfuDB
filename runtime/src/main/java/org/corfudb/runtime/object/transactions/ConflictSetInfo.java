@@ -8,10 +8,10 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
 
 import lombok.Getter;
+import org.corfudb.runtime.object.SnapshotGenerator;
 
 /**
  * This class captures information about objects accessed (read) during speculative
@@ -57,7 +57,7 @@ public class ConflictSetInfo {
     }
 
     /** Add an operation into this conflict set. */
-    public <T extends ICorfuSMR<T>> void add(ICorfuSMRProxyInternal<T> proxy, Object[] conflictObjects) {
+    public <T> void add(ICorfuSMRProxyInternal<T> proxy, Object[] conflictObjects) {
         // Add the conflict objects to the set for this proxy,
         // creating a new set if needed.
         conflicts.compute(proxy, (p, c) -> {

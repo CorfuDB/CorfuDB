@@ -94,7 +94,7 @@ public class SMRMapTest extends AbstractViewTest {
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
                 .open();
 
-        assertThat(id).isEqualTo(testTable.getCorfuStreamID());
+        assertThat(id).isEqualTo(testTable.getCorfuSMRProxy().getStreamID());
     }
 
     @Test

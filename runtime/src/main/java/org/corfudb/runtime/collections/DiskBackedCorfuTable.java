@@ -11,10 +11,10 @@ import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.object.ConsistencyOptions;
-import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.RocksDbApi;
 import org.corfudb.runtime.object.ISMRSnapshot;
 import org.corfudb.runtime.object.RocksDbStore;
+import org.corfudb.runtime.object.SnapshotGenerator;
 import org.corfudb.runtime.object.VersionedObjectIdentifier;
 import org.corfudb.runtime.object.ViewGenerator;
 import org.corfudb.util.serializer.ISerializer;
@@ -37,7 +37,8 @@ import java.util.stream.StreamSupport;
 @Slf4j
 @AllArgsConstructor
 @Builder(toBuilder=true)
-public class DiskBackedCorfuTable<K, V> implements ICorfuSMR<DiskBackedCorfuTable<K, V>>,
+public class DiskBackedCorfuTable<K, V> implements
+        SnapshotGenerator<DiskBackedCorfuTable<K, V>>,
         ViewGenerator<DiskBackedCorfuTable<K, V>> {
 
     public static final String DISK_BACKED = "diskBacked";

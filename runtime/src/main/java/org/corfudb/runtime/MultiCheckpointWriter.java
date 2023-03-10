@@ -52,7 +52,7 @@ public class MultiCheckpointWriter<T extends ICorfuTable<?, ?>> {
 
         try {
             for (ICorfuSMR<T> table : tables) {
-                UUID streamId = table.getCorfuStreamID();
+                UUID streamId = table.getCorfuSMRProxy().getStreamID();
 
                 CheckpointWriter<T> cpw = new CheckpointWriter<>(rt, streamId, author, (T) table);
                 ISerializer serializer = ((ICorfuSMRProxyInternal) table.getCorfuSMRProxy()).getSerializer();

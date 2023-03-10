@@ -12,9 +12,11 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Stream;
 
-public class PersistedCorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<PersistedCorfuTable<K, V>> {
+public class PersistedCorfuTable<K, V> implements
+        ICorfuTable<K, V>,
+        ICorfuSMR<PersistedCorfuTable<K, V>> {
 
-    private MVOCorfuCompileProxy<DiskBackedCorfuTable<K, V>> proxy;
+    private MVOCorfuCompileProxy<PersistedCorfuTable<K, V>, DiskBackedCorfuTable<K, V>> proxy;
 
     private final Map<String, ICorfuSMRUpcallTarget<DiskBackedCorfuTable<K, V>>> upcallTargetMap
             = ImmutableMap.<String, ICorfuSMRUpcallTarget<DiskBackedCorfuTable<K, V>>>builder()
@@ -24,8 +26,8 @@ public class PersistedCorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<P
             .build();
 
     @Override
-    public <R> void setProxy$CORFUSMR(ICorfuSMRProxy<R> proxy) {
-        this.proxy = (MVOCorfuCompileProxy<DiskBackedCorfuTable<K, V>>) proxy;
+    public <R> void setCorfuSMRProxy(ICorfuSMRProxy<R> proxy) {
+        this.proxy = (MVOCorfuCompileProxy<PersistedCorfuTable<K, V>, DiskBackedCorfuTable<K, V>>) proxy;
     }
 
     @Override
@@ -64,7 +66,7 @@ public class PersistedCorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<P
     @Override
     public V get(@Nonnull Object key) {
         Object[] conflictField = new Object[]{key};
-        return proxy.access(corfuSmr -> corfuSmr.get((K)key), conflictField);
+        return proxy.access(corfuSmr -> corfuSmr.get((K) key), conflictField);
     }
 
     @Override
@@ -101,10 +103,5 @@ public class PersistedCorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<P
     @Override
     public Map<String, ICorfuSMRUpcallTarget<DiskBackedCorfuTable<K, V>>> getSMRUpcallMap() {
         return upcallTargetMap;
-    }
-
-    @Override
-    public UUID getCorfuStreamID() {
-        return proxy.getStreamID();
     }
 }

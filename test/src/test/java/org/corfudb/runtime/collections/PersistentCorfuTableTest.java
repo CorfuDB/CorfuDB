@@ -141,7 +141,7 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
             args = new Object[]{new ProtobufIndexer(defaultValueMessage, schemaOptions)};
         }
 
-        table.setProxy$CORFUSMR(new MVOCorfuCompileProxy(
+        table.setCorfuSMRProxy(new MVOCorfuCompileProxy(
                 runtime,
                 UUID.nameUUIDFromBytes(fullyQualifiedTableName.getBytes()),
                 ImmutableCorfuTable.<K, CorfuRecord<V, M>>getTableType().getRawType(),
@@ -340,8 +340,8 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
         // Verify the MVOCache has exactly 2 versions
         Set<VersionedObjectIdentifier> voIds = rt.getObjectsView().getMvoCache().keySet();
         assertThat(voIds).containsExactlyInAnyOrder(
-                new VersionedObjectIdentifier(corfuTable.getCorfuStreamID(), -1L),
-                new VersionedObjectIdentifier(corfuTable.getCorfuStreamID(), 0L));
+                new VersionedObjectIdentifier(corfuTable.getCorfuSMRProxy().getStreamID(), -1L),
+                new VersionedObjectIdentifier(corfuTable.getCorfuSMRProxy().getStreamID(), 0L));
     }
 
     @Test

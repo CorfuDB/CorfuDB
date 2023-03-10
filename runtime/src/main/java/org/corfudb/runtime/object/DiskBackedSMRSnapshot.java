@@ -1,19 +1,14 @@
 package org.corfudb.runtime.object;
 
 import lombok.NonNull;
-import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.corfudb.runtime.collections.RocksDbEntryIterator;
-import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.TrimmedException;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.serializer.ISerializer;
-import org.junit.Assert;
 import org.rocksdb.OptimisticTransactionDB;
 import org.rocksdb.ReadOptions;
 import org.rocksdb.Snapshot;
 import org.rocksdb.WriteOptions;
 
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.Set;
 import java.util.WeakHashMap;
@@ -21,7 +16,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.StampedLock;
 import java.util.function.Function;
 
-public class DiskBackedSMRSnapshot<T extends ICorfuSMR<T>> implements ISMRSnapshot<T>{
+public class DiskBackedSMRSnapshot<T extends SnapshotGenerator<T>> implements ISMRSnapshot<T>{
     private final StampedLock lock = new StampedLock();
     private final OptimisticTransactionDB rocksDb;
 

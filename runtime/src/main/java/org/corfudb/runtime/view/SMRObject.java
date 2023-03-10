@@ -148,7 +148,7 @@ public class SMRObject<T extends ICorfuSMR<T>> {
 
                                     // Get object serializer to check if we didn't attempt to set another serializer
                                     // to an already existing map
-                                    ISerializer objectSerializer = ((ICorfuSMRProxyInternal<T>) ((ICorfuSMR) result).
+                                    ISerializer objectSerializer = ((ICorfuSMRProxyInternal) ((ICorfuSMR) result).
                                             getCorfuSMRProxy())
                                             .getSerializer();
 

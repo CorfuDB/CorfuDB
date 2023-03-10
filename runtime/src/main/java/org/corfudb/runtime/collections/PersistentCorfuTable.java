@@ -24,7 +24,7 @@ public class PersistentCorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<
             .build();
 
     @Override
-    public <R> void setProxy$CORFUSMR(ICorfuSMRProxy<R> proxy) {
+    public <R> void setCorfuSMRProxy(ICorfuSMRProxy<R> proxy) {
         this.proxy = (ICorfuSMRProxy<ImmutableCorfuTable<K, V>>) proxy;
     }
 
@@ -101,10 +101,5 @@ public class PersistentCorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<
     @Override
     public Map<String, ICorfuSMRUpcallTarget<ImmutableCorfuTable<K, V>>> getSMRUpcallMap() {
         return upcallTargetMap;
-    }
-
-    @Override
-    public UUID getCorfuStreamID() {
-        return proxy.getStreamID();
     }
 }

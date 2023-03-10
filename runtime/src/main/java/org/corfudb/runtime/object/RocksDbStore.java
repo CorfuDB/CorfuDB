@@ -14,7 +14,7 @@ import org.rocksdb.WriteOptions;
 import java.nio.file.Path;
 
 @Slf4j
-public class RocksDbStore<T extends ICorfuSMR<T>> implements RocksDbApi<T> {
+public class RocksDbStore<T extends SnapshotGenerator<T>> implements RocksDbApi<T> {
 
     private final OptimisticTransactionDB rocksDb;
     private final WriteOptions writeOptions;

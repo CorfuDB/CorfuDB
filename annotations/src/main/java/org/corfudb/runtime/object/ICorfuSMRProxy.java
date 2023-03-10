@@ -1,8 +1,6 @@
 package org.corfudb.runtime.object;
 
 import java.util.UUID;
-import java.util.function.Function;
-import java.util.function.Supplier;
 
 /** An interface for accessing a proxy, which
  * manages an SMR object.
@@ -40,18 +38,9 @@ public interface ICorfuSMRProxy<T> {
      */
     UUID getStreamID();
 
-
-    /** Return the type of the object being replicated.
-     *
-     * @return              The type of the replicated object.
-     */
-    Class<T> getObjectType();
-
     /** Get the latest version read by the proxy.
      *
      * @return              The latest version read by the proxy.
      */
     long getVersion();
-
-
 }

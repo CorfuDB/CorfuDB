@@ -8,9 +8,8 @@ import org.corfudb.util.serializer.ISerializer;
 import org.rocksdb.OptimisticTransactionDB;
 import org.rocksdb.ReadOptions;
 import org.rocksdb.RocksDBException;
-import org.rocksdb.Snapshot;
 
-public class RocksDbStubTx<T extends ICorfuSMR<T>> implements RocksDbApi<T> {
+public class RocksDbStubTx<T extends SnapshotGenerator<T>> implements RocksDbApi<T> {
     private final OptimisticTransactionDB rocksDb;
     private final DiskBackedSMRSnapshot snapshot;
     private final ReadOptions readOptions;
