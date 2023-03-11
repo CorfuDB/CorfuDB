@@ -169,17 +169,24 @@ public abstract class DistributedCheckpointer {
         this.livenessUpdater.updateLiveness(tableName);
         StatusType returnStatus = StatusType.FAILED;
         for (int retry = 0; retry < MAX_RETRIES; retry++) {
+            CheckpointWriter<ICorfuTable<?,?>> cpw = null;
             try {
-                CheckpointWriter<ICorfuTable<?,?>> cpw = checkpointWriterFn.apply(tableName);
+                cpw = checkpointWriterFn.apply(tableName);
                 cpw.appendCheckpoint(Optional.of(livenessUpdater));
-                cpw.getCorfuTable().close();
                 returnStatus = StatusType.COMPLETED;
                 break;
             } catch (RuntimeException re) {
+                log.warn("Encountered RuntimeException, Message: {}, ", re.getMessage(), re);
                 if (isCriticalRuntimeException(re, retry, MAX_RETRIES)) {
                     break; // stop on non-retryable exceptions
                 }
-            }
+            } catch (Exception ex) {
+                log.warn("Encountered unexpected Exception, Message: {}, ", ex.getMessage(), ex);
+            } finally {
+                if (cpw != null) {
+                    cpw.getCorfuTable().close();
+                }
+             }
         }
         this.livenessUpdater.notifyOnSyncComplete();
         return CheckpointingStatus.newBuilder()
