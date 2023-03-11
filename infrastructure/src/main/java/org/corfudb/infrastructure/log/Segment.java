@@ -28,7 +28,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 
 import static org.corfudb.infrastructure.log.SegmentUtils.getByteBuffer;
 import static org.corfudb.infrastructure.log.SegmentUtils.getLogData;
@@ -61,6 +60,10 @@ public class Segment {
 
     public static final int VERSION = 2;
 
+    public static final int MAX_WRITE_SIZE = 0xfffffff;
+
+    public static final long MAX_SEGMENT_SIZE = 0x0000000fffffffffL;
+
     final long id;
 
     @NonNull
@@ -74,17 +77,18 @@ public class Segment {
 
     private boolean isDirty;
 
-    private final Map<Long, AddressMetaData> knownAddresses = new ConcurrentHashMap<>();
+    private final Index index;
 
     private int refCount = 0;
 
     private final ResourceQuota logSize;
 
-    public Segment(long segmentId, Path segmentsDir, ResourceQuota logSize) {
+    public Segment(long segmentId, int segmentSize, Path segmentsDir, ResourceQuota logSize) {
         this.id = segmentId;
         this.segmentFilePath = segmentsDir + File.separator + segmentId + ".log";
         this.isDirty = false;
         this.logSize = logSize;
+        this.index = new Index(segmentId * segmentSize, segmentSize);
         // Open and load a segment file, or create one if it doesn't exist.
         // Once the segment address space is loaded, it should be ready to accept writes.
         try {
@@ -146,9 +150,10 @@ public class Segment {
                 return;
             }
 
-            knownAddresses.put(entry.getGlobalAddress(),
-                    new AddressMetaData(metadata.getLength(),
-                            channelOffset + METADATA_SIZE));
+            checkSegmentAndBufferSize(channelOffset + METADATA_SIZE, metadata.getLength());
+            index.put(entry.getGlobalAddress(),
+                    channelOffset + METADATA_SIZE,
+                    metadata.getLength());
         }
     }
 
@@ -156,8 +161,8 @@ public class Segment {
      * Get a set of all the written addresses in this segment
      * @return A set of sequence numbers
      */
-    public Set<Long> getAddresses() {
-        return knownAddresses.keySet();
+    public Iterable<Long> getAddresses() {
+        return index.map.iterable();
     }
 
     /**
@@ -179,7 +184,7 @@ public class Segment {
      * Check if the segment contains a particular address
      */
     public boolean contains(long address) {
-        return knownAddresses.containsKey(address);
+        return index.contains(address);
     }
 
     /**
@@ -189,14 +194,14 @@ public class Segment {
      * @throws IOException
      */
     public LogData read(long address) throws IOException {
-        AddressMetaData addressMetaData = knownAddresses.get(address);
-        if (addressMetaData == null) {
+        long value = index.getPacked(address);
+
+        if (value == BoundedMap.NOT_SET) {
             return null;
         }
 
-        int length = addressMetaData.length;
-        long offset = addressMetaData.offset;
-
+        int length = index.unpackLength(value);
+        long offset = index.unpackOffset(value);
         try {
             ByteBuffer entryBuf = ByteBuffer.allocate(length);
             readChannel.read(entryBuf, offset);
@@ -212,6 +217,19 @@ public class Segment {
     }
 
     /**
+     * Verify that the file backing this segment is less than or equal to MAX_SEGMENT_SIZE.
+     * These checks are required prevent corrupting the Index.
+     * @param offset segment file offset after writing the buffer
+     * @param buffSize size of the buffer to be written in bytes
+     */
+    private void checkSegmentAndBufferSize(long offset, int buffSize) {
+        Preconditions.checkArgument(offset > 0);
+        Preconditions.checkArgument(buffSize > 0);
+        Preconditions.checkArgument(offset <= MAX_SEGMENT_SIZE);
+        Preconditions.checkArgument(buffSize <= MAX_WRITE_SIZE);
+    }
+
+    /**
      * Write log data to this segment for a following sequence
      * @param address the sequence to bind the log data to
      * @param logdata the log data to write
@@ -224,13 +242,13 @@ public class Segment {
         LogFormat.Metadata metadata = getMetadata(logEntry);
 
         ByteBuffer buffer = getByteBuffer(metadata, logEntry);
-        long size = buffer.remaining();
+        int size = buffer.remaining();
         long channelOffset;
 
         channelOffset = writeChannel.position() + METADATA_SIZE;
+        checkSegmentAndBufferSize(channelOffset, size);
         writeBuffer(buffer);
-        AddressMetaData addressMetaData = new AddressMetaData(metadata.getLength(), channelOffset);
-        knownAddresses.put(address, addressMetaData);
+        index.put(address, channelOffset, metadata.getLength());
         return size;
     }
 
@@ -268,12 +286,15 @@ public class Segment {
             LogFormat.Metadata metadata = metadataList.get(ind);
             recordsMap.put(entries.get(ind).getGlobalAddress(),
                     new AddressMetaData(metadata.getLength(), channelOffset));
+            checkSegmentAndBufferSize(channelOffset, metadata.getLength());
         }
 
         allRecordsBuf.flip();
         writeBuffer(allRecordsBuf);
 
-        knownAddresses.putAll(recordsMap);
+        for (Map.Entry<Long, AddressMetaData> entry : recordsMap.entrySet()) {
+            index.put(entry.getKey(), entry.getValue().offset, entry.getValue().length);
+        }
 
         return size;
     }
@@ -526,6 +547,55 @@ public class Segment {
         if (refCount != 0) {
             log.warn("closeSegmentHandlers: Segment {} is trimmed, but refCount is {}, attempting to trim anyways",
                     segmentFilePath, refCount);
+        }
+    }
+
+    /**
+     * This index maps a sequence number to a file offset + payload length.
+     *
+     * The file offset and payload length are packed in a long (treated as unsigned) as follows:
+     *
+     *  |--------64-bits--------|
+     *  |fileOffset|payloadSize|
+     *
+     */
+    @VisibleForTesting
+    static final class Index {
+        static final int highBitsNum = Long.bitCount(MAX_SEGMENT_SIZE);
+        static final int lowBitsNum = Integer.bitCount(MAX_WRITE_SIZE);
+        private final BoundedMap map;
+
+        Index(long offset, int size) {
+            this.map = new BoundedMap(offset, size);
+            Preconditions.checkArgument((highBitsNum + lowBitsNum) >> 3 == Long.BYTES);
+        }
+
+        long pack(long high, int low) {
+            return (((long) high) << lowBitsNum) | (low & MAX_WRITE_SIZE);
+        }
+
+        int unpackLength(long num) {
+            return (int) (num & MAX_WRITE_SIZE);
+        }
+
+        long unpackOffset(long num) {
+            return num >>> lowBitsNum;
+        }
+
+        void put(long sequenceNum, long fileOffset, int length) {
+            Preconditions.checkArgument(fileOffset > 0 && fileOffset <= MAX_SEGMENT_SIZE,
+                    "invalid offset %s", fileOffset);
+            Preconditions.checkArgument(length > 0 && length <= MAX_WRITE_SIZE,
+                    "invalid length %s", length);
+            Preconditions.checkState(map.set(sequenceNum, pack(fileOffset, length)));
+        }
+
+        boolean contains(long sequenceNum) {
+            return map.contains(sequenceNum);
+        }
+
+        long getPacked(long sequenceNum) {
+            return map.get(sequenceNum);
         }
     }
 
