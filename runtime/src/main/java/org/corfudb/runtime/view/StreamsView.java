@@ -131,12 +131,14 @@ public class StreamsView extends AbstractView {
      * @param object       The object to append to each stream.
      * @param conflictInfo Conflict information for the sequencer to check.
      * @param cacheOption  The caching mode for write/append
+     * @param skipWriteSizeCheck  Skip maxWriteSize limit check if True
      * @return The address the entry was written to.
      * @throws TransactionAbortedException If the transaction was aborted by
      *                                     the sequencer.
      */
     public long append(@Nonnull Object object, @Nullable TxResolutionInfo conflictInfo,
-                       @Nonnull CacheOption cacheOption, @Nonnull UUID... streamIDs) {
+                       @Nonnull CacheOption cacheOption, @Nonnull boolean skipWriteSizeCheck,
+                       @Nonnull UUID... streamIDs) {
 
         final boolean serializeMetadata = false;
         final LogData ld = new LogData(DataType.DATA, object, runtime.getParameters().getCodecType());
@@ -148,7 +150,15 @@ public class StreamsView extends AbstractView {
         // acquired yet, thus metadata is incomplete. Once a token is acquired, the
         // writer will append the serialized metadata to the buffer.
         try (ILogData.SerializationHandle sh = ld.getSerializedForm(serializeMetadata)) {
-            int payloadSize = ld.checkMaxWriteSize(runtime.getParameters().getMaxWriteSize());
+            int payloadSize;
+            if (skipWriteSizeCheck) {
+                payloadSize = ld.getSizeEstimate();
+                if (log.isTraceEnabled()) {
+                    log.trace("append: payload size is {} bytes.", payloadSize);
+                }
+            } else {
+                payloadSize = ld.checkMaxWriteSize(runtime.getParameters().getMaxWriteSize());
+            }
 
             for (int retry = 0; retry < runtime.getParameters().getWriteRetry(); retry++) {
                 // Go to the sequencer, grab a token to write.
@@ -208,6 +218,16 @@ public class StreamsView extends AbstractView {
         }
 
         throw new AppendException();
+    }
+
+    /**
+     * Append to multiple streams and alwasys check writeSizeLimit
+     *
+     * @see StreamsView#append(Object, TxResolutionInfo, CacheOption, UUID...)
+     */
+    public long append(@Nonnull Object object, @Nullable TxResolutionInfo conflictInfo,
+                       @Nonnull CacheOption cacheOption, @Nonnull UUID... streamIDs) {
+        return append(object, conflictInfo, cacheOption, false, streamIDs);
     }
 
     /**
