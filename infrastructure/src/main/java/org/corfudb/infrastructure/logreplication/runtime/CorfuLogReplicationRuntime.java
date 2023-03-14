@@ -143,7 +143,7 @@ public class CorfuLogReplicationRuntime {
      */
     private final LinkedBlockingQueue<LogReplicationRuntimeEvent> eventQueue = new LinkedBlockingQueue<>();
 
-    private final LogReplicationSourceBaseRouter router;
+    private final LogReplicationClientServerRouter router;
 
     @Getter
     private final LogReplicationSourceManager sourceManager;
@@ -156,21 +156,16 @@ public class CorfuLogReplicationRuntime {
     @Getter
     public final LogReplicationSession session;
 
-    @Getter
-    private final boolean isConnectionStarter;
-
     /**
      * Default Constructor
      */
     public CorfuLogReplicationRuntime(LogReplicationRuntimeParameters parameters,
                                       LogReplicationMetadataManager metadataManager, LogReplicationUpgradeManager upgradeManager,
                                       LogReplicationSession session, LogReplicationContext replicationContext,
-                                      LogReplicationSourceBaseRouter router, boolean isConnectionStarter) {
+                                      LogReplicationClientServerRouter router) {
         this.remoteClusterId = session.getSinkClusterId();
         this.session = session;
         this.router = router;
-        // Shama this will be gone
-        this.router.addClient(new LogReplicationHandler(session));
         this.sourceManager = new LogReplicationSourceManager(parameters,router, metadataManager, upgradeManager,
                 session, replicationContext);
         this.connectedNodes = new HashSet<>();
@@ -187,7 +182,6 @@ public class CorfuLogReplicationRuntime {
 
         initializeStates(metadataManager, upgradeManager);
         this.state = states.get(LogReplicationRuntimeStateType.WAITING_FOR_CONNECTIVITY);
-        this.isConnectionStarter = isConnectionStarter;
 
         log.info("Log Replication Runtime State Machine initialized");
     }

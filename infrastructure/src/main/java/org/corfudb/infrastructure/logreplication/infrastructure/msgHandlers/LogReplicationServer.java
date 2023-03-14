@@ -17,6 +17,9 @@ import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
 import org.corfudb.runtime.clients.IClientRouter;
+import org.corfudb.runtime.proto.service.CorfuMessage;
+import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
@@ -34,13 +37,21 @@ import static org.corfudb.protocols.service.CorfuProtocolLogReplication.getLeade
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getHeaderMsg;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getResponseMsg;
 import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
+import static org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg.PayloadCase.LR_ENTRY;
+import static org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg.PayloadCase.LR_LEADERSHIP_QUERY;
+import static org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg.PayloadCase.LR_METADATA_REQUEST;
+import static org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg.PayloadCase.LR_ENTRY_ACK;
+import static org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg.PayloadCase.LR_LEADERSHIP_LOSS;
+import static org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg.PayloadCase.LR_LEADERSHIP_RESPONSE;
+import static org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg.PayloadCase.LR_METADATA_RESPONSE;
 
 /**
  * This class represents the Log Replication Server, which is responsible of providing Log Replication across sites.
  *
- * The Log Replication Server, handles log replication entries--which represent parts of a Snapshot (full) sync or a
- * Log Entry (delta) sync and also handles negotiation messages, which allows the Source Replicator to get a view of
- * the last synchronized point at the remote cluster.
+ * The Log Replication Server, handles log replication messages :
+ * Leadership messages, so source and sink know which node to send/receive messages
+ * Negotiation messages, which allows the Source Replicator to get a view of the last synchronized point at the remote cluster.
+ * Replication entry messages, which represent parts of a Snapshot (full) sync or a Log Entry (delta) sync and also handles negotiation messages,
  */
 @Slf4j
 public class LogReplicationServer extends LogReplicationAbstractServer {
@@ -78,6 +89,7 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
         return ReplicationHandlerMethods.generateHandler(MethodHandles.lookup(), this);
     }
 
+    // Shama check if you really need ServerContext
     public LogReplicationServer(@Nonnull ServerContext context, @Nonnull SessionManager sessionManager,
                                 String localEndpoint) {
         this.serverContext = context;
@@ -134,121 +146,6 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
         sessionToSinkManagerMap.clear();
     }
 
-    /* ************ Server Handlers ************ */
-
-    /**
-     * Given a log-entry request message, send back an acknowledgement
-     * after processing the message.
-     *
-     * @param request leadership query
-     * @param router  router used for sending back the response
-     */
-    @LogReplicationMsgHandler(type = "lr_entry")
-    private void handleLrEntryRequest(@Nonnull RequestMsg request,
-                                      @Nonnull IClientServerRouter router) {
-        log.trace("Log Replication Entry received by Server.");
-
-        if (isLeader.get()) {
-            LogReplicationSession session = getSession(request);
-
-            LogReplicationSinkManager sinkManager = sessionToSinkManagerMap.get(session);
-
-            // We create a sinkManager for sessions that are discovered while bootstrapping LR. But as topology changes,
-            // we may discover new sessions. At the same time, its possible that the remote Source cluster finds a new
-            // session before the local cluster and sends a request to the local cluster.
-            // Since the two events are async, we wait to receive a new session in the incoming request.
-            // If the incoming session is not known to sessionManager drop the message (until session is discovered by
-            // local cluster), otherwise create a corresponding sinkManager.
-            // TODO[V2] : We still have a case where the cluster does not ever discover a session on its own, like in
-            //  the logical_group use case where only the source knows about the session even when sink starts the
-            //  connection.
-            //  To resolve this, we need to have a long living RPC from the connectionInitiator cluster which will query
-            //  for sessions from the other cluster
-            if (sinkManager == null) {
-                if(!sessionManager.getSessions().contains(session)) {
-                    log.error("SessionManager does not know about incoming session {}, total={}, current sessions={}",
-                            session, sessionToSinkManagerMap.size(), sessionToSinkManagerMap.keySet());
-                    return;
-                } else {
-                    sinkManager = createSinkManager(session);
-                }
-            }
-
-            // Forward the received message to the Sink Manager for apply
-            LogReplicationEntryMsg ack = sinkManager.receive(request.getPayload().getLrEntry());
-
-            if (ack != null) {
-                long ts = ack.getMetadata().getEntryType().equals(LogReplicationEntryType.LOG_ENTRY_REPLICATED) ?
-                    ack.getMetadata().getTimestamp() : ack.getMetadata().getSnapshotTimestamp();
-                log.info("Sending ACK {} on {} to Client ", TextFormat.shortDebugString(ack.getMetadata()), ts);
-
-                ResponsePayloadMsg payload = ResponsePayloadMsg.newBuilder().setLrEntryAck(ack).build();
-                HeaderMsg responseHeader = getHeaderMsg(request.getHeader());
-                ResponseMsg response = getResponseMsg(responseHeader, payload);
-                router.sendResponse(response);
-            }
-        } else {
-            LogReplicationEntryMsg entryMsg = request.getPayload().getLrEntry();
-            LogReplicationEntryType entryType = entryMsg.getMetadata().getEntryType();
-            log.warn("Dropping received message of type {} while NOT LEADER. snapshotSyncSeqNumber={}, ts={}," +
-                "syncRequestId={}", entryType, entryMsg.getMetadata().getSnapshotSyncSeqNum(),
-                entryMsg.getMetadata().getTimestamp(), entryMsg.getMetadata().getSyncRequestId());
-            sendLeadershipLoss(request, router);
-        }
-    }
-
-    /**
-     * Given a metadata request message, send back a response signaling
-     * current log-replication status (snapshot related information).
-     *
-     * @param request leadership query
-     * @param router  router used for sending back the response
-     */
-    @LogReplicationMsgHandler(type = "lr_metadata_request")
-    private void handleMetadataRequest(@Nonnull RequestMsg request,
-                                       @Nonnull IClientServerRouter router) {
-        log.info("Log Replication Metadata Request received by Server.");
-
-        if (isLeader.get()) {
-
-            LogReplicationSession session = getSession(request);
-
-            LogReplicationSinkManager sinkManager = sessionToSinkManagerMap.get(session);
-
-            // We create a sinkManager for sessions that are discovered while bootstrapping LR. But as topology changes,
-            // we may discover new sessions. At the same time, its possible that the remote Source cluster finds a new
-            // session before the local cluster and sends a request to the local cluster.
-            // Since the two events are async, we wait to receive a new session in the incoming request.
-            // If the incoming session is not known to sessionManager drop the message (until session is discovered by
-            // local cluster), otherwise create a corresponding sinkManager.
-            // TODO[V2] : We still have a case where the cluster does not ever discover a session on its own.
-            //  To resolve this, we need to have a long living RPC from the connectionInitiator cluster which will query
-            //  for sessions from the other cluster
-            if (sinkManager == null) {
-                if(!sessionManager.getSessions().contains(session)) {
-                    log.error("SessionManager does not know about incoming session {}, total={}, current sessions={}",
-                            session, sessionToSinkManagerMap.size(), sessionToSinkManagerMap.keySet());
-                    return;
-                } else {
-                    sinkManager = createSinkManager(session);
-                }
-            }
-
-            ReplicationMetadata metadata = sessionManager.getMetadataManager().getReplicationMetadata(session);
-            ResponseMsg response = getMetadataResponse(request, metadata);
-
-            log.info("Send Metadata response: :: {}", TextFormat.shortDebugString(response.getPayload()));
-            router.sendResponse(response);
-
-            // If a snapshot apply is pending, start (if not started already)
-            sinkManager.startPendingSnapshotApply();
-        } else {
-            log.warn("Dropping metadata request as this node is not the leader.  Request id = {}",
-                request.getHeader().getRequestId());
-            sendLeadershipLoss(request, router);
-        }
-    }
-
     /**
      * Get session associated to the received request.
      *
@@ -289,6 +186,121 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
         return getResponseMsg(getHeaderMsg(request.getHeader()), payload);
     }
 
+    /* ************ Server Handlers ************ */
+
+    /**
+     * Given a log-entry request message, send back an acknowledgement
+     * after processing the message.
+     *
+     * @param request leadership query
+     * @param router  router used for sending back the response
+     */
+    @LogReplicationMsgHandler(requestType = LR_ENTRY)
+    private void handleLrEntryRequest(RequestMsg request, ResponseMsg res,
+                                      @Nonnull IClientServerRouter router) {
+        log.trace("Log Replication Entry received by Server.");
+
+        if (isLeader.get()) {
+            LogReplicationSession session = getSession(request);
+
+            LogReplicationSinkManager sinkManager = sessionToSinkManagerMap.get(session);
+
+            // We create a sinkManager for sessions that are discovered while bootstrapping LR. But as topology changes,
+            // we may discover new sessions. At the same time, its possible that the remote Source cluster finds a new
+            // session before the local cluster and sends a request to the local cluster.
+            // Since the two events are async, we wait to receive a new session in the incoming request.
+            // If the incoming session is not known to sessionManager drop the message (until session is discovered by
+            // local cluster), otherwise create a corresponding sinkManager.
+            // TODO[V2] : We still have a case where the cluster does not ever discover a session on its own, like in
+            //  the logical_group use case where only the source knows about the session even when sink starts the
+            //  connection.
+            //  To resolve this, we need to have a long living RPC from the connectionInitiator cluster which will query
+            //  for sessions from the other cluster
+            if (sinkManager == null) {
+                if(!sessionManager.getSessions().contains(session)) {
+                    log.error("SessionManager does not know about incoming session {}, total={}, current sessions={}",
+                            session, sessionToSinkManagerMap.size(), sessionToSinkManagerMap.keySet());
+                    return;
+                } else {
+                    sinkManager = createSinkManager(session);
+                }
+            }
+
+            // Forward the received message to the Sink Manager for apply
+            LogReplicationEntryMsg ack = sinkManager.receive(request.getPayload().getLrEntry());
+
+            if (ack != null) {
+                long ts = ack.getMetadata().getEntryType().equals(LogReplicationEntryType.LOG_ENTRY_REPLICATED) ?
+                        ack.getMetadata().getTimestamp() : ack.getMetadata().getSnapshotTimestamp();
+                log.info("Sending ACK {} on {} to Client ", TextFormat.shortDebugString(ack.getMetadata()), ts);
+
+                ResponsePayloadMsg payload = ResponsePayloadMsg.newBuilder().setLrEntryAck(ack).build();
+                HeaderMsg responseHeader = getHeaderMsg(request.getHeader());
+                ResponseMsg response = getResponseMsg(responseHeader, payload);
+                router.sendResponse(response);
+            }
+        } else {
+            LogReplicationEntryMsg entryMsg = request.getPayload().getLrEntry();
+            LogReplicationEntryType entryType = entryMsg.getMetadata().getEntryType();
+            log.warn("Dropping received message of type {} while NOT LEADER. snapshotSyncSeqNumber={}, ts={}," +
+                            "syncRequestId={}", entryType, entryMsg.getMetadata().getSnapshotSyncSeqNum(),
+                    entryMsg.getMetadata().getTimestamp(), entryMsg.getMetadata().getSyncRequestId());
+            sendLeadershipLoss(request, router);
+        }
+    }
+
+    /**
+     * Given a metadata request message, send back a response signaling
+     * current log-replication status (snapshot related information).
+     *
+     * @param request leadership query
+     * @param router  router used for sending back the response
+     */
+    @LogReplicationMsgHandler(requestType = LR_METADATA_REQUEST)
+    private void handleMetadataRequest(RequestMsg request, ResponseMsg res,
+                                       @Nonnull IClientServerRouter router) {
+        log.info("Log Replication Metadata Request received by Server.");
+
+        if (isLeader.get()) {
+
+            LogReplicationSession session = getSession(request);
+
+            LogReplicationSinkManager sinkManager = sessionToSinkManagerMap.get(session);
+
+            // We create a sinkManager for sessions that are discovered while bootstrapping LR. But as topology changes,
+            // we may discover new sessions. At the same time, its possible that the remote Source cluster finds a new
+            // session before the local cluster and sends a request to the local cluster.
+            // Since the two events are async, we wait to receive a new session in the incoming request.
+            // If the incoming session is not known to sessionManager drop the message (until session is discovered by
+            // local cluster), otherwise create a corresponding sinkManager.
+            // TODO[V2] : We still have a case where the cluster does not ever discover a session on its own.
+            //  To resolve this, we need to have a long living RPC from the connectionInitiator cluster which will query
+            //  for sessions from the other cluster
+            if (sinkManager == null) {
+                if(!sessionManager.getSessions().contains(session)) {
+                    log.error("SessionManager does not know about incoming session {}, total={}, current sessions={}",
+                            session, sessionToSinkManagerMap.size(), sessionToSinkManagerMap.keySet());
+                    return;
+                } else {
+                    sinkManager = createSinkManager(session);
+                }
+            }
+
+            ReplicationMetadata metadata = sessionManager.getMetadataManager().getReplicationMetadata(session);
+            ResponseMsg response = getMetadataResponse(request, metadata);
+
+            log.info("Send Metadata response: :: {}", TextFormat.shortDebugString(response.getPayload()));
+            router.sendResponse(response);
+
+            // If a snapshot apply is pending, start (if not started already)
+            sinkManager.startPendingSnapshotApply();
+        } else {
+            log.warn("Dropping metadata request as this node is not the leader.  Request id = {}",
+                    request.getHeader().getRequestId());
+            sendLeadershipLoss(request, router);
+        }
+    }
+
     /**
      * Given a leadership request message, send back a
      * response indicating our current leadership status.
@@ -296,8 +308,8 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
      * @param request the leadership request message
      * @param router  router used for sending back the response
      */
-    @LogReplicationMsgHandler(type = "lr_leadership_query")
-    private void handleLogReplicationQueryLeadership(@Nonnull RequestMsg request,
+    @LogReplicationMsgHandler(requestType = LR_LEADERSHIP_QUERY)
+    private void  handleLogReplicationQueryLeadership(RequestMsg request, ResponseMsg res,
                                                      @Nonnull IClientServerRouter router) {
         log.debug("Log Replication Query Leadership Request received by Server.");
         HeaderMsg responseHeader = getHeaderMsg(request.getHeader());
@@ -311,32 +323,36 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
      * @param response The ack message
      * @param router   A reference to the router
      */
-    @LogReplicationMsgHandler(type = "lr_leadership_loss")
-    private static Object handleLogReplicationAck(@Nonnull ResponseMsg response,
+    @LogReplicationMsgHandler(responseType = LR_ENTRY_ACK)
+    private void handleLogReplicationAck(RequestMsg req, ResponseMsg response,
                                                   @Nonnull IClientServerRouter router) {
         log.debug("Handle log replication ACK {}", response);
-        return response.getPayload().getLrEntryAck();
+        router.completeRequest(response.getHeader().getSession(), response.getHeader().getRequestId(),
+                response.getPayload().getLrEntryAck());
     }
 
-    @LogReplicationMsgHandler(type = "lr_metadata_response")
-    private static Object handleLogReplicationMetadata(@Nonnull ResponseMsg response,
+    @LogReplicationMsgHandler(responseType = LR_METADATA_RESPONSE)
+    private void handleLogReplicationMetadata(RequestMsg req,  ResponseMsg response,
                                                        @Nonnull IClientServerRouter router) {
         log.debug("Handle log replication Metadata Response");
-        return response.getPayload().getLrMetadataResponse();
+        router.completeRequest(response.getHeader().getSession(), response.getHeader().getRequestId(),
+                response.getPayload().getLrMetadataResponse());
     }
 
-    @LogReplicationMsgHandler(type = "lr_leadership_response")
-    private static Object handleLogReplicationQueryLeadershipResponse(@Nonnull ResponseMsg response,
+    @LogReplicationMsgHandler(responseType = LR_LEADERSHIP_RESPONSE)
+    private void handleLogReplicationQueryLeadershipResponse(RequestMsg req, ResponseMsg response,
                                                                       @Nonnull IClientServerRouter router) {
-        log.trace("Handle log replication query leadership response msg {}", TextFormat.shortDebugString(response));
-        return response.getPayload().getLrLeadershipResponse();
+        log.debug("Handle log replication query leadership response msg {}", TextFormat.shortDebugString(response));
+        router.completeRequest(response.getHeader().getSession(), response.getHeader().getRequestId(),
+                response.getPayload().getLrLeadershipResponse());
     }
 
-    @LogReplicationMsgHandler(type = "lr_leadership_loss")
-    private static Object handleLogReplicationLeadershipLoss(@Nonnull ResponseMsg response,
+    @LogReplicationMsgHandler(responseType = LR_LEADERSHIP_LOSS)
+    private void handleLogReplicationLeadershipLoss(RequestMsg req,  ResponseMsg response,
                                                              @Nonnull IClientServerRouter router) {
         log.debug("Handle log replication leadership loss msg {}", TextFormat.shortDebugString(response));
-        return response.getPayload().getLrLeadershipLoss();
+        router.completeRequest(response.getHeader().getSession(), response.getHeader().getRequestId(),
+                response.getPayload().getLrLeadershipLoss());
     }
 
     /**

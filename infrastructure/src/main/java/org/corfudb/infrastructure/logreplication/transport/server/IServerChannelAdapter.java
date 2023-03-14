@@ -1,14 +1,10 @@
 package org.corfudb.infrastructure.logreplication.transport.server;
 
 import lombok.Getter;
-import org.corfudb.infrastructure.ServerContext;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSinkServerRouter;
-import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSourceServerRouter;
-import org.corfudb.runtime.LogReplication.LogReplicationSession;
+import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientServerRouter;
 import org.corfudb.runtime.proto.service.CorfuMessage;
 
-import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -23,26 +19,16 @@ import java.util.concurrent.CompletableFuture;
 public abstract class IServerChannelAdapter {
 
     @Getter
-    private final Map<LogReplicationSession, LogReplicationSourceServerRouter> sessionToSourceServerRouter;
-    @Getter
-    private final Map<LogReplicationSession, LogReplicationSinkServerRouter> sessionToSinkServerRouter;
+    private final LogReplicationClientServerRouter router;
 
     /**
      * Constructs a new {@link IServerChannelAdapter}
      *
-     * @param sessionToSourceServerRouter map of session-> source-server router. Using this, the adapter forwards the
-     *                                   msg to the correct source router.
-     * @param sessionToSinkServerRouter map of session-> sink-server router. Using this, the adapter forwards the
-     *                                  msg to the correct source router.
+     * @param router interface between LogReplication and the transport server
      */
-    public IServerChannelAdapter(Map<LogReplicationSession, LogReplicationSourceServerRouter> sessionToSourceServerRouter,
-                                 Map<LogReplicationSession, LogReplicationSinkServerRouter> sessionToSinkServerRouter) {
-        this.sessionToSourceServerRouter = sessionToSourceServerRouter;
-        this.sessionToSinkServerRouter = sessionToSinkServerRouter;
+    public IServerChannelAdapter(LogReplicationClientServerRouter router) {
+        this.router = router;
     }
-
-    public abstract void updateRouters(Map<LogReplicationSession, LogReplicationSourceServerRouter> sesionToSourceServerRouter,
-                                       Map<LogReplicationSession, LogReplicationSinkServerRouter> sessionToSinkServerRouter);
 
     /**
      * Send message across channel.
@@ -66,12 +52,7 @@ public abstract class IServerChannelAdapter {
      * @param msg received corfu message
      */
     public void receive(CorfuMessage.ResponseMsg msg) {
-        LogReplicationSession session = msg.getHeader().getSession();
-        if(sessionToSourceServerRouter.containsKey(session)) {
-            sessionToSourceServerRouter.get(session).receive(msg);
-        } else if(sessionToSinkServerRouter.containsKey(session)){
-            sessionToSinkServerRouter.get(session).receive(msg);
-        }
+        router.receive(msg);
     }
 
     /**
@@ -79,12 +60,7 @@ public abstract class IServerChannelAdapter {
      * @param msg received corfu message
      */
     public void receive(CorfuMessage.RequestMsg msg) {
-        LogReplicationSession session = msg.getHeader().getSession();
-        if(sessionToSourceServerRouter.containsKey(session)) {
-            sessionToSourceServerRouter.get(session).receive(msg);
-        } else if(sessionToSinkServerRouter.containsKey(session)){
-            sessionToSinkServerRouter.get(session).receive(msg);
-        }
+        router.receive(msg);
     }
 
     /**

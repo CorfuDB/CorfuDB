@@ -61,15 +61,13 @@ public class LogReplicationSourceManager {
      * Constructor
      *
      * @param params Log Replication parameters
-     * @param client LogReplication client, which is a data sender, both snapshot and log entry, this represents
-     *              the application callback for data transmission
      * @param metadataManager Replication Metadata Manager
      */
     public LogReplicationSourceManager(LogReplicationRuntimeParameters params, IClientServerRouter router,
                                        LogReplicationMetadataManager metadataManager,
                                        LogReplicationUpgradeManager upgradeManager,
                                        LogReplicationSession session, LogReplicationContext replicationContext) {
-        this(params, metadataManager, new CorfuDataSender(router), upgradeManager, session, replicationContext);
+        this(params, metadataManager, new CorfuDataSender(router, session), upgradeManager, session, replicationContext);
     }
 
     @VisibleForTesting
