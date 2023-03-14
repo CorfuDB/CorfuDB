@@ -1,16 +1,13 @@
 package org.corfudb.infrastructure.logreplication.infrastructure.msgHandlers;
 
-import com.google.protobuf.Any;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
-import org.corfudb.infrastructure.AbstractServer;
 import org.corfudb.infrastructure.logreplication.transport.IClientServerRouter;
-import org.corfudb.protocols.service.CorfuProtocolMessage;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.proto.service.CorfuMessage;
-import org.corfudb.runtime.proto.service.CorfuMessage.LogReplicationMsgTypes;
-import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg.PayloadCase;
+import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg;
 
 import javax.annotation.Nonnull;
 import java.lang.invoke.LambdaMetafactory;
@@ -20,14 +17,9 @@ import java.lang.invoke.MethodType;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.Arrays;
-import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Set;
-
-import static org.corfudb.protocols.CorfuProtocolServerErrors.getUnknownErrorMsg;
-import static org.corfudb.protocols.service.CorfuProtocolMessage.getHeaderMsg;
-import static org.corfudb.protocols.service.CorfuProtocolMessage.getResponseMsg;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 public class ReplicationHandlerMethods {
@@ -35,12 +27,17 @@ public class ReplicationHandlerMethods {
     private final Map<String, String> timerNameCache = new HashMap<>();
 
     /**
-     * The handler map.
+     * The request handler map.
      */
-    private final Map<String, HandlerMethod> handlerMap;
+    private final Map<RequestPayloadMsg.PayloadCase, HandlerMethod> requestHandlerMap;
 
     /**
-     * A functional interface for server request handlers. Server request handlers should
+     * The response handler map.
+     */
+    private final Map<ResponsePayloadMsg.PayloadCase, HandlerMethod> responseHandlerMap;
+
+    /**
+     * A functional interface for clinet/server request/response handlers. The handlers should
      * be fast and not block. If a handler blocks for an extended period of time, it will
      * exhaust the server's thread pool. I/O and other long operations should be handled
      * on another thread.
@@ -53,19 +50,11 @@ public class ReplicationHandlerMethods {
     }
 
     /**
-     * Get the types of requests this handler will handle.
-     *
-     * @return  A set containing the types of requests this handler will handle.
-     */
-    public Set<String> getHandledTypes() {
-        return handlerMap.keySet();
-    }
-
-    /**
-     * Construct a new instance of RequestHandlerMethods.
+     * Construct a new instance of ReplicationHandlerMethods.
      */
     public ReplicationHandlerMethods() {
-        handlerMap = new HashMap<>();
+        requestHandlerMap = new ConcurrentHashMap<>();
+        responseHandlerMap = new ConcurrentHashMap<>();
     }
 
     /**
@@ -74,8 +63,18 @@ public class ReplicationHandlerMethods {
      * @param request   The request message to handle.
      * @return          The appropriate {@link HandlerMethod}.
      */
-    protected HandlerMethod getHandler(CorfuMessage.RequestMsg request) {
-        return handlerMap.get(request.getPayload().getPayloadCase());
+    protected HandlerMethod getRequestHandler(CorfuMessage.RequestMsg request) {
+        return requestHandlerMap.get(request.getPayload().getPayloadCase());
+    }
+
+    /**
+     * Given a {@link CorfuMessage.ResponseMsg} return the corresponding handler.
+     *
+     * @param response   The respose message to handle.
+     * @return          The appropriate {@link HandlerMethod}.
+     */
+    protected HandlerMethod getResponseHandler(CorfuMessage.ResponseMsg response) {
+        return responseHandlerMap.get(response.getPayload().getPayloadCase());
     }
 
     /**
@@ -86,15 +85,18 @@ public class ReplicationHandlerMethods {
      */
     @SuppressWarnings("unchecked")
     public void handle(CorfuMessage.RequestMsg req, CorfuMessage.ResponseMsg res, IClientServerRouter r) {
-        final HandlerMethod handler = getHandler(req);
+        final HandlerMethod handler = req != null ? getRequestHandler(req) : getResponseHandler(res);
+
         try {
             handler.handle(req, res, r);
         } catch (Exception e) {
-            log.error("handle[{}]: Unhandled exception processing {} request",
-                    req.getHeader().getRequestId(), req.getPayload().getPayloadCase(), e);
-
-            CorfuMessage.HeaderMsg responseHeader = getHeaderMsg(req.getHeader(), CorfuProtocolMessage.ClusterIdCheck.CHECK, CorfuProtocolMessage.EpochCheck.IGNORE);
-            r.sendResponse(getResponseMsg(responseHeader, getUnknownErrorMsg(e)));
+            if (req != null) {
+                log.error("handle[{}]: Unhandled exception processing {} request",
+                        req.getHeader().getRequestId(), req.getPayload().getPayloadCase(), e);
+            } else {
+                log.error("handle[{}]: Unhandled exception processing {} response",
+                        res.getHeader().getRequestId(), res.getPayload().getPayloadCase(), e);
+            }
         }
     }
 
@@ -119,8 +121,11 @@ public class ReplicationHandlerMethods {
                                 @Nonnull final Method method) {
         final LogReplicationMsgHandler annotation = method.getAnnotation(LogReplicationMsgHandler.class);
 
-        if (handlerMap.containsKey(annotation.type())) {
-            throw new IllegalStateException("HandlerMethod for " + annotation.type() + " already registered!");
+        // check if the method is already registered
+        if((!annotation.requestType().equals(RequestPayloadMsg.PayloadCase.NONE) && requestHandlerMap.containsKey(annotation.requestType())) ||
+                (!annotation.responseType().equals(ResponsePayloadMsg.PayloadCase.NONE) &&
+                responseHandlerMap.containsKey(annotation.responseType())))  {
+            throw new IllegalStateException("HandlerMethod for " + annotation.requestType() + " already registered!");
         }
 
         try {
@@ -144,10 +149,17 @@ public class ReplicationHandlerMethods {
                         mtt, mh, mtt).getTarget().bindTo(server).invoke();
             }
 
+            String payloadSting = annotation.requestType().equals(RequestPayloadMsg.PayloadCase.NONE) ?
+                    annotation.responseType().toString() : annotation.requestType().toString();
+
             // Install pre-conditions on handler
-            final HandlerMethod handler = generateConditionalHandler(annotation.type(), h);
+            final HandlerMethod handler = generateConditionalHandler(payloadSting, h);
             // Install the handler in the map
-            handlerMap.put(annotation.type(), handler);
+            if (!annotation.requestType().equals(RequestPayloadMsg.PayloadCase.NONE)) {
+                requestHandlerMap.put(annotation.requestType(), handler);
+            } else {
+                responseHandlerMap.put(annotation.responseType(), handler);
+            }
         } catch (Throwable e) {
             throw new UnrecoverableCorfuError("Exception during request handler registration", e);
         }
@@ -163,7 +175,7 @@ public class ReplicationHandlerMethods {
      */
     private HandlerMethod generateConditionalHandler(@NonNull final String payloadType,
                                                                            @NonNull final HandlerMethod handler) {
-        // Generate a timer name based on the Corfu request type
+        // Generate a timer name based on the LR message type
         String timerName = getTimerName(payloadType);
         // Register the handler. Depending on metrics collection configuration by MetricsUtil,
         // handler will be instrumented by the metrics context.

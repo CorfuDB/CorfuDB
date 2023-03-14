@@ -3,7 +3,7 @@ package org.corfudb.infrastructure.logreplication.runtime.fsm.sink;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
-import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSinkClientRouter;
+import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientServerRouter;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRuntimeEvent;
 import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
@@ -14,14 +14,19 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
+import static org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg;
+import static org.corfudb.protocols.service.CorfuProtocolMessage.getDefaultProtocolVersionMsg;
+import static org.corfudb.protocols.service.CorfuProtocolMessage.getResponseMsg;
+
 @Slf4j
-public class SinkVerifyRemoteLeader {
+public class VerifyRemoteSinkLeader {
 
     /**
      * Executor service for FSM event queue consume
@@ -37,11 +42,11 @@ public class SinkVerifyRemoteLeader {
 
     private final LogReplicationSession session;
 
-    private final LogReplicationSinkClientRouter router;
+    private final LogReplicationClientServerRouter router;
 
     private volatile Optional<String> leaderNodeId = Optional.empty();
 
-    public SinkVerifyRemoteLeader(LogReplicationSession session, LogReplicationSinkClientRouter router) {
+    public VerifyRemoteSinkLeader(LogReplicationSession session, LogReplicationClientServerRouter router) {
         this.session = session;
         this.router = router;
         this.connectedNodes = new HashSet<>();
@@ -154,7 +159,7 @@ public class SinkVerifyRemoteLeader {
                                     LogReplication.LogReplicationLeadershipRequestMsg.newBuilder().build()).build();
 
                     CompletableFuture<LogReplication.LogReplicationLeadershipResponseMsg> leadershipRequestCf =
-                            router.sendRequestAndGetCompletable(payload, nodeId);
+                            router.sendRequestAndGetCompletable(session, payload, nodeId);
                     pendingLeadershipQueries.put(nodeId, leadershipRequestCf);
                 }
 
@@ -200,11 +205,22 @@ public class SinkVerifyRemoteLeader {
 
     private void subscribeAndStartReplication() {
         CorfuMessage.ResponsePayloadMsg payload =
-                CorfuMessage.ResponsePayloadMsg.newBuilder().setLrSubscribeRequest(
-                        LogReplication.SubscribeToReplicationMsg.newBuilder().build()).build();
+                CorfuMessage.ResponsePayloadMsg.newBuilder()
+                        .setLrSubscribeRequest(LogReplication.SubscribeToReplicationMsg.newBuilder().build())
+                        .build();
+
+        CorfuMessage.HeaderMsg header = CorfuMessage.HeaderMsg.newBuilder()
+                .setSession(session)
+                .setRequestId(router.getSessionToRequestIdCounter().get(session).getAndIncrement())
+                .setClusterId(getUuidMsg(UUID.fromString(session.getSourceClusterId())))
+                .setVersion(getDefaultProtocolVersionMsg())
+                .setIgnoreClusterId(true)
+                .setIgnoreEpoch(true)
+                .build();
+
 
         log.info("Sending the subscribe msg {} for session {}", payload, session);
-        router.sendResponse(payload, getRemoteLeaderNodeId().get());
+        router.sendResponse(getResponseMsg(header, payload));
     }
 
 }

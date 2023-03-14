@@ -505,7 +505,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
                 break;
         }
 
-        LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(runtime, TEST_TOPOLOGY_CONFIG_ID);
+        LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(runtime, TEST_TOPOLOGY_CONFIG_ID, true);
         LogReplicationContext context = new LogReplicationContext(configManager, TEST_TOPOLOGY_CONFIG_ID,
                 "test:" + SERVERS.PORT_0);
         ackReader = new LogReplicationAckReader(metadataManager, runtime, session, context);

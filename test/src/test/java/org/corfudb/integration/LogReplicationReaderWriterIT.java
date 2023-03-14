@@ -256,7 +256,7 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
 
     public static void writeSnapshotMsgs(List<LogReplicationEntryMsg> msgQ, CorfuRuntime rt) {
 
-        LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt, 0);
+        LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt, 0, true);
         logReplicationMetadataManager.addSession(getDefaultSession(), 0, true);
 
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(rt);
@@ -325,7 +325,7 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
 
     public static void writeLogEntryMsgs(List<LogReplicationEntryMsg> msgQ, CorfuRuntime rt) {
 
-        LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt, 0);
+        LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt, 0, true);
         logReplicationMetadataManager.addSession(getDefaultSession(),0, true);
 
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(rt);

@@ -1,7 +1,9 @@
 package org.corfudb.infrastructure.logreplication.transport;
 
+import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.proto.service.CorfuMessage;
 import javax.annotation.Nonnull;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
 
@@ -13,7 +15,7 @@ public interface IClientServerRouter {
      * @param requestID The request to complete.
      * @param cause     The cause to give for the exceptional completion.
      */
-    void completeExceptionally(long requestID, Throwable cause);
+    void completeExceptionally(LogReplication.LogReplicationSession session, long requestID, Throwable cause);
 
     /**
      * Complete a given outstanding request with a completion value.
@@ -22,7 +24,11 @@ public interface IClientServerRouter {
      * @param completion The value to complete the request with
      * @param <T>        The type of the completion.
      */
-    <T> void completeRequest(long requestID, T completion);
+    <T> void completeRequest(LogReplication.LogReplicationSession session, long requestID, T completion);
+
+    void receive(CorfuMessage.RequestMsg request);
+
+    void receive(CorfuMessage.ResponseMsg response);
 
     /**
      * Send a request message and get a completable future to be fulfilled by the reply.
@@ -33,6 +39,7 @@ public interface IClientServerRouter {
      * or a timeout in the case there is no response.
      */
     <T> CompletableFuture<T> sendRequestAndGetCompletable(
+            @Nonnull LogReplication.LogReplicationSession session,
             @Nonnull CorfuMessage.RequestPayloadMsg payload,
             @Nonnull String endpoint);
 
@@ -53,6 +60,6 @@ public interface IClientServerRouter {
     /**
      * Stops routing requests.
      */
-    void stop();
+    void stop(Set<LogReplication.LogReplicationSession> session);
 
 }

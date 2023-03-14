@@ -28,18 +28,21 @@ public abstract class LogReplicationAbstractServer {
     public abstract ReplicationHandlerMethods getHandlerMethods();
 
     /**
-     * A stub that handlers can override to manage their threading, otherwise
-     * the requests will be executed on the IO threads
+     * A stub that handlers can override to manage their threading, otherwise the messages will be executed on the IO
+     * threads
+     *
      * @param req An incoming request message.
+     * @param res An incoming response message.
      * @param r The router that took in the request.
      */
     protected abstract void processRequest(CorfuMessage.RequestMsg req, CorfuMessage.ResponseMsg res, IClientServerRouter r);
 
 
     /**
-     * Handle a incoming request message.
+     * Handle a incoming replication message.
      *
      * @param req An incoming request message.
+     * @param res An incoming response message.
      * @param r   The router that took in the request message.
      */
     public final void handleMessage(CorfuMessage.RequestMsg req, CorfuMessage.ResponseMsg res, IClientServerRouter r) {
@@ -54,24 +57,14 @@ public abstract class LogReplicationAbstractServer {
             return;
         }
 
-        if (getState() != ReplicationServerState.READY) {
-            if (req == null) {
-                r.sendResponse(getNotReadyError(res.getHeader()));
-            } else {
-                r.sendResponse(getNotReadyError(req.getHeader()));
-            }
-            return;
-        }
-
-        processRequest(req, null, r);
+        processRequest(req, res, r);
     }
 
-    private CorfuMessage.ResponseMsg getNotReadyError(CorfuMessage.HeaderMsg requestHeader) {
-        //Shama check how this is used...CHECK and IGNORE
-        CorfuMessage.HeaderMsg responseHeader = getHeaderMsg(requestHeader, CorfuProtocolMessage.ClusterIdCheck.CHECK, CorfuProtocolMessage.EpochCheck.IGNORE);
-        return getResponseMsg(responseHeader, getNotReadyErrorMsg());
-    }
-
+    /**
+     * Set the state of the server
+     *
+     * @param newState
+     */
     protected void setState(ReplicationServerState newState) {
         state.updateAndGet(currState -> {
             if (currState == ReplicationServerState.SHUTDOWN && newState != ReplicationServerState.SHUTDOWN) {
