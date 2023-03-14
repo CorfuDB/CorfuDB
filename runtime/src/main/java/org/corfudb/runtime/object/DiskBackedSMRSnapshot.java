@@ -6,7 +6,9 @@ import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.util.serializer.ISerializer;
 import org.rocksdb.OptimisticTransactionDB;
 import org.rocksdb.ReadOptions;
+import org.rocksdb.RocksIterator;
 import org.rocksdb.Snapshot;
+import org.rocksdb.Transaction;
 import org.rocksdb.WriteOptions;
 
 import java.util.Collections;
@@ -14,6 +16,7 @@ import java.util.Set;
 import java.util.WeakHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.StampedLock;
+import java.util.function.Consumer;
 import java.util.function.Function;
 
 public class DiskBackedSMRSnapshot<S extends SnapshotGenerator<S>> implements ISMRSnapshot<S>{
@@ -58,6 +61,19 @@ public class DiskBackedSMRSnapshot<S extends SnapshotGenerator<S>> implements IS
             lock.unlockRead(stamp);
         }
     }
+
+    public void executeInSnapshot(Consumer<ReadOptions> function) {
+        long stamp = lock.readLock();
+        try {
+            if (!this.readOptions.isOwningHandle()) {
+                throw new TrimmedException("Snapshot is not longer active " + version);
+            }
+            function.accept(this.readOptions);
+        } finally {
+            lock.unlockRead(stamp);
+        }
+    }
+
     public S consume() {
         RocksDbApi<S> rocksTx;
 
@@ -80,8 +96,10 @@ public class DiskBackedSMRSnapshot<S extends SnapshotGenerator<S>> implements IS
         lock.unlockWrite(stamp);
     }
 
-    public <K, V> RocksDbEntryIterator<K, V> newIterator(ISerializer serializer) {
-        RocksDbEntryIterator<K, V> iterator = new RocksDbEntryIterator<>(rocksDb, serializer, readOptions, lock);
+    public <K, V> RocksDbEntryIterator<K, V> newIterator(ISerializer serializer, Transaction transaction) {
+        RocksDbEntryIterator<K, V> iterator = new RocksDbEntryIterator<>(
+                transaction.getIterator(readOptions),
+                serializer, readOptions, lock);
         set.add(iterator);
         return iterator;
     }

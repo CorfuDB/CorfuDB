@@ -4,6 +4,7 @@ import io.netty.buffer.Unpooled;
 import org.corfudb.util.serializer.ISerializer;
 import org.rocksdb.ReadOptions;
 import org.rocksdb.RocksDB;
+import org.rocksdb.RocksIterator;
 import org.rocksdb.Snapshot;
 
 import javax.annotation.concurrent.NotThreadSafe;
@@ -54,9 +55,9 @@ public class RocksDbEntryIterator<K, V> implements Iterator<Map.Entry<K, V>>, Au
         throw new UnsupportedOperationException();
     }
 
-    public RocksDbEntryIterator(RocksDB rocksDB, ISerializer serializer,
+    public RocksDbEntryIterator(RocksIterator rocksIterator, ISerializer serializer,
                                 ReadOptions readOptions, StampedLock lock) {
-        this.wrappedRocksIterator = new CheckedRocksIterator(rocksDB, lock, readOptions);
+        this.wrappedRocksIterator = new CheckedRocksIterator(rocksIterator, lock, readOptions);
         this.serializer = serializer;
         this.loadValues = true;
         wrappedRocksIterator.seekToFirst();

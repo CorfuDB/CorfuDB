@@ -37,7 +37,7 @@ public class CheckedRocksIterator implements RocksIteratorInterface {
         }
     }
 
-    public CheckedRocksIterator(RocksDB rocksDb, StampedLock lock, ReadOptions readOptions) {
+    public CheckedRocksIterator(RocksIterator rocksIterator, StampedLock lock, ReadOptions readOptions) {
         // {@link ReadOptions::isOwningHandle} is atomically set to false on
         // {@link ReadOptions::close}. Therefore, if we do not own the handle,
         // the existing snapshot is no longer valid.
@@ -46,7 +46,7 @@ public class CheckedRocksIterator implements RocksIteratorInterface {
         }
 
         this.isValid = new AtomicBoolean(true);
-        this.rocksIterator = rocksDb.newIterator(readOptions);
+        this.rocksIterator = rocksIterator;
         this.lock = lock;
     }
 

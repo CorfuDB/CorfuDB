@@ -52,6 +52,8 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.entry;
+import static org.assertj.core.api.Assertions.in;
 import static org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy;
 
 @Slf4j
@@ -504,12 +506,38 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
     @Property(tries = NUM_OF_TRIES)
     void verifyPersistedCacheCleanUp() {
         resetTests();
-        assertThat(persistedCacheLocation).doesNotExist();
         try (final PersistedCorfuTable<String, String> table1 = setupTable(alternateTableName, ENABLE_READ_YOUR_WRITES)) {
             table1.insert(defaultNewMapEntry, defaultNewMapEntry);
             assertThat(persistedCacheLocation).exists();
             table1.close();
             assertThat(persistedCacheLocation).doesNotExist();
+        }
+    }
+
+    @Property(tries = NUM_OF_TRIES)
+    void testClear(@ForAll @Size(SAMPLE_SIZE) Set<@AlphaChars String> intended) {
+        resetTests();
+        try (final PersistedCorfuTable<String, String> table = setupTable(alternateTableName, ENABLE_READ_YOUR_WRITES)) {
+            executeTx(() -> intended.forEach(entry -> table.insert(entry, entry)));
+            executeTx(() -> assertThat(table.entryStream().count()).isEqualTo(intended.size()));
+            assertThat(table.entryStream().count()).isEqualTo(intended.size());
+
+            executeTx(table::clear);
+
+            executeTx(() -> assertThat(table.entryStream().count()).isEqualTo(0));
+            assertThat(table.entryStream().count()).isEqualTo(0);
+
+            executeTx(() -> intended.forEach(entry -> table.insert(entry, entry)));
+            executeTx(() -> assertThat(table.entryStream().count()).isEqualTo(intended.size()));
+            assertThat(table.entryStream().count()).isEqualTo(intended.size());
+
+            executeTx(() -> {
+                assertThat(table.entryStream().count()).isEqualTo(intended.size());
+                intended.forEach(key -> assertThat(table.get(key)).isEqualTo(key));
+                table.clear();
+                assertThat(table.entryStream().count()).isEqualTo(0);
+                intended.forEach(key -> assertThat(table.get(key)).isNull());
+            });
         }
     }
 

@@ -3,12 +3,14 @@ package org.corfudb.runtime.object;
 import io.netty.buffer.ByteBuf;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.runtime.collections.CheckedRocksIterator;
 import org.corfudb.runtime.collections.RocksDbEntryIterator;
 import org.corfudb.util.serializer.ISerializer;
 import org.rocksdb.OptimisticTransactionDB;
 import org.rocksdb.Options;
 import org.rocksdb.RocksDB;
 import org.rocksdb.RocksDBException;
+import org.rocksdb.RocksIterator;
 import org.rocksdb.WriteOptions;
 
 import java.nio.file.Path;
@@ -57,6 +59,17 @@ public class RocksDbStore<S extends SnapshotGenerator<S>> implements RocksDbApi<
     @Override
     public <K, V> RocksDbEntryIterator<K, V> getIterator(@NonNull ISerializer serializer) {
         return new RocksDbEntryIterator<>(rocksDb, serializer);
+    }
+
+    @Override
+    public void clear() throws RocksDBException {
+        try (RocksIterator entryIterator = this.rocksDb.newIterator()) {
+            entryIterator.seekToFirst();
+            while (entryIterator.isValid()) {
+                rocksDb.delete(entryIterator.key());
+                entryIterator.next();
+            }
+        }
     }
 
     @Override

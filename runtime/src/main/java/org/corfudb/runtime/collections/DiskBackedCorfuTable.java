@@ -7,6 +7,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.function.Failable;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
@@ -185,6 +186,15 @@ public class DiskBackedCorfuTable<K, V> implements
         } finally {
             keyPayload.release();
         }
+    }
+
+    public DiskBackedCorfuTable<K, V> clear() {
+        try {
+            rocksApi.clear();
+        } catch (RocksDBException e) {
+            throw new UnrecoverableCorfuError(e);
+        }
+        return this;
     }
 
     public Stream<Map.Entry<K, V>> entryStream() {

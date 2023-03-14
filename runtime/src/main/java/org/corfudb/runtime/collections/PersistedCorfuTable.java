@@ -9,7 +9,6 @@ import org.corfudb.runtime.object.MVOCorfuCompileProxy;
 import javax.annotation.Nonnull;
 import java.util.Map;
 import java.util.Set;
-import java.util.UUID;
 import java.util.stream.Stream;
 
 public class PersistedCorfuTable<K, V> implements
@@ -21,7 +20,7 @@ public class PersistedCorfuTable<K, V> implements
     private final Map<String, ICorfuSMRUpcallTarget<DiskBackedCorfuTable<K, V>>> upcallTargetMap
             = ImmutableMap.<String, ICorfuSMRUpcallTarget<DiskBackedCorfuTable<K, V>>>builder()
             .put("put", (obj, args) -> obj.put((K) args[0], (V) args[1]))
-            //.put("clear", (obj, args) -> obj.clear())
+            .put("clear", (obj, args) -> obj.clear())
             .put("remove", (obj, args) -> obj.remove((K) args[0]))
             .build();
 
@@ -50,7 +49,7 @@ public class PersistedCorfuTable<K, V> implements
 
     @Override
     public void clear() {
-        //proxy.logUpdate("clear", false, null);
+        proxy.logUpdate("clear", false, null);
     }
 
     @Override
@@ -60,7 +59,7 @@ public class PersistedCorfuTable<K, V> implements
 
     @Override
     public boolean isTableCached() {
-        return ((MVOCorfuCompileProxy)proxy).isObjectCached();
+        return proxy.isObjectCached();
     }
 
     @Override

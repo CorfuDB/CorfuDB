@@ -8,6 +8,7 @@ import org.corfudb.util.serializer.ISerializer;
 import org.rocksdb.OptimisticTransactionDB;
 import org.rocksdb.ReadOptions;
 import org.rocksdb.RocksDBException;
+import org.rocksdb.RocksIterator;
 
 public class RocksDbStubTx<S extends SnapshotGenerator<S>> implements RocksDbApi<S> {
     private final OptimisticTransactionDB rocksDb;
@@ -35,6 +36,11 @@ public class RocksDbStubTx<S extends SnapshotGenerator<S>> implements RocksDbApi
 
     @Override
     public void delete(@NonNull ByteBuf keyPayload) throws RocksDBException {
+        // No-op
+    }
+
+    @Override
+    public void clear() {
         // No-op
     }
 

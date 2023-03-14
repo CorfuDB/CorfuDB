@@ -8,8 +8,11 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.serializer.ISerializer;
 import org.rocksdb.OptimisticTransactionDB;
 import org.rocksdb.RocksDBException;
+import org.rocksdb.RocksIterator;
 import org.rocksdb.Transaction;
 import org.rocksdb.WriteOptions;
+
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class RocksDbTx<S extends SnapshotGenerator<S>> implements RocksDbApi<S> {
     private final OptimisticTransactionDB rocksDb;
@@ -57,8 +60,33 @@ public class RocksDbTx<S extends SnapshotGenerator<S>> implements RocksDbApi<S> 
     }
 
     @Override
-    public <K, V> RocksDbEntryIterator<K,V> getIterator(@NonNull ISerializer serializer) {
-        return this.snapshot.newIterator(serializer);
+    public <K, V> RocksDbEntryIterator<K, V> getIterator(@NonNull ISerializer serializer) {
+        return this.snapshot.newIterator(serializer, txn);
+    }
+
+    @Override
+    public void clear() throws RocksDBException {
+        snapshot.executeInSnapshot(readOptions -> {
+            try {
+                try (RocksIterator entryIterator = txn.getIterator(readOptions)) {
+                    entryIterator.seekToFirst();
+                    while (entryIterator.isValid()) {
+                        txn.delete(entryIterator.key());
+                        entryIterator.next();
+                    }
+                }
+
+                try (RocksIterator entryIterator = txn.getIterator(readOptions)) {
+                    entryIterator.seekToFirst();
+                    while (entryIterator.isValid()) {
+                        txn.delete(entryIterator.key());
+                        entryIterator.next();
+                    }
+                }
+            } catch (RocksDBException e) {
+                throw new UnrecoverableCorfuError(e);
+            }
+        });
     }
 
     @Override
