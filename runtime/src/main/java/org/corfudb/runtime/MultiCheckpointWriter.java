@@ -6,7 +6,7 @@ import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.object.ICorfuSMR;
-import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
+import org.corfudb.runtime.object.MVOCorfuCompileProxy;
 import org.corfudb.util.serializer.ISerializer;
 
 import java.util.ArrayList;
@@ -55,7 +55,7 @@ public class MultiCheckpointWriter<T extends ICorfuTable<?, ?>> {
                 UUID streamId = table.getCorfuSMRProxy().getStreamID();
 
                 CheckpointWriter<T> cpw = new CheckpointWriter<>(rt, streamId, author, (T) table);
-                ISerializer serializer = ((ICorfuSMRProxyInternal) table.getCorfuSMRProxy()).getSerializer();
+                ISerializer serializer = ((MVOCorfuCompileProxy) table.getCorfuSMRProxy()).getSerializer();
                 cpw.setSerializer(serializer);
 
                 Token minCPSnapshot = Token.UNINITIALIZED;

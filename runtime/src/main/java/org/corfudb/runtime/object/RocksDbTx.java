@@ -11,14 +11,14 @@ import org.rocksdb.RocksDBException;
 import org.rocksdb.Transaction;
 import org.rocksdb.WriteOptions;
 
-public class RocksDbTx<T extends SnapshotGenerator<T>> implements RocksDbApi<T> {
+public class RocksDbTx<S extends SnapshotGenerator<S>> implements RocksDbApi<S> {
     private final OptimisticTransactionDB rocksDb;
-    private final DiskBackedSMRSnapshot<T> snapshot;
+    private final DiskBackedSMRSnapshot<S> snapshot;
     private final Transaction txn;
 
     public RocksDbTx(@NonNull OptimisticTransactionDB rocksDb,
                      @NonNull WriteOptions writeOptions,
-                     @NonNull DiskBackedSMRSnapshot<T> snapshot) {
+                     @NonNull DiskBackedSMRSnapshot<S> snapshot) {
         this.rocksDb = rocksDb;
         this.snapshot = snapshot;
         this.txn = rocksDb.beginTransaction(writeOptions);
@@ -68,7 +68,7 @@ public class RocksDbTx<T extends SnapshotGenerator<T>> implements RocksDbApi<T> 
     }
 
     @Override
-    public ISMRSnapshot<T> getSnapshot(@NonNull ViewGenerator<T> viewGenerator, VersionedObjectIdentifier version) {
+    public ISMRSnapshot<S> getSnapshot(@NonNull ViewGenerator<S> viewGenerator, VersionedObjectIdentifier version) {
         throw new UnsupportedOperationException();
     }
 }

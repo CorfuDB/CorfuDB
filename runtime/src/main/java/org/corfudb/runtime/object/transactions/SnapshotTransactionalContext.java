@@ -5,9 +5,8 @@ import java.util.UUID;
 
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.ICorfuSMRAccess;
-import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
+import org.corfudb.runtime.object.MVOCorfuCompileProxy;
 import org.corfudb.runtime.object.SnapshotGenerator;
 
 /**
@@ -29,8 +28,8 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
      * {@inheritDoc}
      */
     @Override
-    public <R, T extends SnapshotGenerator<T>> R access(
-            ICorfuSMRProxyInternal<T> proxy, ICorfuSMRAccess<R, T> accessFunction, Object[] conflictObject) {
+    public <R, S extends SnapshotGenerator<S>> R access(
+            MVOCorfuCompileProxy<?, S> proxy, ICorfuSMRAccess<R, S> accessFunction, Object[] conflictObject) {
         long startAccessTime = System.nanoTime();
         try {
             return getAndCacheSnapshotProxy(proxy, getSnapshotTimestamp().getSequence())
@@ -63,8 +62,8 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
      * @return The address the update was written at.
      */
     @Override
-    public <T extends SnapshotGenerator<T>> long logUpdate(
-            ICorfuSMRProxyInternal<T> proxy, SMREntry updateEntry, Object[] conflictObject) {
+    public <S extends SnapshotGenerator<S>> long logUpdate(
+            MVOCorfuCompileProxy<?, S> proxy, SMREntry updateEntry, Object[] conflictObject) {
         throw new UnsupportedOperationException(
                 "Can't modify object during a read-only transaction!");
     }

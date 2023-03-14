@@ -7,14 +7,11 @@ import java.util.UUID;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.SMREntry;
-import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.AppendException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.ICorfuSMRAccess;
-import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
 import org.corfudb.runtime.object.MVOCorfuCompileProxy;
 import org.corfudb.runtime.object.SnapshotGenerator;
 
@@ -67,8 +64,8 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
      * {@inheritDoc}
      */
     @Override
-    public <R, T extends SnapshotGenerator<T>> R access(
-            ICorfuSMRProxyInternal<T> proxy, ICorfuSMRAccess<R, T> accessFunction, Object[] conflictObject) {
+    public <R, S extends SnapshotGenerator<S>> R access(
+            MVOCorfuCompileProxy<?, S> proxy, ICorfuSMRAccess<R, S> accessFunction, Object[] conflictObject) {
         long startAccessTime = System.nanoTime();
         try {
             log.debug("Access[{},{}] conflictObj={}", this, proxy, conflictObject);
@@ -99,8 +96,8 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
      * @return              The "address" that the update was written to.
      */
     @Override
-    public <T extends SnapshotGenerator<T>> long logUpdate(
-            ICorfuSMRProxyInternal<T> proxy, SMREntry updateEntry, Object[] conflictObjects) {
+    public <S extends SnapshotGenerator<S>> long logUpdate(
+            MVOCorfuCompileProxy<?, S> proxy, SMREntry updateEntry, Object[] conflictObjects) {
         long startLogUpdateTime = System.nanoTime();
 
         try {
@@ -108,11 +105,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                     this, proxy, updateEntry.getSMRMethod(),
                     updateEntry.getSMRArguments(), conflictObjects);
 
-            // TODO: better proxy type check, or refactor to avoid.
-            if (proxy instanceof MVOCorfuCompileProxy) {
-                getAndCacheSnapshotProxy(proxy, getSnapshotTimestamp().getSequence()).logUpdate(updateEntry);
-            }
-
+            getAndCacheSnapshotProxy(proxy, getSnapshotTimestamp().getSequence()).logUpdate(updateEntry);
             return addToWriteSet(proxy, updateEntry, conflictObjects);
         } finally {
             dbNanoTime += (System.nanoTime() - startLogUpdateTime);

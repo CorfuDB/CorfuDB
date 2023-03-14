@@ -16,7 +16,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.StampedLock;
 import java.util.function.Function;
 
-public class DiskBackedSMRSnapshot<T extends SnapshotGenerator<T>> implements ISMRSnapshot<T>{
+public class DiskBackedSMRSnapshot<S extends SnapshotGenerator<S>> implements ISMRSnapshot<S>{
     private final StampedLock lock = new StampedLock();
     private final OptimisticTransactionDB rocksDb;
 
@@ -25,7 +25,7 @@ public class DiskBackedSMRSnapshot<T extends SnapshotGenerator<T>> implements IS
     private final Snapshot snapshot;
 
     private final ConsistencyOptions consistencyOptions;
-    private final ViewGenerator<T> viewGenerator;
+    private final ViewGenerator<S> viewGenerator;
     private final AtomicInteger refCnt;
     public final VersionedObjectIdentifier version;
 
@@ -35,7 +35,7 @@ public class DiskBackedSMRSnapshot<T extends SnapshotGenerator<T>> implements IS
                                  @NonNull WriteOptions writeOptions,
                                  @NonNull ConsistencyOptions consistencyOptions,
                                  @NonNull VersionedObjectIdentifier version,
-                                 @NonNull ViewGenerator<T> viewGenerator) {
+                                 @NonNull ViewGenerator<S> viewGenerator) {
         this.rocksDb = rocksDb;
         this.writeOptions = writeOptions;
         this.viewGenerator = viewGenerator;
@@ -58,8 +58,8 @@ public class DiskBackedSMRSnapshot<T extends SnapshotGenerator<T>> implements IS
             lock.unlockRead(stamp);
         }
     }
-    public T consume() {
-        RocksDbApi<T> rocksTx;
+    public S consume() {
+        RocksDbApi<S> rocksTx;
 
         if (consistencyOptions.isReadYourWrites()) {
             rocksTx = new RocksDbTx<>(rocksDb, writeOptions, this);
@@ -67,7 +67,7 @@ public class DiskBackedSMRSnapshot<T extends SnapshotGenerator<T>> implements IS
             rocksTx = new RocksDbStubTx<>(rocksDb, this);
         }
 
-        final T view = viewGenerator.newView(rocksTx);
+        final S view = viewGenerator.newView(rocksTx);
         refCnt.incrementAndGet();
         return view;
     }

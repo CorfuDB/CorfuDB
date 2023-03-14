@@ -9,7 +9,7 @@ import org.rocksdb.OptimisticTransactionDB;
 import org.rocksdb.ReadOptions;
 import org.rocksdb.RocksDBException;
 
-public class RocksDbStubTx<T extends SnapshotGenerator<T>> implements RocksDbApi<T> {
+public class RocksDbStubTx<S extends SnapshotGenerator<S>> implements RocksDbApi<S> {
     private final OptimisticTransactionDB rocksDb;
     private final DiskBackedSMRSnapshot snapshot;
     private final ReadOptions readOptions;
@@ -50,7 +50,7 @@ public class RocksDbStubTx<T extends SnapshotGenerator<T>> implements RocksDbApi
     }
 
     @Override
-    public ISMRSnapshot<T> getSnapshot(@NonNull ViewGenerator<T> viewGenerator, VersionedObjectIdentifier version) {
+    public ISMRSnapshot<S> getSnapshot(@NonNull ViewGenerator<S> viewGenerator, VersionedObjectIdentifier version) {
         throw new UnsupportedOperationException();
     }
 }

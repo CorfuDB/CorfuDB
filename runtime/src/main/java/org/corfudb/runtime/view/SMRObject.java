@@ -10,7 +10,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.object.CorfuCompileWrapperBuilder;
 import org.corfudb.runtime.object.ICorfuSMR;
-import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
+import org.corfudb.runtime.object.MVOCorfuCompileProxy;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 
@@ -148,7 +148,7 @@ public class SMRObject<T extends ICorfuSMR<T>> {
 
                                     // Get object serializer to check if we didn't attempt to set another serializer
                                     // to an already existing map
-                                    ISerializer objectSerializer = ((ICorfuSMRProxyInternal) ((ICorfuSMR) result).
+                                    ISerializer objectSerializer = ((MVOCorfuCompileProxy) ((ICorfuSMR) result).
                                             getCorfuSMRProxy())
                                             .getSerializer();
 

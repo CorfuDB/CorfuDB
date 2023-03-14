@@ -26,13 +26,13 @@ import java.util.stream.Collectors;
  * cache-related properties (LRU) under the hood.
  */
 @Slf4j
-public class MVOCache<T extends SnapshotGenerator<T>> {
+public class MVOCache<S extends SnapshotGenerator<S>> {
 
     /**
      * A collection of strong references to all versioned objects and their state.
      */
     @Getter
-    final Cache<VersionedObjectIdentifier, ISMRSnapshot<T>> objectCache;
+    final Cache<VersionedObjectIdentifier, ISMRSnapshot<S>> objectCache;
 
     public MVOCache(Duration expireAfter) {
         // See https://github.com/google/guava/wiki/CachesExplained#when-does-cleanup-happen
@@ -65,7 +65,7 @@ public class MVOCache<T extends SnapshotGenerator<T>> {
                 .map(registry -> GuavaCacheMetrics.monitor(registry, objectCache, "mvo_cache"));
     }
 
-    public void handleEviction(RemovalNotification<VersionedObjectIdentifier, ISMRSnapshot<T>> notification) {
+    public void handleEviction(RemovalNotification<VersionedObjectIdentifier, ISMRSnapshot<S>> notification) {
         log.trace("handleEviction: evicting {} cause {}", notification.getKey(), notification.getCause());
 
         // TODO(Zach): Confirm that all cached snapshots must eventually go through here.
@@ -83,7 +83,7 @@ public class MVOCache<T extends SnapshotGenerator<T>> {
      * @param voId The desired object version.
      * @return An optional containing the corresponding versioned object, if present.
      */
-    public Optional<ISMRSnapshot<T>> get(@Nonnull VersionedObjectIdentifier voId) {
+    public Optional<ISMRSnapshot<S>> get(@Nonnull VersionedObjectIdentifier voId) {
         if (log.isTraceEnabled()) {
             log.trace("MVOCache: performing a get for {}", voId.toString());
         }
@@ -96,7 +96,7 @@ public class MVOCache<T extends SnapshotGenerator<T>> {
      * @param voId   The version of the object being placed into the cache.
      * @param object The actual underlying object corresponding to this voId.
      */
-    public void put(@Nonnull VersionedObjectIdentifier voId, @Nonnull ISMRSnapshot<T> object) {
+    public void put(@Nonnull VersionedObjectIdentifier voId, @Nonnull ISMRSnapshot<S> object) {
         objectCache.cleanUp();
         if (log.isTraceEnabled()) {
             log.trace("MVOCache: performing a put for {}", voId);

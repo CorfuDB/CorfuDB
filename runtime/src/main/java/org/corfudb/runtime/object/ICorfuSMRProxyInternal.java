@@ -23,12 +23,4 @@ public interface ICorfuSMRProxyInternal<T> extends ICorfuSMRProxy<T> {
      * @return  The serializer to use.
      */
     ISerializer getSerializer();
-
-    /**
-     * Get the stream tags on of the object the proxy is managing
-     * @return
-     */
-    Set<UUID> getStreamTags();
-
-    boolean isObjectCached();
 }

@@ -6,7 +6,7 @@ import org.corfudb.runtime.collections.RocksDbEntryIterator;
 import org.corfudb.util.serializer.ISerializer;
 import org.rocksdb.RocksDBException;
 
-public interface RocksDbApi<T extends SnapshotGenerator<T>> {
+public interface RocksDbApi<S extends SnapshotGenerator<S>> {
 
     byte[] get(@NonNull ByteBuf keyPayload) throws RocksDBException;
 
@@ -16,7 +16,7 @@ public interface RocksDbApi<T extends SnapshotGenerator<T>> {
 
     <K, V> RocksDbEntryIterator<K, V> getIterator(@NonNull ISerializer serializer);
 
-    ISMRSnapshot<T> getSnapshot(@NonNull ViewGenerator<T> viewGenerator, VersionedObjectIdentifier version);
+    ISMRSnapshot<S> getSnapshot(@NonNull ViewGenerator<S> viewGenerator, VersionedObjectIdentifier version);
 
     void close() throws RocksDBException;
 }

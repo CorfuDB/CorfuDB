@@ -14,7 +14,7 @@ import org.rocksdb.WriteOptions;
 import java.nio.file.Path;
 
 @Slf4j
-public class RocksDbStore<T extends SnapshotGenerator<T>> implements RocksDbApi<T> {
+public class RocksDbStore<S extends SnapshotGenerator<S>> implements RocksDbApi<S> {
 
     private final OptimisticTransactionDB rocksDb;
     private final WriteOptions writeOptions;
@@ -67,7 +67,7 @@ public class RocksDbStore<T extends SnapshotGenerator<T>> implements RocksDbApi<
     }
 
     @Override
-    public ISMRSnapshot<T> getSnapshot(@NonNull ViewGenerator<T> viewGenerator, VersionedObjectIdentifier version) {
+    public ISMRSnapshot<S> getSnapshot(@NonNull ViewGenerator<S> viewGenerator, VersionedObjectIdentifier version) {
         return new DiskBackedSMRSnapshot<>(rocksDb, writeOptions, consistencyOptions, version, viewGenerator);
     }
 }

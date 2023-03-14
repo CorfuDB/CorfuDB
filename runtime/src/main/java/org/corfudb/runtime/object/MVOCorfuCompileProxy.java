@@ -25,30 +25,33 @@ import java.util.Set;
 import java.util.UUID;
 
 @Slf4j
-public class MVOCorfuCompileProxy<T extends ICorfuSMR<T>, X extends SnapshotGenerator<X>> implements ICorfuSMRProxyInternal<X> {
+public class MVOCorfuCompileProxy<
+        T extends ICorfuSMR<T>,
+        S extends SnapshotGenerator<S>>
+        implements ICorfuSMRProxy<S> {
 
     @Getter
-    MultiVersionObject<X> underlyingMVO;
+    private final MultiVersionObject<S> underlyingMVO;
 
-    final CorfuRuntime rt;
+    private final CorfuRuntime rt;
 
-    final UUID streamID;
+    private final UUID streamID;
 
-    final Class<X> type;
-
-    @Getter
-    ISerializer serializer;
+    private final Class<S> type;
 
     @Getter
-    Set<UUID> streamTags;
+    private final ISerializer serializer;
+
+    @Getter
+    private final Set<UUID> streamTags;
 
     private final Object[] args;
 
     private final ObjectOpenOption objectOpenOption;
 
-    public MVOCorfuCompileProxy(CorfuRuntime rt, UUID streamID, Class<X> type, Object[] args,
+    public MVOCorfuCompileProxy(CorfuRuntime rt, UUID streamID, Class<S> type, Object[] args,
                                 ISerializer serializer, Set<UUID> streamTags, ICorfuSMR<T> wrapperObject,
-                                ObjectOpenOption objectOpenOption, MVOCache<X> mvoCache) {
+                                ObjectOpenOption objectOpenOption, MVOCache<S> mvoCache) {
         this.rt = rt;
         this.streamID = streamID;
         this.type = type;
@@ -67,12 +70,12 @@ public class MVOCorfuCompileProxy<T extends ICorfuSMR<T>, X extends SnapshotGene
     }
 
     @Override
-    public <R> R access(ICorfuSMRAccess<R, X> accessMethod, Object[] conflictObject) {
+    public <R> R access(ICorfuSMRAccess<R, S> accessMethod, Object[] conflictObject) {
         return MicroMeterUtils.time(() -> accessInner(accessMethod, conflictObject),
                 "mvo.read.timer", "streamId", streamID.toString());
     }
 
-    private <R> R accessInner(ICorfuSMRAccess<R, X> accessMethod,
+    private <R> R accessInner(ICorfuSMRAccess<R, S> accessMethod,
                               Object[] conflictObject) {
         if (TransactionalContext.isInTransaction()) {
             try {
@@ -89,7 +92,7 @@ public class MVOCorfuCompileProxy<T extends ICorfuSMR<T>, X extends SnapshotGene
         log.debug("Access[{}] conflictObj={} version={}", this, conflictObject, timestamp);
 
         // Perform underlying access
-        ICorfuSMRSnapshotProxy<X> snapshotProxy = underlyingMVO.getSnapshotProxy(timestamp);
+        ICorfuSMRSnapshotProxy<S> snapshotProxy = underlyingMVO.getSnapshotProxy(timestamp);
         return snapshotProxy.access(accessMethod, v -> {});
     }
 
@@ -136,9 +139,9 @@ public class MVOCorfuCompileProxy<T extends ICorfuSMR<T>, X extends SnapshotGene
         return 0;
     }
 
-    private X getNewInstance() {
+    private S getNewInstance() {
         try {
-            X ret = (X) ReflectionUtils
+            S ret = (S) ReflectionUtils
                     .findMatchingConstructor(type.getDeclaredConstructors(), args);
             return ret;
         } catch (InstantiationException | IllegalAccessException | InvocationTargetException e) {
@@ -193,7 +196,6 @@ public class MVOCorfuCompileProxy<T extends ICorfuSMR<T>, X extends SnapshotGene
         throw tae;
     }
 
-    @Override
     public boolean isObjectCached() {
         return objectOpenOption.equals(ObjectOpenOption.CACHE);
     }
