@@ -6,7 +6,7 @@ import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationE
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationEventMetadata;
 import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
-import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSourceBaseRouter;
+import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientServerRouter;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationUpgradeManager;
 import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
@@ -36,14 +36,14 @@ public class NegotiatingState implements LogReplicationRuntimeState {
 
     private final ThreadPoolExecutor worker;
 
-    private final LogReplicationSourceBaseRouter router;
+    private final LogReplicationClientServerRouter router;
 
     private final LogReplicationMetadataManager metadataManager;
 
     private final LogReplicationUpgradeManager upgradeManager;
 
     public NegotiatingState(CorfuLogReplicationRuntime fsm, ThreadPoolExecutor worker,
-                            LogReplicationSourceBaseRouter router, LogReplicationMetadataManager metadataManager,
+                            LogReplicationClientServerRouter router, LogReplicationMetadataManager metadataManager,
                             LogReplicationUpgradeManager upgradeManager) {
         this.fsm = fsm;
         this.metadataManager = metadataManager;
@@ -70,7 +70,7 @@ public class NegotiatingState implements LogReplicationRuntimeState {
                     leaderNodeId = Optional.empty();
                     return fsm.getStates().get(LogReplicationRuntimeStateType.VERIFYING_REMOTE_LEADER);
                 } else {
-                    // Router will attempt reconnection of non-leader endpoint
+                    // If connection starter, router will attempt reconnection of non-leader endpoint
                     return null;
                 }
             case ON_CONNECTION_UP:
@@ -132,7 +132,7 @@ public class NegotiatingState implements LogReplicationRuntimeState {
                         CorfuMessage.RequestPayloadMsg.newBuilder().setLrMetadataRequest(
                                 LogReplication.LogReplicationMetadataRequestMsg.newBuilder().build()).build();
                 CompletableFuture<LogReplicationMetadataResponseMsg> cf = router
-                        .sendRequestAndGetCompletable(payload, remoteLeader);
+                        .sendRequestAndGetCompletable(fsm.session, payload, remoteLeader);
                 LogReplicationMetadataResponseMsg response =
                         cf.get(CorfuLogReplicationRuntime.DEFAULT_TIMEOUT, TimeUnit.MILLISECONDS);
 
@@ -140,8 +140,10 @@ public class NegotiatingState implements LogReplicationRuntimeState {
                 // (snapshot or log entry sync). This will be carried along the negotiation_complete event.
                 processNegotiationResponse(response);
 
-                // Negotiation to leader node completed, unblock channel in the router.
-                router.getRemoteLeaderConnectionFuture().complete(null);
+                if(router.isConnectionInitiator(fsm.getSession())) {
+                    // Negotiation to leader node completed, unblock channel in the router.
+                    router.getSessionToLeaderConnectionFuture().get(fsm.getSession()).complete(null);
+                }
             } else {
                 log.debug("No leader found during negotiation.");
                 // No leader found at the time of negotiation

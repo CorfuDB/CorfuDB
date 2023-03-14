@@ -2,7 +2,7 @@ package org.corfudb.infrastructure.logreplication.runtime.fsm;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
-import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSourceBaseRouter;
+import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientServerRouter;
 import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationLeadershipResponseMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage;
@@ -27,10 +27,10 @@ public class VerifyingRemoteLeaderState implements LogReplicationRuntimeState {
 
     private ThreadPoolExecutor worker;
 
-    private LogReplicationSourceBaseRouter router;
+    private LogReplicationClientServerRouter router;
 
     public VerifyingRemoteLeaderState(CorfuLogReplicationRuntime fsm, ThreadPoolExecutor worker,
-                                      LogReplicationSourceBaseRouter router) {
+                                      LogReplicationClientServerRouter router) {
         this.fsm = fsm;
         this.worker = worker;
         this.router = router;
@@ -87,7 +87,7 @@ public class VerifyingRemoteLeaderState implements LogReplicationRuntimeState {
                     fsm.getRemoteLeaderNodeId().get())
             );
             log.debug("Exit :: leadership verification");
-        } else if(fsm.isConnectionStarter()){
+        } else if(router.isConnectionInitiator(fsm.session)){
             // Leadership verification is done only if connection starter.
             this.worker.submit(this::verifyLeadership);
         }
@@ -121,7 +121,7 @@ public class VerifyingRemoteLeaderState implements LogReplicationRuntimeState {
                                         LogReplication.LogReplicationLeadershipRequestMsg.newBuilder().build()
                                 ).build();
                         CompletableFuture<LogReplicationLeadershipResponseMsg> leadershipRequestCf =
-                                router.sendRequestAndGetCompletable(payload, nodeId);
+                                router.sendRequestAndGetCompletable(fsm.getSession(), payload, nodeId);
                         pendingLeadershipQueries.put(nodeId, leadershipRequestCf);
                     }
 

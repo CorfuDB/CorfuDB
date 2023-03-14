@@ -1,24 +1,19 @@
 package org.corfudb.infrastructure.logreplication.infrastructure;
 
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.AbstractServer;
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
-import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSourceBaseRouter;
-import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSinkClientRouter;
-import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSinkServerRouter;
-import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSourceClientRouter;
+import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientServerRouter;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationUpgradeManager;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.util.retry.IRetry;
-import org.corfudb.util.retry.IntervalRetry;
-import org.corfudb.util.retry.RetryNeededException;
 
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * This class manages Log Replication for multiple remote (sink) clusters.
@@ -26,7 +21,8 @@ import java.util.Set;
 @Slf4j
 public class CorfuReplicationManager {
 
-    private final Map<LogReplicationSession, CorfuLogReplicationRuntime> sessionRuntimeMap = new HashMap<>();
+    @Getter
+    private final Map<LogReplicationSession, CorfuLogReplicationRuntime> sessionRuntimeMap = new ConcurrentHashMap<>();
 
     private final NodeDescriptor localNodeDescriptor;
 
@@ -44,8 +40,6 @@ public class CorfuReplicationManager {
 
     private final Map<LogReplicationSession, LogReplicationRuntimeParameters> replicationSessionToRuntimeParams;
 
-    private final LogReplicationRouterManager routerManager;
-
     /**
      * Constructor
      */
@@ -53,7 +47,7 @@ public class CorfuReplicationManager {
                                    LogReplicationMetadataManager metadataManager,
                                    String pluginFilePath, CorfuRuntime corfuRuntime,
                                    LogReplicationUpgradeManager upgradeManager,
-                                   LogReplicationContext replicationContext, LogReplicationRouterManager routerManager) {
+                                   LogReplicationContext replicationContext) {
         this.metadataManager = metadataManager;
         this.pluginFilePath = pluginFilePath;
         this.corfuRuntime = corfuRuntime;
@@ -61,78 +55,14 @@ public class CorfuReplicationManager {
         this.upgradeManager = upgradeManager;
         this.topology = topology;
         this.replicationContext = replicationContext;
-        this.routerManager = routerManager;
         this.replicationSessionToRuntimeParams = new HashMap<>();
-    }
-
-    /**
-     * Create router and initiate connection remote clusters
-     * If local cluster is a source, creates a runtime and a sourceRouter
-     * If local cluster is a sink, creates a router.
-     */
-    public void startConnection(LogReplicationSession session, Map<Class, AbstractServer> serverMap, boolean isSource) {
-
-        ClusterDescriptor remote;
-        if (session.getSinkClusterId().equals(topology.getLocalClusterDescriptor().getClusterId())) {
-            remote = topology.getAllClustersInTopology().get(session.getSourceClusterId());
-        } else {
-            remote = topology.getAllClustersInTopology().get(session.getSinkClusterId());
-        }
-
-        log.info("Starting connection to remote {} for session {} ", remote, session);
-        if (isSource) {
-            LogReplicationSourceBaseRouter router = createSourceRouter(session, serverMap, true);
-            try {
-                IRetry.build(IntervalRetry.class, () -> {
-                    try {
-                        ((LogReplicationSourceClientRouter) router).connect();
-                    } catch (Exception e) {
-                        log.error("Failed to connect to remote cluster for session {}. Retry after 1 second. Exception {}.",
-                                session, e);
-                        throw new RetryNeededException();
-                    }
-                    return null;
-                }).run();
-            } catch (InterruptedException e) {
-                log.error("Unrecoverable exception when attempting to connect to remote session.", e);
-            }
-        } else {
-            LogReplicationSinkServerRouter router = routerManager.getOrCreateSinkRouter(session, serverMap, true,
-                    pluginFilePath, corfuRuntime.getParameters().getRequestTimeout().toMillis());
-            try {
-                IRetry.build(IntervalRetry.class, () -> {
-                    try {
-                        ((LogReplicationSinkClientRouter) router).connect();
-                    } catch (Exception e) {
-                        log.error("Failed to connect to remote cluster for session {}. Retry after 1 second.Exception {}.",
-                                session, e);
-                        throw new RetryNeededException();
-                    }
-                    return null;
-                }).run();
-            } catch (InterruptedException e) {
-                log.error("Unrecoverable exception when attempting to connect to remote session.", e);
-            }
-        }
-    }
-
-    public LogReplicationSourceBaseRouter createSourceRouter(LogReplicationSession session,
-                                                             Map<Class, AbstractServer> serverMap,
-                                                             boolean isConnectionStarter) {
-        ClusterDescriptor remote = topology.getAllClustersInTopology().get(session.getSinkClusterId());
-        LogReplicationSourceBaseRouter router = routerManager.getOrCreateSourceRouter(session, serverMap,
-                isConnectionStarter, createRuntimeParams(remote, session), this, remote);
-        createRuntime(remote, session, isConnectionStarter, router);
-        router.setRuntimeFSM(sessionRuntimeMap.get(session));
-
-        return router;
     }
 
     /**
      * Create Log Replication Runtime for a session, if not already created.
      */
     public void createRuntime(ClusterDescriptor remote, LogReplicationSession replicationSession,
-                              boolean isConnectionStarter, LogReplicationSourceBaseRouter router) {
+                              LogReplicationClientServerRouter router) {
         try {
             CorfuLogReplicationRuntime replicationRuntime;
             if (!sessionRuntimeMap.containsKey(replicationSession)) {
@@ -145,9 +75,9 @@ public class CorfuReplicationManager {
                     parameters = replicationSessionToRuntimeParams.get(replicationSession);
                 }
                 replicationRuntime = new CorfuLogReplicationRuntime(parameters,
-                        metadataManager, upgradeManager, replicationSession, replicationContext,
-                        router, isConnectionStarter);
+                        metadataManager, upgradeManager, replicationSession, replicationContext, router);
                 sessionRuntimeMap.put(replicationSession, replicationRuntime);
+                router.addRuntimeFSM(replicationSession, replicationRuntime);
             } else {
                 log.warn("Log Replication Runtime to remote session {}, already exists. Skipping init.",
                         replicationSession);
@@ -227,7 +157,6 @@ public class CorfuReplicationManager {
             try {
                 log.info("Stop log replication runtime for session {}", session);
                 logReplicationRuntime.stop();
-                routerManager.stopSourceRouter(session);
                 replicationSessionToRuntimeParams.remove(session);
 
             } catch(Exception e) {
@@ -240,7 +169,6 @@ public class CorfuReplicationManager {
 
     public void updateTopology(TopologyDescriptor newTopology) {
         this.topology = newTopology;
-        routerManager.setTopology(newTopology);
     }
 
 

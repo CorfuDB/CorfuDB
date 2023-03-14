@@ -3,24 +3,10 @@ package org.corfudb.infrastructure.logreplication.infrastructure;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.AbstractServer;
 import org.corfudb.infrastructure.ServerContext;
-import org.corfudb.infrastructure.ServerThreadFactory;
-import org.corfudb.infrastructure.logreplication.infrastructure.msgHandlers.LogReplicationServer;
-import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
-import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSinkServerRouter;
-import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSourceServerRouter;
-import org.corfudb.infrastructure.logreplication.transport.server.IServerChannelAdapter;
-import org.corfudb.runtime.LogReplication.LogReplicationSession;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientServerRouter;
 
 import javax.annotation.Nonnull;
-import java.io.File;
-import java.net.URL;
-import java.net.URLClassLoader;
-import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -34,93 +20,40 @@ public class CorfuInterClusterReplicationServerNode implements AutoCloseable {
     @Getter
     private final ServerContext serverContext;
 
-    @Getter
-    private final Map<Class, AbstractServer> serverMap;
-
-    // This flag makes the closing of the CorfuServer idempotent.
-    private final AtomicBoolean close;
-
-    private LogReplicationServer logReplicationServer;
-
     private ScheduledExecutorService logReplicationServerRunner;
 
     // Error code required to detect an ungraceful shutdown.
     private static final int EXIT_ERROR_CODE = 100;
 
     // this flag makes the start/stop operation of transportLayerServer idempotent
+    @Getter
     private AtomicBoolean serverStarted;
 
-    private IServerChannelAdapter transportLayerServer;
+    private final LogReplicationClientServerRouter router;
 
     /**
      * Log Replication Server initialization.
      *
      * @param serverContext Initialized Server Context
-     * @param serverMap Servers which help process/validate incoming requests
+     * @param router Interface between LogReplication and the transport layer
      */
     public CorfuInterClusterReplicationServerNode(@Nonnull ServerContext serverContext,
-                                                  Map<Class, AbstractServer> serverMap) {
+                                                  LogReplicationClientServerRouter router) {
 
         this.serverContext = serverContext;
-
-        this.logReplicationServer = (LogReplicationServer) serverMap.get(LogReplicationServer.class);
-
-        this.serverMap = serverMap;
-
-        this.close = new AtomicBoolean(false);
-
+        this.router = router;
         this.serverStarted = new AtomicBoolean(false);
+        setRouterAndStartServer();
     }
 
-    public void setRouterAndStartServer(Map<LogReplicationSession, LogReplicationSourceServerRouter> sessionToSourceServer,
-                                        Map<LogReplicationSession, LogReplicationSinkServerRouter> sessionToSinkServer) {
+    public void setRouterAndStartServer() {
         if (!serverStarted.get()) {
-            createTransportServerAdapter(serverContext, sessionToSourceServer, sessionToSinkServer);
-            setTransportServerInRouters(sessionToSourceServer, sessionToSinkServer);
             logReplicationServerRunner = Executors.newSingleThreadScheduledExecutor(new ThreadFactoryBuilder()
                     .setNameFormat("replication-server-runner").build());
             // Start and listen to the server
             logReplicationServerRunner.submit(() -> this.startAndListen());
         } else {
             log.info("Server transport adapter is already running. Updating the router information");
-            setTransportServerInRouters(sessionToSourceServer, sessionToSinkServer);
-        }
-    }
-
-    private void createTransportServerAdapter(ServerContext serverContext,
-                                              Map<LogReplicationSession, LogReplicationSourceServerRouter> sessionToSourceServer,
-                                              Map<LogReplicationSession, LogReplicationSinkServerRouter> sessionToSinkServer) {
-
-        LogReplicationPluginConfig config = new LogReplicationPluginConfig(serverContext.getPluginConfigFilePath());
-        File jar = new File(config.getTransportAdapterJARPath());
-
-        try (URLClassLoader child = new URLClassLoader(new URL[]{jar.toURI().toURL()}, this.getClass().getClassLoader())) {
-            Class adapter = Class.forName(config.getTransportServerClassCanonicalName(), true, child);
-            this.transportLayerServer =  (IServerChannelAdapter) adapter.getDeclaredConstructor(ServerContext.class, Map.class, Map.class)
-                    .newInstance(serverContext, sessionToSourceServer, sessionToSinkServer);
-        } catch (Exception e) {
-            log.error("Fatal error: Failed to create serverAdapter", e);
-            throw new UnrecoverableCorfuError(e);
-        }
-    }
-
-    /**
-     * Set the transport layer server in new routers
-     *
-     * @param sessionToSourceRouter
-     * @param sessionToSinkRouter
-     */
-    private void setTransportServerInRouters(Map<LogReplicationSession, LogReplicationSourceServerRouter> sessionToSourceRouter,
-                                             Map<LogReplicationSession, LogReplicationSinkServerRouter> sessionToSinkRouter) {
-        transportLayerServer.updateRouters(sessionToSourceRouter, sessionToSinkRouter);
-        // set the server adapter in routers.
-        if(!sessionToSourceRouter.isEmpty()) {
-            sessionToSourceRouter.values().stream().filter(router -> router.getServerChannelAdapter() == null).forEach(router ->
-                    router.setAdapter(transportLayerServer));
-        }
-        if (!sessionToSinkRouter.isEmpty()) {
-            sessionToSinkRouter.values().stream().filter(router -> router.getServerAdapter() == null).forEach(router ->
-                    router.setAdapter(transportLayerServer));
         }
     }
 
@@ -131,7 +64,7 @@ public class CorfuInterClusterReplicationServerNode implements AutoCloseable {
         try {
             log.info("Starting server transport adapter ...");
             serverStarted.set(true);
-            this.transportLayerServer.start().get();
+            this.router.createTransportServerAdapter(serverContext).get();
         } catch (InterruptedException e) {
             // The server can be interrupted and stopped on a role switch.
             // It should not be treated as fatal
@@ -170,41 +103,16 @@ public class CorfuInterClusterReplicationServerNode implements AutoCloseable {
      */
     @Override
     public void close() {
-        if (!close.compareAndSet(false, true)) {
+        if (!serverStarted.get()) {
             log.trace("close: Log Replication Server already shutdown");
             return;
         }
         log.info("close: Shutting down Log Replication server and cleaning resources");
-        serverContext.close();
+        cleanupResources();
     }
 
     private void cleanupResources() {
-        this.transportLayerServer.stop();
-
-        // A executor service to create the shutdown threads
-        // plus name the threads correctly.
-        final ExecutorService shutdownService = Executors.newFixedThreadPool(serverMap.size(),
-            new ServerThreadFactory("ReplicationCorfuServer-shutdown-",
-                new ServerThreadFactory.ExceptionHandler()));
-
-        // Turn into a list of futures on the shutdown, returning
-        // generating a log message to inform of the result.
-        CompletableFuture[] shutdownFutures = serverMap.values().stream()
-            .map(server -> CompletableFuture.runAsync(() -> {
-                try {
-                    log.info("Shutting down {}", server.getClass().getSimpleName());
-                    server.shutdown();
-                    log.info("Cleanly shutdown {}", server.getClass().getSimpleName());
-                } catch (Exception e) {
-                    log.error("Failed to cleanly shutdown {}",
-                        server.getClass().getSimpleName(), e);
-                }
-            }, shutdownService))
-            .toArray(CompletableFuture[]::new);
-
-        CompletableFuture.allOf(shutdownFutures).join();
-        shutdownService.shutdown();
-
+        this.router.getServerChannelAdapter().stop();
         serverStarted.set(false);
         // Stop listening on the server channel
         logReplicationServerRunner.shutdownNow();
@@ -212,11 +120,4 @@ public class CorfuInterClusterReplicationServerNode implements AutoCloseable {
         log.info("Log Replication Server shutdown and resources released");
     }
 
-    public void updateTopologyConfigId(long configId) {
-        logReplicationServer.updateTopologyConfigId(configId);
-    }
-
-    public void setLeadership(boolean isLeader) {
-        logReplicationServer.setLeadership(isLeader);
-    }
 }

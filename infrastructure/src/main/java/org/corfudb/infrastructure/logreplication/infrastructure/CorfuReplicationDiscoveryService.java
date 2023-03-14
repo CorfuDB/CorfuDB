@@ -7,11 +7,8 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.config.ConfigParamNames;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
-import org.corfudb.infrastructure.AbstractServer;
-import org.corfudb.infrastructure.BaseServer;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.logreplication.infrastructure.DiscoveryServiceEvent.DiscoveryServiceEventType;
-import org.corfudb.infrastructure.logreplication.infrastructure.msgHandlers.LogReplicationServer;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.CorfuReplicationClusterManagerAdapter;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
@@ -175,8 +172,6 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
      */
     private LogReplicationEventListener logReplicationEventListener;
 
-    private final Map<Class, AbstractServer> serverMap = new HashMap<>();
-
     /**
      * Constructor Discovery Service
      *
@@ -298,11 +293,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
 
     /**
      * Instantiate the LR components based on role
-     *
-     * Source:
-     * - Start event listener: listens to forced snapshot sync requests
-     * Connection Receiver (Source/Sink):
-     * - Start Log Replication Server(listens and processes incoming requests from the Source)
+     * If Source: Start event listener: listens to forced snapshot sync requests
      */
     private void performRoleBasedSetup() {
 
@@ -314,13 +305,6 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         if (isSource()) {
             logReplicationEventListener = new LogReplicationEventListener(this, getCorfuRuntime());
             logReplicationEventListener.start();
-        }
-    }
-
-    private void updateLogReplicationServerTopologyId() {
-        if (serverMap.containsKey(LogReplicationServer.class)) {
-            ((LogReplicationServer) serverMap.get(LogReplicationServer.class))
-                    .updateTopologyConfigId(topologyDescriptor.getTopologyConfigId());
         }
     }
 
@@ -419,43 +403,28 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
             log.error("Log Replication not started on this cluster. Remote source/sink not found");
             return;
         }
+        setupConnectionReceivingComponents();
+        sessionManager.connectToRemoteClusters();
 
-        setupLogReplicationServer();
-
-        sessionManager.startConnectionReceivingRouters(isSource(), isSink(), serverMap, interClusterServerNode);
-        sessionManager.connectToRemoteClusters(serverMap);
-
-        // record metrics about the lock aquired.
+        // record metrics about the lock acquired.
         lockAcquireSample = recordLockAcquire();
         processCountOnLockAcquire();
     }
 
     /**
-     * Create LogReplicationServer and CorfuInterClusterReplicationServerNode when the cluster is either a connection
-     * endpoint or is a SINK
-     *
+     * Create CorfuInterClusterReplicationServerNode when the cluster is a connection endpoint.
      */
-    private void setupLogReplicationServer() {
-        if(!sessionManager.isConnectionReceiver() && !isSink()) {
+    private void setupConnectionReceivingComponents() {
+        if (!sessionManager.isConnectionReceiver()) {
             return;
         }
 
-        // Create servers if not already created or if the old server is shutdown.
-        if(serverMap.isEmpty() || (serverMap.containsKey(LogReplicationServer.class) &&
-                !serverMap.get(LogReplicationServer.class).getState().equals(AbstractServer.ServerState.READY))) {
-            // LogReplicationServer is used by both Source (when connection receiver) and Sink.
-            LogReplicationServer lrServer = new LogReplicationServer(serverContext, sessionManager, localCorfuEndpoint);
-            serverMap.put(LogReplicationServer.class, lrServer);
-            serverMap.put(BaseServer.class, new BaseServer(serverContext));
-            lrServer.setLeadership(true);
-        } else {
-            // update the new topologyId
-            updateLogReplicationServerTopologyId();
-        }
 
-        // Only when the cluster is a connection receiver
-        if (sessionManager.isConnectionReceiver() && interClusterServerNode == null) {
-            interClusterServerNode = new CorfuInterClusterReplicationServerNode(serverContext, serverMap);
+        if (interClusterServerNode == null) {
+            interClusterServerNode = new CorfuInterClusterReplicationServerNode(serverContext, sessionManager.getRouter());
+        } else if (!interClusterServerNode.getServerStarted().get()) {
+            //Start the server again as it was previously shutdown due to topology change
+            interClusterServerNode.setRouterAndStartServer();
         }
     }
 
@@ -500,6 +469,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
     public void processLockAcquire() {
         log.debug("Lock acquired");
         isLeader.set(true);
+        sessionManager.setLeadership(true);
         sessionManager.refresh(topologyDescriptor);
         onLeadershipAcquire();
     }
@@ -514,10 +484,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         // Unset isLeader flag after stopping log replication
         stopLogReplication();
         isLeader.set(false);
-        // Signal Log Replication Server/Sink to stop receiving messages, leadership loss
-        if (sessionManager.isConnectionReceiver()) {
-            interClusterServerNode.setLeadership(false);
-        }
+        sessionManager.setLeadership(false);
         recordLockRelease();
     }
 
@@ -580,17 +547,13 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
     private void onTopologyChange(TopologyDescriptor newTopology) {
         log.debug("A role change or a remote cluster may have been added or removed");
 
-        if(isLeader.get()) {
-            // refresh the session so new sessions are added and stale sessions are stopped.
-            sessionManager.refresh(newTopology);
-        }
-
+        // refresh the session so new sessions are added and stale sessions are stopped.
+        sessionManager.refresh(newTopology);
         topologyDescriptor = newTopology;
 
         if (!sessionManager.isConnectionReceiver() && interClusterServerNode != null) {
             // Stop the replication server
             interClusterServerNode.disable();
-            serverMap.clear();
         }
 
         performRoleBasedSetup();
@@ -601,10 +564,6 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
             if(!isSource() && logReplicationEventListener != null) {
                 // If no longer a Source, stop event listener.
                 logReplicationEventListener.stop();
-            }
-            // Update the topology config id on the Sink components
-            if (interClusterServerNode != null) {
-                interClusterServerNode.updateTopologyConfigId(newTopology.getTopologyConfigId());
             }
         }
 
@@ -759,6 +718,8 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         if (sessionManager != null) {
             sessionManager.shutdown();
         }
+
+        serverContext.close();
     }
 
     /**

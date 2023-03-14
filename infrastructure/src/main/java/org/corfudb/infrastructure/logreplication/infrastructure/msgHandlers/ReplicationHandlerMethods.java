@@ -1,16 +1,12 @@
 package org.corfudb.infrastructure.logreplication.infrastructure.msgHandlers;
 
-import com.google.protobuf.Any;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
-import org.corfudb.infrastructure.AbstractServer;
 import org.corfudb.infrastructure.logreplication.transport.IClientServerRouter;
 import org.corfudb.protocols.service.CorfuProtocolMessage;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.proto.service.CorfuMessage;
-import org.corfudb.runtime.proto.service.CorfuMessage.LogReplicationMsgTypes;
-import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg.PayloadCase;
 
 import javax.annotation.Nonnull;
 import java.lang.invoke.LambdaMetafactory;
@@ -20,10 +16,10 @@ import java.lang.invoke.MethodType;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.Arrays;
-import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static org.corfudb.protocols.CorfuProtocolServerErrors.getUnknownErrorMsg;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getHeaderMsg;
@@ -40,7 +36,7 @@ public class ReplicationHandlerMethods {
     private final Map<String, HandlerMethod> handlerMap;
 
     /**
-     * A functional interface for server request handlers. Server request handlers should
+     * A functional interface for clinet/server request/response handlers. The handlers should
      * be fast and not block. If a handler blocks for an extended period of time, it will
      * exhaust the server's thread pool. I/O and other long operations should be handled
      * on another thread.
@@ -53,19 +49,10 @@ public class ReplicationHandlerMethods {
     }
 
     /**
-     * Get the types of requests this handler will handle.
-     *
-     * @return  A set containing the types of requests this handler will handle.
-     */
-    public Set<String> getHandledTypes() {
-        return handlerMap.keySet();
-    }
-
-    /**
-     * Construct a new instance of RequestHandlerMethods.
+     * Construct a new instance of ReplicationHandlerMethods.
      */
     public ReplicationHandlerMethods() {
-        handlerMap = new HashMap<>();
+        handlerMap = new ConcurrentHashMap<>();
     }
 
     /**
@@ -74,8 +61,18 @@ public class ReplicationHandlerMethods {
      * @param request   The request message to handle.
      * @return          The appropriate {@link HandlerMethod}.
      */
-    protected HandlerMethod getHandler(CorfuMessage.RequestMsg request) {
-        return handlerMap.get(request.getPayload().getPayloadCase());
+    protected HandlerMethod getRequestHandler(CorfuMessage.RequestMsg request) {
+        return handlerMap.get(request.getPayload().getPayloadCase().toString());
+    }
+
+    /**
+     * Given a {@link CorfuMessage.ResponseMsg} return the corresponding handler.
+     *
+     * @param response   The respose message to handle.
+     * @return          The appropriate {@link HandlerMethod}.
+     */
+    protected HandlerMethod getResponseHandler(CorfuMessage.ResponseMsg response) {
+        return handlerMap.get(response.getPayload().getPayloadCase().toString());
     }
 
     /**
@@ -86,15 +83,18 @@ public class ReplicationHandlerMethods {
      */
     @SuppressWarnings("unchecked")
     public void handle(CorfuMessage.RequestMsg req, CorfuMessage.ResponseMsg res, IClientServerRouter r) {
-        final HandlerMethod handler = getHandler(req);
+        final HandlerMethod handler = req != null ? getRequestHandler(req) : getResponseHandler(res);
+
         try {
             handler.handle(req, res, r);
         } catch (Exception e) {
-            log.error("handle[{}]: Unhandled exception processing {} request",
-                    req.getHeader().getRequestId(), req.getPayload().getPayloadCase(), e);
-
-            CorfuMessage.HeaderMsg responseHeader = getHeaderMsg(req.getHeader(), CorfuProtocolMessage.ClusterIdCheck.CHECK, CorfuProtocolMessage.EpochCheck.IGNORE);
-            r.sendResponse(getResponseMsg(responseHeader, getUnknownErrorMsg(e)));
+            if (req != null) {
+                log.error("handle[{}]: Unhandled exception processing {} request",
+                        req.getHeader().getRequestId(), req.getPayload().getPayloadCase(), e);
+            } else {
+                log.error("handle[{}]: Unhandled exception processing {} response",
+                        res.getHeader().getRequestId(), res.getPayload().getPayloadCase(), e);
+            }
         }
     }
 

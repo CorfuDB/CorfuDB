@@ -17,8 +17,7 @@ import org.corfudb.infrastructure.logreplication.LogReplicationGrpc.LogReplicati
 import org.corfudb.infrastructure.logreplication.LogReplicationGrpc.LogReplicationStub;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.infrastructure.logreplication.infrastructure.NodeDescriptor;
-import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSinkClientRouter;
-import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSourceClientRouter;
+import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientServerRouter;
 import org.corfudb.infrastructure.logreplication.transport.client.IClientChannelAdapter;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
@@ -81,9 +80,8 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
     /** Construct client for accessing LogReplicationService server using the existing channel. */
     public GRPCLogReplicationClientChannelAdapter(
             String localClusterId,
-            ClusterDescriptor remoteClusterDescriptor,
-            LogReplicationSourceClientRouter sourceRouter, LogReplicationSinkClientRouter sinkRouter ) {
-        super(localClusterId, remoteClusterDescriptor, sourceRouter, sinkRouter);
+            LogReplicationClientServerRouter router) {
+        super(localClusterId, router);
 
         this.sessionToBlockingStubMap = new HashMap<>();
         this.sessionToAsyncStubMap = new HashMap<>();
@@ -95,9 +93,8 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
     }
 
     @Override
-    public void connectAsync(LogReplicationSession session) {
-        this.executorService.submit(() ->
-        getRemoteClusterDescriptor().getNodeDescriptors().forEach(node -> {
+    public void connectAsync(ClusterDescriptor remoteClusterDescriptor, LogReplicationSession session) {
+        this.executorService.submit(() -> remoteClusterDescriptor.getNodeDescriptors().forEach(node -> {
             try {
                 NodeLocator nodeLocator = NodeLocator.parseString(node.getEndpoint());
                 ManagedChannel channel;
@@ -122,10 +119,10 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
 
                 sessionToBlockingStubMap.put(session, LogReplicationGrpc.newBlockingStub(channel));
                 sessionToAsyncStubMap.put(session, LogReplicationGrpc.newStub(channel));
-                onConnectionUp(node.getNodeId());
+                onConnectionUp(node.getNodeId(), session);
             } catch (Exception e) {
                 log.error("Error: {} :::: {}", e.getCause(), e.getStackTrace());
-                onConnectionDown(node.getNodeId());
+                onConnectionDown(node.getNodeId(), session);
             }
         }));
     }
@@ -146,8 +143,8 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
     }
 
     @Override
-    public void connectAsync(String nodeId, LogReplicationSession session) {
-        Optional<String> endpoint = getRemoteClusterDescriptor().getNodeDescriptors()
+    public void connectAsync(ClusterDescriptor remoteCluster, String nodeId, LogReplicationSession session) {
+        Optional<String> endpoint = remoteCluster.getNodeDescriptors()
                 .stream()
                 .filter(nodeDescriptor -> nodeDescriptor.getNodeId().toString().equals(nodeId))
                 .map(NodeDescriptor::getEndpoint)
@@ -184,10 +181,10 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
 
                 sessionToBlockingStubMap.put(session, LogReplicationGrpc.newBlockingStub(channel));
                 sessionToAsyncStubMap.put(session, LogReplicationGrpc.newStub(channel));
-                onConnectionUp(nodeId);
+                onConnectionUp(nodeId, session);
             } catch (Exception e) {
                 log.error("Error: {} :::: {}", e.getCause(), e.getStackTrace());
-                onConnectionDown(nodeId);
+                onConnectionDown(nodeId, session);
             }
         });
     }
@@ -215,7 +212,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
     @Override
     public void send(String nodeId, ResponseMsg response) {
         if(nodeId == null) {
-            nodeId = this.getSinkRouter().getRemoteLeaderNodeId().get();
+            nodeId = this.getRouter().getRemoteLeaderNodeId().get();
         }
 
         LogReplicationSession sessionMsg = response.getHeader().getSession();
@@ -230,7 +227,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
                         receive(request);
                     } catch (Exception e) {
                         log.error("Caught exception while receiving Requests", e);
-                        getSinkRouter().completeExceptionally(request.getHeader().getRequestId(), e);
+                        getRouter().completeExceptionally(sessionMsg, request.getHeader().getRequestId(), e);
                         responseObserverMap.remove(sessionMsg);
                     }
                 }
@@ -239,7 +236,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
                 public void onError(Throwable t) {
                     log.error("Error from request observer", t);
                     long requestId = response.getHeader().getRequestId();
-                    getSinkRouter().completeExceptionally(requestId, t);
+                    getRouter().completeExceptionally(sessionMsg, requestId, t);
                     responseObserverMap.remove(sessionMsg);
                     onServiceUnavailable(t, finalNodeId, sessionMsg);
                 }
@@ -254,9 +251,8 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
                 StreamObserver<ResponseMsg> responseObserver = sessionToAsyncStubMap.get(sessionMsg).subscribeAndStartReplication(requestObserver);
                 responseObserverMap.put(sessionMsg, responseObserver);
             } else {
-                log.error("No stub found for remote node {}@{}. Message dropped type={}",
-                        nodeId, getRemoteClusterDescriptor().getEndpointByNodeId(nodeId),
-                        response.getPayload().getPayloadCase());
+                log.error("No stub found for remote node {}. Message dropped type={}",
+                        nodeId, response.getPayload().getPayloadCase());
             }
         }
 
@@ -278,7 +274,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
             log.error("Caught exception while sending message to query leadership status id {}",
                     request.getHeader().getRequestId(), e);
             onServiceUnavailable(e, nodeId, session);
-            getSourceRouter().completeExceptionally(request.getHeader().getRequestId(), e);
+            getRouter().completeExceptionally(session, request.getHeader().getRequestId(), e);
         }
     }
 
@@ -296,7 +292,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
             log.error("Caught exception while sending message to query metadata id={}",
                     request.getHeader().getRequestId(), e);
             onServiceUnavailable(e, nodeId, session);
-            getSourceRouter().completeExceptionally(request.getHeader().getRequestId(), e);
+            getRouter().completeExceptionally(session, request.getHeader().getRequestId(), e);
         }
     }
 
@@ -313,7 +309,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
                         receive(response);
                     } catch (Exception e) {
                         log.error("Caught exception while receiving ACK", e);
-                        getSourceRouter().completeExceptionally(response.getHeader().getRequestId(), e);
+                        getRouter().completeExceptionally(sessionMsg, response.getHeader().getRequestId(), e);
                         replicationReqObserverMap.remove(Pair.of(sessionMsg, requestId));
                     }
                 }
@@ -323,7 +319,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
                     log.error("Error from response observer", t);
                     long requestId = request.getHeader().getRequestId();
                     onServiceUnavailable(t, nodeId, sessionMsg);
-                    getSourceRouter().completeExceptionally(requestId, t);
+                    getRouter().completeExceptionally(sessionMsg, requestId, t);
                     replicationReqObserverMap.remove(Pair.of(sessionMsg, requestId));
                 }
 
@@ -337,14 +333,12 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
                 StreamObserver<RequestMsg> requestObserver = sessionToAsyncStubMap.get(sessionMsg).replicate(responseObserver);
                 replicationReqObserverMap.put(Pair.of(sessionMsg, requestId), requestObserver);
             } else {
-                log.error("No stub found for remote node {}@{}. Message dropped type={}",
-                        nodeId, getRemoteClusterDescriptor().getEndpointByNodeId(nodeId),
-                        request.getPayload().getPayloadCase());
+                log.error("No stub found for remote node {}. Message dropped type={}",
+                        nodeId, request.getPayload().getPayloadCase());
             }
         }
 
-        log.info("Send replication entry: {} to node {}@{}", request.getHeader().getRequestId(),
-                nodeId, getRemoteClusterDescriptor().getEndpointByNodeId(nodeId));
+        log.info("Send replication entry: {} to node {}", request.getHeader().getRequestId(), nodeId);
 
         // Send log replication entries across channel
         replicationReqObserverMap.get(Pair.of(sessionMsg, requestId)).onNext(request);
@@ -374,7 +368,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
         // No-op
     }
 
-    private synchronized void onServiceUnavailable(Throwable t, String nodeId, LogReplicationSession sessionMsg) {
+    private synchronized void onServiceUnavailable(Throwable t, String nodeId, LogReplicationSession sesssion) {
         Set<ManagedChannel> allChannelsToNode = nodeIdToChannelMap.get(nodeId);
 
         allChannelsToNode.stream().forEach(channel -> {
@@ -389,7 +383,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
                 //generally a transient issue, retry connection...
                 log.info("prob channel {}", channel.hashCode());
                 // no retry logic for sample, so create a new channel
-                onConnectionDown(nodeId);
+                onConnectionDown(nodeId, sesssion);
             } else if (channelState.equals(ConnectivityState.SHUTDOWN)) {
                 log.debug("GRPC channel to node {} is shutdown", nodeId);
             }

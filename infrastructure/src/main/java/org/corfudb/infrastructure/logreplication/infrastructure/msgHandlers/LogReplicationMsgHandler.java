@@ -13,8 +13,8 @@ import java.lang.annotation.Target;
 public @interface LogReplicationMsgHandler {
 
     /**
-     * Returns the request message payload type
-     * @return the type of Corfu message request
+     * Returns the message payload type
+     * @return the type of Corfu message payload
      */
     String type();
 }
