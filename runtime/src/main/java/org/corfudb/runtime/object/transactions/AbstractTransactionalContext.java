@@ -150,13 +150,12 @@ public abstract class AbstractTransactionalContext implements
         AbstractTransactionalContext.log.trace("TXBegin[{}]", this);
     }
 
-    protected <T extends ICorfuSMR<T>, S extends SnapshotGenerator<S>> ICorfuSMRSnapshotProxy<S> getAndCacheSnapshotProxy(
+    protected <S extends SnapshotGenerator<S>> ICorfuSMRSnapshotProxy<S> getAndCacheSnapshotProxy(
             MVOCorfuCompileProxy<?, S> proxy, long ts) {
         // TODO: Refactor me to avoid casting on ICorfuSMRProxyInternal type.
         ICorfuSMRSnapshotProxy<S> snapshotProxy = (ICorfuSMRSnapshotProxy<S>) snapshotProxyMap.get(proxy);
-        final MVOCorfuCompileProxy<T, S> persistentProxy = (MVOCorfuCompileProxy<T, S>) proxy;
         if (snapshotProxy == null) {
-            snapshotProxy = persistentProxy.getUnderlyingMVO().getSnapshotProxy(ts);
+            snapshotProxy = proxy.getUnderlyingMVO().getSnapshotProxy(ts);
             snapshotProxyMap.put(proxy, snapshotProxy);
         }
 
@@ -202,8 +201,8 @@ public abstract class AbstractTransactionalContext implements
      * @param <T>            The type of the proxy's underlying object.
      * @return The address the update was written at.
      */
-    public abstract <S extends SnapshotGenerator<S>> long logUpdate(
-            MVOCorfuCompileProxy<?, S> proxy, SMREntry updateEntry, Object[] conflictObject);
+    public abstract long logUpdate(
+            MVOCorfuCompileProxy<?, ?> proxy, SMREntry updateEntry, Object[] conflictObject);
 
     public abstract void logUpdate(UUID streamId, SMREntry updateEntry);
 
@@ -317,8 +316,7 @@ public abstract class AbstractTransactionalContext implements
      * @param conflictObjects The fine-grained conflict information, if
      *                        available.
      */
-    public <T extends ICorfuSMR<T>, S extends SnapshotGenerator<S>> void addToReadSet(
-            MVOCorfuCompileProxy<?, S> proxy, Object[] conflictObjects) {
+    public void addToReadSet(MVOCorfuCompileProxy<?, ?> proxy, Object[] conflictObjects) {
         getReadSetInfo().add(proxy, conflictObjects);
     }
 
@@ -340,8 +338,8 @@ public abstract class AbstractTransactionalContext implements
      * @return a synthetic "address" in the write-set, to be used for
      *     checking upcall results
      */
-    <T extends ICorfuSMR<T>, S extends SnapshotGenerator<S>> long addToWriteSet(MVOCorfuCompileProxy<?, S> proxy,
-                                                                                SMREntry updateEntry, Object[] conflictObjects) {
+    long addToWriteSet(MVOCorfuCompileProxy<?, ?> proxy,
+                       SMREntry updateEntry, Object[] conflictObjects) {
         return getWriteSetInfo().add(proxy, updateEntry, conflictObjects);
     }
 

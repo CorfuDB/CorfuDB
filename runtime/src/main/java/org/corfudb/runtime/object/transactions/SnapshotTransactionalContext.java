@@ -62,8 +62,8 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
      * @return The address the update was written at.
      */
     @Override
-    public <S extends SnapshotGenerator<S>> long logUpdate(
-            MVOCorfuCompileProxy<?, S> proxy, SMREntry updateEntry, Object[] conflictObject) {
+    public long logUpdate(MVOCorfuCompileProxy<?, ?> proxy,
+                          SMREntry updateEntry, Object[] conflictObject) {
         throw new UnsupportedOperationException(
                 "Can't modify object during a read-only transaction!");
     }

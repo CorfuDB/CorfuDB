@@ -92,12 +92,11 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
      *
      * @param proxy         The proxy making the request.
      * @param updateEntry   The timestamp of the request.
-     * @param <T>           The type of the proxy.
      * @return              The "address" that the update was written to.
      */
     @Override
-    public <S extends SnapshotGenerator<S>> long logUpdate(
-            MVOCorfuCompileProxy<?, S> proxy, SMREntry updateEntry, Object[] conflictObjects) {
+    public long logUpdate(
+            MVOCorfuCompileProxy<?, ?> proxy, SMREntry updateEntry, Object[] conflictObjects) {
         long startLogUpdateTime = System.nanoTime();
 
         try {
