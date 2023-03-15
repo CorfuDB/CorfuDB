@@ -109,7 +109,7 @@ public class DistributedCheckpointerUnitTest {
         //When appendCheckpoint throws an exception
         CheckpointWriter<ICorfuTable<?,?>> cpwThrowException = mock(CheckpointWriter.class);
         when(cpwThrowException.appendCheckpoint(any(Optional.class))).thenThrow(new WriteSizeException(2, 1));
-        when(cpwThrowException.getCorfuTable()).thenReturn(mock(CorfuTable.class));
+        when(cpwThrowException.getCorfuTable()).thenReturn(mock(PersistedCorfuTable.class));
         assert distributedCheckpointer.tryCheckpointTable(tableName, t -> cpwThrowException);
 
         when((CheckpointingStatus) corfuStoreEntry.getPayload())

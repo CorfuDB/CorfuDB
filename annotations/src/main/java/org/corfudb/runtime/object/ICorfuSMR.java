@@ -3,8 +3,6 @@ package org.corfudb.runtime.object;
 import java.util.Map;
 
 /** The interface for an object interfaced with SMR.
- * @param <T> The type of the underlying object.
- * Created by mwei on 11/10/16.
  */
 public interface ICorfuSMR extends AutoCloseable {
 
