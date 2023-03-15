@@ -36,6 +36,9 @@ public class LogReplicationConfig {
     // This value is exposed as a configuration parameter for LR.
     public static final int MAX_CACHE_NUM_ENTRIES = 200;
 
+    // Default value for the max number of entries applied in a single transaction on Sink during snapshot sync
+    public static final int DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED = 50;
+
     // Percentage of log data per log replication message
     public static final int DATA_FRACTION_PER_MSG = 90;
 
@@ -65,13 +68,19 @@ public class LogReplicationConfig {
     private int maxDataSizePerMsg;
 
     /**
+     * Max number of entries to be applied during a snapshot sync.  For special tables only.
+     */
+    private int maxSnapshotEntriesApplied = DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED;
+
+    /**
      * Constructor
      *
      * @param streamsToReplicate Unique identifiers for all streams to be replicated across sites.
      */
     @VisibleForTesting
     public LogReplicationConfig(Set<String> streamsToReplicate) {
-        this(streamsToReplicate, DEFAULT_MAX_NUM_MSG_PER_BATCH, MAX_DATA_MSG_SIZE_SUPPORTED, MAX_CACHE_NUM_ENTRIES);
+        this(streamsToReplicate, DEFAULT_MAX_NUM_MSG_PER_BATCH, MAX_DATA_MSG_SIZE_SUPPORTED, MAX_CACHE_NUM_ENTRIES,
+                DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED);
     }
 
     /**
@@ -80,12 +89,14 @@ public class LogReplicationConfig {
      * @param streamsToReplicate Unique identifiers for all streams to be replicated across sites.
      * @param maxNumMsgPerBatch snapshot sync batch size (number of entries per batch)
      */
-    public LogReplicationConfig(Set<String> streamsToReplicate, int maxNumMsgPerBatch, int maxMsgSize, int cacheSize) {
+    public LogReplicationConfig(Set<String> streamsToReplicate, int maxNumMsgPerBatch, int maxMsgSize, int cacheSize,
+                                int maxSnapshotEntriesApplied) {
         this.streamsToReplicate = streamsToReplicate;
         this.maxNumMsgPerBatch = maxNumMsgPerBatch;
         this.maxMsgSize = maxMsgSize;
         this.maxCacheSize = cacheSize;
         this.maxDataSizePerMsg = maxMsgSize * DATA_FRACTION_PER_MSG / 100;
+        this.maxSnapshotEntriesApplied = maxSnapshotEntriesApplied;
     }
 
     /**
@@ -95,12 +106,13 @@ public class LogReplicationConfig {
      * @param maxNumMsgPerBatch snapshot sync batch size (number of entries per batch)
      */
     public LogReplicationConfig(Set<String> streamsToReplicate, int maxNumMsgPerBatch, int maxMsgSize) {
-        this(streamsToReplicate, maxNumMsgPerBatch, maxMsgSize, MAX_CACHE_NUM_ENTRIES);
+        this(streamsToReplicate, maxNumMsgPerBatch, maxMsgSize, MAX_CACHE_NUM_ENTRIES, DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED);
     }
 
     public LogReplicationConfig(Set<String> streamsToReplicate, Map<UUID, List<UUID>> streamingTagsMap,
-                                Set<UUID> mergeOnlyStreams, int maxNumMsgPerBatch, int maxMsgSize, int cacheSize) {
-        this(streamsToReplicate, maxNumMsgPerBatch, maxMsgSize, cacheSize);
+                                Set<UUID> mergeOnlyStreams, int maxNumMsgPerBatch, int maxMsgSize, int cacheSize,
+                                int maxSnapshotEntriesApplied) {
+        this(streamsToReplicate, maxNumMsgPerBatch, maxMsgSize, cacheSize, maxSnapshotEntriesApplied);
         this.dataStreamToTagsMap = streamingTagsMap;
         this.mergeOnlyStreams = mergeOnlyStreams;
     }

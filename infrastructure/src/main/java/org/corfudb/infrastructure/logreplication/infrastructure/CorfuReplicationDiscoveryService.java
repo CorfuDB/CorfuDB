@@ -438,7 +438,8 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                     mergeOnlyStreams,
                     serverContext.getLogReplicationMaxNumMsgPerBatch(),
                     serverContext.getLogReplicationMaxDataMessageSize(),
-                    serverContext.getLogReplicationCacheMaxSize());
+                    serverContext.getLogReplicationCacheMaxSize(),
+                    serverContext.getMaxSnapshotEntriesApplied());
         } catch (Throwable t) {
             log.error("Exception when fetching the Replication Config", t);
             throw t;

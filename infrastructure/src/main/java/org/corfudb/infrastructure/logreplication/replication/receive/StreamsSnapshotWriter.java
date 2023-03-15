@@ -20,6 +20,7 @@ import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.StreamOptions;
+import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.runtime.view.stream.OpaqueStream;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalRetry;
@@ -42,6 +43,8 @@ import java.util.stream.Stream;
 
 import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
 import static org.corfudb.protocols.service.CorfuProtocolLogReplication.extractOpaqueEntries;
+import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
+import static org.corfudb.runtime.view.TableRegistry.getFullyQualifiedTableName;
 
 /**
  * This class represents the entity responsible of writing streams' snapshots into the standby cluster DB.
@@ -85,6 +88,8 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
     @Getter
     private Phase phase;
 
+    private final int maxSnapshotEntriesApplied;
+
     public StreamsSnapshotWriter(CorfuRuntime rt, LogReplicationConfig config, LogReplicationMetadataManager logReplicationMetadataManager) {
         this.rt = rt;
         this.logReplicationMetadataManager = logReplicationMetadataManager;
@@ -94,6 +99,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         this.snapshotSyncStartMarker = Optional.empty();
         this.dataStreamToTagsMap = config.getDataStreamToTagsMap();
         this.mergeOnlyStreams = config.getMergeOnlyStreams();
+        this.maxSnapshotEntriesApplied = config.getMaxSnapshotEntriesApplied();
 
         initializeShadowStreams(config);
 
@@ -356,9 +362,17 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         int numBatches = 1;
 
         for (SMREntry smrEntry : smrEntries) {
+            // Apply all SMR entries in a single transaction as long as it does not exceed the max write size(25MB).
+            // It was observed that special streams(ProtobufDescriptor table), can get a lot of updates, especially
+            // due to schema updates during an upgrade.  If the table was not checkpointed and trimmed on the Source,
+            // no de-duplication on these updates will occur.  As a result, the transaction size can be large.
+            // Although it is within the maxWriteSize limit, deserializing these entries to read the table can cause an
+            // OOM on applications running with a small memory footprint.  So for such tables, introduce an
+            // additional limit of max number of entries(50 by default) applied in a single transaction.  This
+            // algorithm is in line with the limits imposed in Compaction and Restore workflows.
             if (bufferSize + smrEntry.getSerializedSize() >
-                logReplicationMetadataManager.getRuntime().getParameters()
-                    .getMaxWriteSize()) {
+                    logReplicationMetadataManager.getRuntime().getParameters().getMaxWriteSize() ||
+                    maxEntriesLimitReached(streamId, buffer)) {
                 try (TxnContext txnContext =
                     logReplicationMetadataManager.getTxnContext()) {
                     updateLog(txnContext, buffer, streamId);
@@ -386,6 +400,12 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         log.debug("Completed applying updates to stream {}.  {} " +
             "entries applied across {} transactions.  ", streamId,
             smrEntries.size(), numBatches);
+    }
+
+    private boolean maxEntriesLimitReached(UUID streamId, List<SMREntry> buffer) {
+        UUID PROTOBUF_TABLE_ID = CorfuRuntime.getStreamID(
+                getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME));
+        return (streamId.equals(PROTOBUF_TABLE_ID) && buffer.size() == maxSnapshotEntriesApplied);
     }
 
     /**
