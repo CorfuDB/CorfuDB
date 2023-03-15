@@ -180,13 +180,13 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
      */
     @Test
     public void testSyncStatusUpdatesForSnapshotOnInit() throws Exception {
-        final int UPDATE_TO_STATUS_TABLE_FROM_ON_ENTRY = 1;
+        final int updateToStatusTableFromOnEntry = 1;
         initLogReplicationFSM(ReaderImplementation.EMPTY);
 
         final Table<LogReplicationSession, LogReplicationMetadata.ReplicationStatus, Message> statusTable =
                 this.corfuStore.getTable(NAMESPACE, REPLICATION_STATUS_TABLE_NAME);
 
-        CountDownLatch statusTableLatch = new CountDownLatch(UPDATE_TO_STATUS_TABLE_FROM_ON_ENTRY);
+        CountDownLatch statusTableLatch = new CountDownLatch(updateToStatusTableFromOnEntry);
         TestStreamListener streamListener = new TestStreamListener(statusTableLatch);
         corfuStore.subscribeListener(streamListener, NAMESPACE, LR_STATUS_STREAM_TAG);
 
@@ -238,13 +238,13 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
      */
     @Test
     public void testSyncStatusUpdatesForLogEntryOnInit() throws Exception {
-        final int UPDATE_TO_STATUS_TABLE_FROM_ON_ENTRY = 1;
+        final int updateToStatusTableFromOnEntry = 1;
         initLogReplicationFSM(ReaderImplementation.EMPTY);
 
         final Table<LogReplicationSession, LogReplicationMetadata.ReplicationStatus, Message> statusTable =
                 this.corfuStore.getTable(NAMESPACE, REPLICATION_STATUS_TABLE_NAME);
 
-        CountDownLatch statusTableLatch = new CountDownLatch(UPDATE_TO_STATUS_TABLE_FROM_ON_ENTRY);
+        CountDownLatch statusTableLatch = new CountDownLatch(updateToStatusTableFromOnEntry);
         TestStreamListener streamListener = new TestStreamListener(statusTableLatch);
         corfuStore.subscribeListener(streamListener, NAMESPACE, LR_STATUS_STREAM_TAG);
 
@@ -768,8 +768,8 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
                 LogReplicationMetadata.ReplicationStatus status = (LogReplicationMetadata.ReplicationStatus) entry.get(0).getPayload();
                 LogReplicationMetadata.SyncType syncType = status.getSourceStatus().getReplicationInfo().getSyncType();
                 LogReplicationMetadata.SyncStatus syncStatus = status.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus();
-                if ((syncType == LogReplicationMetadata.SyncType.LOG_ENTRY && syncStatus == LogReplicationMetadata.SyncStatus.COMPLETED)
-                        || syncType == LogReplicationMetadata.SyncType.SNAPSHOT && syncStatus == LogReplicationMetadata.SyncStatus.ONGOING) {
+                if (syncType == LogReplicationMetadata.SyncType.LOG_ENTRY && syncStatus == LogReplicationMetadata.SyncStatus.COMPLETED ||
+                        syncType == LogReplicationMetadata.SyncType.SNAPSHOT && syncStatus == LogReplicationMetadata.SyncStatus.ONGOING) {
                     countDownLatch.countDown();
                 }
             }
