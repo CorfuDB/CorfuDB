@@ -15,6 +15,14 @@ jobs:
         with:
           access_token: ${{ github.token }}
 
+      - name: Cache local Maven repository
+        uses: actions/cache@v2
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
       - name: build docker image
         run: .ci/infrastructure-docker-build.sh docker
 
