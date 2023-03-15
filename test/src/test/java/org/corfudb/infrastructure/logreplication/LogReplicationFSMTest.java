@@ -11,12 +11,14 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Observable;
 import java.util.Observer;
 import java.util.Queue;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Semaphore;
@@ -214,8 +216,9 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         Set<LogReplicationMetadata.SyncType> actualSyncTypes = new HashSet<>();
         List<LogReplicationMetadata.SyncStatus> actualSyncStatus = new ArrayList<>();
 
-        for (CorfuStreamEntries entries : streamListener.getEntries()) {
-            for (List<CorfuStreamEntry> entry : entries.getEntries().values()) {
+        Iterator<CorfuStreamEntries> entriesIterator = streamListener.getEntries().iterator();
+        while (entriesIterator.hasNext()) {
+            for (List<CorfuStreamEntry> entry : entriesIterator.next().getEntries().values()) {
                 LogReplicationMetadata.ReplicationStatus status = (LogReplicationMetadata.ReplicationStatus) entry.get(0).getPayload();
                 actualSyncTypes.add(status.getSourceStatus().getReplicationInfo().getSyncType());
                 actualSyncStatus.add(status.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus());
@@ -272,8 +275,9 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         Set<LogReplicationMetadata.SyncType> actualSyncTypes = new HashSet<>();
         List<LogReplicationMetadata.SyncStatus> actualSyncStatus = new ArrayList<>();
 
-        for (CorfuStreamEntries entries : streamListener.getEntries()) {
-            for (List<CorfuStreamEntry> entry : entries.getEntries().values()) {
+        Iterator<CorfuStreamEntries> entriesIterator = streamListener.getEntries().iterator();
+        while (entriesIterator.hasNext()) {
+            for (List<CorfuStreamEntry> entry : entriesIterator.next().getEntries().values()) {
                 LogReplicationMetadata.ReplicationStatus status = (LogReplicationMetadata.ReplicationStatus) entry.get(0).getPayload();
                 actualSyncTypes.add(status.getSourceStatus().getReplicationInfo().getSyncType());
                 actualSyncStatus.add(status.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus());
@@ -751,7 +755,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
      */
     class TestStreamListener implements StreamListener {
         @Getter
-        List<CorfuStreamEntries> entries = new ArrayList<>();
+        CopyOnWriteArrayList<CorfuStreamEntries> entries = new CopyOnWriteArrayList<>();
 
         @Getter
         Throwable throwable;
