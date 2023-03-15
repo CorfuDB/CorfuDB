@@ -12,7 +12,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Stream;
 
-public class PersistentCorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<PersistentCorfuTable<K, V>> {
+public class PersistentCorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR {
 
     private ICorfuSMRProxy<ImmutableCorfuTable<K, V>> proxy;
 
@@ -30,7 +30,7 @@ public class PersistentCorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<
 
     @Override
     // TODO: use proper return type
-    public ICorfuSMRProxy getCorfuSMRProxy() {
+    public ICorfuSMRProxy<?> getCorfuSMRProxy() {
         return proxy;
     }
 

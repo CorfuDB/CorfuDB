@@ -75,17 +75,24 @@ public class RocksDbTx<S extends SnapshotGenerator<S>> implements RocksDbApi<S> 
                         entryIterator.next();
                     }
                 }
-
-                try (RocksIterator entryIterator = txn.getIterator(readOptions)) {
-                    entryIterator.seekToFirst();
-                    while (entryIterator.isValid()) {
-                        txn.delete(entryIterator.key());
-                        entryIterator.next();
-                    }
-                }
             } catch (RocksDBException e) {
                 throw new UnrecoverableCorfuError(e);
             }
+        });
+    }
+
+    @Override
+    public long exactSize() {
+        return snapshot.executeInSnapshot(readOptions -> {
+            long count = 0;
+            try (RocksIterator entryIterator = txn.getIterator(readOptions)) {
+                entryIterator.seekToFirst();
+                while (entryIterator.isValid()) {
+                    entryIterator.next();
+                    count++;
+                }
+            }
+            return count;
         });
     }
 

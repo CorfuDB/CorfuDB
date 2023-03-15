@@ -73,6 +73,21 @@ public class RocksDbStore<S extends SnapshotGenerator<S>> implements RocksDbApi<
     }
 
     @Override
+    public long exactSize() {
+        long count = 0;
+
+        try (RocksIterator entryIterator = this.rocksDb.newIterator()) {
+            entryIterator.seekToFirst();
+            while (entryIterator.isValid()) {
+                entryIterator.next();
+                count++;
+            }
+        }
+
+        return count;
+    }
+
+    @Override
     public void close() throws RocksDBException {
         rocksDb.close();
         RocksDB.destroyDB(absolutePathString, rocksDbOptions);

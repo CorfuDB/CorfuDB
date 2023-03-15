@@ -37,21 +37,19 @@ public class CorfuCompileWrapperBuilder {
      * @throws InstantiationException Cannot instantiate the object using the arguments and class.
      */
     @SuppressWarnings("checkstyle:abbreviation")
-    private static <T extends ICorfuSMR<T>, S extends SnapshotGenerator<S>> T getWrapper(Class<T> type, CorfuRuntime rt,
-                                                                                         UUID streamID, Object[] args,
-                                                                                         ISerializer serializer,
-                                                                                         Set<UUID> streamTags,
-                                                                                         ObjectOpenOption objectOpenOption) throws Exception {
+    private static <T extends ICorfuSMR, S extends SnapshotGenerator<S>> T getWrapper(
+            Class<T> type, CorfuRuntime rt, UUID streamID, Object[] args,
+            ISerializer serializer, Set<UUID> streamTags, ObjectOpenOption objectOpenOption) throws Exception {
 
         if (type.getName().equals(PERSISTENT_CORFU_TABLE_CLASS_NAME)) {
             // TODO: make general - This should get cleaned up
             Class<S> immutableClass = (Class<S>)
                     Class.forName(IMMUTABLE_CORFU_TABLE_CLASS_NAME);
 
-            Class<ICorfuSMR<T>> wrapperClass = (Class<ICorfuSMR<T>>) Class.forName(type.getName());
+            Class<ICorfuSMR> wrapperClass = (Class<ICorfuSMR>) Class.forName(type.getName());
 
             // Instantiate a new instance of this class.
-            ICorfuSMR<T> wrapperObject = (ICorfuSMR<T>) ReflectionUtils.
+            ICorfuSMR wrapperObject = (ICorfuSMR) ReflectionUtils.
                     findMatchingConstructor(wrapperClass.getDeclaredConstructors(), new Object[0]);
 
             MVOCache<S> mvoCache = rt.getObjectsView().getMvoCache();
@@ -65,10 +63,10 @@ public class CorfuCompileWrapperBuilder {
             Class<S> coreClass = (Class<S>)
                     Class.forName(DISKBACKED_CORFU_TABLE_CLASS_NAME);
 
-            Class<ICorfuSMR<T>> wrapperClass = (Class<ICorfuSMR<T>>) Class.forName(type.getName());
+            Class<ICorfuSMR> wrapperClass = (Class<ICorfuSMR>) Class.forName(type.getName());
 
             // Instantiate a new instance of this class.
-            ICorfuSMR<T> wrapperObject = (ICorfuSMR<T>) ReflectionUtils.
+            ICorfuSMR wrapperObject = (ICorfuSMR) ReflectionUtils.
                     findMatchingConstructor(wrapperClass.getDeclaredConstructors(), new Object[0]);
 
             MVOCache<S> mvoCache = new MVOCache<>(rt.getParameters().getMvoCacheExpiry());
@@ -81,7 +79,7 @@ public class CorfuCompileWrapperBuilder {
         throw new UnsupportedOperationException();
     }
 
-    public static <T extends ICorfuSMR<T>> T getWrapper(SMRObject<T> smrObject) throws Exception {
+    public static <T extends ICorfuSMR> T getWrapper(SMRObject<T> smrObject) throws Exception {
         return getWrapper(smrObject.getType(),
                 smrObject.getRuntime(),
                 smrObject.getStreamID(),

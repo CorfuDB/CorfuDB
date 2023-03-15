@@ -2,11 +2,9 @@ package org.corfudb.runtime.object;
 
 import io.netty.buffer.ByteBuf;
 import lombok.NonNull;
-import org.corfudb.runtime.collections.CheckedRocksIterator;
 import org.corfudb.runtime.collections.RocksDbEntryIterator;
 import org.corfudb.util.serializer.ISerializer;
 import org.rocksdb.RocksDBException;
-import org.rocksdb.RocksIterator;
 
 public interface RocksDbApi<S extends SnapshotGenerator<S>> {
 
@@ -19,6 +17,8 @@ public interface RocksDbApi<S extends SnapshotGenerator<S>> {
     <K, V> RocksDbEntryIterator<K, V> getIterator(@NonNull ISerializer serializer);
 
     void clear() throws RocksDBException;
+
+    long exactSize();
 
     ISMRSnapshot<S> getSnapshot(@NonNull ViewGenerator<S> viewGenerator, VersionedObjectIdentifier version);
 

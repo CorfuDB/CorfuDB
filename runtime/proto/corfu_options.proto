@@ -23,6 +23,10 @@ message SchemaOptions {
     optional ReplicationLogicalGroup replication_group = 7;
 }
 
+message PersistenceOptions {
+    optional string dataPath = 1;
+}
+
 message ReplicationLogicalGroup {
     // Logical group name that helps club a number of tables into one group for Log Replication.
     required string logical_group = 1;

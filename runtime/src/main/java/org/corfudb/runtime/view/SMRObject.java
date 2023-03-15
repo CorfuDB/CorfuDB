@@ -31,7 +31,7 @@ import java.util.UUID;
 @Getter
 @Builder(builderClassName = "Builder")
 @AllArgsConstructor
-public class SMRObject<T extends ICorfuSMR<T>> {
+public class SMRObject<T extends ICorfuSMR> {
 
     @NonNull
     private final CorfuRuntime runtime;
@@ -57,7 +57,7 @@ public class SMRObject<T extends ICorfuSMR<T>> {
     @NonNull
     private final Set<UUID> streamTags;
 
-    public static class Builder<T extends ICorfuSMR<T>> {
+    public static class Builder<T extends ICorfuSMR> {
 
         private ISerializer serializer = Serializers.getDefaultSerializer();
         private ObjectOpenOption option = ObjectOpenOption.CACHE;
@@ -76,13 +76,13 @@ public class SMRObject<T extends ICorfuSMR<T>> {
         }
 
         @SuppressWarnings("unchecked")
-        public <R extends ICorfuSMR<R>> SMRObject.Builder<R>  setType(Class<R> type) {
+        public <R extends ICorfuSMR> SMRObject.Builder<R>  setType(Class<R> type) {
             this.type = (Class<T>) type;
             return (SMRObject.Builder<R>) this;
         }
 
         @SuppressWarnings("unchecked")
-        public <R extends ICorfuSMR<R>> SMRObject.Builder<R> setTypeToken(TypeToken<R> typeToken) {
+        public <R extends ICorfuSMR> SMRObject.Builder<R> setTypeToken(TypeToken<R> typeToken) {
             this.type = (Class<T>) typeToken.getRawType();
             return (SMRObject.Builder<R>) this;
         }

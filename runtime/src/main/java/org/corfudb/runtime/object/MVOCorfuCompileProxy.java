@@ -8,6 +8,7 @@ import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.collections.PersistedCorfuTable;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
@@ -26,7 +27,7 @@ import java.util.UUID;
 
 @Slf4j
 public class MVOCorfuCompileProxy<
-        T extends ICorfuSMR<T>,
+        T extends ICorfuSMR,
         S extends SnapshotGenerator<S>>
         implements ICorfuSMRProxy<S> {
 
@@ -50,7 +51,7 @@ public class MVOCorfuCompileProxy<
     private final ObjectOpenOption objectOpenOption;
 
     public MVOCorfuCompileProxy(CorfuRuntime rt, UUID streamID, Class<S> type, Object[] args,
-                                ISerializer serializer, Set<UUID> streamTags, ICorfuSMR<T> wrapperObject,
+                                ISerializer serializer, Set<UUID> streamTags, ICorfuSMR wrapperObject,
                                 ObjectOpenOption objectOpenOption, MVOCache<S> mvoCache) {
         this.rt = rt;
         this.streamID = streamID;

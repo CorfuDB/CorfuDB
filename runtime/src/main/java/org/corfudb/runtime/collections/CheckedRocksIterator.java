@@ -25,18 +25,6 @@ public class CheckedRocksIterator implements RocksIteratorInterface {
     private final StampedLock lock;
     private final AtomicBoolean isValid;
 
-    private void underReadLock(Runnable runnable) {
-        long stamp = lock.readLock();
-        try {
-            if (!isValid.get()) {
-                throw new TrimmedException();
-            }
-            runnable.run();
-        } finally {
-            lock.unlockRead(stamp);
-        }
-    }
-
     public CheckedRocksIterator(RocksIterator rocksIterator, StampedLock lock, ReadOptions readOptions) {
         // {@link ReadOptions::isOwningHandle} is atomically set to false on
         // {@link ReadOptions::close}. Therefore, if we do not own the handle,
@@ -198,7 +186,31 @@ public class CheckedRocksIterator implements RocksIteratorInterface {
      * Closes the iterator. This method is idempotent.
      */
     public void close() {
-        underReadLock(rocksIterator::close);
+        underWriteLock(rocksIterator::close);
+    }
+
+    private void underWriteLock(Runnable runnable) {
+        long stamp = lock.writeLock();
+        try {
+            if (!isValid.get()) {
+                throw new TrimmedException();
+            }
+            runnable.run();
+        } finally {
+            lock.unlockWrite(stamp);
+        }
+    }
+
+    private void underReadLock(Runnable runnable) {
+        long stamp = lock.readLock();
+        try {
+            if (!isValid.get()) {
+                throw new TrimmedException();
+            }
+            runnable.run();
+        } finally {
+            lock.unlockRead(stamp);
+        }
     }
 
     private <T> T underReadLock(Supplier<T> supplier) {

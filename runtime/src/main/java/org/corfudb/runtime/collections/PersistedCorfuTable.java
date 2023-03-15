@@ -13,7 +13,7 @@ import java.util.stream.Stream;
 
 public class PersistedCorfuTable<K, V> implements
         ICorfuTable<K, V>,
-        ICorfuSMR<PersistedCorfuTable<K, V>> {
+        ICorfuSMR {
 
     private MVOCorfuCompileProxy<PersistedCorfuTable<K, V>, DiskBackedCorfuTable<K, V>> proxy;
 
@@ -31,7 +31,7 @@ public class PersistedCorfuTable<K, V> implements
 
     @Override
     // TODO: use proper return type
-    public ICorfuSMRProxy getCorfuSMRProxy() {
+    public ICorfuSMRProxy<?> getCorfuSMRProxy() {
         return proxy;
     }
 
@@ -65,7 +65,7 @@ public class PersistedCorfuTable<K, V> implements
     @Override
     public V get(@Nonnull Object key) {
         Object[] conflictField = new Object[]{key};
-        return proxy.access(corfuSmr -> corfuSmr.get((K) key), conflictField);
+        return proxy.access(corfuSmr -> corfuSmr.get(key), conflictField);
     }
 
     @Override
@@ -87,12 +87,12 @@ public class PersistedCorfuTable<K, V> implements
 
     @Override
     public int size() {
-        return proxy.access(DiskBackedCorfuTable::size, null);
+        return proxy.access(DiskBackedCorfuTable::size, null).intValue();
     }
 
     @Override
     public boolean isEmpty() {
-        return proxy.access(DiskBackedCorfuTable::isEmpty, null);
+        return proxy.access(DiskBackedCorfuTable::size, null) == 0;
     }
 
     @Override

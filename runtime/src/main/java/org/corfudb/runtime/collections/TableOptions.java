@@ -18,6 +18,7 @@ public class TableOptions {
     /**
      * If this path is set, {@link CorfuStore} will utilize disk-backed {@link ICorfuTable}.
      */
+    @Deprecated
     private final Path persistentDataPath;
 
     /**

@@ -173,7 +173,7 @@ public class DiskBackedCorfuTable<K, V> implements
         }
     }
 
-    public DiskBackedCorfuTable<K, V> remove(@NonNull Object key) {
+    public DiskBackedCorfuTable<K, V> remove(@NonNull K key) {
         final ByteBuf keyPayload = Unpooled.buffer();
 
         try {
@@ -201,16 +201,11 @@ public class DiskBackedCorfuTable<K, V> implements
         final RocksDbEntryIterator<K, V> entryIterator = rocksApi.getIterator(serializer);
         Stream<Map.Entry<K, V>> resStream = StreamSupport.stream(
                 Spliterators.spliteratorUnknownSize(entryIterator, Spliterator.ORDERED), false);
-        resStream.onClose(entryIterator::close);
-        return resStream;
+        return resStream.onClose(entryIterator::close);
     }
 
-    public int size() {
-        return entryStream().map(entry -> 1).reduce(0, Integer::sum);
-    }
-
-    public boolean isEmpty() {
-        return size() == 0;
+    public long size() {
+        return rocksApi.exactSize();
     }
 
     @Override

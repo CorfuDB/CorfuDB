@@ -17,12 +17,15 @@ import net.jqwik.api.Provide;
 import net.jqwik.api.constraints.AlphaChars;
 import net.jqwik.api.constraints.Size;
 import net.jqwik.api.constraints.StringLength;
+import org.apache.commons.io.FileUtils;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.object.ConsistencyOptions;
 import org.corfudb.runtime.object.MVOCorfuCompileProxy;
 import org.corfudb.runtime.view.AbstractViewTest;
@@ -31,10 +34,12 @@ import org.corfudb.test.SampleSchema.EventInfo;
 import org.corfudb.test.SampleSchema.Uuid;
 import org.corfudb.util.serializer.ISerializer;
 import org.junit.jupiter.api.Assertions;
+import org.rocksdb.Env;
 import org.rocksdb.Options;
 import org.rocksdb.RocksDB;
 import org.rocksdb.RocksDBException;
 import org.apache.commons.lang3.function.Failable;
+import org.rocksdb.SstFileManager;
 
 import java.io.InvalidObjectException;
 import java.nio.file.Path;
@@ -49,11 +54,10 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.stream.Collectors;
+import java.util.stream.LongStream;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.entry;
-import static org.assertj.core.api.Assertions.in;
 import static org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy;
 
 @Slf4j
@@ -62,8 +66,9 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
     private static final String defaultTableName = "diskBackedTable";
     private static final String alternateTableName = "diskBackedTable2";
     private static final String diskBackedDirectory = "/tmp/";
-
     private static final Path persistedCacheLocation = Paths.get(diskBackedDirectory, alternateTableName);
+    private static final Options defaultOptions = new Options().setCreateIfMissing(true);
+    private static final ISerializer defaultSerializer = new PojoSerializer(String.class);
     private static final int SAMPLE_SIZE = 100;
     private static final int NUM_OF_TRIES = 1;
     private static final int STRING_MIN = 5;
@@ -129,16 +134,20 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
         public final String payload;
     }
 
-    private PersistedCorfuTable<String, String> setupTable(String streamName, boolean readYourWrites) {
+    private <V> PersistedCorfuTable<String, V> setupTable(String streamName, boolean readYourWrites,
+                                                           Options options, ISerializer serializer) {
         final Path persistedCacheLocation = Paths.get(diskBackedDirectory, streamName);
-        final Options options = new Options().setCreateIfMissing(true);
         final ConsistencyOptions consistencyOptions = ConsistencyOptions.builder()
                 .readYourWrites(readYourWrites).build();
         return getDefaultRuntime().getObjectsView().build()
-                .setTypeToken(new TypeToken<PersistedCorfuTable<String, String>>() {})
-                .setArguments(persistedCacheLocation, options, consistencyOptions, new PojoSerializer(String.class), getRuntime())
+                .setTypeToken(new TypeToken<PersistedCorfuTable<String, V>>() {})
+                .setArguments(persistedCacheLocation, options, consistencyOptions, serializer, getRuntime())
                 .setStreamName(streamName)
                 .open();
+    }
+
+    private PersistedCorfuTable<String, String> setupTable(String streamName, boolean readYourWrites) {
+        return setupTable(streamName, readYourWrites, defaultOptions, new PojoSerializer(String.class));
     }
 
     private PersistedCorfuTable<String, String> setupTable(boolean readYourWrites) {
@@ -177,7 +186,6 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
      *
      * @throws RocksDBException should not be thrown
      */
-    /*
     @Property(tries = NUM_OF_TRIES)
     void fileSystemLimit() throws Exception {
         resetTests();
@@ -192,73 +200,53 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
                         // The size is checked either during flush or compaction.
                         .setWriteBufferSize(FileUtils.ONE_KB);
 
-        final Supplier<StreamingMap> mapSupplier = () -> new PersistedStreamingMap<String, String>(
-                persistedCacheLocation, options, Serializers.JSON, getRuntime());
-        final CorfuTable<String, String> table = getDefaultRuntime().getObjectsView().build()
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
-                .setArguments(mapSupplier,ICorfuVersionPolicy.MONOTONIC)
-                .setStreamName(defaultTableName)
-                .open();
+        try (final PersistedCorfuTable<String, String> table =
+                     setupTable(defaultTableName, ENABLE_READ_YOUR_WRITES, options, defaultSerializer)) {
 
-        final long ITERATION_COUNT = 100000;
-        final int ENTITY_CHAR_SIZE = 1000;
+            final long ITERATION_COUNT = 100000;
+            final int ENTITY_CHAR_SIZE = 1000;
 
-        assertThatThrownBy(() ->
-                LongStream.rangeClosed(1, ITERATION_COUNT).forEach(idx -> {
-                    String key = RandomStringUtils.random(ENTITY_CHAR_SIZE, true, true);
-                    String value = RandomStringUtils.random(ENTITY_CHAR_SIZE, true, true);
-                    table.put(key, value);
-                    String persistedValue = table.get(key);
-                    Assertions.assertEquals(value, persistedValue);
-                })).isInstanceOf(UnrecoverableCorfuError.class)
-                .hasCauseInstanceOf(RocksDBException.class);
-
-        table.close();
+            assertThatThrownBy(() ->
+                    LongStream.rangeClosed(1, ITERATION_COUNT).forEach(idx -> {
+                        String key = RandomStringUtils.random(ENTITY_CHAR_SIZE, true, true);
+                        String value = RandomStringUtils.random(ENTITY_CHAR_SIZE, true, true);
+                        table.insert(key, value);
+                        String persistedValue = table.get(key);
+                        Assertions.assertEquals(value, persistedValue);
+                    })).isInstanceOf(UnrecoverableCorfuError.class)
+                    .hasCauseInstanceOf(RocksDBException.class);
+        }
     }
-    */
 
 
     /**
      * Ensure disk-backed table serialization and deserialization works as expected.
      */
-    /*
     @Property(tries = NUM_OF_TRIES)
     void customSerializer() {
         resetTests();
-        final Options options =
-                new Options().setCreateIfMissing(true)
-                        // The size is checked either during flush or compaction.
-                        .setWriteBufferSize(FileUtils.ONE_KB);
-        final Supplier<StreamingMap> mapSupplier = () -> new PersistedStreamingMap<String, Pojo>(
-                persistedCacheLocation, options, new PojoSerializer(Pojo.class), getRuntime());
-        CorfuTable<String, Pojo>
-                table = getDefaultRuntime().getObjectsView().build()
-                .setTypeToken(new TypeToken<CorfuTable<String, Pojo>>() {})
-                .setArguments(mapSupplier, ICorfuVersionPolicy.MONOTONIC)
-                .setStreamName(defaultTableName)
-                .open();
 
-        final long ITERATION_COUNT = 100;
-        final int ENTITY_CHAR_SIZE = 100;
+        try (final PersistedCorfuTable<String, Pojo> table = setupTable(
+                defaultTableName, ENABLE_READ_YOUR_WRITES, defaultOptions, new PojoSerializer(Pojo.class))) {
 
-        LongStream.rangeClosed(1, ITERATION_COUNT).forEach(idx -> {
-            String key = RandomStringUtils.random(ENTITY_CHAR_SIZE, true, true);
-            Pojo value = Pojo.builder()
-                    .payload(RandomStringUtils.random(ENTITY_CHAR_SIZE, true, true))
-                    .build();
-            table.put(key, value);
-            Pojo persistedValue = table.get(key);
-            Assertions.assertEquals(value, persistedValue);
-        });
+            final long ITERATION_COUNT = 100;
+            final int ENTITY_CHAR_SIZE = 100;
 
-        table.close();
+            LongStream.rangeClosed(1, ITERATION_COUNT).forEach(idx -> {
+                String key = RandomStringUtils.random(ENTITY_CHAR_SIZE, true, true);
+                Pojo value = Pojo.builder()
+                        .payload(RandomStringUtils.random(ENTITY_CHAR_SIZE, true, true))
+                        .build();
+                table.insert(key, value);
+                Pojo persistedValue = table.get(key);
+                Assertions.assertEquals(value, persistedValue);
+            });
+        }
     }
-    */
 
     /**
      * Transactional property based test that does puts followed by scan and filter.
      */
-    /*
     @Property(tries = NUM_OF_TRIES)
     void txPutScanAndFilter(@ForAll @Size(SAMPLE_SIZE) Set<String> intended) {
         resetTests();
@@ -273,13 +261,11 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
             });
         }
     }
-    */
 
 
     /**
      * Non-transactional property based test that does puts followed by scan and filter.
      */
-    /*
     @Property(tries = NUM_OF_TRIES)
     void nonTxPutScanAndFilter(@ForAll @Size(SAMPLE_SIZE) Set<String> intended) {
         resetTests();
@@ -292,7 +278,6 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
             Assertions.assertEquals(table.size(), persisted.size());
         }
     }
-    */
 
     /**
      * Verify basic non-transactional get and insert operations.
@@ -305,8 +290,6 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
             intended.forEach(k -> Assertions.assertEquals(k, table.get(k)));
         }
     }
-
-    ////////////////////////////////////
 
     /**
      * Test the snapshot isolation property of disk-backed Corfu tables.

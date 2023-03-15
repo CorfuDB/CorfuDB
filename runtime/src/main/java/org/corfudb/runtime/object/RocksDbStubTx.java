@@ -44,6 +44,18 @@ public class RocksDbStubTx<S extends SnapshotGenerator<S>> implements RocksDbApi
         // No-op
     }
 
+    public long exactSize() {
+        long count = 0;
+        try (RocksIterator entryIterator = rocksDb.newIterator()) {
+            entryIterator.seekToFirst();
+            while (entryIterator.isValid()) {
+                entryIterator.next();
+                count++;
+            }
+        }
+        return count;
+    }
+
     @Override
     public <K, V> RocksDbEntryIterator<K,V> getIterator(@NonNull ISerializer serializer) {
         return new RocksDbEntryIterator<>(rocksDb, serializer, readOptions, true);

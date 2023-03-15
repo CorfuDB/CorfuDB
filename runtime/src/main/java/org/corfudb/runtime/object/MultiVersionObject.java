@@ -122,9 +122,9 @@ public class MultiVersionObject<S extends SnapshotGenerator<S>> {
      * @param smrStream     The stream View backing this object.
      * @param wrapperObject The wrapper over the actual object.
      */
-    public <T extends ICorfuSMR<T>> MultiVersionObject(
+    public <T extends ICorfuSMR> MultiVersionObject(
             @Nonnull CorfuRuntime corfuRuntime, @Nonnull Supplier<S> newObjectFn,
-            @Nonnull StreamViewSMRAdapter smrStream, @Nonnull ICorfuSMR<T> wrapperObject,
+            @Nonnull StreamViewSMRAdapter smrStream, @Nonnull ICorfuSMR wrapperObject,
             @Nonnull ObjectOpenOption objectOpenOption, @Nonnull MVOCache<S> mvoCache) {
         this.lock = new StampedLock();
         this.smrStream = smrStream;
