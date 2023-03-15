@@ -31,9 +31,8 @@ public class FileSystemAdvisor {
             }
 
             node.getFileSystem()
-                    .map(FileSystemStats::getPartitionAttributeStats)
-                    .filter(PartitionAttributeStats::isReadOnly)
-                    .map(attr -> new NodeRankByPartitionAttributes(nodeEndpoint, attr))
+                    .filter(FileSystemStats::hasError)
+                    .map(fsStats -> new NodeRankByPartitionAttributes(nodeEndpoint, fsStats))
                     .ifPresent(set::add);
         }
 
@@ -43,18 +42,19 @@ public class FileSystemAdvisor {
     public Optional<NodeRankByPartitionAttributes> healedServer(ClusterState clusterState) {
 
         ImmutableList<String> unresponsiveNodes = clusterState.getUnresponsiveNodes();
-        if (!unresponsiveNodes.contains(clusterState.getLocalEndpoint())) {
+        if (unresponsiveNodes.contains(clusterState.getLocalEndpoint())) {
+            Optional<FileSystemStats> maybeFileSystem = getFileSystemStats(clusterState);
+
+            return maybeFileSystem
+                    .filter(fsStats -> fsStats.getPartitionAttributeStats().isWritable())
+                    // !!! We DO NOT check that, the batch processor is in OK status, otherwise we will NEVER be able to
+                    // heal the node, because the batch processor must be in the ERROR state until "reset" operation
+                    // will be triggered by the "heal" step
+                    //.filter(fsStats -> fsStats.getBatchProcessorStats().isOk())
+                    .map(fileSystem -> new NodeRankByPartitionAttributes(clusterState.getLocalEndpoint(), fileSystem));
+        } else {
             return Optional.empty();
         }
-
-        Optional<FileSystemStats> maybeFileSystem = getFileSystemStats(clusterState);
-
-        return maybeFileSystem
-                .filter(fileSystem -> fileSystem.getPartitionAttributeStats().isWritable())
-                .map(fileSystem -> new NodeRankByPartitionAttributes(
-                        clusterState.getLocalEndpoint(),
-                        fileSystem.getPartitionAttributeStats()
-                ));
     }
 
     private Optional<FileSystemStats> getFileSystemStats(ClusterState clusterState) {

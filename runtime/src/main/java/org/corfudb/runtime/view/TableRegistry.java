@@ -583,6 +583,7 @@ public class TableRegistry {
                         .valueSchema(defaultValueMessage)
                         .metadataSchema(defaultMetadataMessage)
                         .schemaOptions(tableSchemaOptions)
+                        .secondaryIndexesDisabled(tableOptions.isSecondaryIndexesDisabled())
                         .build(),
                 this.runtime,
                 this.protobufSerializer,
@@ -770,6 +771,7 @@ public class TableRegistry {
                         .valueSchema(defaultValueMessage)
                         .metadataSchema(defaultMetadataMessage)
                         .schemaOptions(tableSchemaOptions)
+                        .secondaryIndexesDisabled(tableOptions.isSecondaryIndexesDisabled())
                         .build(),
                 this.runtime,
                 this.protobufSerializer,

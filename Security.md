@@ -29,8 +29,7 @@ Options:
  -d <level>, --log-level=<level>                                                        Set the logging level, valid levels are: 
                                                                                         ERROR,WARN,INFO,DEBUG,TRACE [default: INFO].
  -Q, --quickcheck-test-mode                                                             Run in QuickCheck test mode
- -M <address>:<port>, --management-server=<address>:<port>                              Layout endpoint to seed Management Server
- -n, --no-verify                                                                        Disable checksum computation and verification.
+ -M <address>:<port>, --management-server=<address>:<port>                              Layout endpoint to seed Management Server                                                                       
  -e, --enable-tls                                                                       Enable TLS.
  -u <keystore>, --keystore=<keystore>                                                   Path to the key store.
  -f <keystore_password_file>, --keystore-password-file=<keystore_password_file>         Path to the file containing the key store password.

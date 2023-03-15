@@ -16,6 +16,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.LongStream;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.BatchProcessor.BatchProcessorContext;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.log.StreamLogCompaction;
 import org.corfudb.infrastructure.LogUnitServer.LogUnitServerConfig;
@@ -165,16 +166,24 @@ public class LogUnitServerTest {
                 .thenReturn(ImmutableMap.of(
                         "--cache-heap-ratio", "0.5",
                         "--memory", false,
-                        "--no-verify", false,
                         "--no-sync", false));
 
         // Prepare the LogUnitServerInitializer.
         LogUnitServer.LogUnitServerInitializer mLUSI = mock(LogUnitServer.LogUnitServerInitializer.class);
-        when(mLUSI.buildStreamLog(any(LogUnitServerConfig.class), eq(mServerContext))).thenReturn(mStreamLog);
+        when(mLUSI.buildStreamLog(
+                any(LogUnitServerConfig.class),
+                eq(mServerContext),
+                any(BatchProcessorContext.class)
+        )).thenReturn(mStreamLog);
+
         when(mLUSI.buildLogUnitServerCache(any(LogUnitServerConfig.class), eq(mStreamLog))).thenReturn(mCache);
         when(mLUSI.buildStreamLogCompaction(mStreamLog)).thenReturn(mock(StreamLogCompaction.class));
-        when(mLUSI.buildBatchProcessor(any(LogUnitServerConfig.class),
-                eq(mStreamLog), eq(mServerContext))).thenReturn(mBatchProcessor);
+        when(mLUSI.buildBatchProcessor(
+                any(LogUnitServerConfig.class),
+                eq(mStreamLog),
+                eq(mServerContext),
+                any(BatchProcessorContext.class)
+        )).thenReturn(mBatchProcessor);
 
         logUnitServer = new LogUnitServer(mServerContext, mLUSI);
     }

@@ -12,6 +12,7 @@ import org.corfudb.runtime.collections.*;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.exceptions.WriteSizeException;
 import org.corfudb.runtime.exceptions.WrongClusterException;
 import org.junit.Assert;
 import org.junit.Before;
@@ -107,7 +108,8 @@ public class DistributedCheckpointerUnitTest {
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.IDLE).build());
         //When appendCheckpoint throws an exception
         CheckpointWriter<ICorfuTable<?,?>> cpwThrowException = mock(CheckpointWriter.class);
-        when(cpwThrowException.appendCheckpoint(any(Optional.class))).thenThrow(new IllegalStateException());
+        when(cpwThrowException.appendCheckpoint(any(Optional.class))).thenThrow(new WriteSizeException(2, 1));
+        when(cpwThrowException.getCorfuTable()).thenReturn(mock(CorfuTable.class));
         assert distributedCheckpointer.tryCheckpointTable(tableName, t -> cpwThrowException);
 
         when((CheckpointingStatus) corfuStoreEntry.getPayload())

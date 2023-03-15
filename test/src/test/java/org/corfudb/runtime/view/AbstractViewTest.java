@@ -162,7 +162,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
      *
      * @param runtime  The CorfuRuntime to obtain a router for.
      * @param endpoint An endpoint string for the router.
-     * @return
+     * @return client router
      */
     protected IClientRouter getRouterFunction(CorfuRuntime runtime, String endpoint) {
         runtimeRouterMap.putIfAbsent(runtime, new ConcurrentHashMap<>());
@@ -174,8 +174,9 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
                     String serverName = endpoint.startsWith(testHostname) ?
                             endpoint.substring(endpoint.indexOf("test"), endpoint.length() - 1)
                             : endpoint;
-                    TestClientRouter tcn =
-                            new TestClientRouter(testServerMap.get(serverName).getServerRouter());
+                    TestServer testServer = testServerMap.get(serverName);
+                    TestServerRouter serverRouter = testServer.getServerRouter();
+                    TestClientRouter tcn = new TestClientRouter(serverRouter);
                     tcn.addClient(new BaseHandler())
                             .addClient(new SequencerHandler())
                             .addClient(new LayoutHandler())

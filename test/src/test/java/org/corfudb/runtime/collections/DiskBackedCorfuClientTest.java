@@ -22,6 +22,7 @@
 //import org.corfudb.protocols.wireprotocol.Token;
 //import org.corfudb.runtime.CorfuRuntime;
 //import org.corfudb.runtime.CorfuStoreMetadata;
+//import org.corfudb.runtime.ExampleSchemas.ExampleValue;
 //import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 //import org.corfudb.runtime.object.ICorfuVersionPolicy;
 //import org.corfudb.runtime.view.AbstractViewTest;
@@ -49,12 +50,12 @@
 //import java.util.stream.LongStream;
 //
 //import static org.assertj.core.api.Assertions.assertThat;
+//import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 //import static org.assertj.core.api.Assertions.assertThatThrownBy;
 //
 ///**
 // * Disk-backed {@link StreamingMap} tests.
 // */
-// TODO(vjeko): Migrate this test.
 //public class DiskBackedCorfuClientTest extends AbstractViewTest implements AutoCloseable {
 //
 //    private static final String defaultMapName = "diskBackedMap";
@@ -67,6 +68,7 @@
 //    private static final int STRING_MIN = 5;
 //    private static final int STRING_MAX = 10;
 //
+//    private static final String ANOTHER_KEY_INDEX = "anotherKey";
 //    private static final String nonExistingKey = "nonExistingKey";
 //    private static final String defaultNewMapEntry = "newEntry";
 //
@@ -536,6 +538,45 @@
 //                        .setName("event_" + idx)
 //                        .setEventTime(idx)
 //                        .build());
+//    }
+//
+//    @Property(tries = NUM_OF_TRIES)
+//    void disableSecondaryIndexes(
+//            @ForAll @StringLength(min = STRING_MIN, max = STRING_MAX) @AlphaChars String namespace,
+//            @ForAll @StringLength(min = STRING_MIN, max = STRING_MAX) @AlphaChars String tableName)
+//            throws Exception {
+//        resetTests();
+//
+//        // Creating Corfu Store using a connected corfu client.
+//        CorfuStore corfuStore = new CorfuStore(getDefaultRuntime());
+//
+//        { // Positive test.
+//            final Table<Uuid, ExampleValue, SampleSchema.ManagedResources> table =
+//                    corfuStore.openTable(namespace, tableName,
+//                            Uuid.class, ExampleValue.class,
+//                            SampleSchema.ManagedResources.class,
+//                            // TableOptions includes option to choose - Memory/Disk based corfu table.
+//                            TableOptions.fromProtoSchema(ExampleValue.class).toBuilder()
+//                                    .persistentDataPath(Paths.get(diskBackedDirectory, tableName))
+//                                    .secondaryIndexesDisabled(true).build());
+//
+//            assertThatExceptionOfType(IllegalArgumentException.class)
+//                    .isThrownBy(() -> table.getByIndex(ANOTHER_KEY_INDEX, 0L))
+//                    .withMessage("Secondary Index anotherKey is not defined.");
+//        }
+//        { // Negative test.
+//            final Table<Uuid, ExampleValue, SampleSchema.ManagedResources> table =
+//                    corfuStore.openTable(namespace, tableName + tableName,
+//                            Uuid.class, ExampleValue.class,
+//                            SampleSchema.ManagedResources.class,
+//                            // TableOptions includes option to choose - Memory/Disk based corfu table.
+//                            TableOptions.fromProtoSchema(ExampleValue.class).toBuilder()
+//                                    .persistentDataPath(Paths.get(diskBackedDirectory, tableName + tableName))
+//                                    .build());
+//
+//            // Negative test. No throw.
+//            table.getByIndex(ANOTHER_KEY_INDEX, 0L);
+//        }
 //    }
 //
 //    /**

@@ -20,12 +20,12 @@ import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogRepli
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.ClusterRole;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.TopologyConfigurationMsg;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEvent;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEventKey;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.exceptions.RetryExhaustedException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
@@ -437,8 +437,8 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                     replicationConfigManager,
                     serverContext.getLogReplicationMaxNumMsgPerBatch(),
                     serverContext.getLogReplicationMaxDataMessageSize(),
-                    serverContext.getLogReplicationCacheMaxSize()
-            );
+                    serverContext.getLogReplicationCacheMaxSize(),
+                    serverContext.getMaxSnapshotEntriesApplied());
         } catch (Throwable t) {
             log.error("Exception when fetching the Replication Config", t);
             throw t;
@@ -793,13 +793,13 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      * snapshot sync is in the apply phase)
      */
     @Override
-    public Map<String, LogReplicationMetadata.ReplicationStatusVal> queryReplicationStatus() {
+    public Map<String, LogReplication.ReplicationStatusVal> queryReplicationStatus() {
         if (localClusterDescriptor == null || logReplicationMetadataManager == null) {
             log.warn("Cluster configuration has not been pushed to current LR node.");
             return null;
         } else if (localClusterDescriptor.getRole() == ClusterRole.ACTIVE) {
-            Map<String, LogReplicationMetadata.ReplicationStatusVal> mapReplicationStatus = logReplicationMetadataManager.getReplicationRemainingEntries();
-            Map<String, LogReplicationMetadata.ReplicationStatusVal> mapToSend = new HashMap<>(mapReplicationStatus);
+            Map<String, LogReplication.ReplicationStatusVal> mapReplicationStatus = logReplicationMetadataManager.getReplicationRemainingEntries();
+            Map<String, LogReplication.ReplicationStatusVal> mapToSend = new HashMap<>(mapReplicationStatus);
             // If map contains local cluster, remove (as it might have been added by the SinkManager) but this node
             // has an active role.
             if (mapToSend.containsKey(localClusterDescriptor.getClusterId())) {

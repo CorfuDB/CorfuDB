@@ -11,6 +11,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.CFUtils;
+import org.corfudb.util.concurrent.SingletonResource;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -32,7 +33,7 @@ import java.util.stream.Collectors;
 public class EpochHandler {
 
     @NonNull
-    private final CorfuRuntime corfuRuntime;
+    private final SingletonResource<CorfuRuntime> runtimeSingletonResource;
     @NonNull
     private final ServerContext serverContext;
     @NonNull
@@ -97,7 +98,7 @@ public class EpochHandler {
     private CompletableFuture<Layout> getLayoutFromServer(Layout layout, String endpoint) {
         CompletableFuture<Layout> completableFuture = new CompletableFuture<>();
         try {
-            completableFuture = corfuRuntime
+            completableFuture = runtimeSingletonResource.get()
                     .getLayoutView()
                     .getRuntimeLayout(layout)
                     .getLayoutClient(endpoint)
@@ -155,7 +156,7 @@ public class EpochHandler {
 
         // Re-seal all servers with the latestLayout epoch.
         // This has no effect on up-to-date servers. Only the trailing servers are caught up.
-        corfuRuntime
+        runtimeSingletonResource.get()
                 .getLayoutView()
                 .getRuntimeLayout(sealingLayout)
                 .sealMinServerSet();
@@ -230,7 +231,7 @@ public class EpochHandler {
 
     @VisibleForTesting
     CompletableFuture<Boolean> commitLayoutAsync(Layout latestLayout, String layoutServer) {
-        return corfuRuntime
+        return runtimeSingletonResource.get()
                 .getLayoutView()
                 .getRuntimeLayout(latestLayout)
                 .getLayoutClient(layoutServer)

@@ -686,12 +686,12 @@ public class CheckpointSmokeTest extends AbstractViewTest {
     /**
      * When log entry compression is set to NONE and BATCH_THRESHOLD_PERCENTAGE is very small,
      * although the total size of SMR entries could pass the check in appendObjectState(), it
-     * could fail in writing the CheckpointEntry into stream (WriteSizeException) due to the
+     * shouldn't fail in writing the CheckpointEntry as we skip maxWriteSizeLimit check even with
      * slight overhead of packing SMR entries into CheckpointEntry.
      */
-    @Test(expected = WriteSizeException.class)
+    @Test
     @SuppressWarnings("checkstyle:magicnumber")
-    public void checkpointWriterSizeLimitViolationTest() throws Exception {
+    public void checkpointWriterSizeLimitViolationTest() {
         final String streamName = "mystream7";
         final UUID streamId = CorfuRuntime.getStreamID(streamName);
         final String keyPrefix = "a-prefix";

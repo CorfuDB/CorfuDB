@@ -2,8 +2,7 @@ package org.corfudb.runtime.clients;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.corfudb.infrastructure.log.StreamLogFiles.METADATA_SIZE;
-
+import static org.corfudb.infrastructure.log.Segment.METADATA_SIZE;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
@@ -81,7 +80,6 @@ public class LogUnitHandlerTest extends AbstractClientTest {
         String dirPath = PARAMETERS.TEST_TEMP_DIR;
         serverContext = new ServerContextBuilder()
                 .setSingle(true)
-                .setNoVerify(false)
                 .setMemory(false)
                 .setLogPath(dirPath)
                 .setServerRouter(serverRouter)

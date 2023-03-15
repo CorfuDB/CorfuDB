@@ -2,6 +2,7 @@ package org.corfudb.runtime.collections;
 
 import com.google.protobuf.Message;
 import lombok.Builder;
+import lombok.Getter;
 import org.corfudb.runtime.CorfuOptions;
 
 import javax.annotation.Nonnull;
@@ -12,7 +13,7 @@ import java.util.Optional;
 /**
  * Created by zlokhandwala on 2019-08-09.
  */
-@Builder
+@Builder(toBuilder = true)
 public class TableOptions {
 
     /**
@@ -21,14 +22,15 @@ public class TableOptions {
     @Deprecated
     private final Path persistentDataPath;
 
+    @Getter
+    @Builder.Default
+    private final boolean secondaryIndexesDisabled = false;
+
     /**
      * Capture options like stream tags, backup restore, log replication at Table level
      */
+    @Getter
     private final CorfuOptions.SchemaOptions schemaOptions;
-
-    public CorfuOptions.SchemaOptions getSchemaOptions() {
-        return schemaOptions;
-    }
 
     public Optional<Path> getPersistentDataPath() {
         return Optional.ofNullable(persistentDataPath);
@@ -44,8 +46,11 @@ public class TableOptions {
     public static <V extends Message> TableOptions fromProtoSchema(@Nonnull Class<V> vClass,
                                                                    TableOptions tableOptions)
             throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
-        TableOptions.TableOptionsBuilder tableOptionsBuilder =
-                new TableOptions.TableOptionsBuilder();
+        TableOptions.TableOptionsBuilder tableOptionsBuilder = TableOptions.builder();
+        if (tableOptions != null) {
+            tableOptionsBuilder = tableOptions.toBuilder();
+        }
+
         if (vClass != null) { // some test cases pass vClass as null to verify behavior
             V defaultValueMessage = (V) vClass.getMethod("getDefaultInstance").invoke(null);
             tableOptionsBuilder.schemaOptions(defaultValueMessage
@@ -53,9 +58,7 @@ public class TableOptions {
                     .getOptions()
                     .getExtension(CorfuOptions.tableSchema));
         }
-        if (tableOptions != null && tableOptions.getPersistentDataPath().isPresent()) {
-            tableOptionsBuilder.persistentDataPath((Path) tableOptions.getPersistentDataPath().get());
-        }
+
         return tableOptionsBuilder.build();
     }
 

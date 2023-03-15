@@ -1,8 +1,6 @@
 package org.corfudb.integration;
 
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal;
 import org.corfudb.infrastructure.logreplication.proto.Sample.IntValue;
 import org.corfudb.infrastructure.logreplication.proto.Sample.IntValueTag;
 import org.corfudb.infrastructure.logreplication.proto.Sample.Metadata;
@@ -11,6 +9,8 @@ import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicat
 import org.corfudb.runtime.CorfuStoreMetadata.TableDescriptors;
 import org.corfudb.runtime.CorfuStoreMetadata.TableMetadata;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
+import org.corfudb.runtime.LogReplication.ReplicationStatusKey;
+import org.corfudb.runtime.LogReplication.ReplicationStatusVal;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
@@ -201,14 +201,14 @@ public class LogReplicationSinkWriterIT extends LogReplicationAbstractIT {
     private void openLogReplicationStatusTable() throws Exception {
         corfuStoreActive.openTable(LogReplicationMetadataManager.NAMESPACE,
                 REPLICATION_STATUS_TABLE,
-                LogReplicationMetadata.ReplicationStatusKey.class,
+                ReplicationStatusKey.class,
                 ReplicationStatusVal.class,
                 null,
                 TableOptions.fromProtoSchema(ReplicationStatusVal.class));
 
         corfuStoreStandby.openTable(LogReplicationMetadataManager.NAMESPACE,
                 REPLICATION_STATUS_TABLE,
-                LogReplicationMetadata.ReplicationStatusKey.class,
+                ReplicationStatusKey.class,
                 ReplicationStatusVal.class,
                 null,
                 TableOptions.fromProtoSchema(ReplicationStatusVal.class));

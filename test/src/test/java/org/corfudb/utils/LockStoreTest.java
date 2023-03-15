@@ -30,7 +30,7 @@ public class LockStoreTest extends AbstractViewTest {
     private static final int TASK_EXECUTE_TIMEOUT = 20;
     private static final String LOCK_TABLE_NAME = "LOCK";
     private static final int LOCK_LEASE_DURATION_LONG_SECONDS = 300;
-    private static final int DELAY_MS = 10000;
+    private static final int DELAY_MS = 10;
     private boolean acquired1 = false;
     private boolean acquired2 = false;
     private boolean renewed1 = false;
@@ -257,13 +257,12 @@ public class LockStoreTest extends AbstractViewTest {
             Assert.assertTrue(expiredLockIds1.isEmpty());
             Assert.assertTrue(expiredLockIds2.isEmpty());
 
-            // Wait till the duration of the lock lease expiry + an
+            // Wait till the duration of the lock lease expiry(TIMEOUT_SHORT) + an
             // additional delay of 10ms.
-            // LockStore detects a lock as expired if (the duration between
+            // This is because LockStore detects a lock as expired if (the duration between
             // the time it was first read - lease expiry time) is before the
             // current system clock time.  So adding an arbitrary 10ms so
-            // that the lock is detected as
-            // expired.
+            // that the lock is detected as expired.
             Thread.sleep(PARAMETERS.TIMEOUT_SHORT.toMillis() + DELAY_MS);
 
             // Filter again and verify that the expired lock is returned

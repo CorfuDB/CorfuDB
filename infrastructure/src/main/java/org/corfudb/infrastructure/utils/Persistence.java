@@ -11,7 +11,11 @@ import java.nio.file.Paths;
  * Created by maithem on 4/4/18.
  */
 
-public class Persistence {
+public final class Persistence {
+
+    private Persistence() {
+
+    }
 
     /**
      * This method fsyncs a directory. It should be called whenever
