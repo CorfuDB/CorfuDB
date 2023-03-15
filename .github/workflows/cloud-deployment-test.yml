@@ -30,6 +30,17 @@ jobs:
         with:
           repository: 'CorfuDB/corfudb-cloud'
 
+      - name: install helm package manager
+        working-directory: ./cloud/corfu
+        run: |
+          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+          chmod 700 get_helm.sh
+          ./get_helm.sh
+          
+          helm repo add jetstack https://charts.jetstack.io
+          helm repo update
+
       - name: Create k3d Cluster
         uses: AbsaOSS/k3d-action@v2
         with:
@@ -39,14 +50,9 @@ jobs:
             --agents 2
             --k3s-arg "--no-deploy=traefik,servicelb,metrics-server@server:*"
 
-      - name: helm install
+      - name: install corfu package
         working-directory: ./cloud/corfu
         run: |
-          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-          curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
-          chmod 700 get_helm.sh
-          ./get_helm.sh
-          
           helm install cert-manager jetstack/cert-manager --namespace cert-manager --create-namespace --version v1.8.0 --set installCRDs=true
           helm install corfu corfu --set persistence.enabled=true --set global.replicas=3 
           
