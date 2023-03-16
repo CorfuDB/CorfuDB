@@ -35,9 +35,10 @@ import static org.corfudb.runtime.LogReplicationUtils.REPLICATION_STATUS_TABLE;
 @Slf4j
 public abstract class LogReplicationListener implements StreamListener {
 
-    // Indicates if this listener was subscribed when snapshot sync was in progress
+    // Indicates that no full sync on client tables was performed during subscription as an LR snapshot sync was
+    // ongoing.
     @Getter
-    private final AtomicBoolean snapshotSyncInProgressOnSubscription = new AtomicBoolean(false);
+    private final AtomicBoolean subscriptionIncomplete = new AtomicBoolean(false);
 
     // This variable tracks the status of snapshot sync only after snapshotSyncInProgressOnSubscription becomes false
     private final AtomicBoolean snapshotSyncInProgress = new AtomicBoolean(false);
@@ -48,16 +49,16 @@ public abstract class LogReplicationListener implements StreamListener {
     private final List<String> tablesOfInterest;
     private final int bufferSize;
 
-    public LogReplicationListener(CorfuStore corfuStore, @Nonnull String namespace, @Nonnull String streamTag,
-                                  @Nonnull List<String> tablesOfInterest) {
-        this(corfuStore, namespace, streamTag, tablesOfInterest, 0);
-    }
-
-    public LogReplicationListener(CorfuStore corfuStore, @Nonnull String namespace, @Nonnull String streamTag,
-                                  int bufferSize) {
-        this(corfuStore, namespace, streamTag, null, bufferSize);
-    }
-
+    /**
+     * Special LogReplication listener which a client creates to receive ordered updates for replicated data.
+     * @param corfuStore Corfu Store used on the client
+     * @param namespace namespace of the client's tables
+     * @param streamTag stream tag associated with the tables from which updates must be received
+     * @param tablesOfInterest tables from which updates must be received - null if updates from all tables with
+     *                         streamTag must be received
+     * @param bufferSize maximum size of buffer for updates yet to be processed - 0 if default listener buffer size
+     *                   should be used
+     */
     public LogReplicationListener(CorfuStore corfuStore, @Nonnull String namespace, @Nonnull String streamTag,
                                   List<String> tablesOfInterest, int bufferSize) {
         this.corfuStore = corfuStore;
@@ -74,10 +75,6 @@ public abstract class LogReplicationListener implements StreamListener {
      */
     public final void onNext(CorfuStreamEntries results) {
 
-        // A corfu update can/may have multiple updates belonging to different streams.  This callback will return
-        // those updates as a list grouped by their Stream UUIDs.
-        // Note: there is no order guarantee within the transaction boundaries.
-
         Set<String> tableNames =
                 results.getEntries().keySet().stream().map(schema -> schema.getTableName()).collect(Collectors.toSet());
 
@@ -89,8 +86,9 @@ public abstract class LogReplicationListener implements StreamListener {
         }
 
         // Data Updates
-        if (snapshotSyncInProgressOnSubscription.get()) {
-            // If the listener started when snapshot sync was already ongoing, ignore all data updates until it ends
+        if (subscriptionIncomplete.get()) {
+            // If the listener started when snapshot sync was ongoing, ignore all data updates until it ends.  When
+            // it ends, the client will perform a full sync and build a consistent state containing these updates.
             return;
         }
 
@@ -114,22 +112,20 @@ public abstract class LogReplicationListener implements StreamListener {
             if (entry.getOperation() == CorfuStreamEntry.OperationType.UPDATE) {
                 ReplicationStatusVal status = (ReplicationStatusVal)entry.getPayload();
 
-                if (snapshotSyncInProgressOnSubscription.get() && status.getDataConsistent() == true) {
-                    snapshotSyncInProgressOnSubscription.set(false);
-                    corfuStore.unsubscribeListener(this);
-
-                    if (bufferSize == 0) {
-                        corfuStore.subscribeLogReplicationListener(this, namespace, streamTag,
-                                tablesOfInterest);
-                    } else if (tablesOfInterest == null) {
-                        corfuStore.subscribeLogReplicationListener(this, namespace, streamTag, bufferSize);
-                    } else {
-                        corfuStore.subscribeLogReplicationListener(this, namespace, streamTag, tablesOfInterest,
-                                bufferSize);
+                // If subscription was incomplete, we need to process this update only if the snapshot sync ended.
+                if (subscriptionIncomplete.get()) {
+                    if (status.getDataConsistent()) {
+                        // Snapshot sync which was ongoing when the listener was subscribed has ended.  Unsubscribe and
+                        // resubscribe it now so that the client can perform an initial full sync on its tables and get
+                        // subsequent updates.
+                        resubscribe();
+                        subscriptionIncomplete.set(false);
                     }
                     return;
                 }
 
+                // Process replication status updates in the steady state, i.e., client full sync was already
+                // complete during subscription.
                 if (!status.getDataConsistent()) {
                     snapshotSyncInProgress.set(true);
                     onSnapshotSyncStart();
@@ -138,6 +134,21 @@ public abstract class LogReplicationListener implements StreamListener {
                     onSnapshotSyncComplete();
                 }
             }
+        }
+    }
+
+    private void resubscribe() {
+        corfuStore.unsubscribeListener(this);
+
+        if (bufferSize == 0 && tablesOfInterest == null) {
+            corfuStore.subscribeLogReplicationListener(this, namespace, streamTag);
+        } else if (bufferSize == 0) {
+            corfuStore.subscribeLogReplicationListener(this, namespace, streamTag, tablesOfInterest);
+        } else if (tablesOfInterest == null) {
+            corfuStore.subscribeLogReplicationListener(this, namespace, streamTag, bufferSize);
+        } else {
+            corfuStore.subscribeLogReplicationListener(this, namespace, streamTag, tablesOfInterest,
+                    bufferSize);
         }
     }
 
