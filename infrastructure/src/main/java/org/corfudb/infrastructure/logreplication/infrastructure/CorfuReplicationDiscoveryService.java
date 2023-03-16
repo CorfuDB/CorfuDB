@@ -375,6 +375,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                     // This runtime is used for the LockStore, Metadata Manager and Log Entry Sync, which don't rely
                     // heavily on the cache (hence can be smaller)
                     .maxCacheEntries(serverContext.getLogReplicationCacheMaxSize()/2)
+                    .maxWriteSize(serverContext.getMaxWriteSize())
                     .build())
                     .parseConfigurationString(localCorfuEndpoint).connect();
         }
@@ -437,7 +438,8 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                     mergeOnlyStreams,
                     serverContext.getLogReplicationMaxNumMsgPerBatch(),
                     serverContext.getLogReplicationMaxDataMessageSize(),
-                    serverContext.getLogReplicationCacheMaxSize());
+                    serverContext.getLogReplicationCacheMaxSize(),
+                    serverContext.getMaxSnapshotEntriesApplied());
         } catch (Throwable t) {
             log.error("Exception when fetching the Replication Config", t);
             throw t;

@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure;
 
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_MAX_NUM_MSG_PER_BATCH;
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED;
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_DATA_MSG_SIZE_SUPPORTED;
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_CACHE_NUM_ENTRIES;
 
@@ -265,6 +266,20 @@ public class ServerContext implements AutoCloseable {
     public int getLogReplicationCacheMaxSize() {
         String val = getServerConfig(String.class, "--lrCacheSize");
         return val == null ? MAX_CACHE_NUM_ENTRIES : Integer.parseInt(val);
+    }
+
+    /**
+     * Get the max write size of a transaction for LR's runtime.
+     * @return max write size of a transaction
+     */
+    public int getMaxWriteSize() {
+        String val = getServerConfig(String.class, "--max-write-size");
+        return val == null ? Integer.MAX_VALUE : Integer.parseInt(val);
+    }
+
+    public int getMaxSnapshotEntriesApplied() {
+        String val = getServerConfig(String.class, "--max-snapshot-entries-applied");
+        return val == null ? DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED : Integer.parseInt(val);
     }
 
     /**

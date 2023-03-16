@@ -94,11 +94,6 @@ public class LogReplicationSinkManager implements DataReceiver {
 
     private final String pluginConfigFilePath;
 
-    // true indicates data is consistent on the local(standby) cluster, false indicates it is not.
-    // In Snapshot Sync, if the StreamsSnapshotWriter is in the apply phase, the data is not yet
-    // consistent and cannot be read by applications.  Data is always consistent during Log Entry Sync
-    private final AtomicBoolean dataConsistent = new AtomicBoolean(false);
-
     private ExecutorService applyExecutor;
 
     @Getter
@@ -123,6 +118,7 @@ public class LogReplicationSinkManager implements DataReceiver {
                 .ksPasswordFile((String) context.getServerConfig().get("--keystore-password-file"))
                 .tlsEnabled((Boolean) context.getServerConfig().get("--enable-tls"))
                 .maxCacheEntries(config.getMaxCacheSize())
+                .maxWriteSize(context.getMaxWriteSize())
                 .build())
                 .parseConfigurationString(localCorfuEndpoint).connect();
         this.pluginConfigFilePath = context.getPluginConfigFilePath();
@@ -175,14 +171,13 @@ public class LogReplicationSinkManager implements DataReceiver {
         try {
             IRetry.build(IntervalRetry.class, () -> {
                 try {
-                    dataConsistent.set(isDataConsistent);
                     logReplicationMetadataManager.setDataConsistentOnStandby(isDataConsistent);
                 } catch (TransactionAbortedException tae) {
                     log.error("Error while attempting to setDataConsistent in SinkManager's init", tae);
                     throw new RetryNeededException();
                 }
 
-                log.debug("setDataConsistentWithRetry succeeds, current value is {}", dataConsistent.get());
+                log.debug("setDataConsistentWithRetry succeeds, current value is {}", isDataConsistent);
 
                 return null;
             }).run();
@@ -399,8 +394,6 @@ public class LogReplicationSinkManager implements DataReceiver {
         // Signal start of snapshot sync to the writer, so data can be cleared (on old snapshot syncs)
         snapshotWriter.reset(topologyId, timestamp);
 
-        setDataConsistentWithRetry(false);
-
         // Update lastTransferDone with the new snapshot transfer timestamp.
         baseSnapshotTimestamp = entry.getMetadata().getSnapshotTimestamp();
 
@@ -458,10 +451,6 @@ public class LogReplicationSinkManager implements DataReceiver {
                 break;
             case SNAPSHOT_END:
                 if (snapshotWriter.getPhase() != StreamsSnapshotWriter.Phase.APPLY_PHASE) {
-                    // Once snapshot transfer has completed, clear any streams that have been locally written
-                    // (aimed for replication) but yet were not replicated from active to standby (empty on active)
-                    // Note: these streams must be cleared or we could pollute the state of the DB
-                    snapshotWriter.clearLocalStreams();
                     completeSnapshotTransfer(entry);
                     startSnapshotApplyAsync(entry);
                 }
@@ -481,6 +470,10 @@ public class LogReplicationSinkManager implements DataReceiver {
 
     private synchronized void startSnapshotApply(LogReplication.LogReplicationEntryMsg entry) {
         log.debug("Entry Start Snapshot Sync Apply, id={}", entry.getMetadata().getSyncRequestId());
+        // set data_consistent as false
+        setDataConsistentWithRetry(false);
+
+        snapshotWriter.clearLocalStreams();
         snapshotWriter.startSnapshotSyncApply();
         completeSnapshotApply(entry);
         ongoingApply.set(false);

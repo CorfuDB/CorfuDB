@@ -49,7 +49,9 @@ public class CorfuInterClusterReplicationServer implements Runnable {
                     + "\tlog_replication_server (-l <path>|-m) [-nsN] [-a <address>|-q <interface-name>] "
                     + "[--snapshot-batch=<batch-size>] "
                     + "[--max-replication-data-message-size=<msg-size>] "
+                    + "[--max-write-size=<max-write-size>] "
                     + "[--lock-lease=<lease-duration>]"
+                    + "[--max-snapshot-entries-applied=<max-snapshot-entries-applied>]"
                     + "[-c <ratio>] [-d <level>] [-p <seconds>] "
                     + "[--lrCacheSize=<cache-num-entries>]"
                     + "[--plugin=<plugin-config-file-path>]"
@@ -174,10 +176,15 @@ public class CorfuInterClusterReplicationServer implements Runnable {
                     + " --lrCacheSize=<cache-num-entries>"
                     + "              Cache max number of entries.\n                              "
                     + " --max-replication-data-message-size=<msg-size>                           "
-                    + "              The max size of replication data message in bytes.\n   "
+                    + "              Max size of replication data message in bytes. \n   "
+                    + " --max-write-size=<max-write-size>"
+                    + "              Max size of a write in a single corfu transaction.  Integer.MAX_VALUE by default\n "
                     + "                                                                          "
                     + " --lock-lease=<lease-duration>                                            "
                     + "              Lock lease duration in seconds\n                            "
+                    + " --max-snapshot-entries-applied=<max-snapshot-entries-applied>            "
+                    + "              Max number of entries applied in a snapshot transaction.  50 by default."
+                    + "              For special tables only\n.                                  "
                     + " -h, --help                                                               "
                     + "              Show this screen\n"
                     + " --version                                                                "
@@ -293,7 +300,6 @@ public class CorfuInterClusterReplicationServer implements Runnable {
             // Address is specified by the user.
             opts.put("--bind-to-all-interfaces", false);
         }
-
         return new ServerContext(opts);
     }
 

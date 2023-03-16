@@ -332,6 +332,19 @@ public class AbstractIT extends AbstractCorfuTest {
                 .runServer();
     }
 
+    public Process runReplicationServerCustomMaxWriteSize(int port,
+                                                          String pluginConfigFilePath, int maxWriteSize,
+                                                          int maxEntriesApplied) throws IOException {
+        return new CorfuReplicationServerRunner()
+                .setHost(DEFAULT_HOST)
+                .setPort(port)
+                .setPluginConfigFilePath(pluginConfigFilePath)
+                .setMsg_size(MSG_SIZE)
+                .setMaxWriteSize(maxWriteSize)
+                .setMaxSnapshotEntriesApplied(maxEntriesApplied)
+                .runServer();
+    }
+
     public Process runDefaultServer() throws IOException {
         return new CorfuServerRunner()
                 .setHost(DEFAULT_HOST)
@@ -548,6 +561,8 @@ public class AbstractIT extends AbstractCorfuTest {
         private String logPath = null;
         private int msg_size = 0;
         private Integer lockLeaseDuration;
+        private int maxWriteSize = 0;
+        private int maxSnapshotEntriesApplied;
 
         /**
          * Create a command line string according to the properties set for a Corfu Server
@@ -594,6 +609,14 @@ public class AbstractIT extends AbstractCorfuTest {
 
             if (lockLeaseDuration != null) {
                 command.append(" --lock-lease=").append(lockLeaseDuration);
+            }
+
+            if (maxWriteSize != 0) {
+                command.append(" --max-write-size=").append(maxWriteSize);
+            }
+
+            if (maxSnapshotEntriesApplied != 0) {
+                command.append(" --max-snapshot-entries-applied=").append(maxSnapshotEntriesApplied);
             }
 
             command.append(" -d ").append(logLevel).append(" ")

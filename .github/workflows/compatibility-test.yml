@@ -38,11 +38,14 @@ jobs:
         run: ./mvnw clean install -DskipTests -Pcompatibility -Dmaven.javadoc.skip=true -T 1C
 
       - name: Pull docker image built from master parent commit
-        run: docker pull corfudb/corfu-server:0.3.1-SNAPSHOT
+        run: |
+          CORFU_VERSION=$(./mvnw -q -Dexec.executable=echo -Dexec.args='${project.version}' --non-recursive exec:exec)
+          docker pull corfudb/corfu-server:"$CORFU_VERSION"
 
       - uses: actions/checkout@v2
         with:
           repository: 'CorfuDB/corfudb-cloud'
+          ref: "corfudb-cloud-0.3.2"
 
       - name: Build universe-core
         working-directory: ./universe
