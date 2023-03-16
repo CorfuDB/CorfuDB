@@ -49,11 +49,6 @@ public class CorfuStore {
     private final CorfuStoreMetrics corfuStoreMetrics;
 
     /**
-     * Helper class for Log Replication-specific workflows
-     */
-    LogReplicationUtils logReplicationUtils;
-
-    /**
      * Creates a new CorfuStore.
      *
      * @param runtime         Connected instance of the Corfu Runtime.
@@ -399,6 +394,11 @@ public class CorfuStore {
         subscribeListener(streamListener, namespace, streamTag, tablesOfInterest, timestamp);
     }
 
+    public void subscribeLogReplicationListener(@Nonnull LogReplicationListener streamListener,
+                                                @Nonnull String namespace, @Nonnull String streamTag) {
+        subscribeLogReplicationListener(streamListener, namespace, streamTag, getTablesOfInterest(namespace, streamTag));
+    }
+
     /**
      * Subscription API exclusively for Log Replicator(LR).  It is used for subscribing to transaction updates across
      * LR's metadata table(ReplicationStatus) in the CorfuSystem namespace and application-specific tables containing
@@ -419,10 +419,7 @@ public class CorfuStore {
                                                   @Nonnull List<String> tablesOfInterest) {
         int uninitializedBufferSize = 0;
 
-        if (logReplicationUtils == null) {
-            logReplicationUtils = new LogReplicationUtils();
-        }
-        logReplicationUtils.subscribe(streamListener, namespace, streamTag, tablesOfInterest, uninitializedBufferSize,
+        LogReplicationUtils.subscribe(streamListener, namespace, streamTag, tablesOfInterest, uninitializedBufferSize,
                 this);
     }
 
@@ -444,10 +441,7 @@ public class CorfuStore {
     public void subscribeLogReplicationListener(@Nonnull LogReplicationListener streamListener,
                                                   @Nonnull String namespace, @Nonnull String streamTag,
                                                   @Nonnull List<String> tablesOfInterest, int bufferSize) {
-        if (logReplicationUtils == null) {
-            logReplicationUtils = new LogReplicationUtils();
-        }
-        logReplicationUtils.subscribe(streamListener, namespace, streamTag, tablesOfInterest, bufferSize, this);
+        LogReplicationUtils.subscribe(streamListener, namespace, streamTag, tablesOfInterest, bufferSize, this);
     }
 
     /**

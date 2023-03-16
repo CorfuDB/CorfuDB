@@ -54,9 +54,10 @@ public class LogReplicationListenerIT extends AbstractIT {
     // Regular(non-LR) listener for the data table
     private TestListener listener;
 
-
     Table<SampleSchema.Uuid, SampleSchema.SampleTableAMsg, SampleSchema.Uuid> userDataTable;
     Table<ReplicationStatusKey, ReplicationStatusVal, Message> replicationStatusTable;
+
+    private int uninitializedBufferSize = 0;
 
     public LogReplicationListenerIT() {
         corfuSingleNodeHost = PROPERTIES.getProperty("corfuSingleNodeHost");
@@ -103,7 +104,8 @@ public class LogReplicationListenerIT extends AbstractIT {
 
         final int numUpdates = 10;
         CountDownLatch countDownLatch = new CountDownLatch(numUpdates);
-        lrListener = new LRTestListener(store, namespace, userTag, Arrays.asList(userTableName), countDownLatch);
+        lrListener = new LRTestListener(store, namespace, userTag, Arrays.asList(userTableName),
+            uninitializedBufferSize, countDownLatch);
 
         // Subscribe the listener
         store.subscribeLogReplicationListener(lrListener, namespace, userTag, Arrays.asList(userTableName));
@@ -164,7 +166,8 @@ public class LogReplicationListenerIT extends AbstractIT {
         final int numStreamingUpdates = 1;
         CountDownLatch countDownLatch = new CountDownLatch(numStreamingUpdates);
 
-        lrListener = new LRTestListener(store, namespace, userTag, Arrays.asList(userTableName), countDownLatch);
+        lrListener = new LRTestListener(store, namespace, userTag, Arrays.asList(userTableName),
+                uninitializedBufferSize, countDownLatch);
         store.subscribeLogReplicationListener(lrListener, namespace, userTag, Arrays.asList(userTableName));
 
         // End snapshot sync if it had been requested
@@ -215,7 +218,7 @@ public class LogReplicationListenerIT extends AbstractIT {
         final int numUpdates = 50;
 
         CountDownLatch countDownLatch = new CountDownLatch(numUpdates);
-        lrListener = new LRTestListener(store, namespace, userTag, bufferSize, countDownLatch);
+        lrListener = new LRTestListener(store, namespace, userTag, null, bufferSize, countDownLatch);
 
         // Subscribe a listener with a buffer size of 10
         store.subscribeLogReplicationListener(lrListener, namespace, userTag, bufferSize);
@@ -262,7 +265,8 @@ public class LogReplicationListenerIT extends AbstractIT {
         final int numExpectedStreamingUpdates = numIterations * numWritesToDataTable;
 
         CountDownLatch countDownLatch = new CountDownLatch(numExpectedStreamingUpdates);
-        lrListener = new LRTestListener(store, namespace, userTag, Arrays.asList(userTableName), countDownLatch);
+        lrListener = new LRTestListener(store, namespace, userTag, Arrays.asList(userTableName),
+                uninitializedBufferSize, countDownLatch);
         store.subscribeLogReplicationListener(lrListener, namespace, userTag, Arrays.asList(userTableName));
 
         log.info("Write data concurrently on both tables");
@@ -311,7 +315,8 @@ public class LogReplicationListenerIT extends AbstractIT {
         final int newUpdates = 5;
         final int totalUpdates = numUpdates + newUpdates;
         CountDownLatch countDownLatch = new CountDownLatch(totalUpdates);
-        lrListener = new LRTestListener(store, namespace, userTag, Arrays.asList(userTableName), countDownLatch);
+        lrListener = new LRTestListener(store, namespace, userTag, Arrays.asList(userTableName),
+                uninitializedBufferSize, countDownLatch);
 
         // Subscribe the listener at the obtained timestamp
         store.subscribeLogReplicationListener(lrListener, namespace, userTag, Arrays.asList(userTableName));
@@ -351,7 +356,8 @@ public class LogReplicationListenerIT extends AbstractIT {
         initializeCorfu();
         openTables();
 
-        lrListener = new LRTestListener(store, namespace, userTag, Arrays.asList(userTableName), new CountDownLatch(0));
+        lrListener = new LRTestListener(store, namespace, userTag, Arrays.asList(userTableName),
+                uninitializedBufferSize, new CountDownLatch(0));
         store.subscribeLogReplicationListener(lrListener, namespace, userTag, Arrays.asList(userTableName));
 
         // Write to a redundant table to which the listener has not subscribed
@@ -379,7 +385,8 @@ public class LogReplicationListenerIT extends AbstractIT {
         listener = new TestListener(countDownLatch);
 
         CountDownLatch lrCountDownLatch = new CountDownLatch(numUpdates);
-        lrListener = new LRTestListener(store, namespace, userTag, Arrays.asList(userTableName), lrCountDownLatch);
+        lrListener = new LRTestListener(store, namespace, userTag, Arrays.asList(userTableName),
+                uninitializedBufferSize, lrCountDownLatch);
 
         store.subscribeListener(listener, namespace, userTag, Arrays.asList(userTableName));
         store.subscribeLogReplicationListener(lrListener, namespace, userTag, Arrays.asList(userTableName));
@@ -613,14 +620,8 @@ public class LogReplicationListenerIT extends AbstractIT {
                 existingEntries = new ArrayList<>();
 
         LRTestListener(CorfuStore corfuStore, String namespace, String streamTag, List<String> tablesOfInterest,
-                       CountDownLatch countDownLatch) {
-            super(corfuStore, namespace, streamTag, tablesOfInterest);
-            this.countDownLatch = countDownLatch;
-        }
-
-        LRTestListener(CorfuStore corfuStore, String namespace, String streamTag, int bufferSize,
-                       CountDownLatch countDownLatch) {
-            super(corfuStore, namespace, streamTag, bufferSize);
+                       int bufferSize, CountDownLatch countDownLatch) {
+            super(corfuStore, namespace, streamTag, tablesOfInterest, bufferSize);
             this.countDownLatch = countDownLatch;
         }
 
