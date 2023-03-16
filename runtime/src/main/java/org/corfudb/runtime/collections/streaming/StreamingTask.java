@@ -65,6 +65,12 @@ public class StreamingTask<K extends Message, V extends Message, M extends Messa
 
     private volatile Throwable error;
 
+    private final String streamTag;
+
+    private long listenerStartTime;
+
+    private static final long timeToTriggerExceptionSeconds = 600;
+
     public StreamingTask(CorfuRuntime runtime, ExecutorService workerPool, String namespace, String streamTag,
                          StreamListener listener,
                          List<String> tablesOfInterest,
@@ -92,6 +98,12 @@ public class StreamingTask<K extends Message, V extends Message, M extends Messa
                             return new TableSchema<>(tName, t.getKeyClass(), t.getValueClass(), t.getMetadataClass());
                         }));
         this.status = new AtomicReference<>(StreamStatus.RUNNABLE);
+        this.streamTag = streamTag;
+        this.listenerStartTime = System.currentTimeMillis();
+
+        if (Objects.equals(streamTag, "worker_framework")) {
+            log.info("WorkerCorfuStreamListener started.");
+        }
     }
 
     public StreamStatus getStatus() {
@@ -157,6 +169,18 @@ public class StreamingTask<K extends Message, V extends Message, M extends Messa
         Preconditions.checkState(status.get() == StreamStatus.SYNCING);
         Preconditions.checkState(stream.hasNext());
         ILogData logData = stream.next();
+
+        if (Objects.equals(streamTag, "worker_framework")) {
+            long timeSinceStartSeconds = (System.currentTimeMillis() - listenerStartTime) / 1000;
+            log.info("WorkerCorfuStreamListener: onNext : time since listener start is {} seconds", timeSinceStartSeconds);
+            if (timeSinceStartSeconds > timeToTriggerExceptionSeconds) {
+                listenerStartTime = System.currentTimeMillis();
+                log.info("WorkerCorfuStreamListener: Reset listenerStartTime to {}", listenerStartTime);
+                log.info("WorkerCorfuStreamListener: Triggering onError");
+                throw new TrimmedException();
+            }
+        }
+
         Optional<CorfuStreamEntries> streamEntries = transform(logData);
         log.debug("producing {}@{} {} on {}", logData.getEpoch(), logData.getGlobalAddress(), logData.getType(), listenerId);
 
