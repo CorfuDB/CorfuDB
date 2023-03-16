@@ -35,6 +35,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArraySet;
+import java.util.stream.Collectors;
 
 import static org.corfudb.runtime.view.ObjectsView.DEFAULT_LOGICAL_GROUP_CLIENT;
 
@@ -154,14 +155,14 @@ public class SessionManager {
         //  hashcode in all TopologyDescriptor and all its members.  It is being taken care of in a subsequent PR
         //  which contains changes to the Connection Model.
 
-        Set<String> newSources = newTopology.getRemoteSourceClusters().keySet();
-        Set<String> currentSources = topology.getRemoteSourceClusters().keySet();
-        Set<String> sourcesToRemove = Sets.difference(currentSources, newSources);
+        Set<String> newRemoteSources = newTopology.getRemoteSourceClusters().keySet();
+        Set<String> currentRemoteSources = topology.getRemoteSourceClusters().keySet();
+        Set<String> remoteSourcesToRemove = Sets.difference(currentRemoteSources, newRemoteSources);
+        Set<String> remoteSourceClustersUnchanged = Sets.intersection(newRemoteSources, currentRemoteSources);
 
-        Set<String> newSinks = newTopology.getRemoteSinkClusters().keySet();
-        Set<String> currentSinks = topology.getRemoteSinkClusters().keySet();
-        Set<String> sinksToRemove = Sets.difference(currentSinks, newSinks);
-        Set<String> sinkClustersUnchanged = Sets.intersection(newSinks, currentSinks);
+        Set<String> newRemoteSinks = newTopology.getRemoteSinkClusters().keySet();
+        Set<String> currentRemoteSinks = topology.getRemoteSinkClusters().keySet();
+        Set<String> remoteSinksToRemove = Sets.difference(currentRemoteSinks, newRemoteSinks);
 
         Set<LogReplicationSession> sessionsToRemove = new HashSet<>();
         Set<LogReplicationSession> sessionsUnchanged = new HashSet<>();
@@ -170,16 +171,18 @@ public class SessionManager {
             IRetry.build(IntervalRetry.class, () -> {
                 try (TxnContext txn = corfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
                     sessions.forEach(session -> {
-                        if (sinksToRemove.contains(session.getSinkClusterId()) ||
-                                sourcesToRemove.contains(session.getSourceClusterId())) {
+                        if (remoteSinksToRemove.contains(session.getSinkClusterId()) ||
+                                remoteSourcesToRemove.contains(session.getSourceClusterId())) {
                             sessionsToRemove.add(session);
                             metadataManager.removeSession(txn, session);
-                        }
-
-                        if(sinkClustersUnchanged.contains(session.getSinkClusterId())) {
+                        } else {
                             sessionsUnchanged.add(session);
-                            metadataManager.updateReplicationMetadataField(txn, session,
-                                ReplicationMetadata.TOPOLOGYCONFIGID_FIELD_NUMBER, newTopology.getTopologyConfigId());
+
+                            //update topologyId for sink sessions
+                            if (remoteSourceClustersUnchanged.contains(session.getSourceClusterId())) {
+                                metadataManager.updateReplicationMetadataField(txn, session,
+                                        ReplicationMetadata.TOPOLOGYCONFIGID_FIELD_NUMBER, newTopology.getTopologyConfigId());
+                            }
                         }
                     });
                     txn.commit();
@@ -194,7 +197,7 @@ public class SessionManager {
 
                 stopReplication(sessionsToRemove);
 
-                updateReplicationParameters(sessionsUnchanged);
+                updateReplicationParameters(Sets.intersection(sessionsUnchanged, outgoingSessions));
                 createSessions();
                 return null;
             }).run();
@@ -209,7 +212,7 @@ public class SessionManager {
             return;
         }
         for (LogReplicationSession session : sessionsUnchanged) {
-            ClusterDescriptor cluster = topology.getRemoteSinkClusters().get(session.getSinkClusterId());
+            ClusterDescriptor cluster = topology.getRemoteSinkClusters().get(session.getSourceClusterId());
             replicationManager.refreshRuntime(session, cluster, topology.getTopologyConfigId());
         }
     }
@@ -396,7 +399,7 @@ public class SessionManager {
 
     private void stopReplication(Set<LogReplicationSession> sessions) {
         if (replicationManager != null) {
-            replicationManager.stop(sessions);
+            replicationManager.stop(sessions.stream().filter(outgoingSessions::contains).collect(Collectors.toSet()));
         }
 
         sessions.forEach(session -> {
