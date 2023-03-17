@@ -2,6 +2,7 @@ package org.corfudb.integration;
 
 import com.google.protobuf.Message;
 import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
@@ -57,8 +58,6 @@ public class LogReplicationListenerIT extends AbstractIT {
     Table<SampleSchema.Uuid, SampleSchema.SampleTableAMsg, SampleSchema.Uuid> userDataTable;
     Table<ReplicationStatusKey, ReplicationStatusVal, Message> replicationStatusTable;
 
-    private int uninitializedBufferSize = 0;
-
     public LogReplicationListenerIT() {
         corfuSingleNodeHost = PROPERTIES.getProperty("corfuSingleNodeHost");
         corfuStringNodePort = Integer.valueOf(PROPERTIES.getProperty("corfuSingleNodePort"));
@@ -107,7 +106,7 @@ public class LogReplicationListenerIT extends AbstractIT {
         lrListener = new LRTestListener(store, namespace, countDownLatch);
 
         // Subscribe the listener
-        store.subscribeLogReplicationListener(lrListener, namespace, userTag, Arrays.asList(userTableName));
+        store.subscribeLogReplicationListener(lrListener, namespace, userTag);
 
         // End snapshot sync if it had been requested
         if (startInSnapshotSync) {
@@ -117,9 +116,9 @@ public class LogReplicationListenerIT extends AbstractIT {
         // Write numUpdates records in the data table
         writeToDataTable(numUpdates, 0);
 
-        // Wait for the data to arrive.  Since subscription is asynchronous, streaming updates may be lesser than
-        // numUpdates.  But the final number of entries seen by mergeTableOnSubscription() + streaming updates must
-        // be equal to numUpdates
+        // Wait for the data to arrive.  Since performFullSync() is executed later if a snapshot sync is ongoing, the
+        // number of streaming updates in that case will be lesser.  But the final number of entries seen by
+        // performFullSync() + streaming updates must be equal to numUpdates
         countDownLatch.await();
 
         // If the test started when in log entry sync, performFullSync() should not find any existing data as no
@@ -165,8 +164,12 @@ public class LogReplicationListenerIT extends AbstractIT {
         final int numStreamingUpdates = 1;
         CountDownLatch countDownLatch = new CountDownLatch(numStreamingUpdates);
 
+        // As all updates are written in the same transaction, set this countdown latch to 1
+        CountDownLatch numTxLatch = new CountDownLatch(1);
+
         lrListener = new LRTestListener(store, namespace, countDownLatch);
-        store.subscribeLogReplicationListener(lrListener, namespace, userTag, Arrays.asList(userTableName));
+        lrListener.setNumTxLatch(numTxLatch);
+        store.subscribeLogReplicationListener(lrListener, namespace, userTag);
 
         // End snapshot sync if it had been requested
         if (startInSnapshotSync) {
@@ -176,6 +179,7 @@ public class LogReplicationListenerIT extends AbstractIT {
         writeToDataTableMultipleUpdatesInATx(numUpdates, 0);
 
         countDownLatch.await();
+        numTxLatch.await();
 
         // If the test started when in log entry sync, performFullSync() should not find any existing data as no
         // updates have been written prior to subscription.
@@ -264,7 +268,7 @@ public class LogReplicationListenerIT extends AbstractIT {
 
         CountDownLatch countDownLatch = new CountDownLatch(numExpectedStreamingUpdates);
         lrListener = new LRTestListener(store, namespace, countDownLatch);
-        store.subscribeLogReplicationListener(lrListener, namespace, userTag, Arrays.asList(userTableName));
+        store.subscribeLogReplicationListener(lrListener, namespace, userTag);
 
         log.info("Write data concurrently on both tables");
         writeDataAndToggleDataConsistentConcurrently(numIterations, numWritesToDataTable);
@@ -315,7 +319,7 @@ public class LogReplicationListenerIT extends AbstractIT {
         lrListener = new LRTestListener(store, namespace, countDownLatch);
 
         // Subscribe the listener at the obtained timestamp
-        store.subscribeLogReplicationListener(lrListener, namespace, userTag, Arrays.asList(userTableName));
+        store.subscribeLogReplicationListener(lrListener, namespace, userTag);
 
         // End snapshot sync if it had been requested
         if (startInSnapshotSync) {
@@ -353,7 +357,7 @@ public class LogReplicationListenerIT extends AbstractIT {
         openTables();
 
         lrListener = new LRTestListener(store, namespace, new CountDownLatch(0));
-        store.subscribeLogReplicationListener(lrListener, namespace, userTag, Arrays.asList(userTableName));
+        store.subscribeLogReplicationListener(lrListener, namespace, userTag);
 
         // Write to a redundant table to which the listener has not subscribed
         writeToNonSubscribedSystemTable();
@@ -383,7 +387,7 @@ public class LogReplicationListenerIT extends AbstractIT {
         lrListener = new LRTestListener(store, namespace, lrCountDownLatch);
 
         store.subscribeListener(listener, namespace, userTag, Arrays.asList(userTableName));
-        store.subscribeLogReplicationListener(lrListener, namespace, userTag, Arrays.asList(userTableName));
+        store.subscribeLogReplicationListener(lrListener, namespace, userTag);
 
         writeToDataTable(numUpdates, 0);
 
@@ -604,11 +608,17 @@ public class LogReplicationListenerIT extends AbstractIT {
     private class LRTestListener extends LogReplicationListener {
         private CountDownLatch countDownLatch;
 
+        // CountDown latch which checks the number of transactions received.
+        // Depending on the type of update, a single overridden method is invoked on the listener per update received
+        // in onNext().  So this latch can be counted down in each method.
+        @Setter
+        CountDownLatch numTxLatch = null;
+
         // Updates received through streaming
         @Getter
         private final LinkedList<CorfuStreamEntries> updates = new LinkedList<>();
 
-        // Entries discovered in mergeTableOnSubscription() before streaming updates are received
+        // Entries discovered in performFullSync() before streaming updates are received
         @Getter
         private final List<CorfuStoreEntry<SampleSchema.Uuid, SampleSchema.SampleTableAMsg, SampleSchema.Uuid>>
                 existingEntries = new ArrayList<>();
@@ -627,26 +637,29 @@ public class LogReplicationListenerIT extends AbstractIT {
         @Override
         protected void onSnapshotSyncStart() {
             log.info("Snapshot sync started");
+            countDownNumTxLatch();
         }
 
         @Override
         protected void onSnapshotSyncComplete() {
             log.info("Snapshot sync complete");
+            countDownNumTxLatch();
         }
 
         @Override
         protected void processUpdatesInSnapshotSync(CorfuStreamEntries results) {
-            log.info("Processing updates in snapshot sync.  Timestamp = {}", results.getTimestamp().getSequence());
+            log.info("Processing updates in snapshot sync.");
             updates.add(results);
             results.getEntries().forEach((key, val) -> countDownLatch.countDown());
-
+            countDownNumTxLatch();
         }
 
         @Override
         protected void processUpdatesInLogEntrySync(CorfuStreamEntries results) {
-            log.info("Processing updates in log entry sync.  Timestamp = {}", results.getTimestamp().getSequence());
+            log.info("Processing updates in log entry sync.");
             updates.add(results);
             results.getEntries().forEach((key, val) -> countDownLatch.countDown());
+            countDownNumTxLatch();
         }
 
         @Override
@@ -656,6 +669,13 @@ public class LogReplicationListenerIT extends AbstractIT {
             existingEntries.addAll(entries);
 
             existingEntries.forEach(existingEntry -> countDownLatch.countDown());
+            countDownNumTxLatch();
+        }
+
+        private void countDownNumTxLatch() {
+            if (numTxLatch != null) {
+                numTxLatch.countDown();
+            }
         }
     }
 }
