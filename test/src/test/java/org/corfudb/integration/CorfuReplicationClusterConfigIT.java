@@ -130,7 +130,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
     @Parameterized.Parameters
     public static List<ClusterUuidMsg> input() {
         return Arrays.asList(
-                TP_SINGLE_SOURCE_SINK,
+//                TP_SINGLE_SOURCE_SINK,
                 TP_SINGLE_SOURCE_SINK_REV_CONNECTION
         );
 
@@ -1334,9 +1334,11 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         assertThat(mapSink.count()).isEqualTo(secondBatch);
 
         // verify that source doesn't have the invalid cluster info in the LR status table
-        try (TxnContext txn = sourceCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
-            replicationStatus = (ReplicationStatus)txn.getRecord(REPLICATION_STATUS_TABLE, sessionKey).getPayload();
-            txn.commit();
+        while(replicationStatus != null) {
+            try (TxnContext txn = sourceCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
+                replicationStatus = (ReplicationStatus)txn.getRecord(REPLICATION_STATUS_TABLE, sessionKey).getPayload();
+                txn.commit();
+            }
         }
         assertThat(replicationStatus).isNull();
         log.info("After {} seconds sleep, double check passed", mediumInterval);

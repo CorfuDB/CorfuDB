@@ -26,6 +26,7 @@ import javax.annotation.Nonnull;
 import java.lang.invoke.MethodHandles;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -49,25 +50,25 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
     // Unique and immutable identifier of a server node (UUID)
     // Note: serverContext.getLocalEndpoint() can return an IP or FQDN, which is mutable (for this we
     // should have a unique way the identify a node in the  topology
-    private String localNodeId;
+    private final String localNodeId;
 
     // Cluster Id of the local node.
-    private String localClusterId;
+    private final String localClusterId;
 
     private final ExecutorService executor;
 
     private static final String EXECUTOR_NAME_PREFIX = "LogReplicationServer-";
 
-    private Map<LogReplicationSession, LogReplicationSinkManager> sessionToSinkManagerMap = new HashMap<>();
+    private final Map<LogReplicationSession, LogReplicationSinkManager> sessionToSinkManagerMap = new ConcurrentHashMap<>();
 
     private final AtomicBoolean isLeader = new AtomicBoolean(false);
 
     @Getter
-    private SessionManager sessionManager;
+    private final SessionManager sessionManager;
 
-    private ServerContext serverContext;
+    private final ServerContext serverContext;
 
-    private String localEndpoint;
+    private final String localEndpoint;
 
     /**
      * RequestHandlerMethods for the LogReplication server
@@ -79,7 +80,6 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
         return ReplicationHandlerMethods.generateHandler(MethodHandles.lookup(), this);
     }
 
-    // Shama check if you really need ServerContext
     public LogReplicationServer(@Nonnull ServerContext context, @Nonnull SessionManager sessionManager,
                                 String localEndpoint) {
         this.serverContext = context;
@@ -88,7 +88,8 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
         this.localClusterId = sessionManager.getTopology().getLocalClusterDescriptor().getClusterId();
         this.sessionManager = sessionManager;
         createSinkManagers();
-        this.executor = context.getExecutorService(1, EXECUTOR_NAME_PREFIX);
+        log.info("Shama number of thread: {}", context.getLogReplicationServerThreadCount());
+        this.executor = context.getExecutorService(context.getLogReplicationServerThreadCount(), EXECUTOR_NAME_PREFIX);
     }
 
     @VisibleForTesting
@@ -100,7 +101,8 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
         this.localNodeId = localNodeId;
         this.localClusterId = localClusterId;
         this.sessionManager = sessionManager;
-        this.executor = context.getExecutorService(1, EXECUTOR_NAME_PREFIX);
+        log.info("Shama number of thread: {}", context.getLogReplicationServerThreadCount());
+        this.executor = context.getExecutorService(context.getLogReplicationServerThreadCount(), EXECUTOR_NAME_PREFIX);
     }
 
      private void createSinkManagers() {

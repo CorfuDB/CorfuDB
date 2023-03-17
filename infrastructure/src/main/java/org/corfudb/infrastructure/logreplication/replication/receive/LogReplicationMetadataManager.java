@@ -905,6 +905,7 @@ public class LogReplicationMetadataManager {
 
     public void removeSession(TxnContext txn, LogReplicationSession session) {
         if(isLeader.get()) {
+            log.info("Deleting session {} from LR internal tables", session);
             txn.delete(statusTable, session);
             txn.delete(metadataTable, session);
         }

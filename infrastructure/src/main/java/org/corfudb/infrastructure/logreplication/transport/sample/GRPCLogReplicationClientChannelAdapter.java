@@ -218,6 +218,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
         LogReplicationSession sessionMsg = response.getHeader().getSession();
 
         if (!responseObserverMap.containsKey(sessionMsg)) {
+            log.info("Shama creating a responseObserver");
             String finalNodeId = nodeId;
             StreamObserver<RequestMsg> requestObserver = new StreamObserver<RequestMsg>() {
                 @Override
@@ -249,13 +250,14 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
 
             if(sessionToAsyncStubMap.containsKey(sessionMsg)) {
                 StreamObserver<ResponseMsg> responseObserver = sessionToAsyncStubMap.get(sessionMsg).subscribeAndStartReplication(requestObserver);
+                log.info("Adding, hash of the observer is {}",responseObserver.hashCode());
                 responseObserverMap.put(sessionMsg, responseObserver);
             } else {
                 log.error("No stub found for remote node {}. Message dropped type={}",
                         nodeId, response.getPayload().getPayloadCase());
             }
         }
-
+        log.info("hash of the observer is {}",responseObserverMap.get(sessionMsg).hashCode());
         responseObserverMap.get(sessionMsg).onNext(response);
     }
 
@@ -360,6 +362,8 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
             }
         });
         nodeIdToChannelMap.keySet().forEach(node -> log.debug("Channel is closed for node {}", node));
+        responseObserverMap.clear();
+        replicationReqObserverMap.clear();
         lock.unlock();
     }
 

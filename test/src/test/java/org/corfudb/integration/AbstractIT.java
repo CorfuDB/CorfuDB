@@ -585,6 +585,8 @@ public class AbstractIT extends AbstractCorfuTest {
             command.append(" -d ").append(logLevel).append(" ")
                     .append(port);
 
+            command.append(" --log-replication-server-threads ").append(2);
+
             return command.toString();
         }
 
