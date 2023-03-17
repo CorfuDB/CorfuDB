@@ -4,6 +4,8 @@ import com.google.protobuf.Message;
 import lombok.Builder;
 import lombok.Getter;
 import org.corfudb.runtime.CorfuOptions;
+import org.corfudb.runtime.CorfuOptions.PersistenceOptions;
+import org.corfudb.runtime.CorfuOptions.SchemaOptions;
 
 import javax.annotation.Nonnull;
 import java.lang.reflect.InvocationTargetException;
@@ -26,11 +28,15 @@ public class TableOptions {
     @Builder.Default
     private final boolean secondaryIndexesDisabled = false;
 
+    @Getter
+    @Builder.Default
+    private final PersistenceOptions persistenceOptions = PersistenceOptions.getDefaultInstance();
+
     /**
      * Capture options like stream tags, backup restore, log replication at Table level
      */
     @Getter
-    private final CorfuOptions.SchemaOptions schemaOptions;
+    private final SchemaOptions schemaOptions;
 
     public Optional<Path> getPersistentDataPath() {
         return Optional.ofNullable(persistentDataPath);

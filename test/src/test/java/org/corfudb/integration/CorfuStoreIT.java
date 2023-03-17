@@ -10,6 +10,7 @@ import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CompactorMetadataTables;
+import org.corfudb.runtime.CorfuOptions;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
@@ -20,12 +21,14 @@ import org.corfudb.runtime.collections.CorfuDynamicRecord;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStoreEntry;
+import org.corfudb.runtime.collections.PersistedCorfuTable;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.collections.IsolationLevel;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.runtime.object.PersistenceOptions;
 import org.corfudb.runtime.proto.RpcCommon;
 import org.corfudb.runtime.view.ObjectOpenOption;
 import org.corfudb.runtime.view.ObjectsView;
@@ -55,6 +58,7 @@ import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -275,20 +279,22 @@ public class CorfuStoreIT extends AbstractIT {
                 continue; // these tables should have already been checkpointed using normal serializer!
             }
 
-            SMRObject.Builder<PersistentCorfuTable<CorfuDynamicKey, CorfuDynamicRecord>> corfuTableBuilder = runtimeC.getObjectsView()
-                    .build()
-                    .setTypeToken(new TypeToken<PersistentCorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>() {})
-                    .setStreamName(fullTableName)
-                    .setSerializer(dynamicProtobufSerializer);
+            SMRObject.Builder<? extends ICorfuTable<CorfuDynamicKey, CorfuDynamicRecord>> corfuTableBuilder =
+                    runtimeC.getObjectsView().build()
+                            .setTypeToken(new TypeToken<PersistentCorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>() {})
+                            .setStreamName(fullTableName)
+                            .setSerializer(dynamicProtobufSerializer);
 
             // Find out if a table needs to be backed up by disk path to even checkpoint
             boolean diskBased = tableRegistryCT.get(tableName).getMetadata().getDiskBased();
             if (diskBased) {
-                final Path persistedCacheLocation = Paths.get(tempDiskPath + tableName.getTableName());
-                final Options options = new Options().setCreateIfMissing(true);
-                // TODO(vjeko): Fix me.
+                final PersistenceOptions persistenceOptions = PersistenceOptions.builder()
+                        .dataPath(Paths.get(tempDiskPath + tableName.getTableName()))
+                        .consistencyModel(CorfuOptions.ConsistencyModel.READ_YOUR_WRITES)
+                        .build();
                 corfuTableBuilder.setArguments()
-                        .setTypeToken(new TypeToken<PersistentCorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>() {});
+                        .setTypeToken(PersistedCorfuTable.getTypeToken())
+                        .setArguments(persistenceOptions, dynamicProtobufSerializer);
             }
 
             mcw = new MultiCheckpointWriter<>();
@@ -315,7 +321,6 @@ public class CorfuStoreIT extends AbstractIT {
      */
     @Test
     public void checkpointDiskBasedUFO() throws Exception {
-
         final String namespace = "namespace";
         final String tableName = "table";
         final int numRecords = PARAMETERS.NUM_ITERATIONS_MODERATE;
@@ -344,7 +349,7 @@ public class CorfuStoreIT extends AbstractIT {
         }
         final int TEN = 10;
         try (TxnContext txn = store.txn(namespace)) {
-            Set<Uuid> keys = txn.keySet(tableName);
+            Set<Uuid> keys = txn.entryStream(table).map(CorfuStoreEntry::getKey).collect(Collectors.toSet());
             Iterables.partition(keys, TEN);
             txn.commit();
         }

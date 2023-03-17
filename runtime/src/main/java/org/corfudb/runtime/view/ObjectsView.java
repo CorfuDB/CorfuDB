@@ -70,8 +70,8 @@ public class ObjectsView extends AbstractView {
      *
      * @return An object builder to open an object with.
      */
-    public SMRObject.Builder<?> build() {
-        return new SMRObject.Builder<>().runtime(runtime);
+    public <T extends ICorfuSMR> SMRObject.Builder<T> build() {
+        return new SMRObject.Builder<T>().runtime(runtime);
     }
 
     /**
@@ -229,10 +229,7 @@ public class ObjectsView extends AbstractView {
      */
     public void gc(long trimMark) {
         for (Object obj : getObjectCache().values()) {
-            // MVOCorfuCompileProxy
-            ((MVOCorfuCompileProxy) ((ICorfuSMR) obj).
-                    getCorfuSMRProxy()).getUnderlyingMVO().gc(trimMark);
-
+            ((ICorfuSMR) obj).getCorfuSMRProxy().getUnderlyingMVO().gc(trimMark);
         }
     }
 

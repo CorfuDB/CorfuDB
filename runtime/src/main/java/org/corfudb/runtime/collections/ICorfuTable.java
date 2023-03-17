@@ -1,11 +1,14 @@
 package org.corfudb.runtime.collections;
 
+import org.corfudb.runtime.object.ICorfuSMR;
+
 import javax.annotation.Nonnull;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Set;
 import java.util.stream.Stream;
 
-public interface ICorfuTable<K, V> {
+public interface ICorfuTable<K, V> extends ICorfuSMR {
 
     /** Insert a key-value pair into a map, overwriting any previous mapping.
      *
@@ -33,13 +36,13 @@ public interface ICorfuTable<K, V> {
      * @param indexKey  The index key used to query the secondary index
      * @return An Iterable of Map.Entry<K, V>
      */
-    <I> Iterable<Map.Entry<K, V>> getByIndex(@Nonnull final Index.Name indexName, I indexKey);
+    <I> Iterable<Entry<K, V>> getByIndex(@Nonnull final Index.Name indexName, I indexKey);
 
     V get(Object key);
 
     Set<K> keySet();
 
-    Stream<Map.Entry<K, V>> entryStream();
+    Stream<Entry<K, V>> entryStream();
 
     boolean containsKey(Object key);
 
@@ -52,5 +55,4 @@ public interface ICorfuTable<K, V> {
     void close();
 
     boolean isTableCached();
-
 }

@@ -2,8 +2,10 @@ package org.corfudb.runtime;
 
 import com.google.common.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.TokenType;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.collections.*;
+import org.corfudb.runtime.object.PersistenceOptions;
 import org.corfudb.runtime.view.ObjectOpenOption;
 import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.runtime.view.TableRegistry;
@@ -17,6 +19,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 
+import static org.corfudb.runtime.CorfuOptions.ConsistencyModel.READ_COMMITTED;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 @Slf4j
@@ -51,31 +54,41 @@ public class ServerTriggeredCheckpointer extends DistributedCheckpointer {
     private CheckpointWriter<ICorfuTable<?,?>> getCheckpointWriter(TableName tableName,
                                                               KeyDynamicProtobufSerializer keyDynamicProtobufSerializer) {
         UUID streamId = CorfuRuntime.getStreamID(TableRegistry.getFullyQualifiedTableName(tableName));
-        PersistentCorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord> corfuTable = openTable(tableName, keyDynamicProtobufSerializer,
-                checkpointerBuilder.cpRuntime.get());
+        ICorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord> corfuTable = openTable(
+                tableName, keyDynamicProtobufSerializer, checkpointerBuilder.cpRuntime.get());
         CheckpointWriter<ICorfuTable<?,?>> cpw =
                 new CheckpointWriter(checkpointerBuilder.cpRuntime.get(), streamId, "ServerCheckpointer", corfuTable);
         cpw.setSerializer(keyDynamicProtobufSerializer);
         return cpw;
     }
 
-    private PersistentCorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord> openTable(TableName tableName,
+    private ICorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord> openTable(TableName tableName,
                                                                             ISerializer serializer,
                                                                             CorfuRuntime rt) {
         log.info("Opening table {} in namespace {}", tableName.getTableName(), tableName.getNamespace());
-        SMRObject.Builder<PersistentCorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord>> corfuTableBuilder =
-                rt.getObjectsView().build()
-                        .setTypeToken(new TypeToken<PersistentCorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord>>() {
-                        })
+        SMRObject.Builder<? extends ICorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord>> corfuTableBuilder =
+                rt.getObjectsView().<ICorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord>>build()
                         .setStreamName(TableRegistry.getFullyQualifiedTableName(tableName.getNamespace(), tableName.getTableName()))
                         .setSerializer(serializer)
                         .addOpenOption(ObjectOpenOption.NO_CACHE);
+
         if (this.checkpointerBuilder.persistedCacheRoot.isPresent()) {
-            log.info("Opening table in diskBacked mode");
-            String persistentCacheDirName = String.format("compactor_%s_%s",
+            log.info("Opening table in disk mode");
+            final String persistentCacheDirName = String.format("compactor_%s_%s",
                     tableName.getNamespace(), tableName.getTableName());
-            Path persistedCacheLocation = Paths.get(this.checkpointerBuilder.persistedCacheRoot.get()).resolve(persistentCacheDirName);
-            // TODO(vjeko): Integrate with the new disk backed Corfu.
+            final Path persistedCacheLocation = Paths.get(this.checkpointerBuilder.persistedCacheRoot
+                    .get()).resolve(persistentCacheDirName);
+            final PersistenceOptions persistenceOptions = PersistenceOptions.builder()
+                    .consistencyModel(READ_COMMITTED)
+                    .dataPath(persistedCacheLocation)
+                    .build();
+
+            corfuTableBuilder
+                    .setTypeToken(PersistedCorfuTable.getTypeToken())
+                    .setArguments(persistenceOptions, serializer);
+        } else {
+            corfuTableBuilder
+                    .setTypeToken(PersistentCorfuTable.getTypeToken());
         }
         return corfuTableBuilder.open();
     }

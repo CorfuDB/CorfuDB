@@ -55,7 +55,7 @@ public class MultiCheckpointWriter<T extends ICorfuTable<?, ?>> {
                 UUID streamId = table.getCorfuSMRProxy().getStreamID();
 
                 CheckpointWriter<T> cpw = new CheckpointWriter<>(rt, streamId, author, (T) table);
-                ISerializer serializer = ((MVOCorfuCompileProxy) table.getCorfuSMRProxy()).getSerializer();
+                ISerializer serializer = table.getCorfuSMRProxy().getSerializer();
                 cpw.setSerializer(serializer);
 
                 Token minCPSnapshot = Token.UNINITIALIZED;

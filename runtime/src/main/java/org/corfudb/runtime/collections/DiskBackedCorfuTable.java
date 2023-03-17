@@ -7,11 +7,9 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.function.Failable;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
-import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
-import org.corfudb.runtime.object.ConsistencyOptions;
+import org.corfudb.runtime.object.PersistenceOptions;
 import org.corfudb.runtime.object.RocksDbApi;
 import org.corfudb.runtime.object.ISMRSnapshot;
 import org.corfudb.runtime.object.RocksDbStore;
@@ -26,7 +24,6 @@ import org.rocksdb.RocksDB;
 import org.rocksdb.RocksDBException;
 import org.rocksdb.WriteOptions;
 
-import java.nio.file.Path;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Spliterator;
@@ -72,46 +69,40 @@ public class DiskBackedCorfuTable<K, V> implements
      *               option. The default is 64 MB.
      */
     public static Options getDiskBackedCorfuTableOptions() {
-        final int maxSizeAmplificationPercent = 50;
         final Options options = new Options();
 
         options.setCreateIfMissing(true);
         options.setCompressionType(CompressionType.LZ4_COMPRESSION);
 
-        // Set a threshold at which full compaction will be triggered.
-        // This is important as it purges tombstoned entries.
-        final CompactionOptionsUniversal compactionOptions = new CompactionOptionsUniversal();
-        compactionOptions.setMaxSizeAmplificationPercent(maxSizeAmplificationPercent);
-        options.setCompactionOptionsUniversal(compactionOptions);
         return options;
     }
 
-    private final CorfuRuntime corfuRuntime;
     private final ISerializer serializer;
     private final RocksDbApi<DiskBackedCorfuTable<K, V>> rocksApi;
 
-    public DiskBackedCorfuTable(@NonNull Path dataPath,
+    public DiskBackedCorfuTable(@NonNull PersistenceOptions persistenceOptions,
                                 @NonNull Options rocksDbOptions,
-                                @NonNull ISerializer serializer,
-                                @NonNull CorfuRuntime corfuRuntime) {
-        this(dataPath, rocksDbOptions,
-                ConsistencyOptions.builder().build(),
-                serializer, corfuRuntime);
-    }
-
-    public DiskBackedCorfuTable(@NonNull Path dataPath,
-                                @NonNull Options rocksDbOptions,
-                                @NonNull ConsistencyOptions consistencyOptions,
-                                @NonNull ISerializer serializer,
-                                @NonNull CorfuRuntime corfuRuntime) {
+                                @NonNull ISerializer serializer) {
         try {
-            this.rocksApi = new RocksDbStore<>(dataPath, rocksDbOptions, writeOptions, consistencyOptions);
+            this.rocksApi = new RocksDbStore<>(persistenceOptions.getDataPath(),
+                    rocksDbOptions, writeOptions, persistenceOptions);
         } catch (RocksDBException e) {
             throw new UnrecoverableCorfuError(e);
         }
 
         this.serializer = serializer;
-        this.corfuRuntime = corfuRuntime;
+    }
+
+    public DiskBackedCorfuTable(@NonNull PersistenceOptions persistenceOptions,
+                                @NonNull ISerializer serializer) {
+        try {
+            this.rocksApi = new RocksDbStore<>(persistenceOptions.getDataPath(),
+                    getDiskBackedCorfuTableOptions(), writeOptions, persistenceOptions);
+        } catch (RocksDBException e) {
+            throw new UnrecoverableCorfuError(e);
+        }
+
+        this.serializer = serializer;
     }
 
     public V get(@NonNull Object key) {
@@ -127,7 +118,7 @@ public class DiskBackedCorfuTable<K, V> implements
             if (value == null) {
                 return null;
             }
-            return (V) serializer.deserialize(Unpooled.wrappedBuffer(value), corfuRuntime);
+            return (V) serializer.deserialize(Unpooled.wrappedBuffer(value), null);
         } catch (RocksDBException ex) {
             throw new UnrecoverableCorfuError(ex);
         } finally {

@@ -8,14 +8,14 @@ public interface ICorfuSMR extends AutoCloseable {
 
     /** Get the proxy for this wrapper, to manage the state of the object.
      * @return The proxy for this wrapper. */
-    ICorfuSMRProxy<?> getCorfuSMRProxy();
+    MVOCorfuCompileProxy<?, ?> getCorfuSMRProxy();
 
     /**
      * Set the proxy for this wrapper, to manage the state of the object.
      * @param proxy The proxy to set for this wrapper.
      * @param <R> The type used for managing underlying versions.
      */
-    <R> void setCorfuSMRProxy(ICorfuSMRProxy<R> proxy);
+    void setCorfuSMRProxy(MVOCorfuCompileProxy<?, ?> proxy);
 
     /**
      * Get a map from strings (function names) to SMR upcalls.

@@ -1,8 +1,7 @@
 package org.corfudb.runtime.collections;
 
 import com.google.common.collect.ImmutableMap;
-import org.corfudb.runtime.object.ICorfuSMR;
-import org.corfudb.runtime.object.ICorfuSMRProxy;
+import com.google.common.reflect.TypeToken;
 import org.corfudb.runtime.object.ICorfuSMRUpcallTarget;
 import org.corfudb.runtime.object.MVOCorfuCompileProxy;
 
@@ -11,9 +10,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Stream;
 
-public class PersistedCorfuTable<K, V> implements
-        ICorfuTable<K, V>,
-        ICorfuSMR {
+public class PersistedCorfuTable<K, V> implements ICorfuTable<K, V> {
 
     private MVOCorfuCompileProxy<PersistedCorfuTable<K, V>, DiskBackedCorfuTable<K, V>> proxy;
 
@@ -24,14 +21,18 @@ public class PersistedCorfuTable<K, V> implements
             .put("remove", (obj, args) -> obj.remove((K) args[0]))
             .build();
 
+    public static <K, V> TypeToken<PersistedCorfuTable<K, V>> getTypeToken() {
+        return new TypeToken<PersistedCorfuTable<K, V>>() {};
+    }
+
     @Override
-    public <R> void setCorfuSMRProxy(ICorfuSMRProxy<R> proxy) {
+    public void setCorfuSMRProxy(MVOCorfuCompileProxy<?, ?> proxy) {
         this.proxy = (MVOCorfuCompileProxy<PersistedCorfuTable<K, V>, DiskBackedCorfuTable<K, V>>) proxy;
     }
 
     @Override
     // TODO: use proper return type
-    public ICorfuSMRProxy<?> getCorfuSMRProxy() {
+    public MVOCorfuCompileProxy<?, ?> getCorfuSMRProxy() {
         return proxy;
     }
 

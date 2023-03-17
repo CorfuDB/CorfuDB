@@ -40,6 +40,7 @@ import org.corfudb.runtime.ExampleSchemas.ManagedMetadata;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuStoreShim;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
+import org.corfudb.runtime.collections.PersistedCorfuTable;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.collections.CorfuDynamicKey;
 import org.corfudb.runtime.collections.CorfuDynamicRecord;
@@ -48,6 +49,7 @@ import org.corfudb.runtime.collections.StreamListener;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.object.PersistenceOptions;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.runtime.view.TableRegistry;
@@ -124,17 +126,21 @@ public class CorfuStoreBrowserEditor {
 
         String fullTableName = TableRegistry.getFullyQualifiedTableName(namespace, tableName);
 
+        SMRObject.Builder<ICorfuTable<CorfuDynamicKey, CorfuDynamicRecord>> corfuTableBuilder =
+                runtime.getObjectsView().<ICorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>build()
+                        .setStreamName(fullTableName)
+                        .setSerializer(dynamicProtobufSerializer);
+
         if (diskPath == null) {
-            SMRObject.Builder<PersistentCorfuTable<CorfuDynamicKey, CorfuDynamicRecord>> corfuTableBuilder =
-                    runtime.getObjectsView().build()
-                            .setTypeToken(new TypeToken<PersistentCorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>() {})
-                            .setStreamName(fullTableName)
-                            .setSerializer(dynamicProtobufSerializer);
-            return corfuTableBuilder.open();
+            corfuTableBuilder.setTypeToken(PersistentCorfuTable.getTypeToken());
         } else {
-            // TODO(vjeko): Migrate the logic.
-            throw new UnsupportedOperationException();
+            PersistenceOptions persistenceOptions = PersistenceOptions.builder()
+                    .dataPath(Paths.get(diskPath)).build();
+            corfuTableBuilder.setTypeToken(PersistedCorfuTable.getTypeToken())
+                    .setArguments(persistenceOptions, dynamicProtobufSerializer);
         }
+
+        return corfuTableBuilder.open();
     }
 
     /**

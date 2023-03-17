@@ -2,7 +2,6 @@ package org.corfudb.runtime.collections;
 
 import com.google.common.collect.Streams;
 import com.google.common.math.Quantiles;
-import com.google.common.reflect.TypeToken;
 import com.google.gson.Gson;
 import com.google.protobuf.Message;
 import io.netty.buffer.ByteBuf;
@@ -20,14 +19,15 @@ import net.jqwik.api.constraints.StringLength;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.runtime.CorfuOptions.ConsistencyModel;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
-import org.corfudb.runtime.object.ConsistencyOptions;
-import org.corfudb.runtime.object.MVOCorfuCompileProxy;
+import org.corfudb.runtime.object.PersistenceOptions;
+import org.corfudb.runtime.object.PersistenceOptions.PersistenceOptionsBuilder;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.test.SampleSchema;
 import org.corfudb.test.SampleSchema.EventInfo;
@@ -136,13 +136,18 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
 
     private <V> PersistedCorfuTable<String, V> setupTable(String streamName, boolean readYourWrites,
                                                            Options options, ISerializer serializer) {
-        final Path persistedCacheLocation = Paths.get(diskBackedDirectory, streamName);
-        final ConsistencyOptions consistencyOptions = ConsistencyOptions.builder()
-                .readYourWrites(readYourWrites).build();
+
+        PersistenceOptionsBuilder persistenceOptions = PersistenceOptions.builder()
+                .dataPath(Paths.get(diskBackedDirectory, streamName));
+        if (!readYourWrites) {
+            persistenceOptions.consistencyModel(ConsistencyModel.READ_COMMITTED);
+        }
+
         return getDefaultRuntime().getObjectsView().build()
-                .setTypeToken(new TypeToken<PersistedCorfuTable<String, V>>() {})
-                .setArguments(persistedCacheLocation, options, consistencyOptions, serializer, getRuntime())
+                .setTypeToken(PersistedCorfuTable.<String, V>getTypeToken())
+                .setArguments(persistenceOptions.build(), options, serializer)
                 .setStreamName(streamName)
+                .setSerializer(serializer)
                 .open();
     }
 
@@ -156,6 +161,10 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
 
     private PersistedCorfuTable<String, String> setupTable() {
         return setupTable(defaultTableName, ENABLE_READ_YOUR_WRITES);
+    }
+
+    private PersistedCorfuTable<String, String> setupTable(String tableName) {
+        return setupTable(tableName, ENABLE_READ_YOUR_WRITES);
     }
 
     /**
@@ -279,17 +288,117 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
         }
     }
 
+    @Property(tries = NUM_OF_TRIES)
+    void nonTxInsertGetRemove(@ForAll @Size(SAMPLE_SIZE) Set<String> intended) {
+        resetTests();
+        try (final PersistedCorfuTable<String, String> table = setupTable()) {
+            intended.forEach(value -> table.insert(value, value));
+            Assertions.assertEquals(table.size(), intended.size());
+            intended.forEach(value -> Assertions.assertEquals(table.get(value), value));
+            intended.forEach(table::delete);
+
+            final Set<String> persisted = table.entryStream().map(Map.Entry::getValue).collect(Collectors.toSet());
+            Assertions.assertTrue(persisted.isEmpty());
+        }
+    }
+
+    @Property(tries = NUM_OF_TRIES)
+    void txInsertGetRemove(@ForAll @Size(SAMPLE_SIZE) Set<String> intended) {
+        resetTests();
+        try (final PersistedCorfuTable<String, String> table = setupTable()) {
+            executeTx(() -> intended.forEach(value -> table.insert(value, value)));
+            Assertions.assertEquals(table.size(), intended.size());
+            executeTx(() -> {
+                intended.forEach(value -> Assertions.assertEquals(table.get(value), value));
+                intended.forEach(table::delete);
+            });
+
+            executeTx(() -> {
+                final Set<String> persisted = table.entryStream().map(Map.Entry::getValue).collect(Collectors.toSet());
+                Assertions.assertTrue(persisted.isEmpty());
+            });
+        }
+    }
+
     /**
      * Verify basic non-transactional get and insert operations.
      */
     @Property(tries = NUM_OF_TRIES)
-    void nonTxGetAndPut(@ForAll @Size(SAMPLE_SIZE) Set<String> intended) {
+    void nonTxGetAndInsert(@ForAll @Size(SAMPLE_SIZE) Set<String> intended) {
         resetTests();
         try (final PersistedCorfuTable<String, String> table = setupTable()) {
             intended.forEach(value -> table.insert(value, value));
             intended.forEach(k -> Assertions.assertEquals(k, table.get(k)));
         }
     }
+
+    /**
+     * Verify commit address of transactions for disk-backed tables.
+     */
+    @Property(tries = NUM_OF_TRIES)
+    void verifyCommitAddressMultiTable(@ForAll @Size(SAMPLE_SIZE) Set<String> intended) {
+        resetTests();
+        try (final PersistedCorfuTable<String, String> table1 = setupTable();
+             final PersistedCorfuTable<String, String> table2 = setupTable()) {
+            table1.insert(defaultNewMapEntry, defaultNewMapEntry);
+
+            assertThat(executeTx(() -> {
+                table1.get(nonExistingKey);
+                table2.get(nonExistingKey);
+            })).isZero();
+
+            intended.forEach(value -> table2.insert(value, value));
+            assertThat(executeTx(() -> {
+                table1.get(nonExistingKey);
+                table2.get(nonExistingKey);
+            })).isEqualTo(intended.size());
+        }
+    }
+
+    /**
+     * Verify commit address of interleaving transactions on disk-backed tables.
+     */
+    @Property(tries = NUM_OF_TRIES)
+    void verifyCommitAddressInterleavingTxn(@ForAll @Size(SAMPLE_SIZE) Set<String> intended) throws Exception {
+        resetTests();
+        try (final PersistedCorfuTable<String, String> table = setupTable()) {
+            CountDownLatch latch1 = new CountDownLatch(1);
+            CountDownLatch latch2 = new CountDownLatch(1);
+
+            Thread t1 = new Thread(() -> {
+                table.insert(defaultNewMapEntry, defaultNewMapEntry);
+                assertThat(executeTx(() -> table.get(nonExistingKey))).isEqualTo(0L);
+                assertThat(executeTx(() -> {
+                    try {
+                        table.get(nonExistingKey);
+                        latch2.countDown();
+                        latch1.await();
+                        table.get(nonExistingKey);
+                    } catch (InterruptedException ignored) {
+                        // Ignored
+                    }
+                })).isEqualTo(intended.size());
+            });
+
+            Thread t2 = new Thread(() -> {
+                try {
+                    latch2.await();
+                    intended.forEach(value -> table.insert(value, value));
+                    assertThat(executeTx(() -> table.get(nonExistingKey))).isEqualTo(intended.size());
+                    latch1.countDown();
+                } catch (InterruptedException ex) {
+                    // Ignored
+                }
+            });
+
+            t1.start();
+            t2.start();
+            t1.join();
+            t2.join();
+            intended.forEach(value -> assertThat(table.get(value)).isEqualTo(value));
+        }
+    }
+
 
     /**
      * Test the snapshot isolation property of disk-backed Corfu tables.
@@ -409,7 +518,7 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
                 t1.start();
                 Failable.run(t1::join);
 
-                ((MVOCorfuCompileProxy) table.getCorfuSMRProxy()).getUnderlyingMVO()
+                table.getCorfuSMRProxy().getUnderlyingMVO()
                         .getMvoCache().getObjectCache().cleanUp();
 
                 assertThatThrownBy(() -> table.get("a"))
@@ -427,7 +536,7 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
                 t1.start();
                 Failable.run(t1::join);
 
-                ((MVOCorfuCompileProxy) table.getCorfuSMRProxy()).getUnderlyingMVO()
+                table.getCorfuSMRProxy().getUnderlyingMVO()
                         .getMvoCache().getObjectCache().cleanUp();
 
                 assertThatThrownBy(() -> table.entryStream().count())
@@ -460,7 +569,7 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
                 t1.start();
                 Failable.run(t1::join);
 
-                ((MVOCorfuCompileProxy) table.getCorfuSMRProxy()).getUnderlyingMVO()
+                table.getCorfuSMRProxy().getUnderlyingMVO()
                         .getMvoCache().getObjectCache().cleanUp();
                 assertThatThrownBy(iterator::next)
                         .isInstanceOf(TrimmedException.class);

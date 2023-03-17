@@ -43,8 +43,7 @@ public class ViewsGarbageCollectorTest extends AbstractViewTest {
             table.get(String.valueOf(x));
         }
 
-        assertThat(((MVOCorfuCompileProxy<PersistentCorfuTable<String, String>, DiskBackedCorfuTable<String, String>>)table.getCorfuSMRProxy())
-                .getUnderlyingMVO().getAddressSpace().size()).isNotZero();
+        assertThat(table.getCorfuSMRProxy().getUnderlyingMVO().getAddressSpace().size()).isNotZero();
 
         MultiCheckpointWriter<PersistentCorfuTable<String, String>> mcw = new MultiCheckpointWriter<>();
         mcw.addMap(table);
@@ -54,8 +53,7 @@ public class ViewsGarbageCollectorTest extends AbstractViewTest {
         rt.getGarbageCollector().runRuntimeGC();
         assertThat(rt.getAddressSpaceView().getReadCache().asMap()).isEmpty();
 
-        assertThat(((MVOCorfuCompileProxy <PersistentCorfuTable<String, String>, DiskBackedCorfuTable<String, String>>)table.getCorfuSMRProxy())
-                .getUnderlyingMVO().getAddressSpace().size()).isZero();
+        assertThat(table.getCorfuSMRProxy().getUnderlyingMVO().getAddressSpace().size()).isZero();
 
         rt.shutdown();
         assertThat(rt.getGarbageCollector().isStarted()).isFalse();

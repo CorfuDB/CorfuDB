@@ -148,10 +148,7 @@ public class SMRObject<T extends ICorfuSMR> {
 
                                     // Get object serializer to check if we didn't attempt to set another serializer
                                     // to an already existing map
-                                    ISerializer objectSerializer = ((MVOCorfuCompileProxy) ((ICorfuSMR) result).
-                                            getCorfuSMRProxy())
-                                            .getSerializer();
-
+                                    ISerializer objectSerializer = result.getCorfuSMRProxy().getSerializer();
                                     if (smrObject.getSerializer() != objectSerializer) {
                                         log.warn("open: Attempt to open an existing object with a different serializer {}. " +
                                                         "Object {} opened with original serializer {}.",

@@ -543,8 +543,12 @@ public class TableRegistry {
 
         String fullyQualifiedTableName = getFullyQualifiedTableName(namespace, tableName);
 
+        // persistentDataPath is deprecated and needs to be removed.
+        CorfuOptions.PersistenceOptions persistenceOptions =
+                tableOptions.getPersistenceOptions();
         if (tableOptions.getPersistentDataPath().isPresent()) {
-            // TODO(vjeko): Integrate with UFO.
+            persistenceOptions = tableOptions.getPersistenceOptions().toBuilder().setDataPath(
+                    tableOptions.getPersistentDataPath().get().toString()).build();
         }
 
         CorfuOptions.SchemaOptions tableSchemaOptions;
@@ -583,6 +587,7 @@ public class TableRegistry {
                         .valueSchema(defaultValueMessage)
                         .metadataSchema(defaultMetadataMessage)
                         .schemaOptions(tableSchemaOptions)
+                        .persistenceOptions(persistenceOptions)
                         .secondaryIndexesDisabled(tableOptions.isSecondaryIndexesDisabled())
                         .build(),
                 this.runtime,
@@ -747,9 +752,12 @@ public class TableRegistry {
                                                        @Nonnull final TableOptions tableOptions)
             throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
 
-        // In-memory PersistentCorfuTable does not need a map supplier
+        // persistentDataPath is deprecated and needs to be removed.
+        CorfuOptions.PersistenceOptions persistenceOptions =
+                tableOptions.getPersistenceOptions();
         if (tableOptions.getPersistentDataPath().isPresent()) {
-            // TODO(vjeko): Integrate with VLO.
+            persistenceOptions = tableOptions.getPersistenceOptions().toBuilder().setDataPath(
+                    tableOptions.getPersistentDataPath().get().toString()).build();
         }
 
         CorfuOptions.SchemaOptions tableSchemaOptions;
@@ -771,6 +779,7 @@ public class TableRegistry {
                         .valueSchema(defaultValueMessage)
                         .metadataSchema(defaultMetadataMessage)
                         .schemaOptions(tableSchemaOptions)
+                        .persistenceOptions(persistenceOptions)
                         .secondaryIndexesDisabled(tableOptions.isSecondaryIndexesDisabled())
                         .build(),
                 this.runtime,

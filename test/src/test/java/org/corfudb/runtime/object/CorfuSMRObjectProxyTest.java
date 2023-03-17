@@ -88,10 +88,10 @@ public class CorfuSMRObjectProxyTest extends AbstractObjectTest {
         ObjectsView.ObjectID mapId = new ObjectsView.
                 ObjectID(CorfuRuntime.getStreamID("test"), PersistentCorfuTable.class);
 
-        MVOCorfuCompileProxy cp = ((MVOCorfuCompileProxy) ((ICorfuSMR) r.getObjectsView().
+        MVOCorfuCompileProxy cp = ((ICorfuSMR) r.getObjectsView().
                 getObjectCache().
                 get(mapId)).
-                getCorfuSMRProxy());
+                getCorfuSMRProxy();
 
         assertThat(cp.getSerializer()).isEqualTo(customSerializer);
     }

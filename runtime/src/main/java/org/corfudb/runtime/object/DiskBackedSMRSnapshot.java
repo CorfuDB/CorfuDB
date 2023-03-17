@@ -1,6 +1,8 @@
 package org.corfudb.runtime.object;
 
 import lombok.NonNull;
+import org.corfudb.runtime.CorfuOptions;
+import org.corfudb.runtime.CorfuOptions.ConsistencyModel;
 import org.corfudb.runtime.collections.RocksDbEntryIterator;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.util.serializer.ISerializer;
@@ -22,27 +24,24 @@ import java.util.function.Function;
 public class DiskBackedSMRSnapshot<S extends SnapshotGenerator<S>> implements ISMRSnapshot<S>{
     private final StampedLock lock = new StampedLock();
     private final OptimisticTransactionDB rocksDb;
-
     private final ReadOptions readOptions;
     private final WriteOptions writeOptions;
     private final Snapshot snapshot;
-
-    private final ConsistencyOptions consistencyOptions;
+    private final ConsistencyModel consistencyModel;
     private final ViewGenerator<S> viewGenerator;
     private final AtomicInteger refCnt;
-    public final VersionedObjectIdentifier version;
-
-    private final Set<RocksDbEntryIterator> set;
+    private final VersionedObjectIdentifier version;
+    private final Set<RocksDbEntryIterator<?, ?>> set;
 
     public DiskBackedSMRSnapshot(@NonNull OptimisticTransactionDB rocksDb,
                                  @NonNull WriteOptions writeOptions,
-                                 @NonNull ConsistencyOptions consistencyOptions,
+                                 @NonNull ConsistencyModel consistencyModel,
                                  @NonNull VersionedObjectIdentifier version,
                                  @NonNull ViewGenerator<S> viewGenerator) {
         this.rocksDb = rocksDb;
         this.writeOptions = writeOptions;
         this.viewGenerator = viewGenerator;
-        this.consistencyOptions = consistencyOptions;
+        this.consistencyModel = consistencyModel;
         this.snapshot = rocksDb.getSnapshot();
         this.refCnt = new AtomicInteger(1); // TODO(Zach):
         this.readOptions = new ReadOptions().setSnapshot(this.snapshot);
@@ -77,7 +76,7 @@ public class DiskBackedSMRSnapshot<S extends SnapshotGenerator<S>> implements IS
     public S consume() {
         RocksDbApi<S> rocksTx;
 
-        if (consistencyOptions.isReadYourWrites()) {
+        if (consistencyModel == ConsistencyModel.READ_YOUR_WRITES) {
             rocksTx = new RocksDbTx<>(rocksDb, writeOptions, this);
         } else {
             rocksTx = new RocksDbStubTx<>(rocksDb, this);

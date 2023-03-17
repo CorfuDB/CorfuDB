@@ -350,7 +350,7 @@ public class CorfuTableTest extends AbstractViewTest {
             getDefaultRuntime().getObjectsView().TXEnd();
         }
 
-        assertThat(((MVOCorfuCompileProxy) ((ICorfuSMR) corfuTable).
+        assertThat((((ICorfuSMR) corfuTable).
                 getCorfuSMRProxy()).getUnderlyingMVO().getSmrStream().pos()).isEqualTo(3);
     }
 

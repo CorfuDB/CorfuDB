@@ -25,6 +25,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.collections.CorfuDynamicKey;
 import org.corfudb.runtime.collections.ICorfuTable;
+import org.corfudb.runtime.collections.PersistedCorfuTable;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.view.TableRegistry;
 import org.junit.Assert;
@@ -536,6 +537,8 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
                         TableOptions.builder()
                                 .persistentDataPath(Paths.get(PARAMETERS.TEST_TEMP_DIR)).build())
         );
+
+        assertThat(table.getUnderlyingType()).isEqualTo(PersistedCorfuTable.class);
 
         final long keyUuid = 1L;
         final long valueUuid = 3L;

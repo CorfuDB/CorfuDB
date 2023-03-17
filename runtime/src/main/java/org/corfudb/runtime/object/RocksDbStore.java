@@ -3,7 +3,6 @@ package org.corfudb.runtime.object;
 import io.netty.buffer.ByteBuf;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.collections.CheckedRocksIterator;
 import org.corfudb.runtime.collections.RocksDbEntryIterator;
 import org.corfudb.util.serializer.ISerializer;
 import org.rocksdb.OptimisticTransactionDB;
@@ -22,16 +21,16 @@ public class RocksDbStore<S extends SnapshotGenerator<S>> implements RocksDbApi<
     private final WriteOptions writeOptions;
     private final String absolutePathString;
     private final Options rocksDbOptions;
-    private final ConsistencyOptions consistencyOptions;
+    private final PersistenceOptions persistenceOptions;
 
     public RocksDbStore(@NonNull Path dataPath,
                         @NonNull Options rocksDbOptions,
                         @NonNull WriteOptions writeOptions,
-                        @NonNull ConsistencyOptions consistencyOptions) throws RocksDBException {
+                        @NonNull PersistenceOptions persistenceOptions) throws RocksDBException {
         this.absolutePathString = dataPath.toFile().getAbsolutePath();
         this.rocksDbOptions = rocksDbOptions;
         this.writeOptions = writeOptions;
-        this.consistencyOptions = consistencyOptions;
+        this.persistenceOptions = persistenceOptions;
 
         RocksDB.destroyDB(this.absolutePathString, this.rocksDbOptions);
         this.rocksDb = OptimisticTransactionDB.open(rocksDbOptions, absolutePathString);
@@ -96,6 +95,6 @@ public class RocksDbStore<S extends SnapshotGenerator<S>> implements RocksDbApi<
 
     @Override
     public ISMRSnapshot<S> getSnapshot(@NonNull ViewGenerator<S> viewGenerator, VersionedObjectIdentifier version) {
-        return new DiskBackedSMRSnapshot<>(rocksDb, writeOptions, consistencyOptions, version, viewGenerator);
+        return new DiskBackedSMRSnapshot<>(rocksDb, writeOptions, persistenceOptions.consistencyModel, version, viewGenerator);
     }
 }

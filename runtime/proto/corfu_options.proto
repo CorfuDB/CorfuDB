@@ -23,8 +23,14 @@ message SchemaOptions {
     optional ReplicationLogicalGroup replication_group = 7;
 }
 
+enum ConsistencyModel {
+    READ_YOUR_WRITES = 0;
+    READ_COMMITTED = 1;
+}
+
 message PersistenceOptions {
     optional string dataPath = 1;
+    optional ConsistencyModel consistencyModel = 2;
 }
 
 message ReplicationLogicalGroup {
