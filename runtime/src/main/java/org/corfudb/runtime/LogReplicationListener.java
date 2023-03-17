@@ -37,10 +37,10 @@ import static org.corfudb.runtime.LogReplicationUtils.REPLICATION_STATUS_TABLE;
 @Slf4j
 public abstract class LogReplicationListener implements StreamListener {
 
-    // Indicates that no full sync on client tables was performed during subscription as an LR snapshot sync was
-    // ongoing.
+    // Indicates if a full sync on client tables was performed during subscription.  A full sync will not be
+    // performed if a snapshot sync is ongoing.
     @Getter
-    private final AtomicBoolean subscriptionIncomplete = new AtomicBoolean(false);
+    private final AtomicBoolean clientFullSyncPending = new AtomicBoolean(false);
 
     // This variable tracks the status of snapshot sync after subscription completes, i.e., client full sync is done
     private final AtomicBoolean snapshotSyncInProgress = new AtomicBoolean(false);
@@ -50,7 +50,7 @@ public abstract class LogReplicationListener implements StreamListener {
     // performed when this ongoing snapshot sync completes.  The listener, however, can get updates before this full
     // sync.  So we need to maintain this timestamp and ignore any updates below it.
     @Getter
-    private final AtomicLong fullSyncTimestamp = new AtomicLong(Address.NON_ADDRESS);
+    private final AtomicLong clientFullSyncTimestamp = new AtomicLong(Address.NON_ADDRESS);
 
     private final CorfuStore corfuStore;
     private final String namespace;
@@ -72,13 +72,13 @@ public abstract class LogReplicationListener implements StreamListener {
      */
     public final void onNext(CorfuStreamEntries results) {
 
-        Set<String> tableNames =
-                results.getEntries().keySet().stream().map(schema -> schema.getTableName()).collect(Collectors.toSet());
-
         // If this update came before the client's full sync timestamp, ignore it.
-        if (results.getTimestamp().getSequence() <= fullSyncTimestamp.get()) {
+        if (results.getTimestamp().getSequence() <= clientFullSyncTimestamp.get()) {
             return;
         }
+
+        Set<String> tableNames =
+                results.getEntries().keySet().stream().map(schema -> schema.getTableName()).collect(Collectors.toSet());
 
         if (tableNames.contains(REPLICATION_STATUS_TABLE)) {
             Preconditions.checkState(results.getEntries().keySet().size() == 1,
@@ -88,7 +88,7 @@ public abstract class LogReplicationListener implements StreamListener {
         }
 
         // Data Updates
-        if (subscriptionIncomplete.get()) {
+        if (clientFullSyncPending.get()) {
             // If the listener started when snapshot sync was ongoing, ignore all data updates until it ends.  When
             // it ends, the client will perform a full sync and build a consistent state containing these updates.
             return;
@@ -104,24 +104,24 @@ public abstract class LogReplicationListener implements StreamListener {
     private void processReplicationStatusUpdate(CorfuStreamEntries results) {
         Map<TableSchema, List<CorfuStreamEntry>> entries = results.getEntries();
 
-        TableSchema replicationStatusTableSchema =
-                entries.keySet().stream().filter(key -> key.getTableName().equals(REPLICATION_STATUS_TABLE))
-                        .findFirst().get();
+        List<CorfuStreamEntry> replicationStatusTableEntries =
+            entries.entrySet().stream().filter(e -> e.getKey().getTableName().equals(REPLICATION_STATUS_TABLE))
+            .map(Map.Entry::getValue)
+            .findFirst()
+            .get();
 
-        for (CorfuStreamEntry entry : entries.get(replicationStatusTableSchema)) {
+        for (CorfuStreamEntry entry : replicationStatusTableEntries) {
 
             // Ignore any update where the operation type != UPDATE
             if (entry.getOperation() == CorfuStreamEntry.OperationType.UPDATE) {
                 ReplicationStatusVal status = (ReplicationStatusVal)entry.getPayload();
 
                 // If subscription was incomplete, we need to process this update only if the snapshot sync ended.
-                if (subscriptionIncomplete.get()) {
+                if (clientFullSyncPending.get()) {
                     if (status.getDataConsistent()) {
-                        // Snapshot sync which was ongoing when the listener was subscribed has ended.  Unsubscribe and
-                        // resubscribe it now so that the client can perform an initial full sync on its tables and get
-                        // subsequent updates.
-                        LogReplicationUtils.finishSubscription(corfuStore, this, namespace);
-                        subscriptionIncomplete.set(false);
+                        // Snapshot sync which was ongoing when the listener was subscribed has ended.  Attempt to
+                        // perform a full sync now.
+                        LogReplicationUtils.attempClientFullSync(corfuStore, this, namespace);
                     }
                     return;
                 }

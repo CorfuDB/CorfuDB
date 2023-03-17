@@ -394,75 +394,50 @@ public class CorfuStore {
         subscribeListener(streamListener, namespace, streamTag, tablesOfInterest, timestamp);
     }
 
+
+    /**
+     * Subscription API exclusively for Log Replicator(LR).  It is used for subscribing to transaction updates for
+     * replicated tables containing 'streamTag'.  Internally, the API delivers updates such that
+     * LogReplicationListener(stream listener) is able to bifurcate replicated data received within or outside an LR
+     * snapshot sync.
+     * Objects returned will honour transaction boundaries.
+     *
+     * Note: All replicated tables belonging to this stream tag must be opened on the Log Replication Sink(receiver)
+     * regardless of whether any data is replicated for it.
+     *
+     * Note: If memory is a consideration, consider using the other version of this API which takes a custom buffer
+     * size for updates.
+     *
+     * @param streamListener log replication client listener
+     * @param namespace      namespace of the replicated tables
+     * @param streamTag      stream tag of the replicated tables
+     */
     public void subscribeLogReplicationListener(@Nonnull LogReplicationListener streamListener,
                                                 @Nonnull String namespace, @Nonnull String streamTag) {
-        subscribeLogReplicationListener(streamListener, namespace, streamTag, getTablesOfInterest(namespace, streamTag));
-    }
-
-    /**
-     * Subscription API exclusively for Log Replicator(LR).  It is used for subscribing to transaction updates across
-     * LR's metadata table(ReplicationStatus) in the CorfuSystem namespace and application-specific tables containing
-     * 'streamTag' within the application namespace.
-     * Objects returned will honor transactional boundaries and will maintain the order of log data
-     * across the application namespace and corfu system namespace.
-     * <p>
-     * Note: if memory is a consideration consider using the other version of subscribe that is
-     * able to specify the size of buffered transactions entries.
-     *
-     * @param streamListener   callback context
-     * @param namespace        the application namespace to subscribe to
-     * @param streamTag        only updates of tables with the stream tag will be polled
-     * @param tablesOfInterest only updates from these tables of interest will be sent to listener
-     */
-    public void subscribeLogReplicationListener(@Nonnull LogReplicationListener streamListener,
-                                                  @Nonnull String namespace, @Nonnull String streamTag,
-                                                  @Nonnull List<String> tablesOfInterest) {
         int uninitializedBufferSize = 0;
-
-        LogReplicationUtils.subscribe(streamListener, namespace, streamTag, tablesOfInterest, uninitializedBufferSize,
-                this);
+        LogReplicationUtils.subscribe(streamListener, namespace, streamTag, getTablesOfInterest(namespace, streamTag),
+                uninitializedBufferSize, this);
     }
 
     /**
-     * Subscription API exclusively for Log Replicator(LR).  It is used for subscribing to transaction updates across
-     * LR's metadata table(ReplicationStatus) in the CorfuSystem namespace and application-specific tables containing
-     * 'streamTag' within the application namespace.
-     * Objects returned will honor transactional boundaries and will maintain the order of log data
-     * across the application namespace and corfu system namespace.
-     * <p>
+     * Subscription API exclusively for Log Replicator(LR).  It is used for subscribing to transaction updates for
+     * replicated tables containing 'streamTag'.  Internally, the API delivers updates such that
+     * LogReplicationListener(stream listener) is able to bifurcate replicated data received within or outside an LR
+     * snapshot sync.
+     * Objects returned will honour transaction boundaries.
      *
+     * Note: All replicated tables belonging to this stream tag must be opened on the Log Replication Sink(receiver)
+     * regardless of whether any data is replicated for it.
      *
-     * @param streamListener   callback context
-     * @param namespace        the application namespace to subscribe to
-     * @param streamTag        only updates of tables with the stream tag will be polled
-     * @param tablesOfInterest only updates from these tables of interest will be sent to listener
+     * @param streamListener   log replication client listener
+     * @param namespace        namespace of the replicated tables
+     * @param streamTag        stream tag of the replicated tables
      * @param bufferSize       maximum size of buffered transaction entries
      */
     public void subscribeLogReplicationListener(@Nonnull LogReplicationListener streamListener,
-                                                  @Nonnull String namespace, @Nonnull String streamTag,
-                                                  @Nonnull List<String> tablesOfInterest, int bufferSize) {
-        LogReplicationUtils.subscribe(streamListener, namespace, streamTag, tablesOfInterest, bufferSize, this);
-    }
-
-    /**
-     * Subscription API exclusively for Log Replicator(LR).  It is used for subscribing to transaction updates across
-     * LR's metadata table(ReplicationStatus) in the CorfuSystem namespace and application-specific tables containing
-     * 'streamTag' within the application namespace.
-     * Objects returned will honor transactional boundaries and will maintain the order of log data
-     * across the application namespace and corfu system namespace
-     *
-     * Note: all tables belonging to this stream tag must have been previously opened or subscription
-     * will fail.
-     *
-     * @param streamListener   client listener for callback
-     * @param namespace        the CorfuStore namespace to subscribe to
-     * @param streamTag        only updates of tables with the stream tag will be polled
-     * @param bufferSize       maximum size of buffered transaction entries
-     */
-    public void subscribeLogReplicationListener(@Nonnull LogReplicationListener streamListener,
-                                                  @Nonnull String namespace, @Nonnull String streamTag, int bufferSize) {
-        List<String> tablesOfInterest = getTablesOfInterest(namespace, streamTag);
-        subscribeLogReplicationListener(streamListener, namespace, streamTag, tablesOfInterest, bufferSize);
+                                                @Nonnull String namespace, @Nonnull String streamTag, int bufferSize) {
+        LogReplicationUtils.subscribe(streamListener, namespace, streamTag, getTablesOfInterest(namespace, streamTag),
+                bufferSize, this);
     }
 
     /**
