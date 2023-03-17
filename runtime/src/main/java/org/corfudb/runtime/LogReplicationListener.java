@@ -10,11 +10,13 @@ import org.corfudb.runtime.collections.CorfuStreamEntry;
 import org.corfudb.runtime.collections.StreamListener;
 import org.corfudb.runtime.collections.TableSchema;
 import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.runtime.view.Address;
 import javax.annotation.Nonnull;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 import static org.corfudb.runtime.LogReplicationUtils.REPLICATION_STATUS_TABLE;
@@ -40,32 +42,27 @@ public abstract class LogReplicationListener implements StreamListener {
     @Getter
     private final AtomicBoolean subscriptionIncomplete = new AtomicBoolean(false);
 
-    // This variable tracks the status of snapshot sync only after snapshotSyncInProgressOnSubscription becomes false
+    // This variable tracks the status of snapshot sync after subscription completes, i.e., client full sync is done
     private final AtomicBoolean snapshotSyncInProgress = new AtomicBoolean(false);
+
+    // Timestamp at which the client performed a full sync.  Any updates below this timestamp must be ignored.
+    // At the time of subscription, a full sync cannot be performed if LR Snapshot Sync is in progress.  Full Sync is
+    // performed when this ongoing snapshot sync completes.  The listener, however, can get updates before this full
+    // sync.  So we need to maintain this timestamp and ignore any updates below it.
+    @Getter
+    private final AtomicLong fullSyncTimestamp = new AtomicLong(Address.NON_ADDRESS);
 
     private final CorfuStore corfuStore;
     private final String namespace;
-    private final String streamTag;
-    private final List<String> tablesOfInterest;
-    private final int bufferSize;
 
     /**
      * Special LogReplication listener which a client creates to receive ordered updates for replicated data.
      * @param corfuStore Corfu Store used on the client
-     * @param namespace namespace of the client's tables
-     * @param streamTag stream tag associated with the tables from which updates must be received
-     * @param tablesOfInterest tables from which updates must be received - null if updates from all tables with
-     *                         streamTag must be received
-     * @param bufferSize maximum size of buffer for updates yet to be processed - 0 if default listener buffer size
-     *                   should be used
+     * @param namespace Namespace of the client's tables
      */
-    public LogReplicationListener(CorfuStore corfuStore, @Nonnull String namespace, @Nonnull String streamTag,
-                                  List<String> tablesOfInterest, int bufferSize) {
+    public LogReplicationListener(CorfuStore corfuStore, @Nonnull String namespace) {
         this.corfuStore = corfuStore;
         this.namespace = namespace;
-        this.streamTag = streamTag;
-        this.tablesOfInterest = tablesOfInterest;
-        this.bufferSize = bufferSize;
     }
 
     /**
@@ -77,6 +74,11 @@ public abstract class LogReplicationListener implements StreamListener {
 
         Set<String> tableNames =
                 results.getEntries().keySet().stream().map(schema -> schema.getTableName()).collect(Collectors.toSet());
+
+        // If this update came before the client's full sync timestamp, ignore it.
+        if (results.getTimestamp().getSequence() <= fullSyncTimestamp.get()) {
+            return;
+        }
 
         if (tableNames.contains(REPLICATION_STATUS_TABLE)) {
             Preconditions.checkState(results.getEntries().keySet().size() == 1,
@@ -118,7 +120,7 @@ public abstract class LogReplicationListener implements StreamListener {
                         // Snapshot sync which was ongoing when the listener was subscribed has ended.  Unsubscribe and
                         // resubscribe it now so that the client can perform an initial full sync on its tables and get
                         // subsequent updates.
-                        resubscribe();
+                        LogReplicationUtils.finishSubscription(corfuStore, this, namespace);
                         subscriptionIncomplete.set(false);
                     }
                     return;
@@ -134,21 +136,6 @@ public abstract class LogReplicationListener implements StreamListener {
                     onSnapshotSyncComplete();
                 }
             }
-        }
-    }
-
-    private void resubscribe() {
-        corfuStore.unsubscribeListener(this);
-
-        if (bufferSize == 0 && tablesOfInterest == null) {
-            corfuStore.subscribeLogReplicationListener(this, namespace, streamTag);
-        } else if (bufferSize == 0) {
-            corfuStore.subscribeLogReplicationListener(this, namespace, streamTag, tablesOfInterest);
-        } else if (tablesOfInterest == null) {
-            corfuStore.subscribeLogReplicationListener(this, namespace, streamTag, bufferSize);
-        } else {
-            corfuStore.subscribeLogReplicationListener(this, namespace, streamTag, tablesOfInterest,
-                    bufferSize);
         }
     }
 
