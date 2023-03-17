@@ -44,15 +44,23 @@ public final class LogReplicationUtils {
                           @Nonnull String streamTag, @Nonnull List<String> tablesOfInterest, int bufferSize,
                           CorfuStore corfuStore) {
 
+        long subscriptionTimestamp = getSubscriptionTimestamp(corfuStore, namespace, clientListener);
+        corfuStore.getRuntime().getTableRegistry().getStreamingManager().subscribeLogReplicationListener(
+                clientListener, namespace, streamTag, tablesOfInterest, subscriptionTimestamp, bufferSize);
+        log.info("Client subscription at timestamp {} successful.", subscriptionTimestamp);
+    }
+
+    private static long getSubscriptionTimestamp(CorfuStore corfuStore, String namespace,
+                                          LogReplicationListener clientListener) {
         Optional<Counter> mvoTrimCounter = MicroMeterUtils.counter("logreplication.subscribe.trim.count");
         Optional<Counter> conflictCounter = MicroMeterUtils.counter("logreplication.subscribe.conflict.count");
         Optional<Timer.Sample> subscribeTimer = MicroMeterUtils.startTimer();
 
         Table<ReplicationStatusKey, ReplicationStatusVal, Message> replicationStatusTable =
-                openReplicationStatusTable(corfuStore);
+            openReplicationStatusTable(corfuStore);
 
         try {
-            IRetry.build(IntervalRetry.class, () -> {
+            return IRetry.build(IntervalRetry.class, () -> {
                 try (TxnContext txnContext = corfuStore.txn(namespace)) {
                     // The transaction is started in the client's namespace and the Replication Status table resides in the
                     // system namespace.  Corfu Store does not validate the cross-namespace access as long as there are no
@@ -87,10 +95,7 @@ public final class LogReplicationUtils {
                     // and end of the transaction because reads in a transaction observe updates only till the snapshot when it
                     // started.
                     long subscriptionTimestamp = txnContext.getTxnSequence();
-                    corfuStore.getRuntime().getTableRegistry().getStreamingManager().subscribeLogReplicationListener(
-                            clientListener, namespace, streamTag, tablesOfInterest, subscriptionTimestamp, bufferSize);
-                    log.info("Client subscription at timestamp {} successful.", subscriptionTimestamp);
-                    return null;
+                    return subscriptionTimestamp;
                 } catch (TransactionAbortedException tae) {
                     if (tae.getCause() instanceof TrimmedException) {
                         // If the snapshot version where this transaction started has been evicted from the JVM's MVO
@@ -117,6 +122,7 @@ public final class LogReplicationUtils {
         }
     }
 
+
     private static Table<ReplicationStatusKey, ReplicationStatusVal, Message> openReplicationStatusTable(CorfuStore corfuStore) {
         try {
             return corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, REPLICATION_STATUS_TABLE, ReplicationStatusKey.class,
@@ -129,5 +135,19 @@ public final class LogReplicationUtils {
 
     private static void incrementCount(Optional<Counter> counter) {
         counter.ifPresent(Counter::increment);
+    }
+
+    /**
+     * If full sync on client tables was not performed during subscription, attempt to perform it now and complete
+     * the subscription.
+     * @param corfuStore
+     * @param clientListener
+     * @param namespace
+     */
+    public static void finishSubscription(CorfuStore corfuStore, LogReplicationListener clientListener,
+                                        String namespace) {
+        long subscriptionTimestamp = getSubscriptionTimestamp(corfuStore, namespace, clientListener);
+        log.info("Client full sync completed at timestamp {}", subscriptionTimestamp);
+        clientListener.getFullSyncTimestamp().set(subscriptionTimestamp);
     }
 }
