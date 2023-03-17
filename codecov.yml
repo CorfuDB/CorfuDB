@@ -1,3 +1,4 @@
+# Ref: https://docs.codecov.com/docs/codecov-yaml
 coverage:
   precision: 2
   round: nearest
@@ -5,5 +6,11 @@ coverage:
   ignore:
     - "generator/src/main/java/**/*"
     - "samples/**/*"
+  # Ref: https://docs.codecov.com/docs/commit-status
   status:
-    patch: off
+    patch:
+      off
+    project:
+      default:
+        target: auto
+        threshold: 0.2%
