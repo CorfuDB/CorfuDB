@@ -606,23 +606,25 @@ public class SequencerServer extends AbstractServer {
                 streamTailToGlobalTailMap, sequencerEpoch);
 
         if (serverContext.isDeleteInactiveStreamsOnSequencerReset()) {
-            CompletableFuture<Set<UUID>> getInactiveStreamsFuture = CompletableFuture.supplyAsync(() ->
-                            getInactiveStreams(Collections.unmodifiableSet(streamsAddressMap.keySet())),
-                            corfuRuntimeExecutor)
+            CompletableFuture
+                    .supplyAsync(() -> {
+                        Set<UUID> existingStreams = Collections.unmodifiableSet(streamsAddressMap.keySet());
+                        return getInactiveStreams(existingStreams);
+                    }, corfuRuntimeExecutor)
                     .exceptionally(ex -> {
                         log.error("Failed to get inactive streams.", ex);
-                        return Collections.emptySet();});
-            getInactiveStreamsFuture.thenRunAsync(() -> deleteStreams(getInactiveStreamsFuture.join()),
-                            executor)
-                    .exceptionally(ex -> {
-                        log.error("Failed to delete streams during sequencer reset.");
-                        return null;});
+                        return Collections.emptySet();
+                    })
+                    .thenAcceptAsync(this::deleteStreams, executor)
+                    .whenComplete((result, err) -> {
+                        if (err != null) {
+                            log.error("Failed to delete streams during sequencer reset.");
+                        }
+                    });
         }
 
-        HeaderMsg responseHeader = getHeaderMsg(req.getHeader(),
-                ClusterIdCheck.CHECK, EpochCheck.IGNORE);
-        r.sendResponse(getResponseMsg(responseHeader,
-                getBootstrapSequencerResponseMsg(true)), ctx);
+        HeaderMsg responseHeader = getHeaderMsg(req.getHeader(), ClusterIdCheck.CHECK, EpochCheck.IGNORE);
+        r.sendResponse(getResponseMsg(responseHeader, getBootstrapSequencerResponseMsg(true)), ctx);
     }
 
     /**
