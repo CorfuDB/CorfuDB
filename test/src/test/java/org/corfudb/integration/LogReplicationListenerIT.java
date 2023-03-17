@@ -784,6 +784,7 @@ public class LogReplicationListenerIT extends AbstractIT {
          */
         protected void mergeTable(TxnContext txnContext) throws InvocationTargetException, NoSuchMethodException, IllegalAccessException {
             openMergedTable();
+
             List<CorfuStoreEntry<SampleSchema.Uuid, SampleSchema.ValueFieldTagOne, SampleSchema.Uuid>> entries =
                     txnContext.executeQuery(userTableName, p -> true);
             existingEntries.addAll(entries);
