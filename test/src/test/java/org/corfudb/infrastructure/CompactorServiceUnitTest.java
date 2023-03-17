@@ -64,7 +64,7 @@ public class CompactorServiceUnitTest {
 
 
     @Before
-    public void setup() {
+    public void setup() throws Exception {
 
         Map<String, Object> map = new HashMap<>();
         map.put("<port>", "port");
@@ -97,6 +97,32 @@ public class CompactorServiceUnitTest {
         //isLeader becomes false
         when(mockLayout.getPrimarySequencer()).thenReturn(NODE_ENDPOINT + NODE_0);
 
+        when((CheckpointingStatus) corfuStoreCompactionManagerEntry.getPayload())
+                .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.FAILED).build())
+                .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED).build());
+        when(invokeCheckpointingJvm.isRunning()).thenReturn(false).thenReturn(true);
+        when(invokeCheckpointingJvm.isInvoked()).thenReturn(false).thenReturn(true);
+
+        compactorServiceSpy.start(Duration.ofSeconds(SCHEDULER_INTERVAL));
+        try {
+            TimeUnit.SECONDS.sleep(SLEEP_WAIT);
+        } catch (InterruptedException e) {
+            log.warn(SLEEP_INTERRUPTED_EXCEPTION_MSG, e);
+        }
+
+        verify(invokeCheckpointingJvm, times(1)).shutdown();
+        verify(invokeCheckpointingJvm).invokeCheckpointing();
+    }
+
+    @Test
+    public void runOrchestratorNonLeaderOnExceptionTest() throws Exception {
+        Layout mockLayout = mock(Layout.class);
+        when(corfuRuntime.invalidateLayout()).thenReturn(CompletableFuture.completedFuture(mockLayout));
+        //isLeader becomes false
+        when(mockLayout.getPrimarySequencer()).thenReturn(NODE_ENDPOINT + NODE_0);
+
+        when(compactorServiceSpy.getCompactorLeaderServices())
+                .thenThrow(new Exception("CompactorLeaderServices not initialized")).thenReturn(leaderServices);
         when((CheckpointingStatus) corfuStoreCompactionManagerEntry.getPayload())
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.FAILED).build())
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED).build());
