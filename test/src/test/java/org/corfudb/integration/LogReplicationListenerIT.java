@@ -5,6 +5,9 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
+import org.corfudb.infrastructure.logreplication.proto.Sample;
+import org.corfudb.infrastructure.logreplication.proto.Sample.StringKey;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplication.ReplicationStatusKey;
 import org.corfudb.runtime.LogReplication.ReplicationStatusVal;
 import org.corfudb.runtime.LogReplicationListener;
@@ -22,6 +25,7 @@ import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -31,6 +35,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 
+import static org.corfudb.integration.LogReplicationAbstractIT.NAMESPACE;
 import static org.corfudb.runtime.LogReplicationUtils.REPLICATION_STATUS_TABLE;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 import static org.junit.Assert.fail;
@@ -656,6 +661,142 @@ public class LogReplicationListenerIT extends AbstractIT {
             existingEntries.addAll(entries);
 
             existingEntries.forEach(existingEntry -> countDownLatch.countDown());
+        }
+    }
+
+    /**
+     * This class is for LogicalGroup E2E IT
+     *
+     * (1) Open a table that store all the existing data
+     * (2) process updates, add the diff to the table and updates
+     */
+    private class MergeTestListener extends LogReplicationListener {
+
+        private final CountDownLatch updatesLatch;
+
+        private final List<String> tablesOfInterest;
+
+        private final CountDownLatch numTxLatch;
+
+        // Updates received through streaming
+        @Getter
+        private final List<CorfuStreamEntry> updates = new ArrayList<>();
+
+        // Entries discovered in performFullSync() before streaming updates are received
+        @Getter
+        private final List<CorfuStoreEntry>
+                existingEntries = new ArrayList<>();
+
+        Table<SampleSchema.Uuid, SampleSchema.ValueFieldTagOne, SampleSchema.Uuid> mergedTable;
+
+        MergeTestListener(CorfuStore corfuStore, String namespace, String streamTag, List<String> tablesOfInterest,
+                       CountDownLatch numTxLatch, CountDownLatch updatesLatch) {
+            super(corfuStore, namespace);
+            this.updatesLatch = updatesLatch;
+            this.tablesOfInterest = tablesOfInterest;
+            this.numTxLatch = numTxLatch;
+        }
+
+        @Override
+        public void onError(Throwable throwable) {
+            log.error("Error on listener", throwable);
+            fail("onError for LRTestListener: " + throwable.toString());
+        }
+
+        @Override
+        protected void onSnapshotSyncStart() {
+            log.info("Snapshot sync started");
+        }
+
+        @Override
+        protected void onSnapshotSyncComplete() {
+            log.info("Snapshot sync complete");
+        }
+
+        @Override
+        protected void processUpdatesInSnapshotSync(CorfuStreamEntries results) {
+            numTxLatch.countDown();
+            log.info("Processing updates in snapshot sync");
+            results.getEntries().forEach((schema, entries) -> {
+                if (tablesOfInterest.contains(NAMESPACE + "$" + schema.getTableName())) {
+                    entries.forEach(e -> {
+                        updatesLatch.countDown();
+                        // Ignore the clear operation comes from Snapshot Sync
+                        if (!(e.getOperation() == CorfuStreamEntry.OperationType.CLEAR) &&
+                                !(existingEntries.contains(e))) {
+                            updates.add(e);
+                            existingEntries.add(e);
+                            try (TxnContext tx = store.txn(namespace)){
+                                tx.putRecord(mergedTable, (SampleSchema.Uuid)e.getKey(), (SampleSchema.ValueFieldTagOne)
+                                                e.getPayload(),
+                                        (SampleSchema.Uuid) e.getMetadata());
+                                tx.commit();
+                            }
+                        }
+                    });
+                }
+            });
+        }
+
+        @Override
+        protected void processUpdatesInLogEntrySync(CorfuStreamEntries results) {
+            numTxLatch.countDown();
+            log.info("Processing updates in log entry sync");
+            results.getEntries().forEach((schema, entries) -> {
+                if (tablesOfInterest.contains(NAMESPACE + "$" + schema.getTableName())) {
+                    entries.forEach((e) -> {
+                        updatesLatch.countDown();
+                        if (!(existingEntries.contains(e))) {
+                            updates.add(e);
+                            existingEntries.add(e);
+                            try (TxnContext tx = store.txn(namespace)){
+                                tx.putRecord(mergedTable, (SampleSchema.Uuid)e.getKey(), (SampleSchema.ValueFieldTagOne)
+                                                e.getPayload(),
+                                        (SampleSchema.Uuid) e.getMetadata());
+                                tx.commit();
+                            }
+                        }
+                    });
+                }
+            });
+        }
+
+        @Override
+        protected void performFullSync(TxnContext txnContext) {
+        }
+
+        protected void openMergedTable() throws InvocationTargetException, NoSuchMethodException, IllegalAccessException{
+            String mergedTableName = "MERGED_TABLE";
+            mergedTable = store.openTable(
+                    NAMESPACE,
+                    mergedTableName,
+                    SampleSchema.Uuid.class,
+                    SampleSchema.ValueFieldTagOne.class,
+                    SampleSchema.Uuid.class,
+                    TableOptions.fromProtoSchema(SampleSchema.ValueFieldTagOne.class)
+            );
+        }
+
+        /**
+         * Will add different types of merge table later
+         * Open a table that is used for storing all the data before snapshot sync
+         * @param txnContext transaction context in which the operation must be performed
+         */
+        protected void mergeTable(TxnContext txnContext) throws InvocationTargetException, NoSuchMethodException, IllegalAccessException {
+            openMergedTable();
+            List<CorfuStoreEntry<SampleSchema.Uuid, SampleSchema.ValueFieldTagOne, SampleSchema.Uuid>> entries =
+                    txnContext.executeQuery(userTableName, p -> true);
+            existingEntries.addAll(entries);
+
+            existingEntries.forEach((existingEntry) -> {
+                try (TxnContext tx = store.txn(namespace)){
+                    tx.putRecord(mergedTable, (SampleSchema.Uuid)existingEntry.getKey(), (SampleSchema.ValueFieldTagOne)
+                                    existingEntry.getPayload(),
+                            (SampleSchema.Uuid) existingEntry.getMetadata());
+                    updatesLatch.countDown();
+                    tx.commit();
+                }
+            });
         }
     }
 }
