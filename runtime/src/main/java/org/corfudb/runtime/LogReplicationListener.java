@@ -72,13 +72,13 @@ public abstract class LogReplicationListener implements StreamListener {
      */
     public final void onNext(CorfuStreamEntries results) {
 
-        Set<String> tableNames =
-                results.getEntries().keySet().stream().map(schema -> schema.getTableName()).collect(Collectors.toSet());
-
         // If this update came before the client's full sync timestamp, ignore it.
         if (results.getTimestamp().getSequence() <= fullSyncTimestamp.get()) {
             return;
         }
+
+        Set<String> tableNames =
+                results.getEntries().keySet().stream().map(schema -> schema.getTableName()).collect(Collectors.toSet());
 
         if (tableNames.contains(REPLICATION_STATUS_TABLE)) {
             Preconditions.checkState(results.getEntries().keySet().size() == 1,
@@ -104,11 +104,13 @@ public abstract class LogReplicationListener implements StreamListener {
     private void processReplicationStatusUpdate(CorfuStreamEntries results) {
         Map<TableSchema, List<CorfuStreamEntry>> entries = results.getEntries();
 
-        TableSchema replicationStatusTableSchema =
-                entries.keySet().stream().filter(key -> key.getTableName().equals(REPLICATION_STATUS_TABLE))
-                        .findFirst().get();
+        List<CorfuStreamEntry> replicationStatusTableEntries =
+            entries.entrySet().stream().filter(e -> e.getKey().getTableName().equals(REPLICATION_STATUS_TABLE))
+            .map(Map.Entry::getValue)
+            .findFirst()
+            .get();
 
-        for (CorfuStreamEntry entry : entries.get(replicationStatusTableSchema)) {
+        for (CorfuStreamEntry entry : replicationStatusTableEntries) {
 
             // Ignore any update where the operation type != UPDATE
             if (entry.getOperation() == CorfuStreamEntry.OperationType.UPDATE) {
