@@ -7,17 +7,24 @@ import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.clients.TestRule;
+import org.corfudb.runtime.collections.PersistedCorfuTable;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.object.AbstractObjectTest;
+import org.corfudb.runtime.object.PersistenceOptions;
+import org.corfudb.runtime.object.PersistenceOptions.PersistenceOptionsBuilder;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.proto.service.CorfuMessage;
 import org.corfudb.util.serializer.ISerializer;
+import org.corfudb.util.serializer.Serializers;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -338,7 +345,7 @@ public class CheckpointTest extends AbstractObjectTest {
         executeScheduled(PARAMETERS.CONCURRENCY_SOME, PARAMETERS.TIMEOUT_LONG);
 
         // Finally, after all three threads finish, again we start a fresh runtime and instantiate the maps.
-        // This time the we check that the new map instances contains all values
+        // This time we check that the new map instances contains all values
         validateMapRebuild(tableSize, true, false);
 
         rt.shutdown();
@@ -712,55 +719,47 @@ public class CheckpointTest extends AbstractObjectTest {
      */
 
     @Test
-    public void PersistedCorfuTableTests() {
-        // TODO(vjeko): Migrate this test.
-        /**
+    public void PersistedCorfuTableCheckpointTest() {
         String path = PARAMETERS.TEST_TEMP_DIR;
 
         CorfuRuntime rt = getDefaultRuntime();
 
-        UUID tableId = UUID.randomUUID();
-        Supplier<StreamingMap<String, String>> writerMapSupplier = () ->
-                new PersistedStreamingMap<>(Paths.get(path + tableId + "writer"),
-                        PersistedStreamingMap.getPersistedStreamingMapOptions(),
-                        Serializers.JSON, rt);
+        final UUID tableId = UUID.randomUUID();
+        final PersistenceOptionsBuilder persistenceOptions = PersistenceOptions.builder()
+                .dataPath(Paths.get(path + tableId + "writer"));
 
-        CorfuTable<String, String> diskBackedMap = rt.getObjectsView()
+        try (PersistedCorfuTable<String, String> table = rt.getObjectsView()
                 .build()
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setTypeToken(PersistedCorfuTable.<String, String>getTypeToken())
                 .streamID(tableId)
                 .setSerializer(Serializers.JSON)
-                .setArguments(writerMapSupplier, ICorfuVersionPolicy.MONOTONIC)
-                .open();
+                .setArguments(persistenceOptions.build(), Serializers.JSON)
+                .open()) {
 
-        final int numKeys = 303;
-        for (int x = 0; x < numKeys; x++) {
-            diskBackedMap.put(String.valueOf(x), "payload" + x);
+            final int numKeys = 303;
+            for (int x = 0; x < numKeys; x++) {
+                table.insert(String.valueOf(x), "payload" + x);
+            }
+
+            MultiCheckpointWriter mcw = new MultiCheckpointWriter();
+            mcw.addMap(table);
+            Token token = mcw.appendCheckpoints(rt, "Author1");
+            rt.getAddressSpaceView().prefixTrim(token);
+            rt.getAddressSpaceView().gc();
         }
-
-        MultiCheckpointWriter mcw = new MultiCheckpointWriter();
-        mcw.addMap(diskBackedMap);
-        Token token = mcw.appendCheckpoints(rt, "Author1");
-        rt.getAddressSpaceView().prefixTrim(token);
-        rt.getAddressSpaceView().gc();
 
         CorfuRuntime newRt = getNewRuntime();
 
-        Supplier<StreamingMap<String, String>> readerMapSupplier = () ->
-                new PersistedStreamingMap<>(Paths.get(path + tableId + "reader"),
-                        PersistedStreamingMap.getPersistedStreamingMapOptions(),
-                        Serializers.JSON, rt);
-
-        CorfuTable<String, String> newDiskBackedMap = newRt.getObjectsView()
-                .build()
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+        persistenceOptions.dataPath(Paths.get(path + tableId + "reader"));
+        try (PersistedCorfuTable<String, String> table = newRt.getObjectsView().build()
+                .setTypeToken(PersistedCorfuTable.<String, String>getTypeToken())
                 .streamID(tableId)
                 .setSerializer(Serializers.JSON)
-                .setArguments(readerMapSupplier, ICorfuVersionPolicy.MONOTONIC)
-                .open();
+                .setArguments(persistenceOptions.build(), Serializers.JSON)
+                .open()) {
 
-        assertThat(Iterators.elementsEqual(newDiskBackedMap.entryStream().iterator(),
-                diskBackedMap.entryStream().iterator())).isTrue();
-         */
+            assertThat(Iterators.elementsEqual(table.entryStream().iterator(),
+                    table.entryStream().iterator())).isTrue();
+        }
     }
 }

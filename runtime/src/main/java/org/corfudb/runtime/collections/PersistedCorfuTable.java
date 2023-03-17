@@ -71,8 +71,7 @@ public class PersistedCorfuTable<K, V> implements ICorfuTable<K, V> {
 
     @Override
     public Set<K> keySet() {
-        //return proxy.access(ImmutableCorfuTable::keySet, null);
-        throw new UnsupportedOperationException();
+        throw new UnsupportedOperationException("Please use entryStream() API");
     }
 
     @Override

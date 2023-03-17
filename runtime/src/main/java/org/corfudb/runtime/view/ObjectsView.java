@@ -1,6 +1,7 @@
 package org.corfudb.runtime.view;
 
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
@@ -233,10 +234,14 @@ public class ObjectsView extends AbstractView {
         }
     }
 
-    @Data
+    @Builder
+    @AllArgsConstructor
+    @EqualsAndHashCode
     @SuppressWarnings({"checkstyle:abbreviation"})
     public static class ObjectID<T> {
         final UUID streamID;
+
+        @EqualsAndHashCode.Exclude
         final Class<T> type;
 
         public String toString() {

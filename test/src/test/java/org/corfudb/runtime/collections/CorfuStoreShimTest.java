@@ -11,6 +11,7 @@ import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuOptions;
+import org.corfudb.runtime.CorfuOptions.PersistenceOptions;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.CorfuStoreMetadata.ProtobufFileDescriptor;
@@ -29,7 +30,6 @@ import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.ExampleSchemas.ManagedMetadata;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.ObjectsView;
-import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.test.SampleSchema;
@@ -40,9 +40,12 @@ import org.junit.Assert;
 import org.junit.Ignore;
 import org.junit.Test;
 
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -65,6 +68,7 @@ import static com.google.protobuf.Descriptors.FileDescriptor;
 import static org.corfudb.test.SampleAppliance.Appliance;
 import static org.corfudb.test.SampleSchema.FirewallRule;
 import static org.corfudb.test.SampleSchema.ManagedResources;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * To ensure that feature changes in CorfuStore do not break verticals,
@@ -1441,5 +1445,122 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         assertThat(options.getStreamTag(0)).isEqualTo("sample_streamer_4");
         assertThat(options.getSecondaryKeyCount()).isEqualTo(1);
         assertThat(options.getSecondaryKey(0).getIndexPath()).isEqualTo("event_time");
+    }
+
+    @Test
+    public void testDiskBackedTable() throws Exception {
+        final int numEntries = 1000;
+        // Get a Corfu Runtime instance.
+        CorfuRuntime corfuRuntime = getDefaultRuntime();
+
+        // Creating Corfu Store using a connected corfu client.
+        CorfuStoreShim shimStore = new CorfuStoreShim(corfuRuntime);
+
+        // Define a namespace for the table.
+        final String someNamespace = "some-namespace";
+        // Define table name.
+        final String tableName = "DiskTable";
+        final String dataPath = Files.createTempDirectory(tableName).toString();
+        final String LOCK_FILE = "LOCK";
+
+        PersistenceOptions persistenceOptions = PersistenceOptions.newBuilder()
+                .setDataPath(dataPath)
+                .build();
+
+        final Table<SampleSchema.Uuid, SampleSchema.SampleTableAMsg, ManagedResources> table = shimStore.openTable(
+                someNamespace,
+                tableName,
+                SampleSchema.Uuid.class,
+                SampleSchema.SampleTableAMsg.class,
+                ManagedResources.class,
+                TableOptions.builder().persistenceOptions(persistenceOptions).build());
+
+        assertTrue(Files.exists(Paths.get(dataPath, LOCK_FILE)));
+
+        try (ManagedTxnContext txnContext = shimStore.tx(someNamespace)) {
+            for (int i = 0; i < numEntries; i++) {
+                SampleSchema.Uuid key = SampleSchema.Uuid.newBuilder().setLsb(i).setMsb(i).build();
+                SampleSchema.SampleTableAMsg value = SampleSchema.SampleTableAMsg.newBuilder()
+                        .setPayload(String.valueOf(i)).build();
+                txnContext.putRecord(table, key, value, null);
+            }
+
+            CorfuStoreMetadata.Timestamp ts = txnContext.commit();
+            assertThat(ts.getSequence()).isPositive();
+        }
+
+        try (ManagedTxnContext txnContext = shimStore.tx(someNamespace)) {
+            // Ensure that count() works.
+            assertThat(txnContext.count(table)).isEqualTo(numEntries);
+
+            final Set<SampleSchema.Uuid> keySet = new HashSet<>();
+            final Set<SampleSchema.SampleTableAMsg> valueSet = new HashSet<>();
+
+
+            // Ensure that get() works.
+            for (int i = 0; i < numEntries; i++) {
+                SampleSchema.Uuid key = SampleSchema.Uuid.newBuilder().setLsb(i).setMsb(i).build();
+                SampleSchema.SampleTableAMsg expectedKey = SampleSchema.SampleTableAMsg.newBuilder()
+                        .setPayload(String.valueOf(i)).build();
+                CorfuStoreEntry<?, SampleSchema.SampleTableAMsg, ?> entry = txnContext.getRecord(table, key);
+                assertThat(entry.getPayload()).isEqualTo(expectedKey);
+                keySet.add(key);
+                valueSet.add(expectedKey);
+            }
+
+            // Check the streaming API.
+            assertThat(txnContext.entryStream(table)
+                            .map(CorfuStoreEntry::getKey).collect(Collectors.toSet()))
+                    .isEqualTo(keySet);
+
+            assertThat(txnContext.entryStream(table)
+                    .map(CorfuStoreEntry::getPayload).collect(Collectors.toSet()))
+                    .isEqualTo(valueSet);
+
+            CorfuStoreMetadata.Timestamp ts = txnContext.commit();
+            assertThat(ts.getSequence()).isPositive();
+        }
+
+        try (ManagedTxnContext txnContext = shimStore.tx(someNamespace)) {
+            for (int i = 0; i < numEntries/2; i++) {
+                SampleSchema.Uuid key = SampleSchema.Uuid.newBuilder().setLsb(i).setMsb(i).build();
+                SampleSchema.SampleTableAMsg value = SampleSchema.SampleTableAMsg.newBuilder()
+                        .setPayload(String.valueOf(i)).build();
+                txnContext.delete(table, key);
+            }
+
+            CorfuStoreMetadata.Timestamp ts = txnContext.commit();
+            assertThat(ts.getSequence()).isPositive();
+        }
+
+        try (ManagedTxnContext txnContext = shimStore.tx(someNamespace)) {
+            // Make sure the entries were actually removed.
+            assertThat(txnContext.count(table)).isEqualTo(numEntries/2);
+
+            // keySet API is not supported.
+            assertThatThrownBy(() -> txnContext.keySet(table))
+                    .isInstanceOf(UnsupportedOperationException.class);
+
+
+            CorfuStoreMetadata.Timestamp ts = txnContext.commit();
+            assertThat(ts.getSequence()).isPositive();
+        }
+
+        // Ensure that the underlying RocksDB instance is released.
+        try (ManagedTxnContext ignored = shimStore.tx(someNamespace)) {
+            shimStore.freeTableData(someNamespace, tableName);
+        }
+
+        final Table<SampleSchema.Uuid, SampleSchema.SampleTableAMsg, ManagedResources> newTable = shimStore.openTable(
+                someNamespace,
+                tableName,
+                SampleSchema.Uuid.class,
+                SampleSchema.SampleTableAMsg.class,
+                ManagedResources.class,
+                TableOptions.builder().persistenceOptions(persistenceOptions).build());
+
+        try (ManagedTxnContext txnContext = shimStore.tx(someNamespace)) {
+            assertThat(txnContext.count(table)).isEqualTo(numEntries/2);
+        }
     }
 }

@@ -18,6 +18,7 @@ import org.corfudb.runtime.object.PersistenceOptions.PersistenceOptionsBuilder;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.CorfuGuidGenerator;
 import org.corfudb.runtime.view.ObjectsView;
+import org.corfudb.runtime.view.ObjectsView.ObjectID;
 import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.util.serializer.ISerializer;
 
@@ -209,10 +210,9 @@ public class Table<K extends Message, V extends Message, M extends Message> {
             throw new IllegalStateException("Cannot reset a table opened with NO_CACHE option.");
         }
 
-        ObjectsView.ObjectID oid;
 
         // PersistentCorfuTable
-        oid = new ObjectsView.ObjectID(getStreamUUID(), PersistentCorfuTable.class);
+        ObjectID<?> oid = ObjectID.builder().streamID(getStreamUUID()).build();
 
         // Evict all versions of this Table from MVOCache
         runtime.getObjectsView().getMvoCache().invalidateAllVersionsOf(getStreamUUID());
