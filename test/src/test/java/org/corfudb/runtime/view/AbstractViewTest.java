@@ -238,6 +238,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
     public void addServer(int port) {
         new TestServer(new ServerContextBuilder().setSingle(false)
             .setServerRouter(new TestServerRouter(port))
+            .setDeleteInactiveStreamsOnSequencerReset(false)
             .setPort(port).build())
             .addToTest(port, this);
     }
@@ -519,6 +520,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
         TestServer(Map<String, Object> optsMap) {
             this(new ServerContext(optsMap));
             serverContext.setServerRouter(new TestServerRouter());
+            serverContext.setDeleteInactiveStreamsOnSequencerReset(false);
         }
 
         TestServer(ServerContext serverContext) {

@@ -21,6 +21,7 @@ public class ServerContextBuilder {
     boolean noVerify = false;
     boolean noSync = false;
     boolean noAutoCommit = true;
+    boolean deleteInactiveStreamsOnSequencerReset = true;
 
     boolean tlsEnabled = false;
     boolean tlsMutualAuthEnabled = false;
@@ -78,6 +79,7 @@ public class ServerContextBuilder {
                  .put("--no-verify", noVerify)
                  .put("--no-sync", noSync)
                  .put("--no-auto-commit", true)
+                 .put("--delete-inactive-streams-on-sequencer-reset", deleteInactiveStreamsOnSequencerReset)
                  .put("--address", address)
                  .put("--cache-heap-ratio", cacheSizeHeapRatio)
                  .put("--enable-tls", tlsEnabled)

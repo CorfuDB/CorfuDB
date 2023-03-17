@@ -1245,6 +1245,7 @@ public class StateTransferTest extends AbstractViewTest {
             List<File> tempDirs = dirs.getTempDirs();
             ServerContext sc0 = new ServerContextBuilder()
                     .setSingle(false)
+                    .setDeleteInactiveStreamsOnSequencerReset(false)
                     .setServerRouter(new TestServerRouter(SERVERS.PORT_0))
                     .setPort(SERVERS.PORT_0)
                     .setMemory(false)
@@ -1254,6 +1255,7 @@ public class StateTransferTest extends AbstractViewTest {
 
             ServerContext sc1 = new ServerContextBuilder()
                     .setSingle(false)
+                    .setDeleteInactiveStreamsOnSequencerReset(false)
                     .setServerRouter(new TestServerRouter(SERVERS.PORT_1))
                     .setPort(SERVERS.PORT_1)
                     .setMemory(false)
@@ -1263,6 +1265,7 @@ public class StateTransferTest extends AbstractViewTest {
 
             ServerContext sc2 = new ServerContextBuilder()
                     .setSingle(false)
+                    .setDeleteInactiveStreamsOnSequencerReset(false)
                     .setServerRouter(new TestServerRouter(SERVERS.PORT_2))
                     .setPort(SERVERS.PORT_2)
                     .setMemory(false)

@@ -152,6 +152,10 @@ public class ServerContext implements AutoCloseable {
     private final Set<String> dsFilePrefixesForCleanup =
             Sets.newHashSet(PaxosDataStore.PREFIX_PHASE_1, PaxosDataStore.PREFIX_PHASE_2, PREFIX_LAYOUTS);
 
+    @Setter
+    @Getter
+    private boolean deleteInactiveStreamsOnSequencerReset;
+
     /**
      * Returns a new ServerContext.
      *
@@ -181,6 +185,9 @@ public class ServerContext implements AutoCloseable {
                         getVersionFormattedHostAddress((String)serverConfig.get("--address"))
                                 + ":" + serverConfig.get("<port>"));
         localEndpoint = nodeLocator.toEndpointUrl();
+
+        deleteInactiveStreamsOnSequencerReset =  getServerConfig(Boolean.class,
+                "--delete-inactive-streams-on-sequencer-reset");
 
         //TODO(Chetan): Remove this
         log.debug("ServerContext: LocalEndpoint set as " + localEndpoint);

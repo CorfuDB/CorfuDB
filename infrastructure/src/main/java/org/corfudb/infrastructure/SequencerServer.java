@@ -605,15 +605,19 @@ public class SequencerServer extends AbstractServer {
                 " sequencerEpoch = {}", globalLogTail, streamTailToGlobalTailMap.size(),
                 streamTailToGlobalTailMap, sequencerEpoch);
 
-        CompletableFuture<Set<UUID>> getInactiveStreamsFuture = CompletableFuture.supplyAsync(() ->
-                getInactiveStreams(Collections.unmodifiableSet(streamsAddressMap.keySet())), corfuRuntimeExecutor)
-                .exceptionally(ex -> {
-                    log.error("Failed to get inactive streams.", ex);
-                    return Collections.emptySet();});
-        getInactiveStreamsFuture.thenRunAsync(() -> deleteStreams(getInactiveStreamsFuture.join()), executor)
-                .exceptionally(ex -> {
-                    log.error("Failed to delete streams during sequencer reset.");
-                    return null;});
+        if (serverContext.isDeleteInactiveStreamsOnSequencerReset()) {
+            CompletableFuture<Set<UUID>> getInactiveStreamsFuture = CompletableFuture.supplyAsync(() ->
+                            getInactiveStreams(Collections.unmodifiableSet(streamsAddressMap.keySet())),
+                            corfuRuntimeExecutor)
+                    .exceptionally(ex -> {
+                        log.error("Failed to get inactive streams.", ex);
+                        return Collections.emptySet();});
+            getInactiveStreamsFuture.thenRunAsync(() -> deleteStreams(getInactiveStreamsFuture.join()),
+                            executor)
+                    .exceptionally(ex -> {
+                        log.error("Failed to delete streams during sequencer reset.");
+                        return null;});
+        }
 
         HeaderMsg responseHeader = getHeaderMsg(req.getHeader(),
                 ClusterIdCheck.CHECK, EpochCheck.IGNORE);
