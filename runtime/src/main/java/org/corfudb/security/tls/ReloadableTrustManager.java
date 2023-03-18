@@ -36,21 +36,21 @@ public class ReloadableTrustManager implements X509TrustManager {
 
     @Override
     public void checkClientTrusted(X509Certificate[] chain, String authType) throws CertificateException {
-        checkValidity(chain);
-
         reloadTrustStoreWrapper();
+        checkValidity(chain);
         trustManager.checkClientTrusted(chain, authType);
     }
 
     @Override
     public void checkServerTrusted(X509Certificate[] chain, String authType) throws CertificateException {
-        checkValidity(chain);
         reloadTrustStoreWrapper();
+        checkValidity(chain);
         trustManager.checkServerTrusted(chain, authType);
     }
 
     private void checkValidity(X509Certificate[] chain) throws CertificateExpiredException, CertificateNotYetValidException {
         if (isCertExpiryCheckEnabled()) {
+            log.trace("checkValidity: CertExpiryCheck is Enabled.");
             for (X509Certificate cert : chain) {
                 cert.checkValidity();
             }
