@@ -55,7 +55,7 @@ public class AbstractIT extends AbstractCorfuTest {
     static final String DEFAULT_ENDPOINT = DEFAULT_HOST + ":" + DEFAULT_PORT;
 
     static final String CORFU_PROJECT_DIR = new File("..").getAbsolutePath() + File.separator;
-    public static final String CORFU_LOG_PATH = PARAMETERS.TEST_TEMP_DIR;
+    public static final String CORFU_LOG_PATH = "/Users/hshama/Desktop/LR_logs";
 
     static final long DEFAULT_MVO_CACHE_SIZE = 100;
 
@@ -508,7 +508,7 @@ public class AbstractIT extends AbstractCorfuTest {
         private boolean noAutoCommit = true;
         private String keyStore = null;
         private String keyStorePassword = null;
-        private String logLevel = "INFO";
+        private String logLevel = "DEBUG";
         private String logPath = null;
         private String trustStore = null;
         private String logSizeLimitPercentage = null;
@@ -630,7 +630,7 @@ public class AbstractIT extends AbstractCorfuTest {
         private boolean tlsEnabled = false;
         private String keyStore = null;
         private String keyStorePassword = null;
-        private String logLevel = "INFO";
+        private String logLevel = "DEBUG";
         private String trustStore = null;
         private String trustStorePassword = null;
         private String compressionCodec = null;
@@ -694,6 +694,8 @@ public class AbstractIT extends AbstractCorfuTest {
 
             command.append(" -d ").append(logLevel).append(" ")
                     .append(port);
+
+            command.append(" --log-replication-server-threads ").append(2);
 
             return command.toString();
         }
