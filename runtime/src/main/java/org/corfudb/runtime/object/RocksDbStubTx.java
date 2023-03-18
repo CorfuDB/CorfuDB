@@ -12,13 +12,10 @@ import org.rocksdb.RocksIterator;
 
 public class RocksDbStubTx<S extends SnapshotGenerator<S>> implements RocksDbApi<S> {
     private final OptimisticTransactionDB rocksDb;
-    private final DiskBackedSMRSnapshot snapshot;
     private final ReadOptions readOptions;
 
-    public RocksDbStubTx(@NonNull OptimisticTransactionDB rocksDb,
-                         @NonNull DiskBackedSMRSnapshot snapshot) {
+    public RocksDbStubTx(@NonNull OptimisticTransactionDB rocksDb) {
         this.rocksDb = rocksDb;
-        this.snapshot = snapshot;
         this.readOptions = new ReadOptions();
     }
 
@@ -63,7 +60,6 @@ public class RocksDbStubTx<S extends SnapshotGenerator<S>> implements RocksDbApi
 
     @Override
     public void close() throws RocksDBException {
-        // TODO(Zach): How to make sure readOptions are not leaked if thread dies?
         readOptions.close();
     }
 

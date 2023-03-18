@@ -19,7 +19,7 @@ import java.util.function.Supplier;
  * This class is meant to ensure that RocksDB iterator is accessed in a
  * safe, consistent and side effect free manner.
  */
-public class CheckedRocksIterator implements RocksIteratorInterface {
+public class CheckedRocksIterator implements RocksIteratorInterface, AutoCloseable {
 
     private final RocksIterator rocksIterator;
     private final StampedLock lock;
@@ -43,11 +43,13 @@ public class CheckedRocksIterator implements RocksIteratorInterface {
      * This is necessary to make sure that the iterator hasn't been closed.
      */
     private void checkHandle() {
-        underReadLock(() -> {
-            if (!rocksIterator.isOwningHandle()) {
-                throw new IllegalStateException("RocksIterator has been closed");
-            }
-        });
+        if (!lock.isReadLocked()) {
+            throw new IllegalStateException("Read lock should have been acquired.");
+        }
+
+        if (!rocksIterator.isOwningHandle()) {
+            throw new IllegalStateException("RocksIterator has been closed");
+        }
     }
 
     /**
@@ -174,7 +176,7 @@ public class CheckedRocksIterator implements RocksIteratorInterface {
     }
 
     @Override
-    public void refresh(){
+    public void refresh() {
         throw new UnsupportedOperationException("refresh");
     }
 
@@ -182,10 +184,18 @@ public class CheckedRocksIterator implements RocksIteratorInterface {
         return underReadLock(rocksIterator::isOwningHandle);
     }
 
-    /**
-     * Closes the iterator. This method is idempotent.
-     */
+    public void invalidateIterator() {
+        // {@link DiskBackedSMRSnapshot} should have acquired the lock.
+        // {@link StampedLock} is not reentrant.
+        if (!lock.isWriteLocked()) {
+            throw new IllegalStateException("Write lock should have been acquired.");
+        }
+        isValid.set(false);
+    }
+
+    @Override
     public void close() {
+        // All mutators need to acquire the write-lock.
         underWriteLock(rocksIterator::close);
     }
 
@@ -223,14 +233,5 @@ public class CheckedRocksIterator implements RocksIteratorInterface {
         } finally {
             lock.unlockRead(stamp);
         }
-    }
-
-    public void invalidateIterator() {
-        // {@link DiskBackedSMRSnapshot} should have acquired the lock.
-        // {@link StampedLock} is not reentrant.
-        if (!lock.isWriteLocked()) {
-            throw new IllegalStateException("Write lock should have been acquired.");
-        }
-        isValid.set(false);
     }
 }

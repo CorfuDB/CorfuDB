@@ -10,6 +10,7 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.collections.PersistedCorfuTable;
 
 import javax.annotation.Nonnull;
 import java.time.Duration;
@@ -34,6 +35,14 @@ public class MVOCache<S extends SnapshotGenerator<S>> {
     @Getter
     final Cache<VersionedObjectIdentifier, ISMRSnapshot<S>> objectCache;
 
+    /**
+     * Construct an MVO cache whose eviction is strictly time based.
+     * This is used in the context of {@link PersistedCorfuTable} where
+     * snapshots are merely references and thus consume an insignificant
+     * amount of space.
+     *
+     * @param expireAfter time after which a snapshot will be considered invalid
+     */
     public MVOCache(Duration expireAfter) {
         // See https://github.com/google/guava/wiki/CachesExplained#when-does-cleanup-happen
         this.objectCache = CacheBuilder.newBuilder()
@@ -67,8 +76,6 @@ public class MVOCache<S extends SnapshotGenerator<S>> {
 
     public void handleEviction(RemovalNotification<VersionedObjectIdentifier, ISMRSnapshot<S>> notification) {
         log.trace("handleEviction: evicting {} cause {}", notification.getKey(), notification.getCause());
-
-        // TODO(Zach): Confirm that all cached snapshots must eventually go through here.
         notification.getValue().release();
     }
 

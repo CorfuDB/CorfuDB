@@ -15,14 +15,12 @@ import org.rocksdb.WriteOptions;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class RocksDbTx<S extends SnapshotGenerator<S>> implements RocksDbApi<S> {
-    private final OptimisticTransactionDB rocksDb;
     private final DiskBackedSMRSnapshot<S> snapshot;
     private final Transaction txn;
 
     public RocksDbTx(@NonNull OptimisticTransactionDB rocksDb,
                      @NonNull WriteOptions writeOptions,
                      @NonNull DiskBackedSMRSnapshot<S> snapshot) {
-        this.rocksDb = rocksDb;
         this.snapshot = snapshot;
         this.txn = rocksDb.beginTransaction(writeOptions);
     }
@@ -98,7 +96,6 @@ public class RocksDbTx<S extends SnapshotGenerator<S>> implements RocksDbApi<S> 
 
     @Override
     public void close() throws RocksDBException {
-        // TODO(Zach): How to make sure readOptions are not leaked if thread dies?
         txn.rollback();
     }
 

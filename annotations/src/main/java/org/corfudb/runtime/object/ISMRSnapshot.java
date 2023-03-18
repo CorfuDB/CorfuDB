@@ -7,14 +7,18 @@ package org.corfudb.runtime.object;
 public interface ISMRSnapshot<T> {
 
     /**
+     * Consume this snapshot. In some cases, the implementation
+     * might want to transform or do additional processing
+     * when a snapshot is consumed.
      *
      * @return T
      */
     T consume();
 
 
+
     /**
-     *
+     * Release this snapshot.
      */
     void release();
 

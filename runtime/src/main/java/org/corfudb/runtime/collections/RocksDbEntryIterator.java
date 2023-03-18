@@ -80,7 +80,6 @@ public class RocksDbEntryIterator<K, V> implements Iterator<Map.Entry<K, V>>, Au
         if (next == null && wrappedRocksIterator.isOpen()) {
             // close the iterator if it has fully consumed.
             wrappedRocksIterator.close();
-            //readOptions.close();
         }
 
         return next != null;
@@ -105,7 +104,7 @@ public class RocksDbEntryIterator<K, V> implements Iterator<Map.Entry<K, V>>, Au
      */
     @Override
     public void close() {
-        // Release the underlying RocksDB resources
+        // Release the underlying RocksDB resources.
         if (wrappedRocksIterator.isOpen()) {
             wrappedRocksIterator.close();
         }

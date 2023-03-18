@@ -1,14 +1,12 @@
 package org.corfudb.runtime.object;
 
 import lombok.NonNull;
-import org.corfudb.runtime.CorfuOptions;
 import org.corfudb.runtime.CorfuOptions.ConsistencyModel;
 import org.corfudb.runtime.collections.RocksDbEntryIterator;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.util.serializer.ISerializer;
 import org.rocksdb.OptimisticTransactionDB;
 import org.rocksdb.ReadOptions;
-import org.rocksdb.RocksIterator;
 import org.rocksdb.Snapshot;
 import org.rocksdb.Transaction;
 import org.rocksdb.WriteOptions;
@@ -21,16 +19,21 @@ import java.util.concurrent.locks.StampedLock;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
-public class DiskBackedSMRSnapshot<S extends SnapshotGenerator<S>> implements ISMRSnapshot<S>{
+public class DiskBackedSMRSnapshot<S extends SnapshotGenerator<S>> implements ISMRSnapshot<S> {
+
+    private final VersionedObjectIdentifier version;
+
     private final StampedLock lock = new StampedLock();
     private final OptimisticTransactionDB rocksDb;
+    private final Snapshot snapshot;
+    private final ViewGenerator<S> viewGenerator;
+
     private final ReadOptions readOptions;
     private final WriteOptions writeOptions;
-    private final Snapshot snapshot;
     private final ConsistencyModel consistencyModel;
-    private final ViewGenerator<S> viewGenerator;
     private final AtomicInteger refCnt;
-    private final VersionedObjectIdentifier version;
+
+    // A set of iterators associated with this snapshot.
     private final Set<RocksDbEntryIterator<?, ?>> set;
 
     public DiskBackedSMRSnapshot(@NonNull OptimisticTransactionDB rocksDb,
@@ -61,13 +64,13 @@ public class DiskBackedSMRSnapshot<S extends SnapshotGenerator<S>> implements IS
         }
     }
 
-    public void executeInSnapshot(Consumer<ReadOptions> function) {
+    public void executeInSnapshot(Consumer<ReadOptions> consumer) {
         long stamp = lock.readLock();
         try {
             if (!this.readOptions.isOwningHandle()) {
                 throw new TrimmedException("Snapshot is not longer active " + version);
             }
-            function.accept(this.readOptions);
+            consumer.accept(this.readOptions);
         } finally {
             lock.unlockRead(stamp);
         }
@@ -79,7 +82,7 @@ public class DiskBackedSMRSnapshot<S extends SnapshotGenerator<S>> implements IS
         if (consistencyModel == ConsistencyModel.READ_YOUR_WRITES) {
             rocksTx = new RocksDbTx<>(rocksDb, writeOptions, this);
         } else {
-            rocksTx = new RocksDbStubTx<>(rocksDb, this);
+            rocksTx = new RocksDbStubTx<>(rocksDb);
         }
 
         final S view = viewGenerator.newView(rocksTx);
@@ -89,10 +92,14 @@ public class DiskBackedSMRSnapshot<S extends SnapshotGenerator<S>> implements IS
 
     public void release() {
         long stamp = lock.writeLock();
-        rocksDb.releaseSnapshot(snapshot);
-        set.forEach(RocksDbEntryIterator::invalidateIterator);
-        readOptions.close();
-        lock.unlockWrite(stamp);
+        try {
+            rocksDb.releaseSnapshot(snapshot);
+            set.forEach(RocksDbEntryIterator::invalidateIterator);
+            readOptions.close();
+        } finally {
+            lock.unlockWrite(stamp);
+
+        }
     }
 
     public <K, V> RocksDbEntryIterator<K, V> newIterator(ISerializer serializer, Transaction transaction) {
