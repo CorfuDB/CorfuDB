@@ -144,7 +144,7 @@ public final class LogReplicationUtils {
      * @param clientListener
      * @param namespace
      */
-    public static void attempClientFullSync(CorfuStore corfuStore, LogReplicationListener clientListener,
+    public static void attemptClientFullSync(CorfuStore corfuStore, LogReplicationListener clientListener,
                                         String namespace) {
         long subscriptionTimestamp = getSubscriptionTimestamp(corfuStore, namespace, clientListener);
         log.info("Client full sync completed at timestamp {}", subscriptionTimestamp);

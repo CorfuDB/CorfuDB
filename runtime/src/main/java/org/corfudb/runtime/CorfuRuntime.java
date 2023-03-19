@@ -411,11 +411,6 @@ public class CorfuRuntime {
          */
         private int streamingSchedulerPollThreshold = 5;
 
-        /*
-         * Max time for which the thread waiting for snapshot sync completion will wait - 60 seconds
-         */
-        private int snapshotSyncCompletionWaitTimeMs = 60000;
-
         public static CorfuRuntimeParametersBuilder builder() {
             return new CorfuRuntimeParametersBuilder();
         }
@@ -453,7 +448,6 @@ public class CorfuRuntime {
             private Duration streamingPollPeriod = Duration.ofMillis(50);
             private int streamingSchedulerPollBatchSize = 25;
             private int streamingSchedulerPollThreshold = 5;
-            private int snapshotSyncCompletionWaitTimeMs = 60000;
             private boolean cacheWrites = true;
             private String clientName = "CorfuClient";
             private long checkpointTriggerFreqMillis = 0;
@@ -475,11 +469,6 @@ public class CorfuRuntime {
 
             public CorfuRuntimeParametersBuilder streamingSchedulerPollThreshold(int streamingSchedulerPollThreshold) {
                 this.streamingSchedulerPollThreshold = streamingSchedulerPollThreshold;
-                return this;
-            }
-
-            public CorfuRuntimeParametersBuilder snapshotSyncCompletionWaitTimeMs(int snapshotSyncCompletionWaitTimeMs) {
-                this.snapshotSyncCompletionWaitTimeMs = snapshotSyncCompletionWaitTimeMs;
                 return this;
             }
 
@@ -824,7 +813,6 @@ public class CorfuRuntime {
                 corfuRuntimeParameters.setStreamingPollPeriod(streamingPollPeriod);
                 corfuRuntimeParameters.setStreamingSchedulerPollBatchSize(streamingSchedulerPollBatchSize);
                 corfuRuntimeParameters.setStreamingSchedulerPollThreshold(streamingSchedulerPollThreshold);
-                corfuRuntimeParameters.setSnapshotSyncCompletionWaitTimeMs(snapshotSyncCompletionWaitTimeMs);
                 corfuRuntimeParameters.setCacheWrites(cacheWrites);
                 corfuRuntimeParameters.setClientName(clientName);
                 corfuRuntimeParameters.setCheckpointTriggerFreqMillis(checkpointTriggerFreqMillis);

@@ -121,7 +121,7 @@ public abstract class LogReplicationListener implements StreamListener {
                     if (status.getDataConsistent()) {
                         // Snapshot sync which was ongoing when the listener was subscribed has ended.  Attempt to
                         // perform a full sync now.
-                        LogReplicationUtils.attempClientFullSync(corfuStore, this, namespace);
+                        LogReplicationUtils.attemptClientFullSync(corfuStore, this, namespace);
                     }
                     return;
                 }
