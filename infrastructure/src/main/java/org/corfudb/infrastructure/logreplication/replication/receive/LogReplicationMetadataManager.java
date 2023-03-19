@@ -149,6 +149,9 @@ public class LogReplicationMetadataManager {
                             .setRemainingEntriesToSend(-1L)
                             .setReplicationInfo(ReplicationInfo.newBuilder()
                                     .setStatus(SyncStatus.NOT_STARTED)
+                                    .setSnapshotSyncInfo(SnapshotSyncInfo.newBuilder()
+                                            .setStatus(SyncStatus.NOT_STARTED)
+                                            .build())
                                     .build())
                             .build())
                     .build();
@@ -685,8 +688,7 @@ public class LogReplicationMetadataManager {
     }
 
     /**
-     * Set replication status table.
-     * If the current sync type is log entry sync, keep Snapshot Sync Info.
+     * Updates the number of remaining entries.
      *
      * Note: TransactionAbortedException has been handled by upper level.
      *
@@ -694,90 +696,41 @@ public class LogReplicationMetadataManager {
      * @param remainingEntries num of remaining entries to send
      * @param type sync type
      */
-    public void setReplicationStatusTable(LogReplicationSession session, long remainingEntries, SyncType type) {
-        SnapshotSyncInfo snapshotStatus = null;
-        ReplicationStatus current;
-        ReplicationStatus previous = null;
-
+    public void updateRemainingEntriesToSend(LogReplicationSession session, long remainingEntries, SyncType type) {
         try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
             CorfuStoreEntry<LogReplicationSession, ReplicationStatus, Message> entry = txn.getRecord(statusTable,
-                session);
-            if (entry.getPayload() != null) {
-                previous = entry.getPayload();
-                snapshotStatus = previous.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo();
+                    session);
+
+            ReplicationStatus previous = entry.getPayload();
+            SnapshotSyncInfo snapshotStatus = previous.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo();
+
+            if (type == SyncType.LOG_ENTRY && (previous.getSourceStatus().getReplicationInfo().getStatus().equals(SyncStatus.NOT_STARTED)
+                            || snapshotStatus.getStatus().equals(SyncStatus.STOPPED))) {
+                // Skip update of sync status, it will be updated once replication is resumed or started
+                log.info("syncStatusPoller :: skip replication status update, log entry replication is {}",
+                        previous.getSourceStatus().getReplicationInfo().getStatus());
+                txn.commit();
+                return;
+            } else if (type == SyncType.SNAPSHOT && (snapshotStatus.getStatus().equals(SyncStatus.NOT_STARTED)
+                    || snapshotStatus.getStatus().equals(SyncStatus.STOPPED))) {
+                // Skip update of sync status, it will be updated once replication is resumed or started
+                log.info("syncStatusPoller :: skip replication status update, snapshot sync is {}", snapshotStatus);
+                txn.commit();
+                return;
             }
 
-            if (type == SyncType.LOG_ENTRY) {
-                if (previous != null &&
-                        (previous.getSourceStatus().getReplicationInfo().getStatus().equals(SyncStatus.NOT_STARTED)
-                                || snapshotStatus.getStatus().equals(SyncStatus.STOPPED))) {
-                    log.info("syncStatusPoller :: skip replication status update, log entry replication is {}",
-                            previous.getSourceStatus().getReplicationInfo().getStatus());
-                    // Skip update of sync status, it will be updated once replication is resumed or started
-                    txn.commit();
-                    return;
-                }
-
-                if (snapshotStatus == null) {
-                    log.warn("syncStatusPoller [logEntry]:: previous snapshot status is not present for session: {}",
-                            session);
-                    snapshotStatus = SnapshotSyncInfo.newBuilder()
-                            .setStatus(SyncStatus.NOT_STARTED)
-                            .build();
-                }
-
-                current = ReplicationStatus.newBuilder()
-                    .setSourceStatus(SourceReplicationStatus.newBuilder()
-                        .setRemainingEntriesToSend(remainingEntries)
-                        .setReplicationInfo(ReplicationInfo.newBuilder()
-                            .setSyncType(type)
-                            .setStatus(SyncStatus.ONGOING)
-                            .setSnapshotSyncInfo(snapshotStatus)
-                            .build())
-                        .build())
+            ReplicationStatus current = previous.toBuilder()
+                    .setSourceStatus(previous.getSourceStatus().toBuilder()
+                            .setRemainingEntriesToSend(remainingEntries))
                     .build();
 
-                txn.putRecord(statusTable, session, current, null);
-
-                log.debug("syncStatusPoller :: Log Entry status set to ONGOING, session: {}, remainingEntries: {}, " +
-                    "snapshotSyncInfo: {}", session, remainingEntries, snapshotStatus);
-            } else if (type == SyncType.SNAPSHOT) {
-
-                SnapshotSyncInfo currentSnapshotSyncInfo;
-                if (snapshotStatus == null) {
-                    log.warn("syncStatusPoller [snapshot] :: previous status is not present for session: {}", session);
-                    currentSnapshotSyncInfo = SnapshotSyncInfo.newBuilder()
-                            .setStatus(SyncStatus.NOT_STARTED)
-                            .build();
-                } else {
-                    if (snapshotStatus.getStatus().equals(SyncStatus.NOT_STARTED)
-                                || snapshotStatus.getStatus().equals(SyncStatus.STOPPED)) {
-                        // Skip update of sync status, it will be updated once replication is resumed or started
-                        log.info("syncStatusPoller :: skip replication status update, snapshot sync is {}", snapshotStatus);
-                        txn.commit();
-                        return;
-                    }
-                    currentSnapshotSyncInfo = snapshotStatus.toBuilder()
-                            .setStatus(SyncStatus.ONGOING)
-                            .build();
-                }
-
-                current = ReplicationStatus.newBuilder()
-                    .setSourceStatus(SourceReplicationStatus.newBuilder()
-                        .setRemainingEntriesToSend(remainingEntries)
-                        .setReplicationInfo(ReplicationInfo.newBuilder()
-                            .setSyncType(type)
-                            .setStatus(SyncStatus.ONGOING)
-                            .setSnapshotSyncInfo(currentSnapshotSyncInfo)
-                            .build())
-                        .build())
-                    .build();
-
-                txn.putRecord(statusTable, session, current, null);
-            }
+            txn.putRecord(statusTable, session, current, null);
             txn.commit();
+
+            log.debug("syncStatusPoller :: remaining entries updated for {}, session: {}, remainingEntries: {}" +
+                    "snapshotSyncInfo: {}", type, session, remainingEntries, snapshotStatus);
         }
-        log.debug("syncStatusPoller :: sync status for {} set to ONGOING, session: {}, remainingEntries: {}",
+        log.debug("syncStatusPoller :: polling task ran for {}, session: {}, remainingEntries: {}",
                 type, session, remainingEntries);
     }
 

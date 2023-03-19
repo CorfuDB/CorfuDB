@@ -53,7 +53,7 @@ public class LogReplicationAckReader {
     // Last ack'd timestamp from Receiver
     private long lastAckedTimestamp = Address.NON_ADDRESS;
 
-    // Sync Type for which last Ack was received.
+    // Sync Type for which last Ack was received, it is initialized where the timestamp polling task is created.
     private SyncType lastSyncType = null;
 
     private LogEntryReader logEntryReader;
@@ -476,7 +476,7 @@ public class LogReplicationAckReader {
                     try {
                         lock.lock();
                         long entriesToSend = calculateRemainingEntriesToSend(lastAckedTimestamp);
-                        metadataManager.setReplicationStatusTable(session, entriesToSend, lastSyncType);
+                        metadataManager.updateRemainingEntriesToSend(session, entriesToSend, lastSyncType);
                     } catch (TransactionAbortedException tae) {
                         log.error("Error while attempting to set replication status for remote session {} with " +
                                 "lastSyncType {}.", session, lastSyncType, tae);
