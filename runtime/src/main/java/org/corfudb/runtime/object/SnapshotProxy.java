@@ -12,23 +12,20 @@ import java.util.function.LongConsumer;
 @Slf4j
 public class SnapshotProxy<T> implements ICorfuSMRSnapshotProxy<T> {
 
-    private final ISMRSnapshot<T> snapshot;
-
     private T snapshotView;
-
     private final long baseSnapshotVersion;
 
     private final Map<String, ICorfuSMRUpcallTarget<T>> upcallTargetMap;
 
     public SnapshotProxy(@NonNull final ISMRSnapshot<T> snapshotView, final long baseSnapshotVersion,
                          @NonNull final Map<String, ICorfuSMRUpcallTarget<T>> upcallTargetMap) {
-        this.snapshot = snapshotView;
         this.snapshotView = snapshotView.consume();
         this.baseSnapshotVersion = baseSnapshotVersion;
         this.upcallTargetMap = upcallTargetMap;
     }
 
-    public <R> R access(@NonNull ICorfuSMRAccess<R, T> accessFunction, @NonNull LongConsumer versionAccessed) {
+    public <R> R access(@NonNull ICorfuSMRAccess<R, T> accessFunction,
+                        @NonNull LongConsumer versionAccessed) {
         final R ret = accessFunction.access(snapshotView);
         versionAccessed.accept(baseSnapshotVersion);
         return ret;
@@ -45,8 +42,6 @@ public class SnapshotProxy<T> implements ICorfuSMRSnapshotProxy<T> {
     }
 
     public void release() {
-        // TODO(Zach): better alternative for this - How to ensure that resources are cleaned?
-        // Implement closeable?
-        // snapshot.release();
+        // Future work.
     }
 }

@@ -15,11 +15,8 @@ public interface ISMRSnapshot<T> {
      */
     T consume();
 
-
-
     /**
      * Release this snapshot.
      */
     void release();
-
 }

@@ -30,7 +30,7 @@ public class CheckedRocksIterator implements RocksIteratorInterface, AutoCloseab
         // {@link ReadOptions::close}. Therefore, if we do not own the handle,
         // the existing snapshot is no longer valid.
         if (!readOptions.isOwningHandle()) {
-            throw new TrimmedException();
+            throw new TrimmedException("The snapshot is no longer valid.");
         }
 
         this.isValid = new AtomicBoolean(true);
@@ -48,7 +48,7 @@ public class CheckedRocksIterator implements RocksIteratorInterface, AutoCloseab
         }
 
         if (!rocksIterator.isOwningHandle()) {
-            throw new IllegalStateException("RocksIterator has been closed");
+            throw new IllegalStateException("RocksIterator has been closed.");
         }
     }
 

@@ -9,8 +9,19 @@ import org.rocksdb.OptimisticTransactionDB;
 import org.rocksdb.ReadOptions;
 import org.rocksdb.RocksDBException;
 import org.rocksdb.RocksIterator;
+import org.rocksdb.Transaction;
 
-public class RocksDbStubTx<S extends SnapshotGenerator<S>> implements RocksDbApi<S> {
+/**
+ * A concrete class that implements {@link RocksDbApi} using
+ * {@link Transaction}. Unlike its cousin {@link RocksDbTx},
+ *   1) All mutators are no-ops.
+ *   2) All accessors operate directly on {@link OptimisticTransactionDB}.
+ * This will effectively provide read-committed consistency.
+ *
+ * @param <S> extends SnapshotGenerator
+ */
+public class RocksDbStubTx<S extends SnapshotGenerator<S>>
+        implements RocksDbApi<S> {
     private final OptimisticTransactionDB rocksDb;
     private final ReadOptions readOptions;
 
@@ -18,8 +29,7 @@ public class RocksDbStubTx<S extends SnapshotGenerator<S>> implements RocksDbApi
         this.rocksDb = rocksDb;
         this.readOptions = new ReadOptions();
     }
-
-
+    
     @Override
     public byte[] get(@NonNull ByteBuf keyPayload) throws RocksDBException {
         return this.rocksDb.get(readOptions, ByteBufUtil.getBytes(
@@ -64,7 +74,8 @@ public class RocksDbStubTx<S extends SnapshotGenerator<S>> implements RocksDbApi
     }
 
     @Override
-    public ISMRSnapshot<S> getSnapshot(@NonNull ViewGenerator<S> viewGenerator, VersionedObjectIdentifier version) {
+    public ISMRSnapshot<S> getSnapshot(@NonNull ViewGenerator<S> viewGenerator,
+                                       @NonNull VersionedObjectIdentifier version) {
         throw new UnsupportedOperationException();
     }
 }

@@ -14,7 +14,14 @@ import org.rocksdb.WriteOptions;
 
 import java.util.concurrent.atomic.AtomicInteger;
 
+/**
+ * A concrete class that implements {@link RocksDbApi} using
+ * {@link Transaction}.
+ *
+ * @param <S> extends SnapshotGenerator
+ */
 public class RocksDbTx<S extends SnapshotGenerator<S>> implements RocksDbApi<S> {
+
     private final DiskBackedSMRSnapshot<S> snapshot;
     private final Transaction txn;
 
@@ -24,7 +31,6 @@ public class RocksDbTx<S extends SnapshotGenerator<S>> implements RocksDbApi<S> 
         this.snapshot = snapshot;
         this.txn = rocksDb.beginTransaction(writeOptions);
     }
-
 
     @Override
     public byte[] get(@NonNull ByteBuf keyPayload) throws RocksDBException {
@@ -66,6 +72,7 @@ public class RocksDbTx<S extends SnapshotGenerator<S>> implements RocksDbApi<S> 
     public void clear() throws RocksDBException {
         snapshot.executeInSnapshot(readOptions -> {
             try {
+                // Access RocksIterator directly to avoid the cost of (de)serialization.
                 try (RocksIterator entryIterator = txn.getIterator(readOptions)) {
                     entryIterator.seekToFirst();
                     while (entryIterator.isValid()) {
@@ -83,6 +90,7 @@ public class RocksDbTx<S extends SnapshotGenerator<S>> implements RocksDbApi<S> 
     public long exactSize() {
         return snapshot.executeInSnapshot(readOptions -> {
             long count = 0;
+            // Access RocksIterator directly to avoid the cost of (de)serialization.
             try (RocksIterator entryIterator = txn.getIterator(readOptions)) {
                 entryIterator.seekToFirst();
                 while (entryIterator.isValid()) {
@@ -100,7 +108,8 @@ public class RocksDbTx<S extends SnapshotGenerator<S>> implements RocksDbApi<S> 
     }
 
     @Override
-    public ISMRSnapshot<S> getSnapshot(@NonNull ViewGenerator<S> viewGenerator, VersionedObjectIdentifier version) {
+    public ISMRSnapshot<S> getSnapshot(@NonNull ViewGenerator<S> viewGenerator,
+                                       @NonNull VersionedObjectIdentifier version) {
         throw new UnsupportedOperationException();
     }
 }

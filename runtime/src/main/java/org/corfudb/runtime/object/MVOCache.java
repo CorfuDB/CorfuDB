@@ -36,10 +36,10 @@ public class MVOCache<S extends SnapshotGenerator<S>> {
     final Cache<VersionedObjectIdentifier, ISMRSnapshot<S>> objectCache;
 
     /**
-     * Construct an MVO cache whose eviction is strictly time based.
+     * Construct an MVO cache whose eviction policy is strictly time based.
      * This is used in the context of {@link PersistedCorfuTable} where
-     * snapshots are merely references and thus consume an insignificant
-     * amount of space.
+     * snapshots are merely references and thus do not consume any significant
+     * amount of resources.
      *
      * @param expireAfter time after which a snapshot will be considered invalid
      */

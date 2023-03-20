@@ -1,18 +1,25 @@
 package org.corfudb.runtime.object;
 
 /**
- * Sub type.
+ * Interface that facilitates creation of snapshots.
  *
- * @param <T> ty0pe
+ * @param <T>
  */
 public interface SnapshotGenerator<T> extends AutoCloseable {
+
     /**
+     * Generate a new snapshot of the underlying data structure
+     * and associate a version with it.
      *
-     * @param version version
-     * @return ISMRSnapshot
+     * @param version       a version that will be associated
+     *                      with this snapshot
+     * @return ISMRSnapshot a new snapshot
      */
     ISMRSnapshot<T> getSnapshot(VersionedObjectIdentifier version);
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     void close();
 }

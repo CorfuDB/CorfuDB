@@ -31,7 +31,6 @@ public class PersistedCorfuTable<K, V> implements ICorfuTable<K, V> {
     }
 
     @Override
-    // TODO: use proper return type
     public MVOCorfuCompileProxy<?, ?> getCorfuSMRProxy() {
         return proxy;
     }
@@ -71,6 +70,7 @@ public class PersistedCorfuTable<K, V> implements ICorfuTable<K, V> {
 
     @Override
     public Set<K> keySet() {
+        // We only allow operations over streams and iterators.
         throw new UnsupportedOperationException("Please use entryStream() API");
     }
 
@@ -97,7 +97,7 @@ public class PersistedCorfuTable<K, V> implements ICorfuTable<K, V> {
 
     @Override
     public <I> Iterable<Map.Entry<K, V>> getByIndex(@Nonnull final Index.Name indexName, I indexKey) {
-        throw new UnsupportedOperationException();
+        throw new UnsupportedOperationException("Not yet implemented.");
     }
     @Override
     public Map<String, ICorfuSMRUpcallTarget<DiskBackedCorfuTable<K, V>>> getSMRUpcallMap() {

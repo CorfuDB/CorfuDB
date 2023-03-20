@@ -6,6 +6,10 @@ import org.corfudb.runtime.CorfuOptions.ConsistencyModel;
 
 import java.nio.file.Path;
 
+/**
+ * Reflects {@link org.corfudb.runtime.CorfuOptions.PersistenceOptions}
+ * since Protobuf does not allow for explicit default options
+ */
 @Builder
 public class PersistenceOptions {
 

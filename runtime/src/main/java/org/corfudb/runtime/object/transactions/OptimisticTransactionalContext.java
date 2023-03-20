@@ -160,7 +160,6 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         log.trace("TX[{}] request optimistic commit", this);
 
         snapshotProxyMap.forEach((key, value) -> value.release());
-
         return getConflictSetAndCommit(getReadSetInfo());
     }
 

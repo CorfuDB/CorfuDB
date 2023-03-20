@@ -14,12 +14,18 @@ import org.rocksdb.WriteOptions;
 
 import java.nio.file.Path;
 
+/**
+ * A concrete class that implements {@link RocksDbApi} using
+ * {@link OptimisticTransactionDB}.
+ *
+ * @param <S> extends SnapshotGenerator
+ */
 @Slf4j
 public class RocksDbStore<S extends SnapshotGenerator<S>> implements RocksDbApi<S> {
 
     private final OptimisticTransactionDB rocksDb;
-    private final WriteOptions writeOptions;
     private final String absolutePathString;
+    private final WriteOptions writeOptions;
     private final Options rocksDbOptions;
     private final PersistenceOptions persistenceOptions;
 
@@ -93,8 +99,19 @@ public class RocksDbStore<S extends SnapshotGenerator<S>> implements RocksDbApi<
         log.info("Cleared RocksDB data on {}", absolutePathString);
     }
 
+    /**
+     * Generate a new snapshot based on the current state of
+     * {@link OptimisticTransactionDB} instance.
+     *
+     * @param viewGenerator an instance that will be responsible for
+     *                      generating new views based on this snapshot
+     * @param version       a version that will be tied to this snapshot
+     * @return
+     */
     @Override
-    public ISMRSnapshot<S> getSnapshot(@NonNull ViewGenerator<S> viewGenerator, VersionedObjectIdentifier version) {
-        return new DiskBackedSMRSnapshot<>(rocksDb, writeOptions, persistenceOptions.consistencyModel, version, viewGenerator);
+    public ISMRSnapshot<S> getSnapshot(@NonNull ViewGenerator<S> viewGenerator,
+                                       @NonNull VersionedObjectIdentifier version) {
+        return new DiskBackedSMRSnapshot<>(rocksDb, writeOptions,
+                persistenceOptions.consistencyModel, version, viewGenerator);
     }
 }
