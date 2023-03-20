@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure.logreplication.utils;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Preconditions;
 import com.google.protobuf.Message;
 import com.google.protobuf.TextFormat;
 import lombok.Getter;
@@ -39,6 +40,7 @@ import org.corfudb.util.retry.RetryNeededException;
 
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -172,6 +174,47 @@ public class LogReplicationConfigManager {
         });
     }
 
+    private void generateFullTableConfig(LogReplicationSession session) {
+        Map<UUID, List<UUID>> streamToTagsMap = new HashMap<>();
+        Set<UUID> streamsToDrop = new HashSet<>();
+        Set<String> streamsToReplicate = new HashSet<>();
+
+        registryTableEntries.forEach(entry -> {
+            String tableName = TableRegistry.getFullyQualifiedTableName(entry.getKey());
+            boolean isFederated = entry.getValue().getMetadata().getTableOptions().getIsFederated();
+            UUID streamId = CorfuRuntime.getStreamID(tableName);
+
+            // Find federated tables that will be used by FULL_TABLE replication model
+            if (isFederated || MERGE_ONLY_STREAMS.contains(streamId)) {
+                streamsToReplicate.add(tableName);
+                // Collect tags for this stream
+                List<UUID> tags = streamToTagsMap.getOrDefault(streamId, new ArrayList<>());
+                tags.addAll(entry.getValue().getMetadata().getTableOptions().getStreamTagList().stream()
+                        .map(streamTag -> TableRegistry.getStreamIdForStreamTag(entry.getKey().getNamespace(), streamTag))
+                        .collect(Collectors.toList()));
+                streamToTagsMap.put(streamId, tags);
+            } else {
+                streamsToDrop.add(streamId);
+            }
+        });
+
+        if (sessionToConfigMap.containsKey(session)) {
+            LogReplicationFullTableConfig config = (LogReplicationFullTableConfig) sessionToConfigMap.get(session);
+            config.setStreamsToReplicate(streamsToReplicate);
+            config.setDataStreamToTagsMap(streamToTagsMap);
+            config.setStreamsToDrop(streamsToDrop);
+        } else {
+
+            LogReplicationFullTableConfig fullTableConfig = new LogReplicationFullTableConfig(session, streamsToReplicate,
+                    streamToTagsMap, serverContext, streamsToDrop);
+            sessionToConfigMap.put(session, fullTableConfig);
+
+        }
+
+        log.info("LogReplicationFullTableConfig generated for session={}, streams to replicate={}, streamsToDrop={}",
+                TextFormat.shortDebugString(session), streamsToReplicate, streamsToDrop);
+    }
+
     private void generateLogicalGroupConfig(LogReplicationSession session) {
         Map<UUID, List<UUID>> streamToTagsMap = new HashMap<>();
         Set<String> streamsToReplicate = new HashSet<>();
@@ -225,44 +268,45 @@ public class LogReplicationConfigManager {
             }
         });
 
-        LogReplicationLogicalGroupConfig logicalGroupConfig = new LogReplicationLogicalGroupConfig(session,
-                streamsToReplicate, streamToTagsMap, serverContext, logicalGroupToStreams);
-        sessionToConfigMap.put(session, logicalGroupConfig);
+        if (sessionToConfigMap.containsKey(session)) {
+            LogReplicationLogicalGroupConfig config = (LogReplicationLogicalGroupConfig) sessionToConfigMap.get(session);
+            config.setStreamsToReplicate(streamsToReplicate);
+            config.setDataStreamToTagsMap(streamToTagsMap);
+            config.setLogicalGroupToStreams(logicalGroupToStreams);
+        } else {
+            LogReplicationLogicalGroupConfig logicalGroupConfig = new LogReplicationLogicalGroupConfig(session,
+                    streamsToReplicate, streamToTagsMap, serverContext, logicalGroupToStreams);
+            sessionToConfigMap.put(session, logicalGroupConfig);
+        }
 
         log.info("LogReplicationLogicalGroupConfig generated for session={}, streams to replicate={}, groups={}",
                 TextFormat.shortDebugString(session), streamsToReplicate, logicalGroupToStreams);
     }
 
-    private void generateFullTableConfig(LogReplicationSession session) {
-        Map<UUID, List<UUID>> streamToTagsMap = new HashMap<>();
-        Set<UUID> streamsToDrop = new HashSet<>();
-        Set<String> streamsToReplicate = new HashSet<>();
+    private void updateLogicalGroupConfig(LogReplicationSession session, Set<String> groupsToAdd, Set<String> groupsToRemove) {
+        Preconditions.checkState(Collections.disjoint(groupsToAdd, groupsToRemove),
+                "The sets groupsToAdd and groupsToRemove must not have any intersections");
 
+        LogReplicationLogicalGroupConfig config = (LogReplicationLogicalGroupConfig) sessionToConfigMap.get(session);
+        groupsToAdd.forEach(group -> {
+            config.getRemovedGroupToStreams().remove(group);
+        });
         registryTableEntries.forEach(entry -> {
             String tableName = TableRegistry.getFullyQualifiedTableName(entry.getKey());
-            boolean isFederated = entry.getValue().getMetadata().getTableOptions().getIsFederated();
-            UUID streamId = CorfuRuntime.getStreamID(tableName);
 
-            // Find federated tables that will be used by FULL_TABLE replication model
-            if (isFederated || MERGE_ONLY_STREAMS.contains(streamId)) {
-                streamsToReplicate.add(tableName);
-                // Collect tags for this stream
-                List<UUID> tags = streamToTagsMap.getOrDefault(streamId, new ArrayList<>());
-                tags.addAll(entry.getValue().getMetadata().getTableOptions().getStreamTagList().stream()
-                        .map(streamTag -> TableRegistry.getStreamIdForStreamTag(entry.getKey().getNamespace(), streamTag))
-                        .collect(Collectors.toList()));
-                streamToTagsMap.put(streamId, tags);
-            } else {
-                streamsToDrop.add(streamId);
+            // Find streams to replicate for every logical group for this session
+            if (entry.getValue().getMetadata().getTableOptions().hasReplicationGroup()) {
+                String clientName = entry.getValue().getMetadata().getTableOptions().getReplicationGroup().getClientName();
+                String logicalGroup = entry.getValue().getMetadata().getTableOptions().getReplicationGroup().getLogicalGroup();
+                // TODO (V2): Client name should be checked after the rpc stream is added for Sink side session creation.
+//                if (session.getSubscriber().getClientName().equals(clientName) && groups.contains(logicalGroup)) {
+                if (groupsToRemove.contains(logicalGroup)) {
+                    Set<String> relatedStreams = config.getRemovedGroupToStreams().getOrDefault(logicalGroup, new HashSet<>());
+                    relatedStreams.add(tableName);
+                    config.getRemovedGroupToStreams().put(logicalGroup, relatedStreams);
+                }
             }
         });
-
-        LogReplicationFullTableConfig fullTableConfig = new LogReplicationFullTableConfig(session, streamsToReplicate,
-                streamToTagsMap, serverContext, streamsToDrop);
-        sessionToConfigMap.put(session, fullTableConfig);
-
-        log.info("LogReplicationFullTableConfig generated for session={}, streams to replicate={}, streamsToDrop={}",
-                TextFormat.shortDebugString(session), streamsToReplicate, streamsToDrop);
     }
 
     public void getUpdatedConfig() {
@@ -381,27 +425,36 @@ public class LogReplicationConfigManager {
         Set<String> recordedSinks = groupSinksMap.getOrDefault(logicalGroup, new HashSet<>());
         Set<String> updatedSinks = new HashSet<>(destinations);
 
-        // The impacted sinks are those who are newly added to this logicalGroup or removed from it. Their config
-        // needs to be generated again to reflect the group destination change.
-        Set<String> impactedSinks = Stream.concat(recordedSinks.stream(), updatedSinks.stream())
-                .filter(sink -> !recordedSinks.contains(sink) || !updatedSinks.contains(sink))
+        // Specifically for those who are newly added to this logicalGroup, we trigger a forced snapshot sync for
+        // their ongoing replication sessions.
+        Set<String> addedSinks = updatedSinks.stream().filter(sink -> !recordedSinks.contains(sink))
                 .collect(Collectors.toSet());
+        Set<String> removedSinks = recordedSinks.stream().filter(sink -> !updatedSinks.contains(sink))
+                .collect(Collectors.toSet());
+
         // Update groupSinksMap first and then generate config, as config generation relies on groupSinksMap as well.
         groupSinksMap.put(logicalGroup, updatedSinks);
-        generateConfig(sessionToConfigMap.keySet().stream()
-                .filter(session -> impactedSinks.contains(session.getSinkClusterId()))
-                .collect(Collectors.toSet()));
+
+
+        Set<LogReplicationSession> sessionsAddedGroup = sessionToConfigMap.keySet().stream()
+                .filter(session -> addedSinks.contains(session.getSinkClusterId()))
+                .collect(Collectors.toSet());
+        Set<LogReplicationSession> sessionsRemovedGroup = sessionToConfigMap.keySet().stream()
+                .filter(session -> removedSinks.contains(session.getSinkClusterId()))
+                .collect(Collectors.toSet());
+        sessionsRemovedGroup.forEach(session -> {
+            updateLogicalGroupConfig(session, new HashSet<>(), Collections.singleton(logicalGroup));
+        });
+        sessionsAddedGroup.forEach(session -> {
+            updateLogicalGroupConfig(session, Collections.singleton(logicalGroup), new HashSet<>());
+        });
+
+        sessionsAddedGroup.addAll(sessionsRemovedGroup);
+        generateConfig(sessionsAddedGroup);
 
         log.info("Updated group to sinks map, group={}, updatedSinks={}", logicalGroup, updatedSinks);
 
-        // Specifically for those who are newly added to this logicalGroup, we trigger a forced snapshot sync for
-        // their ongoing replication sessions.
-        Set<String> newlyAddedSinks = updatedSinks.stream().filter(sink -> !recordedSinks.contains(sink))
-                .collect(Collectors.toSet());
-
-        return sessionToConfigMap.keySet().stream()
-                .filter(session -> newlyAddedSinks.contains(session.getSinkClusterId()))
-                .collect(Collectors.toSet());
+        return sessionsAddedGroup;
     }
 
     /**

@@ -653,7 +653,7 @@ public class LogReplicationLogicalGroupIT extends CorfuReplicationMultiSourceSin
         verifyGroupBTableData(sinkCorfuStores.get(SINK2_INDEX),
                 targetWrites + NUM_WRITES, sinkTablesGroupBOnSink2);
 
-        verifyGroupBTableData(sinkCorfuStores.get(SINK3_INDEX), targetWrites, sinkTablesGroupB);
+        verifyGroupBTableData(sinkCorfuStores.get(SINK3_INDEX), 0, sinkTablesGroupB);
     }
 
     /**
@@ -765,8 +765,8 @@ public class LogReplicationLogicalGroupIT extends CorfuReplicationMultiSourceSin
 
         verifyGroupATableData(sinkCorfuStores.get(SINK2_INDEX), targetWrites, sinkTablesGroupA);
         verifyGroupBTableData(sinkCorfuStores.get(SINK3_INDEX), targetWrites, sinkTablesGroupB);
-        verifyGroupATableData(sinkCorfuStores.get(SINK3_INDEX), NUM_WRITES, sinkTablesGroupAOnSink3);
-        verifyGroupBTableData(sinkCorfuStores.get(SINK2_INDEX), NUM_WRITES, sinkTablesGroupBOnSink2);
+        verifyGroupATableData(sinkCorfuStores.get(SINK3_INDEX), 0, sinkTablesGroupAOnSink3);
+        verifyGroupBTableData(sinkCorfuStores.get(SINK2_INDEX), 0, sinkTablesGroupBOnSink2);
 
         // Add GROUP_A and GROUP_B back and verify new data is replicated to Sink2 and Sink3
         logicalGroupClient.addDestinations(GROUP_A,
