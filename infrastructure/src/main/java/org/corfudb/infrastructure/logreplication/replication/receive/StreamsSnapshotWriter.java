@@ -254,8 +254,7 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
     }
 
     private void clearStream(UUID streamId, TxnContext txnContext) {
-        SMREntry entry = new SMREntry(CLEAR_SMR_METHOD, new Array[0], Serializers.PRIMITIVE);
-        txnContext.logUpdate(streamId, entry, replicationContext.getConfig(session).getDataStreamToTagsMap().get(streamId));
+        txnContext.logUpdate(streamId, CLEAR_ENTRY, replicationContext.getConfig(session).getDataStreamToTagsMap().get(streamId));
     }
 
     @Override
