@@ -42,7 +42,8 @@ public abstract class LogReplicationListener implements StreamListener {
     @Getter
     private final AtomicBoolean clientFullSyncPending = new AtomicBoolean(false);
 
-    // This variable tracks the status of snapshot sync after subscription completes, i.e., client full sync is done
+    // This variable tracks if a snapshot sync is ongoing
+    @Getter
     private final AtomicBoolean snapshotSyncInProgress = new AtomicBoolean(false);
 
     // Timestamp at which the client performed a full sync.  Any updates below this timestamp must be ignored.
@@ -116,24 +117,23 @@ public abstract class LogReplicationListener implements StreamListener {
             if (entry.getOperation() == CorfuStreamEntry.OperationType.UPDATE) {
                 ReplicationStatusVal status = (ReplicationStatusVal)entry.getPayload();
 
-                // If subscription was incomplete, we need to process this update only if the snapshot sync ended.
-                if (clientFullSyncPending.get()) {
-                    if (status.getDataConsistent()) {
-                        // Snapshot sync which was ongoing when the listener was subscribed has ended.  Attempt to
-                        // perform a full sync now.
-                        LogReplicationUtils.attemptClientFullSync(corfuStore, this, namespace);
+                if (status.getDataConsistent()) {
+                    // getDataConsistent() == true means that snapshot sync has ended.
+                    if (snapshotSyncInProgress.get()) {
+                        if (clientFullSyncPending.get()) {
+                            // Snapshot sync which was ongoing when the listener was subscribed has ended.  Attempt to
+                            // perform a full sync now.
+                            LogReplicationUtils.attemptClientFullSync(corfuStore, this, namespace);
+                            return;
+                        }
+                        // Process snapshot sync completion in steady state, i.e., client full sync is already complete
+                        snapshotSyncInProgress.set(false);
+                        onSnapshotSyncComplete();
                     }
-                    return;
-                }
-
-                // Process replication status updates in the steady state, i.e., client full sync was already
-                // complete during subscription.
-                if (!status.getDataConsistent()) {
+                } else {
+                    // getDataConsistent() == false.  Snapshot sync has started.
                     snapshotSyncInProgress.set(true);
                     onSnapshotSyncStart();
-                } else if (snapshotSyncInProgress.get()) {
-                    snapshotSyncInProgress.set(false);
-                    onSnapshotSyncComplete();
                 }
             }
         }

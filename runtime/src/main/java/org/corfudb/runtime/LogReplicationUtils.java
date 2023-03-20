@@ -86,7 +86,7 @@ public final class LogReplicationUtils {
                         // Snapshot sync is in progress.  Subscribe without performing a full sync on the tables.
                         log.info("Snapshot Sync is in progress.  Subscribing without performing a full sync on client" +
                             " tables.");
-                        clientListener.getClientFullSyncPending().set(true);
+                        updateListenerFlagsForSnapshotSync(clientListener, true);
                     }
                     txnContext.commit();
 
@@ -149,6 +149,12 @@ public final class LogReplicationUtils {
         long subscriptionTimestamp = getSubscriptionTimestamp(corfuStore, namespace, clientListener);
         log.info("Client full sync completed at timestamp {}", subscriptionTimestamp);
         clientListener.getClientFullSyncTimestamp().set(subscriptionTimestamp);
-        clientListener.getClientFullSyncPending().set(false);
+        updateListenerFlagsForSnapshotSync(clientListener, false);
+    }
+
+    private static void updateListenerFlagsForSnapshotSync(LogReplicationListener clientListener,
+                                                           boolean snapshotSyncInProgress) {
+        clientListener.getClientFullSyncPending().set(snapshotSyncInProgress);
+        clientListener.getSnapshotSyncInProgress().set(snapshotSyncInProgress);
     }
 }
