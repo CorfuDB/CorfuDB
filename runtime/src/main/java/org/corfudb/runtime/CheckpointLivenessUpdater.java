@@ -67,7 +67,7 @@ public class CheckpointLivenessUpdater implements LivenessUpdater {
         try {
             table = currentTable.get();
         } catch (NoSuchElementException e) {
-            log.info("Encountered NoSuchElementException while accessing currentTable, ", e);
+            log.debug("Encountered NoSuchElementException while accessing currentTable, ", e);
             return;
         }
 
