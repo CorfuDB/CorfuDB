@@ -2,6 +2,7 @@ package org.corfudb.integration;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
@@ -11,8 +12,6 @@ import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TableSchema;
 import org.corfudb.runtime.collections.TxnContext;
-import org.corfudb.runtime.LogReplication.ReplicationStatusKey;
-import org.corfudb.runtime.LogReplication.ReplicationStatusVal;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.test.SampleSchema;
@@ -27,8 +26,6 @@ import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.corfudb.runtime.LogReplicationUtils.LR_STATUS_STREAM_TAG;
-import static org.corfudb.runtime.LogReplicationUtils.REPLICATION_STATUS_TABLE;
 
 /**
  * Test the behavior of transaction batching on the Sink.
@@ -102,17 +99,17 @@ public class CorfuReplicationLargeTxIT extends LogReplicationAbstractIT {
         // change on status are captured)
         int totalStandbyStatusUpdates = 2;
         corfuStoreStandby.openTable(LogReplicationMetadataManager.NAMESPACE,
-            REPLICATION_STATUS_TABLE,
-            ReplicationStatusKey.class,
-            ReplicationStatusVal.class,
+            LogReplicationMetadataManager.REPLICATION_STATUS_TABLE,
+            LogReplicationMetadata.ReplicationStatusKey.class,
+            LogReplicationMetadata.ReplicationStatusVal.class,
             null,
-            TableOptions.fromProtoSchema(ReplicationStatusVal.class));
+            TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
 
         CountDownLatch statusUpdateLatch = new CountDownLatch(totalStandbyStatusUpdates);
         ReplicationStatusListener standbyListener =
             new ReplicationStatusListener(statusUpdateLatch, false);
         corfuStoreStandby.subscribeListener(standbyListener, LogReplicationMetadataManager.NAMESPACE,
-                LR_STATUS_STREAM_TAG);
+            LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
 
         // Calculate the expected total number of streaming updates across all tables
         int totalStreamingUpdates =
