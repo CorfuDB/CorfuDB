@@ -20,10 +20,6 @@
 *   **logreplication.opaque.count\_per\_message**: Number of opaque entries per message (rate, mean, max).
 *   **logreplication.opaque.count\_total**: Number of overall opaque entries (rate, mean, max).
 *   **logreplication.opaque.count\_valid**: Number of valid opaque entries (rate, mean, max).
-*   **logreplication.subscribe.trim.count**: Number of times a Trimmed Exception was thrown from the MVO layer when subscribing to LogReplication listener.
-*   **logreplication.subscribe.conflict.count**: Number of times a Transaction Aborted Exception was thrown due to conflicting updates when subscribing to LogReplication listener.
-*   **logreplication.subscribe.duration**: Time taken to subscribe the LogReplication listener.
-*   **logreplication.client.fullsync.duration**: Time taken by the client subscribing to LogReplication listener to perform a full sync on its tables.
 
 ### Current metrics collected for Corfu Runtime:
 
