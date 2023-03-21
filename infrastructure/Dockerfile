@@ -9,6 +9,7 @@ WORKDIR /app
 
 RUN apt update && apt -y install iptables bash jq python3 sudo iproute2 python3-pip curl
 RUN python3 -m pip install pyyaml==5.4.1
+RUN python3 -m pip install netifaces==0.11.0
 
 COPY target/${CORFU_JAR} /usr/share/corfu/lib/${CORFU_JAR}
 COPY target/${CMDLETS_JAR} /usr/share/corfu/lib/${CMDLETS_JAR}

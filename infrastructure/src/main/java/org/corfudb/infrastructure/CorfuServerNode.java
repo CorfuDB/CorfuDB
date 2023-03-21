@@ -31,6 +31,7 @@ import org.corfudb.util.GitRepositoryState;
 import javax.annotation.Nonnull;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Map;
@@ -351,6 +352,9 @@ public class CorfuServerNode implements AutoCloseable {
                                 .<String>getServerConfig(ConfigParamNames.DISABLE_CERT_EXPIRY_CHECK_FILE)
                                 .map(Paths::get)
                                 .orElse(TrustStoreConfig.DEFAULT_DISABLE_CERT_EXPIRY_CHECK_FILE);
+
+                        log.trace("getServerChannelInitializer: certExpiryFile path is {}, isCertExpiryCheckEnabled is {}.",
+                                certExpiryFile, !Files.exists(certExpiryFile));
 
                         TrustStoreConfig trustStoreConfig = TrustStoreConfig.from(
                                 context.getServerConfig(String.class, ConfigParamNames.TRUST_STORE),

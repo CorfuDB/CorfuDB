@@ -32,6 +32,8 @@ COMPACTOR_CHECKPOINTER_CLASS_NAME = "org.corfudb.compactor.CompactorCheckpointer
 COMPACTOR_BULK_READ_SIZE = 50
 COMPACTOR_JVM_XMX = 1024
 FORCE_DISABLE_CHECKPOINTING = "FORCE_DISABLE_CHECKPOINTING"
+POD_NAME = "POD_NAME"
+POD_NAMESPACE = "POD_NAMESPACE"
 
 logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
@@ -112,8 +114,15 @@ class CommandBuilder(object):
 
     def _resolve_ip_address(self, ifname):
         """
-        Get an address of from the network interfaces. IPv6 is preferred over IPv4.
+        If environment variable is set, resolve using it. Else, get an
+        address of from the network interfaces. IPv6 is preferred over IPv4.
         """
+
+        pod_name = os.environ.get(POD_NAME, "default_name")
+        pod_namespace = os.environ.get(POD_NAMESPACE, "default_namespace")
+        if pod_name != "default_name" and pod_namespace != "default_namespace":
+            return pod_name + ".corfu-headless." + pod_namespace + ".svc.cluster.local"
+
         network_interfaces = netifaces.interfaces()
         ip_version = netifaces.AF_INET6  # Default is IPV6
         generic_interfaces = ['eth0', 'en0', 'eth', 'en', 'lo']
