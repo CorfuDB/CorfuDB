@@ -42,7 +42,8 @@ public class CorfuStoreBrowserEditorMain {
         listTagsForTable,
         listTagsMap,
         printMetadataMap,
-        addRecord
+        addRecord,
+        printTxn
     }
 
     private static final String USAGE = "Usage: corfu-browser --host=<host> " +
@@ -154,6 +155,13 @@ public class CorfuStoreBrowserEditorMain {
                     .orElse(null);
             final String batchSizeStr = "--batchSize";
             int batchSize = 100000; // this would be the default batch size for corfu transactions
+
+            int maxPrintStringLen = 1000; // default
+            if (opts.get("--maxPrintStringLen") != null) {
+                maxPrintStringLen = Integer.parseInt(opts.get("--maxPrintStringLen").toString());
+                Preconditions.checkArgument(maxPrintStringLen > 0);
+            }
+            browser.setMaxPrintStringLen(maxPrintStringLen);
 
             switch (Enum.valueOf(OperationType.class, operation)) {
                 case listTables:
@@ -316,6 +324,13 @@ public class CorfuStoreBrowserEditorMain {
                         return metaMap.size();
                     } else {
                         log.error("Print metadata map for a specific address. Specify using tag --address");
+                    }
+                case printTxn:
+                    if (opts.get("--address") != null) {
+                        long address = Integer.parseInt(opts.get("--address").toString());
+                        browser.printTxn(address);
+                    } else {
+                        log.error("Print Log for a specific address. Specify using tag --address");
                     }
                 default:
                     break;

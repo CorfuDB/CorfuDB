@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -19,8 +20,6 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -29,7 +28,10 @@ import com.google.protobuf.Any;
 import com.google.protobuf.DynamicMessage;
 import com.google.protobuf.InvalidProtocolBufferException;
 import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
+import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.runtime.CorfuOptions;
@@ -54,6 +56,7 @@ import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.object.ICorfuVersionPolicy;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.SMRObject;
@@ -78,6 +81,10 @@ public class CorfuStoreBrowserEditor {
     private final String diskPath;
     private final DynamicProtobufSerializer dynamicProtobufSerializer;
     private final String QUOTE = "\"";
+
+    @Getter
+    @Setter
+    private int maxPrintStringLen = 1000;
 
     /**
      * Creates a CorfuBrowser which connects a runtime to the server.
@@ -117,6 +124,50 @@ public class CorfuStoreBrowserEditor {
 
 
         return data.getMetadataMap();
+    }
+
+    public void printTxn(long address) {
+
+        ILogData data;
+
+        try {
+            data = runtime.getAddressSpaceView().read(address);
+        } catch (TrimmedException te) {
+            System.out.println("The transaction at this address has been trimmed.");
+            return;
+        }
+
+        System.out.println("\n========== Log Data ==========\n");
+        MultiObjectSMREntry multiObjectSMREntry = (MultiObjectSMREntry)(data.getPayload(runtime));
+
+        multiObjectSMREntry.getEntryMap().forEach(((uuid, multiSMREntry) -> {
+            System.out.println("Stream UUID : " + uuid.toString());
+            int cnt = 1;
+            for (SMREntry smrEntry : multiSMREntry.getUpdates()) {
+                System.out.println("SMREntry #" + cnt + "/" + multiSMREntry.getUpdates().size() + " : ");
+                cnt++;
+
+                System.out.println("SMRMethod : " + smrEntry.getSMRMethod());
+
+                try {
+                    CorfuDynamicKey corfuDynamicKey = (CorfuDynamicKey)smrEntry.getSMRArguments()[0];
+                    CorfuDynamicRecord corfuDynamicRecord = (CorfuDynamicRecord)smrEntry.getSMRArguments()[1];
+                    Map.Entry<CorfuDynamicKey, CorfuDynamicRecord> entry =
+                            new AbstractMap.SimpleEntry<>(corfuDynamicKey, corfuDynamicRecord);
+
+                    printKey(entry);
+                    printPayload(entry);
+                    printMetadata(entry);
+                } catch (Exception e) {
+                    System.out.println("Failed to parse this SMREntry");
+                } finally {
+                    System.out.println("-----------------------------------");
+                }
+
+            }
+            System.out.println("-----------------------------------");
+        }));
+        System.out.println("\n==================================\n");
     }
 
     /**
@@ -190,27 +241,33 @@ public class CorfuStoreBrowserEditor {
     }
 
     private void printKey(Map.Entry<CorfuDynamicKey, CorfuDynamicRecord> entry) {
-        StringBuilder builder;
         try {
-            builder = new StringBuilder("\nKey:\n")
-                    .append(JsonFormat.printer().print(entry.getKey().getKey()));
-            System.out.println(builder.toString());
+            String keyString = JsonFormat.printer().print(entry.getKey().getKey());
+            if (keyString.length() > maxPrintStringLen) {
+                keyString = keyString.substring(0, maxPrintStringLen) + "..."; // add ellipsis to indicate truncation
+            }
+            StringBuilder builder = new StringBuilder("\nKey:\n")
+                    .append(keyString);
+            System.out.println(builder);
         } catch (Exception e) {
             log.error("invalid key: ", e);
         }
     }
 
     private void printPayload(Map.Entry<CorfuDynamicKey, CorfuDynamicRecord> entry) {
-        StringBuilder builder;
         if (entry.getValue().getPayload() == null) {
             log.error("payload is NULL");
             return;
         }
 
         try {
-            builder = new StringBuilder("\nPayload:\n")
-                    .append(JsonFormat.printer().print(entry.getValue().getPayload()));
-            System.out.println(builder.toString());
+            String payloadString = JsonFormat.printer().print(entry.getValue().getPayload());
+            if (payloadString.length() > maxPrintStringLen) {
+                payloadString = payloadString.substring(0, maxPrintStringLen) + "..."; // add ellipsis to indicate truncation
+            }
+            StringBuilder builder = new StringBuilder("\nPayload:\n")
+                    .append(payloadString);
+            System.out.println(builder);
         } catch (Exception e) {
             log.error("invalid payload: ", e);
         }
@@ -252,15 +309,18 @@ public class CorfuStoreBrowserEditor {
     }
 
     private void printMetadata(Map.Entry<CorfuDynamicKey, CorfuDynamicRecord> entry) {
-        StringBuilder builder;
         if (entry.getValue().getMetadata() == null) {
             log.warn("metadata is NULL");
             return;
         }
         try {
-            builder = new StringBuilder("\nMetadata:\n")
-                    .append(JsonFormat.printer().print(entry.getValue().getMetadata()));
-            System.out.println(builder.toString());
+            String metadataString = JsonFormat.printer().print(entry.getValue().getMetadata());
+            if (metadataString.length() > maxPrintStringLen) {
+                metadataString = metadataString.substring(0, maxPrintStringLen) + "..."; // add ellipsis to indicate truncation
+            }
+            StringBuilder builder = new StringBuilder("\nMetadata:\n")
+                    .append(metadataString);
+            System.out.println(builder);
         } catch (Exception e) {
             log.error("invalid metadata: ", e);
         }
