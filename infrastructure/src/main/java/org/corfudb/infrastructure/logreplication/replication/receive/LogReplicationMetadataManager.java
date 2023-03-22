@@ -702,19 +702,20 @@ public class LogReplicationMetadataManager {
                     session);
 
             ReplicationStatus previous = entry.getPayload();
-            SnapshotSyncInfo snapshotStatus = previous.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo();
+            SnapshotSyncInfo previousSnapshotSyncInfo = previous.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo();
 
             if (type == SyncType.LOG_ENTRY && (previous.getSourceStatus().getReplicationInfo().getStatus().equals(SyncStatus.NOT_STARTED)
-                            || snapshotStatus.getStatus().equals(SyncStatus.STOPPED))) {
+                            || previousSnapshotSyncInfo.getStatus().equals(SyncStatus.STOPPED))) {
                 // Skip update of sync status, it will be updated once replication is resumed or started
                 log.info("syncStatusPoller :: skip replication status update, log entry replication is {}",
                         previous.getSourceStatus().getReplicationInfo().getStatus());
                 txn.commit();
                 return;
-            } else if (type == SyncType.SNAPSHOT && (snapshotStatus.getStatus().equals(SyncStatus.NOT_STARTED)
-                    || snapshotStatus.getStatus().equals(SyncStatus.STOPPED))) {
+            } else if (type == SyncType.SNAPSHOT && (previousSnapshotSyncInfo.getStatus().equals(SyncStatus.NOT_STARTED)
+                    || previousSnapshotSyncInfo.getStatus().equals(SyncStatus.STOPPED))) {
                 // Skip update of sync status, it will be updated once replication is resumed or started
-                log.info("syncStatusPoller :: skip replication status update, snapshot sync is {}", snapshotStatus);
+                log.info("syncStatusPoller :: skip replication status update, snapshot sync is {}",
+                        previousSnapshotSyncInfo.getStatus());
                 txn.commit();
                 return;
             }
@@ -728,7 +729,7 @@ public class LogReplicationMetadataManager {
             txn.commit();
 
             log.debug("syncStatusPoller :: remaining entries updated for {}, session: {}, remainingEntries: {}" +
-                    "snapshotSyncInfo: {}", type, session, remainingEntries, snapshotStatus);
+                    "snapshotSyncInfo: {}", type, session, remainingEntries, previousSnapshotSyncInfo);
         }
         log.debug("syncStatusPoller :: polling task ran for {}, session: {}, remainingEntries: {}",
                 type, session, remainingEntries);

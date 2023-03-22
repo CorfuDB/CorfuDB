@@ -669,7 +669,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
                 DefaultClusterConfig topologyConfig = new DefaultClusterConfig();
                 defaultClusterManager.setLocalNodeId(topologyConfig.getSourceNodeUuids().get(0));
                 TopologyDescriptor topology = defaultClusterManager.generateSingleSourceSinkTopolgy();
-                SessionManager sessionManager = new SessionManager(topology, this.runtime);
+                new SessionManager(topology, this.runtime);
                 break;
             default:
                 break;
