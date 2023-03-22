@@ -8,7 +8,6 @@ import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.collections.PersistedCorfuTable;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
@@ -32,7 +31,7 @@ public class MVOCorfuCompileProxy<
         implements ICorfuSMRProxy<S> {
 
     @Getter
-    private final MultiVersionObject<S> underlyingMVO;
+    private final AbstractVersionedObject<S> underlyingMVO;
 
     private final CorfuRuntime rt;
 
@@ -61,13 +60,22 @@ public class MVOCorfuCompileProxy<
         this.streamTags = streamTags;
         this.objectOpenOption = objectOpenOption;
 
-        this.underlyingMVO = new MultiVersionObject<>(
-                rt,
-                this::getNewInstance,
-                new StreamViewSMRAdapter(rt, rt.getStreamsView().getUnsafe(streamID)),
-                wrapperObject,
-                objectOpenOption,
-                mvoCache);
+        if (objectOpenOption.equals(ObjectOpenOption.CACHE)) {
+            this.underlyingMVO = new MultiVersionObject<>(
+                    rt,
+                    this::getNewInstance,
+                    new StreamViewSMRAdapter(rt, rt.getStreamsView().getUnsafe(streamID)),
+                    wrapperObject,
+                    mvoCache
+            );
+        } else {
+            this.underlyingMVO = new VersionedObject<>(
+                    rt,
+                    this::getNewInstance,
+                    new StreamViewSMRAdapter(rt, rt.getStreamsView().getUnsafe(streamID)),
+                    wrapperObject
+            );
+        }
     }
 
     @Override

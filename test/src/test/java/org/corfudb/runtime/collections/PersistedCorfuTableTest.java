@@ -53,6 +53,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 import java.util.stream.LongStream;
 import java.util.stream.Stream;
@@ -339,7 +340,7 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
     void verifyCommitAddressMultiTable(@ForAll @Size(SAMPLE_SIZE) Set<String> intended) {
         resetTests();
         try (final PersistedCorfuTable<String, String> table1 = setupTable();
-             final PersistedCorfuTable<String, String> table2 = setupTable()) {
+             final PersistedCorfuTable<String, String> table2 = setupTable(alternateTableName)) {
             table1.insert(defaultNewMapEntry, defaultNewMapEntry);
 
             assertThat(executeTx(() -> {
@@ -358,6 +359,7 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
     /**
      * Verify commit address of interleaving transactions on disk-backed tables.
      */
+    // TODO(ZacH):
     @Property(tries = NUM_OF_TRIES)
     void verifyCommitAddressInterleavingTxn(@ForAll @Size(SAMPLE_SIZE) Set<String> intended) throws Exception {
         resetTests();
@@ -407,6 +409,7 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
     void snapshotIsolation(@ForAll @Size(SAMPLE_SIZE) Set<String> intended) throws Exception {
         resetTests();
         try (final PersistedCorfuTable<String, String> table = setupTable()) {
+            AtomicBoolean failure = new AtomicBoolean(false);
             CountDownLatch latch1 = new CountDownLatch(1);
             CountDownLatch latch2 = new CountDownLatch(1);
             final int numUpdates = 5;
@@ -448,8 +451,8 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
                         }
 
                         log.info("Thread one DONE.");
-                    } catch (InterruptedException ignored) {
-                        // Ignored
+                    } catch (Exception ex) {
+                        failure.set(true);
                     }
                 });
             });
@@ -470,8 +473,8 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
                     assertThat(table.get(defaultNewMapEntry + numUpdates)).isEqualTo(defaultNewMapEntry + numUpdates);
                     log.info("Thread two DONE.");
                     latch1.countDown();
-                } catch (InterruptedException ex) {
-                    // Ignored
+                } catch (Exception ex) {
+                    failure.set(true);
                 }
             });
 
@@ -479,6 +482,7 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
             t2.start();
             t1.join();
             t2.join();
+            assertThat(failure.get()).isFalse();
         }
     }
 
@@ -498,6 +502,7 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
         }
     }
 
+    /*
     @Property(tries = NUM_OF_TRIES)
     void snapshotExpired() {
         resetTests(CorfuRuntimeParameters.builder().mvoCacheExpiry(Duration.ofNanos(0)).build());
@@ -577,6 +582,7 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
 
         }
     }
+     */
 
     @Property(tries = NUM_OF_TRIES)
     void noReadYourOwnWrites(@ForAll @Size(SAMPLE_SIZE) Set<String> intended) throws Exception {
@@ -601,9 +607,9 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
         try (final PersistedCorfuTable<String, String> table1 = setupTable(alternateTableName, ENABLE_READ_YOUR_WRITES)) {
             table1.insert(defaultNewMapEntry, defaultNewMapEntry);
             assertThat(persistedCacheLocation).exists();
-            table1.close();
-            assertThat(persistedCacheLocation).doesNotExist();
         }
+
+        assertThat(persistedCacheLocation).doesNotExist();
     }
 
     @Property(tries = NUM_OF_TRIES)

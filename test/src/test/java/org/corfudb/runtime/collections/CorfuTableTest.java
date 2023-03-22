@@ -194,7 +194,6 @@ public class CorfuTableTest extends AbstractViewTest {
                 .setStreamName("test")
                 .open();
 
-        // TODO(vjeko): java.lang.NullPointerException: snapshotView is marked non-null but is null
         assertThat(corfuTable.getByIndex(StringIndexer.BY_FIRST_LETTER, "a"))
                 .isEmpty();
 

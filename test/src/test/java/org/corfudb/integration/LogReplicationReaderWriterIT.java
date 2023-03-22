@@ -463,7 +463,6 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
             testTable.size();
         } catch (Exception e) {
             log.debug("caught a exception " + e);
-            // TODO(vjeko): java.lang.NullPointerException: snapshotView is marked non-null but is null
             assertThat(e).isInstanceOf(TrimmedException.class);
         }
     }

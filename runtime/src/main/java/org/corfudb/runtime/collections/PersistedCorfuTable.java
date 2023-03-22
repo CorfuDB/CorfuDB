@@ -54,7 +54,7 @@ public class PersistedCorfuTable<K, V> implements ICorfuTable<K, V> {
 
     @Override
     public void close() {
-        proxy.getUnderlyingMVO().getCurrentObject().close();
+        proxy.getUnderlyingMVO().close();
     }
 
     @Override

@@ -155,7 +155,6 @@ public class SecurityIT extends AbstractIT {
 
         // CorfuTable stats before usage
         final int initialSize = testTable.size();
-        // TODO(vjeko): java.lang.NullPointerException: snapshotView is marked non-null but is null
 
         // Put key values in CorfuTable
         final int count = 100;
@@ -205,7 +204,6 @@ public class SecurityIT extends AbstractIT {
 
         // CorfuTable stats before usage
         final int initialSize = testTable.size();
-        // TODO(vjeko): java.lang.NullPointerException: snapshotView is marked non-null but is null
 
         // Put key values in CorfuTable
         final int count = 100;

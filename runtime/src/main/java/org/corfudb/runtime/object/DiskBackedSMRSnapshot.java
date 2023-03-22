@@ -14,7 +14,6 @@ import org.rocksdb.WriteOptions;
 import java.util.Collections;
 import java.util.Set;
 import java.util.WeakHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.StampedLock;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -31,7 +30,6 @@ public class DiskBackedSMRSnapshot<S extends SnapshotGenerator<S>> implements IS
     private final ReadOptions readOptions;
     private final WriteOptions writeOptions;
     private final ConsistencyModel consistencyModel;
-    private final AtomicInteger refCnt;
 
     // A set of iterators associated with this snapshot.
     private final Set<RocksDbEntryIterator<?, ?>> set;
@@ -46,7 +44,6 @@ public class DiskBackedSMRSnapshot<S extends SnapshotGenerator<S>> implements IS
         this.viewGenerator = viewGenerator;
         this.consistencyModel = consistencyModel;
         this.snapshot = rocksDb.getSnapshot();
-        this.refCnt = new AtomicInteger(1); // TODO(Zach):
         this.readOptions = new ReadOptions().setSnapshot(this.snapshot);
         this.version = version;
         this.set = Collections.newSetFromMap(new WeakHashMap<>());
@@ -86,7 +83,6 @@ public class DiskBackedSMRSnapshot<S extends SnapshotGenerator<S>> implements IS
         }
 
         final S view = viewGenerator.newView(rocksTx);
-        refCnt.incrementAndGet();
         return view;
     }
 
