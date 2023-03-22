@@ -582,7 +582,7 @@ public class LogReplicationMetadataManager {
             CorfuStoreEntry<ReplicationStatusKey, ReplicationStatusVal, Message> entry =
                     txn.getRecord(replicationStatusTable, key);
 
-            ReplicationStatusVal previous  = entry.getPayload();
+            ReplicationStatusVal previous = entry.getPayload();
             SnapshotSyncInfo previousSnapshotSyncInfo = previous.getSnapshotSyncInfo();
 
             if (type == SyncType.LOG_ENTRY && (previous.getStatus().equals(SyncStatus.NOT_STARTED)

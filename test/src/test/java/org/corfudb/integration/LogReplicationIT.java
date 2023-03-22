@@ -453,7 +453,8 @@ public class LogReplicationIT extends AbstractIT implements Observer {
                 .setClusterId(REMOTE_CLUSTER_ID)
                 .build();
 
-        SyncStatus syncStatus = null, previousSnapshotSyncStatus = null;
+        SyncStatus syncStatus = null;
+        SyncStatus previousSnapshotSyncStatus = null;
 
         Table<ReplicationStatusKey, ReplicationStatusVal, Message> replicationStatusTable =
                 srcCorfuStore.openTable(CORFU_SYSTEM_NAMESPACE, REPLICATION_STATUS_TABLE,
