@@ -2,6 +2,7 @@ package org.corfudb.infrastructure.logreplication.replication.fsm;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal.SyncType;
 
 /**
  * This class represents the Init state of the Log Replication State Machine.
@@ -32,6 +33,7 @@ public class InitializedState implements LogReplicationState {
         switch (event.getType()) {
             case SNAPSHOT_SYNC_REQUEST:
                 log.info("Start Snapshot Sync, requestId={}", event.getEventId());
+                fsm.getAckReader().setSyncType(SyncType.SNAPSHOT);
                 // Set the id of the event that caused the transition to the new state
                 // This is used to correlate trim or error events that derive from this state
                 LogReplicationState snapshotSyncState = fsm.getStates().get(LogReplicationStateType.IN_SNAPSHOT_SYNC);
@@ -40,6 +42,7 @@ public class InitializedState implements LogReplicationState {
                 return snapshotSyncState;
             case SNAPSHOT_TRANSFER_COMPLETE:
                 log.info("Snapshot Sync transfer completed. Wait for snapshot apply to complete.");
+                fsm.getAckReader().setSyncType(SyncType.SNAPSHOT);
                 WaitSnapshotApplyState waitSnapshotApplyState = (WaitSnapshotApplyState)fsm.getStates().get(LogReplicationStateType.WAIT_SNAPSHOT_APPLY);
                 waitSnapshotApplyState.setTransitionEventId(event.getEventId());
                 waitSnapshotApplyState.setBaseSnapshotTimestamp(event.getMetadata().getLastTransferredBaseSnapshot());
@@ -48,6 +51,7 @@ public class InitializedState implements LogReplicationState {
                 return waitSnapshotApplyState;
             case LOG_ENTRY_SYNC_REQUEST:
                 log.info("Start Log Entry Sync, requestId={}", event.getEventId());
+                fsm.getAckReader().setSyncType(SyncType.LOG_ENTRY);
                 // Set the id of the event that caused the transition to the new state
                 // This is used to correlate trim or error events that derive from this state
                 LogReplicationState logEntrySyncState = fsm.getStates().get(LogReplicationStateType.IN_LOG_ENTRY_SYNC);
@@ -77,8 +81,17 @@ public class InitializedState implements LogReplicationState {
 
     @Override
     public void onExit(LogReplicationState to) {
+        LogReplicationStateType type = to.getType();
+        SyncType toSyncType = null;
+
+        if (type.equals(LogReplicationStateType.IN_SNAPSHOT_SYNC) || type.equals(LogReplicationStateType.WAIT_SNAPSHOT_APPLY)) {
+            toSyncType = SyncType.SNAPSHOT;
+        } else if (type.equals(LogReplicationStateType.IN_LOG_ENTRY_SYNC)) {
+            toSyncType = SyncType.LOG_ENTRY;
+        }
+
         if (to != this || to.getType() != LogReplicationStateType.ERROR) {
-            fsm.getAckReader().startSyncStatusUpdatePeriodicTask();
+            fsm.getAckReader().startSyncStatusUpdatePeriodicTask(toSyncType);
         }
     }
 

@@ -59,6 +59,8 @@ public class CorfuReplicationManager {
         this.corfuRuntime = corfuRuntime;
         this.localNodeDescriptor = localNodeDescriptor;
         this.replicationConfigManager = replicationConfigManager;
+        // Add default entry to Replication Status Table
+        metadataManager.initializeReplicationStatusTable();
     }
 
     /**

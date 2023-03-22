@@ -52,8 +52,8 @@ public class LogReplicationAckReader {
     // Last ack'd timestamp from Receiver
     private long lastAckedTimestamp = Address.NON_ADDRESS;
 
-    // Sync Type for which last Ack was received. Default to LOG_ENTRY as this is the initial FSM state
-    private SyncType lastSyncType = SyncType.LOG_ENTRY;
+    // Sync Type for which last Ack was received, it is initialized where the timestamp polling task is created.
+    private SyncType lastSyncType = null;
 
     private LogEntryReader logEntryReader;
 
@@ -442,8 +442,9 @@ public class LogReplicationAckReader {
     /**
      * Start periodic replication status update task (completion percentage)
      */
-    public void startSyncStatusUpdatePeriodicTask() {
+    public void startSyncStatusUpdatePeriodicTask(SyncType syncType) {
         log.info("Start sync status update periodic task");
+        lastSyncType = syncType;
         lastAckedTsPoller = Executors.newSingleThreadScheduledExecutor(
                 new ThreadFactoryBuilder().setNameFormat("ack-timestamp-reader").build());
         lastAckedTsPoller.scheduleWithFixedDelay(new TsPollingTask(), 0, ACKED_TS_READ_INTERVAL_SECONDS,
@@ -471,7 +472,7 @@ public class LogReplicationAckReader {
                     try {
                         lock.lock();
                         long entriesToSend = calculateRemainingEntriesToSend(lastAckedTimestamp);
-                        metadataManager.setReplicationStatusTable(remoteClusterId, entriesToSend, lastSyncType);
+                        metadataManager.updateRemainingEntriesToSend(remoteClusterId, entriesToSend, lastSyncType);
                     } catch (TransactionAbortedException tae) {
                         log.error("Error while attempting to set replication status for " +
                                         "remote cluster {} with lastSyncType {}.",

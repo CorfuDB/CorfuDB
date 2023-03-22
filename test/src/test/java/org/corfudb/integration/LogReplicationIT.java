@@ -1,5 +1,6 @@
 package org.corfudb.integration;
 
+import com.google.protobuf.Message;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.util.ObservableValue;
@@ -11,19 +12,26 @@ import org.corfudb.infrastructure.logreplication.proto.Sample;
 import org.corfudb.infrastructure.logreplication.proto.Sample.IntValue;
 import org.corfudb.infrastructure.logreplication.proto.Sample.Metadata;
 import org.corfudb.infrastructure.logreplication.proto.Sample.StringKey;
+import org.corfudb.infrastructure.logreplication.replication.LogReplicationAckReader;
 import org.corfudb.infrastructure.logreplication.replication.LogReplicationSourceManager;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationFSM;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationStateType;
 import org.corfudb.infrastructure.logreplication.replication.fsm.ObservableAckMsg;
+import org.corfudb.infrastructure.logreplication.replication.fsm.TestLogEntryReader;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationEventMetadata;
+import org.corfudb.infrastructure.logreplication.replication.send.logreader.LogEntryReader;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
 import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusKey;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SyncStatus;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal.SyncType;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStoreEntry;
 import org.corfudb.runtime.collections.Table;
@@ -31,15 +39,14 @@ import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.proto.service.CorfuMessage;
 
-
-
-import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.view.ObjectsView;
-import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.util.Utils;
+import org.junit.Assert;
 import org.junit.Test;
 
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
@@ -54,6 +61,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.TimeUnit;
 
 import static java.lang.Thread.sleep;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -61,6 +69,7 @@ import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED;
 import static org.corfudb.integration.LogReplicationAbstractIT.checkpointAndTrimCorfuStore;
 import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
+import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 /**
  * Test the core components of log replication, namely, Snapshot Sync and Log Entry Sync,
@@ -110,6 +119,9 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     static private final int BATCH_SIZE = 4;
 
     static private final int SMALL_MSG_SIZE = 12000;
+
+    private static final Duration WAIT_INTERVAL = Duration.ofSeconds(5);
+    private static final String REPLICATION_STATUS_TABLE = "LogReplicationStatus";
 
     static private TestConfig testConfig = new TestConfig();
 
@@ -385,6 +397,82 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     }
 
     /* ***************************** LOG REPLICATION IT TESTS ***************************** */
+
+    /**
+     * This test helps to emulate the raceCondition where statusSyncUpdater thread gets
+     * the precedence over the state transition to LOG_ENTRY_SYNC.
+     * A statusSyncUpdater service is run independently without the FSM and
+     * NOT_STARTED status is verified from the replicationStatus table.
+     * @throws Exception
+     */
+    @Test
+    public void testSyncStatusBeforeLogEntrySync() throws Exception {
+        setupEnv();
+        testSyncStatus(SyncType.LOG_ENTRY, SyncStatus.NOT_STARTED, SyncStatus.UNAVAILABLE);
+        cleanEnv();
+    }
+
+    /**
+     * This test helps to emulate the raceCondition where statusSyncUpdater thread gets
+     * the precedence over the state transition to SNAPSHOT_SYNC.
+     * A statusSyncUpdater service is run independently without the FSM and
+     * NOT_STARTED status is verified from the replicationStatus table.
+     * @throws Exception
+     */
+    @Test
+    public void testSyncStatusBeforeSnapshotSync() throws Exception {
+        setupEnv();
+        testSyncStatus(SyncType.SNAPSHOT, SyncStatus.NOT_STARTED, SyncStatus.NOT_STARTED);
+        cleanEnv();
+    }
+
+    private void testSyncStatus(SyncType type, SyncStatus expectedSyncStatus,
+                                SyncStatus expectedPreviousSnapshotSyncStatus)
+            throws InvocationTargetException, NoSuchMethodException, IllegalAccessException {
+
+        LogReplicationMetadataManager srcMetadataManager = new LogReplicationMetadataManager(srcTestRuntime, 0, ACTIVE_CLUSTER_ID);
+        LogReplicationConfigManager configManager = new LogReplicationConfigManager(srcTestRuntime);
+        LogReplicationConfig config = new LogReplicationConfig(configManager, BATCH_SIZE,
+                SMALL_MSG_SIZE, MAX_CACHE_NUM_ENTRIES, DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED);
+
+        LogEntryReader logEntryReader = new TestLogEntryReader();
+        LogReplicationAckReader ackReader = new LogReplicationAckReader(srcMetadataManager, config, srcDataRuntime, REMOTE_CLUSTER_ID);
+        ackReader.setLogEntryReader(logEntryReader);
+
+        try {
+            ackReader.setSyncType(type);
+            ackReader.startSyncStatusUpdatePeriodicTask(type);
+            TimeUnit.SECONDS.sleep(WAIT_INTERVAL.getSeconds());
+        } catch (InterruptedException e) {
+            System.out.println("Sleep interrupted: " + e);
+        } finally {
+            ackReader.shutdown();
+        }
+
+        ReplicationStatusKey key = ReplicationStatusKey.newBuilder()
+                .setClusterId(REMOTE_CLUSTER_ID)
+                .build();
+
+        SyncStatus syncStatus = null, previousSnapshotSyncStatus = null;
+
+        Table<ReplicationStatusKey, ReplicationStatusVal, Message> replicationStatusTable =
+                srcCorfuStore.openTable(CORFU_SYSTEM_NAMESPACE, REPLICATION_STATUS_TABLE,
+                        ReplicationStatusKey.class, ReplicationStatusVal.class, null,
+                        TableOptions.fromProtoSchema(ReplicationStatusVal.class));
+
+        try (TxnContext txn = srcCorfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+            CorfuStoreEntry<ReplicationStatusKey, ReplicationStatusVal, Message> entry =
+                    txn.getRecord(replicationStatusTable, key);
+            if (entry.getPayload() != null) {
+                syncStatus = entry.getPayload().getStatus();
+                previousSnapshotSyncStatus = entry.getPayload().getSnapshotSyncInfo().getStatus();
+            }
+            txn.commit();
+        }
+
+        Assert.assertEquals(expectedSyncStatus, syncStatus);
+        Assert.assertEquals(expectedPreviousSnapshotSyncStatus, previousSnapshotSyncStatus);
+    }
 
     /**
      * This test attempts to perform a snapshot sync and log entry sync through the Log Replication Manager.
@@ -1196,7 +1284,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
                                                 boolean injectTxData, TransitionSource function) throws Exception {
 
         logReplicationSourceManager = setupSourceManagerAndObservedValues(waitConditions, function);
-
         // Start Log Entry Sync
         log.info("****** Start Log Entry Sync with src tail " + srcDataRuntime.getAddressSpaceView().getLogTail()
                 + " dst tail " + dstDataRuntime.getAddressSpaceView().getLogTail());
