@@ -502,7 +502,6 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
         }
     }
 
-    /*
     @Property(tries = NUM_OF_TRIES)
     void snapshotExpired() {
         resetTests(CorfuRuntimeParameters.builder().mvoCacheExpiry(Duration.ofNanos(0)).build());
@@ -582,7 +581,6 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
 
         }
     }
-     */
 
     @Property(tries = NUM_OF_TRIES)
     void noReadYourOwnWrites(@ForAll @Size(SAMPLE_SIZE) Set<String> intended) throws Exception {

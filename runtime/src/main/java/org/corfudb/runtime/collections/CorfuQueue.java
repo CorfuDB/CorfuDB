@@ -62,8 +62,6 @@ public class CorfuQueue {
                 .setSerializer(serializer)
                 .open();
 
-        // TODO(Zach): Probably broken - Fix setArguments
-
         guidGenerator = CorfuGuidGenerator.getInstance(runtime);
     }
 

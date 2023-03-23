@@ -8,7 +8,7 @@ import java.util.UUID;
  * manages an SMR object.
  *
  * @param <T> The type of the SMR object.
- *            Created by mwei on 11/10/16.
+ * Created by mwei on 11/10/16.
  */
 public interface ICorfuSMRProxy<T> {
 
@@ -26,15 +26,11 @@ public interface ICorfuSMRProxy<T> {
      * Record an SMR function to the log before returning.
      *
      * @param smrUpdateFunction The name of the function to record.
-     * @param keepUpcallResult  Whether or not we need to keep the
-     *                          result to the upcall, for a subsequent
-     *                          call to getUpcallResult.
-     * @param conflictObject    Fine-grained conflict information, if
-     *                          available.
+     * @param conflictObject    Fine-grained conflict information, if available.
      * @param args              The arguments to the function.
      * @return The address in the log the SMR function was recorded at.
      */
-    long logUpdate(String smrUpdateFunction, boolean keepUpcallResult,
+    long logUpdate(String smrUpdateFunction,
                    Object[] conflictObject, Object... args);
 
     /**
@@ -43,13 +39,6 @@ public interface ICorfuSMRProxy<T> {
      * @return The UUID of the stream this proxy is subscribed to.
      */
     UUID getStreamID();
-
-    /**
-     * Get the latest version read by the proxy.
-     *
-     * @return The latest version read by the proxy.
-     */
-    long getVersion();
 
     /**
      * Get the stream tags on of the object the proxy is managing.

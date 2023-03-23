@@ -15,7 +15,7 @@ public interface SnapshotGenerator<T> extends AutoCloseable {
      *                      with this snapshot
      * @return ISMRSnapshot a new snapshot
      */
-    ISMRSnapshot<T> getSnapshot(VersionedObjectIdentifier version);
+    SMRSnapshot<T> getSnapshot(VersionedObjectIdentifier version);
 
     /**
      * {@inheritDoc}

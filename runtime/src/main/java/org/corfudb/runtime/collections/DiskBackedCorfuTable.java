@@ -11,7 +11,7 @@ import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.object.PersistenceOptions;
 import org.corfudb.runtime.object.RocksDbApi;
-import org.corfudb.runtime.object.ISMRSnapshot;
+import org.corfudb.runtime.object.SMRSnapshot;
 import org.corfudb.runtime.object.RocksDbStore;
 import org.corfudb.runtime.object.SnapshotGenerator;
 import org.corfudb.runtime.object.VersionedObjectIdentifier;
@@ -208,7 +208,7 @@ public class DiskBackedCorfuTable<K, V> implements
     }
 
     @Override
-    public ISMRSnapshot<DiskBackedCorfuTable<K, V>> getSnapshot(VersionedObjectIdentifier version) {
+    public SMRSnapshot<DiskBackedCorfuTable<K, V>> getSnapshot(VersionedObjectIdentifier version) {
         return rocksApi.getSnapshot(this, version);
     }
 

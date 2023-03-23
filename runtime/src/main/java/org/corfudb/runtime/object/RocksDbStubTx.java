@@ -74,8 +74,8 @@ public class RocksDbStubTx<S extends SnapshotGenerator<S>>
     }
 
     @Override
-    public ISMRSnapshot<S> getSnapshot(@NonNull ViewGenerator<S> viewGenerator,
-                                       @NonNull VersionedObjectIdentifier version) {
+    public SMRSnapshot<S> getSnapshot(@NonNull ViewGenerator<S> viewGenerator,
+                                      @NonNull VersionedObjectIdentifier version) {
         throw new UnsupportedOperationException();
     }
 }

@@ -109,8 +109,8 @@ public class RocksDbStore<S extends SnapshotGenerator<S>> implements RocksDbApi<
      * @return
      */
     @Override
-    public ISMRSnapshot<S> getSnapshot(@NonNull ViewGenerator<S> viewGenerator,
-                                       @NonNull VersionedObjectIdentifier version) {
+    public SMRSnapshot<S> getSnapshot(@NonNull ViewGenerator<S> viewGenerator,
+                                      @NonNull VersionedObjectIdentifier version) {
         return new DiskBackedSMRSnapshot<>(rocksDb, writeOptions,
                 persistenceOptions.consistencyModel, version, viewGenerator);
     }

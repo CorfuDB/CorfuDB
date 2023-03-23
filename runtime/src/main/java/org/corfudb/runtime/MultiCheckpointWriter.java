@@ -6,7 +6,6 @@ import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.object.ICorfuSMR;
-import org.corfudb.runtime.object.MVOCorfuCompileProxy;
 import org.corfudb.util.serializer.ISerializer;
 
 import java.util.ArrayList;

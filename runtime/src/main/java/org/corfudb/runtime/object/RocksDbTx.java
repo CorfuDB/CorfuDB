@@ -12,8 +12,6 @@ import org.rocksdb.RocksIterator;
 import org.rocksdb.Transaction;
 import org.rocksdb.WriteOptions;
 
-import java.util.concurrent.atomic.AtomicInteger;
-
 /**
  * A concrete class that implements {@link RocksDbApi} using
  * {@link Transaction}.
@@ -108,8 +106,8 @@ public class RocksDbTx<S extends SnapshotGenerator<S>> implements RocksDbApi<S> 
     }
 
     @Override
-    public ISMRSnapshot<S> getSnapshot(@NonNull ViewGenerator<S> viewGenerator,
-                                       @NonNull VersionedObjectIdentifier version) {
+    public SMRSnapshot<S> getSnapshot(@NonNull ViewGenerator<S> viewGenerator,
+                                      @NonNull VersionedObjectIdentifier version) {
         throw new UnsupportedOperationException();
     }
 }

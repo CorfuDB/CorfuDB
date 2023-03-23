@@ -49,7 +49,7 @@ public class MultiVersionObject<S extends SnapshotGenerator<S>> extends Abstract
      * {@inheritDoc}
      */
     @Override
-    protected ISMRSnapshot<S> retrieveSnapshotUnsafe(@Nonnull VersionedObjectIdentifier voId) {
+    protected SMRSnapshot<S> retrieveSnapshotUnsafe(@Nonnull VersionedObjectIdentifier voId) {
         if (voId.getVersion() == materializedUpTo) {
             return currentSnapshot;
         }

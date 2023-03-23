@@ -17,7 +17,7 @@ public class SnapshotProxy<T> implements ICorfuSMRSnapshotProxy<T> {
 
     private final Map<String, ICorfuSMRUpcallTarget<T>> upcallTargetMap;
 
-    public SnapshotProxy(@NonNull final ISMRSnapshot<T> snapshotView, final long baseSnapshotVersion,
+    public SnapshotProxy(@NonNull final SMRSnapshot<T> snapshotView, final long baseSnapshotVersion,
                          @NonNull final Map<String, ICorfuSMRUpcallTarget<T>> upcallTargetMap) {
         this.snapshotView = snapshotView.consume();
         this.baseSnapshotVersion = baseSnapshotVersion;

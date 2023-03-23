@@ -106,7 +106,7 @@ public class MVOCorfuCompileProxy<
     }
 
     @Override
-    public long logUpdate(String smrUpdateFunction, boolean keepUpcallResult, Object[] conflictObject, Object... args) {
+    public long logUpdate(String smrUpdateFunction, Object[] conflictObject, Object... args) {
         return MicroMeterUtils.time(
                 () -> logUpdateInner(smrUpdateFunction, conflictObject, args),
                 "mvo.write.timer", "streamId", streamID.toString());
@@ -141,11 +141,6 @@ public class MVOCorfuCompileProxy<
     @Override
     public UUID getStreamID() {
         return streamID;
-    }
-
-    @Override
-    public long getVersion() {
-        return 0;
     }
 
     private S getNewInstance() {

@@ -42,18 +42,18 @@ public class PersistentCorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR 
     @Override
     public void delete(@Nonnull K key) {
         Object[] conflictField = new Object[]{key};
-        proxy.logUpdate("remove", false, conflictField, key);
+        proxy.logUpdate("remove", conflictField, key);
     }
 
     @Override
     public void insert(@Nonnull K key, @Nonnull V value) {
         Object[] conflictField = new Object[]{key};
-        proxy.logUpdate("put", false, conflictField, key, value);
+        proxy.logUpdate("put", conflictField, key, value);
     }
 
     @Override
     public void clear() {
-        proxy.logUpdate("clear", false, null);
+        proxy.logUpdate("clear", null);
     }
 
     @Override

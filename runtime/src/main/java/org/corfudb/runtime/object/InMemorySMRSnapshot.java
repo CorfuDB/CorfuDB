@@ -1,21 +1,28 @@
 package org.corfudb.runtime.object;
 
 import lombok.AllArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 
+/**
+ * An in-memory implementation of a snapshot.
+ * Views produced via consume() are immutable.
+ *
+ * @param <T> The type of the views produced by this snapshot.
+ */
 @AllArgsConstructor
-@Slf4j
-public class InMemorySMRSnapshot<T> implements ISMRSnapshot<T>  {
-
+public class InMemorySMRSnapshot<T> implements SMRSnapshot<T> {
     private final T snapshot;
 
+    /**
+     * {@inheritDoc}
+     */
     public T consume() {
-        log.warn("InMemorySMRSnapshot: invoking consume()");
         return snapshot;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public void release() {
-        log.warn("InMemorySMRSnapshot: invoking release()");
-        // No-Op
+        // No-Op.
     }
 }

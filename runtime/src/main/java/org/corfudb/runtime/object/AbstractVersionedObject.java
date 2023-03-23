@@ -72,7 +72,7 @@ public abstract class AbstractVersionedObject<S extends SnapshotGenerator<S>> {
     /**
      * A corresponding snapshot reference for currentObject.
      */
-    protected volatile ISMRSnapshot<S> currentSnapshot;
+    protected volatile SMRSnapshot<S> currentSnapshot;
 
     /**
      * All versions up to (and including) materializedUpTo have had their versions
@@ -230,7 +230,7 @@ public abstract class AbstractVersionedObject<S extends SnapshotGenerator<S>> {
 
                 // The snapshot is acquired before validating the lock, as the state of the
                 // underlying object can change afterwards.
-                final ISMRSnapshot<S> versionedObject = retrieveSnapshotUnsafe(voId);
+                final SMRSnapshot<S> versionedObject = retrieveSnapshotUnsafe(voId);
                 snapshotProxy = new SnapshotProxy<>(versionedObject, streamTs, upcallTargetMap);
 
                 if (lock.validate(lockTs)) {
@@ -256,7 +256,7 @@ public abstract class AbstractVersionedObject<S extends SnapshotGenerator<S>> {
      * Allows subclasses to control caching behaviour, if applicable.
      * @param voId The desired version of the object.
      */
-    protected abstract ISMRSnapshot<S> retrieveSnapshotUnsafe(@Nonnull VersionedObjectIdentifier voId);
+    protected abstract SMRSnapshot<S> retrieveSnapshotUnsafe(@Nonnull VersionedObjectIdentifier voId);
 
     /**
      * Sync the SMR stream by playing updates forward in the stream until the given timestamp.

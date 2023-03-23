@@ -5,7 +5,6 @@ import org.corfudb.util.serializer.ISerializer;
 import org.rocksdb.ReadOptions;
 import org.rocksdb.RocksDB;
 import org.rocksdb.RocksIterator;
-import org.rocksdb.Snapshot;
 
 import javax.annotation.concurrent.NotThreadSafe;
 import java.util.AbstractMap;

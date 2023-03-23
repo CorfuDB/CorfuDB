@@ -18,7 +18,7 @@ import java.util.concurrent.locks.StampedLock;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
-public class DiskBackedSMRSnapshot<S extends SnapshotGenerator<S>> implements ISMRSnapshot<S> {
+public class DiskBackedSMRSnapshot<S extends SnapshotGenerator<S>> implements SMRSnapshot<S> {
 
     private final VersionedObjectIdentifier version;
 
@@ -99,10 +99,15 @@ public class DiskBackedSMRSnapshot<S extends SnapshotGenerator<S>> implements IS
     }
 
     public <K, V> RocksDbEntryIterator<K, V> newIterator(ISerializer serializer, Transaction transaction) {
-        RocksDbEntryIterator<K, V> iterator = new RocksDbEntryIterator<>(
-                transaction.getIterator(readOptions),
-                serializer, readOptions, lock);
-        set.add(iterator);
-        return iterator;
+        // When newIterator is invoked, it's possible that this snapshot has since been invalidated.
+        // Requesting an iterator from the RocksDB transaction with an invalid snapshot/readOptions causes
+        // an internal assertion failure. Hence, we perform this validation before creating the new iterator.
+        return executeInSnapshot(ro -> {
+            RocksDbEntryIterator<K, V> iterator = new RocksDbEntryIterator<>(
+                    transaction.getIterator(ro),
+                    serializer, ro, lock);
+            set.add(iterator);
+            return iterator;
+        });
     }
 }

@@ -33,7 +33,7 @@ public class MVOCache<S extends SnapshotGenerator<S>> {
      * A collection of strong references to all versioned objects and their state.
      */
     @Getter
-    final Cache<VersionedObjectIdentifier, ISMRSnapshot<S>> objectCache;
+    final Cache<VersionedObjectIdentifier, SMRSnapshot<S>> objectCache;
 
     /**
      * Construct an MVO cache whose eviction policy is strictly time based.
@@ -74,7 +74,7 @@ public class MVOCache<S extends SnapshotGenerator<S>> {
                 .map(registry -> GuavaCacheMetrics.monitor(registry, objectCache, "mvo_cache"));
     }
 
-    public void handleEviction(RemovalNotification<VersionedObjectIdentifier, ISMRSnapshot<S>> notification) {
+    public void handleEviction(RemovalNotification<VersionedObjectIdentifier, SMRSnapshot<S>> notification) {
         log.trace("handleEviction: evicting {} cause {}", notification.getKey(), notification.getCause());
         notification.getValue().release();
     }
@@ -90,7 +90,7 @@ public class MVOCache<S extends SnapshotGenerator<S>> {
      * @param voId The desired object version.
      * @return An optional containing the corresponding versioned object, if present.
      */
-    public Optional<ISMRSnapshot<S>> get(@Nonnull VersionedObjectIdentifier voId) {
+    public Optional<SMRSnapshot<S>> get(@Nonnull VersionedObjectIdentifier voId) {
         if (log.isTraceEnabled()) {
             log.trace("MVOCache: performing a get for {}", voId.toString());
         }
@@ -103,7 +103,7 @@ public class MVOCache<S extends SnapshotGenerator<S>> {
      * @param voId   The version of the object being placed into the cache.
      * @param object The actual underlying object corresponding to this voId.
      */
-    public void put(@Nonnull VersionedObjectIdentifier voId, @Nonnull ISMRSnapshot<S> object) {
+    public void put(@Nonnull VersionedObjectIdentifier voId, @Nonnull SMRSnapshot<S> object) {
         objectCache.cleanUp();
         if (log.isTraceEnabled()) {
             log.trace("MVOCache: performing a put for {}", voId);
