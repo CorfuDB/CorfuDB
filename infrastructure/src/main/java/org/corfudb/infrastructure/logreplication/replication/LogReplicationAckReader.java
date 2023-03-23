@@ -52,7 +52,7 @@ public class LogReplicationAckReader {
     // Last ack'd timestamp from Receiver
     private long lastAckedTimestamp = Address.NON_ADDRESS;
 
-    // Sync Type for which last Ack was received, it is initialized where the timestamp polling task is created.
+    // Sync Type for which last Ack was received, it is initialized when setSyncType is called
     private SyncType lastSyncType = null;
 
     private LogEntryReader logEntryReader;
@@ -442,9 +442,8 @@ public class LogReplicationAckReader {
     /**
      * Start periodic replication status update task (completion percentage)
      */
-    public void startSyncStatusUpdatePeriodicTask(SyncType syncType) {
+    public void startSyncStatusUpdatePeriodicTask() {
         log.info("Start sync status update periodic task");
-        lastSyncType = syncType;
         lastAckedTsPoller = Executors.newSingleThreadScheduledExecutor(
                 new ThreadFactoryBuilder().setNameFormat("ack-timestamp-reader").build());
         lastAckedTsPoller.scheduleWithFixedDelay(new TsPollingTask(), 0, ACKED_TS_READ_INTERVAL_SECONDS,
