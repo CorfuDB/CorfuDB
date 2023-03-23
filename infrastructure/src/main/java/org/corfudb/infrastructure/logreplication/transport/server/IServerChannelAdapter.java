@@ -40,10 +40,9 @@ public abstract class IServerChannelAdapter {
     /**
      * Send a message across the channel to a specific endpoint.
      *
-     * @param nodeId remote node id
      * @param request corfu message to be sent
      */
-    public abstract void send(String nodeId, CorfuMessage.RequestMsg request);
+    public abstract void send(CorfuMessage.RequestMsg request);
 
     /**
      * Receive a message from Server.

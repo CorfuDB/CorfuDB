@@ -26,13 +26,16 @@ import static org.corfudb.protocols.service.CorfuProtocolMessage.getDefaultProto
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getResponseMsg;
 
 @Slf4j
-public class VerifyRemoteSinkLeader {
+public class VerifyRemoteSourceLeader {
 
     /**
      * Executor service for FSM event queue consume
      */
     private final ExecutorService communicationFSMConsumer;
 
+    /**
+     * Remote nodes to which connection has been established.
+     */
     private final Set<String> connectedNodes;
 
     /**
@@ -40,13 +43,22 @@ public class VerifyRemoteSinkLeader {
      */
     private final LinkedBlockingQueue<LogReplicationRuntimeEvent> eventQueue = new LinkedBlockingQueue<>();
 
+    /**
+     * Session information
+     */
     private final LogReplicationSession session;
 
+    /**
+     * A router that forwards a message to the transport layer
+     */
     private final LogReplicationClientServerRouter router;
 
+    /**
+     * NodeId of the remote leader.
+     */
     private volatile Optional<String> leaderNodeId = Optional.empty();
 
-    public VerifyRemoteSinkLeader(LogReplicationSession session, LogReplicationClientServerRouter router) {
+    public VerifyRemoteSourceLeader(LogReplicationSession session, LogReplicationClientServerRouter router) {
         this.session = session;
         this.router = router;
         this.connectedNodes = new HashSet<>();
@@ -206,7 +218,7 @@ public class VerifyRemoteSinkLeader {
     private void subscribeAndStartReplication() {
         CorfuMessage.ResponsePayloadMsg payload =
                 CorfuMessage.ResponsePayloadMsg.newBuilder()
-                        .setLrSubscribeRequest(LogReplication.SubscribeToReplicationMsg.newBuilder().build())
+                        .setLrSubscribeMsg(LogReplication.SubscribeToReplicationMsg.newBuilder().build())
                         .build();
 
         CorfuMessage.HeaderMsg header = CorfuMessage.HeaderMsg.newBuilder()

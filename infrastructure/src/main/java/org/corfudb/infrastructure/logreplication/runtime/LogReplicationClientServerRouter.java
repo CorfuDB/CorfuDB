@@ -9,11 +9,10 @@ import org.corfudb.infrastructure.ServerThreadFactory;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.infrastructure.logreplication.infrastructure.CorfuReplicationManager;
 import org.corfudb.infrastructure.logreplication.infrastructure.SessionManager;
-import org.corfudb.infrastructure.logreplication.infrastructure.msgHandlers.LogReplicationAbstractServer;
 import org.corfudb.infrastructure.logreplication.infrastructure.msgHandlers.LogReplicationServer;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRuntimeEvent;
-import org.corfudb.infrastructure.logreplication.runtime.fsm.sink.VerifyRemoteSinkLeader;
+import org.corfudb.infrastructure.logreplication.runtime.fsm.sink.VerifyRemoteSourceLeader;
 import org.corfudb.infrastructure.logreplication.transport.IClientServerRouter;
 import org.corfudb.infrastructure.logreplication.transport.client.ChannelAdapterException;
 import org.corfudb.infrastructure.logreplication.transport.client.IClientChannelAdapter;
@@ -33,7 +32,6 @@ import java.io.File;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.time.Duration;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -135,7 +133,7 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
     /**
      * Triggers leadership request and create bidirectional streams to remote endpoints
      */
-    private final Map<LogReplicationSession, VerifyRemoteSinkLeader> sessionToSinkVerifyLeadership;
+    private final Map<LogReplicationSession, VerifyRemoteSourceLeader> sessionToSinkVerifyLeadership;
 
     /**
      * Session manager to check session details
@@ -292,7 +290,7 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
                 if(isConnectionInitiator(session)) {
                     clientChannelAdapter.send(nodeId, getRequestMsg(header.build(), payload));
                 } else {
-                    serverChannelAdapter.send(nodeId, getRequestMsg(header.build(), payload));
+                    serverChannelAdapter.send(getRequestMsg(header.build(), payload));
                 }
             } catch (NetworkException ne) {
                 log.error("Caught Network Exception while trying to send message to remote leader {}", nodeId);
@@ -425,7 +423,7 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
                 return;
             }
 
-            if (msg.getPayload().getPayloadCase().equals(CorfuMessage.ResponsePayloadMsg.PayloadCase.LR_SUBSCRIBE_REQUEST)) {
+            if (msg.getPayload().getPayloadCase().equals(CorfuMessage.ResponsePayloadMsg.PayloadCase.LR_SUBSCRIBE_MSG)) {
                 // Start runtimeFSM
                 sessionToRuntimeFSM.get(session).setRemoteLeaderNodeId(nodeId);
                 sessionToRuntimeFSM.get(session).start();
@@ -572,7 +570,7 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
         }
 
         if (sessionManager.getIncomingSessions().contains(session)) {
-            sessionToSinkVerifyLeadership.put(session, new VerifyRemoteSinkLeader(session, this));
+            sessionToSinkVerifyLeadership.put(session, new VerifyRemoteSourceLeader(session, this));
         }
     }
 

@@ -151,25 +151,13 @@ message ResponsePayloadMsg {
     LogReplicationLeadershipResponseMsg lr_leadership_response = 72;
 
     LogReplicationLeadershipLossResponseMsg lr_leadership_loss = 73;
-    SubscribeToReplicationMsg lr_subscribe_request = 74;
+    SubscribeToReplicationMsg lr_subscribe_msg = 74;
     // sentinel value for the LogReplicationMsgHandler
     LogReplicationEntryMsg none = 75;
 
     // Server Error
     ServerErrorMsg server_error = 200;
   }
-}
-
-enum LogReplicationMsgTypes {
-  INVALID_MSG = 0;
-  LR_LEADERSHIP_REQUEST = 1;
-  LR_METADATA_REQUEST = 2;
-  LR_ENTRY = 3;
-  LR_ENTRY_ACK = 4;
-  LR_METADATA_RESPONSE = 5;
-  LR_LEADERSHIP_RESPONSE = 6;
-  LR_LEADERSHIP_LOSS = 7;
-  LR_SUBSCRIBE_REQUEST = 8;
 }
 
 
