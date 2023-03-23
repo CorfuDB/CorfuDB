@@ -5,7 +5,7 @@ import io.micrometer.core.instrument.Tag;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.infrastructure.logreplication.DataSender;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SyncType;
+import org.corfudb.runtime.LogReplication.SyncType;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 
 import java.util.Map;
