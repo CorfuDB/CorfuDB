@@ -39,6 +39,7 @@ import org.corfudb.util.retry.RetryNeededException;
 
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -54,6 +55,7 @@ import static org.corfudb.infrastructure.logreplication.config.LogReplicationCon
 import static org.corfudb.infrastructure.logreplication.config.LogReplicationConfig.REGISTRY_TABLE_ID;
 import static org.corfudb.runtime.LogReplicationLogicalGroupClient.LR_MODEL_METADATA_TABLE_NAME;
 import static org.corfudb.runtime.LogReplicationLogicalGroupClient.LR_REGISTRATION_TABLE_NAME;
+import static org.corfudb.runtime.view.ObjectsView.LOG_REPLICATOR_STREAM_INFO;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 /**
@@ -196,12 +198,8 @@ public class LogReplicationConfigManager {
             // Add merge only streams first
             if (MERGE_ONLY_STREAMS.contains(streamId)) {
                 streamsToReplicate.add(tableName);
-                // Collect tags for this stream
-                List<UUID> tags = streamToTagsMap.getOrDefault(streamId, new ArrayList<>());
-                tags.addAll(entry.getValue().getMetadata().getTableOptions().getStreamTagList().stream()
-                        .map(streamTag -> TableRegistry.getStreamIdForStreamTag(entry.getKey().getNamespace(), streamTag))
-                        .collect(Collectors.toList()));
-                streamToTagsMap.put(streamId, tags);
+                // Collect tags for merge-only stream
+                streamToTagsMap.put(streamId, Collections.singletonList(LOG_REPLICATOR_STREAM_INFO.getStreamId()));
             }
 
             // Find streams to replicate for every logical group for this session
@@ -246,12 +244,17 @@ public class LogReplicationConfigManager {
             // Find federated tables that will be used by FULL_TABLE replication model
             if (isFederated || MERGE_ONLY_STREAMS.contains(streamId)) {
                 streamsToReplicate.add(tableName);
-                // Collect tags for this stream
-                List<UUID> tags = streamToTagsMap.getOrDefault(streamId, new ArrayList<>());
-                tags.addAll(entry.getValue().getMetadata().getTableOptions().getStreamTagList().stream()
-                        .map(streamTag -> TableRegistry.getStreamIdForStreamTag(entry.getKey().getNamespace(), streamTag))
-                        .collect(Collectors.toList()));
-                streamToTagsMap.put(streamId, tags);
+                if (MERGE_ONLY_STREAMS.contains(streamId)) {
+                    // Collect tags for merge-only stream
+                    streamToTagsMap.put(streamId, Collections.singletonList(LOG_REPLICATOR_STREAM_INFO.getStreamId()));
+                } else {
+                    // Collect tags for normal stream
+                    List<UUID> tags = streamToTagsMap.getOrDefault(streamId, new ArrayList<>());
+                    tags.addAll(entry.getValue().getMetadata().getTableOptions().getStreamTagList().stream()
+                            .map(streamTag -> TableRegistry.getStreamIdForStreamTag(entry.getKey().getNamespace(), streamTag))
+                            .collect(Collectors.toList()));
+                    streamToTagsMap.put(streamId, tags);
+                }
             } else {
                 streamsToDrop.add(streamId);
             }
