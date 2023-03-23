@@ -624,6 +624,24 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         LrTx.putRecord(replicationStatusTable, keyMsg, valMsg, null);
         LrTx.commit();
 
+//        runtime.shutdown();
+
+        final String METADATA_TABLE = "CORFU-REPLICATION-WRITER-adf1dd99-f837-44db-a756-92775a3a0464";
+        final Table<LogReplicationMetadata.LogReplicationMetadataKey, LogReplicationMetadata.LogReplicationMetadataVal, Message> metadataTable =
+                store.openTable(CORFU_SYSTEM_NAMESPACE,
+                        METADATA_TABLE,
+                        LogReplicationMetadata.LogReplicationMetadataKey.class,
+                        LogReplicationMetadata.LogReplicationMetadataVal.class,
+                        null,
+                        TableOptions.fromProtoSchema(LogReplicationMetadata.LogReplicationMetadataVal.class));
+
+        final String metadataKey = "lastSnapshotStarted";
+        LogReplicationMetadata.LogReplicationMetadataKey key2 = LogReplicationMetadata.LogReplicationMetadataKey.newBuilder().setKey(metadataKey).build();
+        LogReplicationMetadata.LogReplicationMetadataVal val2 = LogReplicationMetadata.LogReplicationMetadataVal.newBuilder().setVal("1").build();
+        TxnContext LrMetadataTx = store.txn(CORFU_SYSTEM_NAMESPACE);
+        LrMetadataTx.putRecord(metadataTable, key2, val2, null);
+        LrMetadataTx.commit();
+
         runtime.shutdown();
 
         runtime = createRuntime(singleNodeEndpoint);
@@ -666,6 +684,8 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
 
         assertThat(browser.deleteRecord(CORFU_SYSTEM_NAMESPACE, REPLICATION_STATUS_TABLE, key)).isEqualTo(1);
         assertThat(browser.deleteRecord(CORFU_SYSTEM_NAMESPACE, REPLICATION_STATUS_TABLE, key)).isZero();
+        assertThat(browser.deleteRecord(CORFU_SYSTEM_NAMESPACE, METADATA_TABLE, metadataKey)).isEqualTo(1);
+        assertThat(browser.deleteRecord(CORFU_SYSTEM_NAMESPACE, METADATA_TABLE, metadataKey)).isEqualTo(0);
         runtime.shutdown();
     }
 }
