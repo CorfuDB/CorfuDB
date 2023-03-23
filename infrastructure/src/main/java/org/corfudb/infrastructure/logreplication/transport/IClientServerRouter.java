@@ -20,14 +20,24 @@ public interface IClientServerRouter {
     /**
      * Complete a given outstanding request with a completion value.
      *
+     * @param session    The session the request belongs to
      * @param requestID  The request to complete.
      * @param completion The value to complete the request with
-     * @param <T>        The type of the completion.
      */
     <T> void completeRequest(LogReplication.LogReplicationSession session, long requestID, T completion);
 
+    /**
+     * Receive a request message from the transport layer
+     *
+     * @param request The request received.
+     */
     void receive(CorfuMessage.RequestMsg request);
 
+    /**
+     * Receive a response message from the transport layer
+     *
+     * @param response The response received
+     */
     void receive(CorfuMessage.ResponseMsg response);
 
     /**
