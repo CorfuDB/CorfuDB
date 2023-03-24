@@ -111,7 +111,8 @@ public class ReplicationHandlerMethods {
                                                             @NonNull final LogReplicationAbstractServer server) {
         ReplicationHandlerMethods handler = new ReplicationHandlerMethods();
         Arrays.stream(server.getClass().getDeclaredMethods())
-                .filter(method -> method.isAnnotationPresent(LogReplicationMsgHandler.class))
+                .filter(method -> method.isAnnotationPresent(LogReplicationRequestHandler.class) ||
+                        method.isAnnotationPresent(LogReplicationResponseHandler.class))
                 .forEach(method -> handler.registerMethod(caller, server, method));
         return handler;
     }
@@ -119,13 +120,23 @@ public class ReplicationHandlerMethods {
     private void registerMethod(@Nonnull final MethodHandles.Lookup caller,
                                 @Nonnull final LogReplicationAbstractServer server,
                                 @Nonnull final Method method) {
-        final LogReplicationMsgHandler annotation = method.getAnnotation(LogReplicationMsgHandler.class);
+        RequestPayloadMsg.PayloadCase requestType = null;
+        ResponsePayloadMsg.PayloadCase responseType = null;
+        String payloadString;
 
         // check if the method is already registered
-        if((!annotation.requestType().equals(RequestPayloadMsg.PayloadCase.NONE) && requestHandlerMap.containsKey(annotation.requestType())) ||
-                (!annotation.responseType().equals(ResponsePayloadMsg.PayloadCase.NONE) &&
-                responseHandlerMap.containsKey(annotation.responseType())))  {
-            throw new IllegalStateException("HandlerMethod for " + annotation.requestType() + " already registered!");
+        if(method.isAnnotationPresent(LogReplicationRequestHandler.class)) {
+            requestType = method.getAnnotation(LogReplicationRequestHandler.class).requestType();
+            if(requestHandlerMap.containsKey(requestType)) {
+                throw new IllegalStateException("Request handlerMethod for " + requestType + " already registered!");
+            }
+            payloadString = requestType.toString();
+        } else {
+            responseType = method.getAnnotation(LogReplicationResponseHandler.class).responseType();
+            if(responseHandlerMap.containsKey(responseType)) {
+                throw new IllegalStateException("Response handlerMethod for " + responseType + " already registered!");
+            }
+            payloadString = responseType.toString();
         }
 
         try {
@@ -149,16 +160,13 @@ public class ReplicationHandlerMethods {
                         mtt, mh, mtt).getTarget().bindTo(server).invoke();
             }
 
-            String payloadSting = annotation.requestType().equals(RequestPayloadMsg.PayloadCase.NONE) ?
-                    annotation.responseType().toString() : annotation.requestType().toString();
-
             // Install pre-conditions on handler
-            final HandlerMethod handler = generateConditionalHandler(payloadSting, h);
+            final HandlerMethod handler = generateConditionalHandler(payloadString, h, requestType != null);
             // Install the handler in the map
-            if (!annotation.requestType().equals(RequestPayloadMsg.PayloadCase.NONE)) {
-                requestHandlerMap.put(annotation.requestType(), handler);
+            if (requestType != null) {
+                requestHandlerMap.put(requestType, handler);
             } else {
-                responseHandlerMap.put(annotation.responseType(), handler);
+                responseHandlerMap.put(responseType, handler);
             }
         } catch (Throwable e) {
             throw new UnrecoverableCorfuError("Exception during request handler registration", e);
@@ -174,18 +182,23 @@ public class ReplicationHandlerMethods {
      *                      handler based on preconditions (whether the server is shutdown/ready).
      */
     private HandlerMethod generateConditionalHandler(@NonNull final String payloadType,
-                                                                           @NonNull final HandlerMethod handler) {
-        // Generate a timer name based on the LR message type
-        String timerName = getTimerName(payloadType);
-        // Register the handler. Depending on metrics collection configuration by MetricsUtil,
-        // handler will be instrumented by the metrics context.
-        return (req, res, r) -> MicroMeterUtils.time(() -> handler.handle(req, res, r), timerName);
+                                                     @NonNull final HandlerMethod handler, boolean isRequestType) {
+        if (isRequestType) {
+            // Generate a timer name based on the LR message type
+            String timerName = getTimerName(payloadType);
+
+            // Register the request handler. Depending on metrics collection configuration by MetricsUtil,
+            // handler will be instrumented by the metrics context.
+            return (req, res, r) -> MicroMeterUtils.time(() -> handler.handle(req, res, r), timerName);
+        }
+
+        return handler;
     }
 
     // Create a timer using cached timer name for the corresponding type
     private String getTimerName(@Nonnull String type) {
         timerNameCache.computeIfAbsent(type,
-                aType -> ("corfu.infrastructure.message-handler." +
+                aType -> ("corfu.infrastructure.log-replication-message-handler." +
                         aType.toLowerCase()));
         return timerNameCache.get(type);
     }

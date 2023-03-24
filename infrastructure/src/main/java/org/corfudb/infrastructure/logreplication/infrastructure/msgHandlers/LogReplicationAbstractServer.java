@@ -1,16 +1,10 @@
 package org.corfudb.infrastructure.logreplication.infrastructure.msgHandlers;
 
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.AbstractServer;
 import org.corfudb.infrastructure.logreplication.transport.IClientServerRouter;
-import org.corfudb.protocols.service.CorfuProtocolMessage;
 import org.corfudb.runtime.proto.service.CorfuMessage;
 
 import java.util.concurrent.atomic.AtomicReference;
-
-import static org.corfudb.protocols.CorfuProtocolServerErrors.getNotReadyErrorMsg;
-import static org.corfudb.protocols.service.CorfuProtocolMessage.getHeaderMsg;
-import static org.corfudb.protocols.service.CorfuProtocolMessage.getResponseMsg;
 
 @Slf4j
 public abstract class LogReplicationAbstractServer {

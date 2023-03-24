@@ -43,10 +43,10 @@ public class CorfuInterClusterReplicationServerNode implements AutoCloseable {
         this.serverContext = serverContext;
         this.router = router;
         this.serverStarted = new AtomicBoolean(false);
-        setRouterAndStartServer();
+        startServer();
     }
 
-    public void setRouterAndStartServer() {
+    public void startServer() {
         if (!serverStarted.get()) {
             logReplicationServerRunner = Executors.newSingleThreadScheduledExecutor(new ThreadFactoryBuilder()
                     .setNameFormat("replication-server-runner").build());
