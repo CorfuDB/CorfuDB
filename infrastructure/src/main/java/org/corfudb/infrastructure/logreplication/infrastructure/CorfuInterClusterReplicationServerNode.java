@@ -94,6 +94,10 @@ public class CorfuInterClusterReplicationServerNode implements AutoCloseable {
      * error.
      */
     public void disable() {
+        if (!serverStarted.get()) {
+            log.trace("close: Log Replication Server already shutdown");
+            return;
+        }
         log.trace("Disabling the Replication Server Node");
         cleanupResources();
     }
