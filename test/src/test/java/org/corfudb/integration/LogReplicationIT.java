@@ -36,7 +36,6 @@ import org.corfudb.util.Utils;
 import org.junit.Test;
 
 import java.io.IOException;
-import java.time.Duration;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
@@ -107,9 +106,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     static private final int BATCH_SIZE = 4;
 
     static private final int SMALL_MSG_SIZE = 12000;
-
-    private static final Duration WAIT_INTERVAL = Duration.ofSeconds(5);
-    private static final String REPLICATION_STATUS_TABLE = "LogReplicationStatus";
 
     static private TestConfig testConfig = new TestConfig();
 
@@ -1196,6 +1192,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
                                                 boolean injectTxData, TransitionSource function) throws Exception {
 
         logReplicationSourceManager = setupSourceManagerAndObservedValues(waitConditions, function);
+
         // Start Log Entry Sync
         log.info("****** Start Log Entry Sync with src tail " + srcDataRuntime.getAddressSpaceView().getLogTail()
                 + " dst tail " + dstDataRuntime.getAddressSpaceView().getLogTail());
