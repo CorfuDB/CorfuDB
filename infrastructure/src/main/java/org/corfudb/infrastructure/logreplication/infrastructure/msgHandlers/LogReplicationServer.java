@@ -6,9 +6,6 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.logreplication.infrastructure.SessionManager;
-import org.corfudb.infrastructure.logreplication.infrastructure.msgHandlers.LogReplicationAbstractServer;
-import org.corfudb.infrastructure.logreplication.infrastructure.msgHandlers.LogReplicationMsgHandler;
-import org.corfudb.infrastructure.logreplication.infrastructure.msgHandlers.ReplicationHandlerMethods;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.transport.IClientServerRouter;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
@@ -16,14 +13,10 @@ import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicat
 import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
-import org.corfudb.runtime.clients.IClientRouter;
-import org.corfudb.runtime.proto.service.CorfuMessage;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg;
-import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
-import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg;
 
 import javax.annotation.Nonnull;
 import java.lang.invoke.MethodHandles;
@@ -83,13 +76,9 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
      * RequestHandlerMethods for the LogReplication server
      */
     @Getter
-    private final ReplicationHandlerMethods handlerMethods = createHandlerMethods();
+    private final ReplicationHandlerMethods handlerMethods =
+            ReplicationHandlerMethods.generateHandler(MethodHandles.lookup(), this);
 
-    protected ReplicationHandlerMethods createHandlerMethods() {
-        return ReplicationHandlerMethods.generateHandler(MethodHandles.lookup(), this);
-    }
-
-    // Shama check if you really need ServerContext
     public LogReplicationServer(@Nonnull ServerContext context, @Nonnull SessionManager sessionManager,
                                 String localEndpoint) {
         this.serverContext = context;
@@ -195,7 +184,7 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
      * @param request leadership query
      * @param router  router used for sending back the response
      */
-    @LogReplicationMsgHandler(requestType = LR_ENTRY)
+    @LogReplicationRequestHandler(requestType = LR_ENTRY)
     private void handleLrEntryRequest(RequestMsg request, ResponseMsg res,
                                       @Nonnull IClientServerRouter router) {
         log.trace("Log Replication Entry received by Server.");
@@ -256,7 +245,7 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
      * @param request leadership query
      * @param router  router used for sending back the response
      */
-    @LogReplicationMsgHandler(requestType = LR_METADATA_REQUEST)
+    @LogReplicationRequestHandler(requestType = LR_METADATA_REQUEST)
     private void handleMetadataRequest(RequestMsg request, ResponseMsg res,
                                        @Nonnull IClientServerRouter router) {
         log.info("Log Replication Metadata Request received by Server.");
@@ -308,7 +297,7 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
      * @param request the leadership request message
      * @param router  router used for sending back the response
      */
-    @LogReplicationMsgHandler(requestType = LR_LEADERSHIP_QUERY)
+    @LogReplicationRequestHandler(requestType = LR_LEADERSHIP_QUERY)
     private void  handleLogReplicationQueryLeadership(RequestMsg request, ResponseMsg res,
                                                      @Nonnull IClientServerRouter router) {
         log.debug("Log Replication Query Leadership Request received by Server.");
@@ -323,7 +312,7 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
      * @param response The ack message
      * @param router   A reference to the router
      */
-    @LogReplicationMsgHandler(responseType = LR_ENTRY_ACK)
+    @LogReplicationResponseHandler(responseType = LR_ENTRY_ACK)
     private void handleLogReplicationAck(RequestMsg req, ResponseMsg response,
                                                   @Nonnull IClientServerRouter router) {
         log.debug("Handle log replication ACK {}", response);
@@ -331,7 +320,7 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
                 response.getPayload().getLrEntryAck());
     }
 
-    @LogReplicationMsgHandler(responseType = LR_METADATA_RESPONSE)
+    @LogReplicationResponseHandler(responseType = LR_METADATA_RESPONSE)
     private void handleLogReplicationMetadata(RequestMsg req,  ResponseMsg response,
                                                        @Nonnull IClientServerRouter router) {
         log.debug("Handle log replication Metadata Response");
@@ -339,7 +328,7 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
                 response.getPayload().getLrMetadataResponse());
     }
 
-    @LogReplicationMsgHandler(responseType = LR_LEADERSHIP_RESPONSE)
+    @LogReplicationResponseHandler(responseType = LR_LEADERSHIP_RESPONSE)
     private void handleLogReplicationQueryLeadershipResponse(RequestMsg req, ResponseMsg response,
                                                                       @Nonnull IClientServerRouter router) {
         log.debug("Handle log replication query leadership response msg {}", TextFormat.shortDebugString(response));
@@ -347,7 +336,7 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
                 response.getPayload().getLrLeadershipResponse());
     }
 
-    @LogReplicationMsgHandler(responseType = LR_LEADERSHIP_LOSS)
+    @LogReplicationResponseHandler(responseType = LR_LEADERSHIP_LOSS)
     private void handleLogReplicationLeadershipLoss(RequestMsg req,  ResponseMsg response,
                                                              @Nonnull IClientServerRouter router) {
         log.debug("Handle log replication leadership loss msg {}", TextFormat.shortDebugString(response));

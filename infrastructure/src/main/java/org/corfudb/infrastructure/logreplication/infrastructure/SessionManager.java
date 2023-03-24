@@ -198,7 +198,7 @@ public class SessionManager {
                 replicationContext.setTopologyConfigId(topology.getTopologyConfigId());
                 metadataManager.setTopologyConfigId(topology.getTopologyConfigId());
 
-                stopSessions(sessionsToRemove);
+                stopReplication(sessionsToRemove);
                 updateReplicationParameters(Sets.intersection(sessionsUnchanged, outgoingSessions));
                 router.updateTopologyConfigId(topology.getTopologyConfigId());
                 createSessions();
@@ -364,16 +364,16 @@ public class SessionManager {
     /**
      * Stop all sessions
      */
-    public void stopSessions() {
+    public void stopReplication() {
         log.info("Stopping log replication.");
-        stopSessions(sessions);
+        stopReplication(sessions);
     }
 
     /**
      * Stop replication for a set of sessions and clear in-memory info
      * @param sessions
      */
-    private void stopSessions(Set<LogReplicationSession> sessions) {
+    private void stopReplication(Set<LogReplicationSession> sessions) {
         if (sessions.isEmpty()) {
             return;
         }
@@ -397,6 +397,10 @@ public class SessionManager {
      * If local cluster is SINK for any session: initiate connection to remote sources.
      */
     public synchronized void connectToRemoteClusters() {
+        if (topology.getRemoteClusterEndpoints().isEmpty()) {
+            return;
+        }
+
         router.createTransportClientAdapter(configManager.getServerContext().getPluginConfigFilePath());
 
         newSessionsDiscovered.stream()

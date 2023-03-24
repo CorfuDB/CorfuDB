@@ -424,7 +424,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
             interClusterServerNode = new CorfuInterClusterReplicationServerNode(serverContext, sessionManager.getRouter());
         } else if (!interClusterServerNode.getServerStarted().get()) {
             //Start the server again as it was previously shutdown due to topology change
-            interClusterServerNode.setRouterAndStartServer();
+            interClusterServerNode.startServer();
         }
     }
 
@@ -459,7 +459,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
     private void stopLogReplication() {
         if (isLeader.get()) {
             log.info("Stopping log replication.");
-            sessionManager.stopSessions();
+            sessionManager.stopReplication();
         }
     }
 

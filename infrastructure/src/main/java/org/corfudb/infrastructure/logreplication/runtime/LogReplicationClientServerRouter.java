@@ -362,7 +362,7 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
         sessions.forEach(session -> removeSessionInfo(session));
 
         // When all the connection starter sessions are stopped, shut down the transport layer
-        if(sessionToOutstandingRequests.isEmpty()) {
+        if(sessionToOutstandingRequests.isEmpty() && this.clientChannelAdapter != null) {
             // stop the client Adapter. The Server Adapter is closed in the interClusterServerNode.
             this.clientChannelAdapter.stop();
         }

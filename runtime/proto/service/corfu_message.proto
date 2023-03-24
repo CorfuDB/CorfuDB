@@ -93,8 +93,6 @@ message RequestPayloadMsg {
     LogReplicationEntryMsg lr_entry = 70;
     LogReplicationMetadataRequestMsg lr_metadata_request = 71;
     LogReplicationLeadershipRequestMsg lr_leadership_query = 72;
-    // sentinel value for the LogReplicationMsgHandler
-    LogReplicationEntryMsg none = 73;
   }
 }
 
@@ -152,8 +150,6 @@ message ResponsePayloadMsg {
 
     LogReplicationLeadershipLossResponseMsg lr_leadership_loss = 73;
     SubscribeToReplicationMsg lr_subscribe_msg = 74;
-    // sentinel value for the LogReplicationMsgHandler
-    LogReplicationEntryMsg none = 75;
 
     // Server Error
     ServerErrorMsg server_error = 200;

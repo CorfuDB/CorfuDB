@@ -11,17 +11,11 @@ import java.lang.annotation.Target;
 @Target(ElementType.METHOD)
 @Retention(RetentionPolicy.RUNTIME)
 @Inherited
-public @interface LogReplicationMsgHandler {
+public @interface LogReplicationRequestHandler {
 
     /**
      * Returns the request payload type
      * @return the type of log replication request payload
      */
-    RequestPayloadMsg.PayloadCase  requestType() default RequestPayloadMsg.PayloadCase.NONE;
-
-    /**
-     * Returns the response payload type
-     * @return the type of log replication response payload
-     */
-    ResponsePayloadMsg.PayloadCase  responseType() default ResponsePayloadMsg.PayloadCase.NONE;
+    RequestPayloadMsg.PayloadCase  requestType();
 }
