@@ -169,7 +169,7 @@ public class ReplicationHandlerMethods {
                 responseHandlerMap.put(responseType, handler);
             }
         } catch (Throwable e) {
-            throw new UnrecoverableCorfuError("Exception during request handler registration", e);
+            throw new UnrecoverableCorfuError("Exception during message handler registration", e);
         }
     }
 
