@@ -1,10 +1,12 @@
 package org.corfudb.infrastructure;
 
+import org.apache.commons.io.IOUtils;
 import org.corfudb.runtime.DistributedCheckpointer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -56,6 +58,20 @@ public class InvokeCheckpointingJvm implements InvokeCheckpointing {
                 this.checkpointerProcess = pb.start();
                 this.isInvoked = true;
                 log.info("Triggered compactor jvm");
+
+                Thread commandLineThread = new Thread(() -> {
+                    try {
+                        String err = IOUtils.toString(checkpointerProcess.getErrorStream(), StandardCharsets.UTF_8);
+                        if (err.length() > 0) {
+                            log.error("Error occurred after invoking compactor jvm: {}", err);
+                        }
+                    } catch (IOException ex) {
+                        log.error("Exception occurred while getting ErrorStream: ", ex);
+                    }
+                });
+                commandLineThread.setDaemon(true);
+                commandLineThread.start();
+
                 return;
             } catch (RuntimeException re) {
                 if (DistributedCheckpointer.isCriticalRuntimeException(re, i, MAX_COMPACTION_RETRIES)) {
