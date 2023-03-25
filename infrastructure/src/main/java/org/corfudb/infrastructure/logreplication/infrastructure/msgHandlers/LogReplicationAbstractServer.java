@@ -82,7 +82,7 @@ public abstract class LogReplicationAbstractServer {
 
     /**
      * The server state.
-     * Represents server in a particular state: READY, NOT_READY, SHUTDOWN.
+     * Represents server in a particular state: READY, SHUTDOWN.
      */
     public enum ReplicationServerState {
         READY, SHUTDOWN

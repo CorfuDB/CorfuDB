@@ -52,11 +52,15 @@ public class NodeDescriptor {
     }
 
     public String getEndpoint() {
-        // TODO: once Chetan's fix is merged, revisit to handle the exception
-        if (host == null || port == null) {
-            return "";
+        String endpoint;
+        try {
+            endpoint = getVersionFormattedEndpointURL(host, port);
+        } catch (IllegalArgumentException e) {
+            log.trace("the host is empty or null.{}", e.getMessage());
+            endpoint = "";
         }
-        return getVersionFormattedEndpointURL(host, port);
+
+        return endpoint;
     }
 
     @Override
