@@ -648,7 +648,9 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
                 break;
         }
 
-        metadataManager.initializeReplicationStatusTable();
+        // Manually initialize the replication status table
+        metadataManager.initializeReplicationStatusTable(TEST_LOCAL_CLUSTER_ID);
+
         ackReader = new LogReplicationAckReader(metadataManager, config, runtime, TEST_LOCAL_CLUSTER_ID);
         fsm = new LogReplicationFSM(runtime, snapshotReader, dataSender, logEntryReader,
                 new DefaultReadProcessor(runtime), config, new ClusterDescriptor("Cluster-Local",

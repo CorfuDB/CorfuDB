@@ -110,9 +110,9 @@ public class LogReplicationMetadataManager {
         setupTopologyConfigId(topologyConfigId);
     }
 
-    public void initializeReplicationStatusTable() {
+    public void initializeReplicationStatusTable(String remoteClusterId) {
         ReplicationStatusKey replicationStatusKey = ReplicationStatusKey.newBuilder()
-                .setClusterId(localClusterId)
+                .setClusterId(remoteClusterId)
                 .build();
 
         ReplicationStatusVal defaultSourceStatus = ReplicationStatusVal.newBuilder()

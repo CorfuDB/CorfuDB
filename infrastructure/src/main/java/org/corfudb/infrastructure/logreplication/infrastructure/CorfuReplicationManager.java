@@ -5,6 +5,7 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.*;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
@@ -58,8 +59,6 @@ public class CorfuReplicationManager {
         this.corfuRuntime = corfuRuntime;
         this.localNodeDescriptor = localNodeDescriptor;
         this.replicationConfigManager = replicationConfigManager;
-        // Add default entry to Replication Status Table
-        metadataManager.initializeReplicationStatusTable();
     }
 
     /**
@@ -256,5 +255,17 @@ public class CorfuReplicationManager {
             standbyRuntime.getSourceManager().stopLogReplication();
             standbyRuntime.getSourceManager().startForcedSnapshotSync(event.getEventId());
         }
+    }
+
+    /**
+     * Initialize Replication Status as NOT_STARTED.
+     * Should be called only once in an active lifecycle.
+     */
+    public void initializeStatusAsNotStarted() {
+        runtimeToRemoteCluster.values().forEach(corfuLogReplicationRuntime ->
+                corfuLogReplicationRuntime
+                        .getSourceManager()
+                        .getAckReader()
+                        .markInitialSyncStatus());
     }
 }
