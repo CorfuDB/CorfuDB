@@ -6,7 +6,9 @@ import javax.annotation.Nonnull;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
-
+/**
+ * A router interface used by both SOURCE and SINK irrespective of who is the connection starter.
+ */
 public interface IClientServerRouter {
 
     /**

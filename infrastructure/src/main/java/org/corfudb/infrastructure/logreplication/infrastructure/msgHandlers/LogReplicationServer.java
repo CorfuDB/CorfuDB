@@ -298,7 +298,7 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
      * @param router  router used for sending back the response
      */
     @LogReplicationRequestHandler(requestType = LR_LEADERSHIP_QUERY)
-    private void  handleLogReplicationQueryLeadership(RequestMsg request, ResponseMsg res,
+    private void  handleLeadershipQuery(RequestMsg request, ResponseMsg res,
                                                      @Nonnull IClientServerRouter router) {
         log.debug("Log Replication Query Leadership Request received by Server.");
         HeaderMsg responseHeader = getHeaderMsg(request.getHeader());
@@ -313,7 +313,7 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
      * @param router   A reference to the router
      */
     @LogReplicationResponseHandler(responseType = LR_ENTRY_ACK)
-    private void handleLogReplicationAck(RequestMsg req, ResponseMsg response,
+    private void handleAck(RequestMsg req, ResponseMsg response,
                                                   @Nonnull IClientServerRouter router) {
         log.debug("Handle log replication ACK {}", response);
         router.completeRequest(response.getHeader().getSession(), response.getHeader().getRequestId(),
@@ -321,7 +321,7 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
     }
 
     @LogReplicationResponseHandler(responseType = LR_METADATA_RESPONSE)
-    private void handleLogReplicationMetadata(RequestMsg req,  ResponseMsg response,
+    private void handleMetadataResponse(RequestMsg req,  ResponseMsg response,
                                                        @Nonnull IClientServerRouter router) {
         log.debug("Handle log replication Metadata Response");
         router.completeRequest(response.getHeader().getSession(), response.getHeader().getRequestId(),
@@ -329,7 +329,7 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
     }
 
     @LogReplicationResponseHandler(responseType = LR_LEADERSHIP_RESPONSE)
-    private void handleLogReplicationQueryLeadershipResponse(RequestMsg req, ResponseMsg response,
+    private void handleLeadershipResponse(RequestMsg req, ResponseMsg response,
                                                                       @Nonnull IClientServerRouter router) {
         log.debug("Handle log replication query leadership response msg {}", TextFormat.shortDebugString(response));
         router.completeRequest(response.getHeader().getSession(), response.getHeader().getRequestId(),
@@ -337,7 +337,7 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
     }
 
     @LogReplicationResponseHandler(responseType = LR_LEADERSHIP_LOSS)
-    private void handleLogReplicationLeadershipLoss(RequestMsg req,  ResponseMsg response,
+    private void handleLeadershipLoss(RequestMsg req,  ResponseMsg response,
                                                              @Nonnull IClientServerRouter router) {
         log.debug("Handle log replication leadership loss msg {}", TextFormat.shortDebugString(response));
         router.completeRequest(response.getHeader().getSession(), response.getHeader().getRequestId(),

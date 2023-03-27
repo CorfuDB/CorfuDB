@@ -95,9 +95,7 @@ public class CorfuReplicationManager {
      */
     public void startLogReplicationRuntime(LogReplicationSession replicationSession) {
         CorfuLogReplicationRuntime replicationRuntime;
-        synchronized (this) {
-            replicationRuntime = sessionRuntimeMap.get(replicationSession);
-        }
+        replicationRuntime = sessionRuntimeMap.get(replicationSession);
         replicationRuntime.start();
     }
 
