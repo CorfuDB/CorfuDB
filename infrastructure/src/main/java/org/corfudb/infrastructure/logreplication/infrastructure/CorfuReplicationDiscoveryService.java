@@ -471,6 +471,8 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         isLeader.set(true);
         sessionManager.setLeadership(true);
         sessionManager.refresh(topologyDescriptor);
+        // check if all the sessions in system tables are valid
+        sessionManager.removeStaleSessionOnLeadershipAcquire();
         onLeadershipAcquire();
     }
 
