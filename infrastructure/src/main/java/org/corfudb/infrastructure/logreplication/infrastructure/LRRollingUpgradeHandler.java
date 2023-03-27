@@ -1,11 +1,17 @@
 package org.corfudb.infrastructure.logreplication.infrastructure;
 
+import com.google.protobuf.Message;
+import com.google.protobuf.Timestamp;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.ILogReplicationVersionAdapter;
-import org.corfudb.runtime.ExampleSchemas;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TxnContext;
+
+import java.time.Instant;
+import java.util.UUID;
+
+import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.REPLICATION_EVENT_TABLE_NAME;
 
 /**
  * Rolling upgrade handling means cluster must function in a mode where not all
@@ -89,12 +95,24 @@ public class LRRollingUpgradeHandler {
     /**
      * Add flag to event table to trigger snapshot sync.
      */
-    public static void eventSnapshotSyncRollingUpgrade(TxnContext txnContext) {
+    public void eventSnapshotSyncRollingUpgrade(TxnContext txnContext) {
+        UUID rollingUpgradeForceSyncId = UUID.randomUUID();
+
+        // Write a rolling upgrade force snapshot sync event to the logReplicationEventTable
+        LogReplicationMetadata.ReplicationEventInfoKey key = LogReplicationMetadata.ReplicationEventInfoKey.newBuilder()
+                .build();
+
+        LogReplicationMetadata.ReplicationEvent event = LogReplicationMetadata.ReplicationEvent.newBuilder()
+                .setEventId(rollingUpgradeForceSyncId.toString())
+                .setType(LogReplicationMetadata.ReplicationEvent.ReplicationEventType.ROLLING_UPGRADE_FORCE_SNAPSHOT_SYNC)
+                .setEventTimestamp(Timestamp.newBuilder().setSeconds(Instant.now().getEpochSecond()).build())
+                .build();
+
+        Table<LogReplicationMetadata.ReplicationEventInfoKey, LogReplicationMetadata.ReplicationEvent, Message> replicationEventTable =
+                txnContext.getTable(REPLICATION_EVENT_TABLE_NAME);
+
         log.info("Forced snapshot sync will be triggered due to completion of rolling upgrade");
-        Table<ExampleSchemas.ClusterUuidMsg, ExampleSchemas.ClusterUuidMsg, ExampleSchemas.ClusterUuidMsg>  configTable =
-                txnContext.getTable(DefaultClusterManager.CONFIG_TABLE_NAME);
-        txnContext.putRecord(configTable, DefaultClusterManager.OP_ROLLING_UPGRADE_ENFORCE_SNAPSHOT_SYNC,
-                DefaultClusterManager.OP_ROLLING_UPGRADE_ENFORCE_SNAPSHOT_SYNC, DefaultClusterManager.OP_ROLLING_UPGRADE_ENFORCE_SNAPSHOT_SYNC);
+        txnContext.putRecord(replicationEventTable, key, event, null);
         txnContext.commit();
     }
 }

@@ -129,6 +129,7 @@ message ReplicationEvent {
 
   enum ReplicationEventType {
     FORCE_SNAPSHOT_SYNC = 0;
+    ROLLING_UPGRADE_FORCE_SNAPSHOT_SYNC = 1;
   }
   string clusterId = 1;
   string eventId = 2;

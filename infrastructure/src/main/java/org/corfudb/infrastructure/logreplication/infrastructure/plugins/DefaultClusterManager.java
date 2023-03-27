@@ -57,18 +57,17 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
     public static final ClusterUuidMsg OP_ALL_SINK = ClusterUuidMsg.newBuilder().setLsb(3L).setMsb(3L).build();
     public static final ClusterUuidMsg OP_INVALID = ClusterUuidMsg.newBuilder().setLsb(4L).setMsb(4L).build();
     public static final ClusterUuidMsg OP_ENFORCE_SNAPSHOT_FULL_SYNC = ClusterUuidMsg.newBuilder().setLsb(5L).setMsb(5L).build();
-    public static final ClusterUuidMsg OP_ROLLING_UPGRADE_ENFORCE_SNAPSHOT_SYNC = ClusterUuidMsg.newBuilder().setLsb(6L).setMsb(6L).build();
-    public static final ClusterUuidMsg OP_BACKUP = ClusterUuidMsg.newBuilder().setLsb(7L).setMsb(7L).build();
+    public static final ClusterUuidMsg OP_BACKUP = ClusterUuidMsg.newBuilder().setLsb(6L).setMsb(6L).build();
 
     // Topology types
-    public static final ClusterUuidMsg TP_SINGLE_SOURCE_SINK = ClusterUuidMsg.newBuilder().setLsb(8L).setMsb(8L).build();
-    public static final ClusterUuidMsg TP_MULTI_SINK = ClusterUuidMsg.newBuilder().setLsb(9L).setMsb(9L).build();
-    public static final ClusterUuidMsg TP_MULTI_SOURCE = ClusterUuidMsg.newBuilder().setLsb(10L).setMsb(10L).build();
-    public static final ClusterUuidMsg TP_MIXED_MODEL_THREE_SINK = ClusterUuidMsg.newBuilder().setLsb(11L).setMsb(11L).build();
-    public static final ClusterUuidMsg TP_SINGLE_SOURCE_SINK_REV_CONNECTION = ClusterUuidMsg.newBuilder().setLsb(12L).setMsb(12L).build();
-    public static final ClusterUuidMsg TP_MULTI_SOURCE_REV_CONNECTION = ClusterUuidMsg.newBuilder().setLsb(13L).setMsb(13L).build();
-    public static final ClusterUuidMsg TP_MULTI_SINK_REV_CONNECTION = ClusterUuidMsg.newBuilder().setLsb(14L).setMsb(14L).build();
-    public static final ClusterUuidMsg OP_TWO_SINK_MIXED = ClusterUuidMsg.newBuilder().setLsb(15L).setMsb(15L).build();
+    public static final ClusterUuidMsg TP_SINGLE_SOURCE_SINK = ClusterUuidMsg.newBuilder().setLsb(7L).setMsb(7L).build();
+    public static final ClusterUuidMsg TP_MULTI_SINK = ClusterUuidMsg.newBuilder().setLsb(8L).setMsb(8L).build();
+    public static final ClusterUuidMsg TP_MULTI_SOURCE = ClusterUuidMsg.newBuilder().setLsb(9L).setMsb(9L).build();
+    public static final ClusterUuidMsg TP_MIXED_MODEL_THREE_SINK = ClusterUuidMsg.newBuilder().setLsb(10L).setMsb(10L).build();
+    public static final ClusterUuidMsg TP_SINGLE_SOURCE_SINK_REV_CONNECTION = ClusterUuidMsg.newBuilder().setLsb(11L).setMsb(11L).build();
+    public static final ClusterUuidMsg TP_MULTI_SOURCE_REV_CONNECTION = ClusterUuidMsg.newBuilder().setLsb(12L).setMsb(12L).build();
+    public static final ClusterUuidMsg TP_MULTI_SINK_REV_CONNECTION = ClusterUuidMsg.newBuilder().setLsb(13L).setMsb(13L).build();
+    public static final ClusterUuidMsg OP_TWO_SINK_MIXED = ClusterUuidMsg.newBuilder().setLsb(14L).setMsb(14L).build();
 
     @Getter
     private long configId;
@@ -177,11 +176,6 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
     @Override
     public UUID forceSnapshotSync(LogReplicationSession session) throws LogReplicationDiscoveryServiceException {
         return corfuReplicationDiscoveryServiceAdapter.forceSnapshotSync(session);
-    }
-
-    @Override
-    public List<UUID> rollingUpgradeForceSnapshot() throws LogReplicationDiscoveryServiceException {
-        return corfuReplicationDiscoveryServiceAdapter.rollingUpgradeForceSnapshot();
     }
 
     @Override
@@ -779,12 +773,6 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
                                     "exception", e);
                             throw new RuntimeException(e);
                         }
-                    }
-                } else if (entry.getKey().equals(OP_ROLLING_UPGRADE_ENFORCE_SNAPSHOT_SYNC)) {
-                    try {
-                        clusterManager.rollingUpgradeForceSnapshot();
-                    } catch (LogReplicationDiscoveryServiceException e) {
-                        log.warn("Caught a RuntimeException ", e);
                     }
                 } else if (entry.getKey().equals(OP_BACKUP)) {
                     clusterManager.getClusterManagerCallback()
