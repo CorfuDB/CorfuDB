@@ -315,7 +315,7 @@ public class RemoteMonitoringService implements ManagementService {
                     partition.getAvailableSpace(),
                     partition.getTotalSpace()
             );
-
+            log.info("Partition: " + partition);
             BatchProcessorStats bpStats = new BatchProcessorStats(partition.getBatchProcessorStatus());
             FileSystemStats fsStats = new FileSystemStats(partitionAttributeStats, bpStats);
 

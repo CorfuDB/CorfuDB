@@ -51,7 +51,7 @@ public class FailuresAgent {
      */
     public DetectorTask detectAndHandleFailure(PollReport pollReport, Layout layout) {
         log.trace("Handle failures for the report: {}", pollReport);
-
+        // if node is unresponsve return no v log pishem  chto oboslralis' + layout i cluster state
         try {
             ClusterState clusterState = pollReport.getClusterState();
 
@@ -132,11 +132,13 @@ public class FailuresAgent {
         log.info("Detected failed nodes in node responsiveness: Failed:{}, is slot unfilled: {}, clusterState:{}",
                 failedNodes, pollReport.getLayoutSlotUnFilled(layout), graph.toJson()
         );
-
+        log.info("Local endpoint: {}",
+                localEndpoint
+        );
         return runtimeSingleton.get()
                 .getLayoutView()
                 .getRuntimeLayout(layout)
-                .getManagementClient(localEndpoint)
+                .getManagementClient("192.168.0.221:9001")
                 .handleFailure(layout.getEpoch(), failedNodes)
                 .thenApply(DetectorTask::fromBool);
     }

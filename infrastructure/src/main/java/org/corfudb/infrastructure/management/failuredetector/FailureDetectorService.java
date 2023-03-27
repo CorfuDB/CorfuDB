@@ -116,6 +116,8 @@ public class FailureDetectorService {
                 return DetectorTask.COMPLETED;
             }
 
+
+
             // Analyze the poll report and trigger failure handler if needed.
             DetectorTask handleFailure = failuresAgent.detectAndHandleFailure(pollReport, ourLayout);
 

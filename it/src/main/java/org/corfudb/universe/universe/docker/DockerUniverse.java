@@ -149,6 +149,7 @@ public class DockerUniverse extends AbstractUniverse<NodeParams, UniverseParams>
             try {
                 docker.createNetwork(networkConfig);
             } catch (Exception e) {
+
                 throw new UniverseException("Cannot setup docker network.", e);
             }
         }

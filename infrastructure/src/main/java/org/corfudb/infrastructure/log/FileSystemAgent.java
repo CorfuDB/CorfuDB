@@ -99,7 +99,7 @@ public final class FileSystemAgent {
     private void reportQuotaExceeded() {
         try {
             Issue issue = Issue.createIssue(LOG_UNIT, Issue.IssueId.QUOTA_EXCEEDED_ERROR, "Quota exceeded");
-            if (!logSizeQuota.hasAvailable()) {
+            if (!getResourceQuota().hasAvailable()) {
                 HealthMonitor.reportIssue(issue);
             } else {
                 HealthMonitor.resolveIssue(issue);
@@ -247,7 +247,14 @@ public final class FileSystemAgent {
             // For example, "/" + "config"
             logPartition = Paths.get(config.logDir.getRoot().toString(),
                     config.logDir.subpath(0, 1).toString());
+            if (scheduler.isShutdown()) {
+                log.info("Scheduler is shutdown");
+            }
+            else {
+                log.info("Scheduler is not shutdown");
+            }
             initializeScheduler();
+
             setPartitionAttribute();
         }
 
@@ -263,7 +270,7 @@ public final class FileSystemAgent {
          * Sets PartitionAttribute's fields with the values from log file and the log partition.
          */
         private void setPartitionAttribute() {
-            log.trace("setPartitionAttribute: fetching PartitionAttribute.");
+            log.info("setPartitionAttribute: fetching PartitionAttribute.");
             try {
                 // Log path to check if it is in readOnly mode
                 File logDirectoryFile = config.logDir.toFile();
@@ -276,7 +283,7 @@ public final class FileSystemAgent {
                         fileStore.getTotalSpace(),
                         batchProcessorContext.getStatus()
                 );
-                log.trace("setPartitionAttribute: fetched PartitionAttribute successfully. " +
+                log.info("setPartitionAttribute: fetched PartitionAttribute successfully. " +
                         "{}", partitionAttribute);
 
             } catch (Exception ex) {

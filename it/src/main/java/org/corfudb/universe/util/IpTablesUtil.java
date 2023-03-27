@@ -10,6 +10,25 @@ public class IpTablesUtil {
     }
 
     /**
+     * Introduce delay in milliseconds
+     *
+     * @param millis
+     * @return command line
+     */
+    public static String[] introduceDelay(int millis) {
+        return new String[]{"tc", "qdisc", "add", "dev", "eth0", "root", "netem", "delay", millis + "ms"};
+    }
+
+    /**
+     * Remove delay
+     *
+     * @return command line
+     */
+    public static String[] removeDelay() {
+        return new String[]{"tc", "qdisc", "del", "dev", "eth0", "root", "netem"};
+    }
+
+    /**
      * Drop input packages for a particular ip address
      *
      * @param ipAddress ip address to drop packages

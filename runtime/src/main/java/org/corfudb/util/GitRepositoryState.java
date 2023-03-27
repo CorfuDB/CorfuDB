@@ -32,36 +32,37 @@ public class GitRepositoryState {
     public final String buildVersion;
 
     private GitRepositoryState() {
-        Properties properties = new Properties();
-        try {
-            properties.load(GitRepositoryState.class.getClassLoader()
-                    .getResourceAsStream("git.properties"));
-        } catch (IOException ie) {
-            log.error("Failed to get repository state", ie);
-        }
+//        Properties properties = new Properties();
+//        try {
+//            System.out.println(GitRepositoryState.class.getClass().getResourceAsStream("git.properties"));
+//            properties.load(GitRepositoryState.class.getClassLoader()
+//                    .getResourceAsStream("git.properties"));
+//        } catch (IOException ie) {
+//            log.error("Failed to get repository state", ie);
+//        }
 
-        this.tags = properties.get("git.tags").toString();
-        this.branch = properties.get("git.branch").toString();
-        this.dirty = properties.get("git.dirty").toString();
-        this.remoteOriginUrl = properties.get("git.remote.origin.url").toString();
+        this.tags = "a";
+        this.branch = "a";
+        this.dirty = "a";
+        this.remoteOriginUrl = "a";
 
-        this.commitId = properties.get("git.commit.id").toString();
-        this.commitIdAbbrev = properties.get("git.commit.id.abbrev").toString();
-        this.describe = properties.get("git.commit.id.describe").toString();
-        this.describeShort = properties.get("git.commit.id.describe-short").toString();
-        this.commitUserName = properties.get("git.commit.user.name").toString();
-        this.commitUserEmail = properties.get("git.commit.user.email").toString();
-        this.commitMessageFull = properties.get("git.commit.message.full").toString();
-        this.commitMessageShort = properties.get("git.commit.message.short").toString();
-        this.commitTime = properties.get("git.commit.time").toString();
-        this.closestTagName = properties.get("git.closest.tag.name").toString();
-        this.closestTagCommitCount = properties.get("git.closest.tag.commit.count").toString();
+        this.commitId = "a";
+        this.commitIdAbbrev = "a";
+        this.describe = "a";
+        this.describeShort = "a";
+        this.commitUserName = "a";
+        this.commitUserEmail = "a";
+        this.commitMessageFull = "a";
+        this.commitMessageShort = "a";
+        this.commitTime = "a";
+        this.closestTagName = "a";
+        this.closestTagCommitCount = "a";
 
-        this.buildUserName = properties.get("git.build.user.name").toString();
-        this.buildUserEmail = properties.get("git.build.user.email").toString();
-        this.buildTime = properties.get("git.build.time").toString();
-        this.buildHost = properties.get("git.build.host").toString();
-        this.buildVersion = properties.get("git.build.version").toString();
+        this.buildUserName = "a";
+        this.buildUserEmail = "a";
+        this.buildTime = "a";
+        this.buildHost = "a";
+        this.buildVersion = "a";
     }
 
     /**
@@ -78,7 +79,7 @@ public class GitRepositoryState {
      * @return git repo state
      */
     public static GitRepositoryState getRepositoryState() {
-        return GitRepositoryStateHelper.gitRepositoryState;
+        return new GitRepositoryState();
     }
 
     /**
@@ -91,6 +92,6 @@ public class GitRepositoryState {
     public static long getCorfuSourceCodeVersion() {
         final int CUTOFF = 12;
         final int HEX_OPT = 16;
-        return Long.parseLong(getRepositoryState().commitId.substring(0, CUTOFF), HEX_OPT);
+        return 100;
     }
 }

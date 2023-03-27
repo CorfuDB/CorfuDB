@@ -37,7 +37,11 @@ public class StateTransferIT extends AbstractIT {
     private CorfuRuntime secondRuntime;
     private CorfuRuntime writerRuntime;
     private String getServerEndpoint(int port) {
-        return corfuSingleNodeHost + ":" + port;
+        return "192.168.0.221" + ":" + port;
+    }
+
+    private String getServerEndpoint2(String host, int port) {
+        return host + ":" + port;
     }
 
     private Layout getLayout(int numNodes) {
@@ -45,6 +49,26 @@ public class StateTransferIT extends AbstractIT {
 
         for (int x = 0; x < numNodes; x++) {
             String serverAddress = getServerEndpoint(basePort + x);
+            servers.add(serverAddress);
+        }
+
+        return new Layout(
+                new ArrayList<>(servers),
+                new ArrayList<>(servers),
+                Collections.singletonList(new Layout.LayoutSegment(
+                        Layout.ReplicationMode.CHAIN_REPLICATION,
+                        0L,
+                        -1L,
+                        Collections.singletonList(new Layout.LayoutStripe(servers)))),
+                0L,
+                UUID.randomUUID());
+    }
+
+    private Layout getLayout2(int numNodes, String address) {
+        List<String> servers = new ArrayList<>();
+
+        for (int x = 0; x < numNodes; x++) {
+            String serverAddress = getServerEndpoint2(address, basePort + x);
             servers.add(serverAddress);
         }
 
@@ -103,6 +127,47 @@ public class StateTransferIT extends AbstractIT {
     }
 
 
+    @Test
+    @SuppressWarnings("checkstyle:magicnumber")
+    public void testRestart() throws Exception {
+        final int PORT_0 = 9000;
+        final int PORT_1 = 9001;
+        final int PORT_2 = 9002;
+        final Duration timeout = Duration.ofMinutes(5);
+        final Duration pollPeriod = Duration.ofSeconds(5);
+        final int workflowNumRetry = 3;
+        final int nodesCount = 3;
+
+        Process corfuServer_1 = runPersistentServer(null, PORT_0, false);
+        Process corfuServer_2 = runPersistentServer(null, PORT_1, false);
+        Process corfuServer_3 = runPersistentServer(null, PORT_2, false);
+
+
+        List<Process> corfuServers = Arrays.asList(corfuServer_1, corfuServer_2, corfuServer_3);
+
+        // bootstrap cluster with 2 nodes
+        final Layout oneNodeLayout = getLayout(1);
+        System.out.println(oneNodeLayout);
+        try{
+            BootstrapUtil.bootstrap(oneNodeLayout, retries, PARAMETERS.TIMEOUT_SHORT);
+        }
+        catch (Exception e) {
+
+        }
+        firstRuntime = createDefaultRuntime();
+        firstRuntime.getManagementView().addNode("192.168.0.221:9001", workflowNumRetry,
+                timeout, pollPeriod);
+        firstRuntime.getManagementView().addNode("192.168.0.221:9002", workflowNumRetry,
+                timeout, pollPeriod);
+        assertThat(shutdownCorfuServer(corfuServers.get(2))).isTrue();
+        System.out.println("Killed the last one");
+        waitForLayoutChange(l -> !l.getUnresponsiveServers().isEmpty(), firstRuntime);
+        System.out.println("We got a layout change! Bring back the 9002");
+        runPersistentServer(null, PORT_2, false);
+        waitForLayoutChange(l -> l.getUnresponsiveServers().isEmpty(), firstRuntime);
+
+
+    }
     /**
      * A cluster of two nodes is started - 9000, 9001.
      * Then a block of data entries is written to the cluster.

@@ -97,16 +97,16 @@ public class CompleteGraphAdvisor implements ClusterAdvisor {
     @Override
     public Optional<NodeRank> healedServer(ClusterState clusterState) {
 
-        log.trace("Detecting the healed nodes for: ClusterState: {}", clusterState);
-
+        log.info("Detecting the healed nodes for: ClusterState: {}", clusterState);
+        log.info("Local endpoint in graph advisor: {}", localEndpoint);
         ImmutableList<String> unresponsiveNodes = clusterState.getUnresponsiveNodes();
         if (unresponsiveNodes.isEmpty()) {
-            log.trace("All nodes responsive. Nothing to heal");
+            log.info("All nodes responsive. Nothing to heal");
             return Optional.empty();
         }
 
         if (!unresponsiveNodes.contains(localEndpoint)) {
-            log.trace("Local node is responsive. Nothing to heal");
+            log.info("Local node is responsive. Nothing to heal");
             return Optional.empty();
         }
 

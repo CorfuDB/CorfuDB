@@ -40,8 +40,9 @@ public class FileSystemAdvisor {
     }
 
     public Optional<NodeRankByPartitionAttributes> healedServer(ClusterState clusterState) {
-
         ImmutableList<String> unresponsiveNodes = clusterState.getUnresponsiveNodes();
+        log.info("Cluster state: {}", clusterState);
+        log.info("clusterState.getLocalEndpoint() is {} but unresponsive nodes: {}", clusterState.getLocalEndpoint(), unresponsiveNodes);
         if (unresponsiveNodes.contains(clusterState.getLocalEndpoint())) {
             Optional<FileSystemStats> maybeFileSystem = getFileSystemStats(clusterState);
 

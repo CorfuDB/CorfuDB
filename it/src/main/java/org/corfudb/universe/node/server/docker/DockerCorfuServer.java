@@ -189,6 +189,27 @@ public class DockerCorfuServer extends AbstractCorfuServer<CorfuServerParams, Un
                 });
     }
 
+    public void introduceDelay(int millis) {
+        log.info("Introducing delay of {} millis for the docker server: {}",
+                millis, params.getName());
+        try {
+            dockerManager.execCommand(params.getName(),
+                    IpTablesUtil.introduceDelay(millis));
+        } catch (DockerException | InterruptedException ex) {
+            throw new NodeException("Can't introduce delay: " + params.getName(), ex);
+        }
+    }
+
+    public void removeDelay() {
+        log.info("Removing delay for the docker server: {}", params.getName());
+        try {
+            dockerManager.execCommand(params.getName(),
+                    IpTablesUtil.removeDelay());
+        } catch (DockerException | InterruptedException ex) {
+            throw new NodeException("Can't remove delay: " + params.getName(), ex);
+        }
+    }
+
     /**
      * Pause the container from docker network
      *
@@ -298,6 +319,7 @@ public class DockerCorfuServer extends AbstractCorfuServer<CorfuServerParams, Un
             ListImagesParam corfuImageQuery = ListImagesParam
                     .byName(params.getDockerImageNameFullName());
             List<Image> corfuImages = docker.listImages(corfuImageQuery);
+
             if (corfuImages.isEmpty()) {
                 docker.pull(params.getDockerImageNameFullName());
             }
@@ -351,6 +373,7 @@ public class DockerCorfuServer extends AbstractCorfuServer<CorfuServerParams, Un
         HostConfig hostConfig = hostConfigBuilder
                 .privileged(true)
                 .portBindings(portBindings)
+                .capAdd("NET_ADMIN")
                 .build();
 
         // Compose command line for starting Corfu
@@ -363,7 +386,7 @@ public class DockerCorfuServer extends AbstractCorfuServer<CorfuServerParams, Un
 
         return ContainerConfig.builder()
                 .hostConfig(hostConfig)
-                .image(params.getDockerImageNameFullName())
+                .image("corfudb/corfu-server:cloud")
                 .hostname(params.getName())
                 .exposedPorts(ports.toArray(new String[0]))
                 .cmd("sh", "-c", cmdLine)
