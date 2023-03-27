@@ -34,6 +34,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
+import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.METADATA_TABLE_NAME;
+
 /**
  * Manage log replication sessions for multiple replication models.
  *
@@ -325,6 +327,24 @@ public class SessionManager {
                 .setSinkClusterId(sinkClusterId)
                 .setSubscriber(getDefaultSubscriber())
                 .build();
+    }
+
+    /**
+     * When a node acquires the lock, check if all the sessions present in the system tables are still valid.
+     *
+     * Since the metadata table is written to only by the leader node, we can run into the scenario where the leader node
+     * missed updating the system table because the leadership changed at that precise moment.
+     * If the new leader node had already received the topology change notification before becoming the leader, the stale
+     * sessions would not be recognized on "refresh".
+     * Therefore, iterate over the sessions in the system tables and remove the stale sessions if any.
+     */
+    public void removeStaleSessionOnLeadershipAcquire() {
+        try (TxnContext txn = metadataManager.getTxnContext()) {
+            Set<LogReplicationSession> sessionsInTable = txn.keySet(METADATA_TABLE_NAME);
+            sessionsInTable.stream().filter(sessionInTable -> !sessions.contains(sessionInTable))
+                    .forEach(staleSession -> metadataManager.removeSession(txn,staleSession));
+            txn.commit();
+        }
     }
 
     /**

@@ -359,6 +359,8 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
                 });
             }
         });
+        responseObserverMap.clear();
+        replicationReqObserverMap.clear();
         nodeIdToChannelMap.keySet().forEach(node -> log.debug("Channel is closed for node {}", node));
         lock.unlock();
     }
