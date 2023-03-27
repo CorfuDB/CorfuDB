@@ -6,7 +6,6 @@ import org.corfudb.infrastructure.logreplication.infrastructure.TopologyDescript
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.LogReplication.ReplicationStatus;
 
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -62,6 +61,4 @@ public interface CorfuReplicationClusterManagerAdapter {
      * @param session
      */
     UUID forceSnapshotSync(LogReplicationSession session) throws LogReplicationDiscoveryServiceException;
-
-    List<UUID> rollingUpgradeForceSnapshot() throws LogReplicationDiscoveryServiceException;
 }

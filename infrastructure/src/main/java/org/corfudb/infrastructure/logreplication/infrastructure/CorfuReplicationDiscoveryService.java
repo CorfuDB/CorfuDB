@@ -255,6 +255,10 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
                 processEnforceSnapshotSync(event);
                 break;
 
+            case ROLLING_UPGRADE_ENFORCE_SNAPSHOT_SYNC:
+                rollingUpgradeForceSnapshot();
+                break;
+
             default:
                 log.error("Invalid event type {}", event.getType());
                 break;
@@ -711,10 +715,14 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         return forceSyncId;
     }
 
-    public List<UUID> rollingUpgradeForceSnapshot() throws LogReplicationDiscoveryServiceException {
+    public List<UUID> rollingUpgradeForceSnapshot() {
         List<UUID> forceSyncIds = new ArrayList<>();
         for (LogReplicationSession session : sessionManager.getSessions()) {
-            forceSyncIds.add(forceSnapshotSync(session));
+            try {
+                forceSyncIds.add(forceSnapshotSync(session));
+            } catch (LogReplicationDiscoveryServiceException e) {
+                log.warn("Caught a RuntimeException ", e);
+            }
         }
         return forceSyncIds;
     }
