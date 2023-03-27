@@ -9,6 +9,7 @@ import org.corfudb.infrastructure.ServerThreadFactory;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.infrastructure.logreplication.infrastructure.CorfuReplicationManager;
 import org.corfudb.infrastructure.logreplication.infrastructure.SessionManager;
+import org.corfudb.infrastructure.logreplication.infrastructure.TopologyDescriptor;
 import org.corfudb.infrastructure.logreplication.infrastructure.msgHandlers.LogReplicationServer;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRuntimeEvent;
@@ -51,18 +52,17 @@ import static org.corfudb.protocols.service.CorfuProtocolMessage.getRequestMsg;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getResponseMsg;
 
 /**
- * A Base Source Router, which interfaces between the Log replication Source components (FSMs, AckReader, etc) and the
- * custom transport adapter
+ * Router, interfaces between the custom transport layer and LR core components.
  *
- * This class is inherited by both LogReplicationSourceClientRouter and LogReplicationSourceServerRouter.
+ * There is one router per node, and all the sessions (both incoming and outgoing) share the router.
  */
 @Slf4j
 public class LogReplicationClientServerRouter implements IClientServerRouter {
 
-    public static String REMOTE_LEADER = "REMOTE_LEADER";
+    public static final String REMOTE_LEADER = "REMOTE_LEADER";
 
     /**
-     * A map of remoteCluster to {@link CompletableFuture} for each session, which is completed when a connection,
+     * A map of session to {@link CompletableFuture}, which is completed when a connection,
      * including a successful handshake, completes and messages can be sent
      * to the remote node.
      */
@@ -125,7 +125,7 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
     private IServerChannelAdapter serverChannelAdapter;
 
     /**
-     * The handlers registered to this router.
+     * Log replication server which has the handlers for incoming messages.
      */
     @Getter
     private final LogReplicationServer msgHandler;
@@ -142,7 +142,7 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
 
 
     /**
-     * Log Replication Client Constructor
+     * Log Replication Router Constructor
      *
      * @param responseTimeout timeout for requests
      * @param replicationManager replicationManager to start FSM
@@ -213,7 +213,7 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
 
 
     /**
-     * set runtimeFSM of the router
+     * Add runtimeFSM of the router
      * @param runtimeFSM runtime state machine, insert connection related events
      */
     public void addRuntimeFSM(LogReplicationSession session, CorfuLogReplicationRuntime runtimeFSM) {

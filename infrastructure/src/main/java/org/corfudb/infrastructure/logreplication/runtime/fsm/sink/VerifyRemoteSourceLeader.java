@@ -103,7 +103,7 @@ public class VerifyRemoteSourceLeader {
         switch (event.getType()) {
             case ON_CONNECTION_DOWN:
                 String nodeIdDown = event.getNodeId();
-                log.debug("Detected connection down from node={}", nodeIdDown);
+                log.info("Detected connection down from node={}", nodeIdDown);
                 updateDisconnectedNodes(nodeIdDown);
                 resetRemoteLeader();
                 break;
@@ -112,14 +112,14 @@ public class VerifyRemoteSourceLeader {
                 verifyLeadership();
                 break;
             case ON_CONNECTION_UP:
-                log.debug("Detected connection up from endpoint={}", event.getNodeId());
+                log.info("Detected connection up from endpoint={}", event.getNodeId());
                 // Add new connected node, for leadership verification
                 updateConnectedNodes(event.getNodeId());
                 verifyLeadership();
                 break;
             case REMOTE_LEADER_FOUND:
                 log.debug("Remote Leader is found: {}", event.getNodeId());
-                subscribeAndStartReplication();
+                invokeReverseReplication();
                 break;
             default: {
                 log.warn("Unexpected communication event {}", event.getType());
@@ -215,7 +215,7 @@ public class VerifyRemoteSourceLeader {
         log.debug("Exit :: leadership verification");
     }
 
-    private void subscribeAndStartReplication() {
+    private void invokeReverseReplication() {
         CorfuMessage.ResponsePayloadMsg payload =
                 CorfuMessage.ResponsePayloadMsg.newBuilder()
                         .setLrSubscribeMsg(LogReplication.SubscribeToReplicationMsg.newBuilder().build())

@@ -7,12 +7,14 @@ import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientServerRouter;
 
 import javax.annotation.Nonnull;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * This class manages the lifecycle of the transport layer server
+ * This class manages the lifecycle of the transport layer server.
+ * Used by connection receiving clusters.
  */
 @Slf4j
 public class CorfuInterClusterReplicationServerNode implements AutoCloseable {
@@ -58,13 +60,14 @@ public class CorfuInterClusterReplicationServerNode implements AutoCloseable {
     }
 
     /**
-     * Wait on Corfu Server Channel until it closes.
+     * Wait on the transport frameworks's server until it is shutdown.
      */
     private void startAndListen() {
         try {
             log.info("Starting server transport adapter ...");
+            CompletableFuture<Boolean> cf =  this.router.createTransportServerAdapter(serverContext);
             serverStarted.set(true);
-            this.router.createTransportServerAdapter(serverContext).get();
+            cf.get();
         } catch (InterruptedException e) {
             // The server can be interrupted and stopped on a role switch.
             // It should not be treated as fatal
@@ -94,10 +97,6 @@ public class CorfuInterClusterReplicationServerNode implements AutoCloseable {
      * error.
      */
     public void disable() {
-        if (!serverStarted.get()) {
-            log.trace("close: Log Replication Server already shutdown");
-            return;
-        }
         log.trace("Disabling the Replication Server Node");
         cleanupResources();
     }
@@ -107,21 +106,22 @@ public class CorfuInterClusterReplicationServerNode implements AutoCloseable {
      */
     @Override
     public void close() {
-        if (!serverStarted.get()) {
-            log.trace("close: Log Replication Server already shutdown");
-            return;
-        }
-        log.info("close: Shutting down Log Replication server and cleaning resources");
+        log.info("close: Shutting down Log Replication Inter Cluster Server and cleaning resources");
         cleanupResources();
     }
 
-    private void cleanupResources() {
+    private synchronized void cleanupResources() {
+        if (!serverStarted.get()) {
+            log.trace("close: Log Replication Inter Cluster Server already shutdown");
+            return;
+        }
+
         this.router.getServerChannelAdapter().stop();
         serverStarted.set(false);
         // Stop listening on the server channel
         logReplicationServerRunner.shutdownNow();
 
-        log.info("Log Replication Server shutdown and resources released");
+        log.info("Log Replication Inter Cluster Server shutdown and resources released");
     }
 
 }
