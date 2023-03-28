@@ -590,7 +590,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         // Block until snapshot sync completes
         replicationStatus = null;
         while (replicationStatus == null || !replicationStatus.getSourceStatus().getReplicationInfo()
-                .getSnapshotSyncInfo().getStatus().equals(LogReplicationMetadata.SyncStatus.COMPLETED)) {
+                .getSnapshotSyncInfo().getStatus().equals(SyncStatus.COMPLETED)) {
             try (TxnContext txn = sinkCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
                 replicationStatus = (ReplicationStatus)txn.getRecord(REPLICATION_STATUS_TABLE, sessionKey).getPayload();
                 txn.commit();
