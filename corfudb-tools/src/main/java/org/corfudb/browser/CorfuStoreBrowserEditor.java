@@ -19,8 +19,6 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -73,11 +71,10 @@ import javax.annotation.Nonnull;
  */
 @Slf4j
 @SuppressWarnings("checkstyle:printLine")
-public class CorfuStoreBrowserEditor {
+public class CorfuStoreBrowserEditor implements CorfuBrowserEditorCommands {
     private final CorfuRuntime runtime;
     private final String diskPath;
     private final DynamicProtobufSerializer dynamicProtobufSerializer;
-    private final String QUOTE = "\"";
 
     /**
      * Creates a CorfuBrowser which connects a runtime to the server.
@@ -107,6 +104,7 @@ public class CorfuStoreBrowserEditor {
      * @param address specific address to read metadata map from
      * @return
      */
+    @Override
     public EnumMap<IMetadata.LogUnitMetadataType, Object> printMetadataMap(long address) {
         ILogData data = runtime.getAddressSpaceView().read(address);
         System.out.println("\n========== Metadata Map ==========\n");
@@ -121,6 +119,7 @@ public class CorfuStoreBrowserEditor {
 
     /**
      * Fetches the table from the given namespace
+     *
      * @param namespace Namespace of the table
      * @param tableName Tablename
      * @return CorfuTable
@@ -162,13 +161,14 @@ public class CorfuStoreBrowserEditor {
      * @param tablename - table name without the namespace
      * @return - number of entries in the table
      */
+    @Override
     public int printTable(String namespace, String tablename) {
         if (namespace.equals(TableRegistry.CORFU_SYSTEM_NAMESPACE)
                 && tablename.equals(TableRegistry.REGISTRY_TABLE_NAME)) {
             // TableDescriptors are an internal type that use Any protobuf.
             // JsonFormat has a known bug where it fails to print Any protobuf payloads
             // So to work around this bug, avoid dumping the TableDescriptor table directly.
-            return printTableRegistry();
+            return printTableRegistry(dynamicProtobufSerializer);
         }
 
         ICorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table =
@@ -189,7 +189,7 @@ public class CorfuStoreBrowserEditor {
         return size;
     }
 
-    private void printKey(Map.Entry<CorfuDynamicKey, CorfuDynamicRecord> entry) {
+    public static void printKey(Map.Entry<CorfuDynamicKey, CorfuDynamicRecord> entry) {
         StringBuilder builder;
         try {
             builder = new StringBuilder("\nKey:\n")
@@ -200,7 +200,7 @@ public class CorfuStoreBrowserEditor {
         }
     }
 
-    private void printPayload(Map.Entry<CorfuDynamicKey, CorfuDynamicRecord> entry) {
+    public static void printPayload(Map.Entry<CorfuDynamicKey, CorfuDynamicRecord> entry) {
         StringBuilder builder;
         if (entry.getValue().getPayload() == null) {
             log.error("payload is NULL");
@@ -212,11 +212,11 @@ public class CorfuStoreBrowserEditor {
                     .append(JsonFormat.printer().print(entry.getValue().getPayload()));
             System.out.println(builder.toString());
         } catch (Exception e) {
-            log.error("invalid payload: ", e);
+            //log.error("invalid payload: ", e);
         }
     }
 
-    private int printTableRegistry() {
+    public static int printTableRegistry(DynamicProtobufSerializer dynamicProtobufSerializer) {
         for (Map.Entry<TableName, CorfuRecord<TableDescriptors, TableMetadata>> entry :
                 dynamicProtobufSerializer.getCachedRegistryTable().entrySet()) {
             try {
@@ -228,9 +228,10 @@ public class CorfuStoreBrowserEditor {
             }
             try {
                 StringBuilder builder = new StringBuilder();
-                builder.append("\nkeyType = \"" + entry.getValue().getPayload().getKey().getTypeUrl() + QUOTE);
-                builder.append("\npayloadType = \"" + entry.getValue().getPayload().getValue().getTypeUrl() + QUOTE);
-                builder.append("\nmetadataType = \"" + entry.getValue().getPayload().getMetadata().getTypeUrl() + QUOTE);
+                String separator = "\"";
+                builder.append("\nkeyType = \"" + entry.getValue().getPayload().getKey().getTypeUrl() + separator);
+                builder.append("\npayloadType = \"" + entry.getValue().getPayload().getValue().getTypeUrl() + separator);
+                builder.append("\nmetadataType = \"" + entry.getValue().getPayload().getMetadata().getTypeUrl() + separator);
                 builder.append("\nProtobuf Source Files: \"" +
                         entry.getValue().getPayload().getFileDescriptorsMap().keySet()
                 );
@@ -251,7 +252,7 @@ public class CorfuStoreBrowserEditor {
         return dynamicProtobufSerializer.getCachedRegistryTable().size();
     }
 
-    private void printMetadata(Map.Entry<CorfuDynamicKey, CorfuDynamicRecord> entry) {
+    public static void printMetadata(Map.Entry<CorfuDynamicKey, CorfuDynamicRecord> entry) {
         StringBuilder builder;
         if (entry.getValue().getMetadata() == null) {
             log.warn("metadata is NULL");
@@ -271,6 +272,7 @@ public class CorfuStoreBrowserEditor {
      * @param namespace - the namespace where the table belongs
      * @return - number of tables in this namespace
      */
+    @Override
     public int listTables(String namespace)
     {
         int numTables = 0;
@@ -297,6 +299,7 @@ public class CorfuStoreBrowserEditor {
      * @param tablename - table name without the namespace
      * @return - number of entries in the table
      */
+    @Override
     public int printTableInfo(String namespace, String tablename) {
         System.out.println("\n======================\n");
         String fullName = TableRegistry.getFullyQualifiedTableName(namespace, tablename);
@@ -313,6 +316,7 @@ public class CorfuStoreBrowserEditor {
     /**
      * Helper to analyze all the protobufs used in this cluster
      */
+    @Override
     public int printAllProtoDescriptors() {
         int numProtoFiles = -1;
         System.out.println("=========PROTOBUF FILE NAMES===========");
@@ -347,6 +351,7 @@ public class CorfuStoreBrowserEditor {
      * @param tablename - table name without the namespace
      * @return - number of entries in the table before clearing the table
      */
+    @Override
     public int clearTable(String namespace, String tablename) {
         System.out.println("\n======================\n");
         String fullName = TableRegistry.getFullyQualifiedTableName(namespace, tablename);
@@ -384,6 +389,7 @@ public class CorfuStoreBrowserEditor {
      * @return CorfuDynamicRecord the newly added record.  null if no record
      * was created
      */
+    @Override
     public CorfuDynamicRecord addRecord(String namespace, String tableName,
                                         String newKey, String newValue,
                                         String newMetadata) {
@@ -460,6 +466,7 @@ public class CorfuStoreBrowserEditor {
      * @return CorfuDynamicRecord the edited CorfuDynamicRecord.  null if no
      *  record was edited, either due to an error or key not found.
      */
+    @Override
     public CorfuDynamicRecord editRecord(String namespace, String tableName,
                                          String keyToEdit, String newRecord) {
         System.out.println("\n======================\n");
@@ -561,6 +568,7 @@ public class CorfuStoreBrowserEditor {
      * @param batchSize number of records to group into a single corfu transaction
      * @return number of keys deleted.
      */
+    @Override
     @SuppressWarnings("checkstyle:magicnumber")
     public int deleteRecords(String namespace, String tableName, List<String> keysToDelete, int batchSize) {
         System.out.println("\n======================\n");
@@ -631,6 +639,7 @@ public class CorfuStoreBrowserEditor {
      * @param itemSize - size of each item - a random string array
      * @return - number of entries loaded in table
      */
+    @Override
     public int loadTable(String namespace, String tableName, int numItems, int batchSize, int itemSize) {
         ICorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table =
                 getTable(namespace, tableName);
@@ -661,11 +670,13 @@ public class CorfuStoreBrowserEditor {
 
     /**
      * Subscribe to and just dump the updates read from a table
+     *
      * @param namespace namespace to listen on
      * @param tableName tableName to subscribe to
      * @param stopAfter number of updates to stop listening at
      * @return number of updates read so far
      */
+    @Override
     public int listenOnTable(String namespace, String tableName, int stopAfter) {
         CorfuStoreShim store = new CorfuStoreShim(runtime);
         final Table<ExampleTableName, ExampleTableName, ManagedMetadata> table;
@@ -770,6 +781,7 @@ public class CorfuStoreBrowserEditor {
      *
      * @return stream tags
      * */
+    @Override
     public Set<String> listStreamTags() {
         Set<String> streamTags = new HashSet<>();
 
@@ -790,6 +802,7 @@ public class CorfuStoreBrowserEditor {
      *
      * @return map of tags to table names in the registry
      */
+    @Override
     public Map<String, List<TableName>> listTagToTableMap() {
         Map<String, List<TableName>> streamTagToTableNames = getTagToTableNamesMap();
         System.out.println("\n======================\n");
@@ -807,6 +820,7 @@ public class CorfuStoreBrowserEditor {
      * @param namespace namespace for the table of interest
      * @param table table name of interest
      */
+    @Override
     public Set<String> listTagsForTable(String namespace, String table) {
         Set<String> tags = new HashSet<>();
         TableName tableName = TableName.newBuilder().setNamespace(namespace).setTableName(table).build();
@@ -832,6 +846,7 @@ public class CorfuStoreBrowserEditor {
      * @param streamTag specific stream tag, if empty or null return all stream tags map
      * @return table names with given 'streamTag'
      */
+    @Override
     public List<TableName> listTablesForTag(@Nonnull String streamTag) {
         if (streamTag == null || streamTag.isEmpty()) {
             log.warn("Stream tag is null or empty. Provide correct --tag <tag> argument.");
