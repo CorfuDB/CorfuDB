@@ -419,7 +419,6 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
             return;
         }
 
-
         if (interClusterServerNode == null) {
             interClusterServerNode = new CorfuInterClusterReplicationServerNode(serverContext, sessionManager.getRouter());
         } else if (!interClusterServerNode.getServerStarted().get()) {

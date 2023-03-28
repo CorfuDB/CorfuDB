@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure.logreplication;
 
+import com.google.common.collect.Sets;
 import org.corfudb.infrastructure.logreplication.infrastructure.CorfuReplicationManager;
 import org.corfudb.infrastructure.logreplication.infrastructure.SessionManager;
 import org.corfudb.infrastructure.logreplication.infrastructure.TopologyDescriptor;
@@ -8,6 +9,7 @@ import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultC
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientServerRouter;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.junit.After;
 import org.junit.Assert;
@@ -15,6 +17,8 @@ import org.junit.Before;
 import org.junit.Test;
 import org.mockito.Mockito;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Set;
 
 import static org.mockito.Matchers.anyLong;
 import static org.mockito.Matchers.anyObject;
@@ -116,12 +120,23 @@ public class SessionManagerTest extends AbstractViewTest {
         Assert.assertEquals(numSinkCluster, sessionManager.getOutgoingSessions().size());
         Assert.assertEquals(sourceClusterId, topology.getLocalClusterDescriptor().getClusterId());
         Assert.assertEquals(0, sessionManager.getIncomingSessions().size());
+        Assert.assertEquals(router.getSessionToLeaderConnectionFuture().size(), topology.getRemoteClusterEndpoints().size());
+
+        //get sessions from topology1
+        Set<LogReplication.LogReplicationSession> sessionsFromTopology1 = new HashSet<>(sessionManager.getSessions());
 
         // Encounter topology change by introducing a new sink cluster and removing the existing sink cluster.
         TopologyDescriptor newTopology = clusterManager.addAndRemoveSinkFromDefaultTopology();
         sessionManager.refresh(newTopology);
+        // get sessions from topology2
+        Set<LogReplication.LogReplicationSession> sessionFromTopology2 = new HashSet<>(sessionManager.getSessions());
+
+        //assert size of incoming and outgoing sessions
         Assert.assertEquals(0, sessionManager.getIncomingSessions().size());
         Assert.assertEquals(newTopology.getRemoteSinkClusters().size(), sessionManager.getOutgoingSessions().size());
+
+        //verify router.stop was called with old stale sessions
+        Mockito.verify(router, Mockito.times(1)).stop(Sets.difference(sessionsFromTopology1, sessionFromTopology2));
 
     }
 }
