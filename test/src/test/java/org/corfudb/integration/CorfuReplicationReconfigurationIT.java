@@ -5,11 +5,9 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.corfudb.infrastructure.logreplication.infrastructure.SessionManager;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SyncType;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SnapshotSyncInfo;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SyncStatus;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatus;
 import org.corfudb.infrastructure.logreplication.proto.Sample.IntValueTag;
 import org.corfudb.infrastructure.logreplication.proto.Sample.Metadata;
 import org.corfudb.infrastructure.logreplication.proto.Sample.StringKey;
@@ -19,6 +17,7 @@ import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.ExampleSchemas;
+import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
 import org.corfudb.runtime.collections.StreamListener;
@@ -200,9 +199,9 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
         corfuStoreSource.openTable(LogReplicationMetadataManager.NAMESPACE,
             REPLICATION_STATUS_TABLE_NAME,
             LogReplicationSession.class,
-            ReplicationStatus.class,
+            LogReplication.ReplicationStatus.class,
             null,
-            TableOptions.fromProtoSchema(ReplicationStatus.class));
+            TableOptions.fromProtoSchema(LogReplication.ReplicationStatus.class));
 
         // Wait the polling period time before verifying sync status (to make sure it was updated)
         Sleep.sleepUninterruptibly(Duration.ofSeconds(LogReplicationAckReader.ACKED_TS_READ_INTERVAL_SECONDS + 1));
@@ -260,9 +259,9 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
             .setSubscriber(SessionManager.getDefaultSubscriber())
             .build();
 
-        ReplicationStatus replicationStatus;
+        LogReplication.ReplicationStatus replicationStatus;
         try (TxnContext txn = corfuStoreSource.txn(LogReplicationMetadataManager.NAMESPACE)) {
-            replicationStatus = (ReplicationStatus)txn.getRecord(REPLICATION_STATUS_TABLE_NAME, session).getPayload();
+            replicationStatus = (LogReplication.ReplicationStatus)txn.getRecord(REPLICATION_STATUS_TABLE_NAME, session).getPayload();
             txn.commit();
         }
 
@@ -547,9 +546,9 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
             corfuStoreSource.openTable(LogReplicationMetadataManager.NAMESPACE,
                     REPLICATION_STATUS_TABLE_NAME,
                     LogReplicationSession.class,
-                    ReplicationStatus.class,
+                    LogReplication.ReplicationStatus.class,
                     null,
-                    TableOptions.fromProtoSchema(ReplicationStatus.class));
+                    TableOptions.fromProtoSchema(LogReplication.ReplicationStatus.class));
             blockUntilSnapshotSyncCompleted();
 
             // Verify Snapshot has successfully replicated
@@ -625,12 +624,12 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
             .setSubscriber(SessionManager.getDefaultSubscriber())
             .build();
 
-        ReplicationStatus replicationStatus;
+        LogReplication.ReplicationStatus replicationStatus;
         boolean snapshotSyncCompleted = false;
 
         while (snapshotSyncCompleted) {
             try (TxnContext txn = corfuStoreSource.txn(LogReplicationMetadataManager.NAMESPACE)) {
-                replicationStatus = (ReplicationStatus) txn.getRecord(REPLICATION_STATUS_TABLE_NAME, key).getPayload();
+                replicationStatus = (LogReplication.ReplicationStatus) txn.getRecord(REPLICATION_STATUS_TABLE_NAME, key).getPayload();
                 txn.commit();
             }
 
@@ -646,7 +645,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
                     replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getCompletedTime());
 
             snapshotSyncCompleted = replicationStatus.getSourceStatus().getReplicationInfo()
-                    .getSnapshotSyncInfo().getStatus() == SyncStatus.COMPLETED;
+                    .getSnapshotSyncInfo().getStatus() == LogReplication.SyncStatus.COMPLETED;
         }
     }
 
