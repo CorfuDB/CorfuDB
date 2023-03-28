@@ -439,31 +439,6 @@ public class LogReplicationAckReader {
         }
     }
 
-    // Set the initial sync status for the cluster as NOT_STARTED
-    public void markInitialSyncStatus() {
-        try {
-            IRetry.build(IntervalRetry.class, () -> {
-                try {
-                    lock.lock();
-                    metadataManager.initializeReplicationStatusTable(remoteClusterId);
-                } catch (TransactionAbortedException tae) {
-                    log.error("Error while attempting to initialize sync status.", tae);
-                    throw new RetryNeededException();
-                } finally {
-                    lock.unlock();
-                }
-
-                if (log.isTraceEnabled()) {
-                    log.trace("Initializing sync status succeeds.");
-                }
-                return null;
-            }).run();
-        } catch (InterruptedException e) {
-            log.error("Unrecoverable exception when attempting to initialize sync status.", e);
-            throw new UnrecoverableCorfuInterruptedError(e);
-        }
-    }
-
     /**
      * Start periodic replication status update task (completion percentage)
      */

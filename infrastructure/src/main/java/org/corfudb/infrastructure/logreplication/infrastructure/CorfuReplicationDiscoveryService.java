@@ -343,8 +343,13 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
 
         logReplicationServerHandler = new LogReplicationServer(serverContext, logReplicationConfig,
             logReplicationMetadataManager, localCorfuEndpoint, topologyDescriptor.getTopologyConfigId(), localNodeId);
-        logReplicationServerHandler.setActive(localClusterDescriptor.getRole().equals(ClusterRole.ACTIVE));
-        logReplicationServerHandler.setStandby(localClusterDescriptor.getRole().equals(ClusterRole.STANDBY));
+        if (localClusterDescriptor.getRole().equals(ClusterRole.ACTIVE)) {
+            logReplicationServerHandler.setActive(true);
+            addDefaultReplicationStatus();
+        } else if (localClusterDescriptor.getRole().equals(ClusterRole.STANDBY)) {
+            logReplicationServerHandler.setStandby(true);
+            statusFlag = false;
+        }
 
         interClusterReplicationService = new CorfuInterClusterReplicationServerNode(
                 serverContext,
@@ -497,7 +502,6 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                 }
                 replicationManager.setTopology(topologyDescriptor);
                 replicationManager.start();
-                updateReplicationStatus();
                 lockAcquireSample = recordLockAcquire(localClusterDescriptor.getRole());
                 processCountOnLockAcquire(localClusterDescriptor.getRole());
                 break;
@@ -506,7 +510,6 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                 log.info("Start as Sink (receiver)");
                 interClusterReplicationService.getLogReplicationServer().getSinkManager().reset();
                 interClusterReplicationService.getLogReplicationServer().setLeadership(true);
-                statusFlag = false;
                 lockAcquireSample = recordLockAcquire(localClusterDescriptor.getRole());
                 processCountOnLockAcquire(localClusterDescriptor.getRole());
                 break;
@@ -903,10 +906,12 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         lockAcquireSample.ifPresent(LongTaskTimer.Sample::stop);
     }
 
-    private void updateReplicationStatus() {
+    private void addDefaultReplicationStatus() {
         if (!statusFlag) {
             // Add default entry to Replication Status Table
-            replicationManager.initializeStatusAsNotStarted();
+            for (ClusterDescriptor clusterDescriptor : topologyDescriptor.getStandbyClusters().values()) {
+                logReplicationMetadataManager.initializeReplicationStatusTable(clusterDescriptor.clusterId);
+            }
             statusFlag = true;
         }
     }
