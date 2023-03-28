@@ -175,5 +175,5 @@ message ReplicationInfo {
 /*------------------------------------*/
 
 message SubscribeToReplicationMsg {
-  LogReplicationSession session = 1;
+  string sinkLeaderNodeId = 1;
 }

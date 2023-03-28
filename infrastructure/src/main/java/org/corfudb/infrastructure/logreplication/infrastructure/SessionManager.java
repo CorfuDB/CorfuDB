@@ -122,7 +122,7 @@ public class SessionManager {
                 replicationContext);
         this.router = new LogReplicationClientServerRouter(
                 runtime.getParameters().getRequestTimeout().toMillis(), replicationManager,
-                topology.getLocalClusterDescriptor().clusterId, serverContext,
+                topology.getLocalNodeDescriptor().getClusterId(), topology.getLocalNodeDescriptor().getNodeId(), serverContext,
                 localCorfuEndpoint, this);
     }
 

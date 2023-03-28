@@ -4,7 +4,6 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientServerRouter;
-import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRuntimeEvent;
 import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.proto.service.CorfuMessage;
@@ -25,6 +24,12 @@ import static org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getDefaultProtocolVersionMsg;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getResponseMsg;
 
+/**
+ * This class qis used only by SINK when connection initiator, to query leadership from the remote SOURCE cluster.
+ *
+ * Upon receiving the leadership response, a bidirectional stream is setup so SOURCE can drive the replication as LR
+ * follows a push model.
+ */
 @Slf4j
 public class VerifyRemoteSourceLeader {
 
@@ -41,7 +46,7 @@ public class VerifyRemoteSourceLeader {
     /**
      * A queue of events.
      */
-    private final LinkedBlockingQueue<LogReplicationRuntimeEvent> eventQueue = new LinkedBlockingQueue<>();
+    private final LinkedBlockingQueue<LogReplicationSinkEvent> eventQueue = new LinkedBlockingQueue<>();
 
     /**
      * Session information
@@ -58,9 +63,13 @@ public class VerifyRemoteSourceLeader {
      */
     private volatile Optional<String> leaderNodeId = Optional.empty();
 
-    public VerifyRemoteSourceLeader(LogReplicationSession session, LogReplicationClientServerRouter router) {
+    private final String localNodeId;
+
+    public VerifyRemoteSourceLeader(LogReplicationSession session, LogReplicationClientServerRouter router,
+                                    String localNodeId) {
         this.session = session;
         this.router = router;
+        this.localNodeId = localNodeId;
         this.connectedNodes = new HashSet<>();
 
         this.communicationFSMConsumer = Executors.newSingleThreadExecutor(new
@@ -71,7 +80,7 @@ public class VerifyRemoteSourceLeader {
         communicationFSMConsumer.submit(this::consume);
     }
 
-    public synchronized void input(LogReplicationRuntimeEvent event) {
+    public synchronized void input(LogReplicationSinkEvent event) {
         try {
             log.info("adding to the queue {}", event);
             eventQueue.put(event);
@@ -88,7 +97,7 @@ public class VerifyRemoteSourceLeader {
     private void consume() {
         try {
             //  Block until an event shows up in the queue.
-            LogReplicationRuntimeEvent event = eventQueue.take();
+            LogReplicationSinkEvent event = eventQueue.take();
             processEvent(event);
 
             communicationFSMConsumer.submit(this::consume);
@@ -98,7 +107,7 @@ public class VerifyRemoteSourceLeader {
         }
     }
 
-    private void processEvent(LogReplicationRuntimeEvent event) {
+    private void processEvent(LogReplicationSinkEvent event) {
         log.info("processing event {}", event);
         switch (event.getType()) {
             case ON_CONNECTION_DOWN:
@@ -120,6 +129,11 @@ public class VerifyRemoteSourceLeader {
             case REMOTE_LEADER_FOUND:
                 log.debug("Remote Leader is found: {}", event.getNodeId());
                 invokeReverseReplication();
+                break;
+            case REMOTE_LEADER_LOSS:
+                log.debug("Remote leader has changed");
+                resetRemoteLeader();
+                verifyLeadership();
                 break;
             default: {
                 log.warn("Unexpected communication event {}", event.getType());
@@ -190,7 +204,7 @@ public class VerifyRemoteSourceLeader {
                         pendingLeadershipQueries.clear();
 
                         // A new leader has been found,
-                        input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.REMOTE_LEADER_FOUND, leader));
+                        input(new LogReplicationSinkEvent(LogReplicationSinkEvent.LogReplicationSinkEventType.REMOTE_LEADER_FOUND, leader));
                         log.debug("Exit :: leadership verification");
                         return;
                     } else {
@@ -202,11 +216,11 @@ public class VerifyRemoteSourceLeader {
                 }
 
                 // No remote leader was found, retry leadership
-                input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.REMOTE_LEADER_NOT_FOUND, leader));
+                input(new LogReplicationSinkEvent(LogReplicationSinkEvent.LogReplicationSinkEventType.REMOTE_LEADER_NOT_FOUND, leader));
 
             } catch (Exception ex) {
                 log.warn("Exception caught while verifying remote leader.", ex);
-                input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.REMOTE_LEADER_NOT_FOUND, leader));
+                input(new LogReplicationSinkEvent(LogReplicationSinkEvent.LogReplicationSinkEventType.REMOTE_LEADER_NOT_FOUND, leader));
             }
         } else {
             log.info("Remote Leader already present {}. Skip leader verification.", getRemoteLeaderNodeId().get());
@@ -218,7 +232,10 @@ public class VerifyRemoteSourceLeader {
     private void invokeReverseReplication() {
         CorfuMessage.ResponsePayloadMsg payload =
                 CorfuMessage.ResponsePayloadMsg.newBuilder()
-                        .setLrSubscribeMsg(LogReplication.SubscribeToReplicationMsg.newBuilder().build())
+                        .setLrSubscribeMsg(LogReplication.SubscribeToReplicationMsg
+                                .newBuilder()
+                                .setSinkLeaderNodeId(localNodeId)
+                                .build())
                         .build();
 
         CorfuMessage.HeaderMsg header = CorfuMessage.HeaderMsg.newBuilder()

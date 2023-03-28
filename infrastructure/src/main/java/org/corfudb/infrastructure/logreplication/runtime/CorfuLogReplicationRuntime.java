@@ -18,7 +18,7 @@ import org.corfudb.infrastructure.logreplication.runtime.fsm.NegotiatingState;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.ReplicatingState;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.StoppedState;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.UnrecoverableState;
-import org.corfudb.infrastructure.logreplication.runtime.fsm.VerifyingRemoteLeaderState;
+import org.corfudb.infrastructure.logreplication.runtime.fsm.VerifyingRemoteSinkLeaderState;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.WaitingForConnectionsState;
 
 import java.util.HashMap;
@@ -204,7 +204,7 @@ public class CorfuLogReplicationRuntime {
          * per every transition (reduce GC cycles).
          */
         states.put(LogReplicationRuntimeStateType.WAITING_FOR_CONNECTIVITY, new WaitingForConnectionsState(this));
-        states.put(LogReplicationRuntimeStateType.VERIFYING_REMOTE_LEADER, new VerifyingRemoteLeaderState(this,
+        states.put(LogReplicationRuntimeStateType.VERIFYING_REMOTE_LEADER, new VerifyingRemoteSinkLeaderState(this,
             communicationFSMWorkers, router));
         states.put(LogReplicationRuntimeStateType.NEGOTIATING, new NegotiatingState(this, communicationFSMWorkers,
                 router, metadataManager, upgradeManager));

@@ -21,7 +21,7 @@ import java.util.concurrent.TimeUnit;
  * @author amartinezman
  */
 @Slf4j
-public class VerifyingRemoteLeaderState implements LogReplicationRuntimeState {
+public class VerifyingRemoteSinkLeaderState implements LogReplicationRuntimeState {
 
     private CorfuLogReplicationRuntime fsm;
 
@@ -29,8 +29,8 @@ public class VerifyingRemoteLeaderState implements LogReplicationRuntimeState {
 
     private LogReplicationClientServerRouter router;
 
-    public VerifyingRemoteLeaderState(CorfuLogReplicationRuntime fsm, ThreadPoolExecutor worker,
-                                      LogReplicationClientServerRouter router) {
+    public VerifyingRemoteSinkLeaderState(CorfuLogReplicationRuntime fsm, ThreadPoolExecutor worker,
+                                          LogReplicationClientServerRouter router) {
         this.fsm = fsm;
         this.worker = worker;
         this.router = router;
