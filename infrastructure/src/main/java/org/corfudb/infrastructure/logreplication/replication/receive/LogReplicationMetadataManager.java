@@ -91,7 +91,7 @@ public class LogReplicationMetadataManager {
     private long topologyConfigId;
 
     @Getter
-    private AtomicBoolean isLeader;
+    private final AtomicBoolean isLeader;
 
     /**
      * Constructor
@@ -122,12 +122,6 @@ public class LogReplicationMetadataManager {
             log.error("Caught an exception while opening metadata tables", e);
             throw new ReplicationWriterException(e);
         }
-    }
-
-    @VisibleForTesting
-    public LogReplicationMetadataManager(CorfuRuntime runtime, long topologyConfigId, boolean isLeader) {
-        this(runtime, topologyConfigId);
-        setLeadership(isLeader);
     }
 
     private void initializeMetadata(TxnContext txn, LogReplicationSession session, boolean incomingSession,

@@ -108,60 +108,54 @@ public class VerifyingRemoteSinkLeaderState implements LogReplicationRuntimeStat
         Map<String, CompletableFuture<LogReplicationLeadershipResponseMsg>> pendingLeadershipQueries = new HashMap<>();
 
         // Verify leadership on remote cluster, only if no leader is currently selected.
-        if (!fsm.getRemoteLeaderNodeId().isPresent()) {
+        log.debug("Verify leader on remote cluster {}", fsm.getRemoteClusterId());
 
-                log.debug("Verify leader on remote cluster {}", fsm.getRemoteClusterId());
+        try {
+            for (String nodeId : fsm.getConnectedNodes()) {
+                log.debug("Verify leadership status for node {}", nodeId);
+                // Check Leadership
+                CorfuMessage.RequestPayloadMsg payload =
+                        CorfuMessage.RequestPayloadMsg.newBuilder().setLrLeadershipQuery(
+                                LogReplication.LogReplicationLeadershipRequestMsg.newBuilder().build()
+                        ).build();
+                CompletableFuture<LogReplicationLeadershipResponseMsg> leadershipRequestCf =
+                        router.sendRequestAndGetCompletable(fsm.getSession(), payload, nodeId);
+                pendingLeadershipQueries.put(nodeId, leadershipRequestCf);
+            }
 
-                try {
-                    for (String nodeId : fsm.getConnectedNodes()) {
-                        log.debug("Verify leadership status for node {}", nodeId);
-                        // Check Leadership
-                        CorfuMessage.RequestPayloadMsg payload =
-                                CorfuMessage.RequestPayloadMsg.newBuilder().setLrLeadershipQuery(
-                                        LogReplication.LogReplicationLeadershipRequestMsg.newBuilder().build()
-                                ).build();
-                        CompletableFuture<LogReplicationLeadershipResponseMsg> leadershipRequestCf =
-                                router.sendRequestAndGetCompletable(fsm.getSession(), payload, nodeId);
-                        pendingLeadershipQueries.put(nodeId, leadershipRequestCf);
-                    }
-
-                    // Block until all leadership requests are completed, or a leader is discovered.
-                    while (pendingLeadershipQueries.size() != 0) {
-                        LogReplicationLeadershipResponseMsg leadershipResponse = (LogReplicationLeadershipResponseMsg)
-                                CompletableFuture.anyOf(pendingLeadershipQueries.values()
+            // Block until all leadership requests are completed, or a leader is discovered.
+            while (pendingLeadershipQueries.size() != 0) {
+                LogReplicationLeadershipResponseMsg leadershipResponse = (LogReplicationLeadershipResponseMsg)
+                        CompletableFuture.anyOf(pendingLeadershipQueries.values()
                                 .toArray(new CompletableFuture<?>[pendingLeadershipQueries.size()])).get(CorfuLogReplicationRuntime.DEFAULT_TIMEOUT, TimeUnit.MILLISECONDS);
 
-                        if (leadershipResponse.getIsLeader()) {
-                            log.info("Received Leadership Response :: leader for remote cluster, node={}", leadershipResponse.getNodeId());
-                            leader = leadershipResponse.getNodeId();
-                            fsm.setRemoteLeaderNodeId(leader);
+                if (leadershipResponse.getIsLeader()) {
+                    log.info("Received Leadership Response :: leader for remote cluster, node={}", leadershipResponse.getNodeId());
+                    leader = leadershipResponse.getNodeId();
+                    fsm.setRemoteLeaderNodeId(leader);
 
-                            // Remove all CF, based on the assumption that one leader response is the expectation.
-                            pendingLeadershipQueries.clear();
+                    // Remove all CF, based on the assumption that one leader response is the expectation.
+                    pendingLeadershipQueries.clear();
 
-                            // A new leader has been found, start negotiation, to determine log replication
-                            // continuation or start point
-                            fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.REMOTE_LEADER_FOUND, leader));
-                            log.debug("Exit :: leadership verification");
-                            return;
-                        } else {
-                            log.debug("Received Leadership Response :: node {} is not the leader", leadershipResponse.getNodeId());
+                    // A new leader has been found, start negotiation, to determine log replication
+                    // continuation or start point
+                    fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.REMOTE_LEADER_FOUND, leader));
+                    log.debug("Exit :: leadership verification");
+                    return;
+                } else {
+                    log.debug("Received Leadership Response :: node {} is not the leader", leadershipResponse.getNodeId());
 
-                            // Remove CF for completed request
-                            pendingLeadershipQueries.remove(leadershipResponse.getNodeId());
-                        }
-                    }
-
-                    // No remote leader was found, retry leadership
-                    fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.REMOTE_LEADER_NOT_FOUND, leader));
-
-                } catch (Exception ex) {
-                    log.warn("Exception caught while verifying remote leader.", ex);
-                    fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.REMOTE_LEADER_NOT_FOUND, leader));
+                    // Remove CF for completed request
+                    pendingLeadershipQueries.remove(leadershipResponse.getNodeId());
                 }
-        } else {
-            log.info("Remote Leader already present {}. Skip leader verification.", fsm.getRemoteLeaderNodeId().get());
-            fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.REMOTE_LEADER_FOUND, leader));
+            }
+
+            // No remote leader was found, retry leadership
+            fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.REMOTE_LEADER_NOT_FOUND, leader));
+
+        } catch (Exception ex) {
+            log.warn("Exception caught while verifying remote leader.", ex);
+            fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.REMOTE_LEADER_NOT_FOUND, leader));
         }
 
         log.debug("Exit :: leadership verification");
