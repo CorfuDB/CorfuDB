@@ -357,13 +357,6 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
     }
 
     public void setLeadership(boolean leader) {
-        // Leadership change can come asynchronously from sinkClientRouter when SINK is the connection starter and the router is
-        // shutting down, and also from discoveryService when connection receiver and is no longer the leader.
-        // Ignore redundant updates.
-        if(leader == isLeader.get()) {
-            return;
-        }
-
         isLeader.set(leader);
 
         if (isLeader.get()) {

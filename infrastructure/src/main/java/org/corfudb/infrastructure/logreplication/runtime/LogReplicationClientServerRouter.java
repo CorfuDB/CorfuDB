@@ -13,6 +13,7 @@ import org.corfudb.infrastructure.logreplication.infrastructure.TopologyDescript
 import org.corfudb.infrastructure.logreplication.infrastructure.msgHandlers.LogReplicationServer;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRuntimeEvent;
+import org.corfudb.infrastructure.logreplication.runtime.fsm.sink.LogReplicationSinkEvent;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.sink.VerifyRemoteSourceLeader;
 import org.corfudb.infrastructure.logreplication.transport.IClientServerRouter;
 import org.corfudb.infrastructure.logreplication.transport.client.ChannelAdapterException;
@@ -112,6 +113,11 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
     private String localClusterId;
 
     /**
+     * local node ID
+     */
+    private String localNodeId;
+
+    /**
      * Client Transport adapter
      */
     @Setter
@@ -131,7 +137,8 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
     private final LogReplicationServer msgHandler;
 
     /**
-     * Triggers leadership request and create bidirectional streams to remote endpoints
+     * Map of session -> verifySinkLeadership. VerifySinkLeadership triggers leadership request and and upon receiving
+     * the response, creates a bidirectional streams to remote endpoints
      */
     private final Map<LogReplicationSession, VerifyRemoteSourceLeader> sessionToSinkVerifyLeadership;
 
@@ -152,11 +159,12 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
      * @param sessionManager session manager
      */
     public LogReplicationClientServerRouter(long responseTimeout,
-                                            CorfuReplicationManager replicationManager, String localClusterId,
+                                            CorfuReplicationManager replicationManager, String localClusterId, String localNodeId,
                                             ServerContext serverContext, String localCorfuEndpoint,
                                             SessionManager sessionManager) {
         this.timeoutResponse = responseTimeout;
         this.localClusterId = localClusterId;
+        this.localNodeId = localNodeId;
         this.replicationManager = replicationManager;
         this.sessionToRuntimeFSM = replicationManager.getSessionRuntimeMap();
         this.sessionManager = sessionManager;
@@ -298,8 +306,8 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
                     sessionToRuntimeFSM.get(session).input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.ON_CONNECTION_DOWN,
                             nodeId));
                 } else {
-                    sessionToSinkVerifyLeadership.get(session).input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.ON_CONNECTION_DOWN,
-                            nodeId));
+                    sessionToSinkVerifyLeadership.get(session).input(new LogReplicationSinkEvent(
+                            LogReplicationSinkEvent.LogReplicationSinkEventType.ON_CONNECTION_DOWN, nodeId));
                 }
                 throw ne;
             } catch (Exception e) {
@@ -379,7 +387,7 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
      */
     @Override
     public void sendResponse(CorfuMessage.ResponseMsg response) {
-        log.info("Ready to send response {}", response.getPayload().getPayloadCase());
+        log.trace("Ready to send response {}", response.getPayload().getPayloadCase());
         LogReplicationSession session = response.getHeader().getSession();
         if (isConnectionInitiator(session)) {
             if(sessionManager.getIncomingSessions().contains(session)) {
@@ -387,13 +395,13 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
                     clientChannelAdapter.send(sessionToSinkVerifyLeadership.get(session).getRemoteLeaderNodeId().get(), response);
                 } else {
                     sessionToSinkVerifyLeadership.get(session).input(
-                            new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.REMOTE_LEADER_LOSS));
+                            new LogReplicationSinkEvent(LogReplicationSinkEvent.LogReplicationSinkEventType.REMOTE_LEADER_LOSS));
                 }
             }
         } else {
             try {
                 this.serverChannelAdapter.send(response);
-                log.info("Sent response: {}", response);
+                log.trace("Sent response: {}", response);
             } catch (IllegalArgumentException e) {
                 log.warn("Illegal response type. Ignoring message.", e);
             }
@@ -409,27 +417,28 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
     public void receive(CorfuMessage.ResponseMsg msg) {
         try {
             LogReplicationSession session = msg.getHeader().getSession();
-            String nodeId = msg.getPayload().getLrLeadershipLoss().getNodeId();
 
             // If it is a Leadership Loss Message re-trigger leadership discovery
             if (msg.getPayload().getPayloadCase() == CorfuMessage.ResponsePayloadMsg.PayloadCase.LR_LEADERSHIP_LOSS) {
+                String nodeId = msg.getPayload().getLrLeadershipLoss().getNodeId();
                 if (isOutgoingSession(session)) {
                     this.sessionToRuntimeFSM.get(session)
                             .input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.REMOTE_LEADER_LOSS, nodeId));
                 } else {
                     sessionToSinkVerifyLeadership.get(session)
-                            .input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.REMOTE_LEADER_LOSS, nodeId));
+                            .input(new LogReplicationSinkEvent(LogReplicationSinkEvent.LogReplicationSinkEventType.REMOTE_LEADER_LOSS, nodeId));
                 }
                 return;
             }
 
             if (msg.getPayload().getPayloadCase().equals(CorfuMessage.ResponsePayloadMsg.PayloadCase.LR_SUBSCRIBE_MSG)) {
+                String RemoteLeaderId = msg.getPayload().getLrSubscribeMsg().getSinkLeaderNodeId();
                 // Start runtimeFSM
-                sessionToRuntimeFSM.get(session).setRemoteLeaderNodeId(nodeId);
+                sessionToRuntimeFSM.get(session).setRemoteLeaderNodeId(RemoteLeaderId);
                 sessionToRuntimeFSM.get(session).start();
                 log.debug("runtimeFSM started for session {}", session);
                 sessionToRuntimeFSM.get(session)
-                        .input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.ON_CONNECTION_UP, nodeId));
+                        .input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.ON_CONNECTION_UP, RemoteLeaderId));
             } else {
                 // Route the message to the handler.
                 if (log.isTraceEnabled()) {
@@ -570,7 +579,7 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
         }
 
         if (sessionManager.getIncomingSessions().contains(session)) {
-            sessionToSinkVerifyLeadership.put(session, new VerifyRemoteSourceLeader(session, this));
+            sessionToSinkVerifyLeadership.put(session, new VerifyRemoteSourceLeader(session, this, localNodeId));
         }
     }
 
@@ -579,8 +588,8 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
         if (sessionManager.getOutgoingSessions().contains(session)) {
             startReplication(session, nodeId);
         } else {
-            sessionToSinkVerifyLeadership.get(session).input(new LogReplicationRuntimeEvent(
-                    LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.ON_CONNECTION_UP, nodeId));
+            sessionToSinkVerifyLeadership.get(session).input(new LogReplicationSinkEvent(
+                    LogReplicationSinkEvent.LogReplicationSinkEventType.ON_CONNECTION_UP, nodeId));
         }
     }
 
@@ -590,8 +599,8 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
             sessionToRuntimeFSM.get(session).input(new LogReplicationRuntimeEvent(
                     LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.ON_CONNECTION_DOWN, nodeId));
         } else {
-            sessionToSinkVerifyLeadership.get(session).input(new LogReplicationRuntimeEvent(
-                    LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.ON_CONNECTION_DOWN, nodeId));
+            sessionToSinkVerifyLeadership.get(session).input(new LogReplicationSinkEvent(
+                    LogReplicationSinkEvent.LogReplicationSinkEventType.ON_CONNECTION_DOWN, nodeId));
         }
 
         if (isConnectionInitiator(session)) {
