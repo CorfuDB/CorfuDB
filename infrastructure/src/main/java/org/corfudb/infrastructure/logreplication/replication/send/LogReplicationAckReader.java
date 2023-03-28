@@ -4,17 +4,12 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
-<<<<<<< HEAD:infrastructure/src/main/java/org/corfudb/infrastructure/logreplication/replication/LogReplicationAckReader.java
-import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal.SyncType;
-=======
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SyncType;
-import org.corfudb.runtime.LogReplication.LogReplicationSession;
->>>>>>> Session Manager & Session-based Metadata Manager (#3495):infrastructure/src/main/java/org/corfudb/infrastructure/logreplication/replication/send/LogReplicationAckReader.java
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SyncStatus;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.LogEntryReader;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.LogEntryReader.StreamIteratorMetadata;
+import org.corfudb.runtime.LogReplication.SyncType;
+import org.corfudb.runtime.LogReplication.LogReplicationSession;
+import org.corfudb.runtime.LogReplication.SyncStatus;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
