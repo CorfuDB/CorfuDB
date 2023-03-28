@@ -1,7 +1,6 @@
 package org.corfudb.integration;
 
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatus;
 import org.corfudb.infrastructure.logreplication.proto.Sample.IntValue;
 import org.corfudb.infrastructure.logreplication.proto.Sample.IntValueTag;
 import org.corfudb.infrastructure.logreplication.proto.Sample.Metadata;
@@ -12,6 +11,7 @@ import org.corfudb.runtime.CorfuStoreMetadata.TableDescriptors;
 import org.corfudb.runtime.CorfuStoreMetadata.TableMetadata;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
+import org.corfudb.runtime.LogReplicationUtils;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
@@ -31,7 +31,7 @@ public class LogReplicationSinkWriterIT extends LogReplicationAbstractIT {
 
     private static final int NUM_WRITES = 500;
 
-    private static final String REPLICATION_STATUS_TABLE = LogReplicationMetadataManager.REPLICATION_STATUS_TABLE_NAME;
+    private static final String REPLICATION_STATUS_TABLE = LogReplicationUtils.REPLICATION_STATUS_TABLE_NAME;
 
 
     /**

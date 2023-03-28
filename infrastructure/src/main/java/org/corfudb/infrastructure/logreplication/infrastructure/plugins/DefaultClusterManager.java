@@ -10,12 +10,12 @@ import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationDi
 import org.corfudb.infrastructure.logreplication.infrastructure.NodeDescriptor;
 import org.corfudb.infrastructure.logreplication.infrastructure.SessionManager;
 import org.corfudb.infrastructure.logreplication.infrastructure.TopologyDescriptor;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.ExampleSchemas.ClusterUuidMsg;
 import org.corfudb.runtime.LogReplication;
+import org.corfudb.runtime.LogReplication.ReplicationStatus;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
 import org.corfudb.runtime.collections.CorfuStreamEntry;
@@ -161,7 +161,7 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
     }
 
     @Override
-    public Map<LogReplicationSession, LogReplicationMetadata.ReplicationStatus> queryReplicationStatus() {
+    public Map<LogReplicationSession, ReplicationStatus> queryReplicationStatus() {
         return corfuReplicationDiscoveryServiceAdapter.queryReplicationStatus();
     }
 

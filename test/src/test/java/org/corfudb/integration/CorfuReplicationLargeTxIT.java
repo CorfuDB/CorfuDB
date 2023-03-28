@@ -2,7 +2,7 @@ package org.corfudb.integration;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatus;
+import org.corfudb.runtime.LogReplication.ReplicationStatus;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.runtime.LogReplicationUtils;
@@ -108,7 +108,7 @@ public class CorfuReplicationLargeTxIT extends LogReplicationAbstractIT {
         // change on status are captured)
         int totalSinkStatusUpdates = 2;
         corfuStoreSink.openTable(LogReplicationMetadataManager.NAMESPACE,
-            LogReplicationMetadataManager.REPLICATION_STATUS_TABLE_NAME,
+            LogReplicationUtils.REPLICATION_STATUS_TABLE_NAME,
             LogReplicationSession.class,
             ReplicationStatus.class,
             null,
@@ -118,7 +118,7 @@ public class CorfuReplicationLargeTxIT extends LogReplicationAbstractIT {
         ReplicationStatusListener sinkListener =
             new ReplicationStatusListener(statusUpdateLatch, false);
         corfuStoreSink.subscribeListener(sinkListener, LogReplicationMetadataManager.NAMESPACE,
-            LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
+                LogReplicationUtils.LR_STATUS_STREAM_TAG);
 
         // Calculate the expected total number of streaming updates across all tables
         int totalStreamingUpdates =

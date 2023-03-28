@@ -57,60 +57,18 @@ message ReplicationMetadata {
 /*--------END---------*/
 
 /*-------- Replication Status Table V1------*/
-
 enum SyncType {
   SNAPSHOT = 0;
   LOG_ENTRY = 1;
 }
 
-/*
- * Replication Status Key
- */
-message ReplicationStatusKey {
-  string clusterId = 1;
-}
-
-/*
- * Replication Status Value
- * Source Site sets the completionPercent, Sink sets the dataConsistent boolean
- */
-message ReplicationStatusVal {
-  option (org.corfudb.runtime.table_schema).stream_tag = "lr_status";
-
-  uint64 remainingEntriesToSend = 1; // Set only by Source
-  bool dataConsistent = 2; // Set only by Sink
-  SyncType syncType = 3;
-  SyncStatus status = 4;
-  SnapshotSyncInfo snapshotSyncInfo = 5;
-}
-
-/*-------- Replication Status Table V2------*/
-
-message ReplicationStatus {
-  option (org.corfudb.runtime.table_schema).stream_tag = "lr_status";
-  oneof status {
-    SourceReplicationStatus source_status = 1;
-    SinkReplicationStatus sink_status = 2;
-  }
-}
-
-message SourceReplicationStatus {
-  option (org.corfudb.runtime.table_schema).stream_tag = "lr_status";
-
-  uint64 remainingEntriesToSend = 1;
-  ReplicationInfo replicationInfo = 2;
-}
-
-message SinkReplicationStatus {
-  option (org.corfudb.runtime.table_schema).stream_tag = "lr_status";
-  bool dataConsistent = 1;
-  ReplicationInfo replicationInfo = 2;
-}
-
-message ReplicationInfo {
-  SyncType syncType = 1;
-  SyncStatus status = 2;
-  SnapshotSyncInfo snapshotSyncInfo = 3;
+enum SyncStatus {
+  ONGOING = 0;
+  COMPLETED = 1;
+  ERROR = 2;
+  NOT_STARTED = 3;
+  STOPPED = 4;
+  UNAVAILABLE = 5;
 }
 
 /*
@@ -138,6 +96,20 @@ message SnapshotSyncInfo {
  */
 message ReplicationStatusKey {
   string clusterId = 1;
+}
+
+/*
+ * Replication Status Value
+ * Source Site sets the completionPercent, Sink sets the dataConsistent boolean
+ */
+message ReplicationStatusVal {
+  option (org.corfudb.runtime.table_schema).stream_tag = "lr_status";
+
+  uint64 remainingEntriesToSend = 1; // Set only by Source
+  bool dataConsistent = 2; // Set only by Sink
+  SyncType syncType = 3;
+  SyncStatus status = 4;
+  SnapshotSyncInfo snapshotSyncInfo = 5;
 }
 
 /*------- Log Replication Event Table Schema ----------*/
