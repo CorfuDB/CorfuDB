@@ -35,7 +35,9 @@ public final class CFUtils {
      * A static timeout exception that we complete futures exceptionally with.
      */
     static final TimeoutException TIMEOUT_EXCEPTION = new TimeoutException();
-
+    public static boolean hasValue(CompletableFuture cf) {
+        return cf.isDone() && !cf.isCancelled() && !cf.isCompletedExceptionally();
+    }
     private CFUtils() {
         // Prevent initializing a utility class
     }
