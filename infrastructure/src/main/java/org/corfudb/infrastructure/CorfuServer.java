@@ -299,7 +299,6 @@ public class CorfuServer {
         // Bind to all interfaces only if no address or interface specified by the user.
         // Fetch the address if given a network interface.
         if (opts.get("--network-interface") != null) {
-            log.info("God please save us");
             opts.put(
                     ADDRESS_PARAM,
                     getAddressFromInterfaceName(
@@ -311,9 +310,6 @@ public class CorfuServer {
             );
             opts.put("--bind-to-all-interfaces", false);
         } else if (opts.get(ADDRESS_PARAM) == null) {
-            // If the address and interface is not specified,
-            // pick an address from eth0 interface and set the bind to all interfaces flag to true.
-            log.info("BIND TO ALL INTERFACES");
             opts.put("--bind-to-all-interfaces", true);
             opts.put(ADDRESS_PARAM,
                     getAddressFromInterfaceName(
@@ -324,18 +320,8 @@ public class CorfuServer {
                     )
             );
         } else {
-            log.info("WHAT?");
-
             // Address is specified by the user.
-            opts.put("--bind-to-all-interfaces", true);
-            opts.put(ADDRESS_PARAM,
-                    getAddressFromInterfaceName(
-                            "eth0",
-                            (opts.get(NETWORK_INTERFACE_VERSION_PARAM) != null) ?
-                                    NetworkInterfaceVersion.valueOf(((String) opts.get(NETWORK_INTERFACE_VERSION_PARAM)).toUpperCase()):
-                                    NetworkInterfaceVersion.IPV6 // Default is IPV6
-                    )
-            );
+            opts.put("--bind-to-all-interfaces", false);
         }
         log.info("Configured Corfu Server address: {}", opts.get(ADDRESS_PARAM));
 
