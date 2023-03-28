@@ -1,6 +1,6 @@
 package org.corfudb.infrastructure.logreplication.infrastructure;
 
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatus;
+import org.corfudb.runtime.LogReplication.ReplicationStatus;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 
 import java.util.Map;
