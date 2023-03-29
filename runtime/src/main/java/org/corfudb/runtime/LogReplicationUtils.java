@@ -73,15 +73,32 @@ public final class LogReplicationUtils {
                                 record -> record.getKey().getSubscriber().getModel()
                                     .equals(LogReplication.ReplicationModel.LOGICAL_GROUPS));
 
-                    // Sharding in Log Replication is done based on a destination.  So for a given replication model,
-                    // any Sink node will have a session with only 1 Source node.  Hence, there should be only 1
-                    // record corresponding to the Logical Group Replication Model.
-                    Preconditions.checkState(entries.size() == 1);
-                    CorfuStoreEntry<LogReplicationSession, ReplicationStatus, Message> entry = entries.get(0);
+                    CorfuStoreEntry<LogReplicationSession, ReplicationStatus, Message> entry = null;
+
+                    // It is possible that there is no entry for the Logical Group Model in the status table in
+                    // the following scenarios:
+                    // 1. Request to subscribe is received before the Log Replication JVM or pod starts and
+                    // initializes the table
+                    // 2. Topology change which removes this cluster from the status table.
+                    // We cannot differentiate between the two cases here so continue with the right
+                    // behavior for the 1st case, i.e., subscribe and wait for the initial Snapshot Sync to get
+                    // triggered.  If we are here because of the second case, the listener will not get any updates
+                    // from LR and subscription will be a no-op.
+                    if (entries.isEmpty()) {
+                        log.info("No record for the Logical Group Model found in the Status Table.  Subscription " +
+                                "could have been attempted before LR startup.  Subscribe the listener and wait for" +
+                                "initial Snapshot Sync");
+                    } else {
+                        // Sharding in Log Replication is done based on a destination.  So for a given replication model,
+                        // any Sink node will have a session with only 1 Source node.  Hence, there should be only 1
+                        // record corresponding to the Logical Group Replication Model.
+                        Preconditions.checkState(entries.size() == 1);
+                        entry = entries.get(0);
+                    }
 
                     boolean snapshotSyncInProgress = false;
 
-                    if (entry.getPayload().getSinkStatus().getDataConsistent()) {
+                    if (entry == null || entry.getPayload().getSinkStatus().getDataConsistent()) {
                         // No snapshot sync is in progress
                         log.info("No Snapshot Sync is in progress.  Request the client to perform a full sync on its " +
                             "tables.");

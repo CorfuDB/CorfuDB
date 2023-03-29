@@ -44,7 +44,7 @@ public class LogReplicationUtilsTest extends AbstractViewTest {
      */
     @Test
     public void testAttemptClientFullSyncSnapshotSyncOngoing() {
-        testAttemptClientFullSync(true);
+        testAttemptClientFullSync(true,true);
     }
 
     /**
@@ -52,12 +52,24 @@ public class LogReplicationUtilsTest extends AbstractViewTest {
      * the listener must be updated correctly.
      */
     @Test
-    public void testAttempClientFullSyncSnapshotSyncComplete() {
-        testAttemptClientFullSync(false);
+    public void testAttemptClientFullSyncSnapshotSyncComplete() {
+        testAttemptClientFullSync(true,false);
     }
 
-    private void testAttemptClientFullSync(boolean ongoing) {
-        TestUtils.setSnapshotSyncOngoing(corfuStore, replicationStatusTable, ongoing);
+    /**
+     * Test the behavior of attemptClientFullSync() when the LR Status table does not have any entry for the Logical
+     * Group Replication Model.  The expected behavior is that no ongoing Snapshot Sync is detected and client full
+     * sync succeeds.
+     */
+    @Test
+    public void testAttemptClientFullSyncStatusNotFound() {
+        testAttemptClientFullSync(false, false);
+    }
+
+    private void testAttemptClientFullSync(boolean initializeTable, boolean ongoing) {
+        if (initializeTable) {
+            TestUtils.setSnapshotSyncOngoing(corfuStore, replicationStatusTable, ongoing);
+        }
         LogReplicationUtils.attemptClientFullSync(corfuStore, lrListener, namespace);
         verifyListenerFlags(ongoing);
     }
@@ -68,7 +80,7 @@ public class LogReplicationUtilsTest extends AbstractViewTest {
      */
     @Test
     public void testSubscribeSnapshotSyncOngoing() {
-        testSubscribe(true);
+        testSubscribe(true, true);
     }
 
     /**
@@ -77,11 +89,23 @@ public class LogReplicationUtilsTest extends AbstractViewTest {
      */
     @Test
     public void testSubscribeSnapshotSyncComplete() {
-        testSubscribe(false);
+        testSubscribe(true, false);
     }
 
-    private void testSubscribe(boolean ongoing) {
-        TestUtils.setSnapshotSyncOngoing(corfuStore, replicationStatusTable, ongoing);
+    /**
+     * Test the behavior of subscribe() when the LR Status table does not have any entry for the Logical
+     * Group Replication Model.  The expected behavior is that no ongoing Snapshot Sync is detected and
+     * subscription succeeds.
+     */
+    @Test
+    public void testSubscribeSyncStatusNotFound() {
+        testSubscribe(false, false);
+    }
+
+    private void testSubscribe(boolean initializeTable, boolean ongoing) {
+        if (initializeTable) {
+            TestUtils.setSnapshotSyncOngoing(corfuStore, replicationStatusTable, ongoing);
+        }
 
         String streamTag = "test_tag";
         LogReplicationUtils.subscribe(lrListener, namespace, streamTag, new ArrayList<>(), 5, corfuStore);
