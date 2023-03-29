@@ -3,6 +3,7 @@ package org.corfudb.infrastructure.management;
 import com.google.common.collect.ImmutableList;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.management.failuredetector.ClusterGraph;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank;
@@ -24,10 +25,8 @@ public class CompleteGraphAdvisor implements ClusterAdvisor {
 
     private static final ClusterType CLUSTER_TYPE = ClusterType.COMPLETE_GRAPH;
 
-    private final String localEndpoint;
+    public CompleteGraphAdvisor() {
 
-    public CompleteGraphAdvisor(@NonNull String localEndpoint) {
-        this.localEndpoint = localEndpoint;
     }
 
     @Override
@@ -95,7 +94,7 @@ public class CompleteGraphAdvisor implements ClusterAdvisor {
      * {@link ClusterType}.
      */
     @Override
-    public Optional<NodeRank> healedServer(ClusterState clusterState) {
+    public Optional<NodeRank> healedServer(ClusterState clusterState, String localEndpoint) {
 
         log.trace("Detecting the healed nodes for: ClusterState: {}", clusterState);
 

@@ -49,7 +49,7 @@ public interface ClusterAdvisor {
      * @return a server considered to have been healed according to the underlying
      * {@link ClusterType}.
      */
-    Optional<NodeRank> healedServer(ClusterState clusterState);
+    Optional<NodeRank> healedServer(ClusterState clusterState, String localEndpoint);
 
     /**
      * Provides a cluster graph generated from the {@link ClusterState}

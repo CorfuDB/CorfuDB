@@ -1,12 +1,20 @@
 package org.corfudb.infrastructure.management;
 
 import com.google.common.collect.ImmutableList;
+import org.corfudb.infrastructure.ServerContext;
+import org.corfudb.infrastructure.log.statetransfer.StateTransferManager;
+import org.corfudb.infrastructure.log.statetransfer.transferprocessor.BasicTransferProcessor;
+import org.corfudb.infrastructure.log.statetransfer.transferprocessor.ParallelTransferProcessor;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank;
+import org.corfudb.runtime.clients.LogUnitClient;
 import org.junit.Test;
+import org.mockito.Mock;
 
+import java.util.Map;
 import java.util.Optional;
+import java.util.stream.LongStream;
 
 import static org.corfudb.infrastructure.management.NodeStateTestUtil.A;
 import static org.corfudb.infrastructure.management.NodeStateTestUtil.B;
@@ -18,11 +26,27 @@ import static org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivit
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
 
 public class CompleteGraphAdvisorTest {
 
     private final long epoch = 1;
 
+    @Mock
+    private Map<String, Object> map;
+
+    private ServerContext getDefaultInstance(String localEndpoint) {
+        final ServerContext spy = spy(new ServerContext(map));
+        doReturn(localEndpoint)
+                .when(spy).getLocalEndpoint();
+        return spy;
+    }
+
+    private CompleteGraphAdvisor getGraphAdvisor(String localEndpoint) {
+        return new CompleteGraphAdvisor(getDefaultInstance(localEndpoint));
+    }
     /**
      * By definition, a fully connected node can not be added to the unresponsive list.
      * Failed connection(s) between unresponsive and fully connected node(s)
@@ -31,6 +55,7 @@ public class CompleteGraphAdvisorTest {
     @Test
     public void testUnresponsiveAndFullyConnectedNode() {
         final String localEndpoint = A;
+        ServerContext
         CompleteGraphAdvisor advisor = new CompleteGraphAdvisor(localEndpoint);
 
         ClusterState clusterState = buildClusterState(
@@ -157,7 +182,7 @@ public class CompleteGraphAdvisorTest {
     @Test
     public void testHealedServer() {
         final String localEndpoint = C;
-        CompleteGraphAdvisor advisor = new CompleteGraphAdvisor(localEndpoint);
+        CompleteGraphAdvisor advisor = new CompleteGraphAdvisor();
 
         ClusterState clusterState = buildClusterState(
                 localEndpoint,
@@ -167,7 +192,7 @@ public class CompleteGraphAdvisorTest {
                 nodeState(localEndpoint, epoch, OK, OK, OK)
         );
 
-        Optional<NodeRank> healedServer = advisor.healedServer(clusterState);
+        Optional<NodeRank> healedServer = advisor.healedServer(clusterState, localEndpoint);
         assertTrue(healedServer.isPresent());
         assertEquals(new NodeRank(localEndpoint, clusterState.size()), healedServer.get());
     }

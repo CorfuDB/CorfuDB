@@ -44,9 +44,6 @@ public class HealingAgent {
 
     @NonNull
     private final FileSystemAdvisor fsAdvisor;
-
-    @NonNull
-    private final String localEndpoint;
     /**
      * Future which is reset every time a new task to mergeSegments is launched.
      * This is to avoid multiple mergeSegments requests.
@@ -74,7 +71,7 @@ public class HealingAgent {
      * @param pollReport poll report
      * @param layout     current layout
      */
-    public CompletableFuture<DetectorTask> detectAndHandleHealing(PollReport pollReport, Layout layout) {
+    public CompletableFuture<DetectorTask> detectAndHandleHealing(PollReport pollReport, Layout layout, String localEndpoint) {
         log.trace("Handle healing, layout: {}", layout);
 
         Optional<NodeRankByPartitionAttributes> fsHealth = fsAdvisor.healedServer(pollReport.getClusterState());
@@ -84,13 +81,13 @@ public class HealingAgent {
         }
 
         return advisor
-                .healedServer(pollReport.getClusterState())
+                .healedServer(pollReport.getClusterState(), localEndpoint)
                 .map(healedNode -> {
                     Set<String> healedNodes = ImmutableSet.of(healedNode.getEndpoint());
 
-                    return handleHealing(pollReport, layout, healedNodes)
+                    return handleHealing(pollReport, layout, healedNodes, localEndpoint)
                             .thenApply(healingResult -> {
-                                saveFailureDetectorStats(pollReport, layout, healedNode);
+                                saveFailureDetectorStats(pollReport, layout, healedNode, localEndpoint);
                                 return DetectorTask.COMPLETED;
                             })
                             .exceptionally(ex -> {
@@ -105,7 +102,7 @@ public class HealingAgent {
     }
 
     @VisibleForTesting
-    CompletableFuture<Boolean> handleHealing(PollReport pollReport, Layout layout, Set<String> healedNodes) {
+    CompletableFuture<Boolean> handleHealing(PollReport pollReport, Layout layout, Set<String> healedNodes, String localEndpoint) {
         return runtimeSingleton.get()
                 .getLayoutView()
                 .getRuntimeLayout(layout)
@@ -114,7 +111,7 @@ public class HealingAgent {
                 .handleHealing(pollReport.getPollEpoch(), healedNodes);
     }
 
-    private void saveFailureDetectorStats(PollReport pollReport, Layout layout, NodeRank healed) {
+    private void saveFailureDetectorStats(PollReport pollReport, Layout layout, NodeRank healed, String localEndpoint) {
         //save history
         FailureDetectorMetrics history = FailureDetectorMetrics.builder()
                 .localNode(localEndpoint)
@@ -136,7 +133,7 @@ public class HealingAgent {
      * A new task is not spawned if a task is already in progress.
      * This method does not wait on the completion of the restore redundancy and merge segments task.
      */
-    public void restoreRedundancyAndMergeSegments(Layout layout) {
+    public void restoreRedundancyAndMergeSegments(Layout layout, String localEndpoint) {
         // Check that the task is not currently running.
         if (!mergeSegmentsTask.isDone()) {
             log.trace("Merge segments task already in progress. Skipping spawning another task.");

@@ -10,6 +10,7 @@ import org.corfudb.universe.node.client.ClientParams;
 import org.corfudb.universe.node.client.CorfuClient;
 import org.corfudb.universe.node.server.CorfuServer;
 import org.junit.Test;
+import org.slf4j.event.Level;
 
 import java.time.Duration;
 
@@ -30,6 +31,10 @@ public class HandOfGodIT extends GenericIntegrationTest {
     @Test(timeout = 300000)
     public void handOfGodTest() {
         workflow(wf -> {
+            wf.setupDocker(fixture -> {
+                fixture.getLogging().enabled(true);
+                fixture.getServer().logLevel(Level.TRACE);
+            });
             wf.deploy();
 
             ClientParams clientFixture = ClientParams.builder().build();
@@ -66,18 +71,21 @@ public class HandOfGodIT extends GenericIntegrationTest {
                     clientFixture.getTimeout(),
                     clientFixture.getPollPeriod()
             );
-
+            System.out.println("Invalidate layout");
             // Verify layout contains only the node that is up
             corfuClient.invalidateLayout();
             Layout layout = corfuClient.getLayout();
+            System.out.println("Assert one node");
             assertThat(layout.getAllActiveServers()).containsExactly(server0.getEndpoint());
 
+            System.out.println("Get cluster status and assert");
             // Verify cluster status is STABLE
             ClusterStatusReport clusterStatusReport = corfuClient.getManagementView().getClusterStatus();
             assertThat(clusterStatusReport.getClusterStatus()).isEqualTo(ClusterStatus.STABLE);
 
             ScenarioUtils.waitUninterruptibly(Duration.ofSeconds(30));
 
+            System.out.println("Verify data path");
             // Verify data path working
             for (int i = 0; i < DEFAULT_TABLE_ITER; i++) {
                 assertThat(table.get(String.valueOf(i))).isEqualTo(String.valueOf(i));

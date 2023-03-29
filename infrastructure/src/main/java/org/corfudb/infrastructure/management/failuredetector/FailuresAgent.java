@@ -31,9 +31,6 @@ public class FailuresAgent {
     private final FileSystemAdvisor fsAdvisor;
 
     @NonNull
-    private final String localEndpoint;
-
-    @NonNull
     private final FailureDetectorDataStore fdDataStore;
 
     @NonNull
@@ -49,7 +46,7 @@ public class FailuresAgent {
      * @param pollReport Poll report obtained from failure detection policy.
      * @return boolean result if failure was handled. False if there is no failure
      */
-    public DetectorTask detectAndHandleFailure(PollReport pollReport, Layout layout) {
+    public DetectorTask detectAndHandleFailure(PollReport pollReport, Layout layout, String localEndpoint) {
         log.trace("Handle failures for the report: {}", pollReport);
 
         try {
@@ -81,7 +78,7 @@ public class FailuresAgent {
 
                 Set<String> failedNodes = new HashSet<>();
                 failedNodes.add(failedNode.getEndpoint());
-                return handleFailure(layout, failedNodes, pollReport).join();
+                return handleFailure(layout, failedNodes, pollReport, localEndpoint).join();
             }
 
             Optional<NodeRank> maybeFailedNode = advisor.failedServer(clusterState);
@@ -109,7 +106,7 @@ public class FailuresAgent {
 
                 Set<String> failedNodes = new HashSet<>();
                 failedNodes.add(failedNode.getEndpoint());
-                return handleFailure(layout, failedNodes, pollReport).join();
+                return handleFailure(layout, failedNodes, pollReport, localEndpoint).join();
             }
         } catch (Exception e) {
             log.error("Exception invoking failure handler", e);
@@ -125,7 +122,7 @@ public class FailuresAgent {
      * @param pollReport  poll report
      */
     public CompletableFuture<DetectorTask> handleFailure(
-            Layout layout, Set<String> failedNodes, PollReport pollReport) {
+            Layout layout, Set<String> failedNodes, PollReport pollReport, String localEndpoint) {
 
         ClusterGraph graph = advisor.getGraph(pollReport.getClusterState());
 

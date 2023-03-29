@@ -53,7 +53,7 @@ public class FailureDetectorService {
      * @param pollReport cluster status
      * @return async detection task
      */
-    public CompletableFuture<DetectorTask> runFailureDetectorTask(PollReport pollReport, Layout ourLayout) {
+    public CompletableFuture<DetectorTask> runFailureDetectorTask(PollReport pollReport, Layout ourLayout, String endpoint) {
 
         // Corrects out of phase epoch issues if present in the report. This method
         // performs re-sealing of all nodes if required and catchup of a layout server to
@@ -78,7 +78,7 @@ public class FailureDetectorService {
                 if (unfilledSlot.isPresent()) {
                     log.info("Trying to fill an unfilled slot {}. PollReport: {}",
                             unfilledSlot.get(), pollReport);
-                    failuresAgent.handleFailure(latestLayout, Collections.emptySet(), pollReport).join();
+                    failuresAgent.handleFailure(latestLayout, Collections.emptySet(), pollReport, endpoint).join();
                     return DetectorTask.COMPLETED;
                 }
 
@@ -107,7 +107,7 @@ public class FailureDetectorService {
                 return DetectorTask.COMPLETED;
             }
 
-            DetectorTask healing = healingAgent.detectAndHandleHealing(pollReport, ourLayout).join();
+            DetectorTask healing = healingAgent.detectAndHandleHealing(pollReport, ourLayout, endpoint).join();
 
             //If local node healed it causes change in the cluster state which means the layout is changed also.
             //If the cluster status is changed let failure detector detect the change on next iteration and
@@ -117,7 +117,7 @@ public class FailureDetectorService {
             }
 
             // Analyze the poll report and trigger failure handler if needed.
-            DetectorTask handleFailure = failuresAgent.detectAndHandleFailure(pollReport, ourLayout);
+            DetectorTask handleFailure = failuresAgent.detectAndHandleFailure(pollReport, ourLayout, endpoint);
 
             //If a failure is detected (which means we have updated a layout)
             // then don't try to heal anything, wait for next iteration.
@@ -126,7 +126,7 @@ public class FailureDetectorService {
             }
 
             // Restores redundancy and merges multiple segments if present.
-            healingAgent.restoreRedundancyAndMergeSegments(ourLayout);
+            healingAgent.restoreRedundancyAndMergeSegments(ourLayout, endpoint);
 
             sequencerBootstrapper.handleSequencer(ourLayout);
 

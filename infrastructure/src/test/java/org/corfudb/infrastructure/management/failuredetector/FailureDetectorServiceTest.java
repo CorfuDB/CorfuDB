@@ -39,7 +39,9 @@ class FailureDetectorServiceTest {
 
         Layout layoutMock = mock(Layout.class);
 
-        fdService.runFailureDetectorTask(pollReportMock, layoutMock).whenComplete((result, ex) -> {
+        String endpointMock = mock(String.class);
+
+        fdService.runFailureDetectorTask(pollReportMock, layoutMock, endpointMock).whenComplete((result, ex) -> {
             assertEquals("Wrong epoch. [expected=123]", ex.getMessage());
         });
     }

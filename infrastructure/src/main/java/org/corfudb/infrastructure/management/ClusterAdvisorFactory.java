@@ -23,10 +23,10 @@ public class ClusterAdvisorFactory {
      * @return a concrete instance of {@link ClusterAdvisor} specific to the
      * provided strategy.
      */
-    public static ClusterAdvisor createForStrategy(ClusterType strategy, String localEndpoint) {
+    public static ClusterAdvisor createForStrategy(ClusterType strategy) {
         switch (strategy) {
             case COMPLETE_GRAPH:
-                return new CompleteGraphAdvisor(localEndpoint);
+                return new CompleteGraphAdvisor();
             case STAR_GRAPH:
                 throw new UnsupportedOperationException(strategy.name());
             default:

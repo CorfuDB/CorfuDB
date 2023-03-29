@@ -88,6 +88,8 @@ public class RemoteMonitoringService implements ManagementService {
      */
     private CompletableFuture<DetectorTask> failureDetectorFuture = DETECTOR_TASK_NOT_COMPLETED;
 
+    private final FailureDetectorService fdService;
+
     /**
      * Number of workers for failure detector. Three workers used by default:
      * - failure/healing detection
@@ -106,7 +108,10 @@ public class RemoteMonitoringService implements ManagementService {
         this.clusterContext = clusterContext;
         this.failureDetector = failureDetector;
         this.localMonitoringService = localMonitoringService;
-
+        ClusterAdvisor advisor = ClusterAdvisorFactory.createForStrategy(
+                ClusterType.COMPLETE_GRAPH,
+                serverContext.getLocalEndpoint()
+        );
         this.detectionTasksScheduler = Executors.newSingleThreadScheduledExecutor(
                 new ThreadFactoryBuilder()
                         .setDaemon(true)
@@ -121,6 +126,50 @@ public class RemoteMonitoringService implements ManagementService {
                 .setNameFormat(serverContext.getThreadPrefix() + "DetectionWorker-%d")
                 .build();
         this.failureDetectorWorker = Executors.newFixedThreadPool(detectionWorkersCount, fdThreadFactory);
+
+        FailureDetectorDataStore fdDataStore = FailureDetectorDataStore.builder()
+                .localEndpoint(serverContext.getLocalEndpoint())
+                .dataStore(serverContext.getDataStore())
+                .build();
+
+        FileSystemAdvisor fsAdvisor = new FileSystemAdvisor();
+
+        EpochHandler epochHandler = EpochHandler.builder()
+                .runtimeSingletonResource(runtimeSingletonResource)
+                .serverContext(serverContext)
+                .failureDetectorWorker(failureDetectorWorker)
+                .build();
+
+        HealingAgent healingAgent = HealingAgent.builder()
+                .advisor(advisor)
+                .fsAdvisor(fsAdvisor)
+                .runtimeSingleton(runtimeSingletonResource)
+                .failureDetectorWorker(failureDetectorWorker)
+                .dataStore(fdDataStore)
+                .build();
+
+        FailuresAgent failuresAgent = FailuresAgent.builder()
+                .fdDataStore(fdDataStore)
+                .advisor(advisor)
+                .fsAdvisor(fsAdvisor)
+                .runtimeSingleton(runtimeSingletonResource)
+                .build();
+
+        SequencerBootstrapper sequencerBootstrapper = SequencerBootstrapper.builder()
+                .runtimeSingletonResource(runtimeSingletonResource)
+                .clusterContext(clusterContext)
+                .failureDetectorWorker(failureDetectorWorker)
+                .build();
+
+        this.fdService = FailureDetectorService.builder()
+                .epochHandler(epochHandler)
+                .failuresAgent(failuresAgent)
+                .healingAgent(healingAgent)
+                .sequencerBootstrapper(sequencerBootstrapper)
+                .failureDetectorWorker(failureDetectorWorker)
+                .build();
+
+
     }
 
     private CorfuRuntime getCorfuRuntime() {
@@ -194,61 +243,12 @@ public class RemoteMonitoringService implements ManagementService {
      *  </pre>
      */
     private synchronized CompletableFuture<DetectorTask> runDetectionTasks() {
-        ClusterAdvisor advisor = ClusterAdvisorFactory.createForStrategy(
-                ClusterType.COMPLETE_GRAPH,
-                serverContext.getLocalEndpoint()
-        );
-
-        EpochHandler epochHandler = EpochHandler.builder()
-                .runtimeSingletonResource(runtimeSingletonResource)
-                .serverContext(serverContext)
-                .failureDetectorWorker(failureDetectorWorker)
-                .build();
-
-        FailureDetectorDataStore fdDataStore = FailureDetectorDataStore.builder()
-                .localEndpoint(serverContext.getLocalEndpoint())
-                .dataStore(serverContext.getDataStore())
-                .build();
-
-        FileSystemAdvisor fsAdvisor = new FileSystemAdvisor();
-
-        HealingAgent healingAgent = HealingAgent.builder()
-                .advisor(advisor)
-                .fsAdvisor(fsAdvisor)
-                .localEndpoint(serverContext.getLocalEndpoint())
-                .runtimeSingleton(runtimeSingletonResource)
-                .failureDetectorWorker(failureDetectorWorker)
-                .dataStore(fdDataStore)
-                .build();
-
-        FailuresAgent failuresAgent = FailuresAgent.builder()
-                .localEndpoint(serverContext.getLocalEndpoint())
-                .fdDataStore(fdDataStore)
-                .advisor(advisor)
-                .fsAdvisor(fsAdvisor)
-                .runtimeSingleton(runtimeSingletonResource)
-                .build();
-
-        SequencerBootstrapper sequencerBootstrapper = SequencerBootstrapper.builder()
-                .runtimeSingletonResource(runtimeSingletonResource)
-                .clusterContext(clusterContext)
-                .failureDetectorWorker(failureDetectorWorker)
-                .build();
-
-        FailureDetectorService fdService = FailureDetectorService.builder()
-                .epochHandler(epochHandler)
-                .failuresAgent(failuresAgent)
-                .healingAgent(healingAgent)
-                .sequencerBootstrapper(sequencerBootstrapper)
-                .failureDetectorWorker(failureDetectorWorker)
-                .build();
-
+        String localEndpoint = serverContext.getLocalEndpoint();
         return getCorfuRuntime()
                 .invalidateLayout()
                 .thenApply(serverContext::saveManagementLayout)
                 //check if this node can handle failures (if the node is in the cluster)
                 .thenCompose(ourLayout -> {
-                    String localEndpoint = serverContext.getLocalEndpoint();
                     FailureDetectorHelper helper = new FailureDetectorHelper(ourLayout, localEndpoint);
 
                     return helper.handleReconfigurationsAsync();
@@ -271,7 +271,7 @@ public class RemoteMonitoringService implements ManagementService {
                                 return pollReport;
                             })
                             //Execute failure detector task using failureDetectorWorker executor
-                            .thenCompose(pollReport -> fdService.runFailureDetectorTask(pollReport, ourLayout));
+                            .thenCompose(pollReport -> fdService.runFailureDetectorTask(pollReport, ourLayout, localEndpoint));
                 }).thenApply(task -> {
                     Issue issue = Issue.createIssue(Component.FAILURE_DETECTOR,
                             SOME_NODES_ARE_UNRESPONSIVE,
