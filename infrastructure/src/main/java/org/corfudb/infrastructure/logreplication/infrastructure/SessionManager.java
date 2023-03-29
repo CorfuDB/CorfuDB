@@ -309,7 +309,7 @@ public class SessionManager {
                 router.getSessionToOutstandingRequests().put(session, new HashMap<>());
             }
 
-            if(isSessionConnectionStarter(session)) {
+            if(isConnectionStarterForSession(session)) {
                 router.getSessionToLeaderConnectionFuture().put(session, new CompletableFuture<>());
                 router.getSessionToOutstandingRequests().putIfAbsent(session, new HashMap<>());
             }
@@ -493,11 +493,12 @@ public class SessionManager {
     }
 
     /**
-     * Check if a session will start a connection to remote, or expect a connection from remote.
+     * Check if this node is a connection starter for the given session.
+     *
      * @param session
      * @return true if the session is a connection starter, false otherwise
      */
-    public boolean isSessionConnectionStarter(LogReplicationSession session) {
+    public boolean isConnectionStarterForSession(LogReplicationSession session) {
         return topology.getRemoteClusterEndpoints().containsKey(session.getSinkClusterId()) ||
                 topology.getRemoteClusterEndpoints().containsKey(session.getSourceClusterId());
     }

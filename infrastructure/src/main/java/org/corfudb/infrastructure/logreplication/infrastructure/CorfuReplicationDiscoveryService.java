@@ -484,7 +484,9 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         log.debug("Lock released");
         // Unset isLeader flag after stopping log replication
         stopLogReplication();
-        interClusterServerNode.close();
+        if (interClusterServerNode != null) {
+            interClusterServerNode.close();
+        }
         isLeader.set(false);
         sessionManager.setLeadership(false);
         recordLockRelease();

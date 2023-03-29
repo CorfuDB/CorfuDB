@@ -9,7 +9,6 @@ import org.corfudb.infrastructure.ServerThreadFactory;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.infrastructure.logreplication.infrastructure.CorfuReplicationManager;
 import org.corfudb.infrastructure.logreplication.infrastructure.SessionManager;
-import org.corfudb.infrastructure.logreplication.infrastructure.TopologyDescriptor;
 import org.corfudb.infrastructure.logreplication.infrastructure.msgHandlers.LogReplicationServer;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRuntimeEvent;
@@ -479,7 +478,7 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
     }
 
     public boolean isConnectionInitiator(LogReplicationSession session) {
-        return sessionManager.isSessionConnectionStarter(session);
+        return sessionManager.isConnectionStarterForSession(session);
     }
 
     private void removeSessionInfo(LogReplicationSession session) {
