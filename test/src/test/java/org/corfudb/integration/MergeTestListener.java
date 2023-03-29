@@ -84,11 +84,18 @@ public class MergeTestListener extends LogReplicationListener{
         fail("onError for LRTestListener: " + throwable.toString());
     }
 
+    /**
+     * Invoke when snapshot sync starts
+     */
     @Override
     protected void onSnapshotSyncStart() {
         log.info("Snapshot sync started");
     }
 
+    /**
+     * Apply addedKeys and deletedKeys to merged table, add keys to
+     * existingKeysInMergedTable from addedKeys and deletedKeys.
+     */
     @Override
     protected void onSnapshotSyncComplete() {
         existingKeysInMergedTable.addAll(addedKeys.keySet());
@@ -110,6 +117,12 @@ public class MergeTestListener extends LogReplicationListener{
         log.info("Snapshot sync complete");
     }
 
+    /**
+     * Write local tables to merged table, process updates and add the keys to addedKeys
+     * and deletedKeys for replicated table.
+     *
+     * @param results Entries received in a single transaction as part of a snapshot sync
+     */
     @Override
     protected void processUpdatesInSnapshotSync(CorfuStreamEntries results) {
         log.info("Processing updates in snapshot sync");
@@ -141,7 +154,12 @@ public class MergeTestListener extends LogReplicationListener{
         });
     }
 
-
+    /**
+     * Write records to merged table, and process updates from replicated
+     * tables.
+     *
+     * @param results Entries received in a single transaction as part of a log entry sync
+     */
     @Override
     protected void processUpdatesInLogEntrySync(CorfuStreamEntries results) {
         log.info("Processing updates in log entry sync");
@@ -165,7 +183,12 @@ public class MergeTestListener extends LogReplicationListener{
         });
     }
 
-
+    /**
+     * Read and write replicated and local tables to the merged table,
+     * construct existingKeysInMergedTable and add the existing keys to it.
+     *
+     * @param txnContext transaction context in which the operation must be performed
+     */
     @Override
     protected void performFullSync(TxnContext txnContext) {
         List<CorfuStoreEntry<SampleSchema.Uuid, SampleSchema.ValueFieldTagOne, SampleSchema.Uuid>> entries =
@@ -178,6 +201,13 @@ public class MergeTestListener extends LogReplicationListener{
         });
     }
 
+    /**
+     * Open merged table.
+     *
+     * @throws InvocationTargetException
+     * @throws NoSuchMethodException
+     * @throws IllegalAccessException
+     */
     protected void openMergedTable() throws InvocationTargetException, NoSuchMethodException, IllegalAccessException{
         String mergedTableName = "MERGED_TABLE";
         mergedTable = store.openTable(
