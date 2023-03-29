@@ -69,7 +69,7 @@ public class CorfuInterClusterReplicationServerNode implements AutoCloseable {
             serverStarted.set(true);
             cf.get();
         } catch (InterruptedException e) {
-            // The server can be interrupted and stopped on a role switch.
+            // The server can be interrupted and stopped on a role switch or on leadership loss.
             // It should not be treated as fatal
             log.warn("Server interrupted.  It could be due to a role switch");
         } catch (Throwable th) {
@@ -96,6 +96,7 @@ public class CorfuInterClusterReplicationServerNode implements AutoCloseable {
      * transport adapter.  GRPC transport adapter does not result in any such
      * error.
      */
+    // TODO: comply with the comment when netty is bought back
     public void disable() {
         log.trace("Disabling the Replication Server Node");
         cleanupResources();
