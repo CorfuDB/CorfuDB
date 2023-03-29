@@ -1,6 +1,7 @@
 package org.corfudb.runtime.object;
 
 import com.google.common.annotations.VisibleForTesting;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.protocols.logprotocol.SMREntry;
@@ -67,6 +68,7 @@ public abstract class AbstractVersionedObject<S extends SnapshotGenerator<S>> {
      * so that a version is always available to sync from, regardless of the underlying
      * caching strategy.
      */
+    @Getter
     protected volatile S currentObject;
 
     /**

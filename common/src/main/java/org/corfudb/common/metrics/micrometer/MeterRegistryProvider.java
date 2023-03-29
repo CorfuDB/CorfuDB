@@ -15,7 +15,9 @@ import org.slf4j.Logger;
 
 import java.time.Duration;
 import java.util.Iterator;
+import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 
 /**
@@ -27,15 +29,16 @@ public class MeterRegistryProvider {
     private static CompositeMeterRegistry meterRegistry;
     @Getter
     private static Optional<String> id = Optional.empty();
-    @Getter
     private static Optional<MetricType> metricType = Optional.empty();
     private static Optional<RegistryProvider> provider = Optional.empty();
+    private static final Map<String, Supplier<String>> externalMetricsSuppliers
+            = new ConcurrentHashMap<>();
 
     private MeterRegistryProvider() {
 
     }
 
-    public static enum MetricType {
+    public enum MetricType {
         SERVER,
         CLIENT
     }
@@ -89,7 +92,7 @@ public class MeterRegistryProvider {
             Supplier<Optional<MeterRegistry>> supplier = () -> {
                 LoggingRegistryConfig config = new IntervalLoggingConfig(loggingInterval);
                 LoggingMeterRegistryWithHistogramSupport registry =
-                        new LoggingMeterRegistryWithHistogramSupport(config, logger::debug);
+                        new LoggingMeterRegistryWithHistogramSupport(config, logger::debug, externalMetricsSuppliers);
                 registry.config().commonTags("id", identifier);
                 Optional<MeterRegistry> ret = Optional.of(registry);
                 JVMMetrics.register(ret);
@@ -159,6 +162,7 @@ public class MeterRegistryProvider {
     public static synchronized void close() {
         meterRegistry.close();
         meterRegistry.getRegistries().forEach(registry -> meterRegistry.remove(registry));
+        externalMetricsSuppliers.clear();
         provider.ifPresent(RegistryProvider::close);
         provider = Optional.empty();
         metricType = Optional.empty();
@@ -172,6 +176,14 @@ public class MeterRegistryProvider {
      */
     public static synchronized Optional<MetricType> getMetricType() {
         return metricType;
+    }
+
+    public static void registerExternalSupplier(String identifier, Supplier<String> supplier) {
+        externalMetricsSuppliers.put(identifier, supplier);
+    }
+
+    public static void unregisterExternalSupplier(String identifier) {
+        externalMetricsSuppliers.remove(identifier);
     }
 
     /**

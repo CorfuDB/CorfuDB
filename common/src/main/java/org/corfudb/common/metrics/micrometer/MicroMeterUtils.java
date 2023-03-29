@@ -8,7 +8,9 @@ import io.micrometer.core.instrument.Meter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Tags;
 import io.micrometer.core.instrument.Timer;
+import io.micrometer.core.instrument.composite.CompositeMeterRegistry;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider.MetricType;
+import org.corfudb.common.metrics.micrometer.registries.LoggingMeterRegistryWithHistogramSupport;
 import org.corfudb.common.util.Tuple;
 
 import java.time.Duration;
@@ -34,7 +36,6 @@ public class MicroMeterUtils {
             "corfu.infrastructure.message-handler.committed_tail_request",
             "corfu.infrastructure.message-handler.inspect_addresses_request",
             "corfu.infrastructure.message-handler.query_node_request",
-            "corfu.infrastructure.message-handler.write_log_request",
             "corfu.infrastructure.message-handler.read_log_request",
             "corfu.infrastructure.message-handler.sequencer_metrics_request",
             "corfu.infrastructure.message-handler.trim_mark_request",

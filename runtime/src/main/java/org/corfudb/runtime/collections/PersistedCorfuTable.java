@@ -8,6 +8,7 @@ import org.corfudb.runtime.object.MVOCorfuCompileProxy;
 import javax.annotation.Nonnull;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.stream.Stream;
 
 public class PersistedCorfuTable<K, V> implements ICorfuTable<K, V> {
@@ -102,5 +103,10 @@ public class PersistedCorfuTable<K, V> implements ICorfuTable<K, V> {
     @Override
     public Map<String, ICorfuSMRUpcallTarget<DiskBackedCorfuTable<K, V>>> getSMRUpcallMap() {
         return upcallTargetMap;
+    }
+
+
+    public void publishStats(Consumer<String> loggingSink) {
+        loggingSink.accept(proxy.getUnderlyingMVO().getCurrentObject().getStatistics().toString());
     }
 }

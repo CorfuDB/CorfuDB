@@ -33,19 +33,28 @@ import org.corfudb.test.SampleSchema;
 import org.corfudb.test.SampleSchema.EventInfo;
 import org.corfudb.test.SampleSchema.Uuid;
 import org.corfudb.util.serializer.ISerializer;
+import org.junit.Test;
 import org.junit.jupiter.api.Assertions;
+import org.junit.runner.RunWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Captor;
+import org.mockito.Mockito;
+import org.mockito.runners.MockitoJUnitRunner;
 import org.rocksdb.Env;
 import org.rocksdb.Options;
 import org.rocksdb.RocksDB;
 import org.rocksdb.RocksDBException;
 import org.apache.commons.lang3.function.Failable;
 import org.rocksdb.SstFileManager;
+import org.slf4j.Logger;
 
+import java.io.IOException;
 import java.io.InvalidObjectException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.AbstractMap.SimpleEntry;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
@@ -53,15 +62,20 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.logging.Level;
+import java.util.logging.LogRecord;
 import java.util.stream.Collectors;
 import java.util.stream.LongStream;
 import java.util.stream.Stream;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy;
+import static org.corfudb.common.metrics.micrometer.MeterRegistryProvider.MeterRegistryInitializer.initClientMetrics;
+import static org.mockito.Mockito.mock;
 
 @Slf4j
+@RunWith(MockitoJUnitRunner.class)
 public class PersistedCorfuTableTest extends AbstractViewTest implements AutoCloseable {
 
     private static final String defaultTableName = "diskBackedTable";
@@ -225,6 +239,8 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
                         Assertions.assertEquals(value, persistedValue);
                     })).isInstanceOf(UnrecoverableCorfuError.class)
                     .hasCauseInstanceOf(RocksDBException.class);
+
+            table.publishStats(System.out::println);
         }
     }
 
@@ -767,5 +783,59 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
                         .setNamespace(namespace)
                         .setTableName(tableName)
                         .build());
+    }
+
+    class LogHandler extends java.util.logging.Handler
+    {
+        public List<String> lines = new ArrayList<>();
+
+        public Level checkLevel() {
+            return Level.FINEST;
+        }
+
+        public void close(){}
+
+        @Override
+        public void publish(LogRecord record) {
+            lines.add(record.getMessage());
+        }
+
+        public void flush() {
+        }
+    }
+
+    @Captor
+    private ArgumentCaptor<String> logCaptor;
+
+    @Test
+    public void testExternalProvider() throws InterruptedException, IOException {
+        Logger logger = Mockito.mock(Logger.class);
+        List<String> logMessages = new ArrayList<>();
+        Mockito.doAnswer(invocation -> {
+            synchronized (this) {
+                String logMessage = invocation.getArgumentAt(0, String.class);
+                logMessages.add(logMessage);
+                return null;
+            }
+        }).when(logger).debug(logCaptor.capture());
+
+        final Duration loggingInterval = Duration.ofMillis(100);
+        final String tableFolderName = "metered-table";
+        initClientMetrics(logger, loggingInterval, PersistedCorfuTableTest.class.toString());
+
+        try (PersistedCorfuTable<String, String> ignored = setupTable(tableFolderName)) {
+            TimeUnit.MILLISECONDS.sleep(loggingInterval.multipliedBy(2).toMillis());
+            assertThat(logMessages.stream().filter(log -> log.contains("rocksdb"))
+                    .filter(log -> log.startsWith(tableFolderName))
+                    .findAny()).isPresent();
+        }
+
+        // The table should have been closed by now.
+        // No new messages should be generated.
+        logMessages.clear();
+        TimeUnit.MILLISECONDS.sleep(loggingInterval.multipliedBy(2).toMillis());
+        assertThat(logMessages.stream().filter(log -> log.contains("rocksdb"))
+                .filter(log -> log.startsWith(tableFolderName))
+                .findAny()).isNotPresent();
     }
 }

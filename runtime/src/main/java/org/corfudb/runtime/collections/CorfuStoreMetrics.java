@@ -15,7 +15,6 @@ public class CorfuStoreMetrics {
     private final Optional<DistributionSummary> numberBatchReads;
     private final Optional<DistributionSummary> numberReads;
     private final TimingHistogram highestSequenceNumberDuration;
-
     private final Optional<Counter> openTableCounter;
 
     public void recordBatchReads(int numBatches) {

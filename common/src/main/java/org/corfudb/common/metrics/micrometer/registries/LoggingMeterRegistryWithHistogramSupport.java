@@ -15,9 +15,12 @@ import io.micrometer.core.instrument.util.StringUtils;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 import java.util.stream.Stream;
 
 import static java.util.stream.Collectors.joining;
@@ -29,12 +32,20 @@ import static java.util.stream.Collectors.joining;
 public class LoggingMeterRegistryWithHistogramSupport extends StepMeterRegistry {
     private final LoggingRegistryConfig config;
     private final Consumer<String> loggingSink;
+    private final Map<String, Supplier<String>> externalMetricsSuppliers;
 
     public LoggingMeterRegistryWithHistogramSupport(LoggingRegistryConfig config,
                                                     Consumer<String> loggingSink) {
+        this(config, loggingSink, new ConcurrentHashMap<>());
+    }
+    public LoggingMeterRegistryWithHistogramSupport(
+            LoggingRegistryConfig config,
+            Consumer<String> loggingSink,
+            Map<String, Supplier<String>> externalMetricsSuppliers) {
         super(config, Clock.SYSTEM);
         this.config = config;
         this.loggingSink = loggingSink;
+        this.externalMetricsSuppliers = externalMetricsSuppliers;
         config().namingConvention(new InfluxNamingConvention());
         start(new NamedThreadFactory("logging-metrics-publisher"));
     }
@@ -185,7 +196,10 @@ public class LoggingMeterRegistryWithHistogramSupport extends StepMeterRegistry 
                             counter -> writeCounter(counter.getId(), counter.count()),
                             this::writeFunctionTimer,
                             this::writeMeter
-                    )).forEach(loggingSink::accept);
+                    )).forEach(loggingSink);
+            externalMetricsSuppliers.entrySet().stream()
+                    .map(entry -> entry.getValue().get().replaceAll("(?m)^", entry.getKey()))
+                    .forEach(loggingSink);
         }
     }
 

@@ -12,6 +12,7 @@ import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.UncheckedExecutionException;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.binder.cache.GuavaCacheMetrics;
+import io.micrometer.core.instrument.composite.CompositeMeterRegistry;
 import io.netty.handler.timeout.TimeoutException;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;

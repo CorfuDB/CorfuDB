@@ -5,8 +5,10 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
+import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.object.PersistenceOptions;
@@ -21,6 +23,8 @@ import org.rocksdb.CompressionType;
 import org.rocksdb.Options;
 import org.rocksdb.RocksDB;
 import org.rocksdb.RocksDBException;
+import org.rocksdb.Statistics;
+import org.rocksdb.StatsLevel;
 import org.rocksdb.WriteOptions;
 
 import java.util.Map;
@@ -28,6 +32,7 @@ import java.util.Optional;
 import java.util.Spliterator;
 import java.util.Spliterators;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.function.Consumer;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
@@ -78,13 +83,23 @@ public class DiskBackedCorfuTable<K, V> implements
 
     private final ISerializer serializer;
     private final RocksDbApi<DiskBackedCorfuTable<K, V>> rocksApi;
+    private final String metricsId;
+    @Getter
+    private final Statistics statistics;
 
     public DiskBackedCorfuTable(@NonNull PersistenceOptions persistenceOptions,
                                 @NonNull Options rocksDbOptions,
                                 @NonNull ISerializer serializer) {
         try {
+            this.statistics = new Statistics();
+            this.statistics.setStatsLevel(StatsLevel.ALL);
+            rocksDbOptions.setStatistics(statistics);
+
             this.rocksApi = new RocksDbStore<>(persistenceOptions.getDataPath(),
                     rocksDbOptions, writeOptions, persistenceOptions);
+            this.metricsId = String.format("%s.%s.",
+                    persistenceOptions.getDataPath().getFileName(), System.identityHashCode(this));
+            MeterRegistryProvider.registerExternalSupplier(metricsId, this.statistics::toString);
         } catch (RocksDBException e) {
             throw new UnrecoverableCorfuError(e);
         }
@@ -94,14 +109,7 @@ public class DiskBackedCorfuTable<K, V> implements
 
     public DiskBackedCorfuTable(@NonNull PersistenceOptions persistenceOptions,
                                 @NonNull ISerializer serializer) {
-        try {
-            this.rocksApi = new RocksDbStore<>(persistenceOptions.getDataPath(),
-                    getDiskBackedCorfuTableOptions(), writeOptions, persistenceOptions);
-        } catch (RocksDBException e) {
-            throw new UnrecoverableCorfuError(e);
-        }
-
-        this.serializer = serializer;
+        this(persistenceOptions, getDiskBackedCorfuTableOptions(), serializer);
     }
 
     public V get(@NonNull Object key) {
@@ -204,6 +212,8 @@ public class DiskBackedCorfuTable<K, V> implements
             rocksApi.close();
         } catch (RocksDBException e) {
             throw new UnrecoverableCorfuError(e);
+        } finally {
+            MeterRegistryProvider.unregisterExternalSupplier(metricsId);
         }
     }
 
