@@ -4,8 +4,10 @@ import com.google.common.collect.Sets;
 import org.corfudb.infrastructure.logreplication.infrastructure.CorfuReplicationManager;
 import org.corfudb.infrastructure.logreplication.infrastructure.SessionManager;
 import org.corfudb.infrastructure.logreplication.infrastructure.TopologyDescriptor;
+import org.corfudb.infrastructure.logreplication.infrastructure.msgHandlers.LogReplicationServer;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager;
+import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationSinkManager;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientServerRouter;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.runtime.CorfuRuntime;
@@ -42,6 +44,10 @@ public class SessionManagerTest extends AbstractViewTest {
         Mockito.doReturn(new HashMap<>()).when(router).getSessionToRequestIdCounter();
         Mockito.doReturn(new HashMap<>()).when(router).getSessionToRemoteClusterDescriptor();
         Mockito.doReturn(new HashMap<>()).when(router).getSessionToLeaderConnectionFuture();
+
+        LogReplicationServer msgHandler = Mockito.mock(LogReplicationServer.class);
+        Mockito.doReturn(msgHandler).when(router).getMsgHandler();
+        Mockito.doReturn(Mockito.mock(LogReplicationSinkManager.class)).when(msgHandler).createSinkManager(anyObject());
 
         replicationManager = Mockito.mock(CorfuReplicationManager.class);
         Mockito.doNothing().when(replicationManager).refreshRuntime(anyObject(), anyObject(), anyLong());

@@ -134,7 +134,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
     @Parameterized.Parameters
     public static List<ClusterUuidMsg> input() {
         return Arrays.asList(
-//                TP_SINGLE_SOURCE_SINK,
+                TP_SINGLE_SOURCE_SINK,
                 TP_SINGLE_SOURCE_SINK_REV_CONNECTION
         );
 

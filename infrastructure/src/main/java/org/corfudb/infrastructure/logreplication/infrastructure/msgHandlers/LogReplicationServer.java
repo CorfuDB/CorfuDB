@@ -22,6 +22,7 @@ import javax.annotation.Nonnull;
 import java.lang.invoke.MethodHandles;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -52,25 +53,25 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
     // Unique and immutable identifier of a server node (UUID)
     // Note: serverContext.getLocalEndpoint() can return an IP or FQDN, which is mutable (for this we
     // should have a unique way the identify a node in the  topology
-    private String localNodeId;
+    private final String localNodeId;
 
     // Cluster Id of the local node.
-    private String localClusterId;
+    private final String localClusterId;
 
     private final ExecutorService executor;
 
     private static final String EXECUTOR_NAME_PREFIX = "LogReplicationServer-";
 
-    private Map<LogReplicationSession, LogReplicationSinkManager> sessionToSinkManagerMap = new HashMap<>();
+    private final Map<LogReplicationSession, LogReplicationSinkManager> sessionToSinkManagerMap = new ConcurrentHashMap<>();
 
     private final AtomicBoolean isLeader = new AtomicBoolean(false);
 
     @Getter
-    private SessionManager sessionManager;
+    private final SessionManager sessionManager;
 
-    private ServerContext serverContext;
+    private final ServerContext serverContext;
 
-    private String localEndpoint;
+    private final String localEndpoint;
 
     /**
      * RequestHandlerMethods for the LogReplication server
@@ -86,7 +87,6 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
         this.localNodeId = sessionManager.getTopology().getLocalNodeDescriptor().getNodeId();
         this.localClusterId = sessionManager.getTopology().getLocalClusterDescriptor().getClusterId();
         this.sessionManager = sessionManager;
-        createSinkManagers();
         this.executor = context.getExecutorService(1, EXECUTOR_NAME_PREFIX);
     }
 
@@ -102,18 +102,17 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
         this.executor = context.getExecutorService(1, EXECUTOR_NAME_PREFIX);
     }
 
-     private void createSinkManagers() {
-        for (LogReplicationSession session : sessionManager.getIncomingSessions()) {
-            createSinkManager(session);
+    public LogReplicationSinkManager createSinkManager(LogReplicationSession session) {
+        if(sessionToSinkManagerMap.containsKey(session)) {
+            log.trace("Sink manager already exists for session {}", session);
+            return null;
         }
-    }
-
-    private LogReplicationSinkManager createSinkManager(LogReplicationSession session) {
         LogReplicationSinkManager sinkManager = new LogReplicationSinkManager(localEndpoint,
                 sessionManager.getMetadataManager(), serverContext, session, sessionManager.getReplicationContext());
         sessionToSinkManagerMap.put(session, sinkManager);
         log.info("Sink Manager created for session={}", session);
         return sinkManager;
+
     }
 
     public void updateTopologyConfigId(long topologyConfigId) {
@@ -278,7 +277,7 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
             ReplicationMetadata metadata = sessionManager.getMetadataManager().getReplicationMetadata(session);
             ResponseMsg response = getMetadataResponse(request, metadata);
 
-            log.info("Send Metadata response: :: {}", TextFormat.shortDebugString(response.getPayload()));
+            log.info("Send Metadata response for session {}: :: {}", session.hashCode(), TextFormat.shortDebugString(response.getPayload()));
             router.sendResponse(response);
 
             // If a snapshot apply is pending, start (if not started already)
