@@ -303,6 +303,8 @@ public class SessionManager {
             if(incomingSessions.contains(session)) {
                 router.getSessionToRemoteClusterDescriptor()
                         .put(session, topology.getRemoteSourceClusters().get(session.getSourceClusterId()));
+                //create sink managers for incoming sessions
+                router.getMsgHandler().createSinkManager(session);
             } else {
                 router.getSessionToRemoteClusterDescriptor()
                         .put(session, topology.getRemoteSinkClusters().get(session.getSinkClusterId()));
