@@ -34,12 +34,22 @@ import org.junit.Test;
 import org.rocksdb.Options;
 
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.Random;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -369,6 +379,97 @@ public class CorfuStoreIT extends AbstractIT {
         assertThat(table.count()).isEqualTo(numRecords);
 
         assertThat(shutdownCorfuServer(corfuServer)).isTrue();
+    }
+
+    @SuppressWarnings("checkstyle:magicnumber")
+    @Test
+    public void test() throws Exception {
+
+        final String namespace = "namespace";
+        final String tableName = "table";
+
+        Process server = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
+
+        // PHASE 1 - Start a Corfu runtime & a CorfuStore instance
+        runtime = createRuntime(singleNodeEndpoint);
+        CorfuStore store = new CorfuStore(runtime);
+
+        Table table = store.openTable(namespace, tableName,
+                Uuid.class, Uuid.class, Uuid.class,
+                TableOptions.builder().build());
+
+        Uuid key = Uuid.newBuilder().setLsb(0L).setMsb(0L).build();
+        store.tx(namespace)
+                .create(tableName, key, key, key)
+                .commit();
+
+        runtime.shutdown();
+
+        // PHASE 2 - start compaction
+        CorfuRuntime compactorRuntime = createRuntime(singleNodeEndpoint);
+        AtomicInteger counter = new AtomicInteger(0);
+        Runnable compactionTask = () -> {
+            MultiCheckpointWriter<CorfuTable<?, ?>> mcw = new MultiCheckpointWriter<>();
+
+            CorfuTable<Uuid, CorfuRecord<Uuid, Uuid>> corfuTable = compactorRuntime.getObjectsView().build()
+                    .setTypeToken(new TypeToken<CorfuTable<Uuid, CorfuRecord<Uuid, Uuid>>>() {
+                    })
+                    .setStreamName(table.getFullyQualifiedTableName())
+                    .open();
+            mcw.addMap(corfuTable);
+            mcw.addMap(compactorRuntime.getTableRegistry().getRegistryTable());
+            Token trimPoint = mcw.appendCheckpoints(compactorRuntime, "checkpointer");
+            compactorRuntime.getAddressSpaceView().prefixTrim(trimPoint);
+
+            System.out.println("finished compaction " + counter.incrementAndGet() + ", trim " + trimPoint);
+        };
+        ScheduledExecutorService compaction = Executors.newScheduledThreadPool(1);
+        compaction.scheduleAtFixedRate(compactionTask, 5, 5, TimeUnit.SECONDS);
+
+        // PHASE 3 - verify that count is same after checkpoint and trim
+        ExecutorService checkTableExecutor = Executors.newFixedThreadPool(10);
+        CorfuRuntime checkTableRuntime = createRuntime(singleNodeEndpoint);
+
+        CorfuTable<Uuid, CorfuRecord<Uuid, Uuid>> corfuTable = checkTableRuntime.getObjectsView().build()
+                .setTypeToken(new TypeToken<CorfuTable<Uuid, CorfuRecord<Uuid, Uuid>>>() {
+                })
+                .setStreamName(TableRegistry.getFullyQualifiedTableName(namespace, tableName))
+                .open();
+
+        for (int i = 0; i < 1000; i++){
+            int finalI = i;
+            checkTableExecutor.submit(() -> checkTable(corfuTable, finalI));
+        }
+
+        while (!((ThreadPoolExecutor)checkTableExecutor).getQueue().isEmpty()) {
+            TimeUnit.SECONDS.sleep(1);
+        }
+
+        runtime.shutdown();
+        compaction.shutdownNow();
+        compactorRuntime.shutdown();
+        checkTableExecutor.shutdownNow();
+        checkTableRuntime.shutdown();
+        assertThat(shutdownCorfuServer(server)).isTrue();
+
+    }
+
+    @SuppressWarnings("checkstyle:magicnumber")
+    private void checkTable(CorfuTable corfuTable, int index) {
+
+        Random random = new Random();
+
+        Uuid key = Uuid.newBuilder().setLsb(0L).setMsb(0L).build();
+        for (int i = 0; i < 100; i++) {
+            assertThat(corfuTable.keySet()).containsOnly(key);
+            try {
+                TimeUnit.MILLISECONDS.sleep(random.nextInt(101));
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+        }
+
+        System.out.println("finished checking #" + index);
     }
 
     /**
