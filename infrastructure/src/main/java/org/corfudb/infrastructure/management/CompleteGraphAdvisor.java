@@ -1,9 +1,7 @@
 package org.corfudb.infrastructure.management;
 
 import com.google.common.collect.ImmutableList;
-import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.management.failuredetector.ClusterGraph;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank;
@@ -24,10 +22,6 @@ import java.util.Set;
 public class CompleteGraphAdvisor implements ClusterAdvisor {
 
     private static final ClusterType CLUSTER_TYPE = ClusterType.COMPLETE_GRAPH;
-
-    public CompleteGraphAdvisor() {
-
-    }
 
     @Override
     public ClusterType getType() {

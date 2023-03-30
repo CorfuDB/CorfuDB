@@ -1,20 +1,12 @@
 package org.corfudb.infrastructure.management;
 
 import com.google.common.collect.ImmutableList;
-import org.corfudb.infrastructure.ServerContext;
-import org.corfudb.infrastructure.log.statetransfer.StateTransferManager;
-import org.corfudb.infrastructure.log.statetransfer.transferprocessor.BasicTransferProcessor;
-import org.corfudb.infrastructure.log.statetransfer.transferprocessor.ParallelTransferProcessor;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank;
-import org.corfudb.runtime.clients.LogUnitClient;
 import org.junit.Test;
-import org.mockito.Mock;
 
-import java.util.Map;
 import java.util.Optional;
-import java.util.stream.LongStream;
 
 import static org.corfudb.infrastructure.management.NodeStateTestUtil.A;
 import static org.corfudb.infrastructure.management.NodeStateTestUtil.B;
@@ -26,9 +18,6 @@ import static org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivit
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
-import static org.mockito.Mockito.doReturn;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.spy;
 
 public class CompleteGraphAdvisorTest {
 
