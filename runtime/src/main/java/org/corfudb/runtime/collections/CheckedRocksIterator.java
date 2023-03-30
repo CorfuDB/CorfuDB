@@ -166,13 +166,15 @@ public class CheckedRocksIterator implements RocksIteratorInterface, AutoCloseab
      */
     @Override
     public void status() {
-        underReadLock(() -> {
-            try {
-                rocksIterator.status();
-            } catch (RocksDBException e) {
-                throw new UnrecoverableCorfuError("Iterator is in an invalid state", e);
-            }
-        });
+        if (!lock.isWriteLocked() && !lock.isReadLocked()) {
+            throw new IllegalStateException();
+        }
+
+        try {
+            rocksIterator.status();
+        } catch (RocksDBException e) {
+            throw new UnrecoverableCorfuError("Iterator is in an invalid state", e);
+        }
     }
 
     @Override

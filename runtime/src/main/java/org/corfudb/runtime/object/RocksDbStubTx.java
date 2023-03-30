@@ -11,6 +11,8 @@ import org.rocksdb.RocksDBException;
 import org.rocksdb.RocksIterator;
 import org.rocksdb.Transaction;
 
+import java.util.concurrent.locks.StampedLock;
+
 /**
  * A concrete class that implements {@link RocksDbApi} using
  * {@link Transaction}. Unlike its cousin {@link RocksDbTx},
@@ -65,7 +67,7 @@ public class RocksDbStubTx<S extends SnapshotGenerator<S>>
 
     @Override
     public <K, V> RocksDbEntryIterator<K,V> getIterator(@NonNull ISerializer serializer) {
-        return new RocksDbEntryIterator<>(rocksDb, serializer, readOptions, true);
+        return new RocksDbEntryIterator<>(rocksDb.newIterator(), serializer, readOptions, new StampedLock());
     }
 
     @Override
