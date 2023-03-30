@@ -230,6 +230,8 @@ public class CorfuReplicationManager {
                 topology.addStandbyCluster(clusterInfo);
                 startLogReplicationRuntime(clusterInfo);
             }
+            // Initialize default replication status values for the new standby
+            metadataManager.initializeReplicationStatusTable(clusterId);
         }
 
         // The connection id or other transportation plugin's info could've changed for

@@ -42,8 +42,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
 
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getResponseMsg;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
@@ -76,8 +74,6 @@ public class LogReplicationMetadataManager {
     private final Table<ReplicationEventKey, ReplicationEvent, Message> replicationEventTable;
 
     private Optional<Timer.Sample> snapshotSyncTimerSample = Optional.empty();
-
-    private final Lock lock = new ReentrantLock();
 
     public LogReplicationMetadataManager(CorfuRuntime rt, long topologyConfigId, String localClusterId) {
         this.runtime = rt;
@@ -118,30 +114,28 @@ public class LogReplicationMetadataManager {
         try {
             IRetry.build(IntervalRetry.class, () -> {
                 try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
-                    lock.lock();
-
                     ReplicationStatusKey replicationStatusKey = ReplicationStatusKey.newBuilder()
                             .setClusterId(remoteClusterId)
                             .build();
 
-                    ReplicationStatusVal defaultSourceStatus = ReplicationStatusVal.newBuilder()
-                            .setStatus(SyncStatus.NOT_STARTED)
-                            .setRemainingEntriesToSend(-1L)
-                            .setSnapshotSyncInfo(SnapshotSyncInfo.newBuilder()
-                                    .setStatus(SyncStatus.NOT_STARTED)
-                                    .build())
-                            .build();
+                    // Only set the default value if the key is not present
+                    if (!txn.isExists(replicationStatusTable, replicationStatusKey)) {
+                        ReplicationStatusVal defaultSourceStatus = ReplicationStatusVal.newBuilder()
+                                .setStatus(SyncStatus.NOT_STARTED)
+                                .setRemainingEntriesToSend(-1L)
+                                .setSnapshotSyncInfo(SnapshotSyncInfo.newBuilder()
+                                        .setStatus(SyncStatus.NOT_STARTED)
+                                        .build())
+                                .build();
 
-                    log.debug("Adding default entry on source to Replication Status Table");
-                    txn.putRecord(replicationStatusTable, replicationStatusKey, defaultSourceStatus, null);
+                        log.debug("Adding default entry on source to Replication Status Table");
+                        txn.putRecord(replicationStatusTable, replicationStatusKey, defaultSourceStatus, null);
+                    }
                     txn.commit();
                 } catch (TransactionAbortedException tae) {
                     log.error("Error while adding default entry to Replication Status Table", tae);
                     throw new RetryNeededException();
-                } finally {
-                    lock.unlock();
                 }
-
                 if (log.isTraceEnabled()) {
                     log.trace("Adding default value to Replication Status Table succeeds.");
                 }
