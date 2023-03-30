@@ -59,12 +59,12 @@ class FailuresAgentTest {
 
         doReturn(handle)
                 .when(failuresAgent)
-                .handleFailure(same(layoutMock), eq(expectedFailedNodes), same(pollReportMock), localEndpoint);
+                .handleFailure(same(layoutMock), eq(expectedFailedNodes), same(pollReportMock), same(localEndpoint));
 
         DetectorTask result = failuresAgent.detectAndHandleFailure(pollReportMock, layoutMock, localEndpoint);
 
         verify(failuresAgent, times(1))
-                .handleFailure(same(layoutMock), eq(expectedFailedNodes), same(pollReportMock), localEndpoint);
+                .handleFailure(same(layoutMock), eq(expectedFailedNodes), same(pollReportMock), same(localEndpoint));
 
         assertEquals(DetectorTask.COMPLETED, result);
     }
@@ -100,12 +100,12 @@ class FailuresAgentTest {
 
         doReturn(handle)
                 .when(failuresAgent)
-                .handleFailure(same(layoutMock), eq(expectedFailedNodes), same(pollReportMock), localEndpoint);
+                .handleFailure(same(layoutMock), eq(expectedFailedNodes), same(pollReportMock), same(localEndpoint));
 
         DetectorTask result = failuresAgent.detectAndHandleFailure(pollReportMock, layoutMock, localEndpoint);
 
         verify(failuresAgent, times(1))
-                .handleFailure(same(layoutMock), eq(expectedFailedNodes), same(pollReportMock), localEndpoint);
+                .handleFailure(same(layoutMock), eq(expectedFailedNodes), same(pollReportMock), same(localEndpoint));
 
         assertEquals(DetectorTask.COMPLETED, result);
     }
@@ -141,12 +141,12 @@ class FailuresAgentTest {
 
         doReturn(handle)
                 .when(failuresAgent)
-                .handleFailure(same(layoutMock), eq(expectedFailedNodes), same(pollReportMock), localEndpoint);
+                .handleFailure(same(layoutMock), eq(expectedFailedNodes), same(pollReportMock), same(localEndpoint));
 
         DetectorTask result = failuresAgent.detectAndHandleFailure(pollReportMock, layoutMock, localEndpoint);
 
         verify(failuresAgent, times(1))
-                .handleFailure(same(layoutMock), eq(expectedFailedNodes), same(pollReportMock), localEndpoint);
+                .handleFailure(same(layoutMock), eq(expectedFailedNodes), same(pollReportMock), same(localEndpoint));
 
         assertEquals(DetectorTask.COMPLETED, result);
     }

@@ -57,7 +57,7 @@ public class FailureDetectorTestContext {
                 .localEndpoint(localEndpoint)
                 .dataStore(mock(DataStore.class));
 
-        advisor = new CompleteGraphAdvisor(localEndpoint);
+        advisor = new CompleteGraphAdvisor();
         fsAdvisor = new FileSystemAdvisor();
 
         FailureDetectorDataStore fdDatastore = fdDataStoreBuilder.build();
@@ -67,14 +67,12 @@ public class FailureDetectorTestContext {
                 .advisor(advisor)
                 .fsAdvisor(fsAdvisor)
                 .failureDetectorWorker(fdWorkerMock)
-                .localEndpoint(localEndpoint)
                 .runtimeSingleton(runtimeMock);
 
         failuresAgent = FailuresAgent.builder()
                 .fdDataStore(fdDatastore)
                 .advisor(advisor)
                 .fsAdvisor(fsAdvisor)
-                .localEndpoint(localEndpoint)
                 .runtimeSingleton(runtimeMock);
 
         clusterStateContext = new ClusterStateTestContext(localEndpoint);

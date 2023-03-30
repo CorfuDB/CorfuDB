@@ -109,8 +109,7 @@ public class RemoteMonitoringService implements ManagementService {
         this.failureDetector = failureDetector;
         this.localMonitoringService = localMonitoringService;
         ClusterAdvisor advisor = ClusterAdvisorFactory.createForStrategy(
-                ClusterType.COMPLETE_GRAPH,
-                serverContext.getLocalEndpoint()
+                ClusterType.COMPLETE_GRAPH
         );
         this.detectionTasksScheduler = Executors.newSingleThreadScheduledExecutor(
                 new ThreadFactoryBuilder()

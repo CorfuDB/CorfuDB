@@ -40,7 +40,7 @@ class DecisionMakerAgentTest {
                 nodeState(NodeNames.C, epoch, Optional.of(readOnlyFsStats), OK, OK, OK)
         );
 
-        ClusterAdvisor clusterAdvisor = new CompleteGraphAdvisor(localEndpoint);
+        ClusterAdvisor clusterAdvisor = new CompleteGraphAdvisor();
         DecisionMakerAgent decisionMakerAgent = new DecisionMakerAgent(cluster, clusterAdvisor);
 
         Set<String> healthyNodes = decisionMakerAgent.healthyNodes();
@@ -65,7 +65,7 @@ class DecisionMakerAgentTest {
                 nodeState(NodeNames.C, epoch, Optional.of(writableFsStats), OK, OK, OK)
         );
 
-        ClusterAdvisor clusterAdvisor = new CompleteGraphAdvisor(localEndpoint);
+        ClusterAdvisor clusterAdvisor = new CompleteGraphAdvisor();
         DecisionMakerAgent decisionMakerAgent = new DecisionMakerAgent(cluster, clusterAdvisor);
         Optional<String> decisionMaker = decisionMakerAgent.findDecisionMaker();
 
@@ -89,7 +89,7 @@ class DecisionMakerAgentTest {
                 nodeState(NodeNames.C, epoch, Optional.of(writableFsStats), OK, OK, OK)
         );
 
-        ClusterAdvisor clusterAdvisor = new CompleteGraphAdvisor(localEndpoint);
+        ClusterAdvisor clusterAdvisor = new CompleteGraphAdvisor();
         DecisionMakerAgent decisionMakerAgent = new DecisionMakerAgent(cluster, clusterAdvisor);
         Optional<String> decisionMaker = decisionMakerAgent.findDecisionMaker();
 
@@ -112,7 +112,7 @@ class DecisionMakerAgentTest {
                 nodeState(NodeNames.C, epoch, Optional.of(writableFsStats), OK, OK, OK)
         );
 
-        ClusterAdvisor clusterAdvisor = new CompleteGraphAdvisor(localEndpoint);
+        ClusterAdvisor clusterAdvisor = new CompleteGraphAdvisor();
         DecisionMakerAgent decisionMakerAgent = new DecisionMakerAgent(cluster, clusterAdvisor);
         Optional<String> decisionMaker = decisionMakerAgent.findDecisionMaker();
 
@@ -137,7 +137,7 @@ class DecisionMakerAgentTest {
                 nodeState(NodeNames.C, epoch, Optional.of(readOnlyFsStats), OK, OK, OK)
         );
 
-        ClusterAdvisor clusterAdvisor = new CompleteGraphAdvisor(localEndpoint);
+        ClusterAdvisor clusterAdvisor = new CompleteGraphAdvisor();
         DecisionMakerAgent decisionMakerAgent = new DecisionMakerAgent(cluster, clusterAdvisor);
         Optional<String> decisionMaker = decisionMakerAgent.findDecisionMaker();
 
@@ -161,7 +161,7 @@ class DecisionMakerAgentTest {
                 nodeState(NodeNames.C, epoch, Optional.of(bpErrorStats), OK, OK, OK)
         );
 
-        ClusterAdvisor clusterAdvisor = new CompleteGraphAdvisor(localEndpoint);
+        ClusterAdvisor clusterAdvisor = new CompleteGraphAdvisor();
         DecisionMakerAgent decisionMakerAgent = new DecisionMakerAgent(cluster, clusterAdvisor);
         Optional<String> decisionMaker = decisionMakerAgent.findDecisionMaker();
 

@@ -34,19 +34,6 @@ public class CompleteGraphAdvisorTest {
 
     private final long epoch = 1;
 
-    @Mock
-    private Map<String, Object> map;
-
-    private ServerContext getDefaultInstance(String localEndpoint) {
-        final ServerContext spy = spy(new ServerContext(map));
-        doReturn(localEndpoint)
-                .when(spy).getLocalEndpoint();
-        return spy;
-    }
-
-    private CompleteGraphAdvisor getGraphAdvisor(String localEndpoint) {
-        return new CompleteGraphAdvisor(getDefaultInstance(localEndpoint));
-    }
     /**
      * By definition, a fully connected node can not be added to the unresponsive list.
      * Failed connection(s) between unresponsive and fully connected node(s)
@@ -55,8 +42,7 @@ public class CompleteGraphAdvisorTest {
     @Test
     public void testUnresponsiveAndFullyConnectedNode() {
         final String localEndpoint = A;
-        ServerContext
-        CompleteGraphAdvisor advisor = new CompleteGraphAdvisor(localEndpoint);
+        CompleteGraphAdvisor advisor = new CompleteGraphAdvisor();
 
         ClusterState clusterState = buildClusterState(
                 localEndpoint,
@@ -73,7 +59,7 @@ public class CompleteGraphAdvisorTest {
     @Test
     public void testFailedServer_disconnected_c() {
         final String localEndpoint = A;
-        CompleteGraphAdvisor advisor = new CompleteGraphAdvisor(localEndpoint);
+        CompleteGraphAdvisor advisor = new CompleteGraphAdvisor();
 
         ClusterState clusterState = buildClusterState(
                 localEndpoint,
@@ -91,7 +77,7 @@ public class CompleteGraphAdvisorTest {
     @Test
     public void testFailedServer_asymmetricFailureBetween_b_c() {
         final String localEndpoint = A;
-        CompleteGraphAdvisor advisor = new CompleteGraphAdvisor(localEndpoint);
+        CompleteGraphAdvisor advisor = new CompleteGraphAdvisor();
 
         ClusterState clusterState = buildClusterState(
                 localEndpoint,
@@ -113,7 +99,7 @@ public class CompleteGraphAdvisorTest {
     @Test
     public void testFailedServer_allDisconnected_from_b_perspective() {
         final String localEndpoint = B;
-        CompleteGraphAdvisor advisor = new CompleteGraphAdvisor(localEndpoint);
+        CompleteGraphAdvisor advisor = new CompleteGraphAdvisor();
 
         ClusterState clusterState = buildClusterState(
                 localEndpoint,
@@ -136,9 +122,9 @@ public class CompleteGraphAdvisorTest {
      */
     @Test
     public void testFailureDetectionForThreeNodes_asymmetricPartition_b_c_disconnectedFromEachOther() {
-        CompleteGraphAdvisor nodeAAdvisor = new CompleteGraphAdvisor(A);
-        CompleteGraphAdvisor nodeBAdvisor = new CompleteGraphAdvisor(B);
-        CompleteGraphAdvisor nodeCAdvisor = new CompleteGraphAdvisor(C);
+        CompleteGraphAdvisor nodeAAdvisor = new CompleteGraphAdvisor();
+        CompleteGraphAdvisor nodeBAdvisor = new CompleteGraphAdvisor();
+        CompleteGraphAdvisor nodeCAdvisor = new CompleteGraphAdvisor();
 
         ClusterState nodeAClusterState = buildClusterState(
                 A,
