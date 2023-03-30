@@ -403,6 +403,9 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
             log.error("Log Replication not started on this cluster. Remote source/sink not found");
             return;
         }
+        if (isSource()) {
+            sessionManager.startClientConfigListener();
+        }
         setupConnectionReceivingComponents();
         sessionManager.connectToRemoteClusters();
 

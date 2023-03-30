@@ -423,8 +423,6 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
                 thirdBatch, sourceClusterCorfuPort, sourceRuntime.getAddressSpaceView().getLogTail(),
                 sinkClusterCorfuPort, sinkRuntime.getAddressSpaceView().getLogTail());
 
-        // Double check after 10 seconds
-        TimeUnit.SECONDS.sleep(mediumInterval);
         assertThat(mapSource.count()).isEqualTo(thirdBatch);
         assertThat(mapSink.count()).isEqualTo(thirdBatch);
 
@@ -435,7 +433,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         }
         assertThat(configTable.count()).isOne();
 
-        // Write 5 more entries to mapSink
+        // Write 5 more entries to mapSource
         for (int i = thirdBatch; i < fourthBatch; i++) {
             try (TxnContext txn = sourceCorfuStore.txn(NAMESPACE)) {
                 txn.putRecord(mapSource, StringKey.newBuilder().setKey(String.valueOf(i)).build(),
@@ -630,9 +628,15 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
             .setSubscriber(SessionManager.getDefaultSubscriber())
             .build();
 
-        try (TxnContext txn = sinkCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
-            replicationStatus = (ReplicationStatus)txn.getRecord(REPLICATION_STATUS_TABLE, sessionKey).getPayload();
-            txn.commit();
+        // Block until snapshot sync completes
+        replicationStatus = null;
+        while (replicationStatus == null || !replicationStatus.getSourceStatus().getReplicationInfo()
+                .getSnapshotSyncInfo().getStatus().equals(SyncStatus.COMPLETED)) {
+            try (TxnContext txn = sinkCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
+                replicationStatus = (ReplicationStatus)txn.getRecord(REPLICATION_STATUS_TABLE, sessionKey).getPayload();
+                txn.commit();
+            }
+            sleepUninterruptibly(1);
         }
 
         assertThat(replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getType())
