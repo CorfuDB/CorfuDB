@@ -30,7 +30,6 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 public class TestUtils {
 
     private static final String defaultClusterId = UUID.randomUUID().toString();
-    private static final String clientName = "test_client";
 
     /**
      * Create a LogEntry message with opaque entries starting from startTs to endTs.  Each opaque entry corresponds to a
@@ -72,17 +71,17 @@ public class TestUtils {
 
     public static void setSnapshotSyncOngoing(CorfuStore corfuStore,
                                               Table<LogReplicationSession, ReplicationStatus, Message>
-                                                  replicationStatusTable,
+                                                  replicationStatusTable, String clientName,
                                               boolean ongoing) {
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            LogReplicationSession key = getTestSession();
+            LogReplicationSession key = getTestSession(clientName);
             ReplicationStatus val = getTestReplicationStatus(ongoing);
             txn.putRecord(replicationStatusTable, key, val, null);
             txn.commit();
         }
     }
 
-    private static LogReplicationSession getTestSession() {
+    private static LogReplicationSession getTestSession(String clientName) {
         ReplicationSubscriber subscriber = ReplicationSubscriber.newBuilder().setClientName(clientName)
             .setModel(ReplicationModel.LOGICAL_GROUPS)
             .build();

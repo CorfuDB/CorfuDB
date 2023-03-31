@@ -23,6 +23,7 @@ import org.corfudb.util.retry.RetryNeededException;
 import javax.annotation.Nonnull;
 import java.lang.reflect.InvocationTargetException;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
@@ -70,8 +71,10 @@ public final class LogReplicationUtils {
                     // window between the check and full sync.
                     List<CorfuStoreEntry<LogReplicationSession, ReplicationStatus, Message>> entries =
                         txnContext.executeQuery(replicationStatusTable,
-                                record -> record.getKey().getSubscriber().getModel()
-                                    .equals(LogReplication.ReplicationModel.LOGICAL_GROUPS));
+                                entry -> entry.getKey().getSubscriber().getModel()
+                                    .equals(LogReplication.ReplicationModel.LOGICAL_GROUPS) &&
+                                    Objects.equals(entry.getKey().getSubscriber().getClientName(),
+                                        clientListener.getClientName()));
 
                     CorfuStoreEntry<LogReplicationSession, ReplicationStatus, Message> entry = null;
 
@@ -85,13 +88,13 @@ public final class LogReplicationUtils {
                     // triggered.  If we are here because of the second case, the listener will not get any updates
                     // from LR and subscription will be a no-op.
                     if (entries.isEmpty()) {
-                        log.info("No record for the Logical Group Model found in the Status Table.  Subscription " +
-                                "could have been attempted before LR startup.  Subscribe the listener and wait for" +
-                                "initial Snapshot Sync");
+                        log.info("No record for client {} and Logical Group Model found in the Status Table.  " +
+                                "Subscription could have been attempted before LR startup.  Subscribe the listener and" +
+                                "wait for initial Snapshot Sync", clientListener.getClientName());
                     } else {
-                        // Sharding in Log Replication is done based on a destination.  So for a given replication model,
-                        // any Sink node will have a session with only 1 Source node.  Hence, there should be only 1
-                        // record corresponding to the Logical Group Replication Model.
+                        // Sharding in Log Replication is done based on a destination.  So for a given replication
+                        // model and client, any Sink node will have a session with only 1 Source node.  Hence, there
+                        // should be only 1 record corresponding to the Logical Group Replication Model and this client
                         Preconditions.checkState(entries.size() == 1);
                         entry = entries.get(0);
                     }
@@ -103,7 +106,7 @@ public final class LogReplicationUtils {
                         log.info("No Snapshot Sync is in progress.  Request the client to perform a full sync on its " +
                             "tables.");
                         Optional<Timer.Sample> clientFullSyncTimer = MicroMeterUtils.startTimer();
-                        clientListener.performFullSync(txnContext);
+                        clientListener.performFullSyncAndMerge(txnContext);
                         MicroMeterUtils.time(clientFullSyncTimer, "logreplication.client.fullsync.duration");
                     } else {
                         // Snapshot sync is in progress.  Subscribe without performing a full sync on the tables.

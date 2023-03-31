@@ -16,6 +16,7 @@ import org.corfudb.runtime.view.Address;
 import javax.annotation.Nonnull;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
@@ -115,11 +116,13 @@ public abstract class LogReplicationListener implements StreamListener {
 
         for (CorfuStreamEntry entry : replicationStatusTableEntries) {
 
-            LogReplicationSession key = (LogReplicationSession)entry.getKey();
+            LogReplicationSession session = (LogReplicationSession)entry.getKey();
 
-            // Only process updates where the operation type == UPDATE and model == Logical Groups
+            // Only process updates where operation type == UPDATE, model == Logical Groups and the client name
+            // matches
             if (entry.getOperation() == CorfuStreamEntry.OperationType.UPDATE &&
-                key.getSubscriber().getModel().equals(ReplicationModel.LOGICAL_GROUPS)) {
+                session.getSubscriber().getModel().equals(ReplicationModel.LOGICAL_GROUPS) &&
+                Objects.equals(session.getSubscriber().getClientName(), getClientName())) {
                 ReplicationStatus status = (ReplicationStatus)entry.getPayload();
 
                 if (status.getSinkStatus().getDataConsistent()) {
@@ -171,10 +174,16 @@ public abstract class LogReplicationListener implements StreamListener {
 
     /**
      * Invoked by the Corfu runtime when this listener is being subscribed.  This method should
-     * perform a full-sync on all application tables which the client is interested in merging together.
+     * read all application tables which the client is interested in merging together and perform the merge.
      * @param txnContext transaction context in which the operation must be performed
      */
-    protected abstract void performFullSync(TxnContext txnContext);
+    protected abstract void performFullSyncAndMerge(TxnContext txnContext);
+
+    /**
+     * Name with which this client was registered using the interfaces in LogReplicationLogicalGroupClient
+     * @return client name
+     */
+    protected abstract String getClientName();
 
     /**
      * Callback to indicate that an error or exception has occurred while streaming or that the stream is
