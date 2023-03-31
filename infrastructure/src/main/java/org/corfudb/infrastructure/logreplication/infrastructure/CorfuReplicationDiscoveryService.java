@@ -514,7 +514,8 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         stopLogReplication();
         isLeader.set(false);
         // Signal Log Replication Server/Sink to stop receiving messages, leadership loss
-        if (sessionManager.isConnectionReceiver()) {
+        if (sessionManager.isConnectionReceiver() || interClusterServerNode != null) {
+            interClusterServerNode.disable();
             interClusterServerNode.setLeadership(false);
         }
         recordLockRelease();

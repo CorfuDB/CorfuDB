@@ -527,7 +527,7 @@ public class LogReplicationSinkClientRouter extends LogReplicationSinkServerRout
         log.info("Connection lost to remote node {} on cluster {}", nodeId, this.session.getSourceClusterId());
         this.verifyLeadership.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.ON_CONNECTION_DOWN, nodeId));
         // Attempt to reconnect to this endpoint
-        channelAdapter.connectAsync(nodeId, session);
+        channelAdapter.connectAsync(session);
     }
 
     /**
