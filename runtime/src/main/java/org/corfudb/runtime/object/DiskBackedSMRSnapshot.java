@@ -82,8 +82,7 @@ public class DiskBackedSMRSnapshot<S extends SnapshotGenerator<S>> implements SM
             rocksTx = new RocksDbStubTx<>(rocksDb);
         }
 
-        final S view = viewGenerator.newView(rocksTx);
-        return view;
+        return viewGenerator.newView(rocksTx);
     }
 
     public void release() {
@@ -102,10 +101,10 @@ public class DiskBackedSMRSnapshot<S extends SnapshotGenerator<S>> implements SM
         // When newIterator is invoked, it's possible that this snapshot has since been invalidated.
         // Requesting an iterator from the RocksDB transaction with an invalid snapshot/readOptions causes
         // an internal assertion failure. Hence, we perform this validation before creating the new iterator.
-        return executeInSnapshot(ro -> {
+        return executeInSnapshot(readOptions -> {
             RocksDbEntryIterator<K, V> iterator = new RocksDbEntryIterator<>(
-                    transaction.getIterator(ro),
-                    serializer, ro, lock);
+                    transaction.getIterator(readOptions),
+                    serializer, readOptions, lock);
             set.add(iterator);
             return iterator;
         });
