@@ -17,7 +17,6 @@ import org.junit.Test;
 
 import java.util.HashSet;
 import java.util.List;
-import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.stream.Collectors;
@@ -374,7 +373,7 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         verifyRollingUpgrade();
 
         // Force snapshot sync using checkpoint operation
-        snaphotByCheckpointing();
+        snapshotByCheckpointing();
 
         // Verify that snapshot sync was triggered by checking the number of
         // updates to the ReplicationStatus table on the sink.
@@ -717,7 +716,7 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         verifyDataOnSink(NUM_WRITES);
 
         // Force snapshot sync using checkpoint operation
-        snaphotByCheckpointing();
+        snapshotByCheckpointing();
 
         // Verify that snapshot sync was triggered by checking the number of
         // updates to the ReplicationStatus table on the sink.
@@ -784,7 +783,7 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         verifyRollingUpgrade();
 
         // Force snapshot sync using checkpoint operation
-        snaphotByCheckpointing();
+        snapshotByCheckpointing();
 
         // Verify that snapshot sync was triggered by checking the number of
         // updates to the ReplicationStatus table on the sink.
@@ -998,8 +997,8 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         }
     }
 
-    // TODO: Remove after checkpointing implemented for rolling upgrade.
-    private void snaphotByCheckpointing() throws Exception {
+    // TODO: Remove after snapshot sync implemented for rolling upgrade.
+    private void snapshotByCheckpointing() throws Exception {
         stopSourceLogReplicator();
         checkpointAndTrim(true);
         initSingleSourceSinkCluster();

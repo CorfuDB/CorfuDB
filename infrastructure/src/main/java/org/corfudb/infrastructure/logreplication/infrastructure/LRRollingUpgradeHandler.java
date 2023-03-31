@@ -113,6 +113,5 @@ public class LRRollingUpgradeHandler {
 
         log.info("Forced snapshot sync will be triggered due to completion of rolling upgrade");
         txnContext.putRecord(replicationEventTable, key, event, null);
-        txnContext.commit();
     }
 }
