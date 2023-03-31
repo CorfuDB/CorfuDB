@@ -61,7 +61,7 @@ public class TestUtils {
         return lrEntryMsg;
     }
 
-    public static  Table<LogReplicationSession, ReplicationStatus, Message> openReplicationStatusTable(
+    public static Table<LogReplicationSession, ReplicationStatus, Message> openReplicationStatusTable(
         CorfuStore corfuStore) throws Exception {
 
         return corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, REPLICATION_STATUS_TABLE_NAME,

@@ -92,9 +92,7 @@ public final class LogReplicationUtils {
                                 "Subscription could have been attempted before LR startup.  Subscribe the listener and" +
                                 "wait for initial Snapshot Sync", clientListener.getClientName());
                     } else {
-                        // Sharding in Log Replication is done based on a destination.  So for a given replication
-                        // model and client, any Sink node will have a session with only 1 Source node.  Hence, there
-                        // should be only 1 record corresponding to the Logical Group Replication Model and this client
+                        // For a given replication model and client, any Sink node will have a single session.
                         Preconditions.checkState(entries.size() == 1);
                         entry = entries.get(0);
                     }
@@ -106,8 +104,12 @@ public final class LogReplicationUtils {
                         log.info("No Snapshot Sync is in progress.  Request the client to perform a full sync on its " +
                             "tables.");
                         Optional<Timer.Sample> clientFullSyncTimer = MicroMeterUtils.startTimer();
+                        long clientFullSyncStartTime = System.currentTimeMillis();
                         clientListener.performFullSyncAndMerge(txnContext);
+                        long clientFullSyncEndTime = System.currentTimeMillis();
                         MicroMeterUtils.time(clientFullSyncTimer, "logreplication.client.fullsync.duration");
+                        log.info("Client Full Sync and Merge took {} ms",
+                                clientFullSyncEndTime - clientFullSyncStartTime);
                     } else {
                         // Snapshot sync is in progress.  Subscribe without performing a full sync on the tables.
                         log.info("Snapshot Sync is in progress.  Subscribing without performing a full sync on client" +
