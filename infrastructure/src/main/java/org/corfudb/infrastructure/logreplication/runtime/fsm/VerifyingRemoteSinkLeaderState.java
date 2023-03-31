@@ -87,7 +87,7 @@ public class VerifyingRemoteSinkLeaderState implements LogReplicationRuntimeStat
                     fsm.getRemoteLeaderNodeId().get())
             );
             log.debug("Exit :: leadership verification");
-        } else if(router.isConnectionInitiator(fsm.session)){
+        } else if(router.isConnectionStarterForSession(fsm.session)){
             // Leadership verification is done only if connection starter.
             this.worker.submit(this::verifyLeadership);
         }

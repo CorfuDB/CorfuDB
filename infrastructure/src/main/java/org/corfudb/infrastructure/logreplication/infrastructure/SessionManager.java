@@ -5,6 +5,7 @@ import com.google.common.collect.Sets;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.ServerContext;
+import org.corfudb.infrastructure.logreplication.infrastructure.msgHandlers.LogReplicationServer;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientServerRouter;
@@ -82,6 +83,8 @@ public class SessionManager {
     @Getter
     private LogReplicationClientServerRouter router;
 
+    private LogReplicationServer incomingMsgHandler;
+
     /**
      * Constructor
      *
@@ -119,10 +122,15 @@ public class SessionManager {
         this.replicationManager = new CorfuReplicationManager(topology, metadataManager,
                 configManager.getServerContext().getPluginConfigFilePath(), runtime, upgradeManager,
                 replicationContext);
+
+        this.incomingMsgHandler = new LogReplicationServer(serverContext, sessions, metadataManager,
+                topology.getLocalNodeDescriptor().getNodeId(), topology.getLocalNodeDescriptor().getClusterId(),
+                localCorfuEndpoint, replicationContext);
+
         this.router = new LogReplicationClientServerRouter(
                 runtime.getParameters().getRequestTimeout().toMillis(), replicationManager,
-                topology.getLocalNodeDescriptor().getClusterId(), topology.getLocalNodeDescriptor().getNodeId(), serverContext,
-                localCorfuEndpoint, this);
+                topology.getLocalNodeDescriptor().getClusterId(), topology.getLocalNodeDescriptor().getNodeId(),
+                incomingSessions, outgoingSessions, incomingMsgHandler, replicationManager.getSessionRuntimeMap());
     }
 
     /**
@@ -133,7 +141,8 @@ public class SessionManager {
      */
     @VisibleForTesting
     public SessionManager(@Nonnull TopologyDescriptor topology, CorfuRuntime corfuRuntime,
-                          CorfuReplicationManager replicationManager, LogReplicationClientServerRouter router) {
+                          CorfuReplicationManager replicationManager, LogReplicationClientServerRouter router,
+                          LogReplicationServer logReplicationServer) {
         this.topology = topology;
         this.runtime = corfuRuntime;
         this.corfuStore = new CorfuStore(corfuRuntime);
@@ -148,6 +157,7 @@ public class SessionManager {
         this.replicationContext = new LogReplicationContext(configManager, topology.getTopologyConfigId(), localCorfuEndpoint);
         this.replicationManager = replicationManager;
         this.router = router;
+        this.incomingMsgHandler = logReplicationServer;
     }
 
 
@@ -194,14 +204,9 @@ public class SessionManager {
                     throw new RetryNeededException();
                 }
 
-                // Update the in-memory topology config id after metadata tables have been updated
-                topology = newTopology;
-                replicationContext.setTopologyConfigId(topology.getTopologyConfigId());
-                metadataManager.setTopologyConfigId(topology.getTopologyConfigId());
-
+                updateTopology(newTopology);
                 stopReplication(sessionsToRemove);
                 updateReplicationParameters(Sets.intersection(sessionsUnchanged, outgoingSessions));
-                router.updateTopologyConfigId(topology.getTopologyConfigId());
                 createSessions();
                 return null;
             }).run();
@@ -209,6 +214,19 @@ public class SessionManager {
             log.error("Unrecoverable exception while refreshing sessions", e);
             throw new UnrecoverableCorfuInterruptedError(e);
         }
+    }
+
+    /**
+     * Update in-memory topology and topologyId
+     * @param newTopology new topology
+     */
+    private void updateTopology(TopologyDescriptor newTopology) {
+        topology = newTopology;
+        router.setTopology(topology);
+        replicationManager.updateTopology(topology);
+        incomingMsgHandler.updateTopologyConfigId(topology.getTopologyConfigId());
+        replicationContext.setTopologyConfigId(topology.getTopologyConfigId());
+        metadataManager.setTopologyConfigId(topology.getTopologyConfigId());
     }
 
     private void updateReplicationParameters(Set<LogReplicationSession> sessionsUnchanged) {
@@ -219,8 +237,6 @@ public class SessionManager {
             ClusterDescriptor cluster = topology.getRemoteSinkClusters().get(session.getSourceClusterId());
             replicationManager.refreshRuntime(session, cluster, topology.getTopologyConfigId());
         }
-
-        replicationManager.updateTopology(topology);
     }
 
     /**
@@ -304,14 +320,14 @@ public class SessionManager {
                 router.getSessionToRemoteClusterDescriptor()
                         .put(session, topology.getRemoteSourceClusters().get(session.getSourceClusterId()));
                 //create sink managers for incoming sessions
-                router.getMsgHandler().createSinkManager(session);
+                incomingMsgHandler.createSinkManager(session);
             } else {
                 router.getSessionToRemoteClusterDescriptor()
                         .put(session, topology.getRemoteSinkClusters().get(session.getSinkClusterId()));
                 router.getSessionToOutstandingRequests().put(session, new HashMap<>());
             }
 
-            if(isConnectionStarterForSession(session)) {
+            if(router.isConnectionStarterForSession(session)) {
                 router.getSessionToLeaderConnectionFuture().put(session, new CompletableFuture<>());
                 router.getSessionToOutstandingRequests().putIfAbsent(session, new HashMap<>());
             }
@@ -475,8 +491,11 @@ public class SessionManager {
     public boolean isConnectionReceiver() {
         Set<String> connectionEndpoints = topology.getRemoteClusterEndpoints().keySet();
         for(LogReplicationSession session : sessions) {
-            if (!connectionEndpoints.contains(session.getSinkClusterId()) &&
-                    !connectionEndpoints.contains(session.getSourceClusterId())) {
+            if (connectionEndpoints.contains(session.getSourceClusterId()) ||
+                    connectionEndpoints.contains(session.getSinkClusterId())) {
+                continue;
+            } else {
+                // there is at least 1 session where the remote cluster will initiate the connection to the local cluster
                 return true;
             }
         }
@@ -491,17 +510,6 @@ public class SessionManager {
      */
     public void setLeadership(boolean isLeader) {
         metadataManager.setLeadership(isLeader);
-        router.getMsgHandler().setLeadership(isLeader);
-    }
-
-    /**
-     * Check if this node is a connection starter for the given session.
-     *
-     * @param session
-     * @return true if the session is a connection starter, false otherwise
-     */
-    public boolean isConnectionStarterForSession(LogReplicationSession session) {
-        return topology.getRemoteClusterEndpoints().containsKey(session.getSinkClusterId()) ||
-                topology.getRemoteClusterEndpoints().containsKey(session.getSourceClusterId());
+        incomingMsgHandler.setLeadership(isLeader);
     }
 }

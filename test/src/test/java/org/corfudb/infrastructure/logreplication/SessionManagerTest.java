@@ -32,6 +32,7 @@ public class SessionManagerTest extends AbstractViewTest {
     private String pluginFilPath = "src/test/resources/transport/nettyConfig.properties";
     LogReplicationClientServerRouter router;
     CorfuReplicationManager replicationManager;
+    LogReplicationServer msgHandler;
 
     @Before
     public void setUp() {
@@ -39,15 +40,16 @@ public class SessionManagerTest extends AbstractViewTest {
         LogReplicationConfigManager configManager = Mockito.mock(LogReplicationConfigManager.class);
         Mockito.doReturn(corfuRuntime).when(configManager).getRuntime();
 
+        msgHandler = Mockito.mock(LogReplicationServer.class);
+        Mockito.doNothing().when(msgHandler).updateTopologyConfigId(anyLong());
+        Mockito.doReturn(Mockito.mock(LogReplicationSinkManager.class)).when(msgHandler).createSinkManager(anyObject());
+
         router = Mockito.mock(LogReplicationClientServerRouter.class);
         Mockito.doNothing().when(router).updateTopologyConfigId(anyLong());
         Mockito.doReturn(new HashMap<>()).when(router).getSessionToRequestIdCounter();
         Mockito.doReturn(new HashMap<>()).when(router).getSessionToRemoteClusterDescriptor();
         Mockito.doReturn(new HashMap<>()).when(router).getSessionToLeaderConnectionFuture();
 
-        LogReplicationServer msgHandler = Mockito.mock(LogReplicationServer.class);
-        Mockito.doReturn(msgHandler).when(router).getMsgHandler();
-        Mockito.doReturn(Mockito.mock(LogReplicationSinkManager.class)).when(msgHandler).createSinkManager(anyObject());
 
         replicationManager = Mockito.mock(CorfuReplicationManager.class);
         Mockito.doNothing().when(replicationManager).refreshRuntime(anyObject(), anyObject(), anyLong());
@@ -71,7 +73,7 @@ public class SessionManagerTest extends AbstractViewTest {
         defaultClusterManager.setLocalNodeId(topologyConfig.getSourceNodeUuids().get(0));
         topology = defaultClusterManager.generateSingleSourceSinkTopolgy();
 
-        SessionManager sessionManager = new SessionManager(topology, corfuRuntime, replicationManager, router);
+        SessionManager sessionManager = new SessionManager(topology, corfuRuntime, replicationManager, router, msgHandler);
         sessionManager.refresh(topology);
         String sourceClusterId = DefaultClusterConfig.getSourceClusterIds().get(0);
         int numSinkCluster = topology.getRemoteSinkClusters().size();
@@ -93,7 +95,7 @@ public class SessionManagerTest extends AbstractViewTest {
         defaultClusterManager.setLocalNodeId(topologyConfig.getSinkNodeUuids().get(0));
         topology = defaultClusterManager.generateSingleSourceSinkTopolgy();
 
-        SessionManager sessionManager = new SessionManager(topology, corfuRuntime, replicationManager, router);
+        SessionManager sessionManager = new SessionManager(topology, corfuRuntime, replicationManager, router, msgHandler);
         sessionManager.refresh(topology);
         String sinkClusterId = DefaultClusterConfig.getSinkClusterIds().get(0);
         int numSourceCluster = topology.getRemoteSourceClusters().size();
@@ -117,7 +119,7 @@ public class SessionManagerTest extends AbstractViewTest {
         clusterManager.setLocalNodeId(topologyConfig.getSourceNodeUuids().get(0));
         topology = clusterManager.generateSingleSourceSinkTopolgy();
 
-        SessionManager sessionManager = new SessionManager(topology, corfuRuntime, replicationManager, router);
+        SessionManager sessionManager = new SessionManager(topology, corfuRuntime, replicationManager, router, msgHandler);
         sessionManager.refresh(topology);
         String sourceClusterId = DefaultClusterConfig.getSourceClusterIds().get(0);
         int numSinkCluster = topology.getRemoteSinkClusters().size();

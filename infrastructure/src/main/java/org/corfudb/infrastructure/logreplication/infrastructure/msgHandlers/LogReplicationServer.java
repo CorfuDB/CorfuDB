@@ -5,8 +5,10 @@ import com.google.protobuf.TextFormat;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.ServerContext;
+import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.infrastructure.logreplication.infrastructure.SessionManager;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationMetadata;
+import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.transport.IClientServerRouter;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationSinkManager;
@@ -22,6 +24,7 @@ import javax.annotation.Nonnull;
 import java.lang.invoke.MethodHandles;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -66,12 +69,15 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
 
     private final AtomicBoolean isLeader = new AtomicBoolean(false);
 
-    @Getter
-    private final SessionManager sessionManager;
-
     private final ServerContext serverContext;
 
     private final String localEndpoint;
+
+    private final Set<LogReplicationSession> allSessions;
+
+    private final LogReplicationMetadataManager metadataManager;
+
+    private final LogReplicationContext replicationContext;
 
     /**
      * RequestHandlerMethods for the LogReplication server
@@ -80,25 +86,32 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
     private final ReplicationHandlerMethods handlerMethods =
             ReplicationHandlerMethods.generateHandler(MethodHandles.lookup(), this);
 
-    public LogReplicationServer(@Nonnull ServerContext context, @Nonnull SessionManager sessionManager,
-                                String localEndpoint) {
+    public LogReplicationServer(@Nonnull ServerContext context, Set<LogReplicationSession> sessions,
+                                LogReplicationMetadataManager metadataManager, String localNodeId, String localClusterId,
+                                String localEndpoint, LogReplicationContext replicationContext) {
         this.serverContext = context;
+        this.allSessions = sessions;
+        this.metadataManager = metadataManager;
         this.localEndpoint = localEndpoint;
-        this.localNodeId = sessionManager.getTopology().getLocalNodeDescriptor().getNodeId();
-        this.localClusterId = sessionManager.getTopology().getLocalClusterDescriptor().getClusterId();
-        this.sessionManager = sessionManager;
+        this.localNodeId = localNodeId;
+        this.localClusterId = localClusterId;
+        this.replicationContext = replicationContext;
         this.executor = context.getExecutorService(1, EXECUTOR_NAME_PREFIX);
     }
 
     @VisibleForTesting
     public LogReplicationServer(@Nonnull ServerContext context, LogReplicationSinkManager sinkManager,
-        String localNodeId, String localClusterId, SessionManager sessionManager) {
+                                Set<LogReplicationSession> sessions,
+                                LogReplicationMetadataManager metadataManager, String localNodeId, String localClusterId,
+                                LogReplicationContext replicationContext) {
         this.serverContext = context;
         this.localEndpoint = null;
         sessionToSinkManagerMap.put(sinkManager.getSession(), sinkManager);
         this.localNodeId = localNodeId;
         this.localClusterId = localClusterId;
-        this.sessionManager = sessionManager;
+        this.allSessions = sessions;
+        this.metadataManager = metadataManager;
+        this.replicationContext = replicationContext;
         this.executor = context.getExecutorService(1, EXECUTOR_NAME_PREFIX);
     }
 
@@ -108,7 +121,7 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
             return null;
         }
         LogReplicationSinkManager sinkManager = new LogReplicationSinkManager(localEndpoint,
-                sessionManager.getMetadataManager(), serverContext, session, sessionManager.getReplicationContext());
+                metadataManager, serverContext, session, replicationContext);
         sessionToSinkManagerMap.put(session, sinkManager);
         log.info("Sink Manager created for session={}", session);
         return sinkManager;
@@ -205,7 +218,7 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
             //  To resolve this, we need to have a long living RPC from the connectionInitiator cluster which will query
             //  for sessions from the other cluster
             if (sinkManager == null) {
-                if(!sessionManager.getSessions().contains(session)) {
+                if(!allSessions.contains(session)) {
                     log.error("SessionManager does not know about incoming session {}, total={}, current sessions={}",
                             session, sessionToSinkManagerMap.size(), sessionToSinkManagerMap.keySet());
                     return;
@@ -265,7 +278,7 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
             //  To resolve this, we need to have a long living RPC from the connectionInitiator cluster which will query
             //  for sessions from the other cluster
             if (sinkManager == null) {
-                if(!sessionManager.getSessions().contains(session)) {
+                if(!allSessions.contains(session)) {
                     log.error("SessionManager does not know about incoming session {}, total={}, current sessions={}",
                             session, sessionToSinkManagerMap.size(), sessionToSinkManagerMap.keySet());
                     return;
@@ -274,7 +287,7 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
                 }
             }
 
-            ReplicationMetadata metadata = sessionManager.getMetadataManager().getReplicationMetadata(session);
+            ReplicationMetadata metadata = metadataManager.getReplicationMetadata(session);
             ResponseMsg response = getMetadataResponse(request, metadata);
 
             log.info("Send Metadata response for session {}: :: {}", session.hashCode(), TextFormat.shortDebugString(response.getPayload()));

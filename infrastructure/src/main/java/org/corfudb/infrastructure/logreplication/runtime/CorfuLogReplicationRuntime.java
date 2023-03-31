@@ -292,7 +292,6 @@ public class CorfuLogReplicationRuntime {
 
     public synchronized void resetRemoteLeaderNodeId() {
         log.debug("Reset remote leader node id");
-        router.resetRemoteLeader();
         leaderNodeId = Optional.empty();
     }
 

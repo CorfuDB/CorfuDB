@@ -3,6 +3,7 @@ package org.corfudb.infrastructure;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.extern.slf4j.Slf4j;
 import org.assertj.core.api.Assertions;
+import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.infrastructure.logreplication.infrastructure.msgHandlers.LogReplicationServer;
 import org.corfudb.infrastructure.logreplication.infrastructure.SessionManager;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
@@ -24,6 +25,10 @@ import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
+
+import javax.annotation.Nonnull;
+import java.util.HashSet;
+import java.util.Set;
 
 import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getRequestMsg;
@@ -74,9 +79,10 @@ public class LogReplicationServerTest {
         metadataManager = mock(LogReplicationMetadataManager.class);
         sessionManager = mock(SessionManager.class);
         sinkManager = mock(LogReplicationSinkManager.class);
-        doReturn(session).when(sinkManager).getSession();
-        lrServer = spy(new LogReplicationServer(context, sinkManager, SINK_NODE_ID, SINK_CLUSTER_ID,
-            sessionManager));
+        Set<LogReplicationSession> sessionSet = new HashSet<>();
+        sessionSet.add(session);
+        lrServer = spy(new LogReplicationServer(context, sinkManager, sessionSet, metadataManager, SINK_NODE_ID, SINK_CLUSTER_ID,
+            null));
         mockHandlerContext = mock(ChannelHandlerContext.class);
         mockServerRouter = mock(IClientServerRouter.class);
     }

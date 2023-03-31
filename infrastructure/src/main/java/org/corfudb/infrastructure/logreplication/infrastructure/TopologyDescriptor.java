@@ -193,8 +193,8 @@ public class TopologyDescriptor {
                 .collect(Collectors.toSet());
         otherClusters.removeAll(sourceOrSinkClusters);
 
-        return String.format("Topology[id=%s] \n Remote Source Cluster=%s \n Remote Sink Clusters=%s \n Other Clusters=%s",
-                topologyConfigId, remoteSourceClusters.values(), remoteSinkClusters.values(), otherClusters);
+        return String.format("Topology[id=%s] \n Remote Source Cluster=%s \n Remote Sink Clusters=%s \n connection endpoints=%s \nOther Clusters=%s",
+                topologyConfigId, remoteSourceClusters.values(), remoteSinkClusters.values(),remoteClusterEndpoints.values(), otherClusters);
     }
 
 

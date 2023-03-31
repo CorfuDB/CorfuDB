@@ -89,16 +89,6 @@ public class CorfuReplicationManager {
         }
     }
 
-    /**
-     * Start log replication.
-     * For the connection initiator cluster, this is called when the connection is established.
-     */
-    public void startLogReplicationRuntime(LogReplicationSession replicationSession) {
-        CorfuLogReplicationRuntime replicationRuntime;
-        replicationRuntime = sessionRuntimeMap.get(replicationSession);
-        replicationRuntime.start();
-    }
-
     // TODO (V2): we might think of unifying the info in ClusterDescriptor into session (all nodes host+port)
     private LogReplicationRuntimeParameters createRuntimeParams(ClusterDescriptor remoteCluster, LogReplicationSession session) {
         LogReplicationRuntimeParameters parameters = LogReplicationRuntimeParameters.builder()

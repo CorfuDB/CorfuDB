@@ -25,13 +25,13 @@ import static org.corfudb.protocols.service.CorfuProtocolMessage.getDefaultProto
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getResponseMsg;
 
 /**
- * This class qis used only by SINK when connection initiator, to query leadership from the remote SOURCE cluster.
+ * This class is used only by SINK when connection initiator, to query leadership from the remote SOURCE cluster.
  *
  * Upon receiving the leadership response, a bidirectional stream is setup so SOURCE can drive the replication as LR
  * follows a push model.
  */
 @Slf4j
-public class VerifyRemoteSourceLeader {
+public class RemoteSourceLeadershipManager {
 
     /**
      * Executor service for FSM event queue consume
@@ -65,8 +65,8 @@ public class VerifyRemoteSourceLeader {
 
     private final String localNodeId;
 
-    public VerifyRemoteSourceLeader(LogReplicationSession session, LogReplicationClientServerRouter router,
-                                    String localNodeId) {
+    public RemoteSourceLeadershipManager(LogReplicationSession session, LogReplicationClientServerRouter router,
+                                         String localNodeId) {
         this.session = session;
         this.router = router;
         this.localNodeId = localNodeId;
@@ -205,6 +205,7 @@ public class VerifyRemoteSourceLeader {
 
                         // A new leader has been found,
                         input(new LogReplicationSinkEvent(LogReplicationSinkEvent.LogReplicationSinkEventType.REMOTE_LEADER_FOUND, leader));
+                        router.getSessionToLeaderConnectionFuture().get(session).complete(null);
                         log.debug("Exit :: leadership verification");
                         return;
                     } else {

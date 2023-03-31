@@ -140,7 +140,7 @@ public class NegotiatingState implements LogReplicationRuntimeState {
                 // (snapshot or log entry sync). This will be carried along the negotiation_complete event.
                 processNegotiationResponse(response);
 
-                if(router.isConnectionInitiator(fsm.getSession())) {
+                if(router.isConnectionStarterForSession(fsm.getSession())) {
                     // Negotiation to leader node completed, unblock channel in the router.
                     router.getSessionToLeaderConnectionFuture().get(fsm.getSession()).complete(null);
                 }

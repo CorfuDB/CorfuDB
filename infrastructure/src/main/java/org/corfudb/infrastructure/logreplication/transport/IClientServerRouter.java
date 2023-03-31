@@ -14,6 +14,7 @@ public interface IClientServerRouter {
     /**
      * Exceptionally complete a request with a given cause.
      *
+     * @param session   The session the request belongs to
      * @param requestID The request to complete.
      * @param cause     The cause to give for the exceptional completion.
      */
@@ -22,9 +23,9 @@ public interface IClientServerRouter {
     /**
      * Complete a given outstanding request with a completion value.
      *
-     * @param session    The session the request belongs to
+     * @param session    The session to which the request belongs
      * @param requestID  The request to complete.
-     * @param completion The value to complete the request with
+     * @param completion The value to complete the request
      */
     <T> void completeRequest(LogReplication.LogReplicationSession session, long requestID, T completion);
 
@@ -45,10 +46,11 @@ public interface IClientServerRouter {
     /**
      * Send a request message and get a completable future to be fulfilled by the reply.
      *
-     * @param payload
-     * @param <T> The type of completable to return.
-     * @return A completable future which will be fulfilled by the reply,
-     * or a timeout in the case there is no response.
+     * @param session session for which the message is being sent
+     * @param payload message payload
+     * @param endpoint nodeId of the remote leader
+     * @param <T>  The type of completable to return.
+     * @return A completable future which will be fulfilled by the reply or a timeout in the case there is no response.
      */
     <T> CompletableFuture<T> sendRequestAndGetCompletable(
             @Nonnull LogReplication.LogReplicationSession session,
@@ -71,6 +73,8 @@ public interface IClientServerRouter {
 
     /**
      * Stops routing requests.
+     *
+     * @param session
      */
     void stop(Set<LogReplication.LogReplicationSession> session);
 
