@@ -10,7 +10,6 @@ import org.corfudb.universe.node.client.ClientParams;
 import org.corfudb.universe.node.client.CorfuClient;
 import org.corfudb.universe.node.server.CorfuServer;
 import org.junit.Test;
-import org.slf4j.event.Level;
 
 import java.time.Duration;
 

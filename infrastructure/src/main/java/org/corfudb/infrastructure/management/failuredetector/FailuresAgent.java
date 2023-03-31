@@ -49,6 +49,8 @@ public class FailuresAgent {
     public DetectorTask detectAndHandleFailure(PollReport pollReport, Layout layout, String localEndpoint) {
         log.trace("Handle failures for the report: {}", pollReport);
 
+        DetectorTask resultDetectorTask = DetectorTask.NOT_COMPLETED;
+
         try {
             ClusterState clusterState = pollReport.getClusterState();
 
@@ -59,60 +61,56 @@ public class FailuresAgent {
             DecisionMakerAgent decisionMakerAgent = new DecisionMakerAgent(clusterState, advisor);
             Optional<String> maybeDecisionMaker = decisionMakerAgent.findDecisionMaker();
 
-            if (!maybeDecisionMaker.isPresent()) {
-                return DetectorTask.NOT_COMPLETED;
-            }
+            if (maybeDecisionMaker.isPresent()) {
+                String decisionMaker = maybeDecisionMaker.get();
 
-            String decisionMaker = maybeDecisionMaker.get();
+                Optional<NodeRankByPartitionAttributes> maybeFailedNodeByPartitionAttr = fsAdvisor
+                        .findFailedNodeByPartitionAttributes(clusterState);
 
-            Optional<NodeRankByPartitionAttributes> maybeFailedNodeByPartitionAttr = fsAdvisor
-                    .findFailedNodeByPartitionAttributes(clusterState);
+                if (maybeFailedNodeByPartitionAttr.isPresent()) {
+                    NodeRankByPartitionAttributes failedNode = maybeFailedNodeByPartitionAttr.get();
 
-            if (maybeFailedNodeByPartitionAttr.isPresent()) {
-                NodeRankByPartitionAttributes failedNode = maybeFailedNodeByPartitionAttr.get();
+                    if (decisionMaker.equals(failedNode.getEndpoint())) {
+                        log.error("Decision maker and failed node are the same node: {}", decisionMakerAgent);
+                    } else {
+                        Set<String> failedNodes = new HashSet<>();
+                        failedNodes.add(failedNode.getEndpoint());
+                        resultDetectorTask = handleFailure(layout, failedNodes, pollReport, localEndpoint).join();
+                    }
+                } else {
+                    Optional<NodeRank> maybeFailedNode = advisor.failedServer(clusterState);
 
-                if (decisionMaker.equals(failedNode.getEndpoint())) {
-                    log.error("Decision maker and failed node are the same node: {}", decisionMakerAgent);
-                    return DetectorTask.NOT_COMPLETED;
+                    if (maybeFailedNode.isPresent()) {
+                        NodeRank failedNode = maybeFailedNode.get();
+
+                        if (decisionMaker.equals(failedNode.getEndpoint())) {
+                            log.error("Decision maker and failed node are the same node: {}", decisionMakerAgent);
+                        } else {
+                            //Collect failures history
+                            FailureDetectorMetrics history = FailureDetectorMetrics.builder()
+                                    .localNode(localEndpoint)
+                                    .graph(advisor.getGraph(pollReport.getClusterState()).connectivityGraph())
+                                    .healed(failedNode)
+                                    .action(FailureDetectorMetrics.FailureDetectorAction.FAIL)
+                                    .unresponsiveNodes(layout.getUnresponsiveServers())
+                                    .layout(layout.getLayoutServers())
+                                    .epoch(layout.getEpoch())
+                                    .build();
+
+                            fdDataStore.saveFailureDetectorMetrics(history);
+
+                            Set<String> failedNodes = new HashSet<>();
+                            failedNodes.add(failedNode.getEndpoint());
+                            resultDetectorTask = handleFailure(layout, failedNodes, pollReport, localEndpoint).join();
+                        }
+                    }
                 }
-
-                Set<String> failedNodes = new HashSet<>();
-                failedNodes.add(failedNode.getEndpoint());
-                return handleFailure(layout, failedNodes, pollReport, localEndpoint).join();
-            }
-
-            Optional<NodeRank> maybeFailedNode = advisor.failedServer(clusterState);
-
-            if (maybeFailedNode.isPresent()) {
-                NodeRank failedNode = maybeFailedNode.get();
-
-                if (decisionMaker.equals(failedNode.getEndpoint())) {
-                    log.error("Decision maker and failed node are the same node: {}", decisionMakerAgent);
-                    return DetectorTask.NOT_COMPLETED;
-                }
-
-                //Collect failures history
-                FailureDetectorMetrics history = FailureDetectorMetrics.builder()
-                        .localNode(localEndpoint)
-                        .graph(advisor.getGraph(pollReport.getClusterState()).connectivityGraph())
-                        .healed(failedNode)
-                        .action(FailureDetectorMetrics.FailureDetectorAction.FAIL)
-                        .unresponsiveNodes(layout.getUnresponsiveServers())
-                        .layout(layout.getLayoutServers())
-                        .epoch(layout.getEpoch())
-                        .build();
-
-                fdDataStore.saveFailureDetectorMetrics(history);
-
-                Set<String> failedNodes = new HashSet<>();
-                failedNodes.add(failedNode.getEndpoint());
-                return handleFailure(layout, failedNodes, pollReport, localEndpoint).join();
             }
         } catch (Exception e) {
             log.error("Exception invoking failure handler", e);
         }
 
-        return DetectorTask.NOT_COMPLETED;
+        return resultDetectorTask;
     }
 
     /**
