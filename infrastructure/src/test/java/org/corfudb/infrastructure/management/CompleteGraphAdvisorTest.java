@@ -31,7 +31,7 @@ public class CompleteGraphAdvisorTest {
     @Test
     public void testUnresponsiveAndFullyConnectedNode() {
         final String localEndpoint = A;
-        CompleteGraphAdvisor advisor = new CompleteGraphAdvisor(localEndpoint);
+        CompleteGraphAdvisor advisor = new CompleteGraphAdvisor();
 
         ClusterState clusterState = buildClusterState(
                 localEndpoint,
@@ -48,7 +48,7 @@ public class CompleteGraphAdvisorTest {
     @Test
     public void testFailedServer_disconnected_c() {
         final String localEndpoint = A;
-        CompleteGraphAdvisor advisor = new CompleteGraphAdvisor(localEndpoint);
+        CompleteGraphAdvisor advisor = new CompleteGraphAdvisor();
 
         ClusterState clusterState = buildClusterState(
                 localEndpoint,
@@ -66,7 +66,7 @@ public class CompleteGraphAdvisorTest {
     @Test
     public void testFailedServer_asymmetricFailureBetween_b_c() {
         final String localEndpoint = A;
-        CompleteGraphAdvisor advisor = new CompleteGraphAdvisor(localEndpoint);
+        CompleteGraphAdvisor advisor = new CompleteGraphAdvisor();
 
         ClusterState clusterState = buildClusterState(
                 localEndpoint,
@@ -88,7 +88,7 @@ public class CompleteGraphAdvisorTest {
     @Test
     public void testFailedServer_allDisconnected_from_b_perspective() {
         final String localEndpoint = B;
-        CompleteGraphAdvisor advisor = new CompleteGraphAdvisor(localEndpoint);
+        CompleteGraphAdvisor advisor = new CompleteGraphAdvisor();
 
         ClusterState clusterState = buildClusterState(
                 localEndpoint,
@@ -111,9 +111,9 @@ public class CompleteGraphAdvisorTest {
      */
     @Test
     public void testFailureDetectionForThreeNodes_asymmetricPartition_b_c_disconnectedFromEachOther() {
-        CompleteGraphAdvisor nodeAAdvisor = new CompleteGraphAdvisor(A);
-        CompleteGraphAdvisor nodeBAdvisor = new CompleteGraphAdvisor(B);
-        CompleteGraphAdvisor nodeCAdvisor = new CompleteGraphAdvisor(C);
+        CompleteGraphAdvisor nodeAAdvisor = new CompleteGraphAdvisor();
+        CompleteGraphAdvisor nodeBAdvisor = new CompleteGraphAdvisor();
+        CompleteGraphAdvisor nodeCAdvisor = new CompleteGraphAdvisor();
 
         ClusterState nodeAClusterState = buildClusterState(
                 A,
@@ -157,7 +157,7 @@ public class CompleteGraphAdvisorTest {
     @Test
     public void testHealedServer() {
         final String localEndpoint = C;
-        CompleteGraphAdvisor advisor = new CompleteGraphAdvisor(localEndpoint);
+        CompleteGraphAdvisor advisor = new CompleteGraphAdvisor();
 
         ClusterState clusterState = buildClusterState(
                 localEndpoint,
@@ -167,7 +167,7 @@ public class CompleteGraphAdvisorTest {
                 nodeState(localEndpoint, epoch, OK, OK, OK)
         );
 
-        Optional<NodeRank> healedServer = advisor.healedServer(clusterState);
+        Optional<NodeRank> healedServer = advisor.healedServer(clusterState, localEndpoint);
         assertTrue(healedServer.isPresent());
         assertEquals(new NodeRank(localEndpoint, clusterState.size()), healedServer.get());
     }

@@ -58,12 +58,12 @@ public class HealingAgentTest {
 
         doReturn(handle)
                 .when(agentSpy)
-                .handleHealing(same(pollReportMock), same(layoutMock), anySet());
+                .handleHealing(same(pollReportMock), same(layoutMock), anySet(), same(localEndpoint));
 
-        CompletableFuture<DetectorTask> healingFailed = agentSpy.detectAndHandleHealing(pollReportMock, layoutMock);
+        CompletableFuture<DetectorTask> healingFailed = agentSpy.detectAndHandleHealing(pollReportMock, layoutMock, localEndpoint);
 
         verify(agentSpy, times(1))
-                .handleHealing(same(pollReportMock), same(layoutMock), anySet());
+                .handleHealing(same(pollReportMock), same(layoutMock), anySet(), same(localEndpoint));
 
         assertEquals(DetectorTask.NOT_COMPLETED, healingFailed.join());
     }
@@ -82,9 +82,9 @@ public class HealingAgentTest {
         CompletableFuture<Boolean> handle = CompletableFuture.completedFuture(true);
         doReturn(handle)
                 .when(agentSpy)
-                .handleHealing(same(pollReportMock), same(layoutMock), anySet());
+                .handleHealing(same(pollReportMock), same(layoutMock), anySet(), same(localEndpoint));
 
-        CompletableFuture<DetectorTask> healingFailed = agentSpy.detectAndHandleHealing(pollReportMock, layoutMock);
+        CompletableFuture<DetectorTask> healingFailed = agentSpy.detectAndHandleHealing(pollReportMock, layoutMock, localEndpoint);
 
         assertEquals(DetectorTask.SKIPPED, healingFailed.join());
     }
@@ -106,12 +106,12 @@ public class HealingAgentTest {
         CompletableFuture<Boolean> handle = CompletableFuture.completedFuture(true);
         doReturn(handle)
                 .when(agentSpy)
-                .handleHealing(same(pollReportMock), same(layoutMock), anySet());
+                .handleHealing(same(pollReportMock), same(layoutMock), anySet(), same(localEndpoint));
 
-        CompletableFuture<DetectorTask> healingFailed = agentSpy.detectAndHandleHealing(pollReportMock, layoutMock);
+        CompletableFuture<DetectorTask> healingFailed = agentSpy.detectAndHandleHealing(pollReportMock, layoutMock, localEndpoint);
 
         verify(agentSpy, times(1))
-                .handleHealing(same(pollReportMock), same(layoutMock), anySet());
+                .handleHealing(same(pollReportMock), same(layoutMock), anySet(), same(localEndpoint));
 
         assertEquals(DetectorTask.COMPLETED, healingFailed.join());
     }
