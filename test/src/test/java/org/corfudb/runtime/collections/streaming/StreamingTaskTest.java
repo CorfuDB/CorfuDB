@@ -21,6 +21,7 @@ import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.test.SampleSchema;
 import org.corfudb.test.TestSchema;
 import org.corfudb.util.serializer.ISerializer;
+import org.junit.Before;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -39,32 +40,46 @@ import static org.mockito.Mockito.when;
 @SuppressWarnings("checkstyle:magicnumber")
 public class StreamingTaskTest {
 
-    @Test
-    public void testStreamingTaskLifeCycle() {
-        ExecutorService workers = mock(ExecutorService.class);
-        CorfuRuntime runtime = mock(CorfuRuntime.class);
-        SequencerView sequencerView = mock(SequencerView.class);
+    protected final ExecutorService workers = mock(ExecutorService.class);
+    protected final CorfuRuntime runtime = mock(CorfuRuntime.class);
+    protected final SequencerView sequencerView = mock(SequencerView.class);
+    protected final AddressSpaceView addressSpaceView = mock(AddressSpaceView.class);
+
+    private final String namespace = "test_namespace";
+    private final String tableName = "table";
+    private final String streamTag = "tag_1";
+    private final UUID streamTagId = TableRegistry.getStreamIdForStreamTag(namespace, streamTag);
+
+    protected final StreamListener listener = mock(StreamListener.class);
+    protected final int bufferSize = 10;
+
+    protected StreamingTask task;
+
+    @Before
+    public void setUp() {
+        commonSetup();
+        taskTypeSpecificSetup();
+    }
+
+    private void commonSetup() {
         when(runtime.getSequencerView()).thenReturn(sequencerView);
-        AddressSpaceView addressSpaceView = mock(AddressSpaceView.class);
         when(runtime.getAddressSpaceView()).thenReturn(addressSpaceView);
+    }
 
-        final String namespace = "test_namespace";
-        final String tableName = "table";
-        final String streamTag = "tag_1";
-
-        StreamListener listener = mock(StreamListener.class);
-
+    protected void taskTypeSpecificSetup() {
         Table table = mock(Table.class);
         TableRegistry registry = mock(TableRegistry.class);
         when(runtime.getTableRegistry()).thenReturn(registry);
         when(registry.getTable(namespace, tableName)).thenReturn(table);
-        UUID streamTagId = TableRegistry.getStreamIdForStreamTag(namespace, streamTag);
         when(table.getStreamTags()).thenReturn(Collections.singleton(streamTagId));
 
-        StreamingTask task = new StreamingTask(runtime, workers, namespace, streamTag, listener,
-                Collections.singletonList(tableName), Address.NON_ADDRESS, 10);
+        task = new StreamingTask(runtime, workers, namespace, streamTag, listener, Collections.singletonList(tableName),
+                Address.NON_ADDRESS, bufferSize);
+    }
 
-        assertThat(task.getStream().getStreamId()).isEqualTo(streamTagId);
+    @Test
+    public void testStreamingTaskLifeCycle() {
+        assertThat(task.getStream().getStreamId()).isEqualTo(getTaskStreamId());
         assertThat(task.getStatus()).isEqualTo(StreamStatus.RUNNABLE);
         task.move(StreamStatus.RUNNABLE, StreamStatus.SCHEDULING);
         assertThat(task.getStatus()).isEqualTo(StreamStatus.SCHEDULING);
@@ -85,30 +100,6 @@ public class StreamingTaskTest {
 
     @Test
     public void testStreamingTaskProduce() {
-        ExecutorService workers = mock(ExecutorService.class);
-        CorfuRuntime runtime = mock(CorfuRuntime.class);
-        SequencerView sequencerView = mock(SequencerView.class);
-        when(runtime.getSequencerView()).thenReturn(sequencerView);
-        AddressSpaceView addressSpaceView = mock(AddressSpaceView.class);
-        when(runtime.getAddressSpaceView()).thenReturn(addressSpaceView);
-
-        final String namespace = "test_namespace";
-        final String tableName = "table";
-        final String streamTag = "tag_1";
-
-        StreamListener listener = mock(StreamListener.class);
-
-        Table table = mock(Table.class);
-        TableRegistry registry = mock(TableRegistry.class);
-        when(runtime.getTableRegistry()).thenReturn(registry);
-        when(registry.getTable(namespace, tableName)).thenReturn(table);
-        UUID streamTagId = TableRegistry.getStreamIdForStreamTag(namespace, streamTag);
-        when(table.getStreamTags()).thenReturn(Collections.singleton(streamTagId));
-
-        StreamingTask task = new StreamingTask(runtime, workers, namespace, streamTag, listener,
-                Collections.singletonList(tableName), Address.NON_ADDRESS, 10);
-
-
         StreamAddressSpace sas = new StreamAddressSpace();
         sas.addAddress(1L);
         sas.addAddress(2L);
@@ -191,5 +182,9 @@ public class StreamingTaskTest {
         verify(listener, times(1)).onError(any(StreamingException.class));
         // Verify that the task doesnt submit any more work to the worker thread pool
         verify(workers, times(1)).execute(task);
+    }
+
+    protected UUID getTaskStreamId() {
+        return streamTagId;
     }
 }
