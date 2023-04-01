@@ -143,6 +143,12 @@ public class StreamPollingSchedulerTest {
 
         int numAddressesReceived = addressesInStreamAddressSpace.size();
 
+        Map<UUID, StreamAddressSpace> streamAddressSpaceMap = constructMockAddressMap(0, false);
+        List<StreamAddressRange> rangeQueryList = constructRangeQueryList(0);
+        when(sequencerView.getStreamsAddressSpace(rangeQueryList)).thenReturn(streamAddressSpaceMap);
+
+        int numAddressesReceived = addressesInStreamAddressSpace.size();
+
         streamPoller.schedule();
 
         // verify that the scheduler submitted a syncing task to read address 1 and 2
@@ -217,7 +223,7 @@ public class StreamPollingSchedulerTest {
         // Verify that the same listener can't be registered more than once
         assertThatThrownBy(() -> addTask(5, 10))
                 .isInstanceOf(StreamingException.class)
-                .satisfies(e -> assertThat(((StreamingException) e).getExceptionCause()).isEqualTo(LISTENER_SUBSCRIBED));
+                .hasMessage("StreamingManager::subscribe: listener already registered " + listener);
 
         List<StreamAddressRange> rangeQueryList = constructRangeQueryList(5);
         Map<UUID, StreamAddressSpace> streamAddressSpaceMap = constructMockAddressMap(5, false);

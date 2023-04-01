@@ -14,12 +14,18 @@ import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.Utils;
 
 import javax.annotation.Nonnull;
+import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+
+import static org.corfudb.runtime.LogReplicationUtils.LR_STATUS_STREAM_TAG;
+import static org.corfudb.runtime.LogReplicationUtils.REPLICATION_STATUS_TABLE_NAME;
+import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 /**
  * A streaming subscription manager that allows clients to listen on
@@ -96,13 +102,21 @@ public class StreamingManager {
      * 'streamTag' within the application namespace.
      *
      * @param streamListener   client listener for callback
-     * @param nsToTableName    map of table namespace to list of tables of interest
-     * @param nsToStreamTags   map of table namespace to the stream tag polled
+     * @param namespace       namespace of application tables on which updates should be received
+     * @param streamTag       only updates of application tables with the stream tag will be polled
+     * @param tablesOfInterest only updates from these tables will be returned
      * @param lastAddress      last processed address, new notifications start from lastAddress + 1
-     * @param bufferSize       maximum size of buffered transaction entries
      */
-    public void subscribeLogReplicationListener(@Nonnull LogReplicationListener streamListener, Map<String, List<String>> nsToTableName,
-                                                Map<String, String> nsToStreamTags, long lastAddress, int bufferSize) {
+    public void subscribeLogReplicationListener(@Nonnull LogReplicationListener streamListener, @Nonnull String namespace,
+                                                @Nonnull String streamTag, @Nonnull List<String> tablesOfInterest,
+                                                long lastAddress, int bufferSize) {
+        Map<String, List<String>> nsToTableName = new HashMap<>();
+        nsToTableName.put(namespace, tablesOfInterest);
+        nsToTableName.put(CORFU_SYSTEM_NAMESPACE, Arrays.asList(REPLICATION_STATUS_TABLE_NAME));
+
+        Map<String, String> nsToStreamTags = new HashMap<>();
+        nsToStreamTags.put(namespace, streamTag);
+        nsToStreamTags.put(CORFU_SYSTEM_NAMESPACE, LR_STATUS_STREAM_TAG);
         this.scheduler.addLRTask(streamListener, nsToStreamTags, nsToTableName, lastAddress,
                 bufferSize == 0 ? defaultBufferSize : bufferSize);
     }
@@ -138,26 +152,6 @@ public class StreamingManager {
         // undefined behavior carried from old implementation
         // log warn message if it didnt exist?
         this.scheduler.removeTask(streamListener);
-    }
-
-    /**
-     * Checks if a listener has already been subscribed.
-     *
-     * @param streamListener client listener to validate subscription
-     * @return true if listener has already been subscribed
-     */
-    public boolean isListenerSubscribed(@Nonnull StreamListener streamListener) {
-        return this.scheduler.containsTask(streamListener);
-    }
-
-    /**
-     * Validates the buffer size of a stream.
-     *
-     * @param bufferSize bufferSize
-     * @return true if stream has a sufficiently large buffer size
-     */
-    public boolean validateBufferSize(int bufferSize) {
-        return this.scheduler.hasEnoughBuffer(bufferSize == 0 ? defaultBufferSize : bufferSize);
     }
 
     /**

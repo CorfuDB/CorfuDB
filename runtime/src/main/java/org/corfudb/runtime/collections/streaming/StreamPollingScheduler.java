@@ -169,30 +169,14 @@ public class StreamPollingScheduler {
             if (allTasks.containsKey(streamListener)) {
                 // Multiple subscribers subscribing to same namespace and table is allowed
                 // as long as the hashcode() and equals() method of the listeners are different.
-                throw new StreamingException("StreamingManager::subscribe: listener already registered "
-                        + streamListener, StreamingException.ExceptionCause.LISTENER_SUBSCRIBED);
+                throw new StreamingException(
+                        "StreamingManager::subscribe: listener already registered " + streamListener);
             }
             StreamingTask task = new LRStreamingTask(runtime, workers, nsToStreamTags, nsToTables, streamListener,
                     lastAddress, bufferSize);
             allTasks.put(streamListener, task);
             log.info("addTask: added {} for {} address {}", streamListener, nsToStreamTags, lastAddress);
             allTasks.notifyAll();
-        }
-    }
-
-    /**
-     * Checks if the buffer size of a stream is greater than or equal to the minimum required.
-     *
-     * @param bufferSize bufferSize
-     * @return true if bufferSize is greater than or equal to the poll threshold
-     */
-    public boolean hasEnoughBuffer(int bufferSize) {
-        return bufferSize >= pollThreshold;
-    }
-
-    public boolean containsTask(@Nonnull StreamListener streamListener) {
-        synchronized (allTasks) {
-            return allTasks.containsKey(streamListener);
         }
     }
 
