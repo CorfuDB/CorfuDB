@@ -14,6 +14,12 @@ import java.util.UUID;
 public class LogReplicationLogicalGroupConfig extends LogReplicationConfig {
 
     /**
+     * Stream tag that is used by a stream listener for getting updates from LR client configuration tables.
+     * This tag is dedicated to LR client configuration tables in LOGICAL_GROUP use case.
+     */
+    public static final String CLIENT_CONFIG_TAG = "lr_sessions";
+
+    /**
      * Logical groups that are replicating by this logical group replication session.
      */
     @Getter

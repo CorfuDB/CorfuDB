@@ -77,14 +77,15 @@ public class LogReplicationConfigManager {
     @Getter
     private ServerContext serverContext;
 
+    // Map from a session to its corresponding config.
     @Getter
     private final Map<LogReplicationSession, LogReplicationConfig> sessionToConfigMap = new ConcurrentHashMap<>();
 
+    // Set of registered log replication subscribers.
     @Getter
     private final Set<ReplicationSubscriber> registeredSubscribers = new CopyOnWriteArraySet<>();
 
-    // Map from a logical group to all the Sinks it is targeting. Note that we maintain two bidirectional maps
-    // to facilitate the detection of Sink removal case.
+    // Map from a logical group to all the Sinks it is targeting.
     private final Map<String, Set<String>> groupSinksMap = new ConcurrentHashMap<>();
 
     // In-memory list of registry table entries for generating configs
@@ -156,6 +157,11 @@ public class LogReplicationConfigManager {
         }
     }
 
+    /**
+     * Generate LogReplicationConfig for all given sessions based on there replication model.
+     *
+     * @param sessions set of sessions for which to generate config
+     */
     public void generateConfig(Set<LogReplicationSession> sessions) {
         sessions.forEach(session -> {
                 switch (session.getSubscriber().getModel()) {
@@ -268,6 +274,10 @@ public class LogReplicationConfigManager {
                 TextFormat.shortDebugString(session), streamsToReplicate, streamsToDrop);
     }
 
+    /**
+     * If registry table has updates, update the streams to replicate and tags for each session based
+     * on the latest registry table entries.
+     */
     public void getUpdatedConfig() {
         // Check if the registry table has new entries.  Otherwise, no update is necessary.
         if (syncWithRegistryTable()) {

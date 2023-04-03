@@ -39,9 +39,6 @@ public abstract class LogReplicationConfig {
     // Percentage of log data per log replication message
     public static final int DATA_FRACTION_PER_MSG = 90;
 
-    // Stream tag that is used by a stream listener for getting updates from LR client configuration tables
-    public static final String CLIENT_CONFIG_TAG = "lr_sessions";
-
     public static final UUID REGISTRY_TABLE_ID = CorfuRuntime.getStreamID(
         TableRegistry.getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, TableRegistry.REGISTRY_TABLE_NAME));
 

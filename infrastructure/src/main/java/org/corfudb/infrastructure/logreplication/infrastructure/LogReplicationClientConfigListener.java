@@ -22,13 +22,17 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-import static org.corfudb.infrastructure.logreplication.config.LogReplicationConfig.CLIENT_CONFIG_TAG;
+import static org.corfudb.infrastructure.logreplication.config.LogReplicationLogicalGroupConfig.CLIENT_CONFIG_TAG;
 import static org.corfudb.runtime.LogReplicationLogicalGroupClient.LR_MODEL_METADATA_TABLE_NAME;
 import static org.corfudb.runtime.LogReplicationLogicalGroupClient.LR_REGISTRATION_TABLE_NAME;
 import static org.corfudb.runtime.view.ObjectsView.DEFAULT_LOGICAL_GROUP_CLIENT;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 
+/**
+ * This class implements a Corfu stream listener for the Logical Group client configuration tables.
+ * It is used by LR to listen to client registration events and logical group destination information updates.
+ */
 @Slf4j
 public class LogReplicationClientConfigListener extends StreamListenerResumeOrFullSync {
 
@@ -104,6 +108,10 @@ public class LogReplicationClientConfigListener extends StreamListenerResumeOrFu
         });
     }
 
+    /**
+     * Handle client registration table entries.
+     * @param registrationTableEntries list of client registration table entries
+     */
     private void handleRegistrationTableEntries(List<CorfuStreamEntry> registrationTableEntries) {
         if (registrationTableEntries == null) {
             log.warn("No client registration table entries found!");
@@ -126,6 +134,10 @@ public class LogReplicationClientConfigListener extends StreamListenerResumeOrFu
         }
     }
 
+    /**
+     * Handle client metadata table entries.
+     * @param clientMetadataTableEntries list of client metadata table entries
+     */
     private void handleClientMetadataTableEntries(List<CorfuStreamEntry> clientMetadataTableEntries) {
         Set<LogReplicationSession> impactedSessions = new HashSet<>();
         log.info("clientMetadataTableEntries: {}", clientMetadataTableEntries);
