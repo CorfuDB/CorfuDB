@@ -65,6 +65,8 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
 
     private static final String EXECUTOR_NAME_PREFIX = "LogReplicationServer-";
 
+    @Getter
+    @VisibleForTesting
     private final Map<LogReplicationSession, LogReplicationSinkManager> sessionToSinkManagerMap = new ConcurrentHashMap<>();
 
     private final AtomicBoolean isLeader = new AtomicBoolean(false);
@@ -106,7 +108,6 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
                                 LogReplicationContext replicationContext) {
         this.serverContext = context;
         this.localEndpoint = null;
-        sessionToSinkManagerMap.put(sinkManager.getSession(), sinkManager);
         this.localNodeId = localNodeId;
         this.localClusterId = localClusterId;
         this.allSessions = sessions;
@@ -346,14 +347,6 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
         log.debug("Handle log replication query leadership response msg {}", TextFormat.shortDebugString(response));
         router.completeRequest(response.getHeader().getSession(), response.getHeader().getRequestId(),
                 response.getPayload().getLrLeadershipResponse());
-    }
-
-    @LogReplicationResponseHandler(responseType = LR_LEADERSHIP_LOSS)
-    private void handleLeadershipLoss(RequestMsg req,  ResponseMsg response,
-                                                             @Nonnull IClientServerRouter router) {
-        log.debug("Handle log replication leadership loss msg {}", TextFormat.shortDebugString(response));
-        router.completeRequest(response.getHeader().getSession(), response.getHeader().getRequestId(),
-                response.getPayload().getLrLeadershipLoss());
     }
 
     /**

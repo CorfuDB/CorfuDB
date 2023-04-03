@@ -114,7 +114,7 @@ public class RemoteSourceLeadershipManager {
                 String nodeIdDown = event.getNodeId();
                 log.info("Detected connection down from node={}", nodeIdDown);
                 updateDisconnectedNodes(nodeIdDown);
-                resetRemoteLeader();
+                resetRemoteLeader(nodeIdDown);
                 break;
             case REMOTE_LEADER_NOT_FOUND:
                 log.info("Remote Leader not found. Retrying...");
@@ -131,8 +131,9 @@ public class RemoteSourceLeadershipManager {
                 invokeReverseReplication();
                 break;
             case REMOTE_LEADER_LOSS:
-                log.debug("Remote leader has changed");
-                resetRemoteLeader();
+                String oldLeader = event.getNodeId();
+                log.debug("Remote leader has changed. old leader {}", oldLeader);
+                resetRemoteLeader(oldLeader);
                 verifyLeadership();
                 break;
             default: {
@@ -141,9 +142,11 @@ public class RemoteSourceLeadershipManager {
         }
     }
 
-    private void resetRemoteLeader() {
-        log.debug("Reset remote leader");
-        leaderNodeId = Optional.empty();
+    private void resetRemoteLeader(String nodeId) {
+        if (leaderNodeId.isPresent() && leaderNodeId.get().equals(nodeId)) {
+            log.debug("Reset remote leader");
+            leaderNodeId = Optional.empty();
+        }
     }
 
     private void updateConnectedNodes(String nodeId) {

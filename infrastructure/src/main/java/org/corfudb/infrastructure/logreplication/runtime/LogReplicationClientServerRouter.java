@@ -310,10 +310,13 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
                     if (runtimeFSM.getRemoteLeaderNodeId().isPresent()) {
                         nodeId = runtimeFSM.getRemoteLeaderNodeId().get();
                     } else {
-                        log.error("Leader not found to remote cluster {}", sessionToRemoteClusterDescriptor.get(session).getClusterId());
-                        runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.REMOTE_LEADER_LOSS));
+                        log.error("Leader not found to remote cluster {}",
+                                sessionToRemoteClusterDescriptor.get(session).getClusterId());
+                        runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent
+                                .LogReplicationRuntimeEventType.REMOTE_LEADER_LOSS));
                         throw new ChannelAdapterException(
-                                String.format("Leader not found to remote cluster %s", sessionToRemoteClusterDescriptor.get(session).getClusterId()));
+                                String.format("Leader not found to remote cluster %s",
+                                        sessionToRemoteClusterDescriptor.get(session).getClusterId()));
                     }
                 } else {
                     nodeId = sessionToSinkVerifyLeadership.get(session).getRemoteLeaderNodeId().get();
@@ -330,8 +333,8 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
         } catch (NetworkException ne) {
             log.error("Caught Network Exception while trying to send message to remote leader {}", nodeId);
             if(outgoingSession.contains(session)) {
-                sessionToRuntimeFSM.get(session).input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.ON_CONNECTION_DOWN,
-                        nodeId));
+                sessionToRuntimeFSM.get(session).input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent
+                        .LogReplicationRuntimeEventType.ON_CONNECTION_DOWN, nodeId));
             } else {
                 sessionToSinkVerifyLeadership.get(session).input(new LogReplicationSinkEvent(
                         LogReplicationSinkEvent.LogReplicationSinkEventType.ON_CONNECTION_DOWN, nodeId));
@@ -434,11 +437,15 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
                 String nodeId = msg.getPayload().getLrLeadershipLoss().getNodeId();
                 if (isOutgoingSession(session)) {
                     this.sessionToRuntimeFSM.get(session)
-                            .input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.REMOTE_LEADER_LOSS, nodeId));
+                            .input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent
+                                    .LogReplicationRuntimeEventType.REMOTE_LEADER_LOSS, nodeId));
                 } else {
                     sessionToSinkVerifyLeadership.get(session)
-                            .input(new LogReplicationSinkEvent(LogReplicationSinkEvent.LogReplicationSinkEventType.REMOTE_LEADER_LOSS, nodeId));
+                            .input(new LogReplicationSinkEvent(LogReplicationSinkEvent
+                                    .LogReplicationSinkEventType.REMOTE_LEADER_LOSS, nodeId));
                 }
+                completeRequest(msg.getHeader().getSession(), msg.getHeader().getRequestId(),
+                        msg.getPayload().getLrLeadershipLoss());
                 return;
             }
 
@@ -530,7 +537,8 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
      * Channel Adapter On Error Callback
      */
     public synchronized void onError(Throwable t, LogReplicationSession session) {
-        sessionToRuntimeFSM.get(session).input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.ERROR, t));
+        sessionToRuntimeFSM.get(session).input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent
+                .LogReplicationRuntimeEventType.ERROR, t));
     }
 
 
@@ -552,7 +560,8 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
         sessionToRuntimeFSM.get(session).start();
         log.debug("runtimeFSM started for session {}", session);
         sessionToRuntimeFSM.get(session)
-                .input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.ON_CONNECTION_UP, nodeId));
+                .input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent
+                        .LogReplicationRuntimeEventType.ON_CONNECTION_UP, nodeId));
     }
 
     /**
@@ -595,7 +604,8 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
         }
 
         if (incomingSession.contains(session)) {
-            sessionToSinkVerifyLeadership.put(session, new RemoteSourceLeadershipManager(session, this, localNodeId));
+            sessionToSinkVerifyLeadership.put(session,
+                    new RemoteSourceLeadershipManager(session, this, localNodeId));
         }
     }
 

@@ -79,15 +79,15 @@ public class VerifyingRemoteSinkLeaderState implements LogReplicationRuntimeStat
         log.trace("Submitted tasks to worker :: size={} activeCount={} taskCount={}", worker.getQueue().size(),
                 worker.getActiveCount(), worker.getTaskCount());
 
-        // Proceed if remoteLeader is known, otherwise verify Leadership on connected nodes (ignore those for which
-        // leadership is pending)
+        // Proceed if remoteLeader is known. Only if local is connection starter for the session and the remoteLeader is
+        // not known, verify Leadership on connected nodes
         if (fsm.getRemoteLeaderNodeId().isPresent()) {
             fsm.input(new LogReplicationRuntimeEvent(
                     LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.REMOTE_LEADER_FOUND,
                     fsm.getRemoteLeaderNodeId().get())
             );
             log.debug("Exit :: leadership verification");
-        } else if(router.isConnectionStarterForSession(fsm.session)){
+        } else if (router.isConnectionStarterForSession(fsm.session)){
             // Leadership verification is done only if connection starter.
             this.worker.submit(this::verifyLeadership);
         }

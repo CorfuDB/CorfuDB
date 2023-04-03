@@ -17,7 +17,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * Used by connection receiving clusters.
  */
 @Slf4j
-public class CorfuInterClusterReplicationServerNode implements AutoCloseable {
+public class CorfuInterClusterReplicationServerNode {
 
     @Getter
     private final ServerContext serverContext;
@@ -105,7 +105,6 @@ public class CorfuInterClusterReplicationServerNode implements AutoCloseable {
     /**
      * Closes the currently running corfu log replication server.
      */
-    @Override
     public void close() {
         log.info("close: Shutting down Log Replication Inter Cluster Server and cleaning resources");
         cleanupResources();

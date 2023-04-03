@@ -403,12 +403,15 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
             log.error("Log Replication not started on this cluster. Remote source/sink not found");
             return;
         }
-        setupConnectionReceivingComponents();
-        sessionManager.connectToRemoteClusters();
-
+        setupConnectionComponents();
         // record metrics about the lock acquired.
         lockAcquireSample = recordLockAcquire();
         processCountOnLockAcquire();
+    }
+
+    private void setupConnectionComponents() {
+        setupConnectionReceivingComponents();
+        sessionManager.connectToRemoteClusters();
     }
 
     /**
@@ -563,7 +566,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         performRoleBasedSetup();
 
         if (isLeader.get()) {
-            onLeadershipAcquire();
+            setupConnectionComponents();
 
             if(!isSource() && logReplicationEventListener != null) {
                 // If no longer a Source, stop event listener.

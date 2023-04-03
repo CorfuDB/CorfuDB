@@ -13,6 +13,7 @@ import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg;
 
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -136,7 +137,11 @@ public class GRPCLogReplicationServerHandler extends LogReplicationGrpc.LogRepli
             @Override
             public void onError(Throwable t) {
                 log.error("Encountered error in the long living subscribe RPC for {}...",session, t);
-                router.onConnectionDown(router.getSessionToRuntimeFSM().get(session).getRemoteLeaderNodeId().get(), session);
+                Optional<String> remoteLeader = router.getSessionToRuntimeFSM().get(session) != null ?
+                        router.getSessionToRuntimeFSM().get(session).getRemoteLeaderNodeId() : Optional.empty();
+                if(remoteLeader.isPresent()) {
+                    router.onConnectionDown(remoteLeader.get(), session);
+                }
             }
 
             @Override

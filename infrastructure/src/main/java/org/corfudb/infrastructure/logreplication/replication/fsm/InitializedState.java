@@ -77,7 +77,7 @@ public class InitializedState implements LogReplicationState {
 
     @Override
     public void onExit(LogReplicationState to) {
-        if (to != this || to.getType() != LogReplicationStateType.ERROR) {
+        if (to != this && to.getType() != LogReplicationStateType.ERROR) {
             fsm.getAckReader().startSyncStatusUpdatePeriodicTask();
         }
     }
