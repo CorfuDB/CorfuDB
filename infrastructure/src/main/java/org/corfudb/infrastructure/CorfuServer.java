@@ -11,6 +11,7 @@ import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.common.util.URLUtils.NetworkInterfaceVersion;
 import org.corfudb.infrastructure.health.HealthMonitor;
 import org.corfudb.infrastructure.logreplication.infrastructure.CorfuInterClusterReplicationServer;
+import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.GitRepositoryState;
 import org.docopt.Docopt;
@@ -21,6 +22,7 @@ import java.io.IOException;
 import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 
 import static org.corfudb.util.NetworkUtils.getAddressFromInterfaceName;
 
@@ -217,6 +219,8 @@ public class CorfuServer {
                     + " --version                                                                "
                     + "              Show version\n";
 
+    private static final Duration TIMEOUT = Duration.ofSeconds(3);
+
     // Active Corfu Server.
     private static volatile CorfuServerNode activeServer;
 
@@ -240,7 +244,7 @@ public class CorfuServer {
      *
      * @param args command line argument strings
      */
-    public static void main(String[] args) {
+    public static void main(String[] args) throws Exception {
         try {
             // Parse the options given, using docopt.
             Map<String, Object> opts = new Docopt(USAGE)
@@ -286,7 +290,7 @@ public class CorfuServer {
         }
     }
 
-    private static void startServer(Map<String, Object> opts) {
+    private static void startServer(Map<String, Object> opts) throws InterruptedException {
 
         // Print a nice welcome message.
         printStartupMsg(opts);
@@ -296,6 +300,62 @@ public class CorfuServer {
 
         // Bind to all interfaces only if no address or interface specified by the user.
         // Fetch the address if given a network interface.
+        configureNetwork(opts);
+
+        log.info("Configured Corfu Server address: {}", opts.get(ADDRESS_PARAM));
+        createServiceDirectory(opts);
+        checkMetaDataRetention(opts);
+        registerShutdownHandler();
+
+        // Manages the lifecycle of the Corfu Server.
+        while (!shutdownServer) {
+            ServerContext serverContext;
+            try {
+                serverContext = new ServerContext(opts);
+            } catch (DataCorruptionException ex) {
+                log.error("Failed creating server context", ex);
+                TimeUnit.SECONDS.sleep(TIMEOUT.getSeconds());
+                continue;
+            }
+
+            try {
+                configureMetrics(opts, serverContext.getLocalEndpoint());
+                configureHealthMonitor(opts);
+                activeServer = new CorfuServerNode(serverContext);
+                activeServer.startAndListen();
+            } catch (Throwable th) {
+                log.error("CorfuServer: Server exiting due to unrecoverable error: ", th);
+                System.exit(EXIT_ERROR_CODE);
+            }
+
+            if (cleanupServer) {
+                clearDataFiles(serverContext);
+                cleanupServer = false;
+            }
+
+            if (!shutdownServer) {
+                log.info("main: Server restarting.");
+            }
+        }
+
+        log.info("main: Server exiting due to shutdown");
+    }
+
+    private static void registerShutdownHandler() {
+        // Register shutdown handler
+        Thread shutdownThread = new Thread(CorfuServer::cleanShutdown);
+        shutdownThread.setName("ShutdownThread");
+        Runtime.getRuntime().addShutdownHook(shutdownThread);
+    }
+
+    private static void checkMetaDataRetention(Map<String, Object> opts) {
+        // Check the specified number of datastore files to retain
+        if (Integer.parseInt((String) opts.get("--metadata-retention")) < 1) {
+            throw new IllegalArgumentException("Max number of metadata files to retain must be greater than 0.");
+        }
+    }
+
+    private static void configureNetwork(Map<String, Object> opts) {
         if (opts.get("--network-interface") != null) {
             opts.put(
                     ADDRESS_PARAM,
@@ -323,44 +383,6 @@ public class CorfuServer {
             // Address is specified by the user.
             opts.put("--bind-to-all-interfaces", false);
         }
-        log.info("Configured Corfu Server address: {}", opts.get(ADDRESS_PARAM));
-
-        createServiceDirectory(opts);
-
-        // Check the specified number of datastore files to retain
-        if (Integer.parseInt((String) opts.get("--metadata-retention")) < 1) {
-            throw new IllegalArgumentException("Max number of metadata files to retain must be greater than 0.");
-        }
-
-        // Register shutdown handler
-        Thread shutdownThread = new Thread(CorfuServer::cleanShutdown);
-        shutdownThread.setName("ShutdownThread");
-        Runtime.getRuntime().addShutdownHook(shutdownThread);
-
-        // Manages the lifecycle of the Corfu Server.
-        while (!shutdownServer) {
-            final ServerContext serverContext = new ServerContext(opts);
-            try {
-                configureMetrics(opts, serverContext.getLocalEndpoint());
-                configureHealthMonitor(opts);
-                activeServer = new CorfuServerNode(serverContext);
-                activeServer.startAndListen();
-            } catch (Throwable th) {
-                log.error("CorfuServer: Server exiting due to unrecoverable error: ", th);
-                System.exit(EXIT_ERROR_CODE);
-            }
-
-            if (cleanupServer) {
-                clearDataFiles(serverContext);
-                cleanupServer = false;
-            }
-
-            if (!shutdownServer) {
-                log.info("main: Server restarting.");
-            }
-        }
-
-        log.info("main: Server exiting due to shutdown");
     }
 
     /**

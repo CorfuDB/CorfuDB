@@ -179,7 +179,7 @@ public class DataStore implements KvDataStore {
     private <T> T load(Class<T> tClass, String key) {
         try {
             Path path = Paths.get(logDirPath, key + EXTENSION);
-            if (Files.notExists(path)) {
+            if (!Files.isReadable(path)) {
                 return null;
             }
             byte[] bytes = Files.readAllBytes(path);
@@ -192,7 +192,7 @@ public class DataStore implements KvDataStore {
             String json = new String(bytes, 4, bytes.length - 4);
             return JsonUtils.parser.fromJson(json, tClass);
         } catch (IOException e) {
-            throw new RuntimeException(e);
+            throw new DataCorruptionException(e);
         }
     }
 

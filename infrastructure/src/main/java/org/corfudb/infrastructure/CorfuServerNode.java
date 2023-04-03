@@ -17,6 +17,7 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.config.ConfigParamNames;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
+import org.corfudb.infrastructure.ManagementServer.ManagementServerInitializer;
 import org.corfudb.infrastructure.health.HealthMonitor;
 import org.corfudb.infrastructure.health.HttpServerInitializer;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageDecoder;
@@ -55,7 +56,7 @@ public class CorfuServerNode implements AutoCloseable {
     private final ServerContext serverContext;
 
     @Getter
-    private final Map<Class, AbstractServer> serverMap;
+    private final Map<Class<?>, AbstractServer> serverMap;
 
     @Getter
     private final NettyServerRouter router;
@@ -73,15 +74,13 @@ public class CorfuServerNode implements AutoCloseable {
      * @param serverContext Initialized Server Context.
      */
     public CorfuServerNode(@Nonnull ServerContext serverContext) {
-        this(serverContext,
-                ImmutableMap.<Class, AbstractServer>builder()
-                        .put(BaseServer.class, new BaseServer(serverContext))
-                        .put(SequencerServer.class, new SequencerServer(serverContext))
-                        .put(LayoutServer.class, new LayoutServer(serverContext))
-                        .put(LogUnitServer.class, new LogUnitServer(serverContext))
-                        .put(ManagementServer.class, new ManagementServer(serverContext,
-                                new ManagementServer.ManagementServerInitializer()))
-                        .build()
+        this(serverContext, ImmutableMap.<Class<?>, AbstractServer>builder()
+                .put(BaseServer.class, new BaseServer(serverContext))
+                .put(SequencerServer.class, new SequencerServer(serverContext))
+                .put(LayoutServer.class, new LayoutServer(serverContext))
+                .put(LogUnitServer.class, new LogUnitServer(serverContext))
+                .put(ManagementServer.class, new ManagementServer(serverContext, new ManagementServerInitializer()))
+                .build()
         );
     }
 
@@ -92,7 +91,7 @@ public class CorfuServerNode implements AutoCloseable {
      * @param serverMap     Server Map with all components.
      */
     public CorfuServerNode(@Nonnull ServerContext serverContext,
-                           @Nonnull ImmutableMap<Class, AbstractServer> serverMap) {
+                           @Nonnull ImmutableMap<Class<?>, AbstractServer> serverMap) {
         this.serverContext = serverContext;
         this.serverMap = serverMap;
         router = new NettyServerRouter(serverMap.values().asList(), serverContext);
@@ -100,8 +99,7 @@ public class CorfuServerNode implements AutoCloseable {
         // If the node is started in the single node setup and was bootstrapped,
         // set the server epoch as well.
         if (serverContext.isSingleNodeSetup() && serverContext.getCurrentLayout() != null) {
-            serverContext.setServerEpoch(serverContext.getCurrentLayout().getEpoch(),
-                    router);
+            serverContext.setServerEpoch(serverContext.getCurrentLayout().getEpoch(), router);
         }
         this.close = new AtomicBoolean(false);
     }
