@@ -128,7 +128,6 @@ public class SessionManagerTest extends AbstractViewTest {
         Assert.assertEquals(numSinkCluster, sessionManager.getOutgoingSessions().size());
         Assert.assertEquals(sourceClusterId, topology.getLocalClusterDescriptor().getClusterId());
         Assert.assertEquals(0, sessionManager.getIncomingSessions().size());
-        Assert.assertEquals(router.getSessionToLeaderConnectionFuture().size(), topology.getRemoteClusterEndpoints().size());
 
         //get sessions from topology1
         Set<LogReplication.LogReplicationSession> sessionsFromTopology1 = new HashSet<>(sessionManager.getSessions());

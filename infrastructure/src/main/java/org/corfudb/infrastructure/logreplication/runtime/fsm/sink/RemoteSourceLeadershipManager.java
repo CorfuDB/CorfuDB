@@ -252,7 +252,7 @@ public class RemoteSourceLeadershipManager {
                 .build();
 
 
-        log.info("Sending the subscribe msg {} for session {}", payload, session);
+        log.info("Trigger the reverseReplicate rpc {} for session {}", payload, session);
         router.sendResponse(getResponseMsg(header, payload));
     }
 

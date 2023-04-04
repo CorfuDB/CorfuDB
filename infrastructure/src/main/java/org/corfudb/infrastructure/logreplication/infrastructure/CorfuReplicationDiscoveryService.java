@@ -552,7 +552,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
      * @param newTopology the new discovered topology
      */
     private void onTopologyChange(TopologyDescriptor newTopology) {
-        log.debug("A role change or a remote cluster may have been added or removed");
+        log.info("A role change or a remote cluster may have been added or removed");
 
         // refresh the session so new sessions are added and stale sessions are stopped.
         sessionManager.refresh(newTopology);

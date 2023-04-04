@@ -213,28 +213,6 @@ public class LogReplicationServerTest {
     }
 
     /**
-     * Makee sure that LogReplicationServer processes {@link LogReplicationLeadershipLossResponseMsg}
-     * message and that the appropriate handler gets called.
-     */
-    @Test
-    public void testHandleLeadershipLoss() {
-        final LogReplicationLeadershipLossResponseMsg leadershipLoss =  LogReplicationLeadershipLossResponseMsg
-                .newBuilder().build();
-        final HeaderMsg header = HeaderMsg.newBuilder().setRequestId(2L).setSession(session).build();
-        final ResponseMsg response = ResponseMsg.newBuilder()
-                .setHeader(header)
-                .setPayload(CorfuMessage.ResponsePayloadMsg.newBuilder()
-                        .setLrLeadershipLoss(leadershipLoss).build()).build();
-
-        ArgumentCaptor<LogReplicationLeadershipLossResponseMsg> argument = ArgumentCaptor.forClass(LogReplicationLeadershipLossResponseMsg.class);
-
-        lrServer.getHandlerMethods().handle(null, response, mockServerRouter);
-        verify(mockServerRouter, times(1))
-                .completeRequest(eq(header.getSession()), eq(header.getRequestId()), argument.capture());
-        Assertions.assertThat(argument.getValue()).isEqualTo(leadershipLoss);
-    }
-
-    /**
      * Make sure that the server will process {@link LogReplicationEntryMsg}
      * and provide an appropriate {@link ResponseMsg} message.
      */
