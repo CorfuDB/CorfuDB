@@ -600,18 +600,11 @@ public class LogReplicationMetadataManager {
             ReplicationStatusVal previous = entry.getPayload();
             SnapshotSyncInfo previousSnapshotSyncInfo = previous.getSnapshotSyncInfo();
 
-            if (type == SyncType.LOG_ENTRY && (previous.getStatus().equals(SyncStatus.NOT_STARTED)
-                    || previousSnapshotSyncInfo.getStatus().equals(SyncStatus.STOPPED))) {
+            if ((previous.getStatus().equals(SyncStatus.NOT_STARTED) && previousSnapshotSyncInfo.getStatus().equals(SyncStatus.NOT_STARTED))
+                    || (previous.getStatus().equals(SyncStatus.STOPPED) || previousSnapshotSyncInfo.getStatus().equals(SyncStatus.STOPPED))) {
                 // Skip update of sync status, it will be updated once replication is resumed or started
-                log.info("syncStatusPoller :: skip replication status update, log entry replication is {}",
+                log.info("syncStatusPoller :: skip remaining entries update, replication status is {}",
                         previous.getStatus());
-                txn.commit();
-                return;
-            } else if (type == SyncType.SNAPSHOT && (previousSnapshotSyncInfo.getStatus().equals(SyncStatus.NOT_STARTED)
-                    || previousSnapshotSyncInfo.getStatus().equals(SyncStatus.STOPPED))) {
-                // Skip update of sync status, it will be updated once replication is resumed or started
-                log.info("syncStatusPoller :: skip replication status update, snapshot sync is {}",
-                        previousSnapshotSyncInfo.getStatus());
                 txn.commit();
                 return;
             }
