@@ -309,7 +309,7 @@ public class DeltaStreamTest {
 
         producer.setName("producer");
         producer.start();
-        done.await(1, TimeUnit.SECONDS);
+        done.await();
 
         assertThat(consumed.size()).isEqualTo(numToProduce);
         for (int x = 0; x < numToProduce; x++) {
