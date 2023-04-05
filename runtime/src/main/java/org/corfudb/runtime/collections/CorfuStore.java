@@ -440,6 +440,12 @@ public class CorfuStore {
                 bufferSize, this);
     }
 
+    public void subscribeLogReplicationListener(@Nonnull LogReplicationListener streamListener,
+                                                @Nonnull String namespace, @Nonnull String streamTag, CorfuStore corfuStore) {
+        LogReplicationUtils.subscribe(streamListener, namespace, streamTag, getTablesOfInterest(namespace, streamTag),
+                0, corfuStore);
+    }
+
     /**
      * Get names of opened tables under the given namespace and stream tag.
      *

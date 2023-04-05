@@ -142,3 +142,10 @@ message SampleGroupMsgB {
 
     optional string payload = 1;
 }
+
+
+message SampleMergedTable {
+    option (org.corfudb.runtime.table_schema).is_federated = false;
+
+    optional string payload = 1;
+}

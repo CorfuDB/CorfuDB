@@ -27,6 +27,7 @@ import java.util.Optional;
 
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
+
 /**
  * LogReplication code resides in the infrastructure package.  Adding a dependency from this package(runtime) to
  * infrastructure introduces a circular dependency.  This class defines LR-specific constants and utility methods
@@ -34,6 +35,8 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
  */
 @Slf4j
 public final class LogReplicationUtils {
+
+    public static final String NAMESPACE = "LR-Test";
     public static final String LR_STATUS_STREAM_TAG = "lr_status";
 
     public static final String REPLICATION_STATUS_TABLE_NAME = "LogReplicationStatusSource";
@@ -62,7 +65,7 @@ public final class LogReplicationUtils {
 
         try {
             return IRetry.build(IntervalRetry.class, () -> {
-                try (TxnContext txnContext = corfuStore.txn(namespace)) {
+                try (TxnContext txnContext = corfuStore.txn(namespace)){
                     // The transaction is started in the client's namespace and the Replication Status table resides in the
                     // system namespace.  Corfu Store does not validate the cross-namespace access as long as there are no
                     // writes on the table in the different namespace.  This hack is required here as we want client full
