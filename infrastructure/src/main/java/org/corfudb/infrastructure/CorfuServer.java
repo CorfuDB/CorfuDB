@@ -404,12 +404,20 @@ public class CorfuServer {
      *
      * @param opts Server options map.
      */
-    private static void createServiceDirectory(Map<String, Object> opts) {
+    private static void createServiceDirectory(Map<String, Object> opts) throws InterruptedException {
         if ((Boolean) opts.get("--memory")) {
             return;
         }
 
-        File serviceDir = new File((String) opts.get("--log-path"));
+        Optional<File> maybeServiceDir = Optional.ofNullable(opts.get("--log-path"))
+                .map(Object::toString)
+                .map(File::new);
+
+        if (!maybeServiceDir.isPresent()) {
+            throw new IllegalArgumentException("--log-path parameter is not set");
+        }
+
+        File serviceDir = maybeServiceDir.get();
 
         if (!serviceDir.isDirectory()) {
             log.error("Service directory {} does not point to a directory. Aborting.",
@@ -420,11 +428,24 @@ public class CorfuServer {
         String corfuServiceDirPath = serviceDir.getAbsolutePath()
                 + File.separator
                 + "corfu";
-        File corfuServiceDir = new File(corfuServiceDirPath);
         // Update the new path with the dedicated child service directory.
         opts.put("--log-path", corfuServiceDirPath);
-        if (!corfuServiceDir.exists() && corfuServiceDir.mkdirs()) {
-            log.info("Created new service directory at {}.", corfuServiceDir);
+
+        while (true) {
+            File corfuServiceDir = new File(corfuServiceDirPath);
+
+            if (corfuServiceDir.exists()) {
+                log.info("Service directory at {} is present.", corfuServiceDir);
+                break;
+            }
+
+            if (corfuServiceDir.mkdirs()) {
+                log.info("Created new service directory at {}.", corfuServiceDir);
+                break;
+            }
+
+            log.error("New service directory at {} couldn't be created.", corfuServiceDir);
+            TimeUnit.SECONDS.sleep(TIMEOUT.getSeconds());
         }
     }
 
