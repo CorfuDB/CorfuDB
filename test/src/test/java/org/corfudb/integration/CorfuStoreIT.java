@@ -9,11 +9,8 @@ import org.corfudb.infrastructure.LivenessValidator;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.Token;
-import org.corfudb.runtime.CompactorMetadataTables;
-import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.CorfuStoreMetadata;
+import org.corfudb.runtime.*;
 import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
-import org.corfudb.runtime.MultiCheckpointWriter;
 
 import org.corfudb.runtime.collections.CorfuDynamicKey;
 import org.corfudb.runtime.collections.CorfuDynamicRecord;
@@ -30,6 +27,7 @@ import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.object.ICorfuVersionPolicy;
+import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.proto.RpcCommon;
 import org.corfudb.runtime.view.ObjectOpenOption;
 import org.corfudb.runtime.view.ObjectsView;
@@ -816,5 +814,84 @@ public class CorfuStoreIT extends AbstractIT {
         clientRuntime.shutdown();
         cpRuntime.shutdown();
         shutdownCorfuServer(p);
+    }
+
+    @Test
+    public void trimTableAndAppendHole() throws Exception {
+        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
+
+        runtime = createRuntime(singleNodeEndpoint);
+        CorfuStore corfuStore = new CorfuStore(runtime);
+
+        // Define a namespace for the table.
+        final String namespace = "test-namespace";
+        // Define table names.
+        final String tableNameA = "test-table-a";
+        final String tableNameB = "test-table-b";
+
+        // Create & Register the table.
+        // This is required to initialize the table for the current corfu client.
+        Table<Uuid, Uuid, Uuid> tableA = corfuStore.openTable(
+                namespace,
+                tableNameA,
+                Uuid.class,
+                Uuid.class,
+                null,
+                TableOptions.builder().build());
+        Table<Uuid, Uuid, Uuid> tableB = corfuStore.openTable(
+                namespace,
+                tableNameB,
+                Uuid.class,
+                Uuid.class,
+                null,
+                TableOptions.builder().build());
+
+        Uuid key1 = Uuid.newBuilder().setLsb(1L).setMsb(1L).build();
+        Uuid key2 = Uuid.newBuilder().setLsb(2L).setMsb(2L).build();
+
+        TxnContext tx = corfuStore.txn(namespace);
+        tx.putRecord(tableA, key1, key1, null);
+        tx.commit();
+
+        tx = corfuStore.txn(namespace);
+        tx.putRecord(tableB, key2, key2, null);
+        tx.commit();
+
+        // Checkpoint table A and trim
+        MultiCheckpointWriter<PersistentCorfuTable<?, ?>> mcw = new MultiCheckpointWriter<>();
+        PersistentCorfuTable<Uuid, CorfuRecord<Uuid, Uuid>> corfuTableA =
+                createCorfuTable(runtime, tableA.getFullyQualifiedTableName());
+        mcw.addMap(corfuTableA);
+        mcw.addMap(runtime.getTableRegistry().getRegistryTable());
+        mcw.addMap(runtime.getTableRegistry().getProtobufDescriptorTable());
+        Token trimPoint = mcw.appendCheckpoints(runtime, "checkpointer");
+        runtime.getAddressSpaceView().prefixTrim(trimPoint);
+
+        PersistentCorfuTable<Uuid, CorfuRecord<Uuid, Uuid>> corfuTableB =
+                createCorfuTable(runtime, tableB.getFullyQualifiedTableName());
+        CheckpointWriter<ICorfuTable<?,?>> cpw = new CheckpointWriter<>(runtime, tableB.getStreamUUID(), "author", corfuTableB);
+        Token snapshot = cpw.forceNoOpEntry();
+        runtime.getObjectsView().TXBuild()
+                .type(TransactionType.SNAPSHOT)
+                .snapshot(snapshot)
+                .build()
+                .begin();
+        cpw.startCheckpoint(snapshot);
+        cpw.finishCheckpoint();
+        runtime.getObjectsView().TXEnd();
+
+        corfuStore.openTable(
+                namespace,
+                tableNameB,
+                Uuid.class,
+                Uuid.class,
+                null,
+                TableOptions.builder().build());
+        tx = corfuStore.txn(namespace);
+        assertThat(tx.getRecord(tableNameA, key1).getPayload()).isEqualTo(key1);
+        assertThat(tx.getRecord(tableNameB, key2).getPayload()).isNull();
+        tx.commit();
+        runtime.shutdown();
+        shutdownCorfuServer(corfuServer);
     }
 }
