@@ -15,14 +15,12 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Observable;
 import java.util.Observer;
 import java.util.Queue;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Semaphore;
@@ -35,6 +33,9 @@ import org.corfudb.common.compression.Codec;
 import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusKey;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SyncStatus;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
 import org.corfudb.infrastructure.logreplication.replication.LogReplicationAckReader;
 import org.corfudb.infrastructure.logreplication.replication.fsm.EmptyDataSender;
@@ -59,13 +60,9 @@ import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManag
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusKey;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SyncStatus;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal.SyncType;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
-import org.corfudb.runtime.collections.CorfuStreamEntry;
 import org.corfudb.runtime.collections.StreamListener;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
@@ -198,7 +195,11 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
 
         transitionAvailable.acquire();
 
-        ReplicationStatusVal currentReplicationVal = statusTable.entryStream().findAny().get().getPayload();
+        ReplicationStatusKey currentReplicationKey = ReplicationStatusKey.newBuilder().setClusterId(TEST_LOCAL_CLUSTER_ID).build();
+        ReplicationStatusVal currentReplicationVal;
+        try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
+            currentReplicationVal = txn.getRecord(statusTable, currentReplicationKey).getPayload();
+        }
 
         // Default sync value is null so current syncType should not be set.
         Assert.assertFalse(currentReplicationVal.hasField(ReplicationStatusVal.getDescriptor().findFieldByName("syncType")));
@@ -214,26 +215,31 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         statusTableLatch.await();
         corfuStore.unsubscribeListener(streamListener);
 
-        Set<SyncType> expectedSyncTypes = new HashSet<>(
-                Collections.singletonList(SyncType.SNAPSHOT));
+        Set<SyncType> expectedSyncTypes = new HashSet<>(Collections.singletonList(SyncType.SNAPSHOT));
         Set<SyncType> actualSyncTypes = new HashSet<>();
-        List<SyncStatus> actualSyncStatus = new ArrayList<>();
+        SyncStatus actualSyncStatus;
+        SyncStatus actualSnapshotInfoSyncStatus;
 
-        Iterator<CorfuStreamEntries> entriesIterator = streamListener.getEntries().iterator();
-        while (entriesIterator.hasNext()) {
-            for (List<CorfuStreamEntry> entry : entriesIterator.next().getEntries().values()) {
-                ReplicationStatusVal status = (ReplicationStatusVal) entry.get(0).getPayload();
-                actualSyncTypes.add(status.getSyncType());
-                actualSyncStatus.add(status.getSnapshotSyncInfo().getStatus());
-            }
-        }
+        int expectedNumEntries = 1;
+        Assert.assertEquals(expectedNumEntries, streamListener.getEntries().size());
 
-        // Status starts as NOT_STARTED set at the creation of the metadata manager,
-        // and then gets updated to ONGOING in InSnapshotSyncState
-        SyncStatus tailStatus = SyncStatus.ONGOING;
+        ArrayList<CorfuStreamEntries> streamEntries = streamListener.getEntries();
+        ReplicationStatusVal replicationStatusVal = (ReplicationStatusVal)
+                streamEntries.stream().findAny().get().getEntries().values().stream().findAny().get().get(0).getPayload();
+        actualSyncTypes.add(replicationStatusVal.getSyncType());
+        actualSyncStatus = replicationStatusVal.getStatus();
+        actualSnapshotInfoSyncStatus = replicationStatusVal.getSnapshotSyncInfo().getStatus();
+
+        // replicationSyncStatus (outer) starts as NOT_STARTED by initializeReplicationStatusTable,
+        // and then gets updated to ONGOING in entry of InSnapshotSyncState
+        SyncStatus replicationSyncStatusAfterEntry = SyncStatus.ONGOING;
+        // snapshotInfoSyncStatus (inner) starts as NOT_STARTED by initializeReplicationStatusTable,
+        // and then gets updated to ONGOING in entry of InSnapshotSyncState
+        SyncStatus snapshotInfoSyncStatusAfterEntry = SyncStatus.ONGOING;
 
         Assert.assertEquals(expectedSyncTypes, actualSyncTypes);
-        Assert.assertEquals(tailStatus, actualSyncStatus.get(actualSyncStatus.size() - 1));
+        Assert.assertEquals(replicationSyncStatusAfterEntry, actualSyncStatus);
+        Assert.assertEquals(snapshotInfoSyncStatusAfterEntry, actualSnapshotInfoSyncStatus);
     }
 
     /**
@@ -259,8 +265,11 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
 
         transitionAvailable.acquire();
 
-        ReplicationStatusVal currentReplicationVal = statusTable.entryStream().findAny().get().getPayload();
-
+        ReplicationStatusKey currentReplicationKey = ReplicationStatusKey.newBuilder().setClusterId(TEST_LOCAL_CLUSTER_ID).build();
+        ReplicationStatusVal currentReplicationVal;
+        try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
+            currentReplicationVal = txn.getRecord(statusTable, currentReplicationKey).getPayload();
+        }
         // Default sync value is null so current syncType should not be set.
         Assert.assertFalse(currentReplicationVal.hasField(ReplicationStatusVal.getDescriptor().findFieldByName("syncType")));
 
@@ -275,26 +284,31 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         statusTableLatch.await();
         corfuStore.unsubscribeListener(streamListener);
 
-        Set<SyncType> expectedSyncTypes = new HashSet<>(
-                Collections.singletonList(SyncType.LOG_ENTRY));
+        Set<SyncType> expectedSyncTypes = new HashSet<>(Collections.singletonList(SyncType.LOG_ENTRY));
         Set<SyncType> actualSyncTypes = new HashSet<>();
-        List<SyncStatus> actualSyncStatus = new ArrayList<>();
+        SyncStatus actualSyncStatus;
+        SyncStatus actualSnapshotInfoSyncStatus;
 
-        Iterator<CorfuStreamEntries> entriesIterator = streamListener.getEntries().iterator();
-        while (entriesIterator.hasNext()) {
-            for (List<CorfuStreamEntry> entry : entriesIterator.next().getEntries().values()) {
-                ReplicationStatusVal status = (ReplicationStatusVal) entry.get(0).getPayload();
-                actualSyncTypes.add(status.getSyncType());
-                actualSyncStatus.add(status.getSnapshotSyncInfo().getStatus());
-            }
-        }
+        int expectedNumEntries = 1;
+        Assert.assertEquals(expectedNumEntries, streamListener.getEntries().size());
 
-        // Status starts as NOT_STARTED set at the creation of the metadata manager,
-        // and then gets updated to COMPLETED in InLogEntrySyncState
-        SyncStatus tailStatus = SyncStatus.COMPLETED;
+        ArrayList<CorfuStreamEntries> streamEntries = streamListener.getEntries();
+        ReplicationStatusVal replicationStatusVal = (ReplicationStatusVal)
+                streamEntries.stream().findAny().get().getEntries().values().stream().findAny().get().get(0).getPayload();
+        actualSyncTypes.add(replicationStatusVal.getSyncType());
+        actualSyncStatus = replicationStatusVal.getStatus();
+        actualSnapshotInfoSyncStatus = replicationStatusVal.getSnapshotSyncInfo().getStatus();
+
+        // replicationSyncStatus (outer) starts as NOT_STARTED by initializeReplicationStatusTable,
+        // and then gets updated to ONGOING in entry of InLogEntrySyncState
+        SyncStatus replicationSyncStatusAfterEntry = SyncStatus.ONGOING;
+        // snapshotInfoSyncStatus (inner) starts as NOT_STARTED by initializeReplicationStatusTable,
+        // and then gets updated to COMPLETED in entry of InLogEntrySyncState
+        SyncStatus snapshotInfoSyncStatusAfterEntry = SyncStatus.COMPLETED;
 
         Assert.assertEquals(expectedSyncTypes, actualSyncTypes);
-        Assert.assertEquals(tailStatus, actualSyncStatus.get(actualSyncStatus.size() - 1));
+        Assert.assertEquals(replicationSyncStatusAfterEntry, actualSyncStatus);
+        Assert.assertEquals(snapshotInfoSyncStatusAfterEntry, actualSnapshotInfoSyncStatus);
     }
 
     /**
@@ -759,7 +773,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
      */
     class TestStatusTableStreamListener implements StreamListener {
         @Getter
-        CopyOnWriteArrayList<CorfuStreamEntries> entries = new CopyOnWriteArrayList<>();
+        ArrayList<CorfuStreamEntries> entries = new ArrayList<>();
 
         @Getter
         Throwable throwable;
@@ -772,14 +786,8 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
 
         public void onNext(CorfuStreamEntries results) {
             entries.add(results);
-            for (List<CorfuStreamEntry> entry : results.getEntries().values()) {
-                ReplicationStatusVal status = (ReplicationStatusVal) entry.get(0).getPayload();
-                SyncType syncType = status.getSyncType();
-                SyncStatus syncStatus = status.getSnapshotSyncInfo().getStatus();
-                if (syncType == SyncType.LOG_ENTRY && syncStatus == SyncStatus.COMPLETED ||
-                        syncType == SyncType.SNAPSHOT && syncStatus == SyncStatus.ONGOING) {
-                    countDownLatch.countDown();
-                }
+            for (int i = 0; i < results.getEntries().size(); i++) {
+                countDownLatch.countDown();
             }
         }
 
