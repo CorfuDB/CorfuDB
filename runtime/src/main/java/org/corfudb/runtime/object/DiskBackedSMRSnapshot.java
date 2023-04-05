@@ -18,10 +18,13 @@ import java.util.concurrent.locks.StampedLock;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
+import static org.corfudb.runtime.CorfuOptions.ConsistencyModel.READ_COMMITTED;
+
 public class DiskBackedSMRSnapshot<S extends SnapshotGenerator<S>> implements SMRSnapshot<S> {
 
-    private final VersionedObjectIdentifier version;
+    private static final Snapshot IMPLICIT_LATEST_SNAPSHOT = null;
 
+    private final VersionedObjectIdentifier version;
     private final StampedLock lock = new StampedLock();
     private final OptimisticTransactionDB rocksDb;
     private final Snapshot snapshot;
@@ -43,7 +46,12 @@ public class DiskBackedSMRSnapshot<S extends SnapshotGenerator<S>> implements SM
         this.writeOptions = writeOptions;
         this.viewGenerator = viewGenerator;
         this.consistencyModel = consistencyModel;
-        this.snapshot = rocksDb.getSnapshot();
+        if (consistencyModel == READ_COMMITTED) {
+            this.snapshot = IMPLICIT_LATEST_SNAPSHOT;
+        } else {
+            this.snapshot = rocksDb.getSnapshot();
+        }
+
         this.readOptions = new ReadOptions().setSnapshot(this.snapshot);
         this.version = version;
         this.set = Collections.newSetFromMap(new WeakHashMap<>());
@@ -76,10 +84,10 @@ public class DiskBackedSMRSnapshot<S extends SnapshotGenerator<S>> implements SM
     public S consume() {
         RocksDbApi<S> rocksTx;
 
-        if (consistencyModel == ConsistencyModel.READ_YOUR_WRITES) {
-            rocksTx = new RocksDbTx<>(rocksDb, writeOptions, this);
+        if (consistencyModel == READ_COMMITTED) {
+            rocksTx = new RocksDbReadCommittedTx<>(rocksDb);
         } else {
-            rocksTx = new RocksDbStubTx<>(rocksDb);
+            rocksTx = new RocksDbTx<>(rocksDb, writeOptions, this);
         }
 
         return viewGenerator.newView(rocksTx);

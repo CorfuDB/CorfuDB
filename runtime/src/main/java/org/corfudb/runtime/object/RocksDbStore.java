@@ -10,8 +10,6 @@ import org.rocksdb.Options;
 import org.rocksdb.RocksDB;
 import org.rocksdb.RocksDBException;
 import org.rocksdb.RocksIterator;
-import org.rocksdb.Statistics;
-import org.rocksdb.StatsLevel;
 import org.rocksdb.WriteOptions;
 
 import java.nio.file.Path;

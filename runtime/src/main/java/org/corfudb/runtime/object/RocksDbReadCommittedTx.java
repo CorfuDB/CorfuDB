@@ -22,12 +22,12 @@ import java.util.concurrent.locks.StampedLock;
  *
  * @param <S> extends SnapshotGenerator
  */
-public class RocksDbStubTx<S extends SnapshotGenerator<S>>
+public class RocksDbReadCommittedTx<S extends SnapshotGenerator<S>>
         implements RocksDbApi<S> {
     private final OptimisticTransactionDB rocksDb;
     private final ReadOptions readOptions;
 
-    public RocksDbStubTx(@NonNull OptimisticTransactionDB rocksDb) {
+    public RocksDbReadCommittedTx(@NonNull OptimisticTransactionDB rocksDb) {
         this.rocksDb = rocksDb;
         this.readOptions = new ReadOptions();
     }
