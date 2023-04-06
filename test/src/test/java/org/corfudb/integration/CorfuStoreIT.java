@@ -4,6 +4,7 @@ import com.google.common.collect.Iterables;
 import com.google.common.reflect.TypeToken;
 import com.google.protobuf.DynamicMessage;
 
+import org.corfudb.browser.CorfuStoreBrowserEditor;
 import org.corfudb.infrastructure.CompactorLeaderServices;
 import org.corfudb.infrastructure.LivenessValidator;
 import org.corfudb.protocols.wireprotocol.ILogData;
@@ -29,6 +30,8 @@ import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.object.ICorfuVersionPolicy;
 import org.corfudb.runtime.proto.RpcCommon;
 import org.corfudb.runtime.view.ObjectOpenOption;
@@ -86,6 +89,16 @@ public class CorfuStoreIT extends AbstractIT {
                 .setPort(port)
                 .setLogPath(getCorfuServerLogPath(host, port))
                 .setSingle(true)
+                .runServer();
+    }
+
+    private Process runSinglePersistentServer(String host, int port, boolean disableLogUnitServerCache) throws IOException {
+        return new AbstractIT.CorfuServerRunner()
+                .setHost(host)
+                .setPort(port)
+                .setLogPath(getCorfuServerLogPath(host, port))
+                .setSingle(true)
+                .setDisableLogUnitServerCache(disableLogUnitServerCache)
                 .runServer();
     }
 
@@ -816,5 +829,94 @@ public class CorfuStoreIT extends AbstractIT {
         clientRuntime.shutdown();
         cpRuntime.shutdown();
         shutdownCorfuServer(p);
+    }
+
+    /**
+     * 1. Write key1 and key2 to tableA and tableB.
+     * 2. Checkpoint tableA, trim. tableB is trimmed.
+     * 3. Verify that tableB.get() hit TrimmedException.
+     * 4. Invoke resetTrimmedTable() on tableB. Verify tableB.get() is null
+     */
+    @Test
+    public void resetTrimmedTableTest() throws Exception {
+        // Disable log unit server cache so the requests for trimmed addresses will trigger TrimmedException
+        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort, true);
+
+        runtime = createRuntime(singleNodeEndpoint);
+        CorfuStore corfuStore = new CorfuStore(runtime);
+
+        // Define a namespace for the table.
+        final String namespace = "test-namespace";
+        // Define table names.
+        final String tableNameA = "test-table-a";
+        final String tableNameB = "test-table-b";
+
+        // Create & Register the table.
+        Table<Uuid, Uuid, Uuid> tableA = corfuStore.openTable(
+                namespace,
+                tableNameA,
+                Uuid.class,
+                Uuid.class,
+                null,
+                TableOptions.builder().build());
+        Table<Uuid, Uuid, Uuid> tableB = corfuStore.openTable(
+                namespace,
+                tableNameB,
+                Uuid.class,
+                Uuid.class,
+                null,
+                TableOptions.builder().build());
+
+        Uuid key1 = Uuid.newBuilder().setLsb(1L).setMsb(1L).build();
+        Uuid key2 = Uuid.newBuilder().setLsb(2L).setMsb(2L).build();
+
+        TxnContext tx = corfuStore.txn(namespace);
+        tx.putRecord(tableA, key1, key1, null);
+        tx.commit();
+        tx = corfuStore.txn(namespace);
+        tx.putRecord(tableB, key2, key2, null);
+        tx.commit();
+
+        // Checkpoint table A and trim
+        MultiCheckpointWriter<PersistentCorfuTable<?, ?>> mcw = new MultiCheckpointWriter<>();
+        PersistentCorfuTable<Uuid, CorfuRecord<Uuid, Uuid>> corfuTableA =
+                createCorfuTable(runtime, tableA.getFullyQualifiedTableName());
+        mcw.addMap(corfuTableA);
+        mcw.addMap(runtime.getTableRegistry().getRegistryTable());
+        mcw.addMap(runtime.getTableRegistry().getProtobufDescriptorTable());
+        Token trimPoint = mcw.appendCheckpoints(runtime, "checkpointer");
+        runtime.getAddressSpaceView().prefixTrim(trimPoint);
+        runtime.shutdown();
+
+        // Read tableB and verify TrimmedException
+        runtime = createRuntime(singleNodeEndpoint);
+        corfuStore = new CorfuStore(runtime);
+        tableB = corfuStore.openTable(
+                namespace,
+                tableNameB,
+                Uuid.class,
+                Uuid.class,
+                null,
+                TableOptions.builder().build());
+
+
+        Table<Uuid, Uuid, Uuid> finalTableB = tableB;
+        CorfuStore finalCorfuStore = corfuStore;
+        assertThatThrownBy(() -> {
+                   TxnContext txn = finalCorfuStore.txn(namespace);
+                   txn.getRecord(finalTableB, key2);
+                })
+                .isInstanceOf(TransactionAbortedException.class)
+                .hasCauseInstanceOf(TrimmedException.class);
+
+        // resetTrimmedTable and read tableB again
+        corfuStore.resetTrimmedTable(namespace, tableNameB);
+
+        tx = corfuStore.txn(namespace);
+        assertThat(tx.getRecord(tableNameB, key2).getPayload()).isNull();
+        tx.commit();
+
+        runtime.shutdown();
+        shutdownCorfuServer(corfuServer);
     }
 }

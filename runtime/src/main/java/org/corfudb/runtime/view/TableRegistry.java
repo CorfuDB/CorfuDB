@@ -461,6 +461,9 @@ public class TableRegistry {
      * @return Fully qualified table name.
      */
     public static String getFullyQualifiedTableName(String namespace, String tableName) {
+        if (namespace == null || namespace.isEmpty()) {
+            return tableName;
+        }
         return namespace + "$" + tableName;
     }
 

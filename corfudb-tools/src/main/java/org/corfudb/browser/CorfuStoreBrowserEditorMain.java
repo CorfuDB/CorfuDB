@@ -41,7 +41,8 @@ public class CorfuStoreBrowserEditorMain {
         listTagsForTable,
         listTagsMap,
         printMetadataMap,
-        addRecord
+        addRecord,
+        resetTrimmedTable
     }
 
     private static final String USAGE = "Usage: corfu-browser "+
@@ -66,7 +67,7 @@ public class CorfuStoreBrowserEditorMain {
         + "--port=<port>   Port\n"
         + "--operation=<listTables|infoTable|showTable|clearTable"
         + "|editTable|deleteRecord|loadTable|listenOnTable|listTags|listTagsMap"
-        + "|listTablesForTag|listTagsForTable|listAllProtos> Operation\n"
+        + "|listTablesForTag|listTagsForTable|listAllProtos|resetTrimmedTable> Operation\n"
         + "--namespace=<namespace>   Namespace\n"
         + "--tablename=<tablename>   Table Name\n"
         + "--tag=<tag>  Stream tag of interest\n"
@@ -208,8 +209,7 @@ public class CorfuStoreBrowserEditorMain {
             browser = null;
         }
         final String namespace = Optional.ofNullable(opts.get("--namespace"))
-                .map(Object::toString)
-                .orElse(null);
+                .map(Object::toString).filter(s -> !"NULL".equals(s)).orElse(null);
         final String tableName = Optional.ofNullable(opts.get("--tablename"))
                 .map(Object::toString)
                 .orElse(null);
@@ -218,24 +218,16 @@ public class CorfuStoreBrowserEditorMain {
 
         switch (Enum.valueOf(OperationType.class, operation)) {
             case listTables:
-                Preconditions.checkArgument(isValid(namespace),
-                        "Namespace is null or empty.");
                 return browser.listTables(namespace);
             case infoTable:
-                Preconditions.checkArgument(isValid(namespace),
-                        "Namespace is null or empty.");
                 Preconditions.checkArgument(isValid(tableName),
                         "Table name is null or empty.");
                 return browser.printTableInfo(namespace, tableName);
             case clearTable:
-                Preconditions.checkArgument(isValid(namespace),
-                        "Namespace is null or empty.");
                 Preconditions.checkArgument(isValid(tableName),
                         "Table name is null or empty.");
                 return browser.clearTable(namespace, tableName);
             case showTable:
-                Preconditions.checkArgument(isValid(namespace),
-                        "Namespace is null or empty.");
                 Preconditions.checkArgument(isValid(tableName),
                         "Table name is null or empty.");
                 return browser.printTable(namespace, tableName);
@@ -378,6 +370,10 @@ public class CorfuStoreBrowserEditorMain {
                 } else {
                     log.error("Print metadata map for a specific address. Specify using tag --address");
                 }
+            case resetTrimmedTable:
+                Preconditions.checkArgument(isValid(tableName),
+                        "Table name is null or empty.");
+                browser.resetTrimmedTable(namespace, tableName);
             default:
                 break;
         }

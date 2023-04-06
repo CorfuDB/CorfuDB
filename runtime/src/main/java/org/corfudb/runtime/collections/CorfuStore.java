@@ -1,6 +1,7 @@
 package org.corfudb.runtime.collections;
 
 import com.google.common.collect.Iterables;
+import com.google.common.reflect.TypeToken;
 import com.google.protobuf.Message;
 import io.micrometer.core.instrument.Timer;
 import lombok.Getter;
@@ -9,14 +10,17 @@ import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.runtime.CheckpointWriter;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
 import org.corfudb.runtime.Queue;
+import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.Utils;
+import org.corfudb.util.serializer.Serializers;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -172,6 +176,39 @@ public class CorfuStore {
      */
     public void deleteTable(String namespace, String tableName) {
         runtime.getTableRegistry().deleteTable(namespace, tableName);
+    }
+
+    /**
+     * Appends an empty checkpoint to the given trimmed table. After this is done,
+     * it allows to reopen and access a trimmed table for limited period of time
+     * until the next cycle of prefix trim happens. The main use case of this method
+     * is the auto-remediation process for trimmed tables in openTable.
+     *
+     * @param namespace the namespace of the table
+     * @param tableName the name of the table
+     */
+    public void resetTrimmedTable(String namespace, String tableName) {
+        String table = TableRegistry.getFullyQualifiedTableName(namespace, tableName);
+        UUID streamId = CorfuRuntime.getStreamID(table);
+
+        CorfuTable corfuTable = runtime.getObjectsView()
+                .build()
+                .setStreamName(table)
+                .setTypeToken(new TypeToken<CorfuTable<Object, Object>>() {})
+                .setSerializer(Serializers.JSON)
+                .open();
+        CheckpointWriter<ICorfuTable<?,?>> cpw =
+                new CheckpointWriter<>(runtime, streamId, "corfu-store-resetTrimmedTable", corfuTable);
+
+        Token snapshot = cpw.forceNoOpEntry();
+        runtime.getObjectsView().TXBuild()
+                .type(TransactionType.SNAPSHOT)
+                .snapshot(snapshot)
+                .build()
+                .begin();
+        cpw.startCheckpoint(snapshot);
+        cpw.finishCheckpoint();
+        runtime.getObjectsView().TXEnd();
     }
 
     /**

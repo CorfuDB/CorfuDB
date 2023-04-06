@@ -385,6 +385,9 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
         return null;
     }
 
+    @Override
+    public void resetTrimmedTable(String namespace, String table) {}
+
     class CorfuTableDescriptor {
         @Getter
         private final UUID streamID;

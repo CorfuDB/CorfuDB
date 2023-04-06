@@ -523,6 +523,7 @@ public class AbstractIT extends AbstractCorfuTest {
         private boolean disableHost = false;
         private String networkInterface = null;
         private NetworkInterfaceVersion networkInterfaceVersion = null;
+        private boolean disableLogUnitServerCache = false;
 
 
         /**
@@ -534,8 +535,12 @@ public class AbstractIT extends AbstractCorfuTest {
         public String getOptionsString() {
             StringBuilder command = new StringBuilder();
 
+            if (disableLogUnitServerCache) {
+                command.append("-c ").append(0);
+            }
+
             if (!disableHost) {
-                command.append("-a ").append(host);
+                command.append(" -a ").append(host);
             }
 
             if (logPath != null) {

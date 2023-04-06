@@ -173,4 +173,6 @@ public interface CorfuBrowserEditorCommands {
      * @return table names with given 'streamTag'
      */
     List<CorfuStoreMetadata.TableName> listTablesForTag(@Nonnull String streamTag);
+
+    void resetTrimmedTable(String namespace, String table);
 }

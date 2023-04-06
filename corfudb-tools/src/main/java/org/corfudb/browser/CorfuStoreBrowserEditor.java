@@ -39,6 +39,7 @@ import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.ExampleSchemas.ExampleTableName;
 import org.corfudb.runtime.ExampleSchemas.ManagedMetadata;
 import org.corfudb.runtime.collections.CorfuRecord;
+import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStoreShim;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
 import org.corfudb.runtime.collections.CorfuTable;
@@ -886,5 +887,14 @@ public class CorfuStoreBrowserEditor implements CorfuBrowserEditorCommands {
         formatMapping = formatMapping.substring(0, formatMapping.length() - 2);
         System.out.println("Tag: " + tag + " --- Total Tables: " + tables.size()
             + " TableNames: " + formatMapping);
+    }
+
+    @Override
+    public void resetTrimmedTable(String namespace, String tableName) {
+        System.out.println("\n======================\n");
+        CorfuStore corfuStore = new CorfuStore(runtime);
+        corfuStore.resetTrimmedTable(namespace, tableName);
+        System.out.println("Successfully reset trimmed table!");
+        System.out.println("\n======================\n");
     }
 }
