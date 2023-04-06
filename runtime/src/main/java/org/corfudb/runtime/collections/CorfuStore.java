@@ -165,32 +165,40 @@ public class CorfuStore {
     }
 
     /**
-     * Clear all entries of a table.
+     * Deletes a table instance. [NOT SUPPORTED.]
      *
      * @param namespace Namespace of the table.
      * @param tableName Table name.
      */
-    public void clearTable(String namespace, String tableName) {
-        runtime.getTableRegistry().clearTable(namespace, tableName);
+    public void deleteTable(String namespace, String tableName) {
+        runtime.getTableRegistry().deleteTable(namespace, tableName);
     }
 
     /**
-     * Drops a table. It includes deleting all table entries, deleting it in
-     * RegistryTable, and deleting its stream address space in Sequencer Server and
-     * LogUnit Server. It does not proactively release the local client memory held
-     * by this table or its snapshots.
-     *
-     * It is the user's responsibility to ensure that there is no other clients still
-     * operating on this table before which is dropped.
-     *
-     * The table does not need to be opened by this CorfuStore instance in oder to
-     * run the dropTable().
+     * Unregister a table, and clear the table empty. This will cause the table
+     * to be trimmed upon next compaction cycle. This method combined with
+     * dropTrimmedTable() accomplishes deep clean up of tables. User should
+     * call this method first, then make sure compaction actually trims this
+     * table, and finally call dropTrimmedTable() to finish the cleanup.
      *
      * @param namespace namespace this table
-     * @param tableName name this table
+     * @param tableName name of this table
      */
-    public void dropTable(String namespace, String tableName) {
-        runtime.getTableRegistry().dropTable(namespace, tableName);
+    public void unregisterTable(String namespace, String tableName) {
+        runtime.getTableRegistry().clearAndUnregisterTable(namespace, tableName);
+    }
+
+    /**
+     * Delete the table and its checkpoint stream from the sequencer server and
+     * log unit server to clean up the in-mem maps. Since the table has been trimmed,
+     * future server restarts will not reload the previously trimmed address space.
+     * After calling this method, accesses to this table will not hit TrimmedException.
+     *
+     * @param namespace Namespace of the table.
+     * @param tableName Name of the table.
+     */
+    public void dropTrimmedTable(String namespace, String tableName) {
+        runtime.getTableRegistry().dropTrimmedTable(namespace, tableName);
     }
 
     /**

@@ -680,40 +680,44 @@ public class TableRegistry {
      * @param namespace Namespace of the table.
      * @param tableName Name of the table.
      */
-    public void clearTable(String namespace, String tableName) {
+    public void deleteTable(String namespace, String tableName) {
         Table<Message, Message, Message> table = getTable(namespace, tableName);
         table.clearAll();
     }
 
     /**
-     * Clear the table by appending CLEAR to the stream. Start a transaction to delete the
-     * table from RegistryTable, and remove the table and its checkpoint stream from the
-     * sequencer server and log unit server to clean up the in-mem maps.
+     * Delete the table and its checkpoint stream from the sequencer server and
+     * log unit server to clean up the in-mem maps. After this call, the accesses
+     * to the table will not hit TrimmedException.
      *
      * @param namespace Namespace of the table.
      * @param tableName Name of the table.
      */
-    public void dropTable(String namespace, String tableName) {
-        log.info("Invoking dropTable {}${}", namespace, tableName);
+    public void dropTrimmedTable(String namespace, String tableName) {
+        log.info("Invoking dropTrimmedTable {}${}", namespace, tableName);
 
-        UUID streamId = CorfuRuntime.getStreamID(getFullyQualifiedTableName(namespace, tableName));
+        String fullyQualifiedTableName = getFullyQualifiedTableName(namespace, tableName);
+        UUID streamId = CorfuRuntime.getStreamID(fullyQualifiedTableName);
         UUID cpStreamId = CorfuRuntime.getCheckpointStreamIdFromId(streamId);
         List<UUID> streamsToDelete = Arrays.asList(streamId, cpStreamId);
 
         // Clear the stream address space from Sequencer server cache and Log unit cache.
-        // This step is needed to support reopening a dropped table.
         runtime.getAddressSpaceView().deleteStreamFromServerCache(streamsToDelete);
 
-        // Append 'clear' SMR to the stream so that if the stream is not trimmed yet and is
-        // reloaded in Sequencer, the re-opened table will appear as an empty stream. If the
-        // stream has been trimmed, it will either be deleted already (LogUnit server not restarted),
-        // or not be loaded at all (a trimmed stream won't be loaded upon LogUnit server restart).
-        clearAndUnregisterTable(namespace, tableName);
-
-        log.info("Done dropping table {}${}", namespace, tableName);
+        log.info("Completed dropTrimmedTable table {}${}", namespace, tableName);
     }
 
-    private void clearAndUnregisterTable(String namespace, String tableName) {
+    /**
+     * Unregister a table, and clear the table empty. This will cause the table
+     * to be trimmed upon next compaction cycle. This method combined with
+     * dropTrimmedTable() accomplishes deep clean up of tables. User should
+     * call this method first, then make sure compaction actually trims this
+     * table, and finally call dropTrimmedTable() to finish the cleanup.
+     *
+     * @param namespace namespace this table
+     * @param tableName name of this table
+     */
+    public void clearAndUnregisterTable(String namespace, String tableName) {
         TableName tableNameKey = TableName.newBuilder()
                 .setNamespace(namespace)
                 .setTableName(tableName)
