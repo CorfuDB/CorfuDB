@@ -87,6 +87,16 @@ public class CorfuStoreIT extends AbstractIT {
                 .runServer();
     }
 
+    private Process runSinglePersistentServer(String host, int port, boolean disableLogUnitServerCache) throws IOException {
+        return new AbstractIT.CorfuServerRunner()
+                .setHost(host)
+                .setPort(port)
+                .setLogPath(getCorfuServerLogPath(host, port))
+                .setSingle(true)
+                .setDisableLogUnitServerCache(disableLogUnitServerCache)
+                .runServer();
+    }
+
     /**
      * Load properties for a single node corfu server before each test
      */
@@ -818,7 +828,7 @@ public class CorfuStoreIT extends AbstractIT {
 
     @Test
     public void trimTableAndAppendHole() throws Exception {
-        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
+        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort, true);
 
         runtime = createRuntime(singleNodeEndpoint);
         CorfuStore corfuStore = new CorfuStore(runtime);
@@ -880,13 +890,6 @@ public class CorfuStoreIT extends AbstractIT {
         cpw.finishCheckpoint();
         runtime.getObjectsView().TXEnd();
 
-        corfuStore.openTable(
-                namespace,
-                tableNameB,
-                Uuid.class,
-                Uuid.class,
-                null,
-                TableOptions.builder().build());
         tx = corfuStore.txn(namespace);
         assertThat(tx.getRecord(tableNameA, key1).getPayload()).isEqualTo(key1);
         assertThat(tx.getRecord(tableNameB, key2).getPayload()).isNull();
