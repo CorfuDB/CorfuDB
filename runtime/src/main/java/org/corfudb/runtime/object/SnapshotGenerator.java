@@ -1,5 +1,9 @@
 package org.corfudb.runtime.object;
 
+import org.corfudb.runtime.view.ObjectOpenOption;
+
+import java.util.Optional;
+
 /**
  * Interface that facilitates creation of snapshots.
  *
@@ -15,7 +19,16 @@ public interface SnapshotGenerator<T> extends AutoCloseable {
      *                      with this snapshot
      * @return ISMRSnapshot a new snapshot
      */
-    SMRSnapshot<T> getSnapshot(VersionedObjectIdentifier version);
+    SMRSnapshot<T> generateSnapshot(VersionedObjectIdentifier version);
+
+    Optional<SMRSnapshot<T>> generateTargetSnapshot(
+            VersionedObjectIdentifier version,
+            ObjectOpenOption objectOpenOption,
+            SMRSnapshot<T> previousSnapshot);
+
+    Optional<SMRSnapshot<T>> generateIntermediarySnapshot(
+            VersionedObjectIdentifier version,
+            ObjectOpenOption objectOpenOption);
 
     /**
      * {@inheritDoc}

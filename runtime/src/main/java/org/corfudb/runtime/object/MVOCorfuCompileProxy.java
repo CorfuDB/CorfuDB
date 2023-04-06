@@ -59,23 +59,14 @@ public class MVOCorfuCompileProxy<
         this.serializer = serializer;
         this.streamTags = streamTags;
         this.objectOpenOption = objectOpenOption;
-
-        if (objectOpenOption.equals(ObjectOpenOption.CACHE)) {
-            this.underlyingMVO = new MultiVersionObject<>(
-                    rt,
-                    this::getNewInstance,
-                    new StreamViewSMRAdapter(rt, rt.getStreamsView().getUnsafe(streamID)),
-                    wrapperObject,
-                    mvoCache
-            );
-        } else {
-            this.underlyingMVO = new VersionedObject<>(
-                    rt,
-                    this::getNewInstance,
-                    new StreamViewSMRAdapter(rt, rt.getStreamsView().getUnsafe(streamID)),
-                    wrapperObject
-            );
-        }
+        this.underlyingMVO = new MultiVersionObject<>(
+                rt,
+                this::getNewInstance,
+                new StreamViewSMRAdapter(rt, rt.getStreamsView().getUnsafe(streamID)),
+                wrapperObject,
+                mvoCache,
+                objectOpenOption
+        );
     }
 
     @Override

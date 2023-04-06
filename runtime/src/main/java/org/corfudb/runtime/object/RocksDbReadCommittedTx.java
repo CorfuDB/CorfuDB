@@ -66,18 +66,11 @@ public class RocksDbReadCommittedTx<S extends SnapshotGenerator<S>>
     }
 
     @Override
+    public void close() throws RocksDBException {
+    }
+
+    @Override
     public <K, V> RocksDbEntryIterator<K,V> getIterator(@NonNull ISerializer serializer) {
         return new RocksDbEntryIterator<>(rocksDb.newIterator(), serializer, readOptions, new StampedLock());
-    }
-
-    @Override
-    public void close() throws RocksDBException {
-        readOptions.close();
-    }
-
-    @Override
-    public SMRSnapshot<S> getSnapshot(@NonNull ViewGenerator<S> viewGenerator,
-                                      @NonNull VersionedObjectIdentifier version) {
-        throw new UnsupportedOperationException();
     }
 }

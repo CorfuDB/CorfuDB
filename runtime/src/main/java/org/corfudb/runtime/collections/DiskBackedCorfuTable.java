@@ -13,11 +13,13 @@ import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.object.PersistenceOptions;
 import org.corfudb.runtime.object.RocksDbApi;
+import org.corfudb.runtime.object.RocksDbSnapshotGenerator;
 import org.corfudb.runtime.object.SMRSnapshot;
 import org.corfudb.runtime.object.RocksDbStore;
 import org.corfudb.runtime.object.SnapshotGenerator;
 import org.corfudb.runtime.object.VersionedObjectIdentifier;
 import org.corfudb.runtime.object.ViewGenerator;
+import org.corfudb.runtime.view.ObjectOpenOption;
 import org.corfudb.util.serializer.ISerializer;
 import org.rocksdb.CompressionType;
 import org.rocksdb.Options;
@@ -34,6 +36,8 @@ import java.util.Spliterators;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
+
+import static org.corfudb.runtime.CorfuOptions.ConsistencyModel.READ_COMMITTED;
 
 @Slf4j
 @AllArgsConstructor
@@ -80,8 +84,10 @@ public class DiskBackedCorfuTable<K, V> implements
         return options;
     }
 
+    private final PersistenceOptions persistenceOptions;
     private final ISerializer serializer;
     private final RocksDbApi<DiskBackedCorfuTable<K, V>> rocksApi;
+    private final RocksDbSnapshotGenerator<DiskBackedCorfuTable<K, V>> rocksDbSnapshotGenerator;
     private final String metricsId;
     @Getter
     private final Statistics statistics;
@@ -89,13 +95,17 @@ public class DiskBackedCorfuTable<K, V> implements
     public DiskBackedCorfuTable(@NonNull PersistenceOptions persistenceOptions,
                                 @NonNull Options rocksDbOptions,
                                 @NonNull ISerializer serializer) {
+        this.persistenceOptions = persistenceOptions;
         try {
             this.statistics = new Statistics();
             this.statistics.setStatsLevel(StatsLevel.ALL);
             rocksDbOptions.setStatistics(statistics);
 
-            this.rocksApi = new RocksDbStore<>(persistenceOptions.getDataPath(),
+            final RocksDbStore<DiskBackedCorfuTable<K, V>> rocksDbStore = new RocksDbStore<>(
+                    persistenceOptions.getDataPath(),
                     rocksDbOptions, writeOptions, persistenceOptions);
+            this.rocksApi = rocksDbStore;
+            this.rocksDbSnapshotGenerator = rocksDbStore;
             this.metricsId = String.format("%s.%s.",
                     persistenceOptions.getDataPath().getFileName(), System.identityHashCode(this));
             MeterRegistryProvider.registerExternalSupplier(metricsId, this.statistics::toString);
@@ -212,17 +222,44 @@ public class DiskBackedCorfuTable<K, V> implements
         } catch (RocksDBException e) {
             throw new UnrecoverableCorfuError(e);
         } finally {
-            MeterRegistryProvider.unregisterExternalSupplier(metricsId);
+            if (isRoot()) {
+                MeterRegistryProvider.unregisterExternalSupplier(metricsId);
+            }
         }
     }
 
     @Override
-    public SMRSnapshot<DiskBackedCorfuTable<K, V>> getSnapshot(VersionedObjectIdentifier version) {
-        return rocksApi.getSnapshot(this, version);
+    public SMRSnapshot<DiskBackedCorfuTable<K, V>> generateSnapshot(VersionedObjectIdentifier version) {
+        if (persistenceOptions.getConsistencyModel() == READ_COMMITTED) {
+            return rocksDbSnapshotGenerator.getImplicitSnapshot(this, version);
+        }
+        return rocksDbSnapshotGenerator.getSnapshot(this, version);
+    }
+
+    @Override
+    public Optional<SMRSnapshot<DiskBackedCorfuTable<K, V>>> generateTargetSnapshot(
+            VersionedObjectIdentifier version,
+            ObjectOpenOption objectOpenOption,
+            SMRSnapshot<DiskBackedCorfuTable<K, V>> previousSnapshot) {
+        return Optional.empty();
+    }
+
+    @Override
+    public Optional<SMRSnapshot<DiskBackedCorfuTable<K, V>>> generateIntermediarySnapshot(
+            VersionedObjectIdentifier version,
+            ObjectOpenOption objectOpenOption) {
+        return Optional.of(generateSnapshot(version));
     }
 
     @Override
     public DiskBackedCorfuTable<K, V> newView(@NonNull RocksDbApi<DiskBackedCorfuTable<K, V>> rocksApi) {
+        if (!isRoot()) {
+            throw new IllegalStateException("Only the root object cen generate new views.");
+        }
         return toBuilder().rocksApi(rocksApi).build();
+    }
+
+    private boolean isRoot() {
+        return rocksApi == rocksDbSnapshotGenerator;
     }
 }

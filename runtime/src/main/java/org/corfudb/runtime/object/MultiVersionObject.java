@@ -7,10 +7,10 @@ import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.runtime.view.ObjectOpenOption;
 import org.corfudb.util.Utils;
 
 import javax.annotation.Nonnull;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
 
 /**
@@ -28,6 +28,7 @@ public class MultiVersionObject<S extends SnapshotGenerator<S>> extends Abstract
      */
     @Getter
     private final MVOCache<S> mvoCache;
+    private final ObjectOpenOption objectOpenOption;
 
     /**
      * Create a new MultiVersionObject.
@@ -39,10 +40,12 @@ public class MultiVersionObject<S extends SnapshotGenerator<S>> extends Abstract
      */
     public MultiVersionObject(
             @Nonnull CorfuRuntime corfuRuntime, @Nonnull Supplier<S> newObjectFn,
-            @Nonnull StreamViewSMRAdapter smrStream, @Nonnull ICorfuSMR wrapperObject, @Nonnull MVOCache<S> mvoCache) {
+            @Nonnull StreamViewSMRAdapter smrStream, @Nonnull ICorfuSMR wrapperObject,
+            @Nonnull MVOCache<S> mvoCache, @Nonnull ObjectOpenOption objectOpenOption) {
 
         super(corfuRuntime, newObjectFn, smrStream, wrapperObject);
         this.mvoCache = mvoCache;
+        this.objectOpenOption = objectOpenOption;
     }
 
     /**
@@ -51,7 +54,7 @@ public class MultiVersionObject<S extends SnapshotGenerator<S>> extends Abstract
     @Override
     protected SMRSnapshot<S> retrieveSnapshotUnsafe(@Nonnull VersionedObjectIdentifier voId) {
         if (voId.getVersion() == materializedUpTo) {
-            return currentSnapshot;
+            return getCurrentSnapshot();
         }
 
         return mvoCache.get(voId).orElseThrow(() -> new TrimmedException(voId.getVersion(),
@@ -67,11 +70,6 @@ public class MultiVersionObject<S extends SnapshotGenerator<S>> extends Abstract
         if (log.isTraceEnabled()) {
             log.trace("Sync[{}] to {}", Utils.toReadableId(getID()), timestamp);
         }
-
-        // The current snapshot associated with currentObject is already generated. Therefore,
-        // we do not generate it again after processing the first SMR updates. A version
-        // is *NOT* stored in the cache until a more recent version is materialized.
-        AtomicBoolean isFirst = new AtomicBoolean(true);
 
         Runnable syncStreamRunnable = () -> {
             smrStream.streamUpToInList(timestamp)
@@ -94,25 +92,25 @@ public class MultiVersionObject<S extends SnapshotGenerator<S>> extends Abstract
                                 throw new TrimmedException();
                             }
 
+                            // Update the current object.
+                            addressUpdates.getSmrEntryList().forEach(this::applyUpdateUnsafe);
+
                             // If we observe a new version, place the previous one into the MVOCache.
                             if (globalAddress > materializedUpTo) {
                                 final VersionedObjectIdentifier voId = new VersionedObjectIdentifier(getID(), materializedUpTo);
-
-                                if (!isFirst.get()) {
-                                    currentSnapshot = currentObject.getSnapshot(voId);
-                                }
-
-                                mvoCache.put(voId, currentSnapshot);
+                                currentObject.generateIntermediarySnapshot(voId, objectOpenOption)
+                                        .ifPresent(newSnapshot -> {
+                                            setCurrentSnapshot(newSnapshot);
+                                            mvoCache.put(voId, removeAndGetPreviousSnapshot());
+                                        });
                             }
 
                             // In the case where addressUpdates corresponds to a HOLE, getSmrEntryList() will
                             // produce an empty list and the below will be a no-op. This means that there can
                             // be multiple versions that correspond to the same exact object.
-                            addressUpdates.getSmrEntryList().forEach(this::applyUpdateUnsafe);
                             addressSpace.addAddress(globalAddress);
                             materializedUpTo = globalAddress;
                             resolvedUpTo = globalAddress;
-                            isFirst.set(false);
                         } catch (TrimmedException e) {
                             // The caller catches this TrimmedException and resets the object before retrying.
                             throw e;
@@ -122,11 +120,12 @@ public class MultiVersionObject<S extends SnapshotGenerator<S>> extends Abstract
                         }
                     });
 
-            // If no new SMR updates were consumed during this sync, then currentObject has remained unchanged.
-            if (!isFirst.get()) {
-                final VersionedObjectIdentifier voId = new VersionedObjectIdentifier(getID(), materializedUpTo);
-                currentSnapshot = currentObject.getSnapshot(voId);
-            }
+            final VersionedObjectIdentifier voId = new VersionedObjectIdentifier(getID(), materializedUpTo);
+            currentObject.generateTargetSnapshot(voId, objectOpenOption, getCurrentSnapshot())
+                    .ifPresent(newSnapshot -> {
+                        setCurrentSnapshot(newSnapshot);
+                        mvoCache.put(voId, removeAndGetPreviousSnapshot());
+                    });
         };
 
         MicroMeterUtils.time(syncStreamRunnable, "mvo.sync.timer", STREAM_ID_TAG_NAME, getID().toString());

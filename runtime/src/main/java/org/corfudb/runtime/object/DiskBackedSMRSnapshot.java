@@ -22,8 +22,6 @@ import static org.corfudb.runtime.CorfuOptions.ConsistencyModel.READ_COMMITTED;
 
 public class DiskBackedSMRSnapshot<S extends SnapshotGenerator<S>> implements SMRSnapshot<S> {
 
-    private static final Snapshot IMPLICIT_LATEST_SNAPSHOT = null;
-
     private final VersionedObjectIdentifier version;
     private final StampedLock lock = new StampedLock();
     private final OptimisticTransactionDB rocksDb;
@@ -32,7 +30,6 @@ public class DiskBackedSMRSnapshot<S extends SnapshotGenerator<S>> implements SM
 
     private final ReadOptions readOptions;
     private final WriteOptions writeOptions;
-    private final ConsistencyModel consistencyModel;
 
     // A set of iterators associated with this snapshot.
     private final Set<RocksDbEntryIterator<?, ?>> set;
@@ -45,12 +42,7 @@ public class DiskBackedSMRSnapshot<S extends SnapshotGenerator<S>> implements SM
         this.rocksDb = rocksDb;
         this.writeOptions = writeOptions;
         this.viewGenerator = viewGenerator;
-        this.consistencyModel = consistencyModel;
-        if (consistencyModel == READ_COMMITTED) {
-            this.snapshot = IMPLICIT_LATEST_SNAPSHOT;
-        } else {
-            this.snapshot = rocksDb.getSnapshot();
-        }
+        this.snapshot = rocksDb.getSnapshot();
 
         this.readOptions = new ReadOptions().setSnapshot(this.snapshot);
         this.version = version;
@@ -83,14 +75,7 @@ public class DiskBackedSMRSnapshot<S extends SnapshotGenerator<S>> implements SM
 
     public S consume() {
         RocksDbApi<S> rocksTx;
-
-        if (consistencyModel == READ_COMMITTED) {
-            rocksTx = new RocksDbReadCommittedTx<>(rocksDb);
-        } else {
-            rocksTx = new RocksDbTx<>(rocksDb, writeOptions, this);
-        }
-
-        return viewGenerator.newView(rocksTx);
+        return viewGenerator.newView(new RocksDbTx<>(rocksDb, writeOptions, this));
     }
 
     public void release() {

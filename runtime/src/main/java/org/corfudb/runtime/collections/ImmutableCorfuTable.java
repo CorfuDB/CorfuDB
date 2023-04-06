@@ -14,9 +14,11 @@ import org.corfudb.runtime.object.SMRSnapshot;
 import org.corfudb.runtime.object.InMemorySMRSnapshot;
 import org.corfudb.runtime.object.SnapshotGenerator;
 import org.corfudb.runtime.object.VersionedObjectIdentifier;
+import org.corfudb.runtime.view.ObjectOpenOption;
 
 import javax.annotation.Nonnull;
 import java.util.Collections;
+import java.util.Optional;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
@@ -61,8 +63,32 @@ public class ImmutableCorfuTable<K, V> implements SnapshotGenerator<ImmutableCor
     }
 
     @Override
-    public SMRSnapshot<ImmutableCorfuTable<K, V>> getSnapshot(VersionedObjectIdentifier version) {
+    public SMRSnapshot<ImmutableCorfuTable<K, V>> generateSnapshot(VersionedObjectIdentifier version) {
         return new InMemorySMRSnapshot<>(this);
+    }
+
+    @Override
+    public Optional<SMRSnapshot<ImmutableCorfuTable<K, V>>> generateTargetSnapshot(
+            VersionedObjectIdentifier version,
+            ObjectOpenOption objectOpenOption,
+            SMRSnapshot<ImmutableCorfuTable<K, V>> previousSnapshot) {
+        if (objectOpenOption == ObjectOpenOption.NO_CACHE) {
+            previousSnapshot.release();
+            return Optional.of(new InMemorySMRSnapshot<>(this));
+        }
+
+        return Optional.empty();
+    }
+
+    @Override
+    public Optional<SMRSnapshot<ImmutableCorfuTable<K, V>>> generateIntermediarySnapshot(
+            VersionedObjectIdentifier version,
+            ObjectOpenOption objectOpenOption) {
+        if (objectOpenOption == ObjectOpenOption.NO_CACHE) {
+            return Optional.empty();
+        }
+
+        return Optional.of(new InMemorySMRSnapshot<>(this));
     }
 
     @Override

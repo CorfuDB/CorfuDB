@@ -21,7 +21,8 @@ import java.nio.file.Path;
  * @param <S> extends SnapshotGenerator
  */
 @Slf4j
-public class RocksDbStore<S extends SnapshotGenerator<S>> implements RocksDbApi<S> {
+public class RocksDbStore<S extends SnapshotGenerator<S>>
+        implements RocksDbApi<S>, RocksDbSnapshotGenerator<S> {
 
     private final OptimisticTransactionDB rocksDb;
     private final String absolutePathString;
@@ -106,12 +107,19 @@ public class RocksDbStore<S extends SnapshotGenerator<S>> implements RocksDbApi<
      * @param viewGenerator an instance that will be responsible for
      *                      generating new views based on this snapshot
      * @param version       a version that will be tied to this snapshot
-     * @return
+     * @return a new snapshot
      */
     @Override
     public SMRSnapshot<S> getSnapshot(@NonNull ViewGenerator<S> viewGenerator,
                                       @NonNull VersionedObjectIdentifier version) {
         return new DiskBackedSMRSnapshot<>(rocksDb, writeOptions,
                 persistenceOptions.consistencyModel, version, viewGenerator);
+    }
+
+    @Override
+    public SMRSnapshot<S> getImplicitSnapshot(
+            @NonNull ViewGenerator<S> viewGenerator,
+            @NonNull VersionedObjectIdentifier version) {
+        return new AlwaysLatestSnapshot<>(rocksDb, viewGenerator);
     }
 }

@@ -28,8 +28,5 @@ public interface RocksDbApi<S extends SnapshotGenerator<S>> {
 
     long exactSize();
 
-    SMRSnapshot<S> getSnapshot(@NonNull ViewGenerator<S> viewGenerator,
-                               @NonNull VersionedObjectIdentifier version);
-
     void close() throws RocksDBException;
 }

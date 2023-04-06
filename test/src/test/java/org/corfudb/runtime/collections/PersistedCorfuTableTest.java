@@ -28,6 +28,8 @@ import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.object.PersistenceOptions;
 import org.corfudb.runtime.object.PersistenceOptions.PersistenceOptionsBuilder;
+import org.corfudb.runtime.object.RocksDbReadCommittedTx;
+import org.corfudb.runtime.object.VersionedObjectIdentifier;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.test.SampleSchema;
 import org.corfudb.test.SampleSchema.EventInfo;
@@ -41,6 +43,7 @@ import org.mockito.Captor;
 import org.mockito.Mockito;
 import org.mockito.runners.MockitoJUnitRunner;
 import org.rocksdb.Env;
+import org.rocksdb.OptimisticTransactionDB;
 import org.rocksdb.Options;
 import org.rocksdb.RocksDB;
 import org.rocksdb.RocksDBException;
@@ -72,7 +75,6 @@ import java.util.stream.Stream;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy;
 import static org.corfudb.common.metrics.micrometer.MeterRegistryProvider.MeterRegistryInitializer.initClientMetrics;
-import static org.mockito.Mockito.mock;
 
 @Slf4j
 @RunWith(MockitoJUnitRunner.class)
@@ -239,8 +241,6 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
                         Assertions.assertEquals(value, persistedValue);
                     })).isInstanceOf(UnrecoverableCorfuError.class)
                     .hasCauseInstanceOf(RocksDBException.class);
-
-            table.publishStats(System.out::println);
         }
     }
 
@@ -519,6 +519,22 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
     }
 
     @Property(tries = NUM_OF_TRIES)
+    void invalidView() {
+
+        PersistenceOptionsBuilder persistenceOptions = PersistenceOptions.builder()
+                .dataPath(Paths.get(diskBackedDirectory, defaultTableName));
+
+        OptimisticTransactionDB rocksDb = Mockito.mock(OptimisticTransactionDB.class);
+
+        try (DiskBackedCorfuTable<String, String> table = new DiskBackedCorfuTable<>(
+                persistenceOptions.build(), defaultOptions, defaultSerializer)) {
+            DiskBackedCorfuTable<String, String> newView = table.newView(new RocksDbReadCommittedTx<>(rocksDb));
+            assertThat(newView).isNotNull();
+            assertThatThrownBy(() -> newView.newView(new RocksDbReadCommittedTx<>(rocksDb)))
+                    .isInstanceOf(IllegalStateException.class);
+        }
+    }
+    @Property(tries = NUM_OF_TRIES)
     void snapshotExpired() {
         resetTests(CorfuRuntimeParameters.builder().mvoCacheExpiry(Duration.ofNanos(0)).build());
         try (final PersistedCorfuTable<String, String> table = setupTable()) {
@@ -605,7 +621,7 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
             executeTx(() -> {
                 assertThat(table.get(defaultNewMapEntry)).isNull();
                 table.insert(defaultNewMapEntry, defaultNewMapEntry);
-                assertThat(table.get(defaultNewMapEntry)).isEqualTo(null);
+                assertThat(table.get(defaultNewMapEntry)).isNull();
             });
 
         }
@@ -832,6 +848,7 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
 
         // The table should have been closed by now.
         // No new messages should be generated.
+        TimeUnit.MILLISECONDS.sleep(loggingInterval.multipliedBy(2).toMillis());
         logMessages.clear();
         TimeUnit.MILLISECONDS.sleep(loggingInterval.multipliedBy(2).toMillis());
         assertThat(logMessages.stream().filter(log -> log.contains("rocksdb"))

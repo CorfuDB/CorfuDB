@@ -104,10 +104,4 @@ public class RocksDbTx<S extends SnapshotGenerator<S>> implements RocksDbApi<S> 
     public void close() throws RocksDBException {
         txn.rollback();
     }
-
-    @Override
-    public SMRSnapshot<S> getSnapshot(@NonNull ViewGenerator<S> viewGenerator,
-                                      @NonNull VersionedObjectIdentifier version) {
-        throw new UnsupportedOperationException();
-    }
 }

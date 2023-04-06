@@ -15,12 +15,15 @@ import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nonnull;
 import java.time.Duration;
+import java.util.ArrayDeque;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.locks.StampedLock;
 import java.util.function.Supplier;
+
+import static org.hamcrest.MatcherAssert.assertThat;
 
 /**
  * Provides the necessary synchronization primitives for allowing safe access to the SMR
@@ -29,6 +32,10 @@ import java.util.function.Supplier;
  */
 @Slf4j
 public abstract class AbstractVersionedObject<S extends SnapshotGenerator<S>> {
+
+    private static final int snapshotFifoSize = 2;
+    private static final String CORRECTNESS_LOG_MSG = "Version, {}";
+    protected static final String STREAM_ID_TAG_NAME = "streamId";
 
     private final Logger correctnessLogger = LoggerFactory.getLogger("correctness");
 
@@ -71,10 +78,8 @@ public abstract class AbstractVersionedObject<S extends SnapshotGenerator<S>> {
     @Getter
     protected volatile S currentObject;
 
-    /**
-     * A corresponding snapshot reference for currentObject.
-     */
-    protected volatile SMRSnapshot<S> currentSnapshot;
+    protected volatile ArrayDeque<SMRSnapshot<S>> snapshotFifo
+            = new ArrayDeque<>(snapshotFifoSize);
 
     /**
      * All versions up to (and including) materializedUpTo have had their versions
@@ -91,10 +96,6 @@ public abstract class AbstractVersionedObject<S extends SnapshotGenerator<S>> {
      */
     protected volatile long resolvedUpTo = Address.NON_ADDRESS;
 
-    private static final String CORRECTNESS_LOG_MSG = "Version, {}";
-
-    protected static final String STREAM_ID_TAG_NAME = "streamId";
-
     protected AbstractVersionedObject(@Nonnull CorfuRuntime corfuRuntime, @Nonnull Supplier<S> newObjectFn,
                                       @Nonnull StreamViewSMRAdapter smrStream, @Nonnull ICorfuSMR wrapperObject) {
         this.smrStream = smrStream;
@@ -106,8 +107,23 @@ public abstract class AbstractVersionedObject<S extends SnapshotGenerator<S>> {
 
         // TODO(Zach): confirm -6 or -1 as "empty version"
         this.currentObject = newObjectFn.get();
-        this.currentSnapshot = this.currentObject.getSnapshot(new VersionedObjectIdentifier(getID(), Address.NON_EXIST));
+        this.snapshotFifo.add(this.currentObject.generateSnapshot(new VersionedObjectIdentifier(getID(), Address.NON_EXIST)));
         this.trimRetry = corfuRuntime.getParameters().getTrimRetry();
+    }
+
+    protected SMRSnapshot<S> getCurrentSnapshot() {
+        return snapshotFifo.getLast();
+    }
+
+    protected void setCurrentSnapshot(SMRSnapshot<S> newSnapshot) {
+        snapshotFifo.add(newSnapshot);
+    }
+
+    protected SMRSnapshot<S> removeAndGetPreviousSnapshot() {
+        if (snapshotFifo.size() < snapshotFifoSize) {
+            throw new IllegalStateException("Number of snapshots always needs to be constant.");
+        }
+        return snapshotFifo.remove();
     }
 
     /**
@@ -186,7 +202,7 @@ public abstract class AbstractVersionedObject<S extends SnapshotGenerator<S>> {
             }
 
             correctnessLogger.trace(CORRECTNESS_LOG_MSG, streamTs);
-            return new SnapshotProxy<>(currentSnapshot, streamTs, upcallTargetMap);
+            return new SnapshotProxy<>(getCurrentSnapshot(), streamTs, upcallTargetMap);
         } finally {
             lock.unlock(lockTs);
         }
@@ -341,11 +357,12 @@ public abstract class AbstractVersionedObject<S extends SnapshotGenerator<S>> {
 
         // It is safe to release the current snapshot here as it hasn't been
         // propagated into any caches yet.
-        currentSnapshot.release();
+        snapshotFifo.forEach(SMRSnapshot::release);
+        snapshotFifo = new ArrayDeque<>(2);
         currentObject.close();
         currentObject = newObjectFn.get();
 
-        currentSnapshot = currentObject.getSnapshot(new VersionedObjectIdentifier(getID(), Address.NON_EXIST));
+        snapshotFifo.add(currentObject.generateSnapshot(new VersionedObjectIdentifier(getID(), Address.NON_EXIST)));
         addressSpace = new StreamAddressSpace();
         smrStream.reset();
     }
@@ -358,7 +375,7 @@ public abstract class AbstractVersionedObject<S extends SnapshotGenerator<S>> {
 
         try {
             lockTs = lock.writeLock();
-            currentSnapshot.release();
+            snapshotFifo.forEach(SMRSnapshot::release);
             currentObject.close();
         } finally {
             lock.unlock(lockTs);
