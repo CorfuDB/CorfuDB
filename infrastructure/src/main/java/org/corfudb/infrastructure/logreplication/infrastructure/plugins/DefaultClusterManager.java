@@ -8,8 +8,8 @@ import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescripto
 import org.corfudb.infrastructure.logreplication.infrastructure.CorfuReplicationDiscoveryServiceAdapter;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationDiscoveryServiceException;
 import org.corfudb.infrastructure.logreplication.infrastructure.NodeDescriptor;
-import org.corfudb.infrastructure.logreplication.infrastructure.SessionManager;
 import org.corfudb.infrastructure.logreplication.infrastructure.TopologyDescriptor;
+import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
@@ -762,7 +762,7 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
                         LogReplicationSession session = LogReplicationSession.newBuilder()
                                 .setSinkClusterId(sinkClusterId)
                                 .setSourceClusterId(sourceClusterId)
-                                .setSubscriber(SessionManager.getDefaultSubscriber())
+                                .setSubscriber(LogReplicationConfigManager.getDefaultSubscriber())
                                 .build();
                         clusterManager.forceSnapshotSync(session);
                     } catch (LogReplicationDiscoveryServiceException e) {

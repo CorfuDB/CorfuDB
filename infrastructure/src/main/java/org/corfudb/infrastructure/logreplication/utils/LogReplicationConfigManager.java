@@ -9,7 +9,6 @@ import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.logreplication.config.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.config.LogReplicationFullTableConfig;
 import org.corfudb.infrastructure.logreplication.config.LogReplicationLogicalGroupConfig;
-import org.corfudb.infrastructure.logreplication.infrastructure.SessionManager;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
@@ -47,7 +46,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -55,6 +53,7 @@ import static org.corfudb.infrastructure.logreplication.config.LogReplicationCon
 import static org.corfudb.infrastructure.logreplication.config.LogReplicationConfig.REGISTRY_TABLE_ID;
 import static org.corfudb.runtime.LogReplicationLogicalGroupClient.LR_MODEL_METADATA_TABLE_NAME;
 import static org.corfudb.runtime.LogReplicationLogicalGroupClient.LR_REGISTRATION_TABLE_NAME;
+import static org.corfudb.runtime.view.ObjectsView.DEFAULT_LOGICAL_GROUP_CLIENT;
 import static org.corfudb.runtime.view.ObjectsView.LOG_REPLICATOR_STREAM_INFO;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
@@ -64,6 +63,10 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
  */
 @Slf4j
 public class LogReplicationConfigManager {
+
+    // Represents default client for LR V1, i.e., use case where tables are tagged with
+    // 'is_federated' flag, yet no client is specified in proto
+    private static final String DEFAULT_CLIENT = "00000000-0000-0000-0000-000000000000";
 
     @Getter
     private final CorfuRuntime runtime;
@@ -83,7 +86,7 @@ public class LogReplicationConfigManager {
 
     // Set of registered log replication subscribers.
     @Getter
-    private final Set<ReplicationSubscriber> registeredSubscribers = new CopyOnWriteArraySet<>();
+    private final Set<ReplicationSubscriber> registeredSubscribers = ConcurrentHashMap.newKeySet();
 
     // Map from a logical group to all the Sinks it is targeting.
     private final Map<String, Set<String>> groupSinksMap = new ConcurrentHashMap<>();
@@ -114,6 +117,21 @@ public class LogReplicationConfigManager {
         init();
     }
 
+    // TODO (V2): This builder should be removed after the rpc stream is added for Sink side session creation.
+    public static ReplicationSubscriber getDefaultLogicalGroupSubscriber() {
+        return ReplicationSubscriber.newBuilder()
+                .setClientName(DEFAULT_LOGICAL_GROUP_CLIENT)
+                .setModel(ReplicationModel.LOGICAL_GROUPS)
+                .build();
+    }
+
+    public static ReplicationSubscriber getDefaultSubscriber() {
+        return ReplicationSubscriber.newBuilder()
+                .setClientName(DEFAULT_CLIENT)
+                .setModel(ReplicationModel.FULL_TABLE)
+                .build();
+    }
+
     /**
      * Init config manager:
      * 1. Adding default subscriber to registeredSubscribers
@@ -121,10 +139,10 @@ public class LogReplicationConfigManager {
      * 3. Initialize registry table log tail and in-memory entries
      */
     private void init() {
-        registeredSubscribers.add(SessionManager.getDefaultSubscriber());
+        registeredSubscribers.add(getDefaultSubscriber());
         // TODO (V2): This builder should be removed after the rpc stream is added for Sink side session creation.
         //  and logical group subscribers should come from client registration.
-        registeredSubscribers.add(SessionManager.getDefaultLogicalGroupSubscriber());
+        registeredSubscribers.add(getDefaultLogicalGroupSubscriber());
         openClientConfigTables();
         syncWithRegistryTable();
     }
@@ -206,14 +224,12 @@ public class LogReplicationConfigManager {
                 streamsToReplicate.add(tableName);
                 // Collect tags for merge-only stream
                 streamToTagsMap.put(streamId, Collections.singletonList(LOG_REPLICATOR_STREAM_INFO.getStreamId()));
-            }
-
-            // Find streams to replicate for every logical group for this session
-            if (entry.getValue().getMetadata().getTableOptions().hasReplicationGroup()) {
+            } else if (entry.getValue().getMetadata().getTableOptions().hasReplicationGroup()) {
+                // Find streams to replicate for every logical group for this session
                 String clientName = entry.getValue().getMetadata().getTableOptions().getReplicationGroup().getClientName();
                 String logicalGroup = entry.getValue().getMetadata().getTableOptions().getReplicationGroup().getLogicalGroup();
                 // TODO (V2): Client name should be checked after the rpc stream is added for Sink side session creation.
-//                if (session.getSubscriber().getClientName().equals(clientName) && groups.contains(logicalGroup)) {
+                // if (session.getSubscriber().getClientName().equals(clientName) && groups.contains(logicalGroup)) {
                 if (isSink || logicalGroupToStreams.containsKey(logicalGroup)) {
                     streamsToReplicate.add(tableName);
                     Set<String> relatedStreams = logicalGroupToStreams.getOrDefault(logicalGroup, new HashSet<>());
@@ -328,7 +344,7 @@ public class LogReplicationConfigManager {
                 // TODO (V2): currently we don't support ccustomized client name, default logical group subscriber
                 //  should be removed after the grpc stream for Sink session creation is created.
                 if (model.equals(ReplicationModel.LOGICAL_GROUPS)) {
-                    subscriber = SessionManager.getDefaultLogicalGroupSubscriber();
+                    subscriber = getDefaultLogicalGroupSubscriber();
                 }
                 registeredSubscribers.add(subscriber);
             });
@@ -344,7 +360,7 @@ public class LogReplicationConfigManager {
                 // TODO (V2): currently we don't support ccustomized client name, default logical group subscriber
                 //  should be removed after the grpc stream for Sink session creation is created.
                 if (model.equals(ReplicationModel.LOGICAL_GROUPS)) {
-                    subscriber = SessionManager.getDefaultLogicalGroupSubscriber();
+                    subscriber = getDefaultLogicalGroupSubscriber();
                 }
                 if (registeredSubscribers.contains(subscriber)) {
                     groupSinksMap.put(groupName, new HashSet<>(entry.getPayload().getDestinationIdsList()));

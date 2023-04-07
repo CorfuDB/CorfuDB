@@ -37,9 +37,9 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
-import static org.corfudb.runtime.view.ObjectsView.DEFAULT_LOGICAL_GROUP_CLIENT;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -59,11 +59,6 @@ import static org.corfudb.infrastructure.logreplication.replication.receive.LogR
  */
 @Slf4j
 public class SessionManager {
-
-    // Represents default client for LR V1, i.e., use case where tables are tagged with
-    // 'is_federated' flag, yet no client is specified in proto
-    private static final String DEFAULT_CLIENT = "00000000-0000-0000-0000-000000000000";
-
     private final CorfuStore corfuStore;
 
     private final CorfuRuntime runtime;
@@ -83,7 +78,7 @@ public class SessionManager {
 
     private final Set<LogReplicationSession> outgoingSessions = ConcurrentHashMap.newKeySet();
 
-    private final Set<LogReplicationSession> newSessionsDiscovered = new HashSet<>();
+    private final Set<LogReplicationSession> newSessionsDiscovered = ConcurrentHashMap.newKeySet();
 
     @Getter
     private TopologyDescriptor topology;
@@ -272,6 +267,7 @@ public class SessionManager {
      *     Sink side: assigned grpc stream for subscriber registration
      */
     private void createSessions() {
+        newSessionsDiscovered.clear();
         for (ReplicationSubscriber subscriber : configManager.getRegisteredSubscribers()) {
             createOutgoingSessionsBySubscriber(subscriber);
             createIncomingSessionsBySubscriber(subscriber);
@@ -287,7 +283,7 @@ public class SessionManager {
         logNewlyAddedSessionInfo();
     }
 
-    public void createOutgoingSessionsBySubscriber(ReplicationSubscriber subscriber) {
+    private void createOutgoingSessionsBySubscriber(ReplicationSubscriber subscriber) {
         Set<LogReplicationSession> sessionsToAdd = new HashSet<>();
         try {
             String localClusterId = topology.getLocalClusterDescriptor().getClusterId();
@@ -329,7 +325,7 @@ public class SessionManager {
         configManager.generateConfig(sessionsToAdd);
     }
 
-    public void createIncomingSessionsBySubscriber(ReplicationSubscriber subscriber) {
+    private void createIncomingSessionsBySubscriber(ReplicationSubscriber subscriber) {
         Set<LogReplicationSession> sessionsToAdd = new HashSet<>();
         try {
             String localClusterId = topology.getLocalClusterDescriptor().getClusterId();
@@ -453,21 +449,6 @@ public class SessionManager {
      */
     public Map<LogReplicationSession, ReplicationStatus> getReplicationStatus() {
         return metadataManager.getReplicationStatus();
-    }
-
-    public static ReplicationSubscriber getDefaultSubscriber() {
-        return ReplicationSubscriber.newBuilder()
-                .setClientName(DEFAULT_CLIENT)
-                .setModel(ReplicationModel.FULL_TABLE)
-                .build();
-    }
-
-    // TODO (V2): This builder should be removed after the rpc stream is added for Sink side session creation.
-    public static ReplicationSubscriber getDefaultLogicalGroupSubscriber() {
-        return ReplicationSubscriber.newBuilder()
-                .setClientName(DEFAULT_LOGICAL_GROUP_CLIENT)
-                .setModel(ReplicationModel.LOGICAL_GROUPS)
-                .build();
     }
 
     /**

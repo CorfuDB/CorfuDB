@@ -3,7 +3,6 @@ package org.corfudb.integration;
 import com.google.common.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
-import org.corfudb.infrastructure.logreplication.infrastructure.SessionManager;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
 import org.corfudb.infrastructure.logreplication.proto.Sample.IntValue;
@@ -292,7 +291,7 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
         return LogReplicationSession.newBuilder()
                 .setSinkClusterId(SINK_CLUSTER_ID)
                 .setSourceClusterId(SOURCE_CLUSTER_ID)
-                .setSubscriber(SessionManager.getDefaultSubscriber())
+                .setSubscriber(LogReplicationConfigManager.getDefaultSubscriber())
                 .build();
     }
 

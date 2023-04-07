@@ -75,7 +75,7 @@ public class LogReplicationClientConfigListener extends StreamListenerResumeOrFu
         try {
             corfuStore.subscribeListener(this, CORFU_SYSTEM_NAMESPACE, CLIENT_CONFIG_TAG, tablesOfInterest, timestamp);
         } catch (StreamingException e) {
-            if (e.getCause() == null) {
+            if (e.getExceptionCause().equals(StreamingException.ExceptionCause.LISTENER_SUBSCRIBED)) {
                 log.error("Stream listener already registered!");
             }
         }
