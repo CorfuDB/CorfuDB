@@ -245,7 +245,7 @@ public class RemoteMonitoringService implements ManagementService {
      *  </pre>
      */
     private synchronized CompletableFuture<DetectorTask> runDetectionTasks() {
-
+        long ts = System.currentTimeMillis();
         return getCorfuRuntime()
                 .invalidateLayout()
                 .thenApply(serverContext::saveManagementLayout)
@@ -299,6 +299,7 @@ public class RemoteMonitoringService implements ManagementService {
                                 Issue.IssueId.FAILURE_DETECTOR_TASK_FAILED,
                                 "Last failure detector task was not completed"));
                     } else {
+                        log.info("FD took: {}", System.currentTimeMillis() - ts);
                         log.trace("Resolving issue");
                         HealthMonitor.resolveIssue(new Issue(Component.FAILURE_DETECTOR,
                                 Issue.IssueId.FAILURE_DETECTOR_TASK_FAILED,
@@ -315,7 +316,6 @@ public class RemoteMonitoringService implements ManagementService {
                     partition.getAvailableSpace(),
                     partition.getTotalSpace()
             );
-            log.info("Partition: " + partition);
             BatchProcessorStats bpStats = new BatchProcessorStats(partition.getBatchProcessorStatus());
             FileSystemStats fsStats = new FileSystemStats(partitionAttributeStats, bpStats);
 

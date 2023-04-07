@@ -138,7 +138,7 @@ public class FailuresAgent {
         return runtimeSingleton.get()
                 .getLayoutView()
                 .getRuntimeLayout(layout)
-                .getManagementClient("192.168.0.221:9001")
+                .getManagementClient(localEndpoint)
                 .handleFailure(layout.getEpoch(), failedNodes)
                 .thenApply(DetectorTask::fromBool);
     }

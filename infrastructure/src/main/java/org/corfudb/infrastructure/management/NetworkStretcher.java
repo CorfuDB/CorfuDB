@@ -18,39 +18,30 @@ public class NetworkStretcher {
      * In the worst case scenario or in case of failed servers, their response timeouts will be
      * set to a maximum value of maxPeriod.
      */
-    @Getter
-    @Default
-    private final Duration maxPeriod = Duration.ofSeconds(5);
+
 
     @Getter
     @Default
-    private final Duration minPeriod = Duration.ofSeconds(2);
+    private static final Duration maxPeriod = Duration.ofSeconds(5);
+
+    @Getter
+    @Default
+    private static final Duration minPeriod = Duration.ofSeconds(2);
+
+    @Default
+    private static final Duration periodDelta = Duration.ofSeconds(1);
+
+    @Default
+    private static final Duration initialPollInterval = minPeriod;
 
     /**
      * Response timeout for every router.
      */
     @Getter
     @Default
-    private Duration currentPeriod = Duration.ofSeconds(2);
+    private Duration currentPeriod = getMinPeriod();
 
-    /**
-     * Poll interval between iterations in a pollRound
-     */
-    @Default
-    private final Duration initialPollInterval = Duration.ofSeconds(1);
 
-    /**
-     * Increments in which the period moves towards the maxPeriod in every failed
-     * iteration provided.
-     */
-    @Default
-    private final Duration periodDelta = Duration.ofSeconds(1);
-
-    /**
-     * Function to increment the existing response timeout period.
-     *
-     * @return The new calculated timeout value.
-     */
     @VisibleForTesting
     Duration getIncreasedPeriod() {
         Duration increasedPeriod = currentPeriod.plus(periodDelta);

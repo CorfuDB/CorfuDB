@@ -13,6 +13,7 @@ import com.spotify.docker.client.messages.PortBinding;
 import lombok.Builder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang.StringUtils;
 import org.corfudb.universe.group.cluster.CorfuClusterParams;
 import org.corfudb.universe.logging.LoggingParams;
@@ -25,10 +26,13 @@ import org.corfudb.universe.universe.UniverseParams;
 import org.corfudb.universe.util.DockerManager;
 import org.corfudb.universe.util.IpAddress;
 import org.corfudb.universe.util.IpTablesUtil;
+import org.corfudb.util.Sleep;
 
 import java.io.File;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -312,10 +316,11 @@ public class DockerCorfuServer extends AbstractCorfuServer<CorfuServerParams, Un
      * @return docker container id
      */
     private String deployContainer() {
-        ContainerConfig containerConfig = buildContainerConfig();
+
 
         String id;
         try {
+            ContainerConfig containerConfig = buildContainerConfig();
             ListImagesParam corfuImageQuery = ListImagesParam
                     .byName(params.getDockerImageNameFullName());
             List<Image> corfuImages = docker.listImages(corfuImageQuery);
@@ -347,7 +352,8 @@ public class DockerCorfuServer extends AbstractCorfuServer<CorfuServerParams, Un
             }
 
             ipAddress.set(IpAddress.builder().ip(ipAddr).build());
-        } catch (InterruptedException | DockerException e) {
+        } catch (Exception e) {
+            log.error("Got error: ", e);
             throw new NodeException("Can't start a container", e);
         }
 
@@ -370,11 +376,7 @@ public class DockerCorfuServer extends AbstractCorfuServer<CorfuServerParams, Un
             hostConfigBuilder.memory(params.getContainerResources().getMemory().get());
         }
 
-        HostConfig hostConfig = hostConfigBuilder
-                .privileged(true)
-                .portBindings(portBindings)
-                .capAdd("NET_ADMIN")
-                .build();
+
 
         // Compose command line for starting Corfu
         String cmdLine = String.format("mkdir -p %s", params.getStreamLogDir()) +
@@ -383,6 +385,14 @@ public class DockerCorfuServer extends AbstractCorfuServer<CorfuServerParams, Un
                 org.corfudb.infrastructure.CorfuServer.class.getCanonicalName() +
                 " " +
                 getCommandLineParams();
+        String tempVolumeMount = "/tmp/" + params.getName();
+
+        HostConfig hostConfig = hostConfigBuilder
+                .privileged(true)
+                .portBindings(portBindings)
+                .capAdd("NET_ADMIN")
+                .binds(tempVolumeMount + ":/app/" + params.getStreamLogDir())
+                .build();
 
         return ContainerConfig.builder()
                 .hostConfig(hostConfig)
@@ -403,6 +413,7 @@ public class DockerCorfuServer extends AbstractCorfuServer<CorfuServerParams, Un
             return;
         }
 
+        log.info("params.getStreamLogDir(): " + params.getStreamLogDir());
         Path corfuLogDir = params
                 .getUniverseDirectory()
                 .resolve("logs")

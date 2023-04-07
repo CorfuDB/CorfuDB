@@ -81,7 +81,7 @@ public class FailureDetector implements IDetector {
             @Nonnull Layout layout, @Nonnull CorfuRuntime corfuRuntime, @NonNull SequencerMetrics sequencerMetrics,
             FileSystemStats fileSystemStats) {
 
-        log.trace("Poll report. Layout: {}", layout);
+        log.info("Poll report. Layout: {}", layout);
 
         // Collect and set all responsive servers in the members array.
         Set<String> allServers = layout.getAllServers();
@@ -101,6 +101,7 @@ public class FailureDetector implements IDetector {
         Map<String, IClientRouter> routers = new HashMap<>();
         allServers.forEach(server -> {
             IClientRouter router = corfuRuntime.getRouter(server);
+            log.info("Adjusted all routers to timeouts: {}", networkStretcher.getCurrentPeriod().toMillis());
             router.setTimeoutResponse(networkStretcher.getCurrentPeriod().toMillis());
             routers.put(server, router);
         });
@@ -134,25 +135,26 @@ public class FailureDetector implements IDetector {
         }
 
         List<PollReport> reports = new ArrayList<>();
+        long startRound = System.currentTimeMillis();
+        log.info("Poll round starts");
         for (int iteration = 0; iteration < failureThreshold; iteration++) {
             PollReport currReport = pollIteration(
                     allServers, router, epoch, clusterID, sequencerMetrics, layoutUnresponsiveNodes, fileSystemStats
             );
             reports.add(currReport);
-
             Duration restInterval = networkStretcher.getRestInterval(currReport.getElapsedTime());
             if (!currReport.getFailedNodes().isEmpty()) {
                 networkStretcher.modifyIterationTimeouts();
-
+                log.info("Tuning router response timeouts for the reachable nodes");
                 Set<String> allReachableNodes = currReport.getAllReachableNodes();
                 tuneRoutersResponseTimeout(
                         router, allReachableNodes, networkStretcher.getCurrentPeriod()
                 );
             }
-
             // Sleep for the provided poll interval before starting the next iteration
             Sleep.sleepUninterruptibly(restInterval);
         }
+        log.info("Poll round took: {}", System.currentTimeMillis() - startRound);
 
         //Aggregation step
         Map<String, Long> wrongEpochsAggregated = new HashMap<>();
@@ -212,10 +214,12 @@ public class FailureDetector implements IDetector {
             Set<String> allConnectedNodes) {
 
         networkStretcher.modifyDecreasedPeriod();
+        log.info("Setting all connected nodes {} to this timeout: {}", allConnectedNodes, networkStretcher.getCurrentPeriod());
         tuneRoutersResponseTimeout(
                 clientRouters, allConnectedNodes, networkStretcher.getCurrentPeriod()
         );
 
+        log.info("Setting all failed nodes {} to this timeout: {}", failedNodes, networkStretcher.getMaxPeriod());
         // Reset the timeout of all the failed nodes to the max value to set a longer
         // timeout period to detect their response.
         tuneRoutersResponseTimeout(clientRouters, failedNodes, networkStretcher.getMaxPeriod());
@@ -283,6 +287,8 @@ public class FailureDetector implements IDetector {
     private Map<String, CompletableFuture<NodeState>> pollAsync(
             Set<String> allServers, Map<String, IClientRouter> clientRouters, long epoch, UUID clusterId) {
         // Poll servers for health.  All ping activity will happen in the background.
+        final long start = System.currentTimeMillis();
+
         Map<String, CompletableFuture<NodeState>> clusterState = new HashMap<>();
         allServers.forEach(s -> {
             try {
@@ -294,6 +300,7 @@ public class FailureDetector implements IDetector {
                 );
                 clusterState.put(s, nodeStateFuture);
             } catch (Exception e) {
+                log.error("Error here: ", e);
                 CompletableFuture<NodeState> cf = new CompletableFuture<>();
                 cf.completeExceptionally(e);
                 clusterState.put(s, cf);
@@ -306,8 +313,10 @@ public class FailureDetector implements IDetector {
             CFUtils.allOf(clusterState.values()).join();
         } catch (Exception ex) {
             //ignore
+            log.error("All of error");
         }
 
+        log.info("Poll async took: {}", System.currentTimeMillis() - start);
         return clusterState;
     }
 
@@ -321,7 +330,7 @@ public class FailureDetector implements IDetector {
     private void tuneRoutersResponseTimeout(
             Map<String, IClientRouter> clientRouters, Set<String> endpoints, Duration timeout) {
 
-        log.trace("Tuning router timeout responses for endpoints:{} to {}ms", endpoints, timeout);
+        log.info("Tuning router timeout responses for endpoints:{} to {}ms", endpoints, timeout);
         endpoints.forEach(server -> {
             if (clientRouters.get(server) != null) {
                 clientRouters.get(server).setTimeoutResponse(timeout.toMillis());

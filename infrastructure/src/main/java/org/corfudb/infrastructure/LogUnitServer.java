@@ -324,7 +324,7 @@ public class LogUnitServer extends AbstractServer {
         List<LogData> range = req.getPayload().getRangeWriteLogRequest().getLogDataList()
                 .stream().map(CorfuProtocolLogData::getLogData).collect(Collectors.toList());
 
-        log.debug("handleRangeWrite: {} size [{}-{}]", range.size(),
+        log.info("handleRangeWrite: {} size [{}-{}]", range.size(),
                 range.get(0).getGlobalAddress(), range.get(range.size() - 1).getGlobalAddress());
 
         batchProcessor.addTask(BatchWriterOperation.Type.RANGE_WRITE, req)
