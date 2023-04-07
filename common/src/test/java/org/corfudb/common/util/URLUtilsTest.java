@@ -38,6 +38,11 @@ public class URLUtilsTest {
     private static final String IPV6_ENDPOINT_URL_3_SHORT_MALFORMED = "::1:9000";
     private static final String IPV6_ENDPOINT_URL_MALFORMED_1 = "0:0:0:0:0:0:0:1:9000";
     private static final String IPV6_ENDPOINT_URL_MALFORMED_2 = "0:0:0:0:0:0:0:2:9001";
+    private static final String SAAS_ENDPOINT_1 = "corfu:9000";
+    private static final String SAAS_ENDPOINT_2 = "corfu-0:9000";
+    private static final String SAAS_ENDPOINT_3 = "log-replication-0:9001";
+    private static final String SAAS_ENDPOINT_4 = "corfu-0.corfu.gmns.svc.cluster.local:9000";
+    private static final String SAAS_ENDPOINT_5 = "log-replication-0.log-replication.dev-testing-23.svc.cluster.local:9000";
     private static final String EMPTY_STRING = "";
 
     /**
@@ -74,6 +79,16 @@ public class URLUtilsTest {
                 .isEqualTo(IPV6_ENDPOINT_URL_2);
         assertThat(URLUtils.getVersionFormattedEndpointURL(IPV6_ENDPOINT_URL_3_SHORT_MALFORMED))
                 .isEqualTo(IPV6_ENDPOINT_URL_1_SHORT);
+        assertThat(URLUtils.getVersionFormattedEndpointURL(SAAS_ENDPOINT_1))
+                .isEqualTo(SAAS_ENDPOINT_1);
+        assertThat(URLUtils.getVersionFormattedEndpointURL(SAAS_ENDPOINT_2))
+                .isEqualTo(SAAS_ENDPOINT_2);
+        assertThat(URLUtils.getVersionFormattedEndpointURL(SAAS_ENDPOINT_3))
+                .isEqualTo(SAAS_ENDPOINT_3);
+        assertThat(URLUtils.getVersionFormattedEndpointURL(SAAS_ENDPOINT_4))
+                .isEqualTo(SAAS_ENDPOINT_4);
+        assertThat(URLUtils.getVersionFormattedEndpointURL(SAAS_ENDPOINT_5))
+                .isEqualTo(SAAS_ENDPOINT_5);
     }
 
     /**

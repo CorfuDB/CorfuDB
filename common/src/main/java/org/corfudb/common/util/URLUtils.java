@@ -7,6 +7,8 @@ import org.apache.http.conn.util.InetAddressUtils;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
+import java.util.function.Predicate;
+import java.util.regex.Pattern;
 
 /**
  * Contains Utility methods to work with URIs or the Socket Addresses.
@@ -18,9 +20,20 @@ import java.net.UnknownHostException;
 public final class URLUtils {
 
     private static final String COLON_SEPERATOR = ":";
+    // Matches things like "corfu" or "log-replication-0"
+    private static final Predicate<String> SAAS_PATTERN1 = Pattern.compile("^[a-z-]+(-\\d+)?$").asPredicate();
+    // Matches things like "corfu-0.corfu-headless.dev-env-23.svc.cluster.local"
+    private static final Predicate<String> SAAS_PATTERN2 = Pattern.compile("^[a-z-]+(-\\d+)?.[a-z-]+.[a-z0-9-]+.svc.cluster.local$").asPredicate();
+
+    private static final Predicate<String> SAAS_PATTERN = SAAS_PATTERN1.or(SAAS_PATTERN2);
 
     private URLUtils() {
         // prevent instantiation of this class
+    }
+
+
+    public static boolean hostMatchesSaasPattern(String host) {
+        return SAAS_PATTERN.test(host);
     }
 
     /**
@@ -36,12 +49,16 @@ public final class URLUtils {
 
     /**
      * Returns a version-formatted URL that contains the formatted host address along with the port.
+     * If host matches saas pattern, returns as is.
      *
      * @param host host address that needs formatting
      * @param port port of the endpoint
      * @return a version-formatted endpoint
      */
     public static String getVersionFormattedEndpointURL(String host, String port) {
+        if (hostMatchesSaasPattern(host)) {
+            return host + COLON_SEPERATOR + port;
+        }
         return getVersionFormattedHostAddress(host) +
                 COLON_SEPERATOR +
                 port;
@@ -49,12 +66,17 @@ public final class URLUtils {
 
     /**
      * Returns a version-formatted URL that contains the formatted host address along with the port.
+     * If the host matches saas pattern, returns as is.
      *
      * @param address host address that needs formatting
      * @return a version-formatted endpoint
      */
     public static String getVersionFormattedEndpointURL(String address) {
-        return getVersionFormattedHostAddress(address.substring(0, address.lastIndexOf(':'))) +
+        String host = address.substring(0, address.lastIndexOf(':'));
+        if (hostMatchesSaasPattern(host)) {
+            return address;
+        }
+        return getVersionFormattedHostAddress(host) +
                 address.substring(address.lastIndexOf(COLON_SEPERATOR));
     }
 
