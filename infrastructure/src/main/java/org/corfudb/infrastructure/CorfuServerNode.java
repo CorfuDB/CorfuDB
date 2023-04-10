@@ -23,6 +23,7 @@ import org.corfudb.infrastructure.health.HttpServerInitializer;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageDecoder;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageEncoder;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
+import org.corfudb.runtime.view.Layout;
 import org.corfudb.security.sasl.plaintext.PlainTextSaslNettyServer;
 import org.corfudb.security.tls.SslContextConstructor;
 import org.corfudb.security.tls.TlsUtils.CertStoreConfig.KeyStoreConfig;
@@ -94,13 +95,18 @@ public class CorfuServerNode implements AutoCloseable {
                            @Nonnull ImmutableMap<Class<?>, AbstractServer> serverMap) {
         this.serverContext = serverContext;
         this.serverMap = serverMap;
-        router = new NettyServerRouter(serverMap.values().asList(), serverContext);
+        this.router = new NettyServerRouter(serverMap.values().asList(), serverContext);
         this.serverContext.setServerRouter(router);
         // If the node is started in the single node setup and was bootstrapped,
         // set the server epoch as well.
-        if (serverContext.isSingleNodeSetup() && serverContext.getCurrentLayout() != null) {
-            serverContext.setServerEpoch(serverContext.getCurrentLayout().getEpoch(), router);
-        }
+        Optional<Layout> maybeCurrentLayout = serverContext.findCurrentLayout();
+
+        maybeCurrentLayout.ifPresent(currentLayout -> {
+            if (serverContext.isSingleNodeSetup()) {
+                serverContext.setServerEpoch(currentLayout.getEpoch(), router);
+            }
+        });
+
         this.close = new AtomicBoolean(false);
     }
 
@@ -300,111 +306,122 @@ public class CorfuServerNode implements AutoCloseable {
      * @param router  The {@link NettyServerRouter} to initialize the channel with.
      * @return A {@link ChannelInitializer} to initialize the channel.
      */
-    private static ChannelInitializer<Channel> getServerChannelInitializer(@Nonnull ServerContext context,
-                                                                  @Nonnull NettyServerRouter router) {
+    private static ChannelInitializer<Channel> getServerChannelInitializer(
+            @Nonnull ServerContext context, @Nonnull NettyServerRouter router) {
 
-        // Generate the initializer.
-        return new ChannelInitializer<Channel>() {
-            @Override
-            protected void initChannel(@Nonnull Channel ch) throws Exception {
+        return new CorfuChannelInitializer(context, router);
+    }
 
-                // Security variables
-                final SslContext sslContext;
-                final String[] enabledTlsProtocols;
-                final String[] enabledTlsCipherSuites;
+    private static class CorfuChannelInitializer extends ChannelInitializer<Channel> {
+        private final ServerContext context;
+        private final NettyServerRouter router;
 
-                // Security Initialization
-                Boolean tlsEnabled = context.getServerConfig(Boolean.class, "--enable-tls");
-                Boolean tlsMutualAuthEnabled = context.getServerConfig(Boolean.class,
-                        "--enable-tls-mutual-auth");
-                if (tlsEnabled) {
-                    // Get the TLS cipher suites to enable
-                    String ciphs = context.getServerConfig(String.class, "--tls-ciphers");
-                    if (ciphs != null) {
-                        enabledTlsCipherSuites = Pattern.compile(",")
-                                .splitAsStream(ciphs)
-                                .map(String::trim)
-                                .toArray(String[]::new);
-                    } else {
-                        enabledTlsCipherSuites = new String[]{};
-                    }
+        public CorfuChannelInitializer(ServerContext context, NettyServerRouter router) {
+            this.context = context;
+            this.router = router;
+        }
 
-                    // Get the TLS protocols to enable
-                    String protos = context.getServerConfig(String.class, "--tls-protocols");
-                    if (protos != null) {
-                        enabledTlsProtocols = Pattern.compile(",")
-                                .splitAsStream(protos)
-                                .map(String::trim)
-                                .toArray(String[]::new);
-                    } else {
-                        enabledTlsProtocols = new String[]{};
-                    }
+        @Override
+        protected void initChannel(@Nonnull Channel ch) throws Exception {
 
-                    try {
-                        KeyStoreConfig keyStoreConfig = KeyStoreConfig.from(
-                                context.getServerConfig(String.class, ConfigParamNames.KEY_STORE),
-                                context.getServerConfig(String.class, ConfigParamNames.KEY_STORE_PASS_FILE)
-                        );
+            // Security variables
+            final SslContext sslContext;
+            final String[] enabledTlsProtocols;
+            final String[] enabledTlsCipherSuites;
 
-                        Path certExpiryFile = context
-                                .<String>getServerConfig(ConfigParamNames.DISABLE_CERT_EXPIRY_CHECK_FILE)
-                                .map(Paths::get)
-                                .orElse(TrustStoreConfig.DEFAULT_DISABLE_CERT_EXPIRY_CHECK_FILE);
+            // Security Initialization
+            boolean tlsEnabled = context.getServerConfig(Boolean.class, "--enable-tls");
+            boolean tlsMutualAuthEnabled = context.getServerConfig(Boolean.class, "--enable-tls-mutual-auth");
 
-                        log.trace("getServerChannelInitializer: certExpiryFile path is {}, isCertExpiryCheckEnabled is {}.",
-                                certExpiryFile, !Files.exists(certExpiryFile));
-
-                        TrustStoreConfig trustStoreConfig = TrustStoreConfig.from(
-                                context.getServerConfig(String.class, ConfigParamNames.TRUST_STORE),
-                                context.getServerConfig(String.class, ConfigParamNames.TRUST_STORE_PASS_FILE),
-                                certExpiryFile
-                        );
-
-                        sslContext = SslContextConstructor.constructSslContext(
-                                true, keyStoreConfig, trustStoreConfig
-                        );
-                    } catch (SSLException e) {
-                        log.error("Could not build the SSL context", e);
-                        throw new RuntimeException("Couldn't build the SSL context", e);
-                    }
+            if (tlsEnabled) {
+                // Get the TLS cipher suites to enable
+                String ciphs = context.getServerConfig(String.class, "--tls-ciphers");
+                if (ciphs != null) {
+                    enabledTlsCipherSuites = Pattern.compile(",")
+                            .splitAsStream(ciphs)
+                            .map(String::trim)
+                            .toArray(String[]::new);
                 } else {
                     enabledTlsCipherSuites = new String[]{};
+                }
+
+                // Get the TLS protocols to enable
+                String protos = context.getServerConfig(String.class, "--tls-protocols");
+                if (protos != null) {
+                    enabledTlsProtocols = Pattern.compile(",")
+                            .splitAsStream(protos)
+                            .map(String::trim)
+                            .toArray(String[]::new);
+                } else {
                     enabledTlsProtocols = new String[]{};
-                    sslContext = null;
                 }
 
-                Boolean saslPlainTextAuth = context.getServerConfig(Boolean.class,
-                        "--enable-sasl-plain-text-auth");
+                try {
+                    KeyStoreConfig keyStoreConfig = KeyStoreConfig.from(
+                            context.getServerConfig(String.class, ConfigParamNames.KEY_STORE),
+                            context.getServerConfig(String.class, ConfigParamNames.KEY_STORE_PASS_FILE)
+                    );
 
-                // If TLS is enabled, setup the encryption pipeline.
-                if (tlsEnabled) {
-                    SSLEngine engine = sslContext.newEngine(ch.alloc());
-                    engine.setEnabledCipherSuites(enabledTlsCipherSuites);
-                    engine.setEnabledProtocols(enabledTlsProtocols);
-                    if (tlsMutualAuthEnabled) {
-                        engine.setNeedClientAuth(true);
-                    }
-                    ch.pipeline().addLast("ssl", new SslHandler(engine));
+                    Path certExpiryFile = context
+                            .<String>getServerConfig(ConfigParamNames.DISABLE_CERT_EXPIRY_CHECK_FILE)
+                            .map(Paths::get)
+                            .orElse(TrustStoreConfig.DEFAULT_DISABLE_CERT_EXPIRY_CHECK_FILE);
+
+                    log.trace("getServerChannelInitializer: certExpiryFile path is {}, isCertExpiryCheckEnabled is {}.",
+                            certExpiryFile, !Files.exists(certExpiryFile));
+
+                    TrustStoreConfig trustStoreConfig = TrustStoreConfig.from(
+                            context.getServerConfig(String.class, ConfigParamNames.TRUST_STORE),
+                            context.getServerConfig(String.class, ConfigParamNames.TRUST_STORE_PASS_FILE),
+                            certExpiryFile
+                    );
+
+                    sslContext = SslContextConstructor.constructSslContext(
+                            true, keyStoreConfig, trustStoreConfig
+                    );
+                } catch (SSLException e) {
+                    log.error("Could not build the SSL context", e);
+                    throw new RuntimeException("Couldn't build the SSL context", e);
                 }
-                // Add/parse a length field
-                ch.pipeline().addLast(new LengthFieldPrepender(4));
-                ch.pipeline().addLast(new LengthFieldBasedFrameDecoder(Integer
-                        .MAX_VALUE, 0, 4,
-                        0, 4));
-                // If SASL authentication is requested, perform a SASL plain-text auth.
-                if (saslPlainTextAuth) {
-                    ch.pipeline().addLast("sasl/plain-text", new
-                            PlainTextSaslNettyServer());
-                }
-                // Transform the framed message into a Corfu message.
-                ch.pipeline().addLast(new NettyCorfuMessageDecoder());
-                ch.pipeline().addLast(new NettyCorfuMessageEncoder());
-                ch.pipeline().addLast(new ServerHandshakeHandler(context.getNodeId(),
-                        GitRepositoryState.getCorfuSourceCodeVersion(),
-                        context.getServerConfig(String.class, "--HandshakeTimeout")));
-                // Route the message to the server class.
-                ch.pipeline().addLast(router);
+            } else {
+                enabledTlsCipherSuites = new String[]{};
+                enabledTlsProtocols = new String[]{};
+                sslContext = null;
             }
-        };
+
+            Boolean saslPlainTextAuth = context.getServerConfig(Boolean.class,
+                    "--enable-sasl-plain-text-auth");
+
+            // If TLS is enabled, setup the encryption pipeline.
+            if (tlsEnabled) {
+                SSLEngine engine = sslContext.newEngine(ch.alloc());
+                engine.setEnabledCipherSuites(enabledTlsCipherSuites);
+                engine.setEnabledProtocols(enabledTlsProtocols);
+                if (tlsMutualAuthEnabled) {
+                    engine.setNeedClientAuth(true);
+                }
+                ch.pipeline().addLast("ssl", new SslHandler(engine));
+            }
+            // Add/parse a length field
+            ch.pipeline().addLast(new LengthFieldPrepender(4));
+            ch.pipeline().addLast(new LengthFieldBasedFrameDecoder(Integer.MAX_VALUE, 0, 4, 0, 4));
+            // If SASL authentication is requested, perform a SASL plain-text auth.
+            if (saslPlainTextAuth) {
+                ch.pipeline().addLast("sasl/plain-text", new PlainTextSaslNettyServer());
+            }
+            // Transform the framed message into a Corfu message.
+            ch.pipeline().addLast(new NettyCorfuMessageDecoder());
+            ch.pipeline().addLast(new NettyCorfuMessageEncoder());
+
+            ServerHandshakeHandler serverHandshakeHandler = new ServerHandshakeHandler(
+                    context.getNodeId(),
+                    GitRepositoryState.getCorfuSourceCodeVersion(),
+                    context.getServerConfig(String.class, "--HandshakeTimeout")
+            );
+            ch.pipeline().addLast(serverHandshakeHandler);
+
+            // Route the message to the server class.
+            ch.pipeline().addLast(router);
+        }
     }
 }
