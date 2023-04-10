@@ -470,6 +470,10 @@ public class LogReplicationAckReader {
                 IRetry.build(IntervalRetry.class, () -> {
                     try {
                         lock.lock();
+                        if (lastSyncType == null) {
+                            log.info("lastSyncType is null before polling task run");
+                            return null;
+                        }
                         long entriesToSend = calculateRemainingEntriesToSend(lastAckedTimestamp);
                         metadataManager.updateRemainingEntriesToSend(remoteClusterId, entriesToSend, lastSyncType);
                     } catch (TransactionAbortedException tae) {

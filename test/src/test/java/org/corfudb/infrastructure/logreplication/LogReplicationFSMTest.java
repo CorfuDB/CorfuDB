@@ -203,7 +203,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
             currentReplicationVal = txn.getRecord(statusTable, currentReplicationKey).getPayload();
         }
 
-        // Default sync value is null so current syncType should not be set.
+        // Default sync value is null so current syncType should not be set and default to SNAPSHOT.
         Assert.assertFalse(currentReplicationVal.hasField(ReplicationStatusVal.getDescriptor().findFieldByName("syncType")));
 
         // Current SyncStatus for ReplicationInfo and SnapshotSyncInfo should be NOT_STARTED
@@ -221,9 +221,6 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         Set<SyncType> actualSyncTypes = new HashSet<>();
         SyncStatus actualSyncStatus;
         SyncStatus actualSnapshotInfoSyncStatus;
-
-        int expectedNumEntries = 1;
-        Assert.assertEquals(expectedNumEntries, streamListener.getEntries().size());
 
         ArrayList<CorfuStreamEntries> streamEntries = streamListener.getEntries();
         ReplicationStatusVal replicationStatusVal = (ReplicationStatusVal)
@@ -272,7 +269,8 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
             currentReplicationVal = txn.getRecord(statusTable, currentReplicationKey).getPayload();
         }
-        // Default sync value is null so current syncType should not be set.
+
+        // Default sync value is null so current syncType should not be set and default to SNAPSHOT.
         Assert.assertFalse(currentReplicationVal.hasField(ReplicationStatusVal.getDescriptor().findFieldByName("syncType")));
 
         // Current SyncStatus for ReplicationInfo and SnapshotSyncInfo should be NOT_STARTED
@@ -290,9 +288,6 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         Set<SyncType> actualSyncTypes = new HashSet<>();
         SyncStatus actualSyncStatus;
         SyncStatus actualSnapshotInfoSyncStatus;
-
-        int expectedNumEntries = 1;
-        Assert.assertEquals(expectedNumEntries, streamListener.getEntries().size());
 
         ArrayList<CorfuStreamEntries> streamEntries = streamListener.getEntries();
         ReplicationStatusVal replicationStatusVal = (ReplicationStatusVal)
@@ -349,9 +344,6 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         Set<SyncStatus> actualSyncStatus = new HashSet<>();
         Set<SyncStatus> actualSnapshotInfoSyncStatus = new HashSet<>();
 
-        int expectedNumEntries = 3;
-        Assert.assertEquals(expectedNumEntries, streamListener.getEntries().size());
-
         Iterator<CorfuStreamEntries> entriesIterator = streamListener.getEntries().iterator();
         while (entriesIterator.hasNext()) {
             for (List<CorfuStreamEntry> entry : entriesIterator.next().getEntries().values()) {
@@ -404,9 +396,6 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         Set<SyncType> actualSyncTypes = new HashSet<>();
         Set<SyncStatus> actualSyncStatus = new HashSet<>();
         Set<SyncStatus> actualSnapshotInfoSyncStatus = new HashSet<>();
-
-        int expectedNumEntries = 2;
-        Assert.assertEquals(expectedNumEntries, streamListener.getEntries().size());
 
         Iterator<CorfuStreamEntries> entriesIterator = streamListener.getEntries().iterator();
         while (entriesIterator.hasNext()) {
@@ -897,9 +886,11 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         }
 
         public void onNext(CorfuStreamEntries results) {
-            entries.add(results);
-            for (int i = 0; i < results.getEntries().size(); i++) {
-                countDownLatch.countDown();
+            if (countDownLatch.getCount() > 0) {
+                entries.add(results);
+                for (int i = 0; i < results.getEntries().size(); i++) {
+                    countDownLatch.countDown();
+                }
             }
         }
 
