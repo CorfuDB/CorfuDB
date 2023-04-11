@@ -32,6 +32,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
@@ -95,7 +96,7 @@ public class SessionManager {
      * @param upgradeManager      upgrade management module
      */
     public SessionManager(@Nonnull TopologyDescriptor topology, CorfuRuntime corfuRuntime,
-                          ServerContext serverContext, LogReplicationUpgradeManager upgradeManager) {
+                          ServerContext serverContext, LogReplicationUpgradeManager upgradeManager, AtomicBoolean isLeader) {
         this.topology = topology;
         this.runtime = corfuRuntime;
         this.corfuStore = new CorfuStore(corfuRuntime);
@@ -114,7 +115,7 @@ public class SessionManager {
 
         this.localCorfuEndpoint = lrNodeLocator.toEndpointUrl();
 
-        this.metadataManager = new LogReplicationMetadataManager(corfuRuntime, topology.getTopologyConfigId());
+        this.metadataManager = new LogReplicationMetadataManager(corfuRuntime, topology.getTopologyConfigId(), isLeader);
         this.configManager = new LogReplicationConfigManager(runtime, serverContext);
         this.upgradeManager = upgradeManager;
         this.replicationContext = new LogReplicationContext(configManager, topology.getTopologyConfigId(),
@@ -126,7 +127,7 @@ public class SessionManager {
 
         this.incomingMsgHandler = new LogReplicationServer(serverContext, sessions, metadataManager,
                 topology.getLocalNodeDescriptor().getNodeId(), topology.getLocalNodeDescriptor().getClusterId(),
-                localCorfuEndpoint, replicationContext);
+                localCorfuEndpoint, replicationContext, isLeader);
 
         this.router = new LogReplicationClientServerRouter(
                 runtime.getParameters().getRequestTimeout().toMillis(), replicationManager,
@@ -152,7 +153,7 @@ public class SessionManager {
             .port(topology.getLocalClusterDescriptor().getCorfuPort())
             .build();
         this.localCorfuEndpoint = lrNodeLocator.toEndpointUrl();
-        this.metadataManager = new LogReplicationMetadataManager(corfuRuntime, topology.getTopologyConfigId());
+        this.metadataManager = new LogReplicationMetadataManager(corfuRuntime, topology.getTopologyConfigId(), new AtomicBoolean(true));
         this.configManager = new LogReplicationConfigManager(runtime);
         this.upgradeManager = null;
         this.replicationContext = new LogReplicationContext(configManager, topology.getTopologyConfigId(), localCorfuEndpoint);
@@ -430,7 +431,7 @@ public class SessionManager {
     }
 
     /**
-     * Connect to remote cluster for sessions that are connection initiator.
+     * Connect to remote cluster for sessions where the local cluster is the connection initiator.
      * If local cluster is SOURCE for any session: create FSMs and initiate connection to remote sinks
      * If local cluster is SINK for any session: initiate connection to remote sources.
      */
@@ -504,13 +505,10 @@ public class SessionManager {
     }
 
     /**
-     * set leadership status in
-     * metadata manager : so that non-leader nodes don't overwrite updates on topology change notification
-     * LogReplicationServer : so that messages received can be appropriately handled.
-     * @param isLeader
+     * Notify LogReplicationServer about the leadership change so that sink managers can be reset/stopped accordingly.
      */
-    public void setLeadership(boolean isLeader) {
-        metadataManager.setLeadership(isLeader);
-        incomingMsgHandler.setLeadership(isLeader);
+    public void notifyLeadershipChange() {
+        incomingMsgHandler.leadershipChanged();
     }
 }
+

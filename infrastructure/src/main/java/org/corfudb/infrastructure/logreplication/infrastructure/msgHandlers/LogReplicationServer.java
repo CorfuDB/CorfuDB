@@ -22,7 +22,6 @@ import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
 
 import javax.annotation.Nonnull;
 import java.lang.invoke.MethodHandles;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -38,7 +37,6 @@ import static org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg.P
 import static org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg.PayloadCase.LR_LEADERSHIP_QUERY;
 import static org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg.PayloadCase.LR_METADATA_REQUEST;
 import static org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg.PayloadCase.LR_ENTRY_ACK;
-import static org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg.PayloadCase.LR_LEADERSHIP_LOSS;
 import static org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg.PayloadCase.LR_LEADERSHIP_RESPONSE;
 import static org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg.PayloadCase.LR_METADATA_RESPONSE;
 
@@ -69,7 +67,7 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
     @VisibleForTesting
     private final Map<LogReplicationSession, LogReplicationSinkManager> sessionToSinkManagerMap = new ConcurrentHashMap<>();
 
-    private final AtomicBoolean isLeader = new AtomicBoolean(false);
+    private final AtomicBoolean isLeader;
 
     private final ServerContext serverContext;
 
@@ -90,7 +88,7 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
 
     public LogReplicationServer(@Nonnull ServerContext context, Set<LogReplicationSession> sessions,
                                 LogReplicationMetadataManager metadataManager, String localNodeId, String localClusterId,
-                                String localEndpoint, LogReplicationContext replicationContext) {
+                                String localEndpoint, LogReplicationContext replicationContext, AtomicBoolean isLeader) {
         this.serverContext = context;
         this.allSessions = sessions;
         this.metadataManager = metadataManager;
@@ -98,6 +96,7 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
         this.localNodeId = localNodeId;
         this.localClusterId = localClusterId;
         this.replicationContext = replicationContext;
+        this.isLeader = isLeader;
         this.executor = context.getExecutorService(1, EXECUTOR_NAME_PREFIX);
     }
 
@@ -105,7 +104,7 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
     public LogReplicationServer(@Nonnull ServerContext context, LogReplicationSinkManager sinkManager,
                                 Set<LogReplicationSession> sessions,
                                 LogReplicationMetadataManager metadataManager, String localNodeId, String localClusterId,
-                                LogReplicationContext replicationContext) {
+                                LogReplicationContext replicationContext, AtomicBoolean isLeader) {
         this.serverContext = context;
         this.localEndpoint = null;
         this.localNodeId = localNodeId;
@@ -113,6 +112,7 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
         this.allSessions = sessions;
         this.metadataManager = metadataManager;
         this.replicationContext = replicationContext;
+        this.isLeader = isLeader;
         this.executor = context.getExecutorService(1, EXECUTOR_NAME_PREFIX);
     }
 
@@ -361,8 +361,7 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
         router.sendResponse(response);
     }
 
-    public void setLeadership(boolean leader) {
-        isLeader.set(leader);
+    public void leadershipChanged() {
 
         if (isLeader.get()) {
             // Reset the Sink Managers on acquiring leadership

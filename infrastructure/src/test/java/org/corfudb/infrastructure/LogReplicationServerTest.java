@@ -3,14 +3,12 @@ package org.corfudb.infrastructure;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.extern.slf4j.Slf4j;
 import org.assertj.core.api.Assertions;
-import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.infrastructure.logreplication.infrastructure.msgHandlers.LogReplicationServer;
 import org.corfudb.infrastructure.logreplication.infrastructure.SessionManager;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationSinkManager;
 import org.corfudb.infrastructure.logreplication.transport.IClientServerRouter;
-import org.corfudb.runtime.LogReplication.LogReplicationLeadershipLossResponseMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationLeadershipResponseMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
@@ -26,17 +24,15 @@ import org.junit.Before;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
 
-import javax.annotation.Nonnull;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getRequestMsg;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.same;
-import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
@@ -61,6 +57,7 @@ public class LogReplicationServerTest {
     LogReplicationServer lrServer;
     ChannelHandlerContext mockHandlerContext;
     IClientServerRouter mockServerRouter;
+    AtomicBoolean isLeader = new AtomicBoolean(true);
 
     UuidMsg sourceClusterUuid = UuidMsg.newBuilder().setLsb(5).setMsb(5).build();
     String sourceClusterId = getUUID(sourceClusterUuid).toString();
@@ -82,7 +79,7 @@ public class LogReplicationServerTest {
         Set<LogReplicationSession> sessionSet = new HashSet<>();
         sessionSet.add(session);
         lrServer = spy(new LogReplicationServer(context, sinkManager, sessionSet, metadataManager, SINK_NODE_ID, SINK_CLUSTER_ID,
-            null));
+            null, isLeader));
         lrServer.getSessionToSinkManagerMap().put(session, sinkManager);
         mockHandlerContext = mock(ChannelHandlerContext.class);
         mockServerRouter = mock(IClientServerRouter.class);
@@ -101,7 +98,6 @@ public class LogReplicationServerTest {
                 CorfuMessage.RequestPayloadMsg.newBuilder()
                 .setLrMetadataRequest(metadataRequest).build());
 
-        lrServer.setLeadership(true);
         doReturn(LogReplicationMetadata.ReplicationMetadata.getDefaultInstance()).when(metadataManager)
             .getReplicationMetadata(session);
         doReturn(metadataManager).when(sessionManager).getMetadataManager();
@@ -131,12 +127,6 @@ public class LogReplicationServerTest {
             mockServerRouter);
         ArgumentCaptor<ResponseMsg> argument = ArgumentCaptor.forClass(ResponseMsg.class);
         verify(mockServerRouter).sendResponse(argument.capture());
-        Assertions.assertThat(argument.getValue().getPayload()
-            .getLrLeadershipResponse().getIsLeader()).isFalse();
-
-
-        //set leadership to true and verify the response
-        lrServer.setLeadership(true);
 
         lrServer.getHandlerMethods().handle(request, null,
             mockServerRouter);
@@ -226,8 +216,6 @@ public class LogReplicationServerTest {
                         .setLrEntry(logEntry).build());
         final LogReplicationEntryMsg ack = LogReplicationEntryMsg.newBuilder().build();
 
-        // Make this server the leader and verify the response
-        lrServer.setLeadership(true);
         doReturn(ack).when(sinkManager).receive(same(request.getPayload().getLrEntry()));
 
         lrServer.getHandlerMethods().handle(request, null,
@@ -237,7 +225,8 @@ public class LogReplicationServerTest {
         Assertions.assertThat(argument.getValue().getPayload().getLrEntryAck()).isNotNull();
 
         // Remove leadership from this server and verify the response
-        lrServer.setLeadership(false);
+        isLeader.set(false);
+        lrServer.leadershipChanged();
         lrServer.getHandlerMethods().handle(request, null,
             mockServerRouter);
         argument = ArgumentCaptor.forClass(ResponseMsg.class);

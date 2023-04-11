@@ -403,7 +403,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
             log.error("Log Replication not started on this cluster. Remote source/sink not found");
             return;
         }
-        sessionManager.setLeadership(true);
+        sessionManager.notifyLeadershipChange();
         sessionManager.refresh(topologyDescriptor);
         // check if all the sessions in system tables are valid
         sessionManager.removeStaleSessionOnLeadershipAcquire();
@@ -424,6 +424,12 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
      */
     private void setupConnectionReceivingComponents() {
         if (!sessionManager.isConnectionReceiver()) {
+            if (interClusterServerNode != null) {
+                // Stop the replication server.
+                // There may be a topology change where the remote cluster that would connect to the local cluster was
+                // removed from the topology.
+                interClusterServerNode.disable();
+            }
             return;
         }
 
@@ -492,7 +498,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
             interClusterServerNode.close();
         }
         isLeader.set(false);
-        sessionManager.setLeadership(false);
+        sessionManager.notifyLeadershipChange();
         recordLockRelease();
     }
 
@@ -559,11 +565,6 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         sessionManager.refresh(newTopology);
         topologyDescriptor = newTopology;
 
-        if (!sessionManager.isConnectionReceiver() && interClusterServerNode != null) {
-            // Stop the replication server
-            interClusterServerNode.disable();
-        }
-
         performRoleBasedSetup();
 
         if (isLeader.get()) {
@@ -596,7 +597,8 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
                 log.info("Bootstrap the Log Replication Service");
                 upgradeManager = new LogReplicationUpgradeManager(getCorfuRuntime(),
                         serverContext.getPluginConfigFilePath());
-                sessionManager = new SessionManager(topologyDescriptor, getCorfuRuntime(), serverContext, upgradeManager);
+                sessionManager = new SessionManager(topologyDescriptor, getCorfuRuntime(), serverContext, upgradeManager,
+                        isLeader);
                 performRoleBasedSetup();
                 registerToLogReplicationLock();
                 bootstrapComplete = true;

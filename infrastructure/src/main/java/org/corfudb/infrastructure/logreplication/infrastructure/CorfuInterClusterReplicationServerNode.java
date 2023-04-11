@@ -24,6 +24,7 @@ public class CorfuInterClusterReplicationServerNode {
     @Getter
     private final ServerContext serverContext;
 
+    // An executor service that enqueues start/stop transport server events
     private ScheduledExecutorService logReplicationServerRunner;
 
     // Error code required to detect an ungraceful shutdown.

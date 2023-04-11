@@ -25,6 +25,7 @@ import org.junit.Test;
 import org.mockito.Mockito;
 
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
@@ -47,8 +48,7 @@ public class MetadataManagerTest extends AbstractViewTest {
         configManager = Mockito.mock(LogReplicationConfigManager.class);
         Mockito.doReturn(corfuRuntime).when(configManager).getRuntime();
         utils = new TestUtils();
-        metadataManager = new LogReplicationMetadataManager(corfuRuntime, topologyConfigId);
-        metadataManager.setLeadership(true);
+        metadataManager = new LogReplicationMetadataManager(corfuRuntime, topologyConfigId, new AtomicBoolean(true));
         metadataManager.addSession(defaultSession, topologyConfigId, true);
     }
 
@@ -94,8 +94,8 @@ public class MetadataManagerTest extends AbstractViewTest {
     @Test
     public void testInitTsForSnapshotAndLogEntryProcessed() {
 
-        LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(corfuRuntime, topologyConfigId);
-        metadataManager.setLeadership(true);
+        LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(corfuRuntime, topologyConfigId,
+                new AtomicBoolean(true));
         metadataManager.addSession(defaultSession, topologyConfigId, true);
 
         long lastAppliedSnapshotTimestamp = metadataManager.getReplicationMetadata(defaultSession)
@@ -118,8 +118,8 @@ public class MetadataManagerTest extends AbstractViewTest {
     @Test
     public void testConcurrentTopologyChange() throws Exception {
 
-        LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(corfuRuntime, topologyConfigId);
-        metadataManager.setLeadership(true);
+        LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(corfuRuntime, topologyConfigId,
+                new AtomicBoolean(true));
         metadataManager.addSession(defaultSession, topologyConfigId, true);
         LogReplicationContext context = new LogReplicationContext(configManager, 0,
                 defaultSession.getSourceClusterId());
@@ -190,8 +190,8 @@ public class MetadataManagerTest extends AbstractViewTest {
      */
     @Test
     public void testSetBaseSnapshotStart() {
-        LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(corfuRuntime, topologyConfigId);
-        metadataManager.setLeadership(true);
+        LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(corfuRuntime, topologyConfigId,
+                new AtomicBoolean(true));
         metadataManager.addSession(defaultSession, topologyConfigId, true);
 
         ReplicationMetadata metadata = metadataManager.getReplicationMetadata(defaultSession);
@@ -211,8 +211,8 @@ public class MetadataManagerTest extends AbstractViewTest {
      */
     @Test
     public void testSetLastSnapshotTransferCompleteTimestamp() {
-        LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(corfuRuntime, topologyConfigId);
-        metadataManager.setLeadership(true);
+        LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(corfuRuntime, topologyConfigId,
+                new AtomicBoolean(true));
         metadataManager.addSession(defaultSession, topologyConfigId, true);
 
         ReplicationMetadata metadata = metadataManager.getReplicationMetadata(defaultSession);
@@ -236,8 +236,8 @@ public class MetadataManagerTest extends AbstractViewTest {
      */
     @Test
     public void testSetSnapshotAppliedComplete() {
-        LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(corfuRuntime, topologyConfigId);
-        metadataManager.setLeadership(true);
+        LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(corfuRuntime, topologyConfigId,
+                new AtomicBoolean(true));
         metadataManager.addSession(defaultSession, topologyConfigId, true);
 
         // Verify that an entry in the replication status table was created for the default session

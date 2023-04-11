@@ -98,11 +98,11 @@ public class LogReplicationMetadataManager {
      *
      * @param runtime   the runtime to connect to CorfuDb
      */
-    public LogReplicationMetadataManager(CorfuRuntime runtime, long topologyConfigId) {
+    public LogReplicationMetadataManager(CorfuRuntime runtime, long topologyConfigId, AtomicBoolean isLeader) {
         this.runtime = runtime;
         this.corfuStore = new CorfuStore(runtime);
         this.topologyConfigId = topologyConfigId;
-        this.isLeader = new AtomicBoolean(false);
+        this.isLeader = isLeader;
 
         try {
             this.metadataTable = this.corfuStore.openTable(NAMESPACE, METADATA_TABLE_NAME,
@@ -160,10 +160,6 @@ public class LogReplicationMetadataManager {
             log.debug("Adding entry for session={}[Source] in Replication Status Table", session);
             txn.putRecord(statusTable, session, defaultSourceStatus, null);
         }
-    }
-
-    public void setLeadership(boolean isLeader) {
-        this.isLeader.set(isLeader);
     }
 
     public TxnContext getTxnContext() {
