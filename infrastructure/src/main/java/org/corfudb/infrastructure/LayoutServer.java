@@ -490,7 +490,7 @@ public class LayoutServer extends AbstractServer {
     }
 
     public Optional<Layout> findCurrentLayout() {
-        return Optional.of(getCurrentLayout());
+        return Optional.ofNullable(getCurrentLayout());
     }
 
     /**
