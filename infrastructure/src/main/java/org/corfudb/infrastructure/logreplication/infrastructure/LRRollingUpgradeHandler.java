@@ -90,6 +90,7 @@ public class LRRollingUpgradeHandler {
      */
     public void migrateData(TxnContext txnContext) {
         // Data migration to be added here.
+        eventSnapshotSyncRollingUpgrade(txnContext);
     }
 
     /**
