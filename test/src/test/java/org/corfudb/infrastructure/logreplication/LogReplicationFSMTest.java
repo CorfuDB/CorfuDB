@@ -332,7 +332,8 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         transition(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST, LogReplicationStateType.IN_SNAPSHOT_SYNC);
 
         // Await for update to status table from entry of InSnapshotSyncState, an update stemming
-        // from the SYNC_CANCEL request, and an additional update from the TsPollingTask
+        // from the SYNC_CANCEL request (since we are unable to send the snapshot data in a UT),
+        // and an additional update from the TsPollingTask
         statusTableLatch.await();
         corfuStore.unsubscribeListener(streamListener);
 
@@ -410,6 +411,115 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         Assert.assertEquals(expectedSyncTypes, actualSyncTypes);
         Assert.assertEquals(expectedSyncStatus, actualSyncStatus);
         Assert.assertEquals(expectedSnapshotInfoSyncStatus, actualSnapshotInfoSyncStatus);
+    }
+
+    /**
+     * Verify the status table accurately reflects the sync type and sync status
+     * for a transition from initialized -> snapshot sync state -> log entry state.
+     *
+     */
+    @Test
+    public void testSyncStatusUpdatesForSnapshotToLogEntryTransition() throws Exception {
+        initLogReplicationFSM(ReaderImplementation.EMPTY);
+
+        final Table<ReplicationStatusKey, ReplicationStatusVal, Message> statusTable =
+                this.corfuStore.getTable(NAMESPACE, REPLICATION_STATUS_TABLE);
+
+        ReplicationStatusKey currentReplicationKey = ReplicationStatusKey.newBuilder().setClusterId(TEST_LOCAL_CLUSTER_ID).build();
+        ReplicationStatusVal currentReplicationVal;
+
+        // Initial state: Initialized
+        LogReplicationState initState = fsm.getState();
+        assertThat(initState.getType()).isEqualTo(LogReplicationStateType.INITIALIZED);
+
+        transitionAvailable.acquire();
+
+        // Transition #1: Snapshot Sync Request
+        UUID snapshotSyncId = transition(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST, LogReplicationStateType.IN_SNAPSHOT_SYNC);
+
+        // Get replication status after snapshot sync start
+        try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
+            currentReplicationVal = txn.getRecord(statusTable, currentReplicationKey).getPayload();
+        }
+
+        // Current SyncType should be SNAPSHOT
+        Assert.assertEquals(SyncType.SNAPSHOT, currentReplicationVal.getSyncType());
+
+        // Current SyncStatus for ReplicationInfo and SnapshotSyncInfo should be ONGOING
+        Assert.assertEquals(SyncStatus.ONGOING, currentReplicationVal.getStatus());
+        Assert.assertEquals(SyncStatus.ONGOING, currentReplicationVal.getSnapshotSyncInfo().getStatus());
+
+        // Transition #2: Wait Snapshot Apply
+        transition(LogReplicationEventType.SNAPSHOT_TRANSFER_COMPLETE, LogReplicationStateType.WAIT_SNAPSHOT_APPLY, snapshotSyncId, false);
+
+        // Transition #3: Log Entry Sync Start
+        transition(LogReplicationEventType.SNAPSHOT_APPLY_COMPLETE, LogReplicationStateType.IN_LOG_ENTRY_SYNC, snapshotSyncId, true);
+
+        // Get replication status after log entry sync start
+        try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
+            currentReplicationVal = txn.getRecord(statusTable, currentReplicationKey).getPayload();
+        }
+
+        // Current SyncType should be LOG_ENTRY
+        Assert.assertEquals(SyncType.LOG_ENTRY, currentReplicationVal.getSyncType());
+
+        // Current SyncStatus for ReplicationInfo should be ONGOING, and SyncStatus
+        // for SnapshotSyncInfo should be COMPLETED
+        Assert.assertEquals(SyncStatus.ONGOING, currentReplicationVal.getStatus());
+        Assert.assertEquals(SyncStatus.COMPLETED, currentReplicationVal.getSnapshotSyncInfo().getStatus());
+    }
+
+    /**
+     * Verify the status table accurately reflects the sync type and sync status
+     * for a transition from initialized -> log entry state -> snapshot sync state.
+     *
+     */
+    @Test
+    public void testSyncStatusUpdatesForLogEntryToSnapshotTransition() throws Exception {
+        initLogReplicationFSM(ReaderImplementation.EMPTY);
+
+        final Table<ReplicationStatusKey, ReplicationStatusVal, Message> statusTable =
+                this.corfuStore.getTable(NAMESPACE, REPLICATION_STATUS_TABLE);
+
+        ReplicationStatusKey currentReplicationKey = ReplicationStatusKey.newBuilder().setClusterId(TEST_LOCAL_CLUSTER_ID).build();
+        ReplicationStatusVal currentReplicationVal;
+
+        // Initial state: Initialized
+        LogReplicationState initState = fsm.getState();
+        assertThat(initState.getType()).isEqualTo(LogReplicationStateType.INITIALIZED);
+
+        transitionAvailable.acquire();
+
+        // Transition #1: Log Entry Sync Start
+        transition(LogReplicationEventType.LOG_ENTRY_SYNC_REQUEST, LogReplicationStateType.IN_LOG_ENTRY_SYNC);
+
+        // Get replication status after log entry sync start
+        try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
+            currentReplicationVal = txn.getRecord(statusTable, currentReplicationKey).getPayload();
+        }
+
+        // Current SyncType should be LOG_ENTRY
+        Assert.assertEquals(SyncType.LOG_ENTRY, currentReplicationVal.getSyncType());
+
+        // Current SyncStatus for ReplicationInfo should be ONGOING, and SyncStatus
+        // for SnapshotSyncInfo should be COMPLETED
+        Assert.assertEquals(SyncStatus.ONGOING, currentReplicationVal.getStatus());
+        Assert.assertEquals(SyncStatus.COMPLETED, currentReplicationVal.getSnapshotSyncInfo().getStatus());
+
+        // Transition #2: Snapshot Sync Request
+        transition(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST, LogReplicationStateType.IN_SNAPSHOT_SYNC, true);
+
+        // Get replication status after snapshot sync start
+        try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
+            currentReplicationVal = txn.getRecord(statusTable, currentReplicationKey).getPayload();
+        }
+
+        // Current SyncType should be SNAPSHOT
+        Assert.assertEquals(SyncType.SNAPSHOT, currentReplicationVal.getSyncType());
+
+        // Current SyncStatus for ReplicationInfo and SnapshotSyncInfo should be ONGOING
+        Assert.assertEquals(SyncStatus.ONGOING, currentReplicationVal.getStatus());
+        Assert.assertEquals(SyncStatus.ONGOING, currentReplicationVal.getSnapshotSyncInfo().getStatus());
     }
 
     /**

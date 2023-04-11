@@ -153,9 +153,7 @@ public class InSnapshotSyncState implements LogReplicationState {
         try {
             // If the transition is to itself, the snapshot sync is continuing, no need to reset the sender
             if (from != this) {
-                if (from.getType().equals(LogReplicationStateType.INITIALIZED)) {
-                    fsm.getAckReader().setSyncType(SyncType.SNAPSHOT);
-                }
+                fsm.getAckReader().setSyncType(SyncType.SNAPSHOT);
                 snapshotSender.reset();
                 fsm.getAckReader().markSnapshotSyncInfoOngoing(forcedSnapshotSync, transitionEventId);
                 snapshotSyncTransferTimerSample = MeterRegistryProvider.getInstance().map(Timer::start);
