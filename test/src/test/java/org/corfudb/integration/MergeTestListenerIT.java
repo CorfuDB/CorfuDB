@@ -23,6 +23,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.integration.LogReplicationAbstractIT.NAMESPACE;
@@ -30,8 +31,7 @@ import static org.corfudb.runtime.LogReplicationUtils.REPLICATION_STATUS_TABLE_N
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 @Slf4j
-@SuppressWarnings("checkstyle:magicnumber")
-public class MergeTestListenerIT extends LogReplicationLogicalGroupIT {
+public class MergeTestListenerIT extends CorfuReplicationMultiSourceSinkIT {
 
     /**
      * Static fields to facilitate the test whose names are self-explanatory.
@@ -47,14 +47,17 @@ public class MergeTestListenerIT extends LogReplicationLogicalGroupIT {
 
     private static final String STREAMING_TAG = "tag_one";
 
-    private static final String LOCAL_TABLE_PREFIX = "Local_Table00";
+    public static final String LOCAL_TABLE_PREFIX = "Local_Table00";
 
-    private static final String GROUPA_TABLE_PREFIX = "GroupA_Table00";
+    public static final String GROUPA_TABLE_PREFIX = "GroupA_Table00";
+
+    public static final String MERGED_TABLE_NAME = "MERGED_TABLE";
 
     private static final int SOURCE_INDEX = 0;
 
-
     private static final int SINK2_INDEX = 1;
+
+    private static final int SINK3_INDEX = 2;
 
 
     private static final int numSource = 1;
@@ -65,6 +68,10 @@ public class MergeTestListenerIT extends LogReplicationLogicalGroupIT {
     private final String testClientName = "lr_test_client";
 
     Table<LogReplication.LogReplicationSession, LogReplication.ReplicationStatus, Message> replicationStatusTable;
+
+    Table<LogReplication.LogReplicationSession, LogReplication.ReplicationStatus, Message> replicationStatusTable2;
+
+    Table<Sample.StringKey, SampleSchema.SampleMergedTable, Message> mergedTable;
 
     /**
      * Note that the following lists are used for storing the references of tables opened on Source or Sink side.
@@ -108,27 +115,61 @@ public class MergeTestListenerIT extends LogReplicationLogicalGroupIT {
         // Sink
         openGroupATable(numTables, sinkCorfuStores.get(SINK2_INDEX), sinkTablesGroupA);
         openLocalTable(numTables, sinkCorfuStores.get(SINK2_INDEX), sinkLocalTables);
+        openMergedTable(sinkCorfuStores.get(SINK2_INDEX));
 
         writeDataOnSource(0, NUM_WRITES);
 
         startReplicationServers();
 
         verifySessionInLogEntrySyncState(SINK2_INDEX, SessionManager.getDefaultLogicalGroupSubscriber());
-
         verifyGroupATableData(sinkCorfuStores.get(SINK2_INDEX), NUM_WRITES, sinkTablesGroupA);
 
         writeDataOnSink(NUM_WRITES, NUM_WRITES);
 
         MergeTestListener listenerSink2 = new MergeTestListener(sinkCorfuStores.get(SINK2_INDEX)
-                , NAMESPACE, sinkTablesGroupA,
-                sinkLocalTables);
+                , NAMESPACE, numTables,
+                numTables);
 
         // Subscribe the listeners on the sink side
         sinkCorfuStores.get(SINK2_INDEX).subscribeLogReplicationListener(listenerSink2,
                 NAMESPACE, STREAMING_TAG, sinkCorfuStores.get(SINK2_INDEX));
 
         // Verify the listeners get all the update
-        assertThat(MergeTestListener.mergedTable.count()).isEqualTo(2*NUM_WRITES);
+        verifyMergedTableData(sinkCorfuStores.get(SINK2_INDEX), 2 * NUM_WRITES,
+                        Collections.singletonList(mergedTable));
+
+        writeDataOnSource(2*NUM_WRITES, NUM_WRITES);
+
+        verifyGroupATableData(sinkCorfuStores.get(SINK2_INDEX), 3 * NUM_WRITES, sinkTablesGroupA);
+        verifyMergedTableData(sinkCorfuStores.get(SINK2_INDEX), 3 * NUM_WRITES,
+                Collections.singletonList(mergedTable));
+
+        writeDataOnSink(3*NUM_WRITES, NUM_WRITES);
+        verifyMergedTableData(sinkCorfuStores.get(SINK2_INDEX), 4 * NUM_WRITES,
+                Collections.singletonList(mergedTable));
+        verifyGroupATableData(sinkCorfuStores.get(SINK2_INDEX), 4 * NUM_WRITES, sinkTablesGroupA);
+
+        logicalGroupClient.addDestinations(GROUP_A,
+                Collections.singletonList(DefaultClusterConfig.getSinkClusterIds().get(SINK3_INDEX)));
+        List<Table<Sample.StringKey, SampleSchema.SampleGroupMsgA, Message>> sinkTablesGroupAOnSink3 = new ArrayList<>();
+        openGroupATable(numTables, sinkCorfuStores.get(SINK3_INDEX), sinkTablesGroupAOnSink3);
+
+        writeDataOnSource(NUM_WRITES, NUM_WRITES);
+
+        verifyGroupATableData(sinkCorfuStores.get(SINK3_INDEX), 3 * NUM_WRITES, sinkTablesGroupAOnSink3);
+        verifyGroupATableData(sinkCorfuStores.get(SINK2_INDEX), 4 * NUM_WRITES, sinkTablesGroupA);
+        verifyMergedTableData(sinkCorfuStores.get(SINK2_INDEX), 4 * NUM_WRITES,
+                Collections.singletonList(mergedTable));
+
+        logicalGroupClient.removeDestinations(GROUP_A,
+                Collections.singletonList(DefaultClusterConfig.getSinkClusterIds().get(SINK3_INDEX)));
+
+        writeDataOnSource(3*NUM_WRITES, NUM_WRITES);
+
+        verifyGroupATableData(sinkCorfuStores.get(SINK3_INDEX), 3 * NUM_WRITES, sinkTablesGroupAOnSink3);
+        verifyGroupATableData(sinkCorfuStores.get(SINK2_INDEX), 4 * NUM_WRITES, sinkTablesGroupA);
+        verifyMergedTableData(sinkCorfuStores.get(SINK2_INDEX), 4 * NUM_WRITES,
+                Collections.singletonList(mergedTable));
     }
 
     /**
@@ -181,6 +222,18 @@ public class MergeTestListenerIT extends LogReplicationLogicalGroupIT {
             );
             tableList.add(localTable);
         }
+    }
+
+    private void openMergedTable(CorfuStore corfuStore) throws
+            InvocationTargetException, NoSuchMethodException, IllegalAccessException {
+        mergedTable = corfuStore.openTable(
+                NAMESPACE,
+                MERGED_TABLE_NAME,
+                Sample.StringKey.class,
+                SampleSchema.SampleMergedTable.class,
+                null,
+                TableOptions.fromProtoSchema(SampleSchema.SampleMergedTable.class)
+        );
     }
 
     /**
@@ -270,6 +323,33 @@ public class MergeTestListenerIT extends LogReplicationLogicalGroupIT {
      */
     private void verifyGroupATableData(CorfuStore corfuStore, int expectedConsecutiveWrites,
                                        List<Table<Sample.StringKey, SampleSchema.SampleGroupMsgA, Message>> tables) {
+        tables.forEach(table -> {
+            log.info("Verify Data on Table {}", table.getFullyQualifiedTableName());
+
+            // Wait until data is fully replicated
+            while (table.count() != expectedConsecutiveWrites) {
+                // Block until expected number of entries is reached
+                log.debug("table count: {}, expectedConsecutiveWrites: {}", table.count(), expectedConsecutiveWrites);
+            }
+
+            log.info("Number updates on table {} :: {} ", table.getFullyQualifiedTableName(), expectedConsecutiveWrites);
+
+            // Verify data is present in Sink Site
+            assertThat(table.count()).isEqualTo(expectedConsecutiveWrites);
+
+            for (int i = 0; i < (expectedConsecutiveWrites); i++) {
+                try (TxnContext tx = corfuStore.txn(table.getNamespace())) {
+                    assertThat(tx.getRecord(table,
+                            Sample.StringKey.newBuilder().setKey(String.valueOf(i)).build()).getPayload().getPayload())
+                            .isEqualTo(String.valueOf(i));
+                    tx.commit();
+                }
+            }
+        });
+    }
+
+    private void verifyMergedTableData(CorfuStore corfuStore, int expectedConsecutiveWrites,
+                                       List<Table<Sample.StringKey, SampleSchema.SampleMergedTable, Message>> tables) {
         tables.forEach(table -> {
             log.info("Verify Data on Table {}", table.getFullyQualifiedTableName());
 

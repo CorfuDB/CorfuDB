@@ -14,7 +14,6 @@ import org.corfudb.runtime.collections.TableSchema;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.view.Address;
 import javax.annotation.Nonnull;
-import java.lang.reflect.InvocationTargetException;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -83,7 +82,6 @@ public abstract class LogReplicationListener implements StreamListener {
 
         Set<String> tableNames =
                 results.getEntries().keySet().stream().map(schema -> schema.getTableName()).collect(Collectors.toSet());
-
         if (tableNames.contains(REPLICATION_STATUS_TABLE_NAME)) {
             Preconditions.checkState(results.getEntries().keySet().size() == 1,
                 "Replication Status Table Update received with other tables");
@@ -97,7 +95,6 @@ public abstract class LogReplicationListener implements StreamListener {
             // it ends, the client will perform a full sync and build a consistent state containing these updates.
             return;
         }
-
         if (snapshotSyncInProgress.get()) {
             processUpdatesInSnapshotSync(results);
         } else {
@@ -175,7 +172,7 @@ public abstract class LogReplicationListener implements StreamListener {
      * perform a full-sync on all application tables which the client is interested in merging together.
      * @param txnContext transaction context in which the operation must be performed
      */
-    protected abstract void performFullSync(TxnContext txnContext) throws InvocationTargetException, NoSuchMethodException, IllegalAccessException;
+    protected abstract void performFullSync(TxnContext txnContext);
 
     /**
      * Callback to indicate that an error or exception has occurred while streaming or that the stream is

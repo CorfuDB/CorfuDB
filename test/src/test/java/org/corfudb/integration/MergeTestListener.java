@@ -9,10 +9,12 @@ import org.corfudb.runtime.LogReplicationListener;
 import org.corfudb.runtime.collections.*;
 import org.corfudb.test.SampleSchema;
 
-import java.lang.reflect.InvocationTargetException;
 import java.util.*;
 
 import static org.corfudb.integration.LogReplicationAbstractIT.NAMESPACE;
+import static org.corfudb.integration.MergeTestListenerIT.GROUPA_TABLE_PREFIX;
+import static org.corfudb.integration.MergeTestListenerIT.LOCAL_TABLE_PREFIX;
+import static org.corfudb.integration.MergeTestListenerIT.MERGED_TABLE_NAME;
 import static org.junit.Assert.fail;
 
 /**
@@ -30,44 +32,35 @@ import static org.junit.Assert.fail;
 @Slf4j
 public class MergeTestListener extends LogReplicationListener{
 
-
     public CorfuRuntime runtime;
-
 
     private CorfuStore corfuStoreSink;
 
     private final String namespace = "LR-Test";
 
-    String mergedTableName = "MERGED_TABLE";
-
-
     // Updates received through streaming
     @Getter
     public static LinkedList<CorfuStreamEntry> updates = new LinkedList<>();
 
-    public Set<Message> deletedKeys = new HashSet<>();
+    public Set<Sample.StringKey> deletedKeys = new HashSet<>();
 
-    public Map<Message, CorfuStoreEntry> addedKeys = new HashMap<>();
+    public Map<Sample.StringKey, CorfuStoreEntry> addedKeys = new HashMap<>();
 
-    public Set<Message> existingKeysInMergedTable = new HashSet<>();
+    public Set<Sample.StringKey> existingKeysInMergedTable = new HashSet<>();
 
-    public static Table<Sample.StringKey, SampleSchema.SampleMergedTable, Message> mergedTable;
-
-    List<Table<Sample.StringKey, SampleSchema.SampleGroupMsgA, Message>> tableListForGroupA;
-
-    List<Table<Sample.StringKey, SampleSchema.SampleGroupMsgA, Message>> tableListForLocalTable;
 
     public static List<CorfuStoreEntry<Sample.StringKey, SampleSchema.SampleGroupMsgA, Message>> entries
             = new ArrayList<>();
 
-    MergeTestListener(CorfuStore corfuStoreSink, String namespace, List<Table<Sample.StringKey, SampleSchema.SampleGroupMsgA, Message>>
-                      tableListForGroupA, List<Table<Sample.StringKey, SampleSchema.SampleGroupMsgA, Message>> tableListForLocalTable
-    ) throws InvocationTargetException, NoSuchMethodException, IllegalAccessException {
+    private final int numTableForGroupA;
+
+    private final int numTableForLocalTables;
+
+    MergeTestListener(CorfuStore corfuStoreSink, String namespace, int numTableForGroupA, int numTableForLocalTables) {
         super(corfuStoreSink, namespace);
         this.corfuStoreSink = corfuStoreSink;
-        openMergedTable();
-        this.tableListForGroupA = tableListForGroupA;
-        this.tableListForLocalTable = tableListForLocalTable;
+        this.numTableForGroupA = numTableForGroupA;
+        this.numTableForLocalTables = numTableForLocalTables;
     }
 
     @Override
@@ -93,13 +86,13 @@ public class MergeTestListener extends LogReplicationListener{
         try (TxnContext tx = corfuStoreSink.txn(NAMESPACE)){
             existingKeysInMergedTable.addAll(addedKeys.keySet());
             addedKeys.forEach((addedKey, e) -> {
-                tx.putRecord(mergedTable, (Sample.StringKey) addedKey,
-                        SampleSchema.SampleMergedTable.newBuilder().setPayload(e.getPayload().toString()).build(), e.getMetadata());
+                tx.putRecord(tx.getTable(MERGED_TABLE_NAME), addedKey,
+                        SampleSchema.SampleMergedTable.newBuilder().setPayload(e.getPayload().toString().replaceAll("[^0-9]", "")).build(), e.getMetadata());
             });
 
             existingKeysInMergedTable.removeAll(deletedKeys);
             deletedKeys.forEach(deletedKey -> {
-                tx.delete(mergedTable, (Sample.StringKey) deletedKey);
+                tx.delete(tx.getTable(MERGED_TABLE_NAME), deletedKey);
             });
 
             tx.commit();
@@ -119,21 +112,19 @@ public class MergeTestListener extends LogReplicationListener{
         log.info("Processing updates in snapshot sync");
         results.getEntries().forEach((schema, entries) -> {
             entries.forEach(e -> {
-                Message key = e.getKey();
+                Sample.StringKey key = (Sample.StringKey) e.getKey();
                 if (schema.getTableName().contains("Local_Table00")) {
-                    System.out.println(schema.getTableName());
-                    System.out.println(mergedTable.count());
                     if (!(e.getOperation() == CorfuStreamEntry.OperationType.CLEAR) &&
                             !(existingKeysInMergedTable.contains(key))) {
                         try (TxnContext tx = corfuStoreSink.txn(namespace)){
                             if (e.getOperation() == CorfuStreamEntry.OperationType.UPDATE) {
-                                tx.putRecord(mergedTable, (Sample.StringKey) key,
-                                                SampleSchema.SampleMergedTable.newBuilder().setPayload(e.getPayload().toString()).build(),
+                                tx.putRecord(tx.getTable(MERGED_TABLE_NAME), key,
+                                                SampleSchema.SampleMergedTable.newBuilder().setPayload(e.getPayload().toString().replaceAll("[^0-9]", "")).build(),
                                          e.getMetadata());
                                 existingKeysInMergedTable.add(key);
                             }
                             else {
-                                tx.delete(mergedTable, (Sample.StringKey) key);
+                                tx.delete(tx.getTable(MERGED_TABLE_NAME), key);
                             }
                             tx.commit();
                         }
@@ -168,13 +159,13 @@ public class MergeTestListener extends LogReplicationListener{
         results.getEntries().forEach((schema, entries) -> {
             entries.forEach(e -> {
                 updates.add(e);
-                Message key = e.getKey();
+                Sample.StringKey key = (Sample.StringKey) e.getKey();
                 // Add the records to idfwMergedTable.  Add to existingKeysInMergedTable
                 // Any other processing specific to the local table
                 existingKeysInMergedTable.add(key);
                 try (TxnContext tx = corfuStoreSink.txn(NAMESPACE)){
-                    tx.putRecord(mergedTable, (Sample.StringKey) key,
-                            SampleSchema.SampleMergedTable.newBuilder().setPayload(e.getPayload().toString()).build(),
+                    tx.putRecord(tx.getTable(MERGED_TABLE_NAME), key,
+                            SampleSchema.SampleMergedTable.newBuilder().setPayload(e.getPayload().toString().replaceAll("[^0-9]", "")).build(),
                              e.getMetadata());
                     tx.commit();
 
@@ -192,37 +183,22 @@ public class MergeTestListener extends LogReplicationListener{
     @Override
     protected void performFullSync(TxnContext txnContext) {
         log.info("Processing existing updates");
-        tableListForGroupA.forEach((t) -> {
-            entries.addAll((txnContext.executeQuery(t.getFullyQualifiedTableName().substring(8), p -> true)));
-        });
+        for (int i = 1; i <= numTableForGroupA; i++) {
+            entries.addAll(txnContext.executeQuery(GROUPA_TABLE_PREFIX + i, p -> true));
+        }
 
-        tableListForLocalTable.forEach((t) -> {
-            entries.addAll((txnContext.executeQuery(t.getFullyQualifiedTableName().substring(8), p -> true)));
-        });
+        for (int j = 1; j <= numTableForLocalTables; j++) {
+            entries.addAll(txnContext.executeQuery(LOCAL_TABLE_PREFIX + j, p -> true));
+        }
 
-        System.out.println(entries.size());
-
-        entries.addAll(txnContext.executeQuery(mergedTable.getFullyQualifiedTableName().substring(8), p -> true));
+        entries.addAll(txnContext.executeQuery(MERGED_TABLE_NAME, p -> true));
 
         entries.forEach((entry) -> {
-            txnContext.putRecord(mergedTable, entry.getKey(),
+            txnContext.putRecord(txnContext.getTable(MERGED_TABLE_NAME), entry.getKey(),
                     SampleSchema.SampleMergedTable.newBuilder().setPayload(entry.getPayload().getPayload()).build(),
                     entry.getMetadata());
             existingKeysInMergedTable.add(entry.getKey());
         });
-        System.out.println(mergedTable.count());
     }
-
-    private void openMergedTable() throws InvocationTargetException, NoSuchMethodException, IllegalAccessException {
-        mergedTable = corfuStoreSink.openTable(
-                NAMESPACE,
-                mergedTableName,
-                Sample.StringKey.class,
-                SampleSchema.SampleMergedTable.class,
-                null,
-                TableOptions.fromProtoSchema(SampleSchema.SampleMergedTable.class)
-        );
-    }
-
 
 }
