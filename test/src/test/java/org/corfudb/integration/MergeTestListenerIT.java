@@ -23,7 +23,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.integration.LogReplicationAbstractIT.NAMESPACE;
@@ -59,7 +58,6 @@ public class MergeTestListenerIT extends CorfuReplicationMultiSourceSinkIT {
 
     private static final int SINK3_INDEX = 2;
 
-
     private static final int numSource = 1;
 
     private static final int numSink = 3;
@@ -68,8 +66,6 @@ public class MergeTestListenerIT extends CorfuReplicationMultiSourceSinkIT {
     private final String testClientName = "lr_test_client";
 
     Table<LogReplication.LogReplicationSession, LogReplication.ReplicationStatus, Message> replicationStatusTable;
-
-    Table<LogReplication.LogReplicationSession, LogReplication.ReplicationStatus, Message> replicationStatusTable2;
 
     Table<Sample.StringKey, SampleSchema.SampleMergedTable, Message> mergedTable;
 
