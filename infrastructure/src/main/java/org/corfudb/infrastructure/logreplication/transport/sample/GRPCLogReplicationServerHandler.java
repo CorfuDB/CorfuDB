@@ -1,5 +1,7 @@
 package org.corfudb.infrastructure.logreplication.transport.sample;
 
+import io.grpc.Status;
+import io.grpc.StatusRuntimeException;
 import io.grpc.stub.StreamObserver;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.tuple.Pair;
@@ -126,6 +128,8 @@ public class GRPCLogReplicationServerHandler extends LogReplicationGrpc.LogRepli
 
                 try {
                     sessionToStreamObserverRequestMap.putIfAbsent(session, responseObserver);
+                    log.info("Shama...got the reverseReplicate...hash of oberserver is {}", responseObserver.hashCode());
+                    log.info("Shama Printing {}", sessionToStreamObserverRequestMap);
                 } catch (Exception e) {
                     log.error("Exception caught when unpacking log replication entry {}. Skipping message.",
                             requestId, e);
@@ -136,12 +140,9 @@ public class GRPCLogReplicationServerHandler extends LogReplicationGrpc.LogRepli
 
             @Override
             public void onError(Throwable t) {
-                log.error("Encountered error in the long living subscribe RPC for {}...",session, t);
-                Optional<String> remoteLeader = router.getSessionToRuntimeFSM().get(session) != null ?
-                        router.getSessionToRuntimeFSM().get(session).getRemoteLeaderNodeId() : Optional.empty();
-                if(remoteLeader.isPresent()) {
-                    router.onConnectionDown(remoteLeader.get(), session);
-                }
+                log.error("Encountered error in the long living reverse replicate RPC for {}...", session, t);
+                sessionToStreamObserverRequestMap.remove(session);
+                router.onConnectionDown(session);
             }
 
             @Override
@@ -213,9 +214,16 @@ public class GRPCLogReplicationServerHandler extends LogReplicationGrpc.LogRepli
                 }
 
                 StreamObserver<RequestMsg> observer = sessionToStreamObserverRequestMap.get(session);
-
+                log.info("Shama .....the observer in send is {}", observer.hashCode());
+                log.info("Shama Printing {}", sessionToStreamObserverRequestMap);
                 observer.onNext(msg);
 
+            } catch(StatusRuntimeException e) {
+                if (e.getStatus().getCode().equals(Status.Code.CANCELLED)) {
+                    log.error("StreamObserver for is cancelled for session {} with exception", msg.getHeader().getSession(), e);
+                    router.onConnectionDown(msg.getHeader().getSession());
+                }
+                log.info("Shama status :::: {}", e.getStatus());
             } catch (Exception e) {
                 log.error("Caught exception while trying to send message {}", msg.getHeader().getRequestId(), e);
             }

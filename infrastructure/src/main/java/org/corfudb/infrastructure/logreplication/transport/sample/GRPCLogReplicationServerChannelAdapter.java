@@ -31,8 +31,6 @@ public class GRPCLogReplicationServerChannelAdapter extends IServerChannelAdapte
      */
     private final GRPCLogReplicationServerHandler service;
 
-    private CompletableFuture<Boolean> serverCompletable;
-
     public GRPCLogReplicationServerChannelAdapter(ServerContext serverContext,
                                                   LogReplicationClientServerRouter router) {
         super(router);
@@ -59,26 +57,23 @@ public class GRPCLogReplicationServerChannelAdapter extends IServerChannelAdapte
 
     @Override
     public CompletableFuture<Boolean> start() {
+        CompletableFuture<Boolean> serverCompletable = new CompletableFuture<>();
         try {
-            serverCompletable = new CompletableFuture<>();
             server.start();
+            serverCompletable.complete(true);
             log.info("Server started, listening on {}", port);
         } catch (Exception e) {
             log.error("Caught exception while starting server on port {}", port, e);
             serverCompletable.completeExceptionally(e);
         }
-
         return serverCompletable;
     }
 
     @Override
     public void stop() {
         log.info("Stop GRPC service.");
-        if (server != null) {
+        if (server != null && !server.isShutdown() ) {
             server.shutdownNow();
-        }
-        if (serverCompletable != null) {
-            serverCompletable.complete(true);
         }
     }
 

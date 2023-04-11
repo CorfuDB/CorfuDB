@@ -297,6 +297,7 @@ public class CorfuLogReplicationRuntime {
 
     public synchronized Optional<String> getRemoteLeaderNodeId() {
         log.trace("Retrieve remote leader node id {}", leaderNodeId);
+        log.info("Shama Retrieve remote leader node id {}", leaderNodeId);
         return leaderNodeId;
     }
 

@@ -138,7 +138,7 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
      * Map of session -> verifySinkLeadership. VerifySinkLeadership triggers leadership request and and upon receiving
      * the response, creates a bidirectional streams to remote endpoints
      */
-    private final Map<LogReplicationSession, RemoteSourceLeadershipManager> sessionToSinkVerifyLeadership;
+    private final Map<LogReplicationSession, RemoteSourceLeadershipManager> sessionToRemoteSourceLeaderManager;
 
     /**
      * Set of sessions where the local cluster is SINK
@@ -155,6 +155,8 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
      */
     @Setter
     private TopologyDescriptor topology;
+
+    private Map<LogReplicationSession, CorfuMessage.ResponseMsg> reverseReplicateMsgBuffer;
 
 
 
@@ -188,7 +190,8 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
         this.sessionToRequestIdCounter = new ConcurrentHashMap<>();
         this.sessionToOutstandingRequests = new ConcurrentHashMap<>();
         this.sessionToLeaderConnectionFuture = new ConcurrentHashMap<>();
-        this.sessionToSinkVerifyLeadership = new ConcurrentHashMap<>();
+        this.sessionToRemoteSourceLeaderManager = new ConcurrentHashMap<>();
+        this.reverseReplicateMsgBuffer = new ConcurrentHashMap<>();
         this.clientChannelAdapter = null;
         this.serverChannelAdapter = null;
     }
@@ -251,6 +254,14 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
      */
     public void addRuntimeFSM(LogReplicationSession session, CorfuLogReplicationRuntime runtimeFSM) {
         this.sessionToRuntimeFSM.put(session, runtimeFSM);
+
+        // check if buffer has a reverse_replicate msg for the session.
+        if (reverseReplicateMsgBuffer.containsKey(session)) {
+            String remoteLeaderId = reverseReplicateMsgBuffer.get(session).getPayload().getLrReverseReplicateMsg().getSinkLeaderNodeId();
+            runtimeFSM.setRemoteLeaderNodeId(remoteLeaderId);
+            startReplication(session, remoteLeaderId);
+        }
+        log.info("Shama..adding to the map {}", sessionToRuntimeFSM);
     }
 
 
@@ -274,14 +285,16 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
                 .setIgnoreClusterId(true)
                 .setIgnoreEpoch(true);
 
-        // Get the next request ID.
-        final long requestId = sessionToRequestIdCounter.get(session).getAndIncrement();
+        long requestId = -1;
 
         // Generate a future and put it in the completion table.
         final CompletableFuture<T> cf = new CompletableFuture<>();
-        sessionToOutstandingRequests.get(session).put(requestId, cf);
-
         try {
+            // Get the next request ID.
+            requestId = sessionToRequestIdCounter.get(session).getAndIncrement();
+
+            sessionToOutstandingRequests.get(session).put(requestId, cf);
+
             header.setRequestId(requestId);
             header.setClusterId(getUuidMsg(UUID.fromString(this.localClusterId)));
 
@@ -319,7 +332,7 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
                                         sessionToRemoteClusterDescriptor.get(session).getClusterId()));
                     }
                 } else {
-                    nodeId = sessionToSinkVerifyLeadership.get(session).getRemoteLeaderNodeId().get();
+                    nodeId = sessionToRemoteSourceLeaderManager.get(session).getRemoteLeaderNodeId().get();
                 }
             }
 
@@ -330,59 +343,67 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
             } else {
                 serverChannelAdapter.send(getRequestMsg(header.build(), payload));
             }
+
+            // Generate a timeout future, which will complete exceptionally
+            // if the main future is not completed.
+            final CompletableFuture<T> cfTimeout =
+                    CFUtils.within(cf, Duration.ofMillis(timeoutResponse));
+            final long finalRequestId = requestId;
+            cfTimeout.exceptionally(e -> {
+                if (e.getCause() instanceof TimeoutException) {
+                    sessionToOutstandingRequests.get(session).remove(finalRequestId);
+                    log.debug("sendMessageAndGetCompletable: Remove request {} to {} due to timeout! Message:{}",
+                            finalRequestId, sessionToRemoteClusterDescriptor.get(session).getClusterId(), payload.getPayloadCase());
+                }
+                return null;
+            });
+
+            return cfTimeout;
+
         } catch (NetworkException ne) {
             log.error("Caught Network Exception while trying to send message to remote leader {}", nodeId);
             if(outgoingSession.contains(session)) {
                 sessionToRuntimeFSM.get(session).input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent
                         .LogReplicationRuntimeEventType.ON_CONNECTION_DOWN, nodeId));
             } else {
-                sessionToSinkVerifyLeadership.get(session).input(new LogReplicationSinkEvent(
+                sessionToRemoteSourceLeaderManager.get(session).input(new LogReplicationSinkEvent(
                         LogReplicationSinkEvent.LogReplicationSinkEventType.ON_CONNECTION_DOWN, nodeId));
             }
             throw ne;
+        } catch(NullPointerException npe) {
+            log.info("components are not found for session {}, Error::{}", session, npe.getMessage());
+            // clear the potential stale data generated in this method for the potential stale session.
+            // This is done so the session information can be consistent when another thread might be working on stopping
+            // the replication for the session
+            removeSessionInfo(session);
         } catch (Exception e) {
             sessionToOutstandingRequests.get(session).remove(requestId);
             log.error("sendMessageAndGetCompletable: Remove request {} to {} due to exception! Message:{}",
                     requestId, sessionToRemoteClusterDescriptor.get(session).getClusterId(), payload.getPayloadCase(), e);
             cf.completeExceptionally(e);
-            return cf;
         }
-
-        // Generate a timeout future, which will complete exceptionally
-        // if the main future is not completed.
-        final CompletableFuture<T> cfTimeout =
-                CFUtils.within(cf, Duration.ofMillis(timeoutResponse));
-        cfTimeout.exceptionally(e -> {
-            if (e.getCause() instanceof TimeoutException) {
-                sessionToOutstandingRequests.get(session).remove(requestId);
-                log.debug("sendMessageAndGetCompletable: Remove request {} to {} due to timeout! Message:{}",
-                        requestId, sessionToRemoteClusterDescriptor.get(session).getClusterId(), payload.getPayloadCase());
-            }
-            return null;
-        });
-
-        return cfTimeout;
+        return cf;
     }
 
     @Override
     public <T> void completeRequest(LogReplicationSession session, long requestID, T completion) {
-        log.trace("Complete request: {}...outstandingRequests {}", requestID, sessionToOutstandingRequests.get(session));
-        CompletableFuture<T> cf;
-        if ((cf = (CompletableFuture<T>) sessionToOutstandingRequests.get(session).remove(requestID)) != null) {
+        try {
+            log.trace("Complete request: {}...outstandingRequests {}", requestID, sessionToOutstandingRequests.get(session));
+            CompletableFuture<T> cf = (CompletableFuture<T>) sessionToOutstandingRequests.get(session).remove(requestID);
             cf.complete(completion);
-        } else {
+        } catch (NullPointerException npe) {
             log.warn("Attempted to complete request {}, but request not outstanding!", requestID);
         }
     }
 
     @Override
     public void completeExceptionally(LogReplicationSession session, long requestID, Throwable cause) {
-        CompletableFuture cf;
-        if ((cf = sessionToOutstandingRequests.get(session).remove(requestID)) != null) {
+        try {
+            CompletableFuture cf = sessionToOutstandingRequests.get(session).remove(requestID);
             cf.completeExceptionally(cause);
             log.debug("completeExceptionally: Remove request {} to {} due to {}.", requestID,
                     sessionToRemoteClusterDescriptor.get(session).getClusterId(), cause.getClass().getSimpleName(), cause);
-        } else {
+        } catch (NullPointerException npe) {
             log.warn("Attempted to exceptionally complete request {}, but request not outstanding!",
                     requestID);
         }
@@ -409,13 +430,17 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
         log.trace("Ready to send response {}", response.getPayload().getPayloadCase());
         LogReplicationSession session = response.getHeader().getSession();
         if (isConnectionStarterForSession(session)) {
-            if(incomingSession.contains(session)) {
-                if (sessionToSinkVerifyLeadership.get(session).getRemoteLeaderNodeId().isPresent()) {
-                    clientChannelAdapter.send(sessionToSinkVerifyLeadership.get(session).getRemoteLeaderNodeId().get(), response);
-                } else {
-                    sessionToSinkVerifyLeadership.get(session).input(
-                            new LogReplicationSinkEvent(LogReplicationSinkEvent.LogReplicationSinkEventType.REMOTE_LEADER_LOSS));
+            try {
+                if (incomingSession.contains(session)) {
+                    if (sessionToRemoteSourceLeaderManager.get(session).getRemoteLeaderNodeId().isPresent()) {
+                        clientChannelAdapter.send(sessionToRemoteSourceLeaderManager.get(session).getRemoteLeaderNodeId().get(), response);
+                    } else {
+                        sessionToRemoteSourceLeaderManager.get(session).input(
+                                new LogReplicationSinkEvent(LogReplicationSinkEvent.LogReplicationSinkEventType.REMOTE_LEADER_LOSS));
+                    }
                 }
+            } catch(NullPointerException npe) {
+                log.info("RemoteSourceLeadershipManager not found for session {}", session);
             }
         } else {
             try {
@@ -435,12 +460,12 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
             // If it is a Leadership Loss Message re-trigger leadership discovery
             if (msg.getPayload().getPayloadCase() == CorfuMessage.ResponsePayloadMsg.PayloadCase.LR_LEADERSHIP_LOSS) {
                 String nodeId = msg.getPayload().getLrLeadershipLoss().getNodeId();
-                if (isOutgoingSession(session)) {
+                if (outgoingSession.contains(session)) {
                     this.sessionToRuntimeFSM.get(session)
                             .input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent
                                     .LogReplicationRuntimeEventType.REMOTE_LEADER_LOSS, nodeId));
                 } else {
-                    sessionToSinkVerifyLeadership.get(session)
+                    sessionToRemoteSourceLeaderManager.get(session)
                             .input(new LogReplicationSinkEvent(LogReplicationSinkEvent
                                     .LogReplicationSinkEventType.REMOTE_LEADER_LOSS, nodeId));
                 }
@@ -449,8 +474,15 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
                 return;
             }
 
-            if (msg.getPayload().getPayloadCase().equals(CorfuMessage.ResponsePayloadMsg.PayloadCase.LR_SUBSCRIBE_MSG)) {
-                String remoteLeaderId = msg.getPayload().getLrSubscribeMsg().getSinkLeaderNodeId();
+            if (msg.getPayload().getPayloadCase().equals(CorfuMessage.ResponsePayloadMsg.PayloadCase.LR_REVERSE_REPLICATE_MSG)) {
+                // As creation of runtimeFSM and receiving of LR_REVERSE_REPLICATE_MSG is async, buffer the msg until
+                // the runtimeFSM is ready.
+                if(!sessionToRuntimeFSM.containsKey(session)) {
+                    log.info("RuntimeFSM not present. Buffering the msg for session {}", session);
+                    reverseReplicateMsgBuffer.put(session, msg);
+                    return;
+                }
+                String remoteLeaderId = msg.getPayload().getLrReverseReplicateMsg().getSinkLeaderNodeId();
                 sessionToRuntimeFSM.get(session).setRemoteLeaderNodeId(remoteLeaderId);
                 // Start runtimeFSM
                 startReplication(session, remoteLeaderId);
@@ -461,6 +493,9 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
                 }
                 msgHandler.handleMessage(null, msg, this);
             }
+        } catch (NullPointerException npe) {
+            log.info("Either runtimeFSM or remoteSourceLeadershipManager is not found when msg of type {} is received " +
+                    "for session {}", msg.getPayload().getPayloadCase(), msg.getHeader().getSession());
         } catch (Exception e) {
             log.error("Exception caught while receiving message of type {}",
                     msg.getPayload().getPayloadCase(), e);
@@ -499,7 +534,7 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
     }
 
     private void removeSessionInfo(LogReplicationSession session) {
-        sessionToSinkVerifyLeadership.remove(session);
+        sessionToRemoteSourceLeaderManager.remove(session);
         sessionToOutstandingRequests.remove(session);
         sessionToRuntimeFSM.remove(session);
         sessionToRemoteClusterDescriptor.remove(session);
@@ -529,16 +564,16 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
         shutdownService.shutdown();
     }
 
-    private boolean isOutgoingSession(LogReplicationSession session) {
-        return outgoingSession.contains(session);
-    }
-
     /**
      * Channel Adapter On Error Callback
      */
     public synchronized void onError(Throwable t, LogReplicationSession session) {
-        sessionToRuntimeFSM.get(session).input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent
-                .LogReplicationRuntimeEventType.ERROR, t));
+        try {
+            sessionToRuntimeFSM.get(session).input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent
+                    .LogReplicationRuntimeEventType.ERROR, t));
+        } catch (NullPointerException npe) {
+            log.info("RuntimeFSM not found for session {}", session);
+        }
     }
 
 
@@ -557,11 +592,15 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
      * For the connection receiving cluster, this is called when the cluster receives a subscribeMsg from remote.
      */
     private void startReplication(LogReplicationSession session, String nodeId) {
-        sessionToRuntimeFSM.get(session).start();
-        log.debug("runtimeFSM started for session {}", session);
-        sessionToRuntimeFSM.get(session)
-                .input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent
-                        .LogReplicationRuntimeEventType.ON_CONNECTION_UP, nodeId));
+        try {
+            sessionToRuntimeFSM.get(session).start();
+            log.debug("runtimeFSM started for session {}", session);
+            sessionToRuntimeFSM.get(session)
+                    .input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent
+                            .LogReplicationRuntimeEventType.ON_CONNECTION_UP, nodeId));
+        } catch (NullPointerException npe) {
+            log.info("runtimeFsm is not present for session {}", session);
+        }
     }
 
     /**
@@ -569,7 +608,7 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
      *
      * @param clusterDescriptor remote cluster descriptor
      */
-    public synchronized void onClusterChange(ClusterDescriptor clusterDescriptor) {
+    public void onClusterChange(ClusterDescriptor clusterDescriptor) {
         if(this.clientChannelAdapter != null) {
             this.clientChannelAdapter.clusterChangeNotification(clusterDescriptor);
         }
@@ -604,7 +643,7 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
         }
 
         if (incomingSession.contains(session)) {
-            sessionToSinkVerifyLeadership.put(session,
+            sessionToRemoteSourceLeaderManager.put(session,
                     new RemoteSourceLeadershipManager(session, this, localNodeId));
         }
     }
@@ -620,7 +659,7 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
         if (outgoingSession.contains(session)) {
             startReplication(session, nodeId);
         } else {
-            sessionToSinkVerifyLeadership.get(session).input(new LogReplicationSinkEvent(
+            sessionToRemoteSourceLeaderManager.get(session).input(new LogReplicationSinkEvent(
                     LogReplicationSinkEvent.LogReplicationSinkEventType.ON_CONNECTION_UP, nodeId));
         }
     }
@@ -632,17 +671,35 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
      * @param session session which is interrupted
      */
     public void onConnectionDown(String nodeId, LogReplicationSession session) {
-        log.info("Connection lost to remote node {} for session {}", nodeId, session);
-        if(outgoingSession.contains(session)) {
-            sessionToRuntimeFSM.get(session).input(new LogReplicationRuntimeEvent(
-                    LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.ON_CONNECTION_DOWN, nodeId));
-        } else {
-            sessionToSinkVerifyLeadership.get(session).input(new LogReplicationSinkEvent(
-                    LogReplicationSinkEvent.LogReplicationSinkEventType.ON_CONNECTION_DOWN, nodeId));
+        try {
+            log.info("Connection lost to remote node {} for session {}", nodeId, session);
+            if (outgoingSession.contains(session)) {
+                sessionToRuntimeFSM.get(session).input(new LogReplicationRuntimeEvent(
+                        LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.ON_CONNECTION_DOWN, nodeId));
+            } else if (incomingSession.contains(session)){
+                sessionToRemoteSourceLeaderManager.get(session).input(new LogReplicationSinkEvent(
+                        LogReplicationSinkEvent.LogReplicationSinkEventType.ON_CONNECTION_DOWN, nodeId));
+            }
+        } catch (NullPointerException npe) {
+            log.info("The replication components are already stopped for session {}", session);
         }
 
         if (isConnectionStarterForSession(session)) {
             this.clientChannelAdapter.connectAsync(sessionToRemoteClusterDescriptor.get(session), nodeId, session);
+        }
+    }
+
+    public void onConnectionDown(LogReplicationSession session) {
+        Optional<String> remoteLeader;
+        try {
+            remoteLeader = sessionToRuntimeFSM.get(session).getRemoteLeaderNodeId();
+        } catch (NullPointerException npe) {
+            log.info("Runtime FSM is not present for session {}", session);
+            remoteLeader = Optional.empty();
+        }
+
+        if(remoteLeader.isPresent()) {
+            onConnectionDown(remoteLeader.get(), session);
         }
     }
 

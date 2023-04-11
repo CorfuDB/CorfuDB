@@ -403,6 +403,11 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
             log.error("Log Replication not started on this cluster. Remote source/sink not found");
             return;
         }
+        sessionManager.setLeadership(true);
+        sessionManager.refresh(topologyDescriptor);
+        // check if all the sessions in system tables are valid
+        sessionManager.removeStaleSessionOnLeadershipAcquire();
+
         setupConnectionComponents();
         // record metrics about the lock acquired.
         lockAcquireSample = recordLockAcquire();
@@ -424,8 +429,8 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
 
         if (interClusterServerNode == null) {
             interClusterServerNode = new CorfuInterClusterReplicationServerNode(serverContext, sessionManager.getRouter());
-        } else if (!interClusterServerNode.getServerStarted().get()) {
-            //Start the server again as it was previously shutdown due to topology change
+        } else {
+            //Start the server again as it was previously shutdown due to topology change.(start operation is idempotent)
             interClusterServerNode.startServer();
         }
     }
@@ -471,10 +476,6 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
     public void processLockAcquire() {
         log.debug("Lock acquired");
         isLeader.set(true);
-        sessionManager.setLeadership(true);
-        sessionManager.refresh(topologyDescriptor);
-        // check if all the sessions in system tables are valid
-        sessionManager.removeStaleSessionOnLeadershipAcquire();
         onLeadershipAcquire();
     }
 

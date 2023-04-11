@@ -236,7 +236,7 @@ public class RemoteSourceLeadershipManager {
     private void invokeReverseReplication() {
         CorfuMessage.ResponsePayloadMsg payload =
                 CorfuMessage.ResponsePayloadMsg.newBuilder()
-                        .setLrSubscribeMsg(LogReplication.SubscribeToReplicationMsg
+                        .setLrReverseReplicateMsg(LogReplication.ReverseReplicateMsg
                                 .newBuilder()
                                 .setSinkLeaderNodeId(localNodeId)
                                 .build())
@@ -252,7 +252,7 @@ public class RemoteSourceLeadershipManager {
                 .build();
 
 
-        log.info("Trigger the reverseReplicate rpc {} for session {}", payload, session);
+        log.info("Send the reverseReplicate rpc {} for session {}", payload, session);
         router.sendResponse(getResponseMsg(header, payload));
     }
 

@@ -8,8 +8,10 @@ import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientSer
 
 import javax.annotation.Nonnull;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -27,9 +29,8 @@ public class CorfuInterClusterReplicationServerNode {
     // Error code required to detect an ungraceful shutdown.
     private static final int EXIT_ERROR_CODE = 100;
 
-    // this flag makes the start/stop operation of transportLayerServer idempotent
-    @Getter
-    private AtomicBoolean serverStarted;
+    // this flag makes the start/stop operation of transport layer server idempotent
+    private boolean serverStarted;
 
     private final LogReplicationClientServerRouter router;
 
@@ -44,37 +45,38 @@ public class CorfuInterClusterReplicationServerNode {
 
         this.serverContext = serverContext;
         this.router = router;
-        this.serverStarted = new AtomicBoolean(false);
+        this.serverStarted = false;
         startServer();
     }
 
-    public void startServer() {
-        if (!serverStarted.get()) {
+    public synchronized void startServer() {
+        if (logReplicationServerRunner == null || logReplicationServerRunner.isShutdown()) {
             logReplicationServerRunner = Executors.newSingleThreadScheduledExecutor(new ThreadFactoryBuilder()
                     .setNameFormat("replication-server-runner").build());
-            // Start and listen to the server
-            logReplicationServerRunner.submit(() -> this.startAndListen());
-        } else {
-            log.info("Server transport adapter is already running. Updating the router information");
         }
+        // Start and listen to the server
+        logReplicationServerRunner.submit(() -> this.startAndListen());
     }
 
     /**
      * Wait on the transport frameworks's server until it is shutdown.
      */
     private void startAndListen() {
-        try {
+        if (!serverStarted) {
             log.info("Starting server transport adapter ...");
-            CompletableFuture<Boolean> cf =  this.router.createTransportServerAdapter(serverContext);
-            serverStarted.set(true);
-            cf.get();
-        } catch (InterruptedException e) {
-            // The server can be interrupted and stopped on a role switch or on leadership loss.
-            // It should not be treated as fatal
-            log.warn("Server interrupted.  It could be due to a role switch");
-        } catch (Throwable th) {
-            log.error("LogReplicationServer exiting due to unrecoverable error:", th);
-            System.exit(EXIT_ERROR_CODE);
+            CompletableFuture<Boolean> cf = this.router.createTransportServerAdapter(serverContext);
+            try {
+                serverStarted = cf.get();
+            } catch (ExecutionException th) {
+                log.error("LogReplicationServer exiting due to unrecoverable error: {}", th.getMessage());
+                System.exit(EXIT_ERROR_CODE);
+            } catch (InterruptedException e) {
+                // The server can be interrupted and stopped on a role switch or on leadership loss.
+                // It should not be treated as fatal
+                log.warn("Server interrupted.  It could be due to a role switch");
+            }
+        } else {
+            log.info("Server transport adapter is already running.");
         }
     }
 
@@ -111,15 +113,26 @@ public class CorfuInterClusterReplicationServerNode {
     }
 
     private synchronized void cleanupResources() {
-        if (!serverStarted.get()) {
-            log.trace("close: Log Replication Inter Cluster Server already shutdown");
-            return;
-        }
+        logReplicationServerRunner.submit(() -> {
+            if (serverStarted) {
+                this.router.getServerChannelAdapter().stop();
+                serverStarted = false;
+            } else {
+                log.trace("close: Log Replication Inter Cluster Server already shutdown");
+                return;
+            }
+        });
 
-        this.router.getServerChannelAdapter().stop();
-        serverStarted.set(false);
         // Stop listening on the server channel
-        logReplicationServerRunner.shutdownNow();
+        logReplicationServerRunner.shutdown();
+
+        // wait until logReplicationServerRunner finishes the submitted tasks and is shutdown
+        try {
+            logReplicationServerRunner.awaitTermination(ServerContext.SHUTDOWN_TIMER.toMillis(),
+                    TimeUnit.MILLISECONDS);
+        } catch(InterruptedException ie) {
+            log.info("Executor service was interrupted while trying to shutdown ", ie);
+        }
 
         log.info("Log Replication Inter Cluster Server shutdown and resources released");
     }

@@ -149,7 +149,7 @@ message ResponsePayloadMsg {
     LogReplicationLeadershipResponseMsg lr_leadership_response = 72;
 
     LogReplicationLeadershipLossResponseMsg lr_leadership_loss = 73;
-    SubscribeToReplicationMsg lr_subscribe_msg = 74;
+    ReverseReplicateMsg lr_reverse_replicate_msg = 74;
 
     // Server Error
     ServerErrorMsg server_error = 200;

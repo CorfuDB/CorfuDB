@@ -31,6 +31,7 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
@@ -61,11 +62,11 @@ public class SessionManager {
     private final LogReplicationConfigManager configManager;
 
     @Getter
-    private final Set<LogReplicationSession> sessions = new HashSet<>();
+    private final Set<LogReplicationSession> sessions = ConcurrentHashMap.newKeySet();
 
-    private final Set<LogReplicationSession> incomingSessions = new HashSet<>();
+    private final Set<LogReplicationSession> incomingSessions = ConcurrentHashMap.newKeySet();
 
-    private final Set<LogReplicationSession> outgoingSessions = new HashSet<>();
+    private final Set<LogReplicationSession> outgoingSessions = ConcurrentHashMap.newKeySet();
 
     private final Set<LogReplicationSession> newSessionsDiscovered = new HashSet<>();
 

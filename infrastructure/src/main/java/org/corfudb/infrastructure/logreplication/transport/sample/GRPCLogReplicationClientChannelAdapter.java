@@ -371,6 +371,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
     }
 
     private synchronized void onServiceUnavailable(Throwable t, String nodeId, LogReplicationSession sesssion) {
+        log.info("On service unavailable, clear the channel info");
         Set<ManagedChannel> allChannelsToNode = nodeIdToChannelMap.get(nodeId);
 
         allChannelsToNode.stream().forEach(channel -> {
