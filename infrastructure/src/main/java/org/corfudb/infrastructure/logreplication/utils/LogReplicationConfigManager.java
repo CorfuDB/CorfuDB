@@ -25,8 +25,10 @@ import org.corfudb.runtime.LogReplication.ReplicationSubscriber;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStoreEntry;
+import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.ObjectsView;
@@ -76,6 +78,10 @@ public class LogReplicationConfigManager {
     private final String localClusterId;
 
     private long lastRegistryTableLogTail = Address.NON_ADDRESS;
+
+    private Table<ClientRegistrationId, ClientRegistrationInfo, Message> clientRegistrationTable;
+
+    private Table<ClientDestinationInfoKey, DestinationInfoVal, Message> clientConfigTable;
 
     @Getter
     private ServerContext serverContext;
@@ -151,13 +157,13 @@ public class LogReplicationConfigManager {
         try {
             IRetry.build(IntervalRetry.class, () -> {
                 try {
-                    corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
+                    clientRegistrationTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
                             LR_REGISTRATION_TABLE_NAME,
                             ClientRegistrationId.class,
                             ClientRegistrationInfo.class,
                             null,
                             TableOptions.fromProtoSchema(ClientRegistrationInfo.class));
-                    corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
+                    clientConfigTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
                             LR_MODEL_METADATA_TABLE_NAME,
                             ClientDestinationInfoKey.class,
                             DestinationInfoVal.class,
@@ -226,8 +232,10 @@ public class LogReplicationConfigManager {
                 streamToTagsMap.put(streamId, Collections.singletonList(LOG_REPLICATOR_STREAM_INFO.getStreamId()));
             } else if (entry.getValue().getMetadata().getTableOptions().hasReplicationGroup()) {
                 // Find streams to replicate for every logical group for this session
-                String clientName = entry.getValue().getMetadata().getTableOptions().getReplicationGroup().getClientName();
-                String logicalGroup = entry.getValue().getMetadata().getTableOptions().getReplicationGroup().getLogicalGroup();
+                String clientName = entry.getValue().getMetadata().getTableOptions()
+                        .getReplicationGroup().getClientName();
+                String logicalGroup = entry.getValue().getMetadata().getTableOptions()
+                        .getReplicationGroup().getLogicalGroup();
                 // TODO (V2): Client name should be checked after the rpc stream is added for Sink side session creation.
                 // if (session.getSubscriber().getClientName().equals(clientName) && groups.contains(logicalGroup)) {
                 if (isSink || logicalGroupToStreams.containsKey(logicalGroup)) {
@@ -332,47 +340,55 @@ public class LogReplicationConfigManager {
      * @return Log tail hat will be the start point for client config listener to monitor updates.
      */
     public CorfuStoreMetadata.Timestamp preprocessAndGetTail() {
-        CorfuStoreMetadata.Timestamp logTail;
-        try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            List<CorfuStoreEntry<ClientRegistrationId, ClientRegistrationInfo, Message>> registrationResults =
-                    txn.executeQuery(LR_REGISTRATION_TABLE_NAME, record -> true);
-            registrationResults.forEach(entry -> {
-                String clientName = entry.getKey().getClientName();
-                ReplicationModel model = entry.getPayload().getModel();
-                ReplicationSubscriber subscriber = ReplicationSubscriber.newBuilder()
-                        .setClientName(clientName).setModel(model).build();
-                // TODO (V2): currently we don't support ccustomized client name, default logical group subscriber
-                //  should be removed after the grpc stream for Sink session creation is created.
-                if (model.equals(ReplicationModel.LOGICAL_GROUPS)) {
-                    subscriber = getDefaultLogicalGroupSubscriber();
-                }
-                registeredSubscribers.add(subscriber);
-            });
+        try {
+            return IRetry.build(IntervalRetry.class, () -> {
+                try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+                    List<CorfuStoreEntry<ClientRegistrationId, ClientRegistrationInfo, Message>> registrationResults =
+                            txn.executeQuery(clientRegistrationTable, record -> true);
+                    registrationResults.forEach(entry -> {
+                        String clientName = entry.getKey().getClientName();
+                        ReplicationModel model = entry.getPayload().getModel();
+                        ReplicationSubscriber subscriber = ReplicationSubscriber.newBuilder()
+                                .setClientName(clientName).setModel(model).build();
+                        // TODO (V2): currently we don't support ccustomized client name, default logical group subscriber
+                        //  should be removed after the grpc stream for Sink session creation is created.
+                        if (model.equals(ReplicationModel.LOGICAL_GROUPS)) {
+                            subscriber = getDefaultLogicalGroupSubscriber();
+                        }
+                        registeredSubscribers.add(subscriber);
+                    });
 
-            List<CorfuStoreEntry<ClientDestinationInfoKey, DestinationInfoVal, Message>> groupConfigResults =
-                    txn.executeQuery(LR_MODEL_METADATA_TABLE_NAME, record -> true);
-            groupConfigResults.forEach(entry -> {
-                String clientName = entry.getKey().getClientName();
-                ReplicationModel model = entry.getKey().getModel();
-                ReplicationSubscriber subscriber = ReplicationSubscriber.newBuilder()
-                        .setClientName(clientName).setModel(model).build();
-                String groupName = entry.getKey().getGroupName();
-                // TODO (V2): currently we don't support ccustomized client name, default logical group subscriber
-                //  should be removed after the grpc stream for Sink session creation is created.
-                if (model.equals(ReplicationModel.LOGICAL_GROUPS)) {
-                    subscriber = getDefaultLogicalGroupSubscriber();
-                }
-                if (registeredSubscribers.contains(subscriber)) {
-                    groupSinksMap.put(groupName, new HashSet<>(entry.getPayload().getDestinationIdsList()));
-                } else {
-                    log.warn("Subscriber {} not registered, but found its group config in client table: {}",
-                            subscriber, groupName);
-                }
-            });
+                    List<CorfuStoreEntry<ClientDestinationInfoKey, DestinationInfoVal, Message>> groupConfigResults =
+                            txn.executeQuery(clientConfigTable, record -> true);
+                    groupConfigResults.forEach(entry -> {
+                        String clientName = entry.getKey().getClientName();
+                        ReplicationModel model = entry.getKey().getModel();
+                        ReplicationSubscriber subscriber = ReplicationSubscriber.newBuilder()
+                                .setClientName(clientName).setModel(model).build();
+                        String groupName = entry.getKey().getGroupName();
+                        // TODO (V2): currently we don't support ccustomized client name, default logical group subscriber
+                        //  should be removed after the grpc stream for Sink session creation is created.
+                        if (model.equals(ReplicationModel.LOGICAL_GROUPS)) {
+                            subscriber = getDefaultLogicalGroupSubscriber();
+                        }
+                        if (registeredSubscribers.contains(subscriber)) {
+                            groupSinksMap.put(groupName, new HashSet<>(entry.getPayload().getDestinationIdsList()));
+                        } else {
+                            log.warn("Subscriber {} not registered, but found its group config in client table: {}",
+                                    subscriber, groupName);
+                        }
+                    });
 
-            logTail = txn.commit();
+                    return txn.commit();
+                } catch (TransactionAbortedException tae) {
+                    log.error("Failed to preprocess client configuration tables due to Txn Abort", tae);
+                    throw new RetryNeededException();
+                }
+            }).run();
+        } catch (InterruptedException e) {
+            log.error("Unable to preprocess client configuration tables", e);
+            throw new UnrecoverableCorfuInterruptedError(e);
         }
-        return logTail;
     }
 
     /**

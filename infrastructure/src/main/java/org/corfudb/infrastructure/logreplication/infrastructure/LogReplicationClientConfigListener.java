@@ -86,6 +86,9 @@ public class LogReplicationClientConfigListener extends StreamListenerResumeOrFu
         } catch (StreamingException e) {
             if (e.getExceptionCause().equals(StreamingException.ExceptionCause.LISTENER_SUBSCRIBED)) {
                 log.error("Stream listener already registered!");
+            } else {
+                log.error("Stream listener subscribe failed!", e);
+                throw e;
             }
         }
     }
@@ -138,6 +141,7 @@ public class LogReplicationClientConfigListener extends StreamListenerResumeOrFu
                 //  creation is added.
 //                configManager.onNewClientRegister(subscriber);
 //                sessionManager.createOutgoingSessionsBySubscriber(subscriber);
+                log.info("New client {} registered with model {}", clientName, model);
             } else {
                 // TODO (V2 / Chris/Shreay): add unregister API for clients
             }
