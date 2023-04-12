@@ -34,6 +34,10 @@ import static org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg;
 import static org.corfudb.protocols.service.CorfuProtocolLogReplication.generatePayload;
 import static org.corfudb.protocols.service.CorfuProtocolLogReplication.getLrEntryMsg;
 
+/**
+ * Base class for snapshot readers. It provides common functionality for snapshot readers in different
+ * replication models.
+ */
 @Slf4j
 public abstract class BaseSnapshotReader extends SnapshotReader {
     /**

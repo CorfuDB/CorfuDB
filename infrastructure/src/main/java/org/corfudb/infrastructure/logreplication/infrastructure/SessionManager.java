@@ -175,7 +175,22 @@ public class SessionManager {
      * Start client config listener from discovery service upon leadership acquired.
      */
     public void startClientConfigListener() {
-        this.clientConfigListener.start();
+        if (!this.clientConfigListener.listenerStarted()) {
+            this.clientConfigListener.start();
+        } else {
+            log.warn("Client config listener already started on node {}", topology.getLocalNodeDescriptor().getNodeId());
+        }
+    }
+
+    /**
+     * Stop client config listener from discovery service upon leadership lost. Client config listener was running
+     * on this node if it was the leader node.
+     */
+    public void attemptStopClientConfigListener() {
+        if (this.clientConfigListener.listenerStarted()) {
+            log.debug("Stopping client config listener on node {}", topology.getLocalNodeDescriptor().getNodeId());
+            this.clientConfigListener.stop();
+        }
     }
 
     /**

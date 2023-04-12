@@ -13,8 +13,7 @@ import java.util.UUID;
 
 
 /**
- * This class represents any Log Replication Configuration,
- * i.e., set of parameters common across all Clusters.
+ * This class represents the Log Replication Configuration field(s) for FULL_TABLE replication model.
  */
 public class LogReplicationFullTableConfig extends LogReplicationConfig {
 

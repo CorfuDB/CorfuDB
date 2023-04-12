@@ -11,16 +11,20 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
+/**
+ * This class represents the Log Replication Configuration field(s) for LOGICAL_GROUP replication model.
+ */
 public class LogReplicationLogicalGroupConfig extends LogReplicationConfig {
 
     /**
-     * Stream tag that is used by a stream listener for getting updates from LR client configuration tables.
-     * This tag is dedicated to LR client configuration tables in LOGICAL_GROUP use case.
+     * Stream tag that is used by the client config listener to get updates from LR client configuration tables.
+     * This tag is dedicated to LR client configuration tables in LOGICAL_GROUP use case. Changes could include
+     * new client registration and group-destinations information updates.
      */
     public static final String CLIENT_CONFIG_TAG = "lr_sessions";
 
     /**
-     * Logical groups that are replicating by this logical group replication session.
+     * Logical groups to streams mapping, which are read from RegistryTable.
      */
     @Getter
     @Setter

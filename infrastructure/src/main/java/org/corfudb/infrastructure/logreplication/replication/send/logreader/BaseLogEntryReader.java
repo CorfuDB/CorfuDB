@@ -32,6 +32,10 @@ import static org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg;
 import static org.corfudb.protocols.service.CorfuProtocolLogReplication.generatePayload;
 import static org.corfudb.protocols.service.CorfuProtocolLogReplication.getLrEntryMsg;
 
+/**
+ * Base class for Log Entry Reader. It provides common functionality for log entry readers in different
+ * replication models.
+ */
 @Slf4j
 public abstract class BaseLogEntryReader extends LogEntryReader {
 

@@ -21,6 +21,7 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.corfudb.infrastructure.logreplication.config.LogReplicationLogicalGroupConfig.CLIENT_CONFIG_TAG;
 import static org.corfudb.runtime.LogReplicationLogicalGroupClient.LR_MODEL_METADATA_TABLE_NAME;
@@ -57,7 +58,14 @@ public class LogReplicationClientConfigListener extends StreamListenerResumeOrFu
      */
     private final CorfuStore corfuStore;
 
-    public LogReplicationClientConfigListener(SessionManager sessionManager, LogReplicationConfigManager configManager, CorfuStore corfuStore) {
+    /**
+     * Flag to indicate whether this stream listener has been started.
+     */
+    private final AtomicBoolean started = new AtomicBoolean(false);
+
+    public LogReplicationClientConfigListener(SessionManager sessionManager,
+                                              LogReplicationConfigManager configManager,
+                                              CorfuStore corfuStore) {
         super(corfuStore, CORFU_SYSTEM_NAMESPACE, CLIENT_CONFIG_TAG, tablesOfInterest);
         this.sessionManager = sessionManager;
         this.configManager = configManager;
@@ -74,6 +82,7 @@ public class LogReplicationClientConfigListener extends StreamListenerResumeOrFu
         log.info("Start log replication listener for client config tables from {}", timestamp);
         try {
             corfuStore.subscribeListener(this, CORFU_SYSTEM_NAMESPACE, CLIENT_CONFIG_TAG, tablesOfInterest, timestamp);
+            started.set(true);
         } catch (StreamingException e) {
             if (e.getExceptionCause().equals(StreamingException.ExceptionCause.LISTENER_SUBSCRIBED)) {
                 log.error("Stream listener already registered!");
@@ -124,8 +133,9 @@ public class LogReplicationClientConfigListener extends StreamListenerResumeOrFu
                 ReplicationModel model = ((ClientRegistrationInfo) entry.getPayload()).getModel();
                 LogReplication.ReplicationSubscriber subscriber = LogReplication.ReplicationSubscriber.newBuilder()
                         .setClientName(DEFAULT_LOGICAL_GROUP_CLIENT).setModel(model).build();
-                // TODO (V2): Currently we add a default subscriber for logical group use case instead of listening on client
-                //  registration. Subscriber should be added upon registration after grpc stream for session creation is added.
+                // TODO (V2): Currently we add a default subscriber for logical group use case instead of listening
+                //  on client registration. Subscriber should be added upon registration after grpc stream for session
+                //  creation is added.
 //                configManager.onNewClientRegister(subscriber);
 //                sessionManager.createOutgoingSessionsBySubscriber(subscriber);
             } else {
@@ -171,6 +181,15 @@ public class LogReplicationClientConfigListener extends StreamListenerResumeOrFu
      */
     public void stop() {
         corfuStore.unsubscribeListener(this);
+        started.set(false);
+    }
+
+    /**
+     * Check if the listener is started.
+     * @return true if started, false otherwise.
+     */
+    public boolean listenerStarted() {
+        return started.get();
     }
 
     /**

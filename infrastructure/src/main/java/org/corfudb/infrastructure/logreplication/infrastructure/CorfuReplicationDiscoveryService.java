@@ -580,6 +580,9 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
                 // If no longer a Source, stop event listener.
                 logReplicationEventListener.stop();
             }
+        } else {
+            // If no longer a leader, attempt to stop client config listener in case this node was the leader node.
+            sessionManager.attemptStopClientConfigListener();
         }
 
         log.debug("Persisted new topologyConfigId {}, cluster id={}", topologyDescriptor.getTopologyConfigId(),

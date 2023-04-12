@@ -16,6 +16,9 @@ import java.util.UUID;
 
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
+/**
+ * This class represents the Log Replication Configuration field(s) that are common to all replication models.
+ */
 @Data
 public abstract class LogReplicationConfig {
     // Log Replication message timeout time in milliseconds
