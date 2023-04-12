@@ -3,6 +3,7 @@ package org.corfudb.infrastructure.logreplication.runtime;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.checkerframework.checker.units.qual.C;
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
@@ -26,6 +27,7 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -156,6 +158,9 @@ public class CorfuLogReplicationRuntime {
     @Getter
     public final LogReplicationSession session;
 
+    @Getter
+    private CountDownLatch awaitRuntimeFsmStart;
+
     /**
      * Default Constructor
      */
@@ -182,6 +187,7 @@ public class CorfuLogReplicationRuntime {
 
         initializeStates(metadataManager, upgradeManager);
         this.state = states.get(LogReplicationRuntimeStateType.WAITING_FOR_CONNECTIVITY);
+        awaitRuntimeFsmStart = new CountDownLatch(1);
 
         log.info("Log Replication Runtime State Machine initialized");
     }
@@ -193,6 +199,7 @@ public class CorfuLogReplicationRuntime {
         log.info("Start Log Replication Runtime to remote {}", session.getSinkClusterId());
         // Start Consumer Thread for this state machine (dedicated thread for event consumption)
         communicationFSMConsumer.submit(this::consume);
+        awaitRuntimeFsmStart.countDown();
     }
 
     /**
@@ -316,5 +323,6 @@ public class CorfuLogReplicationRuntime {
      */
     public void stop() {
         input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.LOCAL_LEADER_LOSS));
+        awaitRuntimeFsmStart = new CountDownLatch(1);
     }
 }

@@ -15,6 +15,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
+import static org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRuntimeStateType.WAITING_FOR_CONNECTIVITY;
+
 /**
  * This class manages Log Replication for multiple remote (sink) clusters.
  */
@@ -176,6 +178,14 @@ public class CorfuReplicationManager {
                 event.getSession());
         } else {
             log.info("Enforce snapshot sync for remote session {}", event.getSession());
+            // possible to get the force snapshot sync for a session before the FSM is started. In that case, block
+            // until FSM gets a start notification from the router
+            try {
+                runtime.getAwaitRuntimeFsmStart().await();
+            } catch (InterruptedException e) {
+                log.error("The thread was interrupted while waiting for FSM to start. Skip snapshot sync ", e);
+                return;
+            }
             runtime.getSourceManager().stopLogReplication();
             runtime.getSourceManager().startForcedSnapshotSync(event.getEventId());
         }
