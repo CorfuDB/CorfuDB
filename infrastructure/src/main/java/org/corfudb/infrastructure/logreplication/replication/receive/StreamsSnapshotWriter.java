@@ -369,7 +369,6 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
     }
 
     private boolean maxEntriesLimitReached(UUID streamId, List<SMREntry> buffer) {
-        log.info("size limit: {}", replicationContext.getConfig(session).getMaxSnapshotEntriesApplied());
         return (streamId.equals(PROTOBUF_TABLE_ID) && buffer.size() ==
                 replicationContext.getConfig(session).getMaxSnapshotEntriesApplied());
     }

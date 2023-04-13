@@ -31,7 +31,6 @@ import java.util.Objects;
 import java.util.concurrent.CountDownLatch;
 
 import static org.assertj.core.api.Assertions.fail;
-import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.LR_STATUS_STREAM_TAG;
 import static org.corfudb.integration.LogReplicationAbstractIT.NAMESPACE;
 import static org.corfudb.integration.LogReplicationAbstractIT.runCommandForOutput;
 import static org.corfudb.runtime.LogReplicationUtils.LR_STATUS_STREAM_TAG;

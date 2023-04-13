@@ -6,10 +6,6 @@ import org.corfudb.infrastructure.logreplication.infrastructure.SessionManager;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultSnapshotSyncPlugin;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatus;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SyncStatus;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SyncType;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
 import org.corfudb.infrastructure.logreplication.proto.Sample.StringKey;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
@@ -18,8 +14,12 @@ import org.corfudb.integration.LogReplicationAbstractIT.StreamingSinkListener;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.ExampleSchemas;
 import org.corfudb.runtime.ExampleSchemas.SnapshotSyncPluginValue;
+import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
+import org.corfudb.runtime.LogReplication.ReplicationStatus;
 import org.corfudb.runtime.LogReplication.ReplicationSubscriber;
+import org.corfudb.runtime.LogReplication.SyncType;
+import org.corfudb.runtime.LogReplication.SyncStatus;
 import org.corfudb.runtime.LogReplicationLogicalGroupClient;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.Table;
@@ -44,9 +44,9 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.REPLICATION_STATUS_TABLE_NAME;
 import static org.corfudb.integration.LogReplicationAbstractIT.NAMESPACE;
 import static org.corfudb.integration.LogReplicationAbstractIT.checkpointAndTrimCorfuStore;
+import static org.corfudb.runtime.LogReplicationUtils.REPLICATION_STATUS_TABLE_NAME;
 import static org.junit.Assert.fail;
 
 
@@ -1473,7 +1473,7 @@ public class LogReplicationLogicalGroupIT extends CorfuReplicationMultiSourceSin
                 .isEqualTo(SyncStatus.ONGOING);
 
         assertThat(status.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getType())
-                .isEqualTo(LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType.DEFAULT);
+                .isEqualTo(LogReplication.SnapshotSyncInfo.SnapshotSyncType.DEFAULT);
         assertThat(status.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus())
                 .isEqualTo(SyncStatus.COMPLETED);
     }
