@@ -10,7 +10,9 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
+import org.corfudb.runtime.CorfuOptions;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.runtime.object.ConsistencyView;
 import org.corfudb.runtime.object.PersistenceOptions;
 import org.corfudb.runtime.object.RocksDbApi;
 import org.corfudb.runtime.object.RocksDbSnapshotGenerator;
@@ -44,7 +46,8 @@ import static org.corfudb.runtime.CorfuOptions.ConsistencyModel.READ_COMMITTED;
 @Builder(toBuilder=true)
 public class DiskBackedCorfuTable<K, V> implements
         SnapshotGenerator<DiskBackedCorfuTable<K, V>>,
-        ViewGenerator<DiskBackedCorfuTable<K, V>> {
+        ViewGenerator<DiskBackedCorfuTable<K, V>>,
+        ConsistencyView {
 
     public static final String DISK_BACKED = "diskBacked";
     public static final String TRUE = "true";
@@ -261,5 +264,10 @@ public class DiskBackedCorfuTable<K, V> implements
 
     private boolean isRoot() {
         return rocksApi == rocksDbSnapshotGenerator;
+    }
+
+    @Override
+    public CorfuOptions.ConsistencyModel getConsistencyModel() {
+        return persistenceOptions.getConsistencyModel();
     }
 }

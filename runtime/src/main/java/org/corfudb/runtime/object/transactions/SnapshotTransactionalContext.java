@@ -5,6 +5,7 @@ import java.util.UUID;
 
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.object.ConsistencyView;
 import org.corfudb.runtime.object.ICorfuSMRAccess;
 import org.corfudb.runtime.object.MVOCorfuCompileProxy;
 import org.corfudb.runtime.object.SnapshotGenerator;
@@ -28,7 +29,7 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
      * {@inheritDoc}
      */
     @Override
-    public <R, S extends SnapshotGenerator<S>> R access(
+    public <R, S extends SnapshotGenerator<S> & ConsistencyView> R access(
             MVOCorfuCompileProxy<?, S> proxy, ICorfuSMRAccess<R, S> accessFunction, Object[] conflictObject) {
         long startAccessTime = System.nanoTime();
         try {
@@ -47,7 +48,7 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
         // If the transaction has read monotonic objects, we instead return the min address
         // of all accessed streams. Although this avoids data loss, clients subscribing at
         // this point for delta/streaming may observe duplicate data.
-        if (hasAccessedMonotonicObject) {
+        if (accessedReadCommittedObject) {
             return getMinAddressRead();
         } else {
             return getMaxAddressRead();

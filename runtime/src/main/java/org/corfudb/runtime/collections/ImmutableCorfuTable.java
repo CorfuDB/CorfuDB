@@ -10,6 +10,7 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.collections.vavr.TupleIterableWrapper;
+import org.corfudb.runtime.object.ConsistencyView;
 import org.corfudb.runtime.object.SMRSnapshot;
 import org.corfudb.runtime.object.InMemorySMRSnapshot;
 import org.corfudb.runtime.object.SnapshotGenerator;
@@ -34,7 +35,9 @@ import java.util.stream.StreamSupport;
 @Slf4j
 @AllArgsConstructor(access = AccessLevel.PRIVATE)
 // TODO: don't need to implement ICorfuSMR?
-public class ImmutableCorfuTable<K, V> implements SnapshotGenerator<ImmutableCorfuTable<K, V>> {
+public class ImmutableCorfuTable<K, V> implements
+        SnapshotGenerator<ImmutableCorfuTable<K, V>>,
+        ConsistencyView {
 
     // The "main" map which contains the primary key-value mappings.
     private final Map<K, V> mainMap;

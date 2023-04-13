@@ -37,7 +37,7 @@ public class CorfuCompileWrapperBuilder {
      * @throws InstantiationException Cannot instantiate the object using the arguments and class.
      */
     @SuppressWarnings("checkstyle:abbreviation")
-    private static <T extends ICorfuSMR, S extends SnapshotGenerator<S>> T getWrapper(
+    private static <T extends ICorfuSMR, S extends SnapshotGenerator<S> & ConsistencyView> T getWrapper(
             Class<T> type, CorfuRuntime rt, UUID streamID, Object[] args,
             ISerializer serializer, Set<UUID> streamTags, ObjectOpenOption objectOpenOption) throws Exception {
 

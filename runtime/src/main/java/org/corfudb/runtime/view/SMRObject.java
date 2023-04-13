@@ -10,7 +10,6 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.object.CorfuCompileWrapperBuilder;
 import org.corfudb.runtime.object.ICorfuSMR;
-import org.corfudb.runtime.object.MVOCorfuCompileProxy;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 
@@ -60,7 +59,7 @@ public class SMRObject<T extends ICorfuSMR> {
     public static class Builder<T extends ICorfuSMR> {
 
         private ISerializer serializer = Serializers.getDefaultSerializer();
-        private ObjectOpenOption option = ObjectOpenOption.CACHE;
+        private ObjectOpenOption openOption = ObjectOpenOption.CACHE;
         private Object[] arguments = new Object[0];
         @Getter
         private Class<T> type;
@@ -108,7 +107,7 @@ public class SMRObject<T extends ICorfuSMR> {
         }
 
         public SMRObject.Builder<T> addOpenOption(ObjectOpenOption openOption) {
-            this.option = openOption;
+            this.openOption = openOption;
             return this;
         }
 
@@ -128,7 +127,7 @@ public class SMRObject<T extends ICorfuSMR> {
             }
             verify();
             return new SMRObject<>(runtime, type, streamID, streamName,
-                serializer, option, arguments, streamTags);
+                serializer, openOption, arguments, streamTags);
         }
 
         public T open() {

@@ -17,7 +17,7 @@ import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.object.ICorfuSMR;
+import org.corfudb.runtime.object.ConsistencyView;
 import org.corfudb.runtime.object.ICorfuSMRAccess;
 import org.corfudb.runtime.object.ICorfuSMRSnapshotProxy;
 import org.corfudb.runtime.object.MVOCorfuCompileProxy;
@@ -25,6 +25,8 @@ import org.corfudb.runtime.object.SnapshotGenerator;
 import org.corfudb.runtime.object.transactions.TransactionalContext.PreCommitListener;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.util.Utils;
+
+import static org.corfudb.runtime.CorfuOptions.ConsistencyModel.READ_COMMITTED;
 
 /**
  * Represents a transactional context. Transactional contexts
@@ -124,7 +126,7 @@ public abstract class AbstractTransactionalContext implements
      * on monotonic objects. This is used to compute the commit address
      * of read-only transactions.
      */
-    protected boolean hasAccessedMonotonicObject = false;
+    protected boolean accessedReadCommittedObject = false;
 
     @Getter
     private final WriteSetInfo writeSetInfo = new WriteSetInfo();
@@ -150,7 +152,7 @@ public abstract class AbstractTransactionalContext implements
         AbstractTransactionalContext.log.trace("TXBegin[{}]", this);
     }
 
-    protected <S extends SnapshotGenerator<S>> ICorfuSMRSnapshotProxy<S> getAndCacheSnapshotProxy(
+    protected <S extends SnapshotGenerator<S> & ConsistencyView> ICorfuSMRSnapshotProxy<S> getAndCacheSnapshotProxy(
             MVOCorfuCompileProxy<?, S> proxy, long ts) {
         // TODO: Refactor me to avoid casting on ICorfuSMRProxyInternal type.
         ICorfuSMRSnapshotProxy<S> snapshotProxy = (ICorfuSMRSnapshotProxy<S>) snapshotProxyMap.get(proxy);
@@ -172,9 +174,11 @@ public abstract class AbstractTransactionalContext implements
             // interleaves with this transaction.
             Preconditions.checkState(val == position,
                     "inconsistent stream positions %s and %s", val, position);
-
         }
 
+        if (proxy.getUnderlyingMVO().getCurrentObject().getConsistencyModel() == READ_COMMITTED) {
+            accessedReadCommittedObject = true;
+        }
         knownStreamsPosition.put(proxy.getStreamID(), position);
     }
 
@@ -189,7 +193,7 @@ public abstract class AbstractTransactionalContext implements
      * @param <T>            The type of the proxy's underlying object.
      * @return The return value of the access function.
      */
-    public abstract <R, S extends SnapshotGenerator<S>> R access(
+    public abstract <R, S extends SnapshotGenerator<S> & ConsistencyView> R access(
             MVOCorfuCompileProxy<?, S> proxy, ICorfuSMRAccess<R, S> accessFunction, Object[] conflictObject);
 
     /**

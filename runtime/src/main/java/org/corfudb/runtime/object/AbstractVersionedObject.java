@@ -107,7 +107,8 @@ public abstract class AbstractVersionedObject<S extends SnapshotGenerator<S>> {
 
         // TODO(Zach): confirm -6 or -1 as "empty version"
         this.currentObject = newObjectFn.get();
-        this.snapshotFifo.add(this.currentObject.generateSnapshot(new VersionedObjectIdentifier(getID(), Address.NON_EXIST)));
+        this.snapshotFifo.add(this.currentObject.generateSnapshot(
+                new VersionedObjectIdentifier(getID(), Address.NON_EXIST)));
         this.trimRetry = corfuRuntime.getParameters().getTrimRetry();
     }
 

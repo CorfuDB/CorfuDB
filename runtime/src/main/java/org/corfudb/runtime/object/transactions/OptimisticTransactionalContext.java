@@ -11,6 +11,7 @@ import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.AppendException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.object.ConsistencyView;
 import org.corfudb.runtime.object.ICorfuSMRAccess;
 import org.corfudb.runtime.object.MVOCorfuCompileProxy;
 import org.corfudb.runtime.object.SnapshotGenerator;
@@ -64,7 +65,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
      * {@inheritDoc}
      */
     @Override
-    public <R, S extends SnapshotGenerator<S>> R access(
+    public <R, S extends SnapshotGenerator<S> & ConsistencyView> R access(
             MVOCorfuCompileProxy<?, S> proxy, ICorfuSMRAccess<R, S> accessFunction, Object[] conflictObject) {
         long startAccessTime = System.nanoTime();
         try {
@@ -188,7 +189,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         // this point for delta/streaming may observe duplicate data.
         if (getWriteSetInfo().getWriteSet().getEntryMap().isEmpty()) {
             log.trace("Commit[{}] Read-only commit (no write)", this);
-            if (hasAccessedMonotonicObject) {
+            if (accessedReadCommittedObject) {
                 return getMinAddressRead();
             } else {
                 return getMaxAddressRead();

@@ -27,7 +27,7 @@ import java.util.UUID;
 @Slf4j
 public class MVOCorfuCompileProxy<
         T extends ICorfuSMR,
-        S extends SnapshotGenerator<S>>
+        S extends SnapshotGenerator<S> & ConsistencyView>
         implements ICorfuSMRProxy<S> {
 
     @Getter
