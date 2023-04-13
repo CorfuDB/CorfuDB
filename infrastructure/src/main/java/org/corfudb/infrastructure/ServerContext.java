@@ -177,10 +177,9 @@ public class ServerContext implements AutoCloseable {
             workerGroup = getNewWorkerGroup();
         }
 
-        nodeLocator = NodeLocator
-                .parseString(
-                        getVersionFormattedHostAddress((String)serverConfig.get("--address"))
-                                + ":" + serverConfig.get("<port>"));
+        String hostAddress = getVersionFormattedHostAddress((String) serverConfig.get("--address"));
+        String address = hostAddress + ":" + serverConfig.get("<port>");
+        nodeLocator = NodeLocator.parseString(address);
         localEndpoint = nodeLocator.toEndpointUrl();
 
         //TODO(Chetan): Remove this
@@ -394,13 +393,13 @@ public class ServerContext implements AutoCloseable {
      * Generate a Node Id if not present.
      */
     private void generateNodeId() {
-        String currentId = getDataStore().get(NODE_ID_RECORD);
-        if (currentId == null) {
+        Optional<String> currentId = getDataStore().find(NODE_ID_RECORD);
+        if (currentId.isPresent()) {
+            log.info("Node Id = {}", currentId);
+        } else {
             String idString = UuidUtils.asBase64(UUID.randomUUID());
             log.info("No Node Id, setting to new Id={}", idString);
             getDataStore().put(NODE_ID_RECORD, idString);
-        } else {
-            log.info("Node Id = {}", currentId);
         }
     }
 
@@ -453,7 +452,7 @@ public class ServerContext implements AutoCloseable {
      *  @return True, if a new layout was installed, false otherwise.
      */
     public synchronized boolean installSingleNodeLayoutIfAbsent() {
-        if (isSingleNodeSetup() && getCurrentLayout() == null) {
+        if (isSingleNodeSetup() && !findCurrentLayout().isPresent()) {
             setCurrentLayout(getNewSingleNodeLayout());
             return true;
         }
@@ -465,7 +464,10 @@ public class ServerContext implements AutoCloseable {
      * @return True if it is, false otherwise.
      */
     public boolean isSingleNodeSetup(){
-        return (Boolean) getServerConfig().get("--single");
+        return Optional
+                .ofNullable(getServerConfig().get("--single"))
+                .map(single -> Boolean.parseBoolean(single.toString()))
+                .orElse(false);
     }
 
     /**
@@ -513,6 +515,10 @@ public class ServerContext implements AutoCloseable {
         );
     }
 
+    public Optional<Layout> findCurrentLayout() {
+        return Optional.ofNullable(getCurrentLayout());
+    }
+
     /**
      * Get the current {@link Layout} stored in the {@link DataStore}.
      *
@@ -544,8 +550,7 @@ public class ServerContext implements AutoCloseable {
      * The epoch of this router. This is managed by the base server implementation.
      */
     public synchronized long getServerEpoch() {
-        Long epoch = dataStore.get(SERVER_EPOCH_RECORD);
-        return epoch == null ? Layout.INVALID_EPOCH : epoch;
+        return dataStore.get(SERVER_EPOCH_RECORD, Layout.INVALID_EPOCH);
     }
 
     /**
@@ -589,8 +594,8 @@ public class ServerContext implements AutoCloseable {
      * @return Sequencer epoch.
      */
     public long getSequencerEpoch() {
-        Long epoch = dataStore.get(SEQUENCER_RECORD);
-        return epoch == null ? Layout.INVALID_EPOCH : epoch;
+        return dataStore
+                .get(SEQUENCER_RECORD, Layout.INVALID_EPOCH);
     }
 
     /**
