@@ -259,7 +259,7 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
         if (reverseReplicateMsgBuffer.containsKey(session)) {
             String remoteLeaderId = reverseReplicateMsgBuffer.get(session).getPayload().getLrReverseReplicateMsg().getSinkLeaderNodeId();
             runtimeFSM.setRemoteLeaderNodeId(remoteLeaderId);
-            startReplication(session, remoteLeaderId);
+            addConnectionUpEvent(session, remoteLeaderId);
         }
         log.info("Shama..adding to the map {}", sessionToRuntimeFSM);
     }
@@ -485,7 +485,7 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
                 String remoteLeaderId = msg.getPayload().getLrReverseReplicateMsg().getSinkLeaderNodeId();
                 sessionToRuntimeFSM.get(session).setRemoteLeaderNodeId(remoteLeaderId);
                 // Start runtimeFSM
-                startReplication(session, remoteLeaderId);
+                addConnectionUpEvent(session, remoteLeaderId);
             } else {
                 // Route the message to the handler.
                 if (log.isTraceEnabled()) {
@@ -591,10 +591,9 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
      * For the connection initiator cluster, this is called when the connection is established.
      * For the connection receiving cluster, this is called when the cluster receives a subscribeMsg from remote.
      */
-    private void startReplication(LogReplicationSession session, String nodeId) {
+    private void addConnectionUpEvent(LogReplicationSession session, String nodeId) {
         try {
-            sessionToRuntimeFSM.get(session).start();
-            log.debug("runtimeFSM started for session {}", session);
+            log.debug("Input Connection Up event for session {}", session);
             sessionToRuntimeFSM.get(session)
                     .input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent
                             .LogReplicationRuntimeEventType.ON_CONNECTION_UP, nodeId));
@@ -657,7 +656,7 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
     public void onConnectionUp(String nodeId, LogReplicationSession session) {
         log.info("Connection established to remote node {} for session {}.", nodeId, session);
         if (outgoingSession.contains(session)) {
-            startReplication(session, nodeId);
+            addConnectionUpEvent(session, nodeId);
         } else {
             sessionToRemoteSourceLeaderManager.get(session).input(new LogReplicationSinkEvent(
                     LogReplicationSinkEvent.LogReplicationSinkEventType.ON_CONNECTION_UP, nodeId));

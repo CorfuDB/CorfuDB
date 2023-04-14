@@ -158,9 +158,6 @@ public class CorfuLogReplicationRuntime {
     @Getter
     public final LogReplicationSession session;
 
-    @Getter
-    private CountDownLatch awaitRuntimeFsmStart;
-
     /**
      * Default Constructor
      */
@@ -187,7 +184,6 @@ public class CorfuLogReplicationRuntime {
 
         initializeStates(metadataManager, upgradeManager);
         this.state = states.get(LogReplicationRuntimeStateType.WAITING_FOR_CONNECTIVITY);
-        awaitRuntimeFsmStart = new CountDownLatch(1);
 
         log.info("Log Replication Runtime State Machine initialized");
     }
@@ -199,7 +195,6 @@ public class CorfuLogReplicationRuntime {
         log.info("Start Log Replication Runtime to remote {}", session.getSinkClusterId());
         // Start Consumer Thread for this state machine (dedicated thread for event consumption)
         communicationFSMConsumer.submit(this::consume);
-        awaitRuntimeFsmStart.countDown();
     }
 
     /**
@@ -323,6 +318,5 @@ public class CorfuLogReplicationRuntime {
      */
     public void stop() {
         input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.LOCAL_LEADER_LOSS));
-        awaitRuntimeFsmStart = new CountDownLatch(1);
     }
 }

@@ -80,6 +80,7 @@ public class CorfuReplicationManager {
                         metadataManager, upgradeManager, replicationSession, replicationContext, router);
                 sessionRuntimeMap.put(replicationSession, replicationRuntime);
                 router.addRuntimeFSM(replicationSession, replicationRuntime);
+                replicationRuntime.start();
             } else {
                 log.warn("Log Replication Runtime to remote session {}, already exists. Skipping init.",
                         replicationSession);
@@ -178,14 +179,6 @@ public class CorfuReplicationManager {
                 event.getSession());
         } else {
             log.info("Enforce snapshot sync for remote session {}", event.getSession());
-            // possible to get the force snapshot sync for a session before the FSM is started. In that case, block
-            // until FSM gets a start notification from the router
-            try {
-                runtime.getAwaitRuntimeFsmStart().await();
-            } catch (InterruptedException e) {
-                log.error("The thread was interrupted while waiting for FSM to start. Skip snapshot sync ", e);
-                return;
-            }
             runtime.getSourceManager().stopLogReplication();
             runtime.getSourceManager().startForcedSnapshotSync(event.getEventId());
         }

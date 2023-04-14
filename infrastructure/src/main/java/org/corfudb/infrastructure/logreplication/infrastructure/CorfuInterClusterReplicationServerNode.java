@@ -41,6 +41,7 @@ public class CorfuInterClusterReplicationServerNode {
      * @param serverContext Initialized Server Context
      * @param router Interface between LogReplication and the transport layer
      */
+    // TODO v2: the serverContext will need to evaluated to use corfu's construct vs create a new context for LR
     public CorfuInterClusterReplicationServerNode(@Nonnull ServerContext serverContext,
                                                   LogReplicationClientServerRouter router) {
 
@@ -82,32 +83,9 @@ public class CorfuInterClusterReplicationServerNode {
     }
 
     /**
-     * Invoked on a role switch.  This method does not delete the netty event
-     * loop groups passed in the server context.  It shuts down the server
-     * router, LogReplicationServer and Sink Managers.
-     *
-     * Note: The server context is reused throughout the lifecycle of an LR
-     * JVM.  So deleting the event loop groups makes them unusable on a
-     * subsequent role switch to Sink.  The planned fix is to create the
-     * groups in the NettyLogReplicationServerChannelAdapter when needed.
-     * Once it is available, the below method can be removed and callers can
-     * use the close() method which cleans up everything.
-     * Eventually, passing the server context should also be eliminated
-     * completely.
-     *
-     * Also note that the above limitation exists only if using the netty
-     * transport adapter.  GRPC transport adapter does not result in any such
-     * error.
-     */
-    // TODO: comply with the comment when netty is bought back
-    public void disable() {
-        log.trace("Disabling the Replication Server Node");
-        cleanupResources();
-    }
-
-    /**
      * Closes the currently running corfu log replication server.
      */
+    // TODO V2: We had a disable() for netty. Bring it back along with serverContext for LR when netty is bought back
     public void close() {
         log.info("close: Shutting down Log Replication Inter Cluster Server and cleaning resources");
         cleanupResources();
