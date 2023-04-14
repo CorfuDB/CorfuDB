@@ -44,10 +44,10 @@ ENV JAVA_OPTS -verbose:gc \
     -XX:+PrintGCApplicationConcurrentTime \
     -Djava.io.tmpdir=/image/corfu-server/temp
 
-CMD java -cp *.jar \
-    ${JAVA_OPTS} \
-    -Dlogback.configurationFile=/usr/share/corfu/conf/logback.prod.xml \
-    org.corfudb.infrastructure.CorfuServer \
-    --compactor-script /usr/share/corfu/scripts/compactor_runner.py \
-    --compactor-config=/usr/share/corfu/conf/corfu-compactor-config.yml \
-    --compaction-trigger-freq-ms=900000
+CMD ["java", "-cp", "*.jar", "${JAVA_OPTS}", "-Dlogback.configurationFile=/usr/share/corfu/conf/logback.prod.xml", "org.corfudb.infrastructure.CorfuServer", "--compactor-script", "/usr/share/corfu/scripts/compactor_runner.py", "--compactor-config=/usr/share/corfu/conf/corfu-compactor-config.yml", "--compaction-trigger-freq-ms=900000"]
+
+
+
+
+
+
