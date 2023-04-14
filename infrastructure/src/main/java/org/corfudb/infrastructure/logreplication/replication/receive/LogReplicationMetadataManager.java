@@ -560,6 +560,7 @@ public class LogReplicationMetadataManager {
         SnapshotSyncInfo snapshotStatus = null;
         ReplicationStatusVal current;
         ReplicationStatusVal previous = null;
+        SyncStatus currentStatus = SyncStatus.ONGOING;
 
         try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
             CorfuStoreEntry<ReplicationStatusKey, ReplicationStatusVal, Message> record = txn.getRecord(replicationStatusTable, key);
@@ -579,15 +580,19 @@ public class LogReplicationMetadataManager {
                 return;
             }
 
-            if (snapshotStatus == null){
+            if (snapshotStatus == null) {
+                // Previous snapshot information is not present in the replicationStatus table,
+                // therefore setting the snapshot status information to UNAVAILABLE and
+                // currentStatus to NOT_STARTED suggesting that the LOG_ENTRY_SYNC has not started yet.
                 log.warn("syncStatusPoller [logEntry]:: previous snapshot status is not present for cluster: {}", clusterId);
-                snapshotStatus = SnapshotSyncInfo.newBuilder().build();
+                snapshotStatus = SnapshotSyncInfo.newBuilder().setStatus(SyncStatus.UNAVAILABLE).build();
+                currentStatus = SyncStatus.NOT_STARTED;
             }
 
             current = ReplicationStatusVal.newBuilder()
                     .setRemainingEntriesToSend(remainingEntries)
                     .setSyncType(type)
-                    .setStatus(SyncStatus.ONGOING)
+                    .setStatus(currentStatus)
                     .setSnapshotSyncInfo(snapshotStatus)
                     .build();
 
@@ -596,14 +601,17 @@ public class LogReplicationMetadataManager {
                 txn.commit();
             }
             
-            log.debug("syncStatusPoller :: Log Entry status set to ONGOING, clusterId: {}, remainingEntries: {}, " +
-                            "snapshotSyncInfo: {}", clusterId, remainingEntries, snapshotStatus);
+            log.debug("syncStatusPoller :: Log Entry status set to {}, clusterId: {}, remainingEntries: {}, " +
+                            "snapshotSyncInfo: {}", currentStatus, clusterId, remainingEntries, snapshotStatus);
         } else if (type == SyncType.SNAPSHOT) {
 
             SnapshotSyncInfo currentSnapshotSyncInfo;
-            if (snapshotStatus == null){
+            if (snapshotStatus == null) {
                 log.warn("syncStatusPoller [snapshot] :: previous status is not present for cluster: {}", clusterId);
-                currentSnapshotSyncInfo = SnapshotSyncInfo.newBuilder().build();
+                // Given it is a SNAPSHOT sync, both currentSnapshotSyncInfo & currentStatus points towards the status of current SYNC.
+                // In general, currentStatus gives the status of the SYNC status irrespective of snapshot/log entry.
+                currentSnapshotSyncInfo = SnapshotSyncInfo.newBuilder().setStatus(SyncStatus.NOT_STARTED).build();
+                currentStatus = SyncStatus.NOT_STARTED;
             } else {
 
                 if (snapshotStatus.getStatus().equals(SyncStatus.NOT_STARTED)
@@ -621,7 +629,7 @@ public class LogReplicationMetadataManager {
             current = ReplicationStatusVal.newBuilder()
                     .setRemainingEntriesToSend(remainingEntries)
                     .setSyncType(type)
-                    .setStatus(SyncStatus.ONGOING)
+                    .setStatus(currentStatus)
                     .setSnapshotSyncInfo(currentSnapshotSyncInfo)
                     .build();
 
@@ -630,8 +638,8 @@ public class LogReplicationMetadataManager {
                 txn.commit();
             }
 
-            log.debug("syncStatusPoller :: sync status for {} set to ONGOING, clusterId: {}, remainingEntries: {}",
-                    type, clusterId, remainingEntries);
+            log.debug("syncStatusPoller :: sync status for {} set to {}, clusterId: {}, remainingEntries: {}",
+                    type, currentStatus, clusterId, remainingEntries);
         }
     }
 
