@@ -39,6 +39,7 @@ message HeaderMsg {
   UuidMsg client_id = 6;
   bool ignore_cluster_id = 7;
   bool ignore_epoch = 8;
+  LogReplicationSession session = 9;
 }
 
 message RequestPayloadMsg {
@@ -148,6 +149,7 @@ message ResponsePayloadMsg {
     LogReplicationLeadershipResponseMsg lr_leadership_response = 72;
 
     LogReplicationLeadershipLossResponseMsg lr_leadership_loss = 73;
+    SubscribeToReplicationMsg lr_subscribe_request = 74;
 
     // Server Error
     ServerErrorMsg server_error = 200;

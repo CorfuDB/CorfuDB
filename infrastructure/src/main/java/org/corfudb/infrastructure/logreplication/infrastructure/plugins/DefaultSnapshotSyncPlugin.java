@@ -1,6 +1,5 @@
 package org.corfudb.infrastructure.logreplication.infrastructure.plugins;
 
-import com.google.protobuf.StringValue;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.ExampleSchemas;

@@ -1,5 +1,6 @@
 package org.corfudb.runtime.collections.streaming;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -56,6 +57,8 @@ public class DeltaStream {
     /**
      * The last trim mark that has been observed
      */
+    @VisibleForTesting
+    @Getter
     private final AtomicLong trimMark;
 
     /**
@@ -222,8 +225,7 @@ public class DeltaStream {
 
         if (!logData.isHole()) {
             // if its not a hole then it must belong to our stream
-            Preconditions.checkState(logData.hasBackpointer(streamId), "%s must contain %s",
-                    logData.getBackpointerMap().keySet(), streamId);
+            validateBackpointerPresence(logData);
         }
 
         Preconditions.checkState(logData.getGlobalAddress().equals(readAddress));
@@ -237,5 +239,10 @@ public class DeltaStream {
         MicroMeterUtils.time(Duration.ofNanos(System.nanoTime() - stampedRead.getTimestamp()),
                 "delta_stream.queuing_delay", "streamId", streamId.toString());
         return logData;
+    }
+
+    protected void validateBackpointerPresence(ILogData logData) {
+        Preconditions.checkState(logData.hasBackpointer(streamId), "%s must contain %s",
+            logData.getBackpointerMap().keySet(), streamId);
     }
 }
