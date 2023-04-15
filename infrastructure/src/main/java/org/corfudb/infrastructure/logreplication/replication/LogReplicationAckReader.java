@@ -52,8 +52,8 @@ public class LogReplicationAckReader {
     // Last ack'd timestamp from Receiver
     private long lastAckedTimestamp = Address.NON_ADDRESS;
 
-    // Sync Type for which last Ack was received. Default to LOG_ENTRY as this is the initial FSM state
-    private SyncType lastSyncType = SyncType.LOG_ENTRY;
+    // Sync Type for which last Ack was received, it is initialized when setSyncType is called
+    private SyncType lastSyncType = null;
 
     private LogEntryReader logEntryReader;
 
@@ -399,7 +399,7 @@ public class LogReplicationAckReader {
             IRetry.build(IntervalRetry.class, () -> {
                 try {
                     lock.lock();
-                    metadataManager.updateSyncStatus(remoteClusterId, SyncType.SNAPSHOT, SyncStatus.ONGOING);
+                    metadataManager.updateSyncStatus(remoteClusterId, lastSyncType, SyncStatus.ONGOING);
                 } catch (TransactionAbortedException tae) {
                     log.error("Error while attempting to markSnapshotSyncInfoOngoing for cluster {}.", remoteClusterId, tae);
                     throw new RetryNeededException();
@@ -470,10 +470,14 @@ public class LogReplicationAckReader {
                 IRetry.build(IntervalRetry.class, () -> {
                     try {
                         lock.lock();
+                        if (lastSyncType == null) {
+                            log.info("lastSyncType is null before polling task run");
+                            return null;
+                        }
                         long entriesToSend = calculateRemainingEntriesToSend(lastAckedTimestamp);
-                        metadataManager.setReplicationStatusTable(remoteClusterId, entriesToSend, lastSyncType);
+                        metadataManager.updateRemainingEntriesToSend(remoteClusterId, entriesToSend, lastSyncType);
                     } catch (TransactionAbortedException tae) {
-                        log.error("Error while attempting to set replication status for " +
+                        log.error("Error while attempting to set remaining entries for " +
                                         "remote cluster {} with lastSyncType {}.",
                                 remoteClusterId, lastSyncType, tae);
                         throw new RetryNeededException();
@@ -484,7 +488,7 @@ public class LogReplicationAckReader {
                     return null;
                 }).run();
             } catch (InterruptedException e) {
-                log.error("Unrecoverable exception when attempting to setReplicationStatusTable", e);
+                log.error("Unrecoverable exception when attempting to updateRemainingEntriesToSend", e);
                 throw new UnrecoverableCorfuInterruptedError(e);
             }
         }

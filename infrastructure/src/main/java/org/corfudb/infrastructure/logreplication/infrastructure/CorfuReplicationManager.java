@@ -5,7 +5,6 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SyncStatus;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
@@ -231,6 +230,8 @@ public class CorfuReplicationManager {
                 topology.addStandbyCluster(clusterInfo);
                 startLogReplicationRuntime(clusterInfo);
             }
+            // Initialize default replication status values for the new standby
+            metadataManager.initializeReplicationStatusTable(clusterId);
         }
 
         // The connection id or other transportation plugin's info could've changed for
@@ -255,17 +256,5 @@ public class CorfuReplicationManager {
             standbyRuntime.getSourceManager().stopLogReplication();
             standbyRuntime.getSourceManager().startForcedSnapshotSync(event.getEventId());
         }
-    }
-
-    /**
-     * Update Replication Status as NOT_STARTED.
-     * Should be called only once in an active lifecycle.
-     */
-    public void updateStatusAsNotStarted() {
-        runtimeToRemoteCluster.values().forEach(corfuLogReplicationRuntime ->
-                corfuLogReplicationRuntime
-                        .getSourceManager()
-                        .getAckReader()
-                        .markSyncStatus(SyncStatus.NOT_STARTED));
     }
 }
