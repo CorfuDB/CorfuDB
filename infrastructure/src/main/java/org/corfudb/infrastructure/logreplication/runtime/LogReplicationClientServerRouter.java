@@ -55,6 +55,12 @@ import static org.corfudb.protocols.service.CorfuProtocolMessage.getResponseMsg;
  * Router, interfaces between the custom transport layer and LR core components.
  *
  * There is one router per node, and all the sessions (both incoming and outgoing) share the router.
+ *
+ * Multiple threads access the members of this class:
+ * (1) The LR components (snapshotReader, LogEntryReader) access the router to send an outgoing msg
+ * (2) The thread that receives the incoming message uses this class to route the message to the appropriate handler or
+ * enqueues an event in the LR components.
+ * All of this is done with the help of thread safe data structures.
  */
 @Slf4j
 public class LogReplicationClientServerRouter implements IClientServerRouter {

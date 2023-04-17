@@ -19,6 +19,10 @@ import static org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicati
 
 /**
  * This class manages Log Replication for multiple remote (sink) clusters.
+ *
+ * The access to all the methods, except to sessionRuntimeMap, is single threaded.
+ * Multiple threads (CorfuReplicationManager and the LogReplicationClientServerRouter) read sessionRuntimeMap to access the
+ * runtimeFSM for a session.
  */
 @Slf4j
 public class CorfuReplicationManager {

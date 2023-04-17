@@ -44,6 +44,9 @@ import static org.corfudb.infrastructure.logreplication.replication.receive.LogR
  * A replication session is determined by the cluster endpoints (source & sink)--given by the
  * Cluster Manager (topology)--the replication model and the client (given by clients upon
  * explicit registration or implicitly through protoBuf schema options).
+ *
+ * The access to the methods in this class is single threaded, but multiple threads will read from the data structures
+ * containing the session: sessions, incomingSessions and outgoingSessions
  */
 @Slf4j
 public class SessionManager {
@@ -460,7 +463,7 @@ public class SessionManager {
     /**
      * Create runtimeFSM for sessions for which the local cluster is a SOURCE
      */
-    public void createSourceFSMs() {
+    private void createSourceFSMs() {
         newSessionsDiscovered.stream()
                 .filter(outgoingSessions::contains)
                 .forEach(session -> replicationManager.createRuntime(

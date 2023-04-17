@@ -46,7 +46,11 @@ import static org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg.
  * The Log Replication Server, handles log replication messages :
  * Leadership messages, so source and sink know which node to send/receive messages
  * Negotiation messages, which allows the Source Replicator to get a view of the last synchronized point at the remote cluster.
- * Replication entry messages, which represent parts of a Snapshot (full) sync or a Log Entry (delta) sync and also handles negotiation messages,
+ * Replication entry messages, which represent parts of a Snapshot (full) sync or a Log Entry (delta) sync and also
+ * handles negotiation messages.
+ *
+ * The incoming messages are currently handled by a single thread.This would change in the subsequent PR to be configurable.
+ *
  */
 @Slf4j
 public class LogReplicationServer extends LogReplicationAbstractServer {
@@ -97,6 +101,7 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
         this.localClusterId = localClusterId;
         this.replicationContext = replicationContext;
         this.isLeader = isLeader;
+        // TODO V2: the number of threads will change in the follow up PR.
         this.executor = context.getExecutorService(1, EXECUTOR_NAME_PREFIX);
     }
 
