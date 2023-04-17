@@ -145,16 +145,16 @@ public class FailureDetector implements IDetector {
                 );
                 reports.add(currReport);
                 // Finish the poll round if we've reached the desired number of reports or when
-                // the current FD is not ready. Local connectivity is not ready unless the overall cluster view is updated.
+                // the current FD is not ready.
+                // Local connectivity is not ready unless the overall cluster view is updated.
                 // The resulting report will not be used in the failure detection anyway.
                 // Cut this round short and continue on the next iteration.
-                log.debug("Local state is : {}", currReport.getClusterState().getLocalNodeConnectivity());
-                if (!currReport.getClusterState().getLocalNodeConnectivity().isReady()) {
-                    log.debug("Cluster view is not updated. Skipping iterations.");
+                if (!currReport.getClusterState().isReady()) {
+                    log.trace("Cluster state is not ready. Skipping iterations.");
                     throw new RetryExhaustedException();
                 }
                 if (reports.size() == MAX_POLL_ROUNDS) {
-                    log.debug("Collected {} reports.", reports.size());
+                    log.trace("Collected all {} reports.", reports.size());
                     throw new RetryExhaustedException();
                 }
                 // There are failed nodes. Increase the sleep interval.
@@ -241,9 +241,6 @@ public class FailureDetector implements IDetector {
             PollReport currReport = pollIteration(
                     allServers, router, epoch, clusterID, sequencerMetrics, layoutUnresponsiveNodes, fileSystemStats
             );
-            if (!currReport.getClusterState().getLocalNodeConnectivity().isReady()) {
-                break;
-            }
             reports.add(currReport);
 
             Duration restInterval = networkStretcher.getRestInterval(currReport.getElapsedTime());

@@ -42,11 +42,6 @@ public class NodeConnectivity implements Comparable<NodeConnectivity> {
     @Getter
     private final long epoch;
 
-
-    public boolean isReady() {
-        return type != NodeConnectivityType.NOT_READY;
-    }
-
     /**
      * Contains list of servers successfully connected with current node.
      */

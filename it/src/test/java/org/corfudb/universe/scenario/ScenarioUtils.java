@@ -4,7 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
 import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_WAIT_TIME;
 
+import com.google.common.base.Supplier;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.health.HealthReport;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.exceptions.UnreachableClusterException;
 import org.corfudb.runtime.view.Layout;
@@ -53,6 +55,18 @@ public class ScenarioUtils {
         }
 
         assertThat(verifier.test(refreshedLayout)).isTrue();
+    }
+
+    public static void waitForHealthReport(Predicate<HealthReport> verifier, Supplier<HealthReport> supplier) {
+        HealthReport report = supplier.get();
+        for (int i = 0; i < TestFixtureConst.DEFAULT_WAIT_POLL_ITER; i++) {
+            report = supplier.get();
+            if (verifier.test(report)) {
+                break;
+            }
+            sleep();
+        }
+        assertThat(verifier.test(report)).isTrue();
     }
 
     /**

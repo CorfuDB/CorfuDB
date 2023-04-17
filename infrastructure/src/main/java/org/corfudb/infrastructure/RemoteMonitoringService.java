@@ -190,7 +190,7 @@ public class RemoteMonitoringService implements ManagementService {
 
         Runnable task = () -> {
             if (!failureDetectorFuture.isDone()) {
-                log.debug("FD task is not done");
+                log.trace("FD task is not done");
                 return;
             }
 
@@ -243,7 +243,7 @@ public class RemoteMonitoringService implements ManagementService {
      *  </pre>
      */
     private synchronized CompletableFuture<DetectorTask> runDetectionTasks() {
-        log.debug("Schedule new FD task");
+        log.trace("Schedule new FD task");
         String localEndpoint = serverContext.getLocalEndpoint();
         return getCorfuRuntime()
                 .invalidateLayout()
@@ -260,7 +260,7 @@ public class RemoteMonitoringService implements ManagementService {
                             .thenCompose(metrics -> pollReport(ourLayout, metrics))
                             //Update cluster view by latest cluster state given by the poll report. No need to be asynchronous
                             .thenApply(pollReport -> {
-                                log.debug("Update cluster view: {}", pollReport.getClusterState());
+                                log.trace("Update cluster view: {}", pollReport.getClusterState());
                                 clusterContext.refreshClusterView(ourLayout, pollReport);
                                 return pollReport;
                             })
@@ -274,16 +274,13 @@ public class RemoteMonitoringService implements ManagementService {
                             //Execute failure detector task using failureDetectorWorker executor
                             .thenCompose(pollReport -> fdService.runFailureDetectorTask(pollReport, ourLayout, localEndpoint));
                 }).thenApply(task -> {
-                    log.debug("Updating the unresponsive list");
                     Issue issue = Issue.createIssue(Component.FAILURE_DETECTOR,
                             SOME_NODES_ARE_UNRESPONSIVE,
                             "There are nodes in the unresponsive list");
                     final Layout layout = serverContext.getCurrentLayout();
                     if (layout.getUnresponsiveServers().isEmpty()) {
-                        log.debug("Resolving issue");
                         HealthMonitor.resolveIssue(issue);
                     } else {
-                        log.debug("Reporting issue");
                         HealthMonitor.reportIssue(issue);
                     }
                     return task;
