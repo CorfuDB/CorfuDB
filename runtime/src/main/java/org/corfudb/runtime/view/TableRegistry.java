@@ -576,7 +576,7 @@ public class TableRegistry {
                 .map(StreamTagInfo::getStreamId)
                 .collect(Collectors.toSet());
 
-        log.info("openTable: opening {}${} with stream tags {}", namespace, tableName, streamTagInfoForTable);
+        log.info(CorfuRuntime.LOG_NOT_IMPORTANT, "openTable: opening {}${} with stream tags {}", namespace, tableName, streamTagInfoForTable);
 
         // Open and return table instance.
         Table<K, V, M> table = new Table<>(
