@@ -20,9 +20,13 @@ import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.clients.ManagementClient;
+import org.corfudb.runtime.exceptions.RetryExhaustedException;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.Sleep;
+import org.corfudb.util.retry.IRetry;
+import org.corfudb.util.retry.MixedBoundRetry;
+import org.corfudb.util.retry.RetryNeededException;
 
 import javax.annotation.Nonnull;
 import java.time.Duration;
@@ -35,6 +39,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 /**
@@ -52,11 +57,25 @@ import java.util.stream.Collectors;
 public class FailureDetector implements IDetector {
 
     /**
-     * Number of iterations to execute to detect a failure in a round.
+     * Max number of iterations to execute to detect a failure in a round.
      */
     @Getter
-    @Setter
-    private int failureThreshold = 3;
+    private static final int MAX_POLL_ROUNDS = 3;
+
+    @Getter
+    private static final Duration MAX_DETECTION_DURATION = Duration.ofSeconds(15);
+
+    @Getter
+    private static final Duration MAX_SLEEP_BETWEEN_RETRIES = Duration.ofSeconds(5);
+
+    @Getter
+    private static final Duration INIT_SLEEP_BETWEEN_RETRIES = Duration.ofSeconds(2);
+
+    @Getter
+    private static final int BACKOFF_MULTIPLIER = 2;
+
+    @Getter
+    private static final float BACKOFF_JITTER_FACTOR = 0.2f;
 
     @NonNull
     private ServerContext serverContext;
@@ -89,7 +108,7 @@ public class FailureDetector implements IDetector {
         Map<String, IClientRouter> routers = adjustRouters(corfuRuntime, allServers);
 
         // Perform polling of all responsive servers.
-        return pollRound(
+        return pollRoundExpBackoff(
                 layout.getEpoch(), layout.getClusterId(), allServers, routers, sequencerMetrics,
                 ImmutableList.copyOf(layout.getUnresponsiveServers()),
                 fileSystemStats
@@ -105,6 +124,93 @@ public class FailureDetector implements IDetector {
             routers.put(server, router);
         });
         return routers;
+    }
+
+    PollReport pollRoundExpBackoff(long epoch, UUID clusterID, Set<String> allServers, Map<String, IClientRouter> router,
+                                   SequencerMetrics sequencerMetrics, ImmutableList<String> layoutUnresponsiveNodes,
+                                   FileSystemStats fileSystemStats) {
+        Consumer<MixedBoundRetry> retrySettings = settings -> {
+            settings.setOverallMaxRetryDuration(MAX_DETECTION_DURATION);
+            settings.setMaxRetryDuration(MAX_SLEEP_BETWEEN_RETRIES);
+            settings.setBaseDuration(INIT_SLEEP_BETWEEN_RETRIES);
+            settings.setMultiplier(BACKOFF_MULTIPLIER);
+            settings.setRandomPart(BACKOFF_JITTER_FACTOR);
+        };
+        List<PollReport> reports = new ArrayList<>();
+        final long start = System.currentTimeMillis();
+        try {
+            IRetry.build(MixedBoundRetry.class, () -> {
+                PollReport currReport = pollIteration(
+                        allServers, router, epoch, clusterID, sequencerMetrics, layoutUnresponsiveNodes, fileSystemStats
+                );
+                reports.add(currReport);
+                // Finish the poll round if we've reached the desired number of reports or when
+                // the current FD is not ready. Local connectivity is not ready unless the overall cluster view is updated.
+                // The resulting report will not be used in the failure detection anyway.
+                // Cut this round short and continue on the next iteration.
+                log.debug("Local state is : {}", currReport.getClusterState().getLocalNodeConnectivity());
+                if (!currReport.getClusterState().getLocalNodeConnectivity().isReady()) {
+                    log.debug("Cluster view is not updated. Skipping iterations.");
+                    throw new RetryExhaustedException();
+                }
+                if (reports.size() == MAX_POLL_ROUNDS) {
+                    log.debug("Collected {} reports.", reports.size());
+                    throw new RetryExhaustedException();
+                }
+                // There are failed nodes. Increase the sleep interval.
+                if (!currReport.getFailedNodes().isEmpty()) {
+                    throw new MixedBoundRetry.BackoffRetryNeededException();
+                } else {
+                    throw new RetryNeededException();
+                }
+            }).setOptions(retrySettings).run();
+        } catch (RetryExhaustedException re) {
+            log.debug("Poll round finished. Took: {}ms", System.currentTimeMillis() - start);
+        }
+
+        //Aggregation step
+        Map<String, Long> wrongEpochsAggregated = new HashMap<>();
+        Set<String> connectedNodesAggregated = new HashSet<>();
+        Set<String> failedNodesAggregated = new HashSet<>();
+
+        reports.forEach(report -> {
+            //Calculate wrong epochs
+            wrongEpochsAggregated.putAll(report.getWrongEpochs());
+            report.getReachableNodes().forEach(wrongEpochsAggregated::remove);
+
+            //Aggregate failed/connected nodes
+            connectedNodesAggregated.addAll(report.getReachableNodes());
+            failedNodesAggregated.addAll(report.getFailedNodes());
+        });
+
+        failedNodesAggregated.removeAll(connectedNodesAggregated);
+
+        Set<String> allConnectedNodes = Sets.union(connectedNodesAggregated, wrongEpochsAggregated.keySet());
+
+        tunePollReportTimeouts(router, failedNodesAggregated, allConnectedNodes);
+
+        List<ClusterState> clusterStates = reports.stream()
+                .map(PollReport::getClusterState)
+                .collect(Collectors.toList());
+
+        ClusterStateAggregator aggregator = ClusterStateAggregator.builder()
+                .localEndpoint(serverContext.getLocalEndpoint())
+                .clusterStates(clusterStates)
+                .unresponsiveNodes(layoutUnresponsiveNodes)
+                .build();
+
+        Duration totalElapsedTime = reports.stream()
+                .map(PollReport::getElapsedTime)
+                .reduce(Duration.ZERO, Duration::plus);
+
+        final ClusterState aggregatedClusterState = aggregator.getAggregatedState();
+        return PollReport.builder()
+                .pollEpoch(epoch)
+                .elapsedTime(totalElapsedTime)
+                .pingResponsiveServers(aggregatedClusterState.getPingResponsiveNodes())
+                .wrongEpochs(ImmutableMap.copyOf(wrongEpochsAggregated))
+                .clusterState(aggregatedClusterState)
+                .build();
     }
 
     /**
@@ -129,15 +235,15 @@ public class FailureDetector implements IDetector {
             SequencerMetrics sequencerMetrics, ImmutableList<String> layoutUnresponsiveNodes,
             FileSystemStats fileSystemStats) {
 
-        if (failureThreshold < 1) {
-            throw new IllegalStateException("Invalid failure threshold");
-        }
-
         List<PollReport> reports = new ArrayList<>();
-        for (int iteration = 0; iteration < failureThreshold; iteration++) {
+
+        for (int iteration = 0; iteration < MAX_POLL_ROUNDS; iteration++) {
             PollReport currReport = pollIteration(
                     allServers, router, epoch, clusterID, sequencerMetrics, layoutUnresponsiveNodes, fileSystemStats
             );
+            if (!currReport.getClusterState().getLocalNodeConnectivity().isReady()) {
+                break;
+            }
             reports.add(currReport);
 
             Duration restInterval = networkStretcher.getRestInterval(currReport.getElapsedTime());

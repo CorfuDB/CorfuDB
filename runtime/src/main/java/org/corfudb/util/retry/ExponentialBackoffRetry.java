@@ -1,12 +1,13 @@
 package org.corfudb.util.retry;
 
-import java.time.Duration;
-import java.util.Random;
-
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.util.Sleep;
+
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Random;
 
 
 /**
@@ -20,10 +21,20 @@ public class ExponentialBackoffRetry<E extends Exception, F extends Exception,
         extends AbstractRetry<E, F, G, H, O, ExponentialBackoffRetry> {
 
     private static final int DEFAULT_BASE = 2;
+    private static final int DEFAULT_MULT = 2;
     private static final float DEFAULT_RANDOM_PORTION = 0f;
     private static final Duration DEFAULT_BACKOFF_DURATION = Duration.ofMinutes(1);
     private long retryCounter = 0;
     private long nextBackoffTime = 0;
+
+
+    @Getter
+    @Setter
+    private boolean stopAfterBackoffDurationExceeded = false;
+
+    @Getter
+    @Setter
+    private boolean stop = false;
 
     @Getter
     @Setter
@@ -32,14 +43,20 @@ public class ExponentialBackoffRetry<E extends Exception, F extends Exception,
     /**
      * Base to multiply.
      */
-    @Getter @Setter
+    @Getter
+    @Setter
     private int base = DEFAULT_BASE;
+
+    @Getter
+    @Setter
+    private int multiplier = DEFAULT_MULT;
 
     /**
      * Portion of the number to be randomized, between 0 and 1.
      * 0 - no random portion, 1 - randomize everything.
      */
-    @Getter @Setter
+    @Getter
+    @Setter
     private float randomPortion = DEFAULT_RANDOM_PORTION;
 
     /**
@@ -61,12 +78,20 @@ public class ExponentialBackoffRetry<E extends Exception, F extends Exception,
     }
 
     @Override
+    public boolean stopRequested() {
+        return stop;
+    }
+
+    @Override
     public void nextWait() {
+        // maxRetryThreshold is cap at how long to sleep, if its 5 seconds and sleepTime exceeds it, it will be capped at 5 seconds.
+
         if (nextBackoffTime == 0) {
             nextBackoffTime = System.currentTimeMillis() + backoffDuration.toMillis();
         }
         retryCounter++;
-        long sleepTime = (long) Math.pow(base, retryCounter);
+        long sleepTime = base * (long) Math.pow(multiplier, retryCounter);
+
         sleepTime += extraWait;
         float randomPart = new Random().nextFloat() * randomPortion;
         sleepTime -= sleepTime * randomPart;
@@ -79,6 +104,9 @@ public class ExponentialBackoffRetry<E extends Exception, F extends Exception,
             retryCounter = 1;
             sleepTime = base + extraWait;
             sleepTime -= sleepTime * randomPart;
+            if (stopAfterBackoffDurationExceeded) {
+                stop = true;
+            }
         }
         Sleep.sleepUninterruptibly(Duration.ofMillis(sleepTime));
     }

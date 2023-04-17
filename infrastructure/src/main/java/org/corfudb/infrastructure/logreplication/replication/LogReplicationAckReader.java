@@ -344,99 +344,79 @@ public class LogReplicationAckReader {
     }
 
     public void markSnapshotSyncInfoCompleted() {
-        try {
-            IRetry.build(IntervalRetry.class, () -> {
-                try {
-                    lock.lock();
-                    metadataManager.updateSnapshotSyncStatusCompleted(remoteClusterId,
-                            calculateRemainingEntriesToSend(baseSnapshotTimestamp), baseSnapshotTimestamp);
-                } catch (TransactionAbortedException tae) {
-                    log.error("Error while attempting to markSnapshotSyncInfoCompleted for remote cluster {}.", remoteClusterId, tae);
-                    throw new RetryNeededException();
-                } finally {
-                    lock.unlock();
-                }
+        IRetry.build(IntervalRetry.class, () -> {
+            try {
+                lock.lock();
+                metadataManager.updateSnapshotSyncStatusCompleted(remoteClusterId,
+                        calculateRemainingEntriesToSend(baseSnapshotTimestamp), baseSnapshotTimestamp);
+            } catch (TransactionAbortedException tae) {
+                log.error("Error while attempting to markSnapshotSyncInfoCompleted for remote cluster {}.", remoteClusterId, tae);
+                throw new RetryNeededException();
+            } finally {
+                lock.unlock();
+            }
 
-                if (log.isTraceEnabled()) {
-                    log.trace("markSnapshotSyncInfoCompleted succeeds for remote cluster {}.", remoteClusterId);
-                }
-                return null;
-            }).run();
-        } catch (InterruptedException e) {
-            log.error("Unrecoverable exception when attempting to markSnapshotSyncInfoCompleted.", e);
-            throw new UnrecoverableCorfuInterruptedError(e);
-        }
+            if (log.isTraceEnabled()) {
+                log.trace("markSnapshotSyncInfoCompleted succeeds for remote cluster {}.", remoteClusterId);
+            }
+            return null;
+        }).run();
     }
 
     public void markSnapshotSyncInfoOngoing(boolean forced, UUID eventId) {
-        try {
-            IRetry.build(IntervalRetry.class, () -> {
-                try {
-                    lock.lock();
-                    long remainingEntriesToSend = calculateRemainingEntriesToSend(lastAckedTimestamp);
-                    metadataManager.updateSnapshotSyncStatusOngoing(remoteClusterId, forced, eventId,
-                            baseSnapshotTimestamp, remainingEntriesToSend);
-                } catch (TransactionAbortedException tae) {
-                    log.error("Error while attempting to markSnapshotSyncInfoOngoing for event {}.", eventId, tae);
-                    throw new RetryNeededException();
-                } finally {
-                    lock.unlock();
-                }
+        IRetry.build(IntervalRetry.class, () -> {
+            try {
+                lock.lock();
+                long remainingEntriesToSend = calculateRemainingEntriesToSend(lastAckedTimestamp);
+                metadataManager.updateSnapshotSyncStatusOngoing(remoteClusterId, forced, eventId,
+                        baseSnapshotTimestamp, remainingEntriesToSend);
+            } catch (TransactionAbortedException tae) {
+                log.error("Error while attempting to markSnapshotSyncInfoOngoing for event {}.", eventId, tae);
+                throw new RetryNeededException();
+            } finally {
+                lock.unlock();
+            }
 
-                if (log.isTraceEnabled()) {
-                    log.trace("markSnapshotSyncInfoOngoing succeeds with eventId{} and forced flag {}.", eventId, forced);
-                }
-                return null;
-            }).run();
-        } catch (InterruptedException e) {
-            log.error("Unrecoverable exception when attempting to markSnapshotSyncInfoOngoing.", e);
-            throw new UnrecoverableCorfuInterruptedError(e);
-        }
+            if (log.isTraceEnabled()) {
+                log.trace("markSnapshotSyncInfoOngoing succeeds with eventId{} and forced flag {}.", eventId, forced);
+            }
+            return null;
+        }).run();
     }
 
     public void markSnapshotSyncInfoOngoing() {
-        try {
-            IRetry.build(IntervalRetry.class, () -> {
-                try {
-                    lock.lock();
-                    metadataManager.updateSyncStatus(remoteClusterId, SyncType.SNAPSHOT, SyncStatus.ONGOING);
-                } catch (TransactionAbortedException tae) {
-                    log.error("Error while attempting to markSnapshotSyncInfoOngoing for cluster {}.", remoteClusterId, tae);
-                    throw new RetryNeededException();
-                } finally {
-                    lock.unlock();
-                }
+        IRetry.build(IntervalRetry.class, () -> {
+            try {
+                lock.lock();
+                metadataManager.updateSyncStatus(remoteClusterId, SyncType.SNAPSHOT, SyncStatus.ONGOING);
+            } catch (TransactionAbortedException tae) {
+                log.error("Error while attempting to markSnapshotSyncInfoOngoing for cluster {}.", remoteClusterId, tae);
+                throw new RetryNeededException();
+            } finally {
+                lock.unlock();
+            }
 
-                return null;
-            }).run();
-        } catch (InterruptedException e) {
-            log.error("Unrecoverable exception when attempting to markSnapshotSyncInfoOngoing.", e);
-            throw new UnrecoverableCorfuInterruptedError(e);
-        }
+            return null;
+        }).run();
     }
 
     public void markSyncStatus(SyncStatus status) {
-        try {
-            IRetry.build(IntervalRetry.class, () -> {
-                try {
-                    lock.lock();
-                    metadataManager.updateSyncStatus(remoteClusterId, lastSyncType, status);
-                } catch (TransactionAbortedException tae) {
-                    log.error("Error while attempting to markSyncStatus as {}.", status, tae);
-                    throw new RetryNeededException();
-                } finally {
-                    lock.unlock();
-                }
+        IRetry.build(IntervalRetry.class, () -> {
+            try {
+                lock.lock();
+                metadataManager.updateSyncStatus(remoteClusterId, lastSyncType, status);
+            } catch (TransactionAbortedException tae) {
+                log.error("Error while attempting to markSyncStatus as {}.", status, tae);
+                throw new RetryNeededException();
+            } finally {
+                lock.unlock();
+            }
 
-                if (log.isTraceEnabled()) {
-                    log.trace("markSyncStatus succeeds as {}.", status);
-                }
-                return null;
-            }).run();
-        } catch (InterruptedException e) {
-            log.error("Unrecoverable exception when attempting to markSyncStatus as {}.", status, e);
-            throw new UnrecoverableCorfuInterruptedError(e);
-        }
+            if (log.isTraceEnabled()) {
+                log.trace("markSyncStatus succeeds as {}.", status);
+            }
+            return null;
+        }).run();
     }
 
     /**
@@ -466,27 +446,22 @@ public class LogReplicationAckReader {
     private class TsPollingTask implements Runnable {
         @Override
         public void run() {
-            try {
-                IRetry.build(IntervalRetry.class, () -> {
-                    try {
-                        lock.lock();
-                        long entriesToSend = calculateRemainingEntriesToSend(lastAckedTimestamp);
-                        metadataManager.setReplicationStatusTable(remoteClusterId, entriesToSend, lastSyncType);
-                    } catch (TransactionAbortedException tae) {
-                        log.error("Error while attempting to set replication status for " +
-                                        "remote cluster {} with lastSyncType {}.",
-                                remoteClusterId, lastSyncType, tae);
-                        throw new RetryNeededException();
-                    } finally {
-                        lock.unlock();
-                    }
+            IRetry.build(IntervalRetry.class, () -> {
+                try {
+                    lock.lock();
+                    long entriesToSend = calculateRemainingEntriesToSend(lastAckedTimestamp);
+                    metadataManager.setReplicationStatusTable(remoteClusterId, entriesToSend, lastSyncType);
+                } catch (TransactionAbortedException tae) {
+                    log.error("Error while attempting to set replication status for " +
+                                    "remote cluster {} with lastSyncType {}.",
+                            remoteClusterId, lastSyncType, tae);
+                    throw new RetryNeededException();
+                } finally {
+                    lock.unlock();
+                }
 
-                    return null;
-                }).run();
-            } catch (InterruptedException e) {
-                log.error("Unrecoverable exception when attempting to setReplicationStatusTable", e);
-                throw new UnrecoverableCorfuInterruptedError(e);
-            }
+                return null;
+            }).run();
         }
     }
 }

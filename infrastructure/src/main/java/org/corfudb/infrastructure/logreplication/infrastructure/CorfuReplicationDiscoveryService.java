@@ -307,23 +307,18 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         // The ClusterManager orchestrates the Log Replication Service. If it is not available,
         // topology cannot be discovered and therefore LR cannot start, for this reason connection
         // should be attempted indefinitely.
-        try {
-            clusterManagerAdapter.register(this);
+        clusterManagerAdapter.register(this);
 
-            IRetry.build(IntervalRetry.class, () -> {
-                try {
-                    log.info("Connecting to Cluster Manager {}", clusterManagerAdapter.getClass().getSimpleName());
-                    clusterManagerAdapter.start();
-                } catch (Exception e) {
-                    log.error("Error while attempting to connect to ClusterManager.", e);
-                    throw new RetryNeededException();
-                }
-                return null;
-            }).run();
-        } catch (InterruptedException e) {
-            log.error("Unrecoverable exception when attempting to connect to ClusterManager.", e);
-            throw new UnrecoverableCorfuInterruptedError(e);
-        }
+        IRetry.build(IntervalRetry.class, () -> {
+            try {
+                log.info("Connecting to Cluster Manager {}", clusterManagerAdapter.getClass().getSimpleName());
+                clusterManagerAdapter.start();
+            } catch (Exception e) {
+                log.error("Error while attempting to connect to ClusterManager.", e);
+                throw new RetryNeededException();
+            }
+            return null;
+        }).run();
     }
 
     /**
@@ -451,33 +446,27 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      * The node that acquires the lock will drive/lead log replication.
      */
     private void registerToLogReplicationLock() {
-        try {
+        Lock.setLeaseDuration(serverContext.getLockLeaseDuration());
+        LockClient.setDurationBetweenLockMonitorRuns(serverContext.getLockLeaseDuration() / MONITOR_LEASE_FRACTION);
+        LockState.setDurationBetweenLeaseRenewals(serverContext.getLockLeaseDuration() / RENEWAL_LEASE_FRACTION);
+        HasLeaseState.setDurationBetweenLeaseChecks(serverContext.getLockLeaseDuration() / MONITOR_LEASE_FRACTION);
 
-            Lock.setLeaseDuration(serverContext.getLockLeaseDuration());
-            LockClient.setDurationBetweenLockMonitorRuns(serverContext.getLockLeaseDuration() / MONITOR_LEASE_FRACTION);
-            LockState.setDurationBetweenLeaseRenewals(serverContext.getLockLeaseDuration() / RENEWAL_LEASE_FRACTION);
-            HasLeaseState.setDurationBetweenLeaseChecks(serverContext.getLockLeaseDuration() / MONITOR_LEASE_FRACTION);
+        IRetry.build(IntervalRetry.class, () -> {
+            try {
+                lockClient = new LockClient(logReplicationLockId, getCorfuRuntime());
+                // Callback on lock acquisition or revoke
+                LockListener logReplicationLockListener = new LogReplicationLockListener(this);
+                // Register Interest on the shared Log Replication Lock
+                lockClient.registerInterest(LOCK_GROUP, LOCK_NAME, logReplicationLockListener);
+            } catch (Exception e) {
+                log.error("Error while attempting to register interest on log replication lock {}:{}", LOCK_GROUP, LOCK_NAME, e);
+                throw new RetryNeededException();
+            }
 
-            IRetry.build(IntervalRetry.class, () -> {
-                try {
-                    lockClient = new LockClient(logReplicationLockId, getCorfuRuntime());
-                    // Callback on lock acquisition or revoke
-                    LockListener logReplicationLockListener = new LogReplicationLockListener(this);
-                    // Register Interest on the shared Log Replication Lock
-                    lockClient.registerInterest(LOCK_GROUP, LOCK_NAME, logReplicationLockListener);
-                } catch (Exception e) {
-                    log.error("Error while attempting to register interest on log replication lock {}:{}", LOCK_GROUP, LOCK_NAME, e);
-                    throw new RetryNeededException();
-                }
-
-                log.debug("Registered to lock, client msb={}, lsb={}", logReplicationLockId.getMostSignificantBits(),
-                        logReplicationLockId.getLeastSignificantBits());
-                return null;
-            }).run();
-        } catch (InterruptedException e) {
-            log.error("Unrecoverable exception when attempting to register interest on log replication lock.", e);
-            throw new UnrecoverableCorfuInterruptedError(e);
-        }
+            log.debug("Registered to lock, client msb={}, lsb={}", logReplicationLockId.getMostSignificantBits(),
+                    logReplicationLockId.getLeastSignificantBits());
+            return null;
+        }).run();
     }
 
     /**
@@ -534,9 +523,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
 
                 return null;
             }).setOptions(x -> x.setMaxRetryThreshold(Duration.ofSeconds(FETCH_THRESHOLD))).run();
-        } catch (InterruptedException ie) {
-            throw new UnrecoverableCorfuInterruptedError(ie);
-        } catch (RetryExhaustedException ree) {
+        }  catch (RetryExhaustedException ree) {
             // Retries exhausted. Return
             log.warn("Failed to retrieve updated topology from Cluster Manager.");
         }
@@ -941,21 +928,16 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     }
 
     private void resetReplicationStatusTableWithRetry() {
-        try {
-            IRetry.build(IntervalRetry.class, () -> {
-                try {
-                    logReplicationMetadataManager.resetReplicationStatus();
-                } catch (TransactionAbortedException tae) {
-                    log.error("Error while attempting to resetReplicationStatusTable in DiscoveryService's role change", tae);
-                    throw new RetryNeededException();
-                }
+        IRetry.build(IntervalRetry.class, () -> {
+            try {
+                logReplicationMetadataManager.resetReplicationStatus();
+            } catch (TransactionAbortedException tae) {
+                log.error("Error while attempting to resetReplicationStatusTable in DiscoveryService's role change", tae);
+                throw new RetryNeededException();
+            }
 
-                log.debug("resetReplicationStatusTable succeeds");
-                return null;
-            }).run();
-        } catch (InterruptedException e) {
-            log.error("Unrecoverable exception when attempting to resetReplicationStatusTable in DiscoveryService's role change.", e);
-            throw new UnrecoverableCorfuInterruptedError(e);
-        }
+            log.debug("resetReplicationStatusTable succeeds");
+            return null;
+        }).run();
     }
 }

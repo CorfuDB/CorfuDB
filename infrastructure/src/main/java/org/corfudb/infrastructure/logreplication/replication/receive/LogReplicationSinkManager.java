@@ -169,23 +169,18 @@ public class LogReplicationSinkManager implements DataReceiver {
     }
 
     private void setDataConsistentWithRetry(boolean isDataConsistent) {
-        try {
-            IRetry.build(IntervalRetry.class, () -> {
-                try {
-                    logReplicationMetadataManager.setDataConsistentOnStandby(isDataConsistent);
-                } catch (TransactionAbortedException tae) {
-                    log.error("Error while attempting to setDataConsistent in SinkManager's init", tae);
-                    throw new RetryNeededException();
-                }
+        IRetry.build(IntervalRetry.class, () -> {
+            try {
+                logReplicationMetadataManager.setDataConsistentOnStandby(isDataConsistent);
+            } catch (TransactionAbortedException tae) {
+                log.error("Error while attempting to setDataConsistent in SinkManager's init", tae);
+                throw new RetryNeededException();
+            }
 
-                log.debug("setDataConsistentWithRetry succeeds, current value is {}", isDataConsistent);
+            log.debug("setDataConsistentWithRetry succeeds, current value is {}", isDataConsistent);
 
-                return null;
-            }).run();
-        } catch (InterruptedException e) {
-            log.error("Unrecoverable exception when attempting to setDataConsistent in SinkManager's init.", e);
-            throw new UnrecoverableCorfuInterruptedError(e);
-        }
+            return null;
+        }).run();
     }
 
     /**
@@ -413,20 +408,15 @@ public class LogReplicationSinkManager implements DataReceiver {
      * checkpoint/trim process can be resumed.
      */
     private void completeSnapshotApply(LogReplication.LogReplicationEntryMsg entry) {
-        try {
-            IRetry.build(IntervalRetry.class, () -> {
-                try {
-                    logReplicationMetadataManager.setSnapshotAppliedComplete(entry);
-                } catch (TransactionAbortedException tae) {
-                    log.error("Error while attempting to set SNAPSHOT_SYNC as completed.", tae);
-                    throw new RetryNeededException();
-                }
-                return null;
-            }).run();
-        } catch (InterruptedException e) {
-            log.error("Unrecoverable exception when attempting to set SNAPSHOT_SYNC as completed.", e);
-            throw new UnrecoverableCorfuInterruptedError(e);
-        }
+        IRetry.build(IntervalRetry.class, () -> {
+            try {
+                logReplicationMetadataManager.setSnapshotAppliedComplete(entry);
+            } catch (TransactionAbortedException tae) {
+                log.error("Error while attempting to set SNAPSHOT_SYNC as completed.", tae);
+                throw new RetryNeededException();
+            }
+            return null;
+        }).run();
 
         processSnapshotSyncApplied(entry);
 

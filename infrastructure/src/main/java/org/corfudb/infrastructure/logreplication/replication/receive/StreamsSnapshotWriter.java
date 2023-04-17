@@ -461,25 +461,20 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
     }
 
     private void clearStreams(Set<UUID> streamsToClear) {
-        try {
-            IRetry.build(IntervalRetry.class, () -> {
-                try (TxnContext txnContext = logReplicationMetadataManager.getTxnContext()) {
-                    logReplicationMetadataManager.appendUpdate(txnContext, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID, topologyConfigId);
-                    streamsToClear.forEach(streamId -> {
-                        clearStream(streamId, txnContext);
-                    });
-                    CorfuStoreMetadata.Timestamp ts = txnContext.commit();
-                    log.trace("Clear {} streams committed at :: {}", streamsToClear.size(), ts.getSequence());
-                } catch (TransactionAbortedException tae) {
-                    log.error("Error while attempting to clear locally written streams.", tae);
-                    throw new RetryNeededException();
-                }
-                return null;
-            }).run();
-        } catch (InterruptedException e) {
-            log.error("Unrecoverable exception when attempting to clear locally written streams.", e);
-            throw new UnrecoverableCorfuInterruptedError(e);
-        }
+        IRetry.build(IntervalRetry.class, () -> {
+            try (TxnContext txnContext = logReplicationMetadataManager.getTxnContext()) {
+                logReplicationMetadataManager.appendUpdate(txnContext, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID, topologyConfigId);
+                streamsToClear.forEach(streamId -> {
+                    clearStream(streamId, txnContext);
+                });
+                CorfuStoreMetadata.Timestamp ts = txnContext.commit();
+                log.trace("Clear {} streams committed at :: {}", streamsToClear.size(), ts.getSequence());
+            } catch (TransactionAbortedException tae) {
+                log.error("Error while attempting to clear locally written streams.", tae);
+                throw new RetryNeededException();
+            }
+            return null;
+        }).run();
     }
 
     enum Phase {

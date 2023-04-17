@@ -121,40 +121,35 @@ public class CorfuReplicationManager {
      *
      * @throws InterruptedException
      */
-    private void connect(ClusterDescriptor remoteCluster) throws InterruptedException {
-        try {
-            IRetry.build(IntervalRetry.class, () -> {
-                try {
-                    LogReplicationRuntimeParameters parameters = LogReplicationRuntimeParameters.builder()
-                            .localCorfuEndpoint(context.getLocalCorfuEndpoint())
-                            .remoteClusterDescriptor(remoteCluster)
-                            .localClusterId(localNodeDescriptor.getClusterId())
-                            .replicationConfig(context.getConfig())
-                            .pluginFilePath(pluginFilePath)
-                            .channelContext(context.getChannelContext())
-                            .topologyConfigId(topology.getTopologyConfigId())
-                            .keyStore(corfuRuntime.getParameters().getKeyStore())
-                            .tlsEnabled(corfuRuntime.getParameters().isTlsEnabled())
-                            .ksPasswordFile(corfuRuntime.getParameters().getKsPasswordFile())
-                            .trustStore(corfuRuntime.getParameters().getTrustStore())
-                            .tsPasswordFile(corfuRuntime.getParameters().getTsPasswordFile())
-                            .maxWriteSize(corfuRuntime.getParameters().getMaxWriteSize())
-                            .build();
-                    CorfuLogReplicationRuntime replicationRuntime = new CorfuLogReplicationRuntime(parameters,
-                            metadataManager, replicationConfigManager);
-                    replicationRuntime.start();
-                    runtimeToRemoteCluster.put(remoteCluster.getClusterId(), replicationRuntime);
-                } catch (Exception e) {
-                    log.error("Exception {}. Failed to connect to remote cluster {}. Retry after 1 second.",
-                            e, remoteCluster.getClusterId());
-                    throw new RetryNeededException();
-                }
-                return null;
-            }).run();
-        } catch (InterruptedException e) {
-            log.error("Unrecoverable exception when attempting to connect to remote cluster.", e);
-            throw e;
-        }
+    private void connect(ClusterDescriptor remoteCluster)  {
+        IRetry.build(IntervalRetry.class, () -> {
+            try {
+                LogReplicationRuntimeParameters parameters = LogReplicationRuntimeParameters.builder()
+                        .localCorfuEndpoint(context.getLocalCorfuEndpoint())
+                        .remoteClusterDescriptor(remoteCluster)
+                        .localClusterId(localNodeDescriptor.getClusterId())
+                        .replicationConfig(context.getConfig())
+                        .pluginFilePath(pluginFilePath)
+                        .channelContext(context.getChannelContext())
+                        .topologyConfigId(topology.getTopologyConfigId())
+                        .keyStore(corfuRuntime.getParameters().getKeyStore())
+                        .tlsEnabled(corfuRuntime.getParameters().isTlsEnabled())
+                        .ksPasswordFile(corfuRuntime.getParameters().getKsPasswordFile())
+                        .trustStore(corfuRuntime.getParameters().getTrustStore())
+                        .tsPasswordFile(corfuRuntime.getParameters().getTsPasswordFile())
+                        .maxWriteSize(corfuRuntime.getParameters().getMaxWriteSize())
+                        .build();
+                CorfuLogReplicationRuntime replicationRuntime = new CorfuLogReplicationRuntime(parameters,
+                        metadataManager, replicationConfigManager);
+                replicationRuntime.start();
+                runtimeToRemoteCluster.put(remoteCluster.getClusterId(), replicationRuntime);
+            } catch (Exception e) {
+                log.error("Exception {}. Failed to connect to remote cluster {}. Retry after 1 second.",
+                        e, remoteCluster.getClusterId());
+                throw new RetryNeededException();
+            }
+            return null;
+        }).run();
     }
 
     /**
@@ -172,23 +167,18 @@ public class CorfuReplicationManager {
     }
 
     private void removeClusterInfoFromStatusTable(String clusterId) {
-        try {
-            IRetry.build(IntervalRetry.class, () -> {
-                try {
-                    metadataManager.removeFromStatusTable(clusterId);
-                } catch (TransactionAbortedException tae) {
-                    log.error("Error while attempting to remove clusterInfo from LR status tables", tae);
-                    throw new RetryNeededException();
-                }
+        IRetry.build(IntervalRetry.class, () -> {
+            try {
+                metadataManager.removeFromStatusTable(clusterId);
+            } catch (TransactionAbortedException tae) {
+                log.error("Error while attempting to remove clusterInfo from LR status tables", tae);
+                throw new RetryNeededException();
+            }
 
-                log.debug("removeClusterInfoFromStatusTable succeeds, removed clusterID {}", clusterId);
+            log.debug("removeClusterInfoFromStatusTable succeeds, removed clusterID {}", clusterId);
 
-                return null;
-            }).run();
-        } catch (InterruptedException e) {
-            log.error("Unrecoverable exception when attempting to removeClusterInfoFromStatusTable", e);
-            throw new UnrecoverableCorfuInterruptedError(e);
-        }
+            return null;
+        }).run();
     }
 
     /**

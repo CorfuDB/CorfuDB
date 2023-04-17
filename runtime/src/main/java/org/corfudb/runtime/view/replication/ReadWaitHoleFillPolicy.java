@@ -78,9 +78,7 @@ public class ReadWaitHoleFillPolicy implements IHoleFillPolicy {
                             + "but data absent. Retrying.", address);
                 throw new RetryNeededException();
             }).setOptions(x -> x.setMaxRetryThreshold(retryWaitThreshold)).run();
-        } catch (InterruptedException ie) {
-            throw new UnrecoverableCorfuInterruptedError(ie);
-        } catch (RetryExhaustedException ree) {
+        }  catch (RetryExhaustedException ree) {
             // Retries exhausted. Hole filling.
             log.debug("peekUntilHoleFillRequired: Address:{} empty. Hole-filling.", address);
         }

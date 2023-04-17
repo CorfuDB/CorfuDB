@@ -1,8 +1,9 @@
 package org.corfudb.util.retry;
 
-import java.util.function.Consumer;
-
 import lombok.SneakyThrows;
+import org.corfudb.runtime.exceptions.RetryExhaustedException;
+
+import java.util.function.Consumer;
 
 
 /**
@@ -37,7 +38,7 @@ public interface IRetry<E extends Exception, F extends Exception, G extends Exce
     static <T extends Exception, U extends Exception, R, Z extends IRetry> IRetry<T, U,
             RuntimeException, RuntimeException, R, Z> build(Class<Z> retryType,
                                                             Class<? extends T> firstExceptionType,
-            Class<? extends U> secondExceptionType, IRetryable<T, U, RuntimeException,
+                                                            Class<? extends U> secondExceptionType, IRetryable<T, U, RuntimeException,
             RuntimeException, R> runFunction) {
         return build(retryType, firstExceptionType, secondExceptionType, RuntimeException.class,
                 RuntimeException.class, runFunction);
@@ -45,9 +46,9 @@ public interface IRetry<E extends Exception, F extends Exception, G extends Exce
 
     static <T extends Exception, U extends Exception, V extends Exception, R,
             Z extends IRetry> IRetry<T, U, V, RuntimeException, R,
-            Z> build(Class<Z> retryType,Class<? extends T> firstExceptionType,
-                                                Class<? extends U> secondExceptionType,
-            Class<? extends V> thirdExceptionType, IRetryable<T, U, V,
+            Z> build(Class<Z> retryType, Class<? extends T> firstExceptionType,
+                     Class<? extends U> secondExceptionType,
+                     Class<? extends V> thirdExceptionType, IRetryable<T, U, V,
             RuntimeException, R> runFunction) {
         return build(retryType, firstExceptionType, secondExceptionType, thirdExceptionType,
                 RuntimeException.class, runFunction);
@@ -56,11 +57,11 @@ public interface IRetry<E extends Exception, F extends Exception, G extends Exce
     @SneakyThrows
     static <T extends Exception, U extends Exception, V extends Exception, W extends Exception, R,
             Z extends IRetry>
-                IRetry<T, U, V, W, R, Z> build(Class<Z> retryType,
-                                               Class<? extends T> firstExceptionType,
-                                               Class<? extends U> secondExceptionType,
-                                               Class<? extends V> thirdExceptionType,
-                                               Class<? extends W> fourthExceptionType, IRetryable<T,
+    IRetry<T, U, V, W, R, Z> build(Class<Z> retryType,
+                                   Class<? extends T> firstExceptionType,
+                                   Class<? extends U> secondExceptionType,
+                                   Class<? extends V> thirdExceptionType,
+                                   Class<? extends W> fourthExceptionType, IRetryable<T,
             U, V,
             W, R> runFunction) {
         return (IRetry<T, U, V, W, R, Z>) retryType.getConstructor(IRetryable.class)
@@ -69,18 +70,22 @@ public interface IRetry<E extends Exception, F extends Exception, G extends Exce
 
 
     /**
-     * Run the retry. This function may never return.
+     * Run the retry.
      */
     default O run()
-            throws E, F, G, H, InterruptedException {
+            throws E, F, G, H {
         while (true) {
             try {
+                if (stopRequested()) {
+                    break;
+                }
                 return getRunFunction().retryFunction();
             } catch (RetryNeededException ex) {
                 // retry requested
                 nextWait();
             }
         }
+        return null;
     }
 
     /**
@@ -106,8 +111,11 @@ public interface IRetry<E extends Exception, F extends Exception, G extends Exce
     /**
      * Apply the retry logic.
      */
-    void nextWait() throws InterruptedException;
+    void nextWait();
 
 
+    default boolean stopRequested() {
+        return false;
+    }
 
 }
