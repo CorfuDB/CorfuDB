@@ -128,8 +128,6 @@ public class GRPCLogReplicationServerHandler extends LogReplicationGrpc.LogRepli
 
                 try {
                     sessionToStreamObserverRequestMap.putIfAbsent(session, responseObserver);
-                    log.info("Shama...got the reverseReplicate...hash of oberserver is {}", responseObserver.hashCode());
-                    log.info("Shama Printing {}", sessionToStreamObserverRequestMap);
                 } catch (Exception e) {
                     log.error("Exception caught when unpacking log replication entry {}. Skipping message.",
                             requestId, e);
@@ -214,8 +212,6 @@ public class GRPCLogReplicationServerHandler extends LogReplicationGrpc.LogRepli
                 }
 
                 StreamObserver<RequestMsg> observer = sessionToStreamObserverRequestMap.get(session);
-                log.info("Shama .....the observer in send is {}", observer.hashCode());
-                log.info("Shama Printing {}", sessionToStreamObserverRequestMap);
                 observer.onNext(msg);
 
             } catch(StatusRuntimeException e) {
@@ -223,7 +219,6 @@ public class GRPCLogReplicationServerHandler extends LogReplicationGrpc.LogRepli
                     log.error("StreamObserver for is cancelled for session {} with exception", msg.getHeader().getSession(), e);
                     router.onConnectionDown(msg.getHeader().getSession());
                 }
-                log.info("Shama status :::: {}", e.getStatus());
             } catch (Exception e) {
                 log.error("Caught exception while trying to send message {}", msg.getHeader().getRequestId(), e);
             }

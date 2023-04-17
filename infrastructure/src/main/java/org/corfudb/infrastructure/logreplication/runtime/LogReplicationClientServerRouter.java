@@ -267,7 +267,6 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
             runtimeFSM.setRemoteLeaderNodeId(remoteLeaderId);
             addConnectionUpEvent(session, remoteLeaderId);
         }
-        log.info("Shama..adding to the map {}", sessionToRuntimeFSM);
     }
 
 
