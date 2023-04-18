@@ -82,7 +82,6 @@ public abstract class LogReplicationListener implements StreamListener {
 
         Set<String> tableNames =
                 results.getEntries().keySet().stream().map(schema -> schema.getTableName()).collect(Collectors.toSet());
-
         if (tableNames.contains(REPLICATION_STATUS_TABLE_NAME)) {
             Preconditions.checkState(results.getEntries().keySet().size() == 1,
                 "Replication Status Table Update received with other tables");
@@ -96,7 +95,6 @@ public abstract class LogReplicationListener implements StreamListener {
             // it ends, the client will perform a full sync and build a consistent state containing these updates.
             return;
         }
-
         if (snapshotSyncInProgress.get()) {
             processUpdatesInSnapshotSync(results);
         } else {

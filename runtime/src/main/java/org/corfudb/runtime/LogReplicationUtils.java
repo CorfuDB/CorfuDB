@@ -26,7 +26,6 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
-
 /**
  * LogReplication code resides in the infrastructure package.  Adding a dependency from this package(runtime) to
  * infrastructure introduces a circular dependency.  This class defines LR-specific constants and utility methods
