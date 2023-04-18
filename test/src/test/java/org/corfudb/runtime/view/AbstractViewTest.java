@@ -40,9 +40,11 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 
 import javax.annotation.Nonnull;
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -347,12 +349,18 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
                     .maxPeriod(PARAMETERS.TIMEOUT_VERY_SHORT)
                     .initialPollInterval(PARAMETERS.TIMEOUT_VERY_SHORT)
                     .build();
-
+            FailureDetector.PollConfig config = FailureDetector.PollConfig
+                    .builder()
+                    .maxDetectionDuration(PARAMETERS.TIMEOUT_SHORT)
+                    .maxSleepBetweenRetries(PARAMETERS.TIMEOUT_VERY_SHORT)
+                    .initSleepBetweenRetries(PARAMETERS.TIMEOUT_VERY_SHORT)
+                    .jitterFactor(0)
+                    .build();
             FailureDetector failureDetector = getManagementServer(port)
                     .getManagementAgent()
                     .getRemoteMonitoringService()
                     .getFailureDetector();
-            failureDetector.setNetworkStretcher(stretcher);
+            failureDetector.setPollConfig(Optional.of(config));
         });
     }
 
