@@ -1,15 +1,20 @@
 package org.corfudb.integration;
 
 import com.google.protobuf.Message;
-import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
-import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplicationListener;
 import org.corfudb.runtime.collections.*;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.test.SampleSchema;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.List;
+import java.util.Set;
+
 
 import static org.corfudb.integration.LogReplicationAbstractIT.NAMESPACE;
 import static org.corfudb.integration.MergeTestListenerIT.GROUPA_TABLE_PREFIX;
@@ -17,39 +22,21 @@ import static org.corfudb.integration.MergeTestListenerIT.LOCAL_TABLE_PREFIX;
 import static org.corfudb.integration.MergeTestListenerIT.MERGED_TABLE_NAME;
 import static org.junit.Assert.fail;
 
-/**
- * This class is for LogicalGroup E2E IT
- *
- *  (1) Open a merged table that store all the existing data and keys,
- *      add keys to a set that store all the existing keys
- *  (2) Start snapshot sync
- *  (3) Process updates for snapshot sync, perform the diff by using
- *      the set in (1) when processing replicated tables
- *  (4) Snapshot sync ends, add the keys to the existing keys' set
- *      and apply the keys to merged table
- *  (5) Process updates for log entry sync
- */
 @Slf4j
 public class MergeTestListener extends LogReplicationListener{
 
-    public CorfuRuntime runtime;
+    private static CorfuStore corfuStoreSink;
 
-    private CorfuStore corfuStoreSink;
+    // Keys not present in the replicated tables and hence to be deleted from the merged table
+    private static Set<Sample.StringKey> deletedKeys = new HashSet<>();
 
-    private final String namespace = "LR-Test";
+    // Records newly added or updated in the replicated tables and hence to be added/updated in the merged table
+    private static Map<Sample.StringKey, CorfuStoreEntry> newRecords = new HashMap<>();
 
-    // Updates received through streaming
-    @Getter
-    public static LinkedList<CorfuStreamEntry> updates = new LinkedList<>();
+    // Keys in the merged table which were received from the replicated tables
+    private static Set<Sample.StringKey> existingKeysInMergedTable = new HashSet<>();
 
-    public Set<Sample.StringKey> deletedKeys = new HashSet<>();
-
-    public Map<Sample.StringKey, CorfuStoreEntry> addedKeys = new HashMap<>();
-
-    public Set<Sample.StringKey> existingKeysInMergedTable = new HashSet<>();
-
-
-    public static List<CorfuStoreEntry<Sample.StringKey, SampleSchema.SampleGroupMsgA, Message>> entries
+    private static List<CorfuStoreEntry<Sample.StringKey, SampleSchema.SampleGroupMsgA, Message>> entries
             = new ArrayList<>();
 
     private final int numTableForGroupA;
@@ -78,127 +65,169 @@ public class MergeTestListener extends LogReplicationListener{
     }
 
     /**
-     * Apply addedKeys and deletedKeys to merged table, add keys to
-     * existingKeysInMergedTable from addedKeys and deletedKeys.
+     * Apply newRecords and deletedKeys to merged table
+     * when Snapshot Sync ends.
      */
     @Override
     protected void onSnapshotSyncComplete() {
         try (TxnContext tx = corfuStoreSink.txn(NAMESPACE)){
-            existingKeysInMergedTable.addAll(addedKeys.keySet());
-            addedKeys.forEach((addedKey, e) -> {
-                tx.putRecord(tx.getTable(MERGED_TABLE_NAME), addedKey,
-                        SampleSchema.SampleMergedTable.newBuilder().setPayload(e.getPayload().toString().replaceAll("[^0-9]", "")).build(), e.getMetadata());
-            });
+            // Compute the diff
+            // diff: deletedKeys = deletedKeys + (existingKeysInMergedTable - (unchangedKeys + newRecords))
+            Set<Sample.StringKey> diff = new HashSet<>(existingKeysInMergedTable);
+            diff.removeAll(newRecords.keySet());
+            deletedKeys.addAll(diff);
 
+            // Apply deletedKeys to merged table
             existingKeysInMergedTable.removeAll(deletedKeys);
             deletedKeys.forEach(deletedKey -> {
                 tx.delete(tx.getTable(MERGED_TABLE_NAME), deletedKey);
             });
 
+            // Apply newRecords to merged table
+            existingKeysInMergedTable.addAll(newRecords.keySet());
+            newRecords.forEach((addedKey, e) -> {
+                tx.putRecord(tx.getTable(MERGED_TABLE_NAME), addedKey,
+                        SampleSchema.SampleMergedTable.newBuilder().setPayload(e.getPayload().toString().
+                                replaceAll("[^0-9]", "")).build(), e.getMetadata());
+            });
             tx.commit();
+        } catch  (TransactionAbortedException tae) {
+            log.error("Fail to update existingKeysInMergedTable");
+            throw tae;
         }
-
         log.info("Snapshot sync complete");
     }
 
     /**
-     * Write local tables to merged table, process updates and add the keys to addedKeys
-     * and deletedKeys for replicated table.
-     *
      * @param results Entries received in a single transaction as part of a snapshot sync
      */
     @Override
     protected void processUpdatesInSnapshotSync(CorfuStreamEntries results) {
-        log.info("Processing updates in snapshot sync");
+        log.debug("Processing updates in snapshot sync");
         results.getEntries().forEach((schema, entries) -> {
             entries.forEach(e -> {
-                Sample.StringKey key = (Sample.StringKey) e.getKey();
-                if (schema.getTableName().contains("Local_Table00")) {
-                    if (!(e.getOperation() == CorfuStreamEntry.OperationType.CLEAR) &&
-                            !(existingKeysInMergedTable.contains(key))) {
-                        try (TxnContext tx = corfuStoreSink.txn(namespace)){
-                            if (e.getOperation() == CorfuStreamEntry.OperationType.UPDATE) {
-                                tx.putRecord(tx.getTable(MERGED_TABLE_NAME), key,
-                                                SampleSchema.SampleMergedTable.newBuilder().setPayload(e.getPayload().toString().replaceAll("[^0-9]", "")).build(),
-                                         e.getMetadata());
-                                existingKeysInMergedTable.add(key);
+                if (schema.getTableName().contains(LOCAL_TABLE_PREFIX)) {
+                        try (TxnContext tx = corfuStoreSink.txn(NAMESPACE)){
+                            if ((e.getOperation() == CorfuStreamEntry.OperationType.UPDATE) &&
+                                    !(existingKeysInMergedTable.contains((Sample.StringKey) e.getKey()))) {
+                                // Add the records to idfwMergedTable
+                                tx.putRecord(tx.getTable(MERGED_TABLE_NAME), (Sample.StringKey) e.getKey(),
+                                        SampleSchema.SampleMergedTable.newBuilder().setPayload(e.getPayload().
+                                                toString().replaceAll("[^0-9]", "")).build(),
+                                        e.getMetadata());
                             }
-                            else {
-                                tx.delete(tx.getTable(MERGED_TABLE_NAME), key);
+                            else if ((e.getOperation() == CorfuStreamEntry.OperationType.DELETE)) {
+                                // Delete the records from idfwMergedTable
+                                tx.delete(tx.getTable(MERGED_TABLE_NAME), (Sample.StringKey) e.getKey());
                             }
                             tx.commit();
                         }
+                        catch  (TransactionAbortedException tae) {
+                            log.error("Fail to process entry {}, in table {}", e.getKey(), schema.getTableName());
+                            throw tae;
+                        }
                     }
-                }
                 else {
                     if ((e.getOperation() == CorfuStreamEntry.OperationType.UPDATE) &&
-                            !(existingKeysInMergedTable.contains(key))) {
-                        updates.add(e);
-                        addedKeys.put(key, e);
+                            !(existingKeysInMergedTable.contains((Sample.StringKey) e.getKey()))) {
+                        // Add the keys to newRecords
+                        newRecords.put((Sample.StringKey) e.getKey(), e);
                     }
-                    else if ((e.getOperation() == CorfuStreamEntry.OperationType.DELETE) &&
-                            !(existingKeysInMergedTable.contains(key))) {
-                        updates.add(e);
-                        deletedKeys.add(key);
+                    else if ((e.getOperation() == CorfuStreamEntry.OperationType.DELETE)) {
+                        // Add the keys to deletedKeys
+                        deletedKeys.add((Sample.StringKey) e.getKey());
                     }
                 }
             });
-
         });
     }
 
     /**
-     * Write records to merged table, and process updates from replicated
-     * tables.
-     *
      * @param results Entries received in a single transaction as part of a log entry sync
      */
     @Override
     protected void processUpdatesInLogEntrySync(CorfuStreamEntries results) {
-        log.info("Processing updates in log entry sync");
+        log.debug("Processing updates in log entry sync");
         results.getEntries().forEach((schema, entries) -> {
             entries.forEach(e -> {
-                updates.add(e);
-                Sample.StringKey key = (Sample.StringKey) e.getKey();
-                // Add the records to idfwMergedTable.  Add to existingKeysInMergedTable
-                // Any other processing specific to the local table
-                existingKeysInMergedTable.add(key);
                 try (TxnContext tx = corfuStoreSink.txn(NAMESPACE)){
-                    tx.putRecord(tx.getTable(MERGED_TABLE_NAME), key,
-                            SampleSchema.SampleMergedTable.newBuilder().setPayload(e.getPayload().toString().replaceAll("[^0-9]", "")).build(),
-                             e.getMetadata());
-                    tx.commit();
-
+                    if (schema.getTableName().contains(LOCAL_TABLE_PREFIX)) {
+                        if ((e.getOperation() == CorfuStreamEntry.OperationType.UPDATE) &&
+                                !(existingKeysInMergedTable.contains((Sample.StringKey) e.getKey()))) {
+                            // Add the records to idfwMergedTable
+                            tx.putRecord(tx.getTable(MERGED_TABLE_NAME), (Sample.StringKey) e.getKey(),
+                                    SampleSchema.SampleMergedTable.newBuilder().setPayload(e.getPayload().
+                                            toString().replaceAll("[^0-9]", "")).build(),
+                                    e.getMetadata());
+                        }
+                        else if ((e.getOperation() == CorfuStreamEntry.OperationType.DELETE)) {
+                            // Delete the records from idfwMergedTable
+                            tx.delete(tx.getTable(MERGED_TABLE_NAME), (Sample.StringKey) e.getKey());
+                        }
+                    }
+                    else {
+                        if ((e.getOperation() == CorfuStreamEntry.OperationType.UPDATE) &&
+                                !(existingKeysInMergedTable.contains((Sample.StringKey) e.getKey()))) {
+                            // Add the records to idfwMergedTable
+                            // Update existingKeysInMergedTable
+                            tx.putRecord(tx.getTable(MERGED_TABLE_NAME), (Sample.StringKey) e.getKey(),
+                                    SampleSchema.SampleMergedTable.newBuilder().
+                                            setPayload(e.getPayload().
+                                                    toString().replaceAll("[^0-9]", "")).build(),
+                                    e.getMetadata());
+                            existingKeysInMergedTable.add((Sample.StringKey) e.getKey());
+                        }
+                        else if ((e.getOperation() == CorfuStreamEntry.OperationType.DELETE)) {
+                            // Delete the records from idfwMergedTable
+                            // Update existingKeysInMergedTable
+                            tx.delete(tx.getTable(MERGED_TABLE_NAME), (Sample.StringKey) e.getKey());
+                            existingKeysInMergedTable.remove((Sample.StringKey) e.getKey());
+                        }
+                    }
+                tx.commit();
+                }  catch  (TransactionAbortedException tae) {
+                    log.error("Fail to process entry {}, in table {}", e.getKey(), schema.getTableName());
+                    throw tae;
                 }
+
             });
         });
     }
 
     /**
-     * Read and write replicated and local tables to the merged table,
-     * construct existingKeysInMergedTable and add the existing keys to it.
+     * Read the replicated and local tables and write them to idfwMergedTable.
+     * Construct existingKeysInMergedTable from the entries in replicated tables.
      *
      * @param txnContext transaction context in which the operation must be performed
      */
     @Override
     protected void performFullSync(TxnContext txnContext) {
         log.info("Processing existing updates");
+
+        // Read the existing entries from replicated tables
         for (int i = 1; i <= numTableForGroupA; i++) {
             entries.addAll(txnContext.executeQuery(GROUPA_TABLE_PREFIX + i, p -> true));
         }
 
+        // Construct existingKeysInMergedTable from the entries in replicated tables
+        entries.forEach((entryInTableForGroupA) -> {
+                existingKeysInMergedTable.add(entryInTableForGroupA.getKey());
+            }
+        );
+
+        // Read the existing entries from local tables
         for (int j = 1; j <= numTableForLocalTables; j++) {
             entries.addAll(txnContext.executeQuery(LOCAL_TABLE_PREFIX + j, p -> true));
         }
 
+        // Read the existing entries from merged table
         entries.addAll(txnContext.executeQuery(MERGED_TABLE_NAME, p -> true));
 
+        // Write entries to idfwMergedTable
         entries.forEach((entry) -> {
             txnContext.putRecord(txnContext.getTable(MERGED_TABLE_NAME), entry.getKey(),
                     SampleSchema.SampleMergedTable.newBuilder().setPayload(entry.getPayload().getPayload()).build(),
                     entry.getMetadata());
-            existingKeysInMergedTable.add(entry.getKey());
         });
     }
-
 }

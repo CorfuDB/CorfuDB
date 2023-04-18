@@ -23,6 +23,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.integration.LogReplicationAbstractIT.NAMESPACE;
@@ -52,6 +53,8 @@ public class MergeTestListenerIT extends CorfuReplicationMultiSourceSinkIT {
 
     public static final String MERGED_TABLE_NAME = "MERGED_TABLE";
 
+    private static final int SLEEP_INTERVAL = 5;
+
     private static final int SOURCE_INDEX = 0;
 
     private static final int SINK2_INDEX = 1;
@@ -65,16 +68,10 @@ public class MergeTestListenerIT extends CorfuReplicationMultiSourceSinkIT {
     private final String defaultClusterId = UUID.randomUUID().toString();
     private final String testClientName = "lr_test_client";
 
-    Table<LogReplication.LogReplicationSession, LogReplication.ReplicationStatus, Message> replicationStatusTable;
-
-    Table<Sample.StringKey, SampleSchema.SampleMergedTable, Message> mergedTable;
-
     /**
      * Note that the following lists are used for storing the references of tables opened on Source or Sink side.
      * They do not provide guarantees to guard against from which side the tables are actually opened.
      */
-
-
 
     // A list of tables open on Source side whose logical group is GROUP_A
     private final List<Table<Sample.StringKey, SampleSchema.SampleGroupMsgA, Message>> srcTablesGroupA = new ArrayList<>();
@@ -82,8 +79,16 @@ public class MergeTestListenerIT extends CorfuReplicationMultiSourceSinkIT {
     // A list of tables open on Sink side whose logical group is GROUP_A
     private final List<Table<Sample.StringKey, SampleSchema.SampleGroupMsgA, Message>> sinkTablesGroupA = new ArrayList<>();
 
-    // A list of tables open on Sink side whose logical group is GROUP_B
-    private final List<Table<Sample.StringKey, SampleSchema.SampleGroupMsgA, Message>> sinkLocalTables = new ArrayList<>();
+    // A list of local tables open on Sink side
+    private final List<Table<Sample.StringKey, SampleSchema.SampleGroupMsgA, Message>> sinkTablesLocal = new ArrayList<>();
+
+    /**
+     * Tables for this class.
+     */
+
+    Table<LogReplication.LogReplicationSession, LogReplication.ReplicationStatus, Message> replicationStatusTable;
+
+    Table<Sample.StringKey, SampleSchema.SampleMergedTable, Message> mergedTable;
 
 
     /**
@@ -110,61 +115,80 @@ public class MergeTestListenerIT extends CorfuReplicationMultiSourceSinkIT {
         openGroupATable(numTables, sourceCorfuStores.get(SOURCE_INDEX), srcTablesGroupA);
         // Sink
         openGroupATable(numTables, sinkCorfuStores.get(SINK2_INDEX), sinkTablesGroupA);
-        openLocalTable(numTables, sinkCorfuStores.get(SINK2_INDEX), sinkLocalTables);
+        openLocalTable(numTables, sinkCorfuStores.get(SINK2_INDEX), sinkTablesLocal);
         openMergedTable(sinkCorfuStores.get(SINK2_INDEX));
 
+        // Write data to Source side tables
         writeDataOnSource(0, NUM_WRITES);
 
+        // Start log replication for all sessions
         startReplicationServers();
 
+        // Verify all the sessions' snapshot sync completed
         verifySessionInLogEntrySyncState(SINK2_INDEX, SessionManager.getDefaultLogicalGroupSubscriber());
+
+        // Verify tables' content on Sink side
         verifyGroupATableData(sinkCorfuStores.get(SINK2_INDEX), NUM_WRITES, sinkTablesGroupA);
 
-        writeDataOnSink(NUM_WRITES, NUM_WRITES);
+        // Write data to Sink side tables
+        writeDataOnSinkGroupA(NUM_WRITES, NUM_WRITES);
+        writeDataOnSinkLocal(NUM_WRITES, 2*NUM_WRITES);
 
+        // Subscribe MergeTestStreamListener on Sink side
         MergeTestListener listenerSink2 = new MergeTestListener(sinkCorfuStores.get(SINK2_INDEX)
                 , NAMESPACE, numTables,
                 numTables);
-
-        // Subscribe the listeners on the sink side
         sinkCorfuStores.get(SINK2_INDEX).subscribeLogReplicationListener(listenerSink2,
                 NAMESPACE, STREAMING_TAG, sinkCorfuStores.get(SINK2_INDEX));
 
-        // Verify the listeners get all the update
-        verifyMergedTableData(sinkCorfuStores.get(SINK2_INDEX), 2 * NUM_WRITES,
-                        Collections.singletonList(mergedTable));
-
-        writeDataOnSource(2*NUM_WRITES, NUM_WRITES);
-
-        verifyGroupATableData(sinkCorfuStores.get(SINK2_INDEX), 3 * NUM_WRITES, sinkTablesGroupA);
+        // Verify tables' content on Sink side
+        verifyGroupATableData(sinkCorfuStores.get(SINK2_INDEX), 2 * NUM_WRITES, sinkTablesGroupA);
         verifyMergedTableData(sinkCorfuStores.get(SINK2_INDEX), 3 * NUM_WRITES,
-                Collections.singletonList(mergedTable));
+               Collections.singletonList(mergedTable));
 
-        writeDataOnSink(3*NUM_WRITES, NUM_WRITES);
+        // Write data to Sink side tables
+        writeDataOnSinkGroupA(2 * NUM_WRITES, NUM_WRITES);
+        writeDataOnSinkLocal(2 * NUM_WRITES, 2 * NUM_WRITES);
+
+        // Verify tables' content on Sink side
         verifyMergedTableData(sinkCorfuStores.get(SINK2_INDEX), 4 * NUM_WRITES,
                 Collections.singletonList(mergedTable));
-        verifyGroupATableData(sinkCorfuStores.get(SINK2_INDEX), 4 * NUM_WRITES, sinkTablesGroupA);
+        verifyGroupATableData(sinkCorfuStores.get(SINK2_INDEX), 3 * NUM_WRITES, sinkTablesGroupA);
 
+        // Add GROUP_A to Sink3 and verify the GROUP_A tables' data is successfully replicated to Sink2 and Sink3.
         logicalGroupClient.addDestinations(GROUP_A,
                 Collections.singletonList(DefaultClusterConfig.getSinkClusterIds().get(SINK3_INDEX)));
         List<Table<Sample.StringKey, SampleSchema.SampleGroupMsgA, Message>> sinkTablesGroupAOnSink3 = new ArrayList<>();
         openGroupATable(numTables, sinkCorfuStores.get(SINK3_INDEX), sinkTablesGroupAOnSink3);
-
-        writeDataOnSource(NUM_WRITES, NUM_WRITES);
-
-        verifyGroupATableData(sinkCorfuStores.get(SINK3_INDEX), 3 * NUM_WRITES, sinkTablesGroupAOnSink3);
+        writeDataOnSource(NUM_WRITES, 3 * NUM_WRITES);
+        verifyGroupATableData(sinkCorfuStores.get(SINK3_INDEX), 4 * NUM_WRITES, sinkTablesGroupAOnSink3);
         verifyGroupATableData(sinkCorfuStores.get(SINK2_INDEX), 4 * NUM_WRITES, sinkTablesGroupA);
         verifyMergedTableData(sinkCorfuStores.get(SINK2_INDEX), 4 * NUM_WRITES,
                 Collections.singletonList(mergedTable));
 
+        // Remove GROUP_A from Sink3 and verify GROUP_A tables' data no longer replicated to Sink3
         logicalGroupClient.removeDestinations(GROUP_A,
                 Collections.singletonList(DefaultClusterConfig.getSinkClusterIds().get(SINK3_INDEX)));
+        TimeUnit.SECONDS.sleep(SLEEP_INTERVAL);
+        writeDataOnSource(4 * NUM_WRITES,  NUM_WRITES);
+        writeDataOnSinkLocal(4 * NUM_WRITES, 2 * NUM_WRITES);
+        verifyGroupATableData(sinkCorfuStores.get(SINK3_INDEX), 4 * NUM_WRITES, sinkTablesGroupAOnSink3);
+        verifyGroupATableData(sinkCorfuStores.get(SINK2_INDEX), 5 * NUM_WRITES, sinkTablesGroupA);
+        verifyMergedTableData(sinkCorfuStores.get(SINK2_INDEX), 6 * NUM_WRITES,
+                Collections.singletonList(mergedTable));
 
-        writeDataOnSource(3*NUM_WRITES, NUM_WRITES);
+        // Delete data from local tables on Sink side
+        deleteDataOnSinkLocal( 5 * NUM_WRITES, NUM_WRITES);
 
-        verifyGroupATableData(sinkCorfuStores.get(SINK3_INDEX), 3 * NUM_WRITES, sinkTablesGroupAOnSink3);
-        verifyGroupATableData(sinkCorfuStores.get(SINK2_INDEX), 4 * NUM_WRITES, sinkTablesGroupA);
-        verifyMergedTableData(sinkCorfuStores.get(SINK2_INDEX), 4 * NUM_WRITES,
+        // Delete data from GROUP_A tables on Source side
+        deleteDataOnSource(0, 5 * NUM_WRITES);
+
+        // Verify GROUP_A Sink side tables' content has been deleted
+        verifyGroupATableData(sinkCorfuStores.get(SINK2_INDEX), 0,
+                sinkTablesGroupA);
+
+        // Verify Merged tables' content has been deleted
+        verifyMergedTableData(sinkCorfuStores.get(SINK2_INDEX), 0,
                 Collections.singletonList(mergedTable));
     }
 
@@ -203,6 +227,13 @@ public class MergeTestListenerIT extends CorfuReplicationMultiSourceSinkIT {
         }
     }
 
+    /**
+     * Open local table using the given CorfuStore and add it to the list.
+     *
+     * @param num Number of local table to be opened.
+     * @param corfuStore CorfuStore that will open the tables.
+     * @param tableList List of tables to which the newly opened tables should be added.
+     */
     private void openLocalTable(int num, CorfuStore corfuStore,
                                  List<Table<Sample.StringKey, SampleSchema.SampleGroupMsgA, Message>> tableList)
             throws InvocationTargetException, NoSuchMethodException, IllegalAccessException {
@@ -220,6 +251,12 @@ public class MergeTestListenerIT extends CorfuReplicationMultiSourceSinkIT {
         }
     }
 
+
+    /**
+     * Open merged table using the given CorfuStore.
+     *
+     * @param corfuStore CorfuStore that will open the tables.
+     */
     private void openMergedTable(CorfuStore corfuStore) throws
             InvocationTargetException, NoSuchMethodException, IllegalAccessException {
         mergedTable = corfuStore.openTable(
@@ -253,20 +290,76 @@ public class MergeTestListenerIT extends CorfuReplicationMultiSourceSinkIT {
         }
     }
 
-    private void writeDataOnSink(int startNum, int numWrites) {
+    /**
+     * Delete data from all the Source side tables uniformly.
+     *
+     * @param startNum  Start number that will be deleted from Source side tables.
+     * @param numWrites Number of writes deleted from Source side tables.
+     */
+    private void deleteDataOnSource(int startNum, int numWrites) {
+        for (int i = startNum; i < startNum + numWrites; i++) {
+            try (TxnContext txn = sourceCorfuStores.get(SOURCE_INDEX).txn(NAMESPACE)) {
+                for (int j = 0; j < srcTablesGroupA.size(); j++) {
+                    Sample.StringKey key = Sample.StringKey.newBuilder().setKey(Integer.toString(i)).build();
+                    txn.delete(srcTablesGroupA.get(j), key);
+                }
+                txn.commit();
+            }
+        }
+    }
+
+    /**
+     * Write data to the Sink side GROUP_A tables.
+     *
+     * @param startNum  Start number that will be written to Sink side GROUP_A tables.
+     * @param numWrites Number of writes added to Sink side GROUP_A tables.
+     */
+    private void writeDataOnSinkGroupA(int startNum, int numWrites) {
         for (int i = startNum; i < startNum + numWrites; i++) {
             SampleSchema.SampleGroupMsgA groupATablePayload = SampleSchema.SampleGroupMsgA.newBuilder().setPayload(String.valueOf(i)).build();
-            SampleSchema.SampleGroupMsgA localTablePayload = SampleSchema.SampleGroupMsgA.newBuilder().setPayload(String.valueOf(i)).build();
 
             try (TxnContext txn = sinkCorfuStores.get(SINK2_INDEX).txn(NAMESPACE)) {
                 for (int j = 0; j < sinkTablesGroupA.size(); j++) {
                     Sample.StringKey key = Sample.StringKey.newBuilder().setKey(Integer.toString(i)).build();
                     txn.putRecord(sinkTablesGroupA.get(j), key, groupATablePayload, null);
                 }
+                txn.commit();
+            }
+        }
+    }
 
-                for (int j = 0; j < sinkLocalTables.size(); j++) {
+    /**
+     * Write data to the Sink side local tables.
+     *
+     * @param startNum  Start number that will be written to Sink side local tables.
+     * @param numWrites Number of writes added to Sink side local tables.
+     */
+    private void writeDataOnSinkLocal(int startNum, int numWrites) {
+        for (int i = startNum; i < startNum + numWrites; i++) {
+            SampleSchema.SampleGroupMsgA localTablePayload = SampleSchema.SampleGroupMsgA.newBuilder().setPayload(String.valueOf(i)).build();
+
+            try (TxnContext txn = sinkCorfuStores.get(SINK2_INDEX).txn(NAMESPACE)) {
+                for (int j = 0; j < sinkTablesLocal.size(); j++) {
                     Sample.StringKey key = Sample.StringKey.newBuilder().setKey(Integer.toString(i)).build();
-                    txn.putRecord(sinkLocalTables.get(j), key, localTablePayload, null);
+                    txn.putRecord(sinkTablesLocal.get(j), key, localTablePayload, null);
+                }
+                txn.commit();
+            }
+        }
+    }
+
+    /**
+     * Delete data from the Sink side local tables.
+     *
+     * @param startNum  Start number that will be deleted from Sink side local tables.
+     * @param numWrites Number of writes deleted from Sink side local tables.
+     */
+    private void deleteDataOnSinkLocal(int startNum, int numWrites) {
+        for (int i = startNum; i < startNum + numWrites; i++) {
+            try (TxnContext txn = sinkCorfuStores.get(SINK2_INDEX).txn(NAMESPACE)) {
+                for (int j = 0; j < sinkTablesLocal.size(); j++) {
+                    Sample.StringKey key = Sample.StringKey.newBuilder().setKey(Integer.toString(i)).build();
+                        txn.delete(sinkTablesLocal.get(j), key);
                 }
                 txn.commit();
             }
@@ -344,11 +437,17 @@ public class MergeTestListenerIT extends CorfuReplicationMultiSourceSinkIT {
         });
     }
 
+    /**
+     * Verify the count and actual content of merged tables.
+     *
+     * @param corfuStore CorfuStore that the given tables were opened from.
+     * @param expectedConsecutiveWrites Each table is expected to have a size of expectedConsecutiveWrites, and its
+     *                                  content should be from 0 to expectedConsecutiveWrites (exclusive)
+     */
     private void verifyMergedTableData(CorfuStore corfuStore, int expectedConsecutiveWrites,
                                        List<Table<Sample.StringKey, SampleSchema.SampleMergedTable, Message>> tables) {
         tables.forEach(table -> {
             log.info("Verify Data on Table {}", table.getFullyQualifiedTableName());
-
             // Wait until data is fully replicated
             while (table.count() != expectedConsecutiveWrites) {
                 // Block until expected number of entries is reached
