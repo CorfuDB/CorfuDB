@@ -15,6 +15,7 @@ import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogRepli
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEventInfoKey;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEvent;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEvent.ReplicationEventType;
+import org.corfudb.infrastructure.logreplication.utils.CorfuSaasEndpointProvider;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationUpgradeManager;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.RetryExhaustedException;
@@ -35,8 +36,10 @@ import org.corfudb.utils.lock.states.LockState;
 import javax.annotation.Nonnull;
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileReader;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.time.Duration;
@@ -44,6 +47,7 @@ import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Properties;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -182,6 +186,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         this.logReplicationLockId = serverContext.getNodeId();
         this.localEndpoint = serverContext.getLocalEndpoint();
         this.clusterManagerAdapter = getClusterManagerAdapter(serverContext.getPluginConfigFilePath());
+        CorfuSaasEndpointProvider.init(serverContext.getPluginConfigFilePath());
     }
 
     /**
@@ -342,7 +347,9 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         if (topology.getLocalClusterDescriptor() != null && topology.getLocalNodeDescriptor() != null) {
             if (update) {
                 topologyDescriptor = topology;
-                localCorfuEndpoint = getCorfuEndpoint(getLocalHost(), topology.getLocalClusterDescriptor().getCorfuPort());
+                int port = 9000;
+                localCorfuEndpoint = CorfuSaasEndpointProvider.getCorfuSaasEndpoint()
+                        .orElseGet(() -> getCorfuEndpoint(getLocalHost(), port));
             }
             return true;
         }
@@ -598,7 +605,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
                 upgradeManager = new LogReplicationUpgradeManager(getCorfuRuntime(),
                         serverContext.getPluginConfigFilePath());
                 sessionManager = new SessionManager(topologyDescriptor, getCorfuRuntime(), serverContext, upgradeManager,
-                        isLeader);
+                        isLeader, localCorfuEndpoint);
                 performRoleBasedSetup();
                 registerToLogReplicationLock();
                 bootstrapComplete = true;
