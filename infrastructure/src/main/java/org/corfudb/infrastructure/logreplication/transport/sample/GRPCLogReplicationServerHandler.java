@@ -30,7 +30,7 @@ public class GRPCLogReplicationServerHandler extends LogReplicationGrpc.LogRepli
 
 
     /*
-     * Map of session to SOURCE Router (internal to Corfu)
+     * LogReplication router that handles the incoming/outgoing messages
      */
     final LogReplicationClientServerRouter router;
 
