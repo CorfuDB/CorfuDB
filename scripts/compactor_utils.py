@@ -1,5 +1,6 @@
 import logging
 import subprocess
+import sys
 import time
 import yaml
 
@@ -56,3 +57,40 @@ def wait_and_verify_compactor_success(port, target_cycle_count):
         return True
     log_info("Compaction status for corfu at port: " + str(port) + " is " + status)
     return False
+
+def invoke_compactor_runner(args, port, config_file_path, trim_after_checkpoint):
+    sys.path.insert(1, '/usr/share/corfu/scripts')
+    from compactor_runner import CompactorRunner
+    args.port = port
+    args.compactorConfig = config_file_path
+    args.trimAfterCheckpoint = trim_after_checkpoint
+    args.instantTriggerCompaction = True
+    compactor_runner = CompactorRunner(args)
+    compactor_runner.run()
+
+def trigger_always_and_validate(args, port, config_file_path):
+    set_logger(config_file_path)
+    log_info("Trigger always and validate compactor with port " + str(port))
+    status_before_cp, cycle_count_before_cp = get_compactor_status(port)
+    if status_before_cp == "STARTED":
+        log_info("Waiting for current compactor cycle to end")
+        wait_for_compactor_end(port, cycle_count_before_cp)
+    invoke_compactor_runner(args, port, config_file_path, False)
+    target_cycle_count = cycle_count_before_cp + 1
+    return wait_and_verify_compactor_success(port, target_cycle_count)
+
+def trigger_if_required_and_validate(args):
+    set_logger(args.compactorConfig)
+    log_info("Trigger if required and validate compactor with port " + str(args.port))
+    status_before_cp, cycle_count_before_cp = get_compactor_status(args.port)
+    target_cycle_count = cycle_count_before_cp
+    if status_before_cp != 'STARTED':
+        log_info("Triggering compactor...")
+        invoke_compactor_runner(args, args.port, args.compactorConfig, args.trimAfterCheckpoint)
+        target_cycle_count = cycle_count_before_cp + 1
+    # check if the cycle completed successfully
+    if wait_and_verify_compactor_success(args.port, target_cycle_count) is False:
+        log_info("ERROR: Compactor verification failed.")
+        sys.exit(1)
+    else:
+        log_info("Compactor completed successfully")
