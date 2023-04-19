@@ -211,7 +211,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
 
     // Used when connection is triggered from SINK
     @Override
-    public void send(String nodeId, ResponseMsg response) {
+    public synchronized void send(String nodeId, ResponseMsg response) {
         if(nodeId == null) {
             nodeId = this.getRouter().getRemoteLeaderNodeId().get();
         }

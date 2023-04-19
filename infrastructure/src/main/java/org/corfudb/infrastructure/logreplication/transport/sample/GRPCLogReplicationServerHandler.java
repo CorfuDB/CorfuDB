@@ -16,7 +16,6 @@ import org.corfudb.util.concurrent.CorfuStreamObserver;
 
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -200,7 +199,7 @@ public class GRPCLogReplicationServerHandler extends LogReplicationGrpc.LogRepli
         }
     }
 
-    public void send(RequestMsg msg) {
+    public synchronized void send(RequestMsg msg) {
 
         if (msg.getPayload().getPayloadCase().equals(CorfuMessage.RequestPayloadMsg.PayloadCase.LR_METADATA_REQUEST) ||
                 msg.getPayload().getPayloadCase().equals(CorfuMessage.RequestPayloadMsg.PayloadCase.LR_ENTRY)) {
