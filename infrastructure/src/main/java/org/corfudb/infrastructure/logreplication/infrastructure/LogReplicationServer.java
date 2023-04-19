@@ -313,13 +313,7 @@ public class LogReplicationServer extends AbstractServer {
                                                      @Nonnull IServerRouter router) {
         log.debug("Log Replication Query Leadership Request received by Server.");
         HeaderMsg responseHeader = getHeaderMsg(request.getHeader());
-        String nodeOrPodID = localNodeId;
-        String podName = System.getenv("POD_NAME");
-        if (podName != null) {
-            // For SAAS logical group use-case: node id maps to pod name.
-            nodeOrPodID = podName;
-        }
-        ResponseMsg response = getLeadershipResponse(responseHeader, isLeader.get(), nodeOrPodID);
+        ResponseMsg response = getLeadershipResponse(responseHeader, isLeader.get(), localNodeId);
         router.sendResponse(response, ctx);
     }
 

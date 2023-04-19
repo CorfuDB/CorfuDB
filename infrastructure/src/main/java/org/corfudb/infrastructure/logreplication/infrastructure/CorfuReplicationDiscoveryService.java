@@ -118,6 +118,8 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
     /**
      * Current node's endpoint
      */
+    @Getter
+    @VisibleForTesting
     private final String localEndpoint;
 
     /**
@@ -215,8 +217,8 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         try {
             log.info("Start Log Replication Discovery Service");
 
-            setLocalNodeId();
             fetchTopology();
+            this.localNodeId = clusterManagerAdapter.getLocalNodeId();
             processDiscoveredTopology(topologyDescriptor, true);
 
             while (shouldRun) {
@@ -789,41 +791,6 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
 
     private void recordLockRelease() {
         lockAcquireSample.ifPresent(LongTaskTimer.Sample::stop);
-    }
-
-    private void setLocalNodeId() {
-        // Retrieve system-specific node id
-        LogReplicationPluginConfig config = new LogReplicationPluginConfig(serverContext.getPluginConfigFilePath());
-        String nodeIdFilePath = config.getNodeIdFilePath();
-
-        // TODO[V2]: this code should come from plugin
-        if (nodeIdFilePath != null) {
-            File nodeIdFile = new File(nodeIdFilePath);
-            try (BufferedReader bufferedReader = new BufferedReader(new FileReader(nodeIdFile))) {
-                String line = bufferedReader.readLine();
-                localNodeId = line.split("=")[1].trim().toLowerCase();
-                log.info("Local node id={}", localNodeId);
-            } catch (IOException e) {
-                log.error("setupLocalNodeId failed", e);
-                throw new IllegalStateException(e.getCause());
-            }
-        } else {
-            log.error("setupLocalNodeId failed, because nodeId file path is missing!");
-            DefaultClusterConfig defaultClusterConfig = new DefaultClusterConfig();
-
-            // For testing purpose, it uses the default host to assign node id
-            if (getLocalHost().equals(defaultClusterConfig.getDefaultHost())) {
-                localNodeId = defaultClusterConfig.getDefaultNodeId(localEndpoint);
-
-                if (localNodeId == null) {
-                    throw new IllegalStateException("SetupLocalNodeId failed for testing");
-                }
-
-                log.info("Default node id={} for testing", localNodeId);
-            } else {
-                throw new IllegalArgumentException("NodeId file path is missing");
-            }
-        }
     }
 
     @Override

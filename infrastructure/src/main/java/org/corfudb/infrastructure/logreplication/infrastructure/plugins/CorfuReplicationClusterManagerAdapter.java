@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure.logreplication.infrastructure.plugins;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.corfudb.infrastructure.logreplication.infrastructure.CorfuReplicationDiscoveryService;
 import org.corfudb.infrastructure.logreplication.infrastructure.CorfuReplicationDiscoveryServiceAdapter;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationDiscoveryServiceException;
@@ -62,4 +63,6 @@ public interface CorfuReplicationClusterManagerAdapter {
      * @param session
      */
     UUID forceSnapshotSync(LogReplicationSession session) throws LogReplicationDiscoveryServiceException;
+
+    String getLocalNodeId();
 }
