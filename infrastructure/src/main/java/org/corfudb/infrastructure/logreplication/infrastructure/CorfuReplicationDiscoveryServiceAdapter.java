@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure.logreplication.infrastructure;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.corfudb.runtime.LogReplication.ReplicationStatus;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 
@@ -28,9 +29,6 @@ public interface CorfuReplicationDiscoveryServiceAdapter {
      * Enforce snapshotFullSync
      */
     UUID forceSnapshotSync(LogReplicationSession session) throws LogReplicationDiscoveryServiceException;
-
-    // TODO [V2]: Remove this when localNodeId moves to plugin
-    String getLocalNodeId();
     
     /**
      * Get outgoing sessions
@@ -43,4 +41,11 @@ public interface CorfuReplicationDiscoveryServiceAdapter {
      * @return a set of sessions where the local cluster is a SINK
      */
     Set<LogReplicationSession> getIncomingSessions();
+
+    /**
+     * Gets the replication endpoint of the local cluster. Used only for the ITs.
+     */
+    @VisibleForTesting
+    String getLocalEndpoint();
+
 }

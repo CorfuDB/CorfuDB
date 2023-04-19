@@ -161,7 +161,8 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
     @Override
     public void register(CorfuReplicationDiscoveryServiceAdapter corfuReplicationDiscoveryServiceAdapter) {
         this.corfuReplicationDiscoveryServiceAdapter = corfuReplicationDiscoveryServiceAdapter;
-        localNodeId = corfuReplicationDiscoveryServiceAdapter.getLocalNodeId();
+        String localEndPoint = this.corfuReplicationDiscoveryServiceAdapter.getLocalEndpoint();
+        localNodeId = topology.getDefaultNodeId(localEndPoint);
         log.debug("localNodeId {}", localNodeId);
     }
 
@@ -188,6 +189,15 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
 
         log.info("Shutdown Cluster Manager completed.");
     }
+
+    @Override
+    public String getLocalNodeId() {
+        String localEndPoint = corfuReplicationDiscoveryServiceAdapter.getLocalEndpoint();
+        localNodeId = topology.getDefaultNodeId(localEndPoint);
+        log.debug("localNodeId {}", localNodeId);
+        return localNodeId;
+    }
+
 
     private TopologyDescriptor initConfig() {
         Map<ClusterDescriptor, Set<LogReplication.ReplicationModel>> sourceClustersToReplicationModel = new HashMap<>();

@@ -61,4 +61,11 @@ public interface CorfuReplicationClusterManagerAdapter {
      * @param session
      */
     UUID forceSnapshotSync(LogReplicationSession session) throws LogReplicationDiscoveryServiceException;
+
+    /**
+     * Get the local node ID
+     *
+     * @return node ID
+     */
+    String getLocalNodeId();
 }
