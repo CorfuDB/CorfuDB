@@ -122,8 +122,8 @@ public class LogData implements IMetadata, ILogData {
                             this.payload.set(value);
                             lastKnownSize = data.length;
                         } catch (Throwable throwable) {
-                            log.error("Exception caught at address {}, {}, {}",
-                                    getGlobalAddress(), getStreams(), getType());
+                            log.error("Exception caught at address {}, {}, {}, {}",
+                                    getGlobalAddress(), getStreams(), getType(), throwable.getMessage(), throwable);
                             throw throwable;
                         } finally {
                             serializedBuf.release();
