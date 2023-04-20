@@ -9,6 +9,8 @@ import com.google.protobuf.Message;
 import com.google.protobuf.ProtocolStringList;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.StreamAddressRange;
+import org.corfudb.runtime.CheckpointWriter;
 import org.corfudb.runtime.CorfuOptions;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.TableDescriptors;
@@ -17,6 +19,7 @@ import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.CorfuStoreMetadata.ProtobufFileName;
 import org.corfudb.runtime.CorfuStoreMetadata.ProtobufFileDescriptor;
 import org.corfudb.runtime.collections.CorfuRecord;
+import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.collections.PersistedStreamingMap;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.collections.StreamingMap;
@@ -29,9 +32,11 @@ import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.ObjectsView.StreamTagInfo;
+import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.GitRepositoryState;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.ProtobufSerializer;
+import org.corfudb.util.serializer.Serializers;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -269,6 +274,19 @@ public class TableRegistry {
                 CorfuRecord<TableDescriptors, TableMetadata> newRecord =
                         new CorfuRecord<>(tableDescriptors, tableMetadata);
                 boolean protoFileChanged = tryUpdateTableSchemas(allDescriptors);
+
+                String fullyQualifiedTableName = getFullyQualifiedTableName(namespace, tableName);
+                UUID streamId = CorfuRuntime.getStreamID(fullyQualifiedTableName);
+
+                if (oldRecord == null) {
+                    StreamAddressSpace streamAddressSpace = this.runtime.getSequencerView()
+                            .getStreamAddressSpace(new StreamAddressRange(streamId, Address.MAX, Address.NON_ADDRESS));
+                    if (streamAddressSpace.size() == 0
+                            && streamAddressSpace.getTrimMark() != Address.NON_ADDRESS) {
+                        log.info("Found trimmed table that is re-opened. Reset table {}", fullyQualifiedTableName);
+                        resetTrimmedTable(fullyQualifiedTableName);
+                    }
+                }
                 if (oldRecord == null || protoFileChanged || tableRecordChanged(oldRecord, newRecord)) {
                     this.registryTable.insert(tableNameKey, newRecord);
                 }
@@ -285,6 +303,40 @@ public class TableRegistry {
                 }
             }
         }
+    }
+
+    /**
+     * This method in invoked from registerTable when there's a trimmed table which is reopened.
+     * To reset the table, we write a HOLE to the stream and a checkpoint. We write this checkpoint
+     * with the registerTable transaction's snapshot. Now, when 2 processes attempt to reopen a trimmed
+     * table, one of them fails with CONFLICT on registerTable - but both of them might end up writing the
+     * checkpoints. Since the checkpoints are both written only at or before the successful registerTable
+     * transaction snapshot, the table's state remains as intended.
+     *
+     * @param fullyQualifiedTableName get the fullyQualified name of a table
+     */
+    private void resetTrimmedTable(String fullyQualifiedTableName) {
+        if (!TransactionalContext.isInTransaction()) {
+            throw new IllegalStateException(
+                    "resetTrimmedTable cannot be invoked outside a transaction.");
+        }
+
+        UUID streamId = CorfuRuntime.getStreamID(fullyQualifiedTableName);
+        PersistentCorfuTable<TableName, CorfuRecord<TableDescriptors, TableMetadata>> corfuTable =
+                this.runtime.getObjectsView().build()
+                        .setTypeToken(new TypeToken<PersistentCorfuTable<TableName, CorfuRecord<TableDescriptors, TableMetadata>>>() {
+
+                        })
+                        .setStreamName(fullyQualifiedTableName)
+                        .setSerializer(Serializers.JSON)
+                        .open();
+
+        CheckpointWriter<ICorfuTable<?,?>> cpw =
+                new CheckpointWriter<>(runtime, streamId, "resetTrimmedTable", corfuTable);
+        cpw.forceNoOpEntry();
+        cpw.startCheckpoint(TransactionalContext.getCurrentContext().getSnapshotTimestamp());
+        cpw.finishCheckpoint();
+        log.info("Finished resetting trimmed table {}", fullyQualifiedTableName);
     }
 
     /**
@@ -461,6 +513,9 @@ public class TableRegistry {
      * @return Fully qualified table name.
      */
     public static String getFullyQualifiedTableName(String namespace, String tableName) {
+        if (namespace == null || namespace.isEmpty()) {
+            return tableName;
+        }
         return namespace + "$" + tableName;
     }
 
@@ -600,7 +655,6 @@ public class TableRegistry {
         registerTable(namespace, tableName, kClass, vClass, mClass, tableOptions);
         return table;
     }
-
 
     /**
      * Get an already opened table. Fetches the table from the cache given only the namespace and table name.
