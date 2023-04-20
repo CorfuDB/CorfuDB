@@ -489,6 +489,9 @@ public class SessionManager {
         }
 
         sessions.forEach(session -> {
+            if (incomingSessions.contains(session)) {
+                incomingMsgHandler.stopSinkManagerForSession(session);
+            }
             this.sessions.remove(session);
             if (incomingSessions.contains(session)) {
                 incomingMsgHandler.stopSinkManagerForSession(session);

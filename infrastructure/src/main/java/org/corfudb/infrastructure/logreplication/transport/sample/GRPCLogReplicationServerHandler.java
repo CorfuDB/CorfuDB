@@ -199,7 +199,7 @@ public class GRPCLogReplicationServerHandler extends LogReplicationGrpc.LogRepli
         }
     }
 
-    public synchronized void send(RequestMsg msg) {
+    public void send(RequestMsg msg) {
 
         if (msg.getPayload().getPayloadCase().equals(CorfuMessage.RequestPayloadMsg.PayloadCase.LR_METADATA_REQUEST) ||
                 msg.getPayload().getPayloadCase().equals(CorfuMessage.RequestPayloadMsg.PayloadCase.LR_ENTRY)) {
@@ -213,7 +213,7 @@ public class GRPCLogReplicationServerHandler extends LogReplicationGrpc.LogRepli
                     return;
                 }
 
-                StreamObserver<RequestMsg> observer = sessionToStreamObserverRequestMap.get(session);
+                CorfuStreamObserver<RequestMsg> observer = sessionToStreamObserverRequestMap.get(session);
                 observer.onNext(msg);
 
             } catch(StatusRuntimeException e) {

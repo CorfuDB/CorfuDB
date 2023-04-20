@@ -415,6 +415,15 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
             replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus(),
             replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getCompletedTime());
 
+        // Wait until data is fully replicated again
+        waitForReplication(size -> size == thirdBatch, mapSource, thirdBatch);
+        log.info("Data is fully replicated again after role switch, both maps have size {}. " +
+                        "Current source corfu[{}] log tail is {}, sink corfu[{}] log tail is {}",
+                thirdBatch, sourceClusterCorfuPort, sourceRuntime.getAddressSpaceView().getLogTail(),
+                sinkClusterCorfuPort, sinkRuntime.getAddressSpaceView().getLogTail());
+
+        TimeUnit.SECONDS.sleep(shortInterval);
+
         assertThat(replicationStatus.getSourceStatus().getReplicationInfo().getSyncType())
                 .isEqualTo(SyncType.LOG_ENTRY);
         assertThat(replicationStatus.getSourceStatus().getReplicationInfo().getStatus())
@@ -424,13 +433,6 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
                 .isEqualTo(SnapshotSyncInfo.SnapshotSyncType.DEFAULT);
         assertThat(replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus())
                 .isEqualTo(SyncStatus.COMPLETED);
-
-        // Wait until data is fully replicated again
-        waitForReplication(size -> size == thirdBatch, mapSource, thirdBatch);
-        log.info("Data is fully replicated again after role switch, both maps have size {}. " +
-                        "Current source corfu[{}] log tail is {}, sink corfu[{}] log tail is {}",
-                thirdBatch, sourceClusterCorfuPort, sourceRuntime.getAddressSpaceView().getLogTail(),
-                sinkClusterCorfuPort, sinkRuntime.getAddressSpaceView().getLogTail());
 
         assertThat(mapSource.count()).isEqualTo(thirdBatch);
         assertThat(mapSink.count()).isEqualTo(thirdBatch);
