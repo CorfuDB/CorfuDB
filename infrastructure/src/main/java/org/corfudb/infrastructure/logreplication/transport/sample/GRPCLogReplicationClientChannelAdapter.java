@@ -23,6 +23,7 @@ import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
 import org.corfudb.util.NodeLocator;
+import org.corfudb.util.concurrent.CorfuStreamObserver;
 
 import javax.annotation.Nonnull;
 import java.io.InputStreamReader;
@@ -65,8 +66,8 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
     private final Map<LogReplicationSession, LogReplicationStub> sessionToAsyncStubMap;
     private final ExecutorService executorService;
 
-    private final ConcurrentMap<LogReplicationSession, StreamObserver<ResponseMsg>> responseObserverMap;
-    private final ConcurrentMap<Pair<LogReplicationSession, Long>, StreamObserver<RequestMsg>> replicationReqObserverMap;
+    private final ConcurrentMap<LogReplicationSession, CorfuStreamObserver<ResponseMsg>> responseObserverMap;
+    private final ConcurrentMap<Pair<LogReplicationSession, Long>, CorfuStreamObserver<RequestMsg>> replicationReqObserverMap;
 
 
     /** A {@link CompletableFuture} which is completed when a connection to a remote leader is set,
@@ -249,13 +250,14 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
 
             if(sessionToAsyncStubMap.containsKey(sessionMsg)) {
                 StreamObserver<ResponseMsg> responseObserver = sessionToAsyncStubMap.get(sessionMsg).reverseReplicate(requestObserver);
-                responseObserverMap.put(sessionMsg, responseObserver);
+                responseObserverMap.put(sessionMsg, new CorfuStreamObserver<>(responseObserver));
             } else {
                 log.error("No stub found for remote node {}. Message dropped type={}",
                         nodeId, response.getPayload().getPayloadCase());
             }
         }
 
+        // Session - Observer Pair - SessionLock
         responseObserverMap.get(sessionMsg).onNext(response);
     }
 
@@ -331,7 +333,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
 
             if(sessionToAsyncStubMap.containsKey(sessionMsg)) {
                 StreamObserver<RequestMsg> requestObserver = sessionToAsyncStubMap.get(sessionMsg).replicate(responseObserver);
-                replicationReqObserverMap.put(Pair.of(sessionMsg, requestId), requestObserver);
+                replicationReqObserverMap.put(Pair.of(sessionMsg, requestId), new CorfuStreamObserver<>(requestObserver));
             } else {
                 log.error("No stub found for remote node {}. Message dropped type={}",
                         nodeId, request.getPayload().getPayloadCase());
