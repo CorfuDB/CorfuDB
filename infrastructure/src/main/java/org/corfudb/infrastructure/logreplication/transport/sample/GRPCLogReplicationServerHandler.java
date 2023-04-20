@@ -12,6 +12,7 @@ import org.corfudb.runtime.proto.service.CorfuMessage;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg;
+import org.corfudb.util.concurrent.CorfuStreamObserver;
 
 import java.util.Map;
 import java.util.Objects;
@@ -38,7 +39,7 @@ public class GRPCLogReplicationServerHandler extends LogReplicationGrpc.LogRepli
      * Map of (Remote Cluster Id, Request Id) pair to Stream Observer to send responses back to the client. Used for
      * blocking calls.
      */
-    Map<Pair<LogReplicationSession, Long>, StreamObserver<ResponseMsg>> streamObserverMap;
+    Map<Pair<LogReplicationSession, Long>, CorfuStreamObserver<ResponseMsg>> streamObserverMap;
 
     /*
      * Map of (Remote Cluster Id, Sync Request Id) pair to Stream Observer to send responses back to the client. Used
@@ -47,12 +48,13 @@ public class GRPCLogReplicationServerHandler extends LogReplicationGrpc.LogRepli
      * Note: we cannot rely on the request ID, because for client streaming APIs this will change for each
      * message, despite being part of the same stream.
      */
-    Map<Pair<LogReplicationSession, Long>, StreamObserver<ResponseMsg>> replicationStreamObserverMap;
+    Map<Pair<LogReplicationSession, Long>, CorfuStreamObserver<ResponseMsg>> replicationStreamObserverMap;
 
     /*
      * Map of session to StreamObserver to send requests to the clients.
      */
-    Map<LogReplicationSession, StreamObserver<RequestMsg>> sessionToStreamObserverRequestMap;
+//    Map<LogReplicationSession, StreamObserver<RequestMsg>> sessionToStreamObserverRequestMap;
+    Map<LogReplicationSession, CorfuStreamObserver<RequestMsg>> sessionToStreamObserverRequestMap;
 
     public GRPCLogReplicationServerHandler(LogReplicationClientServerRouter router) {
         this.router = router;
@@ -68,7 +70,7 @@ public class GRPCLogReplicationServerHandler extends LogReplicationGrpc.LogRepli
         LogReplicationSession session = request.getHeader().getSession();
         router.receive(request);
         streamObserverMap.put(Pair.of(request.getHeader().getSession(), request.getHeader().getRequestId()),
-                responseObserver);
+                new CorfuStreamObserver<>(responseObserver));
     }
 
     @Override
@@ -77,7 +79,7 @@ public class GRPCLogReplicationServerHandler extends LogReplicationGrpc.LogRepli
                 request.getPayload().getPayloadCase().name());
         router.receive(request);
         streamObserverMap.put(Pair.of(request.getHeader().getSession(), request.getHeader().getRequestId()),
-            responseObserver);
+            new CorfuStreamObserver<>(responseObserver));
     }
 
     @Override
@@ -93,7 +95,8 @@ public class GRPCLogReplicationServerHandler extends LogReplicationGrpc.LogRepli
                 // Register at the observable first.
                 try {
                     replicationStreamObserverMap.putIfAbsent(
-                        Pair.of(replicationCorfuMessage.getHeader().getSession(), requestId), responseObserver);
+                        Pair.of(replicationCorfuMessage.getHeader().getSession(), requestId),
+                            new CorfuStreamObserver<>(responseObserver));
                 } catch (Exception e) {
                     log.error("Exception caught when unpacking log replication entry {}. Skipping message.",
                             requestId, e);
@@ -127,7 +130,7 @@ public class GRPCLogReplicationServerHandler extends LogReplicationGrpc.LogRepli
                 session = lrResponseMsg.getHeader().getSession();
 
                 try {
-                    sessionToStreamObserverRequestMap.putIfAbsent(session, responseObserver);
+                    sessionToStreamObserverRequestMap.putIfAbsent(session, new CorfuStreamObserver<>(responseObserver));
                 } catch (Exception e) {
                     log.error("Exception caught when unpacking log replication entry {}. Skipping message.",
                             requestId, e);
