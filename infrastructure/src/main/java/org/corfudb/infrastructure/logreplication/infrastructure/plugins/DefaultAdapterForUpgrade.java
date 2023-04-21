@@ -2,7 +2,16 @@ package org.corfudb.infrastructure.logreplication.infrastructure.plugins;
 
 import com.google.common.annotations.VisibleForTesting;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.ExampleSchemas.Uuid;
+import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.utils.LogReplicationStreams.Version;
+import org.corfudb.utils.LogReplicationStreams.VersionString;
+
+import java.lang.reflect.InvocationTargetException;
+
+import static org.corfudb.infrastructure.logreplication.utils.LogReplicationUpgradeManager.LOG_REPLICATION_PLUGIN_VERSION_TABLE;
+import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 public abstract class DefaultAdapterForUpgrade implements ILogReplicationVersionAdapter {
 
@@ -15,7 +24,11 @@ public abstract class DefaultAdapterForUpgrade implements ILogReplicationVersion
 
     String pinnedVersionString;
 
-    public DefaultAdapterForUpgrade(CorfuRuntime runtime) {
+    public DefaultAdapterForUpgrade(CorfuRuntime runtime)
+            throws InvocationTargetException, NoSuchMethodException, IllegalAccessException {
+        // Open version table to simulate being on an older setup (V1)
+        runtime.getTableRegistry().openTable(CORFU_SYSTEM_NAMESPACE, LOG_REPLICATION_PLUGIN_VERSION_TABLE,
+                VersionString.class, Version.class, Uuid.class, TableOptions.builder().build());
         versionString = DEFAULT_VERSION;
         pinnedVersionString = DEFAULT_VERSION;
     }
@@ -34,8 +47,6 @@ public abstract class DefaultAdapterForUpgrade implements ILogReplicationVersion
      * This method should be used only for facilitating validation of the upgrade process
      * in tests and ITs
      *
-     * @param corfuStore - please supply the appropriate instance from the
-     *                   cluster of interest (source / sink)
      */
     @VisibleForTesting
     public void startRollingUpgrade() {
@@ -45,10 +56,8 @@ public abstract class DefaultAdapterForUpgrade implements ILogReplicationVersion
 
     /**
      * This method should be used only for facilitating validation of the upgrade process
-     * in tests and ITs and it simulates end of upgrade by setting pinned version as node version
+     * in tests and ITs, and it simulates end of upgrade by setting pinned version as node version
      *
-     * @param corfuStore - please supply the appropriate instance from the
-     *                   cluster of interest (source / sink)
      */
     @VisibleForTesting
     public void endRollingUpgrade() {
