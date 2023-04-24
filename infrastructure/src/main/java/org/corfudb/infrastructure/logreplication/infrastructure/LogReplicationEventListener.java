@@ -7,6 +7,7 @@ import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.Re
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEvent.ReplicationEventType;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
 import org.corfudb.runtime.collections.CorfuStreamEntry;
@@ -15,6 +16,7 @@ import org.corfudb.runtime.collections.TableSchema;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -73,7 +75,13 @@ public final class LogReplicationEventListener implements StreamListener {
                         discoveryService.input(new DiscoveryServiceEvent(DiscoveryServiceEventType.ENFORCE_SNAPSHOT_SYNC,
                             key.getSession(), event.getEventId()));
                     } else if (event.getType().equals(ReplicationEventType.ROLLING_UPGRADE_FORCE_SNAPSHOT_SYNC)) {
-                        discoveryService.input(new DiscoveryServiceEvent(DiscoveryServiceEventType.ROLLING_UPGRADE_ENFORCE_SNAPSHOT_SYNC));
+                        for (LogReplicationSession session : discoveryService.getSessionManager().getSessions()) {
+                            UUID forceSyncId = UUID.randomUUID();
+                            log.info("Adding event for forced snapshot sync request for session {}, sync_id={}",
+                                    session, forceSyncId);
+                            discoveryService.input(new DiscoveryServiceEvent(DiscoveryServiceEventType.ENFORCE_SNAPSHOT_SYNC,
+                                    session, forceSyncId.toString()));
+                        }
                     } else {
                         log.warn("Received invalid event :: id={}, type={}, cluster_id={} ts={}", event.getEventId(),
                             event.getType(), event.getClusterId(), event.getEventTimestamp());

@@ -41,9 +41,7 @@ import java.net.URL;
 import java.net.URLClassLoader;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -253,10 +251,6 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
 
             case ENFORCE_SNAPSHOT_SYNC:
                 processEnforceSnapshotSync(event);
-                break;
-
-            case ROLLING_UPGRADE_ENFORCE_SNAPSHOT_SYNC:
-                rollingUpgradeForceSnapshot();
                 break;
 
             default:
@@ -713,18 +707,6 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
 
         sessionManager.getMetadataManager().addEvent(key, event);
         return forceSyncId;
-    }
-
-    public List<UUID> rollingUpgradeForceSnapshot() {
-        List<UUID> forceSyncIds = new ArrayList<>();
-        for (LogReplicationSession session : sessionManager.getSessions()) {
-            try {
-                forceSyncIds.add(forceSnapshotSync(session));
-            } catch (LogReplicationDiscoveryServiceException e) {
-                log.warn("Caught a RuntimeException ", e);
-            }
-        }
-        return forceSyncIds;
     }
 
     public void shutdown() {
