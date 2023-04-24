@@ -35,7 +35,8 @@ jobs:
         run: ./mvnw -pl :test clean verify -Pit -DskipTests
 
       - name: Upload integration test logs
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
+        if: failure()
         with:
           name: integration-test-logs
           retention-days: 3
