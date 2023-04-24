@@ -190,7 +190,6 @@ public class RemoteMonitoringService implements ManagementService {
 
         Runnable task = () -> {
             if (!failureDetectorFuture.isDone()) {
-                log.trace("FD task is not done");
                 return;
             }
 
@@ -243,7 +242,6 @@ public class RemoteMonitoringService implements ManagementService {
      *  </pre>
      */
     private synchronized CompletableFuture<DetectorTask> runDetectionTasks() {
-        log.trace("Schedule new FD task");
         String localEndpoint = serverContext.getLocalEndpoint();
         return getCorfuRuntime()
                 .invalidateLayout()

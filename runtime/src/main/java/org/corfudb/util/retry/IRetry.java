@@ -70,22 +70,18 @@ public interface IRetry<E extends Exception, F extends Exception, G extends Exce
 
 
     /**
-     * Run the retry.
+     * Run the retry. This function may never return.
      */
     default O run()
             throws E, F, G, H {
         while (true) {
             try {
-                if (stopRequested()) {
-                    break;
-                }
                 return getRunFunction().retryFunction();
             } catch (RetryNeededException ex) {
                 // retry requested
                 nextWait();
             }
         }
-        return null;
     }
 
     /**
@@ -112,10 +108,5 @@ public interface IRetry<E extends Exception, F extends Exception, G extends Exce
      * Apply the retry logic.
      */
     void nextWait();
-
-
-    default boolean stopRequested() {
-        return false;
-    }
 
 }
