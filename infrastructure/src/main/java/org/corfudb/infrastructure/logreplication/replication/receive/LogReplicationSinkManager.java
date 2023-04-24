@@ -110,6 +110,9 @@ public class LogReplicationSinkManager implements DataReceiver {
     @Getter
     private final AtomicBoolean ongoingApply = new AtomicBoolean(false);
 
+    @Getter
+    private boolean isSinkManagerShutdown = false;
+
     /**
      * Constructor Sink Manager
      *
@@ -581,6 +584,7 @@ public class LogReplicationSinkManager implements DataReceiver {
     public void shutdown() {
         this.runtime.shutdown();
         this.applyExecutor.shutdownNow();
+        isSinkManagerShutdown = true;
     }
 
     /**
