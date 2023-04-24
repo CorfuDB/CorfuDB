@@ -427,6 +427,9 @@ public class SessionManager {
 
         sessions.forEach(session -> {
             this.sessions.remove(session);
+            if (incomingSessions.contains(session)) {
+                incomingMsgHandler.stopSinkManagerForSession(session);
+            }
             this.outgoingSessions.remove(session);
             this.incomingSessions.remove(session);
         });

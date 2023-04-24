@@ -223,7 +223,7 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
             //  connection.
             //  To resolve this, we need to have a long living RPC from the connectionInitiator cluster which will query
             //  for sessions from the other cluster
-            if (sinkManager == null) {
+            if (sinkManager == null || sinkManager.isSinkManagerShutdown()) {
                 if(!allSessions.contains(session)) {
                     log.error("SessionManager does not know about incoming session {}, total={}, current sessions={}",
                             session, sessionToSinkManagerMap.size(), sessionToSinkManagerMap.keySet());
@@ -374,6 +374,18 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
         } else {
             // Stop the Sink Managers if leadership is lost
             sessionToSinkManagerMap.values().forEach(sinkManager -> sinkManager.stopOnLeadershipLoss());
+        }
+    }
+
+    public void stopSinkManagerForSession(LogReplicationSession session) {
+        log.info("Stopping Sink manager for session: {}", session);
+        try {
+            if (sessionToSinkManagerMap.containsKey(session)) {
+                sessionToSinkManagerMap.get(session).shutdown();
+                sessionToSinkManagerMap.remove(session);
+            }
+        } catch (NullPointerException npe) {
+            log.warn("SinkManger was either shutdown or wasnot created for session {}", session);
         }
     }
 }
