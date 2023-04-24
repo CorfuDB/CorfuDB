@@ -108,9 +108,12 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
     private Process sinkCorfuServer = null;
     private Process sourceReplicationServer = null;
     private Process sinkReplicationServer = null;
+    private Process backupCorfu = null;
+    private Process backupReplicationServer = null;
 
     private CorfuRuntime sourceRuntime;
     private CorfuRuntime sinkRuntime;
+    private CorfuRuntime backupRuntime;
     private Table<StringKey, IntValue, Metadata> mapSource;
     private Table<StringKey, IntValue, Metadata> mapSink;
 
@@ -252,15 +255,33 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
             sinkRuntime.shutdown();
         }
 
-        shutdownCorfuServer(sourceCorfuServer);
-        shutdownCorfuServer(sinkCorfuServer);
-
-        // skipping test
-        if (sourceReplicationServer == null) {
-            return;
+        if (backupRuntime != null) {
+            backupRuntime.shutdown();
         }
-        shutdownCorfuServer(sourceReplicationServer);
-        shutdownCorfuServer(sinkReplicationServer);
+
+        if (sourceCorfuServer != null) {
+            shutdownCorfuServer(sourceCorfuServer);
+        }
+
+        if (sinkCorfuServer != null) {
+            shutdownCorfuServer(sinkCorfuServer);
+        }
+
+        if (sourceReplicationServer != null) {
+            shutdownCorfuServer(sourceReplicationServer);
+        }
+
+        if (sinkReplicationServer != null) {
+            shutdownCorfuServer(sinkReplicationServer);
+        }
+
+        if (backupCorfu != null) {
+            shutdownCorfuServer(backupCorfu);
+        }
+
+        if (backupReplicationServer != null) {
+            shutdownCorfuServer(backupReplicationServer);
+        }
     }
 
     /**
@@ -278,7 +299,6 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
     @Test
     public void testNewConfigWithSwitchRole() throws Exception {
         if(topologyType.equals(TP_SINGLE_SOURCE_SINK_REV_CONNECTION)) {
-            tearDown();
             return;
         }
         // Write 10 entries to source map
@@ -1632,7 +1652,6 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
     @Test
     public void testSinkLockRelease() throws Exception {
         if (topologyType.equals(TP_SINGLE_SOURCE_SINK)) {
-            tearDown();
             return;
         }
         // Write 10 entries to source map
@@ -1749,13 +1768,13 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
      */
     @Test
     public void testBackupRestoreWorkflow() throws Exception {
-        Process backupCorfu = runServer(backupClusterCorfuPort, true);
-        Process backupReplicationServer = runReplicationServer(backupReplicationServerPort, grpcPluginPath);
+        backupCorfu = runServer(backupClusterCorfuPort, true);
+        backupReplicationServer = runReplicationServer(backupReplicationServerPort, grpcPluginPath);
 
         CorfuRuntime.CorfuRuntimeParameters params = CorfuRuntime.CorfuRuntimeParameters
                 .builder()
                 .build();
-        CorfuRuntime backupRuntime = CorfuRuntime.fromParameters(params);
+        backupRuntime = CorfuRuntime.fromParameters(params);
         backupRuntime.parseConfigurationString(backupCorfuEndpoint).connect();
         CorfuStore backupCorfuStore = new CorfuStore(backupRuntime);
 
@@ -1849,9 +1868,6 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
                         "is {}, sink corfu[{}] log tail is {}", firstBatch, backupClusterCorfuPort,
                 backupRuntime.getAddressSpaceView().getLogTail(), sinkClusterCorfuPort,
                 sinkRuntime.getAddressSpaceView().getLogTail());
-
-        shutdownCorfuServer(backupCorfu);
-        shutdownCorfuServer(backupReplicationServer);
     }
 
     private void waitForReplication(IntPredicate verifier, Table table, int expected) {
