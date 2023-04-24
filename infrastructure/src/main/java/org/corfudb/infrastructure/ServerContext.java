@@ -89,6 +89,8 @@ public class ServerContext implements AutoCloseable {
     // Corfu Replication Server
     public static final String PLUGIN_CONFIG_FILE_PATH = "../resources/corfu_plugin_config.properties";
 
+    private static final int CORFU_PORT = 9000;
+
     /** The node Id, stored as a base64 string. */
     private static final String NODE_ID = "NODE_ID";
 
@@ -305,6 +307,11 @@ public class ServerContext implements AutoCloseable {
     public int getMaxSnapshotEntriesApplied() {
         String val = getServerConfig(String.class, "--max-snapshot-entries-applied");
         return val == null ? DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED : Integer.parseInt(val);
+    }
+
+    public int getCorfuServerConnectionPort() {
+        String val = getServerConfig(String.class, "<corfu-server-port>");
+        return Integer.parseInt(val);
     }
 
     /**
