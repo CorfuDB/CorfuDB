@@ -66,19 +66,18 @@ public class GRPCLogReplicationServerHandler extends LogReplicationGrpc.LogRepli
     public void negotiate(RequestMsg request, StreamObserver<ResponseMsg> responseObserver) {
         log.info("Received[{}]: {}", request.getHeader().getRequestId(),
                 request.getPayload().getPayloadCase().name());
-        LogReplicationSession session = request.getHeader().getSession();
-        router.receive(request);
         streamObserverMap.put(Pair.of(request.getHeader().getSession(), request.getHeader().getRequestId()),
                 new CorfuStreamObserver<>(responseObserver));
+        router.receive(request);
     }
 
     @Override
     public void queryLeadership(RequestMsg request, StreamObserver<ResponseMsg> responseObserver) {
         log.info("Received[{}]: {}", request.getHeader().getRequestId(),
                 request.getPayload().getPayloadCase().name());
-        router.receive(request);
         streamObserverMap.put(Pair.of(request.getHeader().getSession(), request.getHeader().getRequestId()),
             new CorfuStreamObserver<>(responseObserver));
+        router.receive(request);
     }
 
     @Override

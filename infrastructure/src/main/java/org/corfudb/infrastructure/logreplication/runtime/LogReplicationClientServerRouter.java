@@ -631,6 +631,11 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
         log.info("Connect asynchronously to remote cluster {} and session {} ", remoteClusterDescriptor.getClusterId(),
                 session);
 
+        if (incomingSession.contains(session)) {
+            sessionToRemoteSourceLeaderManager.put(session,
+                    new RemoteSourceLeadershipManager(session, this, localNodeId));
+        }
+
         try {
             IRetry.build(IntervalRetry.class, () -> {
                 try {
@@ -644,11 +649,6 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
             }).run();
         } catch (InterruptedException e) {
             log.error("Unrecoverable exception when attempting to connect to remote session.", e);
-        }
-
-        if (incomingSession.contains(session)) {
-            sessionToRemoteSourceLeaderManager.put(session,
-                    new RemoteSourceLeadershipManager(session, this, localNodeId));
         }
     }
 
