@@ -597,8 +597,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
                 log.info("Bootstrap the Log Replication Service");
                 upgradeManager = new LogReplicationUpgradeManager(getCorfuRuntime(),
                         serverContext.getPluginConfigFilePath());
-                sessionManager = new SessionManager(topologyDescriptor, getCorfuRuntime(), serverContext, upgradeManager,
-                        isLeader);
+                sessionManager = new SessionManager(topologyDescriptor, getCorfuRuntime(), serverContext, upgradeManager);
                 performRoleBasedSetup();
                 registerToLogReplicationLock();
                 bootstrapComplete = true;

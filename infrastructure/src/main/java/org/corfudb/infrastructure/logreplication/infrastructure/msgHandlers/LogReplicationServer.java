@@ -71,11 +71,7 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
     @VisibleForTesting
     private final Map<LogReplicationSession, LogReplicationSinkManager> sessionToSinkManagerMap = new ConcurrentHashMap<>();
 
-    private final AtomicBoolean isLeader;
-
     private final ServerContext serverContext;
-
-    private final String localEndpoint;
 
     private final Set<LogReplicationSession> allSessions;
 
@@ -92,15 +88,13 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
 
     public LogReplicationServer(@Nonnull ServerContext context, Set<LogReplicationSession> sessions,
                                 LogReplicationMetadataManager metadataManager, String localNodeId, String localClusterId,
-                                String localEndpoint, LogReplicationContext replicationContext, AtomicBoolean isLeader) {
+                                LogReplicationContext replicationContext) {
         this.serverContext = context;
         this.allSessions = sessions;
         this.metadataManager = metadataManager;
-        this.localEndpoint = localEndpoint;
         this.localNodeId = localNodeId;
         this.localClusterId = localClusterId;
         this.replicationContext = replicationContext;
-        this.isLeader = isLeader;
         // TODO V2: the number of threads will change in the follow up PR.
         this.executor = context.getExecutorService(1, EXECUTOR_NAME_PREFIX);
     }
@@ -109,24 +103,22 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
     public LogReplicationServer(@Nonnull ServerContext context, LogReplicationSinkManager sinkManager,
                                 Set<LogReplicationSession> sessions,
                                 LogReplicationMetadataManager metadataManager, String localNodeId, String localClusterId,
-                                LogReplicationContext replicationContext, AtomicBoolean isLeader) {
+                                LogReplicationContext replicationContext) {
         this.serverContext = context;
-        this.localEndpoint = null;
         this.localNodeId = localNodeId;
         this.localClusterId = localClusterId;
         this.allSessions = sessions;
         this.metadataManager = metadataManager;
         this.replicationContext = replicationContext;
-        this.isLeader = isLeader;
         this.executor = context.getExecutorService(1, EXECUTOR_NAME_PREFIX);
     }
 
     public LogReplicationSinkManager createSinkManager(LogReplicationSession session) {
         if(sessionToSinkManagerMap.containsKey(session)) {
             log.trace("Sink manager already exists for session {}", session);
-            return null;
+            return sessionToSinkManagerMap.get(session);
         }
-        LogReplicationSinkManager sinkManager = new LogReplicationSinkManager(localEndpoint,
+        LogReplicationSinkManager sinkManager = new LogReplicationSinkManager(replicationContext.getLocalCorfuEndpoint(),
                 metadataManager, serverContext, session, replicationContext);
         sessionToSinkManagerMap.put(session, sinkManager);
         log.info("Sink Manager created for session={}", session);
@@ -207,7 +199,7 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
                                       @Nonnull IClientServerRouter router) {
         log.trace("Log Replication Entry received by Server.");
 
-        if (isLeader.get()) {
+        if (replicationContext.getIsLeader().get()) {
             LogReplicationSession session = getSession(request);
 
             LogReplicationSinkManager sinkManager = sessionToSinkManagerMap.get(session);
@@ -233,8 +225,14 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
                 }
             }
 
-            // Forward the received message to the Sink Manager for apply
-            LogReplicationEntryMsg ack = sinkManager.receive(request.getPayload().getLrEntry());
+            LogReplicationEntryMsg ack = null;
+            try {
+                // Forward the received message to the Sink Manager for apply
+                ack = sinkManager.receive(request.getPayload().getLrEntry());
+            } catch (NullPointerException npe) {
+                log.warn("Dropping LrEntryRequest with requestId {} as sink manager was destroyed for session {}",
+                        request.getHeader().getRequestId(), session);
+            }
 
             if (ack != null) {
                 long ts = ack.getMetadata().getEntryType().equals(LogReplicationEntryType.LOG_ENTRY_REPLICATED) ?
@@ -268,7 +266,7 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
                                        @Nonnull IClientServerRouter router) {
         log.info("Log Replication Metadata Request received by Server.");
 
-        if (isLeader.get()) {
+        if (replicationContext.getIsLeader().get()) {
 
             LogReplicationSession session = getSession(request);
 
@@ -299,8 +297,12 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
             log.info("Send Metadata response for session {}: :: {}", session.hashCode(), TextFormat.shortDebugString(response.getPayload()));
             router.sendResponse(response);
 
-            // If a snapshot apply is pending, start (if not started already)
-            sinkManager.startPendingSnapshotApply();
+            try {
+                // If a snapshot apply is pending, start (if not started already)
+                sinkManager.startPendingSnapshotApply();
+            } catch (NullPointerException npe) {
+                log.warn("Not resuming any pending replication as the sink manager was destroyed for session {}", session);
+            }
         } else {
             log.warn("Dropping metadata request as this node is not the leader.  Request id = {}",
                     request.getHeader().getRequestId());
@@ -320,7 +322,7 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
                                                      @Nonnull IClientServerRouter router) {
         log.debug("Log Replication Query Leadership Request received by Server.");
         HeaderMsg responseHeader = getHeaderMsg(request.getHeader());
-        ResponseMsg response = getLeadershipResponse(responseHeader, isLeader.get(), localNodeId);
+        ResponseMsg response = getLeadershipResponse(responseHeader, replicationContext.getIsLeader().get(), localNodeId);
         router.sendResponse(response);
     }
 
@@ -368,7 +370,7 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
 
     public void leadershipChanged() {
 
-        if (isLeader.get()) {
+        if (replicationContext.getIsLeader().get()) {
             // Reset the Sink Managers on acquiring leadership
             sessionToSinkManagerMap.values().forEach(sinkManager -> sinkManager.reset());
         } else {

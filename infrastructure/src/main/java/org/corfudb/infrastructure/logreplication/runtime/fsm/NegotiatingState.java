@@ -182,7 +182,7 @@ public class NegotiatingState implements LogReplicationRuntimeState {
 
         log.debug("Process negotiation response {} from {}", negotiationResponse, fsm.getRemoteClusterId());
 
-        long topologyConfigId = metadataManager.getTopologyConfigId();
+        long topologyConfigId = metadataManager.getReplicationContext().getTopologyConfigId();
 
         /*
          * The sink site has a smaller config ID, redo the discovery for this sink site when

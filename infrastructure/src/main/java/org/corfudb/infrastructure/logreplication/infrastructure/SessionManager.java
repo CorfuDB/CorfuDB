@@ -99,7 +99,7 @@ public class SessionManager {
      * @param upgradeManager      upgrade management module
      */
     public SessionManager(@Nonnull TopologyDescriptor topology, CorfuRuntime corfuRuntime,
-                          ServerContext serverContext, LogReplicationUpgradeManager upgradeManager, AtomicBoolean isLeader) {
+                          ServerContext serverContext, LogReplicationUpgradeManager upgradeManager) {
         this.topology = topology;
         this.runtime = corfuRuntime;
         this.corfuStore = new CorfuStore(corfuRuntime);
@@ -118,11 +118,11 @@ public class SessionManager {
 
         this.localCorfuEndpoint = lrNodeLocator.toEndpointUrl();
 
-        this.metadataManager = new LogReplicationMetadataManager(corfuRuntime, topology.getTopologyConfigId(), isLeader);
         this.configManager = new LogReplicationConfigManager(runtime, serverContext);
         this.upgradeManager = upgradeManager;
         this.replicationContext = new LogReplicationContext(configManager, topology.getTopologyConfigId(),
                 localCorfuEndpoint);
+        this.metadataManager = new LogReplicationMetadataManager(corfuRuntime, replicationContext);
 
         this.replicationManager = new CorfuReplicationManager(topology, metadataManager,
                 configManager.getServerContext().getPluginConfigFilePath(), runtime, upgradeManager,
@@ -130,7 +130,7 @@ public class SessionManager {
 
         this.incomingMsgHandler = new LogReplicationServer(serverContext, sessions, metadataManager,
                 topology.getLocalNodeDescriptor().getNodeId(), topology.getLocalNodeDescriptor().getClusterId(),
-                localCorfuEndpoint, replicationContext, isLeader);
+                replicationContext);
 
         this.router = new LogReplicationClientServerRouter(
                 runtime.getParameters().getRequestTimeout().toMillis(), replicationManager,
@@ -156,10 +156,10 @@ public class SessionManager {
             .port(topology.getLocalClusterDescriptor().getCorfuPort())
             .build();
         this.localCorfuEndpoint = lrNodeLocator.toEndpointUrl();
-        this.metadataManager = new LogReplicationMetadataManager(corfuRuntime, topology.getTopologyConfigId(), new AtomicBoolean(true));
         this.configManager = new LogReplicationConfigManager(runtime);
         this.upgradeManager = null;
         this.replicationContext = new LogReplicationContext(configManager, topology.getTopologyConfigId(), localCorfuEndpoint);
+        this.metadataManager = new LogReplicationMetadataManager(corfuRuntime, replicationContext);
         this.replicationManager = replicationManager;
         this.router = router;
         this.incomingMsgHandler = logReplicationServer;
@@ -167,7 +167,8 @@ public class SessionManager {
 
 
     /**
-     * Refresh sessions based on new topoloogy
+     * Refresh sessions based on new topology : update in-memory topology, stop and clear stale sessions and discover
+     * new sessions.
      * The metadata updates will be done only by the leader, so other nodes do not overwrite the data
      *
      * @param newTopology   the new discovered topology
@@ -231,7 +232,6 @@ public class SessionManager {
         replicationManager.updateTopology(topology);
         incomingMsgHandler.updateTopologyConfigId(topology.getTopologyConfigId());
         replicationContext.setTopologyConfigId(topology.getTopologyConfigId());
-        metadataManager.setTopologyConfigId(topology.getTopologyConfigId());
     }
 
     private void updateReplicationParameters(Set<LogReplicationSession> sessionsUnchanged) {
@@ -361,11 +361,22 @@ public class SessionManager {
      * Therefore, iterate over the sessions in the system tables and remove the stale sessions if any.
      */
     public void removeStaleSessionOnLeadershipAcquire() {
-        try (TxnContext txn = metadataManager.getTxnContext()) {
-            Set<LogReplicationSession> sessionsInTable = txn.keySet(METADATA_TABLE_NAME);
-            sessionsInTable.stream().filter(sessionInTable -> !sessions.contains(sessionInTable))
-                    .forEach(staleSession -> metadataManager.removeSession(txn,staleSession));
-            txn.commit();
+        try {
+            IRetry.build(IntervalRetry.class, () -> {
+                try (TxnContext txn = metadataManager.getTxnContext()) {
+                    Set<LogReplicationSession> sessionsInTable = txn.keySet(METADATA_TABLE_NAME);
+                    sessionsInTable.stream().filter(sessionInTable -> !sessions.contains(sessionInTable))
+                            .forEach(staleSession -> metadataManager.removeSession(txn, staleSession));
+                    txn.commit();
+                    return null;
+                }  catch (TransactionAbortedException e) {
+                    log.error("Failed to create sessions.  Retrying.", e);
+                    throw new RetryNeededException();
+                }
+            }).run();
+        } catch (InterruptedException e) {
+            log.error("Unrecoverable Corfu Error when removing stale sessions from LR internal tables", e);
+            throw new UnrecoverableCorfuInterruptedError(e);
         }
     }
 

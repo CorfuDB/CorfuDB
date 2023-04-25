@@ -79,7 +79,7 @@ public class LogReplicationServerTest {
         Set<LogReplicationSession> sessionSet = new HashSet<>();
         sessionSet.add(session);
         lrServer = spy(new LogReplicationServer(context, sinkManager, sessionSet, metadataManager, SINK_NODE_ID, SINK_CLUSTER_ID,
-            null, isLeader));
+            null));
         lrServer.getSessionToSinkManagerMap().put(session, sinkManager);
         mockHandlerContext = mock(ChannelHandlerContext.class);
         mockServerRouter = mock(IClientServerRouter.class);
