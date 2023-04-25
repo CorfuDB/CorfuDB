@@ -9,6 +9,7 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
+import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEvent;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEventInfoKey;
@@ -87,22 +88,17 @@ public class LogReplicationMetadataManager {
     private Optional<Timer.Sample> snapshotSyncTimerSample = Optional.empty();
 
     @Getter
-    @Setter
-    private long topologyConfigId;
-
-    @Getter
-    private final AtomicBoolean isLeader;
+    private LogReplicationContext replicationContext;
 
     /**
      * Constructor
      *
      * @param runtime   the runtime to connect to CorfuDb
      */
-    public LogReplicationMetadataManager(CorfuRuntime runtime, long topologyConfigId, AtomicBoolean isLeader) {
+    public LogReplicationMetadataManager(CorfuRuntime runtime, LogReplicationContext replicationContext) {
         this.runtime = runtime;
         this.corfuStore = new CorfuStore(runtime);
-        this.topologyConfigId = topologyConfigId;
-        this.isLeader = isLeader;
+        this.replicationContext = replicationContext;
 
         try {
             this.metadataTable = this.corfuStore.openTable(NAMESPACE, METADATA_TABLE_NAME,
@@ -281,7 +277,7 @@ public class LogReplicationMetadataManager {
      * @param incoming              true, if session is incoming (sink), false otherwise (source)
      */
     public void addSession(TxnContext txn, LogReplicationSession session, long topologyConfigId, boolean incoming) {
-        if(isLeader.get()) {
+        if(replicationContext.getIsLeader().get()) {
             log.info("Add entry to metadata manager, session={}, config_id={}, incoming={}", session, topologyConfigId, incoming);
             initializeMetadata(txn, session, incoming, topologyConfigId);
         }
@@ -356,7 +352,7 @@ public class LogReplicationMetadataManager {
      *         false, otherwise
      */
     public boolean setBaseSnapshotStart(LogReplicationSession session, long topologyConfigId, long snapshotStartTs) {
-        if(!isLeader.get()) {
+        if(!replicationContext.getIsLeader().get()) {
             log.debug("The node is not the leader. Skip updating the metadata table");
             return false;
         }
@@ -855,7 +851,7 @@ public class LogReplicationMetadataManager {
      * Reset replication status for all sessions
      */
     public void resetReplicationStatus() {
-        if(isLeader.get()) {
+        if(replicationContext.getIsLeader().get()) {
             log.info("Reset replication status for all LR sessions");
             try {
                 IRetry.build(IntervalRetry.class, () -> {
@@ -888,7 +884,7 @@ public class LogReplicationMetadataManager {
      * Reset manager by clearing all tables
      */
     public void reset() {
-        if(isLeader.get()) {
+        if(replicationContext.getIsLeader().get()) {
             log.info("Reset all metadata manager tables");
             try (TxnContext tx = corfuStore.txn(NAMESPACE)) {
                 statusTable.clearAll();
@@ -900,7 +896,7 @@ public class LogReplicationMetadataManager {
     }
 
     public void removeSession(TxnContext txn, LogReplicationSession session) {
-        if(isLeader.get()) {
+        if(replicationContext.getIsLeader().get()) {
             txn.delete(statusTable, session);
             txn.delete(metadataTable, session);
         }

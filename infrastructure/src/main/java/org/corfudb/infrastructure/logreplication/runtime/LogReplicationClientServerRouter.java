@@ -426,7 +426,7 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
     }
 
     @Override
-    public void setTimeoutResponse(long timeoutResponse) {
+    public void setResponseTimeout(long timeoutResponse) {
         this.timeoutResponse = timeoutResponse;
     }
 

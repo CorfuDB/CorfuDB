@@ -240,7 +240,9 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         srcCorfuStore = new CorfuStore(srcDataRuntime);
         dstCorfuStore = new CorfuStore(dstDataRuntime);
 
-        metadataManager = new LogReplicationMetadataManager(dstTestRuntime, 0, new AtomicBoolean(true));
+        metadataManager = new LogReplicationMetadataManager(dstTestRuntime,
+                new LogReplicationContext(new LogReplicationConfigManager(dstTestRuntime), 0,
+                "test" + SERVERS.PORT_0, true));
         metadataManager.addSession(session, 0, true);
 
         expectedAckTimestamp = new AtomicLong(Long.MAX_VALUE);

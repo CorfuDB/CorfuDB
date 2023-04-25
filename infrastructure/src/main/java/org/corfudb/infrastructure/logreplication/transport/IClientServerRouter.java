@@ -69,7 +69,7 @@ public interface IClientServerRouter {
      *
      * @param timeoutResponse Response timeout in milliseconds.
      */
-    void setTimeoutResponse(long timeoutResponse);
+    void setResponseTimeout(long timeoutResponse);
 
     /**
      * Stops routing requests.
