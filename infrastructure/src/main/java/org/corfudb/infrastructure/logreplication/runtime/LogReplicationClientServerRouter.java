@@ -322,7 +322,7 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
                     }
                 }
 
-                if(outgoingSession.contains(session)) {
+                if (outgoingSession.contains(session)) {
                     CorfuLogReplicationRuntime runtimeFSM = sessionToRuntimeFSM.get(session);
                     // Get Remote Leader
                     if (runtimeFSM.getRemoteLeaderNodeId().isPresent()) {
@@ -343,7 +343,7 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
 
             // In the case the message is intended for a specific endpoint, we do not
             // block on connection future, this is the case of leader verification.
-            if(isConnectionStarterForSession(session)) {
+            if (isConnectionStarterForSession(session)) {
                 clientChannelAdapter.send(nodeId, getRequestMsg(header.build(), payload));
             } else {
                 serverChannelAdapter.send(getRequestMsg(header.build(), payload));

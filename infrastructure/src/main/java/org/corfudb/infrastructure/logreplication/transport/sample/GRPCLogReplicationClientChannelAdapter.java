@@ -58,6 +58,8 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
 
     private final int MAX_STREAMS_IN_CHANNEL = 100;
 
+    private static final int GRPC_WAIT_DEADLINE = 5;
+
     private static final Map<ManagedChannel, Set<LogReplicationSession>> channelToStreamsMap = new HashMap<>();
     private static final ReentrantLock lock = new ReentrantLock();
 
@@ -283,18 +285,28 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
     private void requestMetadata(String nodeId, RequestMsg request) {
         LogReplicationSession session = request.getHeader().getSession();
         try {
+            log.info("requestMetadata for session {}", session);
             if (sessionToBlockingStubMap.containsKey(session)) {
-                ResponseMsg response = sessionToBlockingStubMap.get(session).withWaitForReady().negotiate(request);
+                ResponseMsg response = sessionToBlockingStubMap.get(session)
+                        .withWaitForReady()
+                        .withDeadlineAfter(GRPC_WAIT_DEADLINE, TimeUnit.SECONDS)
+                        .negotiate(request);
                 receive(response);
             } else {
                 log.warn("Stub not found for remote endpoint {}. Dropping message of type {}",
                         nodeId, request.getPayload().getPayloadCase());
             }
         } catch (Exception e) {
-            log.error("Caught exception while sending message to query metadata id={}",
-                    request.getHeader().getRequestId(), e);
-            onServiceUnavailable(e, nodeId, session);
-            getRouter().completeExceptionally(session, request.getHeader().getRequestId(), e);
+            if (e instanceof StatusRuntimeException &&
+                    ((StatusRuntimeException) e).getStatus().equals(Status.DEADLINE_EXCEEDED)) {
+                log.error("requestMetadata timed out!");
+                throw e;
+            } else {
+                log.error("Caught exception while sending message to query metadata id={}",
+                        request.getHeader().getRequestId(), e);
+                onServiceUnavailable(e, nodeId, session);
+                getRouter().completeExceptionally(session, request.getHeader().getRequestId(), e);
+            }
         }
     }
 
