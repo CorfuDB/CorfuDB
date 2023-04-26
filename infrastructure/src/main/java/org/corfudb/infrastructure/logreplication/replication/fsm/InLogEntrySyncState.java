@@ -158,12 +158,7 @@ public class InLogEntrySyncState implements LogReplicationState {
     }
 
     @Override
-    public void onExit(LogReplicationState to) {
-        if (to.getType().equals(LogReplicationStateType.INITIALIZED)) {
-            fsm.getAckReader().markSyncStatus(SyncStatus.STOPPED);
-            log.debug("Log Entry replication status changed to STOPPED");
-        }
-    }
+    public void onExit(LogReplicationState to) {}
 
     @Override
     public void setTransitionEventId(UUID eventId) {
