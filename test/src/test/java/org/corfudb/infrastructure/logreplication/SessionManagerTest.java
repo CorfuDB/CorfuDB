@@ -54,7 +54,7 @@ public class SessionManagerTest extends AbstractViewTest {
         replicationManager = Mockito.mock(CorfuReplicationManager.class);
         Mockito.doNothing().when(replicationManager).refreshRuntime(anyObject(), anyObject(), anyLong());
         Mockito.doNothing().when(replicationManager).updateTopology(anyObject());
-        Mockito.doNothing().when(replicationManager).createRuntime(anyObject(), anyObject(), anyObject());
+        Mockito.doNothing().when(replicationManager).createAndStartRuntime(anyObject(), anyObject(), anyObject());
     }
 
     @After

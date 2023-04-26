@@ -33,7 +33,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
@@ -156,9 +155,13 @@ public class SessionManager {
 
 
     /**
-     * Refresh sessions based on new topology : update in-memory topology, stop and clear stale sessions and discover
-     * new sessions.
-     * The metadata updates will be done only by the leader, so other nodes do not overwrite the data
+     * Refresh sessions based on new topology :
+     * (i) For sessions that are still valid, update the topology
+     * (ii) For newly added clusters, create sessions, update internal tables, and create appropriate LR components
+     * (iii) For a cluster that was removed, identify the (now) stale sessions, stop replication and clear the cached
+     * information pertaining to the stale sessions
+     *
+     * The metadata updates will be done only by the leader node, so other nodes do not overwrite the data
      *
      * @param newTopology   the new discovered topology
      */
@@ -474,7 +477,7 @@ public class SessionManager {
     private void createSourceFSMs() {
         newSessionsDiscovered.stream()
                 .filter(outgoingSessions::contains)
-                .forEach(session -> replicationManager.createRuntime(
+                .forEach(session -> replicationManager.createAndStartRuntime(
                         topology.getAllClustersInTopology().get(session.getSinkClusterId()), session, router));
     }
 
