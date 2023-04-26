@@ -102,7 +102,7 @@ public class CorfuServer {
     }
 
     public static void configureHealthMonitor(Map<String, Object> opts) {
-        if (opts.get("--health-port") != null) {
+        if (opts.get(CorfuServerCmdLine.HEALTH_PORT_PARAM) != null) {
             log.info("Starting health monitor");
             HealthMonitor.init();
         }
