@@ -344,8 +344,10 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
             // In the case the message is intended for a specific endpoint, we do not
             // block on connection future, this is the case of leader verification.
             if(isConnectionStarterForSession(session)) {
+                log.info("Send requestID {} via clientChannelAdapter for session {}", header.getRequestId(), session);
                 clientChannelAdapter.send(nodeId, getRequestMsg(header.build(), payload));
             } else {
+                log.info("Send requestID {} via serverChannelAdapter for session {}", header.getRequestId(), session);
                 serverChannelAdapter.send(getRequestMsg(header.build(), payload));
             }
 

@@ -158,9 +158,6 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
 
     private boolean shouldRun = true;
 
-    @Getter
-    private final AtomicBoolean isLeader = new AtomicBoolean();
-
     private LockClient lockClient;
 
     /**
@@ -478,7 +475,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
      * Stop Log Replication
      */
     private void stopLogReplication() {
-        if (isLeader.get()) {
+        if (sessionManager.getReplicationContext().getIsLeader().get()) {
             log.info("Stopping log replication.");
             sessionManager.stopReplication();
         }
@@ -489,7 +486,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
      */
     public void processLockAcquire() {
         log.debug("Lock acquired");
-        isLeader.set(true);
+        sessionManager.getReplicationContext().setIsLeader(true);
         onLeadershipAcquire();
     }
 
@@ -505,7 +502,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         if (interClusterServerNode != null) {
             interClusterServerNode.close();
         }
-        isLeader.set(false);
+        sessionManager.getReplicationContext().setIsLeader(false);
         sessionManager.notifyLeadershipChange();
         recordLockRelease();
     }
@@ -575,7 +572,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
 
         performRoleBasedSetup();
 
-        if (isLeader.get()) {
+        if (sessionManager.getReplicationContext().getIsLeader().get()) {
             setupConnectionComponents();
 
             if(!isSource() && logReplicationEventListener != null) {
@@ -634,7 +631,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
                     event.getSession().getSinkClusterId());
             return;
         }
-        if (!isLeader.get()) {
+        if (!sessionManager.getReplicationContext().getIsLeader().get()) {
             log.warn("Node is not the leader - skipping forced snapshot sync, id={}", event.getEventId());
             return;
         }
