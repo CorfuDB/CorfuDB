@@ -22,6 +22,7 @@ jobs:
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
           restore-keys: |
             ${{ runner.os }}-maven-
+
       - name: Set up JDK 1.8
         uses: actions/setup-java@v1
         with:
@@ -34,8 +35,7 @@ jobs:
         run: ./mvnw -pl :test clean verify -Pit -DskipTests
 
       - name: Upload integration test logs
-        uses: actions/upload-artifact@v3
-        if: failure()
+        uses: actions/upload-artifact@v2
         with:
           name: integration-test-logs
           retention-days: 3
