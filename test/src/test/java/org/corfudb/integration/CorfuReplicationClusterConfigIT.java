@@ -147,9 +147,9 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
 
     @Before
     public void setUp() throws Exception {
-        String currentWorkingDir = System.getProperty("user.dir");
-        String methodName = name.getMethodName();
-        CORFU_LOG_PATH = currentWorkingDir.substring(0, currentWorkingDir.lastIndexOf("/")) + "/tests/" + methodName;
+//        String currentWorkingDir = System.getProperty("user.dir");
+//        String methodName = name.getMethodName();
+//        CORFU_LOG_PATH = currentWorkingDir.substring(0, currentWorkingDir.lastIndexOf("/")) + "/tests/" + methodName;
 
         sourceCorfuServer = runServer(sourceClusterCorfuPort, true);
         sinkCorfuServer = runServer(sinkClusterCorfuPort, true);

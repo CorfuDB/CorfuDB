@@ -39,6 +39,7 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 
@@ -263,18 +264,34 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
 
     private void queryLeadership(String nodeId, RequestMsg request) {
         LogReplicationSession session = request.getHeader().getSession();
+        StreamObserver<ResponseMsg> responseObserver = new StreamObserver<ResponseMsg>() {
+            @Override
+            public void onNext(ResponseMsg responseMsg) {
+                log.info("Received leadership response from node {}", nodeId);
+                receive(responseMsg);
+            }
+
+            @Override
+            public void onError(Throwable throwable) {
+                log.warn("Error encountered while receiving leadership response msg");
+            }
+
+            @Override
+            public void onCompleted() {
+                log.info("Finished queryLeadership RPC");
+            }
+        };
         try {
             log.info("queryLeadership for session {}", session);
-            if (sessionToBlockingStubMap.containsKey(session)) {
-                ResponseMsg response = sessionToBlockingStubMap.get(session).withWaitForReady().queryLeadership(request);
-                receive(response);
+            if (sessionToAsyncStubMap.containsKey(session)) {
+            sessionToAsyncStubMap.get(session).queryLeadership(request, responseObserver);
             } else {
                 log.warn("Stub not found for session {}. Dropping message of type {}",
                         session, request.getPayload().getPayloadCase());
             }
         } catch (Exception e) {
-            log.error("Caught exception while sending message to query leadership status id {}",
-                    request.getHeader().getRequestId(), e);
+            log.error("Caught exception while sending message to query leadership status id {} on channel {}",
+                    request.getHeader().getRequestId(), nodeIdToChannelMap.get(nodeId).hashCode(), e);
             onServiceUnavailable(e, nodeId, session);
             getRouter().completeExceptionally(session, request.getHeader().getRequestId(), e);
         }
@@ -284,15 +301,23 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
         LogReplicationSession session = request.getHeader().getSession();
         try {
             if (sessionToBlockingStubMap.containsKey(session)) {
-                ResponseMsg response = sessionToBlockingStubMap.get(session).withWaitForReady().negotiate(request);
+                ResponseMsg response = sessionToBlockingStubMap.get(session)
+                        .withDeadlineAfter(5000, TimeUnit.MILLISECONDS)
+                        .withWaitForReady()
+                        .negotiate(request);
                 receive(response);
             } else {
                 log.warn("Stub not found for remote endpoint {}. Dropping message of type {}",
                         nodeId, request.getPayload().getPayloadCase());
             }
+        } catch (StatusRuntimeException e) {
+            if (e.getStatus().getCode().equals(Status.DEADLINE_EXCEEDED.getCode())) {
+                log.error("DeadLine exceeded for requestMetadata requestID {}", request.getHeader().getRequestId());
+                getRouter().completeExceptionally(session, request.getHeader().getRequestId(), new TimeoutException());
+            }
         } catch (Exception e) {
-            log.error("Caught exception while sending message to query metadata id={}",
-                    request.getHeader().getRequestId(), e);
+            log.error("Caught exception while sending message to query metadata id={} on channel {}",
+                    request.getHeader().getRequestId(), nodeIdToChannelMap.get(nodeId).hashCode(), e);
             onServiceUnavailable(e, nodeId, session);
             getRouter().completeExceptionally(session, request.getHeader().getRequestId(), e);
         }
@@ -391,6 +416,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
                 onConnectionDown(nodeId, sesssion);
             } else if (channelState.equals(ConnectivityState.SHUTDOWN)) {
                 log.debug("GRPC channel to node {} is shutdown", nodeId);
+                log.debug("Shama the channel was {}", hashCode());
             }
         });
 
