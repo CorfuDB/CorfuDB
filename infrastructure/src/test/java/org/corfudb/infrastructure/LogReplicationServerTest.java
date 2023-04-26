@@ -3,12 +3,14 @@ package org.corfudb.infrastructure;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.extern.slf4j.Slf4j;
 import org.assertj.core.api.Assertions;
+import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.infrastructure.logreplication.infrastructure.msgHandlers.LogReplicationServer;
 import org.corfudb.infrastructure.logreplication.infrastructure.SessionManager;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationSinkManager;
 import org.corfudb.infrastructure.logreplication.transport.IClientServerRouter;
+import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationLeadershipResponseMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
@@ -78,8 +80,10 @@ public class LogReplicationServerTest {
         sinkManager = mock(LogReplicationSinkManager.class);
         Set<LogReplicationSession> sessionSet = new HashSet<>();
         sessionSet.add(session);
+        LogReplicationContext replicationContext = new LogReplicationContext(mock(LogReplicationConfigManager.class),
+                0L, SAMPLE_HOSTNAME, true);
         lrServer = spy(new LogReplicationServer(context, sinkManager, sessionSet, metadataManager, SINK_NODE_ID, SINK_CLUSTER_ID,
-            null));
+                replicationContext));
         lrServer.getSessionToSinkManagerMap().put(session, sinkManager);
         mockHandlerContext = mock(ChannelHandlerContext.class);
         mockServerRouter = mock(IClientServerRouter.class);

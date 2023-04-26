@@ -55,7 +55,7 @@ public class AbstractIT extends AbstractCorfuTest {
     static final String DEFAULT_ENDPOINT = DEFAULT_HOST + ":" + DEFAULT_PORT;
 
     static final String CORFU_PROJECT_DIR = new File("..").getAbsolutePath() + File.separator;
-    public static String CORFU_LOG_PATH = "./tests/build/logs/";
+    public static String CORFU_LOG_PATH = PARAMETERS.TEST_TEMP_DIR;
 
     static final long DEFAULT_MVO_CACHE_SIZE = 100;
 
@@ -511,7 +511,7 @@ public class AbstractIT extends AbstractCorfuTest {
         private boolean noAutoCommit = true;
         private String keyStore = null;
         private String keyStorePassword = null;
-        private String logLevel = "INFO";
+        private String logLevel = "DEBUG";
         private String logPath = null;
         private String trustStore = null;
         private String logSizeLimitPercentage = null;
