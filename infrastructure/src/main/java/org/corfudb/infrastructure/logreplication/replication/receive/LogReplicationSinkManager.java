@@ -492,8 +492,8 @@ public class LogReplicationSinkManager implements DataReceiver {
             applyExecutor.submit(() -> {
                 try {
                     startSnapshotApply(entry);
-                } catch (TransactionAbortedException tae) {
-                    log.error("Error while attempting to start snapshot apply.", tae);
+                } catch (Exception e) {
+                    log.error("Error while attempting to start snapshot apply.", e);
                     ongoingApply.set(false);
                 }
             });

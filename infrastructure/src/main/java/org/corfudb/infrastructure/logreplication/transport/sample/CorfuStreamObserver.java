@@ -1,4 +1,4 @@
-package org.corfudb.util.concurrent;
+package org.corfudb.infrastructure.logreplication.transport.sample;
 
 import io.grpc.Status;
 import io.grpc.StatusException;

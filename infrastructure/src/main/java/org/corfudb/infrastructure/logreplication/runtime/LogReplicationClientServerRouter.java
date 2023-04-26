@@ -90,7 +90,7 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
     private long timeoutResponse;
 
     /**
-     * The outstanding requests on this router.
+     * The outstanding requests (for Source and for Sink when Sink is the connection starter)  on this router.
      */
     @Getter
     private final Map<LogReplicationSession, Map<Long, CompletableFuture>> sessionToOutstandingRequests;
@@ -144,6 +144,7 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
      * Map of session -> verifySinkLeadership. VerifySinkLeadership triggers leadership request and and upon receiving
      * the response, creates a bidirectional streams to remote endpoints
      */
+    @Getter
     private final Map<LogReplicationSession, RemoteSourceLeadershipManager> sessionToRemoteSourceLeaderManager;
 
     /**
@@ -162,7 +163,12 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
     @Setter
     private TopologyDescriptor topology;
 
-    private Map<LogReplicationSession, CorfuMessage.ResponseMsg> reverseReplicateMsgBuffer;
+    /**
+     * This is used only when the local cluster is Source and is a connection receiver.
+     * Stores the first incoming reverseReplicate message when the source FSMs are not yet initialized. When the FSMs are
+     * ready, the buffered message is used to advance the state machine to the Negotiation state.
+     */
+    private Map<LogReplicationSession, CorfuMessage.ResponseMsg> reverseReplicateInitMsgBuffer;
 
 
 
@@ -197,7 +203,7 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
         this.sessionToOutstandingRequests = new ConcurrentHashMap<>();
         this.sessionToLeaderConnectionFuture = new ConcurrentHashMap<>();
         this.sessionToRemoteSourceLeaderManager = new ConcurrentHashMap<>();
-        this.reverseReplicateMsgBuffer = new ConcurrentHashMap<>();
+        this.reverseReplicateInitMsgBuffer = new ConcurrentHashMap<>();
         this.clientChannelAdapter = null;
         this.serverChannelAdapter = null;
     }
@@ -262,8 +268,8 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
         this.sessionToRuntimeFSM.put(session, runtimeFSM);
 
         // check if buffer has a reverse_replicate msg for the session.
-        if (reverseReplicateMsgBuffer.containsKey(session)) {
-            String remoteLeaderId = reverseReplicateMsgBuffer.get(session).getPayload().getLrReverseReplicateMsg().getSinkLeaderNodeId();
+        if (reverseReplicateInitMsgBuffer.containsKey(session)) {
+            String remoteLeaderId = reverseReplicateInitMsgBuffer.get(session).getPayload().getLrReverseReplicateMsg().getSinkLeaderNodeId();
             runtimeFSM.setRemoteLeaderNodeId(remoteLeaderId);
             addConnectionUpEvent(session, remoteLeaderId);
         }
@@ -486,7 +492,7 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
                 // the runtimeFSM is ready.
                 if(!sessionToRuntimeFSM.containsKey(session)) {
                     log.info("RuntimeFSM not present. Buffering the msg for session {}", session);
-                    reverseReplicateMsgBuffer.put(session, msg);
+                    reverseReplicateInitMsgBuffer.put(session, msg);
                     return;
                 }
                 String remoteLeaderId = msg.getPayload().getLrReverseReplicateMsg().getSinkLeaderNodeId();
@@ -646,11 +652,6 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
             }).run();
         } catch (InterruptedException e) {
             log.error("Unrecoverable exception when attempting to connect to remote session.", e);
-        }
-
-        if (incomingSession.contains(session)) {
-            sessionToRemoteSourceLeaderManager.put(session,
-                    new RemoteSourceLeadershipManager(session, this, localNodeId));
         }
     }
 
