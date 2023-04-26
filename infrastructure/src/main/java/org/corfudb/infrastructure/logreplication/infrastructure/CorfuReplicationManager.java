@@ -15,7 +15,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
-import static org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRuntimeStateType.WAITING_FOR_CONNECTIVITY;
 
 /**
  * This class manages Log Replication for multiple remote (sink) clusters.
@@ -67,8 +66,8 @@ public class CorfuReplicationManager {
     /**
      * Create Log Replication Runtime for a session, if not already created.
      */
-    public void createRuntime(ClusterDescriptor remote, LogReplicationSession replicationSession,
-                              LogReplicationClientServerRouter router) {
+    public void createAndStartRuntime(ClusterDescriptor remote, LogReplicationSession replicationSession,
+                                      LogReplicationClientServerRouter router) {
         try {
             CorfuLogReplicationRuntime replicationRuntime;
             if (!sessionRuntimeMap.containsKey(replicationSession)) {

@@ -26,7 +26,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.corfudb.protocols.service.CorfuProtocolLogReplication.getLeadershipLoss;
 import static org.corfudb.protocols.service.CorfuProtocolLogReplication.getLeadershipResponse;
@@ -134,6 +133,7 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
 
     @Override
     protected void processRequest(RequestMsg req, ResponseMsg res, IClientServerRouter r) {
+        // TODO V2: add metrics around the queue size
         executor.submit(() -> getHandlerMethods().handle(req, res, r));
     }
 

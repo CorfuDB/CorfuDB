@@ -1,6 +1,6 @@
 package org.corfudb.infrastructure.logreplication.runtime;
 
-import com.sun.istack.internal.NotNull;
+
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
@@ -278,7 +278,7 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
 
     @Override
     public <T> CompletableFuture<T> sendRequestAndGetCompletable(
-            @NotNull LogReplicationSession session,
+            @Nonnull LogReplicationSession session,
             @Nonnull CorfuMessage.RequestPayloadMsg payload,
             @Nonnull String nodeId) {
 
