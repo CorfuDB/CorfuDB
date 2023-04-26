@@ -147,6 +147,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
 
     @Before
     public void setUp() throws Exception {
+        // Shama remove this
 //        String currentWorkingDir = System.getProperty("user.dir");
 //        String methodName = name.getMethodName();
 //        CORFU_LOG_PATH = currentWorkingDir.substring(0, currentWorkingDir.lastIndexOf("/")) + "/tests/" + methodName;
