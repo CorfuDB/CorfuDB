@@ -9,6 +9,7 @@ import org.corfudb.infrastructure.logreplication.infrastructure.msgHandlers.LogR
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientServerRouter;
+import org.corfudb.infrastructure.logreplication.runtime.fsm.sink.RemoteSourceLeadershipManager;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationUpgradeManager;
 import org.corfudb.runtime.CorfuRuntime;
@@ -335,6 +336,11 @@ public class SessionManager {
             if(router.isConnectionStarterForSession(session)) {
                 router.getSessionToLeaderConnectionFuture().put(session, new CompletableFuture<>());
                 router.getSessionToOutstandingRequests().putIfAbsent(session, new HashMap<>());
+                if (incomingSessions.contains(session)) {
+                    router.getSessionToRemoteSourceLeaderManager().put(session,
+                            new RemoteSourceLeadershipManager(session, router,
+                                    topology.getLocalNodeDescriptor().getNodeId()));
+                }
             }
         });
     }

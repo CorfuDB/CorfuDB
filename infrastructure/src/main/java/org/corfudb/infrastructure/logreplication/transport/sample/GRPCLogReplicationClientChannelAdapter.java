@@ -23,7 +23,6 @@ import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
 import org.corfudb.util.NodeLocator;
-import org.corfudb.util.concurrent.CorfuStreamObserver;
 
 import javax.annotation.Nonnull;
 import java.io.InputStreamReader;
@@ -258,12 +257,13 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
             }
         }
 
-        // Session - Observer Pair - SessionLock
         responseObserverMap.get(sessionMsg).onNext(response);
     }
 
     private void queryLeadership(String nodeId, RequestMsg request) {
         LogReplicationSession session = request.getHeader().getSession();
+
+        // StreamObserver which will observe the async response
         StreamObserver<ResponseMsg> responseObserver = new StreamObserver<ResponseMsg>() {
             @Override
             public void onNext(ResponseMsg responseMsg) {
@@ -273,7 +273,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
 
             @Override
             public void onError(Throwable throwable) {
-                log.warn("Error encountered while receiving leadership response msg");
+                log.warn("Error encountered while receiving leadership response msg {}", throwable);
             }
 
             @Override
@@ -281,6 +281,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
                 log.info("Finished queryLeadership RPC");
             }
         };
+
         try {
             log.info("queryLeadership for session {}", session);
             if (sessionToAsyncStubMap.containsKey(session)) {
@@ -300,6 +301,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
     private void requestMetadata(String nodeId, RequestMsg request) {
         LogReplicationSession session = request.getHeader().getSession();
         try {
+            log.info("Metadata request for session {}", session);
             if (sessionToBlockingStubMap.containsKey(session)) {
                 ResponseMsg response = sessionToBlockingStubMap.get(session)
                         .withDeadlineAfter(5000, TimeUnit.MILLISECONDS)
@@ -398,7 +400,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
     }
 
     private synchronized void onServiceUnavailable(Throwable t, String nodeId, LogReplicationSession sesssion) {
-        log.info("On service unavailable, clear the channel info");
+        log.info("Service unavailable, clear cached information about connection to node {}", nodeId);
         Set<ManagedChannel> allChannelsToNode = nodeIdToChannelMap.get(nodeId);
 
         allChannelsToNode.stream().forEach(channel -> {
@@ -411,12 +413,9 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
             if (!channelState.equals(ConnectivityState.SHUTDOWN) && t instanceof StatusRuntimeException &&
                     ((StatusRuntimeException) t).getStatus().getCode().equals(Status.UNAVAILABLE.getCode())) {
                 //generally a transient issue, retry connection...
-                log.info("prob channel {}", channel.hashCode());
-                // no retry logic for sample, so create a new channel
                 onConnectionDown(nodeId, sesssion);
             } else if (channelState.equals(ConnectivityState.SHUTDOWN)) {
                 log.debug("GRPC channel to node {} is shutdown", nodeId);
-                log.debug("Shama the channel was {}", hashCode());
             }
         });
 

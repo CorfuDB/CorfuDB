@@ -425,7 +425,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
                 // Stop the replication server.
                 // There may be a topology change where the remote cluster that would connect to the local cluster was
                 // removed from the topology.
-//                interClusterServerNode.disable();
+                interClusterServerNode.close();
             }
             return;
         }
