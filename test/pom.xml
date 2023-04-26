@@ -103,7 +103,7 @@
                             <!-- Option to generate a file test report or just output the test report to the console. -->
                             <useFile>false</useFile>
                             <includes>
-                                <include>**/CorfuReplicationClusterConfigIT.java</include>
+                                <include>**/*IT.java</include>
                             </includes>
                             <excludes>
                             </excludes>

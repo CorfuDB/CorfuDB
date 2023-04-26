@@ -46,9 +46,7 @@ import org.corfudb.utils.lock.LockDataTypes;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
-import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.TestName;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
@@ -142,16 +140,8 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
 
     }
 
-    @Rule
-    public TestName name = new TestName();
-
     @Before
     public void setUp() throws Exception {
-        // Shama remove this
-//        String currentWorkingDir = System.getProperty("user.dir");
-//        String methodName = name.getMethodName();
-//        CORFU_LOG_PATH = currentWorkingDir.substring(0, currentWorkingDir.lastIndexOf("/")) + "/tests/" + methodName;
-
         sourceCorfuServer = runServer(sourceClusterCorfuPort, true);
         sinkCorfuServer = runServer(sinkClusterCorfuPort, true);
 
