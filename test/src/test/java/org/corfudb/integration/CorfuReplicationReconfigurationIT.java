@@ -1,12 +1,12 @@
 package org.corfudb.integration;
 
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.tuple.Pair;
 import org.corfudb.infrastructure.logreplication.infrastructure.SessionManager;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
-import org.corfudb.runtime.LogReplication.SyncType;
-import org.corfudb.runtime.LogReplication.SnapshotSyncInfo;
-import org.corfudb.runtime.LogReplication.SyncStatus;
-import org.corfudb.runtime.LogReplication.ReplicationStatus;
+import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SnapshotSyncInfo;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SyncStatus;
 import org.corfudb.infrastructure.logreplication.proto.Sample.IntValueTag;
 import org.corfudb.infrastructure.logreplication.proto.Sample.Metadata;
 import org.corfudb.infrastructure.logreplication.proto.Sample.StringKey;
@@ -15,6 +15,8 @@ import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicat
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
+import org.corfudb.runtime.ExampleSchemas;
+import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
 import org.corfudb.runtime.collections.StreamListener;
@@ -32,10 +34,14 @@ import org.corfudb.util.Sleep;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 import java.io.File;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -52,6 +58,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
 import static org.corfudb.runtime.LogReplicationUtils.REPLICATION_STATUS_TABLE_NAME;
+import static org.junit.Assert.assertTrue;
 
 /**
  * This suite of tests validates the behavior of Log Replication
@@ -60,6 +67,7 @@ import static org.corfudb.runtime.LogReplicationUtils.REPLICATION_STATUS_TABLE_N
  * @author amartinezman
  */
 @Slf4j
+@RunWith(Parameterized.class)
 public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT {
 
     private static final int SLEEP_DURATION = 5;
@@ -82,19 +90,37 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
 
     private Table<StringKey, IntValueTag, Metadata> noisyMap;
 
-    /**
-     * Sets the plugin path before starting any test
-     *
-     * @throws Exception
-     */
-    @Before
-    public void setupPluginPath() {
+    public CorfuReplicationReconfigurationIT(Pair<String, ExampleSchemas.ClusterUuidMsg> pluginAndTopologyType) {
+        this.pluginConfigFilePath = pluginAndTopologyType.getKey();
+        this.topologyType = pluginAndTopologyType.getValue();
+    }
+
+    // Static method that generates and returns test data (automatically test for two transport protocols: netty and GRPC)
+    @Parameterized.Parameters
+    public static Collection<Pair<String, ExampleSchemas.ClusterUuidMsg>> input() {
+
+        List<String> transportPlugins = Arrays.asList(
+                "src/test/resources/transport/grpcConfig.properties"
+//                "src/test/resources/transport/nettyConfig.properties"
+        );
+
+        List<ExampleSchemas.ClusterUuidMsg> topologyTypes = Arrays.asList(
+                DefaultClusterManager.TP_SINGLE_SOURCE_SINK,
+                DefaultClusterManager.TP_SINGLE_SOURCE_SINK_REV_CONNECTION
+        );
+
+        List<Pair<String, ExampleSchemas.ClusterUuidMsg>> absolutePathPlugins = new ArrayList<>();
+
         if(runProcess) {
-            File f = new File(nettyConfig);
-            this.pluginConfigFilePath = f.getAbsolutePath();
+            transportPlugins.stream().map(File::new).forEach(f ->
+                    topologyTypes.stream().forEach(type -> absolutePathPlugins.add(Pair.of(f.getAbsolutePath(), type))));
         } else {
-            this.pluginConfigFilePath = nettyConfig;
+
+            transportPlugins.stream().forEach(f ->
+                    topologyTypes.stream().forEach(type -> absolutePathPlugins.add(Pair.of(f, type))));
         }
+
+        return absolutePathPlugins;
     }
 
     /**
@@ -106,7 +132,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
     public void testSinkClusterReset() throws Exception {
         // (1) Snapshot and Log Entry Sync
         log.debug(">>> (1) Start Snapshot and Log Entry Sync");
-        testEndToEndSnapshotAndLogEntrySyncUFO(false, false, 1);
+        testEndToEndSnapshotAndLogEntrySyncUFO(false, false, 1, false);
 
         ExecutorService writerService = Executors.newSingleThreadExecutor();
 
@@ -144,7 +170,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
 
         // (1) Snapshot and Log Entry Sync
         log.debug(">>> (1) Start Snapshot and Log Entry Sync");
-        testEndToEndSnapshotAndLogEntrySyncUFO(false, false, 1);
+        testEndToEndSnapshotAndLogEntrySyncUFO(false, false, 1, false);
 
         ExecutorService writerService = Executors.newSingleThreadExecutor();
 
@@ -173,16 +199,16 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
         corfuStoreSource.openTable(LogReplicationMetadataManager.NAMESPACE,
             REPLICATION_STATUS_TABLE_NAME,
             LogReplicationSession.class,
-            ReplicationStatus.class,
+            LogReplication.ReplicationStatus.class,
             null,
-            TableOptions.fromProtoSchema(ReplicationStatus.class));
+            TableOptions.fromProtoSchema(LogReplication.ReplicationStatus.class));
 
         // Wait the polling period time before verifying sync status (to make sure it was updated)
         Sleep.sleepUninterruptibly(Duration.ofSeconds(LogReplicationAckReader.ACKED_TS_READ_INTERVAL_SECONDS + 1));
 
-        long remainingEntriesToSend = verifyReplicationStatus(SyncType.LOG_ENTRY,
-                SyncStatus.ONGOING, SnapshotSyncInfo.SnapshotSyncType.DEFAULT,
-                SyncStatus.COMPLETED);
+        long remainingEntriesToSend = verifyReplicationStatus(LogReplication.SyncType.LOG_ENTRY,
+                LogReplication.SyncStatus.ONGOING, LogReplication.SnapshotSyncInfo.SnapshotSyncType.DEFAULT,
+                LogReplication.SyncStatus.COMPLETED);
        assertThat(remainingEntriesToSend).isEqualTo(0L);
 
         // (8) Keep writing data into the TX stream (but with data not intended for replication) while
@@ -203,9 +229,9 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
 
         // While the TX log is growing, the remaining entries to send can be changing during this time, as it is computed
         // wrt. the tail of the log and this varies depending on how fast we are catching the tail of the log.
-        verifyReplicationStatus(SyncType.LOG_ENTRY,
-                SyncStatus.ONGOING, SnapshotSyncInfo.SnapshotSyncType.DEFAULT,
-                SyncStatus.COMPLETED);
+        verifyReplicationStatus(LogReplication.SyncType.LOG_ENTRY,
+                LogReplication.SyncStatus.ONGOING, LogReplication.SnapshotSyncInfo.SnapshotSyncType.DEFAULT,
+                LogReplication.SyncStatus.COMPLETED);
 
         stopWrites.set(true);
 
@@ -217,15 +243,15 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
         // Wait the polling period time and verify sync status again (to make sure it was not erroneously updated)
         Sleep.sleepUninterruptibly(Duration.ofSeconds(LogReplicationAckReader.ACKED_TS_READ_INTERVAL_SECONDS + delta));
 
-        remainingEntriesToSend = verifyReplicationStatus(SyncType.LOG_ENTRY,
-                SyncStatus.ONGOING, SnapshotSyncInfo.SnapshotSyncType.DEFAULT,
-                SyncStatus.COMPLETED);
+        remainingEntriesToSend = verifyReplicationStatus(LogReplication.SyncType.LOG_ENTRY,
+                LogReplication.SyncStatus.ONGOING, LogReplication.SnapshotSyncInfo.SnapshotSyncType.DEFAULT,
+                LogReplication.SyncStatus.COMPLETED);
         assertThat(remainingEntriesToSend).isEqualTo(0L);
     }
 
-    private long verifyReplicationStatus(SyncType targetSyncType, SyncStatus targetSyncStatus,
-                                         SnapshotSyncInfo.SnapshotSyncType targetSnapshotSyncType,
-                                         SyncStatus targetSnapshotSyncStatus) {
+    private long verifyReplicationStatus(LogReplication.SyncType targetSyncType, LogReplication.SyncStatus targetSyncStatus,
+                                         LogReplication.SnapshotSyncInfo.SnapshotSyncType targetSnapshotSyncType,
+                                         LogReplication.SyncStatus targetSnapshotSyncStatus) {
 
         LogReplicationSession session = LogReplicationSession.newBuilder()
             .setSourceClusterId(new DefaultClusterConfig().getSourceClusterIds().get(0))
@@ -233,9 +259,9 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
             .setSubscriber(SessionManager.getDefaultSubscriber())
             .build();
 
-        ReplicationStatus replicationStatus;
+        LogReplication.ReplicationStatus replicationStatus;
         try (TxnContext txn = corfuStoreSource.txn(LogReplicationMetadataManager.NAMESPACE)) {
-            replicationStatus = (ReplicationStatus)txn.getRecord(REPLICATION_STATUS_TABLE_NAME, session).getPayload();
+            replicationStatus = (LogReplication.ReplicationStatus)txn.getRecord(REPLICATION_STATUS_TABLE_NAME, session).getPayload();
             txn.commit();
         }
 
@@ -520,9 +546,9 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
             corfuStoreSource.openTable(LogReplicationMetadataManager.NAMESPACE,
                     REPLICATION_STATUS_TABLE_NAME,
                     LogReplicationSession.class,
-                    ReplicationStatus.class,
+                    LogReplication.ReplicationStatus.class,
                     null,
-                    TableOptions.fromProtoSchema(ReplicationStatus.class));
+                    TableOptions.fromProtoSchema(LogReplication.ReplicationStatus.class));
             blockUntilSnapshotSyncCompleted();
 
             // Verify Snapshot has successfully replicated
@@ -598,12 +624,12 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
             .setSubscriber(SessionManager.getDefaultSubscriber())
             .build();
 
-        ReplicationStatus replicationStatus;
+        LogReplication.ReplicationStatus replicationStatus;
         boolean snapshotSyncCompleted = false;
 
         while (snapshotSyncCompleted) {
             try (TxnContext txn = corfuStoreSource.txn(LogReplicationMetadataManager.NAMESPACE)) {
-                replicationStatus = (ReplicationStatus) txn.getRecord(REPLICATION_STATUS_TABLE_NAME, key).getPayload();
+                replicationStatus = (LogReplication.ReplicationStatus) txn.getRecord(REPLICATION_STATUS_TABLE_NAME, key).getPayload();
                 txn.commit();
             }
 
@@ -619,7 +645,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
                     replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getCompletedTime());
 
             snapshotSyncCompleted = replicationStatus.getSourceStatus().getReplicationInfo()
-                    .getSnapshotSyncInfo().getStatus() == SyncStatus.COMPLETED;
+                    .getSnapshotSyncInfo().getStatus() == LogReplication.SyncStatus.COMPLETED;
         }
     }
 
