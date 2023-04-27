@@ -1,4 +1,4 @@
-package org.corfudb.infrastructure.logreplication.infrastructure.msgHandlers;
+package org.corfudb.infrastructure.logreplication.infrastructure.msghandlers;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;

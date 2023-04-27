@@ -1,4 +1,4 @@
-package org.corfudb.infrastructure.logreplication.infrastructure.msgHandlers;
+package org.corfudb.infrastructure.logreplication.infrastructure.msghandlers;
 
 import org.corfudb.runtime.proto.service.CorfuMessage;
 

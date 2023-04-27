@@ -1,4 +1,4 @@
-package org.corfudb.infrastructure.logreplication.infrastructure.msgHandlers;
+package org.corfudb.infrastructure.logreplication.infrastructure.msghandlers;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.TextFormat;
