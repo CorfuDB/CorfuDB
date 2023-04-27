@@ -109,6 +109,9 @@ public class LogReplicationSinkManager implements DataReceiver {
     @Getter
     private final AtomicBoolean ongoingApply = new AtomicBoolean(false);
 
+    @Getter
+    private boolean isSinkManagerShutdown = false;
+
     /**
      * Constructor Sink Manager
      *
@@ -223,7 +226,7 @@ public class LogReplicationSinkManager implements DataReceiver {
         logEntryWriter = new LogEntryWriter(metadataManager, session, replicationContext);
 
         logEntrySinkBufferManager = new LogEntrySinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,
-                metadataManager.getReplicationMetadata(session).getLastLogEntryApplied(), this);
+                metadataManager.getReplicationMetadata(session).getLastLogEntryBatchProcessed(), this);
     }
 
     private ISnapshotSyncPlugin getOnSnapshotSyncPlugin() {
@@ -484,7 +487,14 @@ public class LogReplicationSinkManager implements DataReceiver {
     private synchronized void startSnapshotApplyAsync(LogReplicationEntryMsg entry) {
         if (!ongoingApply.get()) {
             ongoingApply.set(true);
-            applyExecutor.submit(() -> startSnapshotApply(entry));
+            applyExecutor.submit(() -> {
+                try {
+                    startSnapshotApply(entry);
+                } catch (Exception e) {
+                    log.error("Error while attempting to start snapshot apply.", e);
+                    ongoingApply.set(false);
+                }
+            });
         }
     }
 
@@ -572,6 +582,7 @@ public class LogReplicationSinkManager implements DataReceiver {
     public void shutdown() {
         this.runtime.shutdown();
         this.applyExecutor.shutdownNow();
+        isSinkManagerShutdown = true;
     }
 
     /**

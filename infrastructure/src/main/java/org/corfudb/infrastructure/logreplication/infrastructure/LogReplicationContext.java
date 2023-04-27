@@ -1,10 +1,13 @@
 package org.corfudb.infrastructure.logreplication.infrastructure;
 
+import com.google.common.annotations.VisibleForTesting;
 import lombok.Getter;
 import lombok.Setter;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.util.serializer.ISerializer;
+
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.corfudb.util.serializer.ProtobufSerializer.PROTOBUF_SERIALIZER_CODE;
 
@@ -19,6 +22,7 @@ import static org.corfudb.util.serializer.ProtobufSerializer.PROTOBUF_SERIALIZER
 public class LogReplicationContext {
 
     @Getter
+    @Setter
     private final LogReplicationConfigManager configManager;
 
     @Getter
@@ -28,6 +32,10 @@ public class LogReplicationContext {
     @Setter
     private long topologyConfigId;
 
+    @Getter
+    @Setter
+    private final AtomicBoolean isLeader;
+
     /**
      * Constructor
      **/
@@ -36,6 +44,20 @@ public class LogReplicationContext {
         this.configManager = configManager;
         this.topologyConfigId = topologyConfigId;
         this.localCorfuEndpoint = localCorfuEndpoint;
+        this.isLeader = new AtomicBoolean(false);
+    }
+
+    @VisibleForTesting
+    public LogReplicationContext(LogReplicationConfigManager configManager, long topologyConfigId,
+                                 String localCorfuEndpoint, boolean isLeader) {
+        this.configManager = configManager;
+        this.topologyConfigId = topologyConfigId;
+        this.localCorfuEndpoint = localCorfuEndpoint;
+        this.isLeader = new AtomicBoolean(isLeader);
+    }
+
+    public void setIsLeader(boolean newValue) {
+        this.isLeader.set(newValue);
     }
 
     /**
@@ -67,4 +89,5 @@ public class LogReplicationContext {
     public ISerializer getProtobufSerializer() {
         return configManager.getRuntime().getSerializers().getSerializer(PROTOBUF_SERIALIZER_CODE);
     }
+
 }

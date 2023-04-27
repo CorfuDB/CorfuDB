@@ -9,6 +9,7 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
+import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEvent;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEventInfoKey;
@@ -44,7 +45,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
@@ -85,18 +88,17 @@ public class LogReplicationMetadataManager {
     private Optional<Timer.Sample> snapshotSyncTimerSample = Optional.empty();
 
     @Getter
-    @Setter
-    private long topologyConfigId;
+    private LogReplicationContext replicationContext;
 
     /**
      * Constructor
      *
      * @param runtime   the runtime to connect to CorfuDb
      */
-    public LogReplicationMetadataManager(CorfuRuntime runtime, long topologyConfigId) {
+    public LogReplicationMetadataManager(CorfuRuntime runtime, LogReplicationContext replicationContext) {
         this.runtime = runtime;
         this.corfuStore = new CorfuStore(runtime);
-        this.topologyConfigId = topologyConfigId;
+        this.replicationContext = replicationContext;
 
         try {
             this.metadataTable = this.corfuStore.openTable(NAMESPACE, METADATA_TABLE_NAME,
@@ -228,7 +230,7 @@ public class LogReplicationMetadataManager {
         ReplicationMetadata updatedMetadata = entry.getPayload().toBuilder().setField(fd, value).build();
         txn.putRecord(metadataTable, session, updatedMetadata, null);
 
-        log.debug("Update metadata field {}, value={}, session={}", fd.getFullName(), value);
+        log.debug("Update metadata field {}, value={}, session={}", fd.getFullName(), value, session);
     }
 
     /**
@@ -275,8 +277,10 @@ public class LogReplicationMetadataManager {
      * @param incoming              true, if session is incoming (sink), false otherwise (source)
      */
     public void addSession(TxnContext txn, LogReplicationSession session, long topologyConfigId, boolean incoming) {
-        log.info("Add entry to metadata manager, session={}, config_id={}, incoming={}", session, topologyConfigId, incoming);
-        initializeMetadata(txn, session, incoming, topologyConfigId);
+        if(replicationContext.getIsLeader().get()) {
+            log.info("Add entry to metadata manager, session={}, config_id={}, incoming={}", session, topologyConfigId, incoming);
+            initializeMetadata(txn, session, incoming, topologyConfigId);
+        }
     }
 
     /**
@@ -348,6 +352,10 @@ public class LogReplicationMetadataManager {
      *         false, otherwise
      */
     public boolean setBaseSnapshotStart(LogReplicationSession session, long topologyConfigId, long snapshotStartTs) {
+        if(!replicationContext.getIsLeader().get()) {
+            log.debug("The node is not the leader. Skip updating the metadata table");
+            return false;
+        }
 
         ReplicationMetadata metadata;
 
@@ -842,22 +850,24 @@ public class LogReplicationMetadataManager {
      * Reset replication status for all sessions
      */
     public void resetReplicationStatus() {
-        log.info("Reset replication status for all LR sessions");
-        try {
-            IRetry.build(IntervalRetry.class, () -> {
-                try (TxnContext tx = corfuStore.txn(NAMESPACE)) {
-                    tx.clear(statusTable);
-                    tx.commit();
-                } catch (TransactionAbortedException tae) {
-                    log.error("Error while attempting to reset replication status", tae);
-                    throw new RetryNeededException();
-                }
-                log.debug("Reset of replication status completed");
-                return null;
-            }).run();
-        } catch (InterruptedException e) {
-            log.error("Unrecoverable exception when attempting to reset replication status", e);
-            throw new UnrecoverableCorfuInterruptedError(e);
+        if(replicationContext.getIsLeader().get()) {
+            log.info("Reset replication status for all LR sessions");
+            try {
+                IRetry.build(IntervalRetry.class, () -> {
+                    try (TxnContext tx = corfuStore.txn(NAMESPACE)) {
+                        tx.clear(statusTable);
+                        tx.commit();
+                    } catch (TransactionAbortedException tae) {
+                        log.error("Error while attempting to reset replication status", tae);
+                        throw new RetryNeededException();
+                    }
+                    log.debug("Reset of replication status completed");
+                    return null;
+                }).run();
+            } catch (InterruptedException e) {
+                log.error("Unrecoverable exception when attempting to reset replication status", e);
+                throw new UnrecoverableCorfuInterruptedError(e);
+            }
         }
     }
 
@@ -873,18 +883,22 @@ public class LogReplicationMetadataManager {
      * Reset manager by clearing all tables
      */
     public void reset() {
-        log.info("Reset all metadata manager tables");
-        try (TxnContext tx = corfuStore.txn(NAMESPACE)) {
-            statusTable.clearAll();
-            metadataTable.clearAll();
-            replicationEventTable.clearAll();
-            tx.commit();
+        if(replicationContext.getIsLeader().get()) {
+            log.info("Reset all metadata manager tables");
+            try (TxnContext tx = corfuStore.txn(NAMESPACE)) {
+                statusTable.clearAll();
+                metadataTable.clearAll();
+                replicationEventTable.clearAll();
+                tx.commit();
+            }
         }
     }
 
     public void removeSession(TxnContext txn, LogReplicationSession session) {
-        txn.delete(statusTable, session);
-        txn.delete(metadataTable, session);
+        if(replicationContext.getIsLeader().get()) {
+            txn.delete(statusTable, session);
+            txn.delete(metadataTable, session);
+        }
     }
 
     public enum LogReplicationMetadataType {

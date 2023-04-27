@@ -7,6 +7,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.runtime.LogReplication.SyncStatus;
 import org.corfudb.infrastructure.logreplication.replication.send.SnapshotSender;
+import org.corfudb.runtime.LogReplication.SyncStatus;
+import org.corfudb.runtime.LogReplication.SyncType;
 
 import java.util.Optional;
 import java.util.UUID;
