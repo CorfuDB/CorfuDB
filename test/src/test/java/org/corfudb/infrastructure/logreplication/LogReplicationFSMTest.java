@@ -12,6 +12,7 @@ import java.util.Queue;
 import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.google.protobuf.ByteString;
 import lombok.extern.slf4j.Slf4j;
@@ -505,9 +506,9 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
                 break;
         }
 
-        LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(runtime, TEST_TOPOLOGY_CONFIG_ID);
         LogReplicationContext context = new LogReplicationContext(configManager, TEST_TOPOLOGY_CONFIG_ID,
-                "test:" + SERVERS.PORT_0);
+                "test:" + SERVERS.PORT_0, true);
+        LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(runtime, context);
         ackReader = new LogReplicationAckReader(metadataManager, runtime, session, context);
         fsm = new LogReplicationFSM(runtime, snapshotReader, dataSender, logEntryReader,
                 new DefaultReadProcessor(runtime), upgradeManager,
