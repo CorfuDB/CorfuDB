@@ -105,6 +105,19 @@ public class RemoteSourceLeadershipManager {
         }
     }
 
+    /**
+     * Process the incoming events. These events will determine the next task to perform.
+     *
+     * Below are the valid events and the tasks performed:
+     * (i)   ON_CONNECTION_DOWN -> reset remote leader.
+     * (ii)  REMOTE_LEADER_NOT_FOUND -> retry verify remote leader
+     * (iii) ON_CONNECTION_UP -> verify remote leader
+     * (iv)  REMOTE_LEADER_FOUND -> trigger the long living reverseReplicate RPC. The first message containing the localNodeId
+     * which will be cached by the remote source
+     * (v)   REMOTE_LEADER_LOSS -> There was a leadership change on the remote. Verify remote leader again.
+     *
+     * @param event
+     */
     private void processEvent(LogReplicationSinkEvent event) {
         log.info("processing event {}", event);
         switch (event.getType()) {

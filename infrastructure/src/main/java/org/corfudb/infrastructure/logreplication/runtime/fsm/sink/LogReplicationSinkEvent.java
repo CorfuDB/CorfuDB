@@ -11,11 +11,11 @@ public class LogReplicationSinkEvent {
     /* Enum listing the various type of LogReplicationSinkEvent.
      */
     public enum LogReplicationSinkEventType {
-        ON_CONNECTION_UP,
-        ON_CONNECTION_DOWN,
-        REMOTE_LEADER_NOT_FOUND,
-        REMOTE_LEADER_FOUND,
-        REMOTE_LEADER_LOSS
+        ON_CONNECTION_UP, // a channel was successfully established
+        ON_CONNECTION_DOWN, // something when wrong with the connection
+        REMOTE_LEADER_NOT_FOUND, // Remote leader not found during verifyRemoteLeader
+        REMOTE_LEADER_FOUND, // Remote leader found on verifyRemoteLeader
+        REMOTE_LEADER_LOSS // Leadership changed on the remote
     }
 
     // Communication Event Type
