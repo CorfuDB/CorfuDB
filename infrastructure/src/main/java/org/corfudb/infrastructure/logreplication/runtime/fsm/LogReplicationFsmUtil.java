@@ -1,10 +1,11 @@
-package org.corfudb.infrastructure.logreplication.runtime.fsm.sink;
+package org.corfudb.infrastructure.logreplication.runtime.fsm;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientServerRouter;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRuntimeEvent;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.VerifyingRemoteSinkLeaderState;
+import org.corfudb.infrastructure.logreplication.runtime.fsm.sink.LogReplicationSinkEvent;
 import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.proto.service.CorfuMessage;
 

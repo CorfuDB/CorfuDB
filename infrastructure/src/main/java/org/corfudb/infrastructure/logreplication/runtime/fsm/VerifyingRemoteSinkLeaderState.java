@@ -3,17 +3,10 @@ package org.corfudb.infrastructure.logreplication.runtime.fsm;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientServerRouter;
-import org.corfudb.runtime.LogReplication;
-import org.corfudb.runtime.LogReplication.LogReplicationLeadershipResponseMsg;
-import org.corfudb.runtime.proto.service.CorfuMessage;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
 
-import static org.corfudb.infrastructure.logreplication.runtime.fsm.sink.LogReplicationFsmUtil.verifyRemoteLeader;
+import static org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationFsmUtil.verifyRemoteLeader;
 
 /**
  * Log Replication Runtime Verifying Remote Leader State.
