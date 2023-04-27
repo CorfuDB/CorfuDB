@@ -9,7 +9,7 @@ import org.corfudb.infrastructure.ServerThreadFactory;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.infrastructure.logreplication.infrastructure.CorfuReplicationManager;
 import org.corfudb.infrastructure.logreplication.infrastructure.TopologyDescriptor;
-import org.corfudb.infrastructure.logreplication.infrastructure.msgHandlers.LogReplicationServer;
+import org.corfudb.infrastructure.logreplication.infrastructure.msghandlers.LogReplicationServer;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRuntimeEvent;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.sink.LogReplicationSinkEvent;

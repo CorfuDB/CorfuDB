@@ -1,7 +1,7 @@
-package org.corfudb.infrastructure.logreplication.infrastructure.msgHandlers;
+package org.corfudb.infrastructure.logreplication.infrastructure.msghandlers;
 
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
-import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg;
+
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Inherited;
 import java.lang.annotation.Retention;

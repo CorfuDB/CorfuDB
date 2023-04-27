@@ -116,12 +116,6 @@ public class CorfuReplicationManager {
         return parameters;
     }
 
-
-    /**
-     * Start log replication by instantiating a runtime for each session
-     */
-
-
     /**
      * Stop log replication for all sessions
      */

@@ -5,7 +5,7 @@ import com.google.common.collect.Sets;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.ServerContext;
-import org.corfudb.infrastructure.logreplication.infrastructure.msgHandlers.LogReplicationServer;
+import org.corfudb.infrastructure.logreplication.infrastructure.msghandlers.LogReplicationServer;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientServerRouter;
@@ -366,7 +366,7 @@ public class SessionManager {
                             .forEach(staleSession -> metadataManager.removeSession(txn, staleSession));
                     txn.commit();
                     return null;
-                }  catch (TransactionAbortedException e) {
+                } catch (TransactionAbortedException e) {
                     log.error("Failed to create sessions.  Retrying.", e);
                     throw new RetryNeededException();
                 }

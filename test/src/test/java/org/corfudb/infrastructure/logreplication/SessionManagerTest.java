@@ -4,7 +4,7 @@ import com.google.common.collect.Sets;
 import org.corfudb.infrastructure.logreplication.infrastructure.CorfuReplicationManager;
 import org.corfudb.infrastructure.logreplication.infrastructure.SessionManager;
 import org.corfudb.infrastructure.logreplication.infrastructure.TopologyDescriptor;
-import org.corfudb.infrastructure.logreplication.infrastructure.msgHandlers.LogReplicationServer;
+import org.corfudb.infrastructure.logreplication.infrastructure.msghandlers.LogReplicationServer;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationSinkManager;

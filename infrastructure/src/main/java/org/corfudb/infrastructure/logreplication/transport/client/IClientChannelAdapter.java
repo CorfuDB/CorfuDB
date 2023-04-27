@@ -46,12 +46,12 @@ public abstract class IClientChannelAdapter {
     /**
      * Connect Asynchronously to all endpoints specified in the Cluster Descriptor.
      */
-    public void connectAsync(ClusterDescriptor remoteCluster, LogReplicationSession sessionMsg) {}
+    public abstract void connectAsync(ClusterDescriptor remoteCluster, LogReplicationSession sessionMsg);
 
     /**
      * If connection is lost to a specific endpoint, attempt to reconnect to the specific node.
      */
-    public void connectAsync(ClusterDescriptor remoteCluster, String nodeId, LogReplicationSession sessionMsg) {}
+    public abstract void connectAsync(ClusterDescriptor remoteCluster, String nodeId, LogReplicationSession sessionMsg);
 
     /**
      * Stop communication across all remote clusters.

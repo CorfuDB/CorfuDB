@@ -1,4 +1,4 @@
-package org.corfudb.infrastructure.logreplication.infrastructure.msgHandlers;
+package org.corfudb.infrastructure.logreplication.infrastructure.msghandlers;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.transport.IClientServerRouter;
@@ -84,7 +84,7 @@ public abstract class LogReplicationAbstractServer {
      * The server state.
      * Represents server in a particular state: READY, SHUTDOWN.
      */
-    public enum ReplicationServerState {
+    public static enum ReplicationServerState {
         READY, SHUTDOWN
     }
 
