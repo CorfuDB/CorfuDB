@@ -99,7 +99,8 @@ public class SessionManager {
      * @param upgradeManager      upgrade management module
      */
     public SessionManager(@Nonnull TopologyDescriptor topology, CorfuRuntime corfuRuntime,
-                          ServerContext serverContext, LogReplicationUpgradeManager upgradeManager) {
+                          ServerContext serverContext, LogReplicationUpgradeManager upgradeManager,
+                          String localCorfuEndpoint) {
         this.topology = topology;
         this.runtime = corfuRuntime;
         this.corfuStore = new CorfuStore(corfuRuntime);
