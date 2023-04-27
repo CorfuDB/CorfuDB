@@ -1,8 +1,8 @@
 package org.corfudb.infrastructure.logreplication.infrastructure.plugins;
 
 import com.google.common.annotations.VisibleForTesting;
-import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.ExampleSchemas.Uuid;
+import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.utils.LogReplicationStreams.Version;
@@ -24,11 +24,7 @@ public abstract class DefaultAdapterForUpgrade implements ILogReplicationVersion
 
     String pinnedVersionString;
 
-    public DefaultAdapterForUpgrade(CorfuRuntime runtime)
-            throws InvocationTargetException, NoSuchMethodException, IllegalAccessException {
-        // Open version table to simulate being on an older setup (V1)
-        runtime.getTableRegistry().openTable(CORFU_SYSTEM_NAMESPACE, LOG_REPLICATION_PLUGIN_VERSION_TABLE,
-                VersionString.class, Version.class, Uuid.class, TableOptions.builder().build());
+    public DefaultAdapterForUpgrade() {
         versionString = DEFAULT_VERSION;
         pinnedVersionString = DEFAULT_VERSION;
     }
@@ -49,7 +45,11 @@ public abstract class DefaultAdapterForUpgrade implements ILogReplicationVersion
      *
      */
     @VisibleForTesting
-    public void startRollingUpgrade() {
+    public void startRollingUpgrade(CorfuStore corfuStore)
+            throws InvocationTargetException, NoSuchMethodException, IllegalAccessException {
+        // Open version table to simulate being on an older setup (V1)
+        corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, LOG_REPLICATION_PLUGIN_VERSION_TABLE,
+                VersionString.class, Version.class, Uuid.class, TableOptions.builder().build());
         versionString = LATEST_VERSION;
         pinnedVersionString = OLDER_VERSION;
     }

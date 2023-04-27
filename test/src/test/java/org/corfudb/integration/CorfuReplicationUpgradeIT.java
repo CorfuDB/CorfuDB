@@ -895,7 +895,7 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
                 TableOptions.fromProtoSchema(ReplicationEvent.class));
 
         LRRollingUpgradeHandler rollingUpgradeHandler = new LRRollingUpgradeHandler(defaultAdapterForUpgrade);
-        defaultAdapterForUpgrade.startRollingUpgrade();
+        defaultAdapterForUpgrade.startRollingUpgrade(corfuStore);
 
         try (TxnContext txnContext = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             Assert.assertTrue(rollingUpgradeHandler.isLRUpgradeInProgress(txnContext));
