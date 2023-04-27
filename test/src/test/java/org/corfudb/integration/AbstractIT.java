@@ -512,7 +512,7 @@ public class AbstractIT extends AbstractCorfuTest {
         private boolean noAutoCommit = true;
         private String keyStore = null;
         private String keyStorePassword = null;
-        private String logLevel = "DEBUG";
+        private String logLevel = "INFO";
         private String logPath = null;
         private String trustStore = null;
         private String logSizeLimitPercentage = null;

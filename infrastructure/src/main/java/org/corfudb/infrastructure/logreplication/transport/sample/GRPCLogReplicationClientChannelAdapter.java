@@ -285,7 +285,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
         try {
             log.info("queryLeadership for session {}", session);
             if (sessionToAsyncStubMap.containsKey(session)) {
-            sessionToAsyncStubMap.get(session).queryLeadership(request, responseObserver);
+                sessionToAsyncStubMap.get(session).queryLeadership(request, responseObserver);
             } else {
                 log.warn("Stub not found for session {}. Dropping message of type {}",
                         session, request.getPayload().getPayloadCase());
