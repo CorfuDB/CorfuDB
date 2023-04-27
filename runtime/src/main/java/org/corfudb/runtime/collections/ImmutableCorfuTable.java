@@ -34,7 +34,6 @@ import java.util.stream.StreamSupport;
  */
 @Slf4j
 @AllArgsConstructor(access = AccessLevel.PRIVATE)
-// TODO: don't need to implement ICorfuSMR?
 public class ImmutableCorfuTable<K, V> implements
         SnapshotGenerator<ImmutableCorfuTable<K, V>>,
         ConsistencyView {
@@ -66,7 +65,7 @@ public class ImmutableCorfuTable<K, V> implements
     }
 
     @Override
-    public SMRSnapshot<ImmutableCorfuTable<K, V>> generateSnapshot(VersionedObjectIdentifier version) {
+    public SMRSnapshot<ImmutableCorfuTable<K, V>> generateSnapshot(@Nonnull VersionedObjectIdentifier version) {
         return new InMemorySMRSnapshot<>(this);
     }
 

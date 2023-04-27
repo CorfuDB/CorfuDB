@@ -5,6 +5,7 @@ import io.netty.buffer.ByteBufUtil;
 import lombok.NonNull;
 import org.corfudb.runtime.collections.RocksDbEntryIterator;
 import org.corfudb.util.serializer.ISerializer;
+import org.rocksdb.ColumnFamilyHandle;
 import org.rocksdb.OptimisticTransactionDB;
 import org.rocksdb.ReadOptions;
 import org.rocksdb.RocksDBException;
@@ -22,13 +23,15 @@ import java.util.concurrent.locks.StampedLock;
  *
  * @param <S> extends SnapshotGenerator
  */
-public class RocksDbReadCommittedTx<S extends SnapshotGenerator<S>>
-        implements RocksDbApi<S> {
+public class RocksDbReadCommittedTx<S extends SnapshotGenerator<S>> implements RocksDbApi<S> {
     private final OptimisticTransactionDB rocksDb;
     private final ReadOptions readOptions;
+    private final RocksDbColumnFamilyRegistry cfRegistry;
 
-    public RocksDbReadCommittedTx(@NonNull OptimisticTransactionDB rocksDb) {
+    public RocksDbReadCommittedTx(@NonNull OptimisticTransactionDB rocksDb,
+                                  @NonNull RocksDbColumnFamilyRegistry cfRegistry) {
         this.rocksDb = rocksDb;
+        this.cfRegistry = cfRegistry;
         this.readOptions = new ReadOptions();
     }
     
@@ -69,8 +72,61 @@ public class RocksDbReadCommittedTx<S extends SnapshotGenerator<S>>
     public void close() throws RocksDBException {
     }
 
+    /**
+     * Return the registry of column families associated with
+     * this RocksDbStore instance.
+     * @return The associated registry of column families.
+     */
+    @Override
+    public RocksDbColumnFamilyRegistry getRegisteredColumnFamilies() {
+        return cfRegistry;
+    }
+
     @Override
     public <K, V> RocksDbEntryIterator<K,V> getIterator(@NonNull ISerializer serializer) {
         return new RocksDbEntryIterator<>(rocksDb.newIterator(), serializer, readOptions, new StampedLock());
+    }
+
+    @Override
+    public BatchedUpdatesAdapter getBatchedUpdatesAdapter() {
+        return new WriteBatchTxStubAdapter();
+    }
+
+    private static class WriteBatchTxStubAdapter implements BatchedUpdatesAdapter {
+        private boolean isProcessed;
+
+        public WriteBatchTxStubAdapter() {
+            this.isProcessed = false;
+        }
+
+        @Override
+        public void insert(@NonNull ColumnFamilyHandle cfh,
+                           @NonNull ByteBuf keyPayload,
+                           @NonNull ByteBuf valuePayload) throws RocksDBException {
+
+            if (isProcessed) {
+                throw new IllegalStateException();
+            }
+        }
+
+        @Override
+        public void delete(@NonNull ColumnFamilyHandle cfh,
+                           @NonNull ByteBuf keyPayload) throws RocksDBException {
+
+            if (isProcessed) {
+                throw new IllegalStateException();
+            }
+        }
+
+        @Override
+        public void process() throws RocksDBException {
+            isProcessed = true;
+        }
+
+        @Override
+        public void close() {
+            // No-op.
+        }
+
     }
 }

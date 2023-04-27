@@ -28,5 +28,9 @@ public interface RocksDbApi<S extends SnapshotGenerator<S>> {
 
     long exactSize();
 
+    RocksDbColumnFamilyRegistry getRegisteredColumnFamilies();
+
+    BatchedUpdatesAdapter getBatchedUpdatesAdapter();
+
     void close() throws RocksDBException;
 }

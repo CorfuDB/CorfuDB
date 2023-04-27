@@ -28,6 +28,7 @@ import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.object.PersistenceOptions;
 import org.corfudb.runtime.object.PersistenceOptions.PersistenceOptionsBuilder;
+import org.corfudb.runtime.object.RocksDbColumnFamilyRegistry;
 import org.corfudb.runtime.object.RocksDbReadCommittedTx;
 import org.corfudb.runtime.object.VersionedObjectIdentifier;
 import org.corfudb.runtime.view.AbstractViewTest;
@@ -149,6 +150,24 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
     @Builder
     public static class Pojo {
         public final String payload;
+    }
+
+    private PersistedCorfuTable<String, String> setupTable(String streamName, Index.Registry<String, String> registry,
+                                                          Options options, ISerializer serializer) {
+
+        PersistenceOptionsBuilder persistenceOptions = PersistenceOptions.builder()
+                .dataPath(Paths.get(diskBackedDirectory, streamName));
+
+        return getDefaultRuntime().getObjectsView().build()
+                .setTypeToken(PersistedCorfuTable.<String, String>getTypeToken())
+                .setArguments(persistenceOptions.build(), options, serializer, registry)
+                .setStreamName(streamName)
+                .setSerializer(serializer)
+                .open();
+    }
+
+    private PersistedCorfuTable<String, String> setupTable(Index.Registry<String, String> registry) {
+        return setupTable(defaultTableName, registry, defaultOptions, new PojoSerializer(String.class));
     }
 
     private <V> PersistedCorfuTable<String, V> setupTable(String streamName, boolean readYourWrites,
@@ -525,12 +544,13 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
                 .dataPath(Paths.get(diskBackedDirectory, defaultTableName));
 
         OptimisticTransactionDB rocksDb = Mockito.mock(OptimisticTransactionDB.class);
+        RocksDbColumnFamilyRegistry cfRegistry = Mockito.mock(RocksDbColumnFamilyRegistry.class);
 
         try (DiskBackedCorfuTable<String, String> table = new DiskBackedCorfuTable<>(
                 persistenceOptions.build(), defaultOptions, defaultSerializer)) {
-            DiskBackedCorfuTable<String, String> newView = table.newView(new RocksDbReadCommittedTx<>(rocksDb));
+            DiskBackedCorfuTable<String, String> newView = table.newView(new RocksDbReadCommittedTx<>(rocksDb, cfRegistry));
             assertThat(newView).isNotNull();
-            assertThatThrownBy(() -> newView.newView(new RocksDbReadCommittedTx<>(rocksDb)))
+            assertThatThrownBy(() -> newView.newView(new RocksDbReadCommittedTx<>(rocksDb, cfRegistry)))
                     .isInstanceOf(IllegalStateException.class);
         }
     }
@@ -665,6 +685,27 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
                 table.clear();
                 assertThat(table.entryStream().count()).isEqualTo(0);
                 intended.forEach(key -> assertThat(table.get(key)).isNull());
+            });
+        }
+    }
+
+    @Property(tries = NUM_OF_TRIES)
+    void testSecondaryIndexes(@ForAll @Size(SAMPLE_SIZE) Set<String> intended) {
+        resetTests();
+        try (final PersistedCorfuTable<String, String> table = setupTable(new StringIndexer())) {
+            // StringIndexer does not work with empty strings (StringIndexOutOfBoundsException)
+            Set<String> filtered = intended.stream().filter(s -> !s.isEmpty()).collect(Collectors.toSet());
+
+            executeTx(() -> filtered.forEach(value -> table.insert(value, value)));
+            Assertions.assertEquals(filtered.size(), table.size());
+
+            executeTx(() -> filtered.forEach(value -> table.insert(value, value)));
+            Assertions.assertEquals(filtered.size(), table.size());
+
+            executeTx(() -> {
+                final Set<String> persisted = table.entryStream().map(Map.Entry::getValue).collect(Collectors.toSet());
+                Assertions.assertEquals(filtered, persisted);
+                Assertions.assertEquals(table.size(), persisted.size());
             });
         }
     }
