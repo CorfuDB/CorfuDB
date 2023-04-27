@@ -59,6 +59,8 @@ public class LRRollingUpgradeHandler {
 
     public boolean isLRUpgradeInProgress(TxnContext txnContext) {
         try {
+            // If LOG_REPLICATION_PLUGIN_VERSION_TABLE exists, it indicates an upgrade from a
+            // previous version was performed. It has since been removed in the current version.
             txnContext.getTable(LOG_REPLICATION_PLUGIN_VERSION_TABLE);
 
             if (isClusterAllAtV2) {
@@ -99,13 +101,13 @@ public class LRRollingUpgradeHandler {
      */
     public void migrateData(TxnContext txnContext) {
         // Data migration to be added here.
-        addEventForSnapshotSyncOnRollingUpgrade(txnContext);
+        addSnapshotSyncEventOnUpgradeCompletion(txnContext);
     }
 
     /**
      * Add flag to event table to trigger snapshot sync.
      */
-    public void addEventForSnapshotSyncOnRollingUpgrade(TxnContext txnContext) {
+    public void addSnapshotSyncEventOnUpgradeCompletion(TxnContext txnContext) {
         UUID rollingUpgradeForceSyncId = UUID.randomUUID();
 
         // Write a rolling upgrade force snapshot sync event to the logReplicationEventTable
@@ -114,7 +116,7 @@ public class LRRollingUpgradeHandler {
 
         LogReplicationMetadata.ReplicationEvent event = LogReplicationMetadata.ReplicationEvent.newBuilder()
                 .setEventId(rollingUpgradeForceSyncId.toString())
-                .setType(LogReplicationMetadata.ReplicationEvent.ReplicationEventType.ROLLING_UPGRADE_FORCE_SNAPSHOT_SYNC)
+                .setType(LogReplicationMetadata.ReplicationEvent.ReplicationEventType.UPGRADE_COMPLETION_FORCE_SNAPSHOT_SYNC)
                 .setEventTimestamp(Timestamp.newBuilder().setSeconds(Instant.now().getEpochSecond()).build())
                 .build();
 
