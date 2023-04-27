@@ -54,7 +54,7 @@ public final class LogReplicationEventListener implements StreamListener {
 
         // If the current node is not a leader, ignore the notifications.
         synchronized (discoveryService) {
-            if (!discoveryService.getIsLeader().get()) {
+            if (!discoveryService.getSessionManager().getReplicationContext().getIsLeader().get()) {
                 log.info("onNext[{}] :: skipped as current node is not the leader", results.getTimestamp());
                 return;
             }

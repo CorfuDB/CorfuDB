@@ -173,3 +173,7 @@ message ReplicationInfo {
 }
 
 /*------------------------------------*/
+
+message ReverseReplicateMsg {
+  string sinkLeaderNodeId = 1;
+}

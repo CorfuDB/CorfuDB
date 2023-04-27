@@ -22,6 +22,7 @@ import java.util.ArrayList;
  * Tests the apis in LogReplicationUtils.
  */
 @Slf4j
+@SuppressWarnings("checkstyle:magicnumber")
 public class LogReplicationUtilsTest extends AbstractViewTest {
 
     private CorfuRuntime corfuRuntime;

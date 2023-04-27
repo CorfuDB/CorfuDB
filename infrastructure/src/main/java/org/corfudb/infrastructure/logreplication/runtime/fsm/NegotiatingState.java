@@ -6,7 +6,7 @@ import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationE
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationEventMetadata;
 import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
-import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientRouter;
+import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientServerRouter;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationUpgradeManager;
 import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
@@ -44,8 +44,9 @@ public class NegotiatingState implements LogReplicationRuntimeState {
 
     private final LogReplicationUpgradeManager upgradeManager;
 
-    public NegotiatingState(CorfuLogReplicationRuntime fsm, ThreadPoolExecutor worker, LogReplicationClientRouter router,
-                            LogReplicationMetadataManager metadataManager, LogReplicationUpgradeManager upgradeManager) {
+    public NegotiatingState(CorfuLogReplicationRuntime fsm, ThreadPoolExecutor worker,
+                            LogReplicationClientServerRouter router, LogReplicationMetadataManager metadataManager,
+                            LogReplicationUpgradeManager upgradeManager) {
         this.fsm = fsm;
         this.metadataManager = metadataManager;
         this.worker = worker;
@@ -186,7 +187,7 @@ public class NegotiatingState implements LogReplicationRuntimeState {
 
         log.debug("Process negotiation response {} from {}", negotiationResponse, fsm.getRemoteClusterId());
 
-        long topologyConfigId = metadataManager.getTopologyConfigId();
+        long topologyConfigId = metadataManager.getReplicationContext().getTopologyConfigId();
 
         /*
          * The sink site has a smaller config ID, redo the discovery for this sink site when

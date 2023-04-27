@@ -83,6 +83,7 @@ public class ReplicationHandlerMethods {
      * @param req       The request message to handle.
      * @param r         The server router.
      */
+    @SuppressWarnings("unchecked")
     public void handle(CorfuMessage.RequestMsg req, CorfuMessage.ResponseMsg res, IClientServerRouter r) {
         final HandlerMethod handler = req != null ? getRequestHandler(req) : getResponseHandler(res);
 
@@ -197,7 +198,8 @@ public class ReplicationHandlerMethods {
     // Create a timer using cached timer name for the corresponding type
     private String getTimerName(@Nonnull String type) {
         timerNameCache.computeIfAbsent(type,
-                aType -> "corfu.infrastructure.log-replication-message-handler." + aType.toLowerCase());
+                aType -> ("corfu.infrastructure.log-replication-message-handler." +
+                        aType.toLowerCase()));
         return timerNameCache.get(type);
     }
 }

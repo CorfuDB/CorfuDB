@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.DataSender;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
+import org.corfudb.infrastructure.logreplication.transport.IClientServerRouter;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationUpgradeManager;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
@@ -16,7 +17,6 @@ import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationF
 import org.corfudb.infrastructure.logreplication.replication.fsm.ObservableAckMsg;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.DefaultReadProcessor;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.ReadProcessor;
-import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClient;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 
@@ -60,11 +60,11 @@ public class LogReplicationSourceManager {
      * @param params Log Replication parameters
      * @param metadataManager Replication Metadata Manager
      */
-    public LogReplicationSourceManager(LogReplicationRuntimeParameters params, LogReplicationClient client,
+    public LogReplicationSourceManager(LogReplicationRuntimeParameters params, IClientServerRouter router,
                                        LogReplicationMetadataManager metadataManager,
                                        LogReplicationUpgradeManager upgradeManager,
                                        LogReplicationSession session, LogReplicationContext replicationContext) {
-        this(params, metadataManager, new CorfuDataSender(client), upgradeManager, session, replicationContext);
+        this(params, metadataManager, new CorfuDataSender(router, session), upgradeManager, session, replicationContext);
     }
 
     @VisibleForTesting
@@ -104,9 +104,6 @@ public class LogReplicationSourceManager {
         this.ackReader = new LogReplicationAckReader(this.metadataManager, runtime, session, replicationContext);
 
         this.logReplicationFSM = new LogReplicationFSM(this.runtime, upgradeManager, dataSender, readProcessor,
-                logReplicationFSMWorkers, ackReader, session, replicationContext);
-
-        this.logReplicationFSM = new LogReplicationFSM(this.runtime, dataSender, readProcessor,
                 logReplicationFSMWorkers, ackReader, session, replicationContext);
         this.logReplicationFSM.setTopologyConfigId(params.getTopologyConfigId());
         this.ackReader.setLogEntryReader(this.logReplicationFSM.getLogEntryReader());

@@ -30,6 +30,24 @@ public class ClusterDescriptor {
         this.nodeDescriptors = nodes;
     }
 
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        ClusterDescriptor that = (ClusterDescriptor) o;
+        return corfuPort == that.corfuPort && clusterId.equals(that.clusterId) &&
+                nodeDescriptors.equals(that.nodeDescriptors);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(clusterId, nodeDescriptors, corfuPort);
+    }
+
     public static String listToString(List<?> list) {
         String result = "";
         for (int i = 0; i < list.size(); i++) {

@@ -1,7 +1,6 @@
 package org.corfudb.infrastructure.logreplication.runtime;
 
 
-import com.google.common.base.Preconditions;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
@@ -19,7 +18,6 @@ import org.corfudb.infrastructure.logreplication.transport.IClientServerRouter;
 import org.corfudb.infrastructure.logreplication.transport.client.ChannelAdapterException;
 import org.corfudb.infrastructure.logreplication.transport.client.IClientChannelAdapter;
 import org.corfudb.infrastructure.logreplication.transport.server.IServerChannelAdapter;
-import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
@@ -35,7 +33,6 @@ import java.io.File;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.time.Duration;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -51,7 +48,6 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import static org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getDefaultProtocolVersionMsg;
-import static org.corfudb.protocols.service.CorfuProtocolMessage.getHeaderMsg;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getRequestMsg;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getResponseMsg;
 
@@ -112,6 +108,11 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
     private final Map<LogReplicationSession, ClusterDescriptor> sessionToRemoteClusterDescriptor;
 
     /**
+     * The replicationManager
+     */
+    private final CorfuReplicationManager replicationManager;
+
+    /**
      * local cluster ID
      */
     private final String localClusterId;
@@ -119,7 +120,6 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
     /**
      * local node ID
      */
-    @Getter
     private final String localNodeId;
 
     /**
@@ -175,24 +175,25 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
     /**
      * Log Replication Router Constructor
      *
+     * @param responseTimeout timeout for requests
      * @param replicationManager replicationManager to start FSM
      * @param localClusterId local cluster ID
      * @param localNodeId  local node ID
      * @param incomingSession sessions where the local cluster is SINK
-     * @param outgoingSession sessions where the local cluster is SOURCE
+     * @param outgoingSession sesssions where the local cluster is SOURCE
      * @param msgHandler LogReplicationServer instance, used to handle the incoming messages.
+     * @param sessionToRuntime Map of outgoing session and corresponding runtimeFSM objects
      */
-    public LogReplicationClientServerRouter(CorfuReplicationManager replicationManager,
-                                            String localClusterId, String localNodeId,
-                                            Set<LogReplicationSession> incomingSession,
-                                            Set<LogReplicationSession> outgoingSession,
-                                            LogReplicationServer msgHandler,
-                                            ServerContext serverContext,
-                                            LogReplicationPluginConfig pluginConfig) {
-        this.timeoutResponse = replicationManager.getCorfuRuntime().getParameters().getRequestTimeout().toMillis();
+    public LogReplicationClientServerRouter(long responseTimeout,
+                                            CorfuReplicationManager replicationManager, String localClusterId,
+                                            String localNodeId, Set<LogReplicationSession> incomingSession,
+                                            Set<LogReplicationSession> outgoingSession, LogReplicationServer msgHandler,
+                                            Map<LogReplicationSession, CorfuLogReplicationRuntime> sessionToRuntime) {
+        this.timeoutResponse = responseTimeout;
         this.localClusterId = localClusterId;
         this.localNodeId = localNodeId;
-        this.sessionToRuntimeFSM = replicationManager.getSessionRuntimeMap();
+        this.replicationManager = replicationManager;
+        this.sessionToRuntimeFSM = sessionToRuntime;
         this.incomingSession = incomingSession;
         this.outgoingSession = outgoingSession;
         this.msgHandler = msgHandler;
@@ -203,25 +204,27 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
         this.sessionToLeaderConnectionFuture = new ConcurrentHashMap<>();
         this.sessionToRemoteSourceLeaderManager = new ConcurrentHashMap<>();
         this.reverseReplicateInitMsgBuffer = new ConcurrentHashMap<>();
-        createTransportServerAdapter(serverContext, pluginConfig);
-        createTransportClientAdapter(pluginConfig);
+        this.clientChannelAdapter = null;
+        this.serverChannelAdapter = null;
     }
 
     /**
      * Initiate and start the transport layer server. All the sessions use this server to receive messages.
      *
      * @param serverContext
-     * @param pluginConfig
      * @return
      */
-    public void createTransportServerAdapter(ServerContext serverContext, LogReplicationPluginConfig pluginConfig) {
-        File jar = new File(pluginConfig.getTransportAdapterJARPath());
+    public CompletableFuture<Boolean> createTransportServerAdapter(ServerContext serverContext) {
+
+        LogReplicationPluginConfig config = new LogReplicationPluginConfig(serverContext.getPluginConfigFilePath());
+        File jar = new File(config.getTransportAdapterJARPath());
 
         try (URLClassLoader child = new URLClassLoader(new URL[]{jar.toURI().toURL()}, this.getClass().getClassLoader())) {
-            Class adapter = Class.forName(pluginConfig.getTransportServerClassCanonicalName(), true, child);
-            this.serverChannelAdapter = (IServerChannelAdapter) adapter
+            Class adapter = Class.forName(config.getTransportServerClassCanonicalName(), true, child);
+            this.serverChannelAdapter =  (IServerChannelAdapter) adapter
                     .getDeclaredConstructor(ServerContext.class, LogReplicationClientServerRouter.class)
                     .newInstance(serverContext, this);
+            return this.serverChannelAdapter.start();
         } catch (Exception e) {
             log.error("Fatal error: Failed to create serverAdapter", e);
             throw new UnrecoverableCorfuError(e);
@@ -230,48 +233,27 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
 
     /**
      * Initiate the transport layer client. All the sessions use this client to send messages.
-     * @param pluginConfig
+     * @param pluginFilePath
      */
-    public void createTransportClientAdapter(LogReplicationPluginConfig pluginConfig) {
+    public void createTransportClientAdapter(String pluginFilePath) {
         if(this.clientChannelAdapter != null) {
             log.trace("The client channel adapter is already initialized");
             return;
         }
 
-        File jar = new File(pluginConfig.getTransportAdapterJARPath());
+        LogReplicationPluginConfig config = new LogReplicationPluginConfig(pluginFilePath);
+        File jar = new File(config.getTransportAdapterJARPath());
 
         try (URLClassLoader child = new URLClassLoader(new URL[]{jar.toURI().toURL()}, this.getClass().getClassLoader())) {
             // Instantiate Channel Adapter (external implementation of the channel / transport)
-            Class adapterType = Class.forName(pluginConfig.getTransportClientClassCanonicalName(), true, child);
+            Class adapterType = Class.forName(config.getTransportClientClassCanonicalName(), true, child);
             this.clientChannelAdapter = (IClientChannelAdapter) adapterType
                     .getDeclaredConstructor(String.class, LogReplicationClientServerRouter.class)
                     .newInstance(this.localClusterId, this);
-            this.clientChannelAdapter.setChannelContext(this.serverChannelAdapter.getChannelContext());
         } catch (Exception e) {
             log.error("Fatal error: Failed to initialize transport adapter {}",
-                    pluginConfig.getTransportClientClassCanonicalName(), e);
+                    config.getTransportClientClassCanonicalName(), e);
             throw new UnrecoverableCorfuError(e);
-        }
-    }
-
-    /**
-     * Start server channel adapter with retry.
-     *
-     * @return Completable Future on connection start
-     */
-    public CompletableFuture<Boolean> startServerChannelAdapter() {
-        try {
-            return IRetry.build(IntervalRetry.class, () -> {
-                try {
-                    return this.serverChannelAdapter.start();
-                } catch (Exception e) {
-                    log.warn("Exception caught while starting server adapter, retrying", e);
-                    throw new RetryNeededException();
-                }
-            }).run();
-        } catch (InterruptedException e) {
-            log.error("Unrecoverable exception when starting server adapter.", e);
-            throw new UnrecoverableCorfuInterruptedError(e);
         }
     }
 
@@ -320,9 +302,8 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
         final CompletableFuture<T> cf = new CompletableFuture<>();
         try {
             // Get the next request ID.
-            requestId = sessionToRequestIdCounter.getOrDefault(session, new AtomicLong(0)).getAndIncrement();
+            requestId = sessionToRequestIdCounter.get(session).getAndIncrement();
 
-            sessionToOutstandingRequests.putIfAbsent(session, new HashMap<>());
             sessionToOutstandingRequests.get(session).put(requestId, cf);
 
             header.setRequestId(requestId);
@@ -369,15 +350,10 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
             // In the case the message is intended for a specific endpoint, we do not
             // block on connection future, this is the case of leader verification.
             if(isConnectionStarterForSession(session)) {
-                log.info("Send requestID/payload {}/{} via clientChannelAdapter for session {}", header.getRequestId(),
-                        payload.getPayloadCase(), session);
+                log.info("Send requestID {} via clientChannelAdapter for session {}", header.getRequestId(), session);
                 clientChannelAdapter.send(nodeId, getRequestMsg(header.build(), payload));
             } else {
-                // connection endpoints do not send leadership_query msgs.
-                Preconditions.checkArgument(!payload.getPayloadCase().equals(
-                        CorfuMessage.RequestPayloadMsg.PayloadCase.LR_LEADERSHIP_QUERY));
-                log.info("Send requestID/payload {}/{} via serverChannelAdapter for session {}", header.getRequestId(),
-                        payload.getPayloadCase(), session);
+                log.info("Send requestID {} via serverChannelAdapter for session {}", header.getRequestId(), session);
                 serverChannelAdapter.send(getRequestMsg(header.build(), payload));
             }
 
@@ -489,11 +465,6 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
         }
     }
 
-    public void inputRemoteSourceLeaderLoss(LogReplicationSession session) {
-        sessionToRemoteSourceLeaderManager.get(session).input(
-                new LogReplicationSinkEvent(LogReplicationSinkEvent.LogReplicationSinkEventType.REMOTE_LEADER_LOSS));
-    }
-
     @Override
     public void receive(CorfuMessage.ResponseMsg msg) {
         try {
@@ -528,13 +499,6 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
                 sessionToRuntimeFSM.get(session).setRemoteLeaderNodeId(remoteLeaderId);
                 // Start runtimeFSM
                 addConnectionUpEvent(session, remoteLeaderId);
-            } else if (isAckForLocalLeaderLoss(msg)) {
-                log.debug("Received an ACK for requestID/payload {}/{}", msg.getHeader().getRequestId(),
-                        msg.getPayload().getPayloadCase());
-                // the ACK for leadership loss msg from SOURCE is completed with null
-                completeRequest(msg.getHeader().getSession(), msg.getHeader().getRequestId(), null);
-                return;
-
             } else {
                 // Route the message to the handler.
                 if (log.isTraceEnabled()) {
@@ -551,41 +515,9 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
         }
     }
 
-    private boolean isAckForLocalLeaderLoss(CorfuMessage.ResponseMsg msg) {
-        return msg.getPayload().getPayloadCase().equals(CorfuMessage.ResponsePayloadMsg.PayloadCase.LR_ENTRY_ACK) &&
-                !msg.getPayload().getLrEntryAck().hasMetadata();
-    }
-
     @Override
     public void receive(CorfuMessage.RequestMsg message) {
         log.debug("Received request message {}", message.getPayload().getPayloadCase());
-        try {
-            if (message.getPayload().getPayloadCase().equals(CorfuMessage.RequestPayloadMsg.PayloadCase.LR_LEADERSHIP_LOSS)) {
-
-                // Leadership Loss is received as a request only if the local cluster is Sink and connection starter.
-                LogReplicationSession session = message.getHeader().getSession();
-
-                this.clientChannelAdapter.processLeadershipLoss(session);
-                sessionToRemoteSourceLeaderManager.get(session).input(new LogReplicationSinkEvent(
-                        LogReplicationSinkEvent.LogReplicationSinkEventType.REMOTE_LEADER_LOSS,
-                        message.getPayload().getLrLeadershipLoss().getNodeId()));
-                // ack the leadership loss msg with an empty payload
-                CorfuMessage.ResponsePayloadMsg responsePayloadMsg = CorfuMessage.ResponsePayloadMsg.newBuilder()
-                        .setLrEntryAck(LogReplication.LogReplicationEntryMsg.newBuilder().build()).build();
-
-                CorfuMessage.ResponseMsg responseMsg = getResponseMsg(getHeaderMsg(message.getHeader()),
-                        responsePayloadMsg);
-
-                // If there is a leadership loss on the remote Source cluster, send an ACK responding to it because
-                // the old leader is waiting(blocked) on this ACK
-                clientChannelAdapter.send(message.getPayload().getLrLeadershipLoss().getNodeId(), responseMsg);
-                return;
-            }
-        } catch (NullPointerException npe) {
-            log.error("Ignoring the leadership_loss msg. The replication components has already been stopped for " +
-                    "session {} ", message.getHeader().getSession());
-            return;
-        }
 
         // Route the message to the handler.
         if (log.isTraceEnabled()) {
@@ -593,7 +525,7 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
         }
 
         try {
-            msgHandler.handleMessage(message, null, this);
+            msgHandler.handleMessage(message, null,  this);
         } catch (Throwable t) {
             log.error("channelRead: Handling {} failed due to {}:{}",
                     message.getPayload().getPayloadCase(),
@@ -664,8 +596,7 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
     private boolean isValidMessage(CorfuMessage.RequestPayloadMsg message) {
         return message.getPayloadCase().equals(CorfuMessage.RequestPayloadMsg.PayloadCase.LR_ENTRY) ||
                 message.getPayloadCase().equals(CorfuMessage.RequestPayloadMsg.PayloadCase.LR_METADATA_REQUEST) ||
-                message.getPayloadCase().equals(CorfuMessage.RequestPayloadMsg.PayloadCase.LR_LEADERSHIP_QUERY) ||
-                message.getPayloadCase().equals(CorfuMessage.RequestPayloadMsg.PayloadCase.LR_LEADERSHIP_LOSS);
+                message.getPayloadCase().equals(CorfuMessage.RequestPayloadMsg.PayloadCase.LR_LEADERSHIP_QUERY);
     }
 
     /**

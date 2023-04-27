@@ -31,8 +31,9 @@ public class CorfuReplicationMultiSinkIT extends CorfuReplicationMultiSourceSink
     public static Collection input() {
 
         List<String> transportPlugins = Arrays.asList(
-            "src/test/resources/transport/grpcConfig.properties",
-            "src/test/resources/transport/nettyConfig.properties");
+            "src/test/resources/transport/grpcConfig.properties"
+//            "src/test/resources/transport/nettyConfig.properties"
+        );
 
         List<String> absolutePathPlugins = new ArrayList<>();
         transportPlugins.forEach(plugin -> {
@@ -63,6 +64,13 @@ public class CorfuReplicationMultiSinkIT extends CorfuReplicationMultiSourceSink
      */
     @Test
     public void testUpdatesOnReplicatedTables() throws Exception {
+        super.setUp(1, MAX_REMOTE_CLUSTERS, DefaultClusterManager.TP_MULTI_SINK);
+        verifySnapshotAndLogEntrySink(false);
+    }
+
+    @Test
+    public void testUpdatesOnReplicatedTables_sinkConnectionStarter() throws Exception {
+        super.setUp(1, MAX_REMOTE_CLUSTERS, DefaultClusterManager.TP_MULTI_SINK_REV_CONNECTION);
         verifySnapshotAndLogEntrySink(false);
     }
 

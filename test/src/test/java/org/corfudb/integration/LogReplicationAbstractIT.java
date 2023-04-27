@@ -85,7 +85,10 @@ public class LogReplicationAbstractIT extends AbstractIT {
 
     public static final String TAG_ONE = "tag_one";
 
-    public static String pluginConfigFilePath = "src/test/resources/transport/pluginConfig.properties";
+    public final static String nettyConfig = "src/test/resources/transport/nettyConfig.properties";
+    public final static String grpcConfig = "src/test/resources/transport/grpcConfig.properties";
+
+    public String pluginConfigFilePath;
 
     // Note: this flag is kept for debugging purposes only.
     // Log Replication Server should run as a process as the unexpected termination of it
@@ -183,13 +186,16 @@ public class LogReplicationAbstractIT extends AbstractIT {
 
     }
 
-    public void testEndToEndSnapshotAndLogEntrySyncUFO(boolean diskBased, boolean checkRemainingEntriesOnSecondLogEntrySync, int numSourceClusters) throws Exception {
-        testEndToEndSnapshotAndLogEntrySyncUFO(1, diskBased, checkRemainingEntriesOnSecondLogEntrySync, numSourceClusters);
+    public void testEndToEndSnapshotAndLogEntrySyncUFO(boolean diskBased,
+                                                       boolean checkRemainingEntriesOnSecondLogEntrySync,
+                                                       int numSourceClusters, boolean cleanup) throws Exception {
+        testEndToEndSnapshotAndLogEntrySyncUFO(1, diskBased, checkRemainingEntriesOnSecondLogEntrySync,
+                numSourceClusters, cleanup);
     }
 
     public void testEndToEndSnapshotAndLogEntrySyncUFO(int totalNumMaps, boolean diskBased,
                                                        boolean checkRemainingEntriesOnSecondLogEntrySync,
-                                                       int numSourceClusters) throws Exception {
+                                                       int numSourceClusters, boolean cleanup) throws Exception {
         // For the purpose of this test, Sink should get 3 transactions for status update:
         // (1) On startup, init the replication status for each Source cluster in a single transaction
         // (2) When starting snapshot sync apply : is_data_consistent = false
@@ -272,6 +278,10 @@ public class LogReplicationAbstractIT extends AbstractIT {
 
         } finally {
             executorService.shutdownNow();
+
+            if(!cleanup) {
+                return;
+            }
 
             if (sourceCorfu != null) {
                 sourceCorfu.destroy();

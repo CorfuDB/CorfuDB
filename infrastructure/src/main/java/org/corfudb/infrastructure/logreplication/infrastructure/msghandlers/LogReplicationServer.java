@@ -6,10 +6,10 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
+import org.corfudb.infrastructure.logreplication.infrastructure.SessionManager;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.transport.IClientServerRouter;
-import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationSinkManager;
 import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
@@ -27,7 +27,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 
-import static org.corfudb.protocols.service.CorfuProtocolLogReplication.getLeadershipLossResponseMsg;
+import static org.corfudb.protocols.service.CorfuProtocolLogReplication.getLeadershipLoss;
 import static org.corfudb.protocols.service.CorfuProtocolLogReplication.getLeadershipResponse;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getHeaderMsg;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getResponseMsg;
@@ -98,13 +98,27 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
         this.executor = context.getExecutorService(1, EXECUTOR_NAME_PREFIX);
     }
 
+    @VisibleForTesting
+    public LogReplicationServer(@Nonnull ServerContext context, LogReplicationSinkManager sinkManager,
+                                Set<LogReplicationSession> sessions,
+                                LogReplicationMetadataManager metadataManager, String localNodeId, String localClusterId,
+                                LogReplicationContext replicationContext) {
+        this.serverContext = context;
+        this.localNodeId = localNodeId;
+        this.localClusterId = localClusterId;
+        this.allSessions = sessions;
+        this.metadataManager = metadataManager;
+        this.replicationContext = replicationContext;
+        this.executor = context.getExecutorService(1, EXECUTOR_NAME_PREFIX);
+    }
+
     public LogReplicationSinkManager createSinkManager(LogReplicationSession session) {
         if(sessionToSinkManagerMap.containsKey(session)) {
             log.trace("Sink manager already exists for session {}", session);
             return sessionToSinkManagerMap.get(session);
         }
-        LogReplicationSinkManager sinkManager = new LogReplicationSinkManager(metadataManager, serverContext, session,
-                replicationContext);
+        LogReplicationSinkManager sinkManager = new LogReplicationSinkManager(replicationContext.getLocalCorfuEndpoint(),
+                metadataManager, serverContext, session, replicationContext);
         sessionToSinkManagerMap.put(session, sinkManager);
         log.info("Sink Manager created for session={}", session);
         return sinkManager;
@@ -145,7 +159,7 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
             session = LogReplicationSession.newBuilder()
                     .setSourceClusterId(getUUID(request.getHeader().getClusterId()).toString())
                     .setSinkClusterId(localClusterId)
-                    .setSubscriber(LogReplicationConfigManager.getDefaultSubscriber())
+                    .setSubscriber(SessionManager.getDefaultSubscriber())
                     .build();
         } else {
             session = request.getHeader().getSession();
@@ -350,7 +364,7 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
      */
     private void sendLeadershipLoss(@Nonnull RequestMsg request, @Nonnull IClientServerRouter router) {
         HeaderMsg responseHeader = getHeaderMsg(request.getHeader());
-        ResponseMsg response = getLeadershipLossResponseMsg(responseHeader, localNodeId);
+        ResponseMsg response = getLeadershipLoss(responseHeader, localNodeId);
         router.sendResponse(response);
     }
 

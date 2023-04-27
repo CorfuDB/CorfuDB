@@ -66,7 +66,7 @@ public class GRPCLogReplicationServerChannelAdapter extends IServerChannelAdapte
     }
 
     @Override
-    public CompletableFuture<Boolean> start() throws IllegalStateException {
+    public CompletableFuture<Boolean> start() {
         CompletableFuture<Boolean> serverCompletable = new CompletableFuture<>();
         try {
             server.start();
@@ -80,7 +80,6 @@ public class GRPCLogReplicationServerChannelAdapter extends IServerChannelAdapte
             log.error("Caught exception while starting server on port {}", port, e);
             serverCompletable.completeExceptionally(e);
         }
-
         return serverCompletable;
     }
 

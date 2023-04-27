@@ -31,5 +31,16 @@ public interface CorfuReplicationDiscoveryServiceAdapter {
 
     // TODO [V2]: Remove this when localNodeId moves to plugin
     String getLocalNodeId();
+    
+    /**
+     * Get outgoing sessions
+     * @return a set of sessions where the local cluster is a SOURCE
+     */
+    Set<LogReplicationSession> getOutgoingSessions();
 
+    /**
+     * Get incoming sessions
+     * @return a set of sessions where the local cluster is a SINK
+     */
+    Set<LogReplicationSession> getIncomingSessions();
 }

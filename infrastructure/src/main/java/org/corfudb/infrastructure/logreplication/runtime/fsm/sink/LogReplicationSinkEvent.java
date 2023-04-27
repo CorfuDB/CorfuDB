@@ -10,7 +10,7 @@ public class LogReplicationSinkEvent {
 
     /* Enum listing the various type of LogReplicationSinkEvent.
      */
-    public static enum LogReplicationSinkEventType {
+    public enum LogReplicationSinkEventType {
         ON_CONNECTION_UP, // a channel was successfully established
         ON_CONNECTION_DOWN, // something when wrong with the connection
         REMOTE_LEADER_NOT_FOUND, // Remote leader not found during verifyRemoteLeader

@@ -35,8 +35,7 @@ public abstract class IClientChannelAdapter {
      * Default Constructor
      *
      * @param localClusterId local cluster unique identifier
-     * @param remoteClusterDescriptor descriptor of the remote cluster (sink)
-     * @param router interface to forward
+     * @param router interface between LR and the transport layer
      */
     public IClientChannelAdapter(@Nonnull String localClusterId,
                                  @Nonnull LogReplicationClientServerRouter router) {
@@ -47,7 +46,7 @@ public abstract class IClientChannelAdapter {
     /**
      * Connect Asynchronously to all endpoints specified in the Cluster Descriptor.
      */
-    public abstract void connectAsync(ClusterDescriptor remoteCluster, LogReplicationSession sessionMsg) throws Exception;
+    public abstract void connectAsync(ClusterDescriptor remoteCluster, LogReplicationSession sessionMsg);
 
     /**
      * If connection is lost to a specific endpoint, attempt to reconnect to the specific node.

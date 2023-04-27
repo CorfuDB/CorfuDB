@@ -62,6 +62,9 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
     public static final ClusterUuidMsg TP_SINGLE_SOURCE_SINK = ClusterUuidMsg.newBuilder().setLsb(7L).setMsb(7L).build();
     public static final ClusterUuidMsg TP_MULTI_SINK = ClusterUuidMsg.newBuilder().setLsb(8L).setMsb(8L).build();
     public static final ClusterUuidMsg TP_MULTI_SOURCE = ClusterUuidMsg.newBuilder().setLsb(9L).setMsb(9L).build();
+    public static final ClusterUuidMsg TP_SINGLE_SOURCE_SINK_REV_CONNECTION = ClusterUuidMsg.newBuilder().setLsb(11L).setMsb(11L).build();
+    public static final ClusterUuidMsg TP_MULTI_SOURCE_REV_CONNECTION = ClusterUuidMsg.newBuilder().setLsb(12L).setMsb(12L).build();
+    public static final ClusterUuidMsg TP_MULTI_SINK_REV_CONNECTION = ClusterUuidMsg.newBuilder().setLsb(13L).setMsb(13L).build();
 
     @Getter
     private long configId;
@@ -102,6 +105,8 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
     // structure which tracks the current source/sinks
     private Set<String> tempPrevSourceClusterIds = new HashSet<>(DefaultClusterConfig.getSourceClusterIds());
     private Set<String> tempPrevSinkClusterIds = new HashSet<>(DefaultClusterConfig.getSinkClusterIds());
+
+    private boolean isSinkConnectionStarter = false;
 
     public DefaultClusterManager() {
         topology = new DefaultClusterConfig();
@@ -290,15 +295,24 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
                             .filter(cluster -> cluster.getClusterId()
                                     .equals(DefaultClusterConfig.getSinkClusterIds().get(0)))
                             .findFirst().get(), addModel(Arrays.asList(LogReplication.ReplicationModel.FULL_TABLE)));
-            connectionEndPoints.add(topologyConfig.getRemoteSinkClusters().values().stream()
-                    .filter(cluster -> cluster.getClusterId().equals(DefaultClusterConfig.getSinkClusterIds().get(0)))
-                    .findFirst().get());
+
+            if(!isSinkConnectionStarter) {
+                connectionEndPoints.add(topologyConfig.getRemoteSinkClusters().values().stream()
+                        .filter(cluster -> cluster.getClusterId().equals(DefaultClusterConfig.getSinkClusterIds().get(0)))
+                        .findFirst().get());
+            }
         } else {
             remoteSourceToReplicationModels.put(topologyConfig.getRemoteSourceClusters().values().stream()
                             .filter(cluster -> cluster.getClusterId()
                                     .equals(DefaultClusterConfig.getSourceClusterIds().get(0)))
                             .findFirst().get(),
                     addModel(Arrays.asList(LogReplication.ReplicationModel.FULL_TABLE)));
+
+            if(isSinkConnectionStarter) {
+                connectionEndPoints.add(topologyConfig.getRemoteSourceClusters().values().stream()
+                        .filter(cluster -> cluster.getClusterId().equals(DefaultClusterConfig.getSourceClusterIds().get(0)))
+                        .findFirst().get());
+            }
         }
         log.info("new topology has clusters: source: {} sink: {} connectionEndpoints: {}",
                 remoteSourceToReplicationModels, remoteSinkToReplicationModels, connectionEndPoints);
@@ -419,11 +433,17 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
 
         if(DefaultClusterConfig.getSourceClusterIds().contains(localCluster.getClusterId())) {
             remoteSinkToReplicationModels.putAll(topologyConfig.getRemoteSinkClusterToReplicationModels());
-            topologyConfig.getRemoteSinkClusters().values().forEach(connectionEndPoints::add);
+            if(!isSinkConnectionStarter) {
+                topologyConfig.getRemoteSinkClusters().values().forEach(connectionEndPoints::add);
+            }
         } else {
             remoteSourceToReplicationModels.put(topologyConfig.getRemoteSourceClusters().values().stream()
                     .filter(cluster -> cluster.getClusterId().equals(DefaultClusterConfig.getSourceClusterIds().get(0)))
                     .findFirst().get(), addModel(Arrays.asList(LogReplication.ReplicationModel.FULL_TABLE)));
+
+            if(isSinkConnectionStarter) {
+                connectionEndPoints.addAll(remoteSourceToReplicationModels.keySet());
+            }
         }
         log.info("new Topology single-source-multi-sink: source: {} sink: {} connectionEndpoints: {}",
                 remoteSourceToReplicationModels, remoteSinkToReplicationModels, connectionEndPoints);
@@ -453,12 +473,18 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
                     .filter(cluster -> cluster.getClusterId().equals(DefaultClusterConfig.getSinkClusterIds().get(0)))
                     .findFirst().get(), addModel(Arrays.asList(LogReplication.ReplicationModel.FULL_TABLE)));
 
-            connectionEndPoints.add(topologyConfig.getRemoteSinkClusters().values().stream()
-                    .filter(cluster -> cluster.getClusterId().equals(DefaultClusterConfig.getSinkClusterIds().get(0)))
-                    .findFirst().get());
+            if (!isSinkConnectionStarter) {
+                connectionEndPoints.add(topologyConfig.getRemoteSinkClusters().values().stream()
+                        .filter(cluster -> cluster.getClusterId().equals(DefaultClusterConfig.getSinkClusterIds().get(0)))
+                        .findFirst().get());
+            }
 
         } else {
             remoteSourceToReplicationModels.putAll(topologyConfig.getRemoteSourceClusterToReplicationModels());
+
+            if (isSinkConnectionStarter) {
+                connectionEndPoints.addAll(topologyConfig.getRemoteSourceClusters().values());
+            }
         }
 
         log.info("new topology:: the multi-source-single-sink: source: {} sink: {} connectionEndpoints: {}",
@@ -619,21 +645,27 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
 
         ClusterDescriptor localCluster = findLocalCluster();
 
-        if(DefaultClusterConfig.getSinkClusterIds().contains(localCluster.getClusterId())) {
-            remoteSourceToReplicationModels.put(backupCluster,
-                    addModel(Arrays.asList(LogReplication.ReplicationModel.FULL_TABLE)));
-
-        } else if (localCluster.getClusterId().equals(backupCluster.getClusterId())){
+        if (localCluster.getClusterId().equals(backupCluster.getClusterId())){
             topologyConfig.getAllClustersInTopology().values().stream()
                     .filter(cluster -> cluster.getClusterId().equals(DefaultClusterConfig.getSinkClusterIds().get(0)))
                     .forEach(cluster ->
                             remoteSinkToReplicationModels.put(cluster,
                                     addModel(Arrays.asList(LogReplication.ReplicationModel.FULL_TABLE))));
-            connectionEndPoints.addAll(remoteSinkToReplicationModels.keySet());
+
+            if (!isSinkConnectionStarter) {
+                connectionEndPoints.addAll(remoteSinkToReplicationModels.keySet());
+            }
+        } else if(DefaultClusterConfig.getSinkClusterIds().contains(localCluster.getClusterId())) {
+            remoteSourceToReplicationModels.put(backupCluster,
+                    addModel(Arrays.asList(LogReplication.ReplicationModel.FULL_TABLE)));
+
+            if (isSinkConnectionStarter) {
+                connectionEndPoints.addAll(remoteSourceToReplicationModels.keySet());
+            }
         }
 
-        log.info("added the backup as a SOURCE cluster: source: {} sink: {} connectionEndpoints: {}", remoteSourceToReplicationModels,
-                remoteSinkToReplicationModels, connectionEndPoints);
+        log.info("added the backup as a SOURCE cluster: source: {} sink: {} connectionEndpoints: {}",
+                remoteSourceToReplicationModels, remoteSinkToReplicationModels, connectionEndPoints);
 
         return new TopologyDescriptor(++configId, remoteSinkToReplicationModels, remoteSourceToReplicationModels,
                 topologyConfig.getAllClustersInTopology(), connectionEndPoints, localNodeId);
@@ -753,6 +785,15 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
                     clusterManager.createSingleSourceMultiSinkTopology();
                 } else if (entry.getKey().equals(TP_MULTI_SOURCE)) {
                     clusterManager.createMultiSourceSingleSinkTopology();
+                } else if(entry.getKey().equals(TP_MULTI_SINK_REV_CONNECTION)) {
+                    clusterManager.isSinkConnectionStarter = true;
+                    clusterManager.createSingleSourceMultiSinkTopology();
+                } else if(entry.getKey().equals(TP_MULTI_SOURCE_REV_CONNECTION)) {
+                    clusterManager.isSinkConnectionStarter = true;
+                    clusterManager.createMultiSourceSingleSinkTopology();
+                } else if(entry.getKey().equals(TP_SINGLE_SOURCE_SINK_REV_CONNECTION)) {
+                    clusterManager.isSinkConnectionStarter = true;
+                    clusterManager.initSingleSourceSinkTopology();
                 }
                 return;
             }

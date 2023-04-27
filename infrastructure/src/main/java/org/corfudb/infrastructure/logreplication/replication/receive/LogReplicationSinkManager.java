@@ -224,7 +224,7 @@ public class LogReplicationSinkManager implements DataReceiver {
         logEntryWriter = new LogEntryWriter(metadataManager, session, replicationContext);
 
         logEntrySinkBufferManager = new LogEntrySinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,
-                metadataManager.getReplicationMetadata(session).getLastLogEntryApplied(), this);
+                metadataManager.getReplicationMetadata(session).getLastLogEntryBatchProcessed(), this);
     }
 
     private ISnapshotSyncPlugin getOnSnapshotSyncPlugin() {

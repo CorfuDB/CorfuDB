@@ -5,9 +5,9 @@ import com.google.gson.stream.JsonReader;
 import io.grpc.ConnectivityState;
 import io.grpc.Context;
 import io.grpc.ManagedChannel;
+import io.grpc.ManagedChannelBuilder;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
-import io.grpc.netty.shaded.io.grpc.netty.NettyChannelBuilder;
 import io.grpc.stub.StreamObserver;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -26,7 +26,6 @@ import org.corfudb.util.NodeLocator;
 
 import javax.annotation.Nonnull;
 import java.io.InputStreamReader;
-import java.net.InetSocketAddress;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -95,9 +94,8 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
     }
 
     @Override
-    public void connectAsync() {
-        this.executorService.submit(() ->
-        getRemoteClusterDescriptor().getNodeDescriptors().forEach(node -> {
+    public void connectAsync(ClusterDescriptor remoteClusterDescriptor, LogReplicationSession session) {
+        this.executorService.submit(() -> remoteClusterDescriptor.getNodeDescriptors().forEach(node -> {
             try {
                 NodeLocator nodeLocator = NodeLocator.parseString(node.getEndpoint());
                 ManagedChannel channel;
@@ -106,7 +104,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
                 Pair<Boolean, ManagedChannel> reuseChannel = canReuseChannel(node.getNodeId());
                 if(!nodeIdToChannelMap.containsKey(node.getNodeId()) || !reuseChannel.getLeft()) {
                     log.info("GRPC create new channel to node{}@{}:{}", node.getNodeId(), nodeLocator.getHost(), nodeLocator.getPort());
-                    channel = NettyChannelBuilder.forAddress(new InetSocketAddress(nodeLocator.getHost(), nodeLocator.getPort()))
+                    channel = ManagedChannelBuilder.forAddress(nodeLocator.getHost(), nodeLocator.getPort())
                             .usePlaintext()
                             .defaultServiceConfig(getRetryingServiceConfig())
                             .enableRetry()
@@ -127,7 +125,9 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
                 log.error("Error: {} :::: {}", e.getCause(), e.getStackTrace());
                 onConnectionDown(node.getNodeId(), session);
             }
-        })).get();
+        }
+
+        return Pair.of(false, null);
     }
 
     private Pair<Boolean, ManagedChannel> canReuseChannel(String nodeId) {
@@ -146,8 +146,8 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
     }
 
     @Override
-    public void connectAsync(String nodeId) {
-        Optional<String> endpoint = getRemoteClusterDescriptor().getNodeDescriptors()
+    public void connectAsync(ClusterDescriptor remoteCluster, String nodeId, LogReplicationSession session) {
+        Optional<String> endpoint = remoteCluster.getNodeDescriptors()
                 .stream()
                 .filter(nodeDescriptor -> nodeDescriptor.getNodeId().toString().equals(nodeId))
                 .map(NodeDescriptor::getEndpoint)
@@ -168,7 +168,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
                 Pair<Boolean, ManagedChannel> reuseChannel = canReuseChannel(nodeId);
                 if(!nodeIdToChannelMap.containsKey(nodeId) || !reuseChannel.getLeft()) {
                     log.info("GRPC create new channel to node{}@{}:{}", nodeId, nodeLocator.getHost(), nodeLocator.getPort());
-                    channel = NettyChannelBuilder.forAddress(new InetSocketAddress(nodeLocator.getHost(), nodeLocator.getPort()))
+                    channel = ManagedChannelBuilder.forAddress(nodeLocator.getHost(), nodeLocator.getPort())
                             .usePlaintext()
                             .defaultServiceConfig(getRetryingServiceConfig())
                             .enableRetry()
@@ -242,7 +242,6 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
                     getRouter().completeExceptionally(sessionMsg, requestId, t);
                     responseObserverMap.remove(sessionMsg);
                     onServiceUnavailable(t, finalNodeId, sessionMsg);
-                    getRouter().inputRemoteSourceLeaderLoss(sessionMsg);
                 }
 
                 @Override
@@ -261,10 +260,6 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
         }
 
         responseObserverMap.get(sessionMsg).onNext(response);
-    }
-
-    public void processLeadershipLoss(LogReplicationSession session) {
-        responseObserverMap.remove(session);
     }
 
     private void queryLeadership(String nodeId, RequestMsg request) {
@@ -292,8 +287,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
         try {
             log.info("queryLeadership for session {}", session);
             if (sessionToAsyncStubMap.containsKey(session)) {
-                sessionToAsyncStubMap.get(session).withDeadlineAfter(10, TimeUnit.SECONDS)
-                        .queryLeadership(request, responseObserver);
+                sessionToAsyncStubMap.get(session).queryLeadership(request, responseObserver);
             } else {
                 log.warn("Stub not found for session {}. Dropping message of type {}",
                         session, request.getPayload().getPayloadCase());
