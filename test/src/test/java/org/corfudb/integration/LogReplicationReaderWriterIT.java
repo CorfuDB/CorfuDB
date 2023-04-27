@@ -52,6 +52,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -254,12 +255,12 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
         }
     }
 
-    public static void writeSnapshotMsgs(List<LogReplicationEntryMsg> msgQ, CorfuRuntime rt) {
-
-        LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt, 0);
+    private void writeSnapshotMsgs(List<LogReplicationEntryMsg> msgQ, CorfuRuntime rt) {
+        LogReplicationConfigManager configManager = new LogReplicationConfigManager(rt);
+        LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt,
+                getReplicationContext(configManager, 0, "test", true));
         logReplicationMetadataManager.addSession(getDefaultSession(), 0, true);
 
-        LogReplicationConfigManager configManager = new LogReplicationConfigManager(rt);
 
         StreamsSnapshotWriter writer = new StreamsSnapshotWriter(rt, logReplicationMetadataManager,
             getDefaultSession(), new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT));
@@ -323,12 +324,12 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
         assertThat(reader.getLastOpaqueEntry()).isNull();
     }
 
-    public static void writeLogEntryMsgs(List<LogReplicationEntryMsg> msgQ, CorfuRuntime rt) {
-
-        LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt, 0);
-        logReplicationMetadataManager.addSession(getDefaultSession(),0, true);
+    private void writeLogEntryMsgs(List<LogReplicationEntryMsg> msgQ, CorfuRuntime rt) {
 
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(rt);
+        LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt,
+                getReplicationContext(configManager, 0, "test", true));
+        logReplicationMetadataManager.addSession(getDefaultSession(),0, true);
 
         LogEntryWriter writer = new LogEntryWriter(logReplicationMetadataManager, getDefaultSession(),
                 new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT));
@@ -340,6 +341,11 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
         for (LogReplicationEntryMsg msg : msgQ) {
             writer.apply(msg);
         }
+    }
+
+    private LogReplicationContext getReplicationContext(LogReplicationConfigManager configManager, long topologyConfigId,
+                                                        String localCorfuEndpoint, boolean isLeader) {
+        return new LogReplicationContext(configManager, topologyConfigId, localCorfuEndpoint, isLeader);
     }
 
     private void accessTxStream(Iterator<ILogData> iterator, int num) {

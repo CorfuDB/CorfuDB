@@ -207,6 +207,9 @@ public class LogReplicationFSM {
     @Getter
     private final LogReplicationAckReader ackReader;
 
+    @Getter
+    private final LogReplicationSession session;
+
     /**
      * Constructor for LogReplicationFSM, custom read processor for data transformation.
      *
@@ -234,9 +237,9 @@ public class LogReplicationFSM {
         this.logReplicationFSMConsumer = Executors.newSingleThreadExecutor(new
             ThreadFactoryBuilder().setNameFormat("replication-fsm-consumer-" + session.hashCode())
             .build());
+        this.session = session;
 
         init(dataSender, session, upgradeManager);
-
     }
 
     /**
@@ -270,6 +273,7 @@ public class LogReplicationFSM {
         this.logReplicationFSMConsumer = Executors.newSingleThreadExecutor(new
                 ThreadFactoryBuilder().setNameFormat("replication-fsm-consumer-" + session.hashCode())
                 .build());
+        this.session = session;
 
         init(dataSender, session, upgradeManager);
     }
