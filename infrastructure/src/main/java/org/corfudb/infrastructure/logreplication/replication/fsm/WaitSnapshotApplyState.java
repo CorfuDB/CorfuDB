@@ -82,22 +82,33 @@ public class WaitSnapshotApplyState implements LogReplicationState {
     public LogReplicationState processEvent(LogReplicationEvent event) throws IllegalTransitionException {
         switch (event.getType()) {
             case SNAPSHOT_SYNC_REQUEST:
-                log.info("Snapshot Sync requested {} while waiting for {} to complete.", event.getEventId(), getTransitionEventId());
+                log.info("Snapshot Sync requested {} while waiting for {} to complete.",
+                        event.getMetadata().getRequestId(), getTransitionEventId());
                 LogReplicationState snapshotSyncState = fsm.getStates().get(LogReplicationStateType.IN_SNAPSHOT_SYNC);
-                snapshotSyncState.setTransitionEventId(event.getEventId());
+                snapshotSyncState.setTransitionEventId(event.getMetadata().getRequestId());
                 ((InSnapshotSyncState)snapshotSyncState).setForcedSnapshotSync(event.getMetadata().isForcedSnapshotSync());
                 return snapshotSyncState;
             case SYNC_CANCEL:
-                log.debug("Sync has been canceled while waiting for Snapshot Sync {} to complete apply. Restart.", transitionEventId);
-                LogReplicationState inSnapshotSyncState = fsm.getStates().get(LogReplicationStateType.IN_SNAPSHOT_SYNC);
-                inSnapshotSyncState.setTransitionEventId(UUID.randomUUID());
-                ((InSnapshotSyncState)inSnapshotSyncState).setForcedSnapshotSync(false);
-                return inSnapshotSyncState;
+                if(fsm.isValidTransition(transitionEventId, event.getMetadata().getRequestId())) {
+                    log.debug("Sync has been canceled while waiting for Snapshot Sync {} to complete apply. Restart.", transitionEventId);
+                    LogReplicationState inSnapshotSyncState = fsm.getStates().get(LogReplicationStateType.IN_SNAPSHOT_SYNC);
+                    // new ID for new snapshot sync ID
+                    inSnapshotSyncState.setTransitionEventId(UUID.randomUUID());
+                    ((InSnapshotSyncState) inSnapshotSyncState).setForcedSnapshotSync(event.getMetadata().isForcedSnapshotSync());
+                    return inSnapshotSyncState;
+                }
+                log.info("Ignoring Sync cancel event for snapshot sync {}, as ongoing snapshot sync is {}",
+                        event.getMetadata().getRequestId(), transitionEventId);
+                return this;
             case SNAPSHOT_APPLY_IN_PROGRESS:
-                log.debug("Snapshot Apply in progress {}. Verify status.", transitionEventId);
+                if(fsm.isValidTransition(transitionEventId, event.getMetadata().getRequestId())) {
+                    log.debug("Snapshot Apply in progress {}. Verify status.", transitionEventId);
+                    return this;
+                }
+                log.info("Ignoring Snapshot Apply in Progress event for snapshot sync {}, as ongoing snapshot sync is {}",
+                        event.getMetadata().getRequestId(), transitionEventId);
                 return this;
             case SNAPSHOT_APPLY_COMPLETE:
-                UUID snapshotSyncApplyId = event.getMetadata().getRequestId();
                 /*
                  This is required as in the following sequence of events:
 
@@ -109,23 +120,25 @@ public class WaitSnapshotApplyState implements LogReplicationState {
                  as 4, attempting to process a completion event for the incorrect snapshot sync.
                  */
 
-                if (snapshotSyncApplyId.equals(transitionEventId)) {
+                if (fsm.isValidTransition(transitionEventId, event.getMetadata().getRequestId())) {
                     LogReplicationState logEntrySyncState = fsm.getStates()
                             .get(LogReplicationStateType.IN_LOG_ENTRY_SYNC);
                     // We need to set a new transition event Id, so anything happening on this new state
                     // is marked with this unique Id and correlated to cancel or trimmed events.
-                    logEntrySyncState.setTransitionEventId(event.getEventId());
+                    logEntrySyncState.setTransitionEventId(transitionEventId);
                     fsm.setBaseSnapshot(event.getMetadata().getLastTransferredBaseSnapshot());
                     fsm.setAckedTimestamp(event.getMetadata().getLastLogEntrySyncedTimestamp());
                     log.info("Snapshot Sync apply completed, syncRequestId={}, baseSnapshot={}. Transition to LOG_ENTRY_SYNC",
-                            event.getEventId(), event.getMetadata().getLastTransferredBaseSnapshot());
+                            event.getMetadata().getRequestId(), event.getMetadata().getLastTransferredBaseSnapshot());
                     return logEntrySyncState;
                 }
 
-                log.warn("Ignoring snapshot sync apply complete event, for request {}, as ongoing snapshot sync is {}",
-                        snapshotSyncApplyId, transitionEventId);
+                log.warn("Ignoring snapshot sync apply complete event for snapshot sync {}, as ongoing snapshot sync is {}",
+                        event.getMetadata().getRequestId(), transitionEventId);
                 return this;
             case REPLICATION_STOP:
+                // No need to validate transitionId as REPLICATION_STOP comes either from enforceSnapshotSync or when
+                // the runtime FSM transitions back to VERIFYING_REMOTE_LEADER from REPLICATING state
                 log.debug("Stop Log Replication while waiting for snapshot sync apply to complete id={}", transitionEventId);
                 stopSnapshotApply.set(true);
                 return fsm.getStates().get(LogReplicationStateType.INITIALIZED);
@@ -133,7 +146,13 @@ public class WaitSnapshotApplyState implements LogReplicationState {
                 log.debug("Shutdown Log Replication while waiting for snapshot sync apply to complete id={}", transitionEventId);
                 return fsm.getStates().get(LogReplicationStateType.ERROR);
             default: {
-                log.warn("Unexpected log replication event {} when in wait snapshot sync apply state.", event.getType());
+                if (!fsm.isValidTransition(transitionEventId, event.getMetadata().getRequestId())) {
+                    log.warn("Ignoring log replication event {} for sync {} when in wait snapshot sync apply state for sync {}",
+                            event.getType(), event.getMetadata().getRequestId(), transitionEventId);
+                    return this;
+                }
+                log.warn("Unexpected log replication event {} for sync {} when in wait snapshot sync apply state for sync {}",
+                        event.getType(), event.getMetadata().getRequestId(), transitionEventId);
                 throw new IllegalTransitionException(event.getType(), getType());
             }
         }

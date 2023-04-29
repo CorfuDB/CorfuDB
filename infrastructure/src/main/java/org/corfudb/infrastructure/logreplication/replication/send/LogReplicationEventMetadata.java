@@ -13,10 +13,10 @@ public class LogReplicationEventMetadata {
     private static final UUID NIL_UUID = new UUID(0,0);
 
     /*
-     * Represents the request/event Id that preceded this event.
+     * Represents the request ID of snapshot_sync or log_entry_sync state
      *
-     * This is used to correlate the event with the state in which it was originated.
-     * For example, a trimmed exception from state A vs. a trimmed exception from state B.
+     * This is used to correlate the sync and the event.
+     * For example, a snapshot sync ID 1 , event E1 and a snapshot sync ID2 with event E2
      */
     private UUID requestId;
 
@@ -48,6 +48,16 @@ public class LogReplicationEventMetadata {
      */
     public LogReplicationEventMetadata(UUID requestId) {
         this.requestId = requestId;
+    }
+
+    /**
+     * Constructor
+     *
+     * @param requestId identifier of the request that preceded this event.
+     */
+    public LogReplicationEventMetadata(UUID requestId, boolean forceSnapshotSync) {
+        this.requestId = requestId;
+        this.forceSnapshotSync = forceSnapshotSync;
     }
 
     /**

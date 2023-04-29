@@ -57,7 +57,9 @@ public class LogReplicationEvent {
      * @param type log replication event type
      */
     public LogReplicationEvent(LogReplicationEventType type) {
-        this(type, LogReplicationEventMetadata.empty());
+        this.type = type;
+        this.eventId = Utils.genPseudorandomUUID();
+        this.metadata = new LogReplicationEventMetadata(eventId);
     }
 
     /**
