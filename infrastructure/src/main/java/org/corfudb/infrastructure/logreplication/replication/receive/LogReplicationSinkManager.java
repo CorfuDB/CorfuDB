@@ -4,6 +4,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.google.protobuf.TextFormat;
 import lombok.Getter;
+import lombok.Synchronized;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.config.ConfigParamNames;
 import org.corfudb.common.util.ObservableValue;
@@ -39,6 +40,7 @@ import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
 import static org.corfudb.protocols.service.CorfuProtocolLogReplication.getLrEntryAckMsg;
@@ -410,7 +412,7 @@ public class LogReplicationSinkManager implements DataReceiver {
      *
      * @param entry a SNAPSHOT_START message
      */
-    private void processSnapshotStart(LogReplicationEntryMsg entry) {
+    private synchronized void processSnapshotStart(LogReplicationEntryMsg entry) {
         baseSnapshotTimestamp = entry.getMetadata().getSnapshotTimestamp();
 
         // Signal start of snapshot sync to the writer, so data can be cleared (on old snapshot syncs)
@@ -449,17 +451,35 @@ public class LogReplicationSinkManager implements DataReceiver {
 
         processSnapshotSyncApplied(entry);
 
-        rxState = RxState.LOG_ENTRY_SYNC;
+        // TODO: revisit this when increasing the number of threads in logReplicationServer.
+        // snapshot_Start and completeSnapshotApply is executed by different threads, and they race on updating rxState.
+        // Consider this scenario: Thread1 is working on a snapshot apply with baseSnapshotTimestamp T2 and comes here
+        // to update the in-memory states.
+        // At the same time thread2 receives a snapshot_start msg and updates the baseSnapshotTimestamp to T2 and
+        // updates rxState to Snapshot_Sync.
+        // Thread1 updates rxState to Log_entry_sync and exists.
+        // Now, the incoming snapshot messages will be dropped as the rxState = Log_entry_sync.
+        // Synchronizing the 2 threads and and checking baseSnapshotTimestamp before updating rxState will resolve this
+        // race condition.
+        synchronized (this) {
+            if (entry.getMetadata().getSnapshotTimestamp() < baseSnapshotTimestamp) {
+                log.warn("Not transition to Log_Entry sync there is a msitmatch between the current snapshotTs {} and the " +
+                        "applied snapshot Ts {}", baseSnapshotTimestamp, entry.getMetadata().getSnapshotTimestamp());
+                return;
+            }
 
-        // Create the Sink Buffer Manager with the last processed timestamp as the snapshot timestamp (log entry
-        // batch processed timestamp is already updated to the snapshot timestamp
-        logEntrySinkBufferManager = new LogEntrySinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,
-                metadataManager.getReplicationMetadata(session)
-                    .getLastLogEntryBatchProcessed(), this);
-        logEntryWriter.reset(entry.getMetadata().getSnapshotTimestamp(), entry.getMetadata().getSnapshotTimestamp());
+            rxState = RxState.LOG_ENTRY_SYNC;
 
-        log.info("Snapshot apply complete, sync_id={}, snapshot={}, state={}", entry.getMetadata().getSyncRequestId(),
-                entry.getMetadata().getSnapshotTimestamp(), rxState);
+            // Create the Sink Buffer Manager with the last processed timestamp as the snapshot timestamp (log entry
+            // batch processed timestamp is already updated to the snapshot timestamp
+            logEntrySinkBufferManager = new LogEntrySinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,
+                    metadataManager.getReplicationMetadata(session)
+                            .getLastLogEntryBatchProcessed(), this);
+            logEntryWriter.reset(entry.getMetadata().getSnapshotTimestamp(), entry.getMetadata().getSnapshotTimestamp());
+
+            log.info("Snapshot apply complete, sync_id={}, snapshot={}, state={}", entry.getMetadata().getSyncRequestId(),
+                    entry.getMetadata().getSnapshotTimestamp(), rxState);
+        }
     }
 
     /**

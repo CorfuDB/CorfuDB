@@ -54,6 +54,16 @@ public class LogReplicationEventMetadata {
      * Constructor
      *
      * @param requestId identifier of the request that preceded this event.
+     */
+    public LogReplicationEventMetadata(UUID requestId, boolean forceSnapshotSync) {
+        this.requestId = requestId;
+        this.forceSnapshotSync = forceSnapshotSync;
+    }
+
+    /**
+     * Constructor
+     *
+     * @param requestId identifier of the request that preceded this event.
      * @param syncTimestamp last synced timestamp.
      */
     public LogReplicationEventMetadata(UUID requestId, long syncTimestamp) {
