@@ -98,8 +98,8 @@ public class ObjectsViewIT extends AbstractIT {
         writeTx(table2rt2, rt2, key, singleWrite, multiWrite);
 
         // Perform a read on table1 with rt1. Since globalTail = 21 > resolvedUpTo = 13, we will trigger a sync.
-        // However, when applying the updates from the object, 11 will not be >= 13, so an IllegalStateException
-        // will be thrown. The object layer should detect this and reset the object in order to provide a correct view.
+        // However, when applying the updates from the object, 11 will not be >= 13, so a TrimmedException will
+        // be thrown. The object layer should detect this and reset the object in order to provide a correct view.
         rt1.getObjectsView().TXBegin();
         assertThat(table1.get(key)).isEqualTo(key + multiWrite);
         rt1.getObjectsView().TXEnd();
