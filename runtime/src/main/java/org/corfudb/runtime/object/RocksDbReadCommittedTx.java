@@ -12,6 +12,7 @@ import org.rocksdb.RocksDBException;
 import org.rocksdb.RocksIterator;
 import org.rocksdb.Transaction;
 
+import java.util.Set;
 import java.util.concurrent.locks.StampedLock;
 
 /**
@@ -26,28 +27,28 @@ import java.util.concurrent.locks.StampedLock;
 public class RocksDbReadCommittedTx<S extends SnapshotGenerator<S>> implements RocksDbApi<S> {
     private final OptimisticTransactionDB rocksDb;
     private final ReadOptions readOptions;
-    private final RocksDbColumnFamilyRegistry cfRegistry;
 
-    public RocksDbReadCommittedTx(@NonNull OptimisticTransactionDB rocksDb,
-                                  @NonNull RocksDbColumnFamilyRegistry cfRegistry) {
+    public RocksDbReadCommittedTx(@NonNull OptimisticTransactionDB rocksDb) {
         this.rocksDb = rocksDb;
-        this.cfRegistry = cfRegistry;
         this.readOptions = new ReadOptions();
     }
     
     @Override
-    public byte[] get(@NonNull ByteBuf keyPayload) throws RocksDBException {
-        return this.rocksDb.get(readOptions, ByteBufUtil.getBytes(
+    public byte[] get(@NonNull ColumnFamilyHandle columnFamilyHandle,
+                      @NonNull ByteBuf keyPayload) throws RocksDBException {
+        return this.rocksDb.get(columnFamilyHandle, readOptions, ByteBufUtil.getBytes(
                 keyPayload, keyPayload.arrayOffset(), keyPayload.readableBytes(), false));
     }
 
     @Override
-    public void insert(@NonNull ByteBuf keyPayload, @NonNull ByteBuf valuePayload) throws RocksDBException {
+    public void insert(@NonNull ColumnFamilyHandle columnFamilyHandle,
+                       @NonNull ByteBuf keyPayload, @NonNull ByteBuf valuePayload) throws RocksDBException {
         // No-op.
     }
 
     @Override
-    public void delete(@NonNull ByteBuf keyPayload) throws RocksDBException {
+    public void delete(@NonNull ColumnFamilyHandle columnFamilyHandle,
+                       @NonNull ByteBuf keyPayload) throws RocksDBException {
         // No-op
     }
 
@@ -72,61 +73,18 @@ public class RocksDbReadCommittedTx<S extends SnapshotGenerator<S>> implements R
     public void close() throws RocksDBException {
     }
 
-    /**
-     * Return the registry of column families associated with
-     * this RocksDbStore instance.
-     * @return The associated registry of column families.
-     */
-    @Override
-    public RocksDbColumnFamilyRegistry getRegisteredColumnFamilies() {
-        return cfRegistry;
-    }
-
     @Override
     public <K, V> RocksDbEntryIterator<K,V> getIterator(@NonNull ISerializer serializer) {
         return new RocksDbEntryIterator<>(rocksDb.newIterator(), serializer, readOptions, new StampedLock());
     }
 
     @Override
-    public BatchedUpdatesAdapter getBatchedUpdatesAdapter() {
-        return new WriteBatchTxStubAdapter();
+    public RocksIterator getRawIterator(ReadOptions readOptions, ColumnFamilyHandle columnFamilyHandle) {
+        return rocksDb.newIterator(columnFamilyHandle, readOptions);
     }
 
-    private static class WriteBatchTxStubAdapter implements BatchedUpdatesAdapter {
-        private boolean isProcessed;
-
-        public WriteBatchTxStubAdapter() {
-            this.isProcessed = false;
-        }
-
-        @Override
-        public void insert(@NonNull ColumnFamilyHandle cfh,
-                           @NonNull ByteBuf keyPayload,
-                           @NonNull ByteBuf valuePayload) throws RocksDBException {
-
-            if (isProcessed) {
-                throw new IllegalStateException();
-            }
-        }
-
-        @Override
-        public void delete(@NonNull ColumnFamilyHandle cfh,
-                           @NonNull ByteBuf keyPayload) throws RocksDBException {
-
-            if (isProcessed) {
-                throw new IllegalStateException();
-            }
-        }
-
-        @Override
-        public void process() throws RocksDBException {
-            isProcessed = true;
-        }
-
-        @Override
-        public void close() {
-            // No-op.
-        }
-
+    @Override
+    public Set<ByteBuf> prefixScan(ColumnFamilyHandle secondaryIndexesHandle, byte indexId, Object secondaryKey, ISerializer serializer) {
+        return prefixScan(secondaryKey, secondaryIndexesHandle, indexId, serializer, new ReadOptions());
     }
 }

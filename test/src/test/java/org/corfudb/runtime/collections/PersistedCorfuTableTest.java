@@ -5,6 +5,7 @@ import com.google.common.math.Quantiles;
 import com.google.gson.Gson;
 import com.google.protobuf.Message;
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufUtil;
 import lombok.Builder;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
@@ -16,8 +17,10 @@ import net.jqwik.api.Provide;
 import net.jqwik.api.constraints.AlphaChars;
 import net.jqwik.api.constraints.Size;
 import net.jqwik.api.constraints.StringLength;
+import net.jqwik.api.constraints.UniqueElements;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuOptions.ConsistencyModel;
 import org.corfudb.runtime.CorfuRuntime;
@@ -28,9 +31,7 @@ import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.object.PersistenceOptions;
 import org.corfudb.runtime.object.PersistenceOptions.PersistenceOptionsBuilder;
-import org.corfudb.runtime.object.RocksDbColumnFamilyRegistry;
 import org.corfudb.runtime.object.RocksDbReadCommittedTx;
-import org.corfudb.runtime.object.VersionedObjectIdentifier;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.test.SampleSchema;
 import org.corfudb.test.SampleSchema.EventInfo;
@@ -73,6 +74,8 @@ import java.util.logging.LogRecord;
 import java.util.stream.Collectors;
 import java.util.stream.LongStream;
 import java.util.stream.Stream;
+import java.util.stream.StreamSupport;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy;
 import static org.corfudb.common.metrics.micrometer.MeterRegistryProvider.MeterRegistryInitializer.initClientMetrics;
@@ -119,14 +122,6 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
             this.clazz = clazz;
         }
 
-        private byte[] byteArrayFromBuf(final ByteBuf buf) {
-            ByteBuf readOnlyCopy = buf.asReadOnly();
-            readOnlyCopy.resetReaderIndex();
-            byte[] outArray = new byte[readOnlyCopy.readableBytes()];
-            readOnlyCopy.readBytes(outArray);
-            return outArray;
-        }
-
         @Override
         public byte getType() {
             return SERIALIZER_OFFSET;
@@ -134,7 +129,7 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
 
         @Override
         public Object deserialize(ByteBuf b, CorfuRuntime rt) {
-            return gson.fromJson(new String(byteArrayFromBuf(b)), clazz);
+            return gson.fromJson(new String(ByteBufUtil.getBytes(b)), clazz);
         }
 
         @Override
@@ -152,8 +147,9 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
         public final String payload;
     }
 
-    private PersistedCorfuTable<String, String> setupTable(String streamName, Index.Registry<String, String> registry,
-                                                          Options options, ISerializer serializer) {
+    private PersistedCorfuTable<String, String> setupTable(
+            String streamName, Index.Registry<String, String> registry,
+            Options options, ISerializer serializer) {
 
         PersistenceOptionsBuilder persistenceOptions = PersistenceOptions.builder()
                 .dataPath(Paths.get(diskBackedDirectory, streamName));
@@ -167,11 +163,12 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
     }
 
     private PersistedCorfuTable<String, String> setupTable(Index.Registry<String, String> registry) {
-        return setupTable(defaultTableName, registry, defaultOptions, new PojoSerializer(String.class));
+        return setupTable(defaultTableName, registry, defaultOptions, defaultSerializer);
     }
 
-    private <V> PersistedCorfuTable<String, V> setupTable(String streamName, boolean readYourWrites,
-                                                           Options options, ISerializer serializer) {
+    private <V> PersistedCorfuTable<String, V> setupTable(
+            String streamName, boolean readYourWrites,
+            Options options, ISerializer serializer) {
 
         PersistenceOptionsBuilder persistenceOptions = PersistenceOptions.builder()
                 .dataPath(Paths.get(diskBackedDirectory, streamName));
@@ -188,7 +185,7 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
     }
 
     private PersistedCorfuTable<String, String> setupTable(String streamName, boolean readYourWrites) {
-        return setupTable(streamName, readYourWrites, defaultOptions, new PojoSerializer(String.class));
+        return setupTable(streamName, readYourWrites, defaultOptions, defaultSerializer);
     }
 
     private PersistedCorfuTable<String, String> setupTable(boolean readYourWrites) {
@@ -525,10 +522,9 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
      * Test the read-your-own-writes property of disk-backed Corfu tables.
      */
     @Property(tries = NUM_OF_TRIES)
-    void readYourOwnWrites(@ForAll @Size(SAMPLE_SIZE) Set<String> intended) throws Exception {
+    void readYourOwnWrites() {
         resetTests();
         try (final PersistedCorfuTable<String, String> table = setupTable()) {
-
             executeTx(() -> {
                 assertThat(table.get(defaultNewMapEntry)).isNull();
                 table.insert(defaultNewMapEntry, defaultNewMapEntry);
@@ -539,98 +535,80 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
 
     @Property(tries = NUM_OF_TRIES)
     void invalidView() {
-
         PersistenceOptionsBuilder persistenceOptions = PersistenceOptions.builder()
                 .dataPath(Paths.get(diskBackedDirectory, defaultTableName));
 
         OptimisticTransactionDB rocksDb = Mockito.mock(OptimisticTransactionDB.class);
-        RocksDbColumnFamilyRegistry cfRegistry = Mockito.mock(RocksDbColumnFamilyRegistry.class);
 
         try (DiskBackedCorfuTable<String, String> table = new DiskBackedCorfuTable<>(
                 persistenceOptions.build(), defaultOptions, defaultSerializer)) {
-            DiskBackedCorfuTable<String, String> newView = table.newView(new RocksDbReadCommittedTx<>(rocksDb, cfRegistry));
+            DiskBackedCorfuTable<String, String> newView = table.newView(new RocksDbReadCommittedTx<>(rocksDb));
             assertThat(newView).isNotNull();
-            assertThatThrownBy(() -> newView.newView(new RocksDbReadCommittedTx<>(rocksDb, cfRegistry)))
+            assertThatThrownBy(() -> newView.newView(new RocksDbReadCommittedTx<>(rocksDb)))
                     .isInstanceOf(IllegalStateException.class);
         }
     }
     @Property(tries = NUM_OF_TRIES)
-    void snapshotExpired() {
+    void snapshotExpiredCrud(@ForAll @Size(SAMPLE_SIZE) Set<String> intended) {
         resetTests(CorfuRuntimeParameters.builder().mvoCacheExpiry(Duration.ofNanos(0)).build());
         try (final PersistedCorfuTable<String, String> table = setupTable()) {
             executeTx(() -> {
-                table.insert("a", "a");
-                table.get("a");
+                intended.forEach(entry -> table.insert(entry, entry));
+                intended.forEach(entry -> assertThat(table.get(entry)).isEqualTo(entry));
             });
 
             executeTx(() -> {
-                assertThat(table.get("a")).isEqualTo("a");
+                intended.forEach(entry -> assertThat(table.get(entry)).isEqualTo(entry));
 
-                Thread t1 = new Thread(() -> {
-                    executeTx(() -> table.insert("a", "b"));
-                    executeTx(() -> table.get("a"));
+                Thread thread = new Thread(() -> {
+                    intended.forEach(entry -> table.insert(entry, StringUtils.reverse(entry)));
+                    intended.forEach(entry -> assertThat(table.get(entry)).isEqualTo(StringUtils.reverse(entry)));
                 });
 
-                t1.start();
-                Failable.run(t1::join);
+                thread.start();
+                Failable.run(thread::join);
 
                 table.getCorfuSMRProxy().getUnderlyingMVO()
                         .getMvoCache().getObjectCache().cleanUp();
 
-                assertThatThrownBy(() -> table.get("a"))
+                assertThatThrownBy(() -> table.get(intended.stream().findFirst().get()))
                         .isInstanceOf(TransactionAbortedException.class);
             });
 
-            executeTx(() -> {
-                assertThat(table.entryStream().count()).isEqualTo(1);
+        }
+    }
 
-                Thread t1 = new Thread(() -> {
-                    executeTx(() -> table.insert("a", "b"));
-                    executeTx(() -> table.get("a"));
+        @Property(tries = NUM_OF_TRIES)
+        void snapshotExpiredIterator(@ForAll @Size(SAMPLE_SIZE) Set<String> intended) {
+            resetTests(CorfuRuntimeParameters.builder().mvoCacheExpiry(Duration.ofNanos(0)).build());
+            try (final PersistedCorfuTable<String, String> table = setupTable()) {
+
+                executeTx(() -> {
+                    intended.forEach(entry -> table.insert(entry, entry));
+                    intended.forEach(entry -> assertThat(table.get(entry)).isEqualTo(entry));
                 });
 
-                t1.start();
-                Failable.run(t1::join);
+                executeTx(() -> {
+                    assertThat(table.entryStream().count()).isEqualTo(intended.size());
 
-                table.getCorfuSMRProxy().getUnderlyingMVO()
-                        .getMvoCache().getObjectCache().cleanUp();
+                    Stream<Map.Entry<String, String>> stream = table.entryStream();
+                    Iterator<Map.Entry<String, String>> iterator = stream.iterator();
+                    assertThat(iterator.next()).isNotNull();
+                    assertThat(iterator.next()).isNotNull();
 
-                assertThatThrownBy(() -> table.entryStream().count())
-                        .isInstanceOf(TransactionAbortedException.class);
-            });
+                    Thread thread = new Thread(() -> {
+                        intended.forEach(entry -> table.insert(entry, StringUtils.reverse(entry)));
+                        intended.forEach(entry -> assertThat(table.get(entry)).isEqualTo(StringUtils.reverse(entry)));
+                    });
 
-            executeTx(() -> {
-                table.insert("a", "a");
-                table.insert("b", "b");
-                table.insert("c", "c");
-                table.get("a");
-            });
+                    thread.start();
+                    Failable.run(thread::join);
 
-            final int tableSize = 3;
-            executeTx(() -> {
-                assertThat(table.entryStream().count()).isEqualTo(tableSize);
-
-                Stream<Map.Entry<String, String>> stream = table.entryStream();
-                Iterator<Map.Entry<String, String>> iterator = stream.iterator();
-                assertThat(iterator.next()).isNotNull();
-
-                assertThat(iterator.next()).isNotNull();
-                // has next failed?
-
-                Thread t1 = new Thread(() -> {
-                    executeTx(() -> table.insert("a", "b"));
-                    executeTx(() -> table.get("a"));
+                    table.getCorfuSMRProxy().getUnderlyingMVO()
+                            .getMvoCache().getObjectCache().cleanUp();
+                    assertThatThrownBy(iterator::next)
+                            .isInstanceOf(TrimmedException.class);
                 });
-
-                t1.start();
-                Failable.run(t1::join);
-
-                table.getCorfuSMRProxy().getUnderlyingMVO()
-                        .getMvoCache().getObjectCache().cleanUp();
-                assertThatThrownBy(iterator::next)
-                        .isInstanceOf(TrimmedException.class);
-            });
-
         }
     }
 
@@ -643,10 +621,8 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
                 table.insert(defaultNewMapEntry, defaultNewMapEntry);
                 assertThat(table.get(defaultNewMapEntry)).isNull();
             });
-
         }
     }
-        ////////////////////////////////////
 
     /**
      * Verify RocksDB persisted cache is cleaned up
@@ -663,59 +639,148 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
     }
 
     @Property(tries = NUM_OF_TRIES)
-    void testClear(@ForAll @Size(SAMPLE_SIZE) Set<@AlphaChars String> intended) {
+    void testClear(@ForAll @UniqueElements @Size(SAMPLE_SIZE)
+                   Set<@AlphaChars @StringLength(min = 1) String> intended) {
         resetTests();
-        try (final PersistedCorfuTable<String, String> table = setupTable(alternateTableName, ENABLE_READ_YOUR_WRITES)) {
+        try (final PersistedCorfuTable<String, String> table = setupTable(new StringIndexer())) {
             executeTx(() -> intended.forEach(entry -> table.insert(entry, entry)));
             executeTx(() -> assertThat(table.entryStream().count()).isEqualTo(intended.size()));
             assertThat(table.entryStream().count()).isEqualTo(intended.size());
 
-            executeTx(table::clear);
+            Map<Character, Set<String>> groups = intended.stream()
+                    .collect(Collectors.groupingBy(s -> s.charAt(0), Collectors.toSet()));
 
+            groups.forEach(((character, strings) -> assertThat(StreamSupport.stream(
+                            table.getByIndex(StringIndexer.BY_FIRST_LETTER, character).spliterator(), false)
+                    .map(Map.Entry::getValue)
+                    .collect(Collectors.toSet()))
+                    .isEqualTo(strings)));
+
+            executeTx(() -> {
+                table.clear();
+
+                // Ensure correctness from read-your-writes perspective.
+                assertThat(table.entryStream().count()).isEqualTo(0);
+                intended.forEach(key -> assertThat(table.get(key)).isNull());
+
+                groups.forEach(((character, strings) -> assertThat(StreamSupport.stream(
+                                table.getByIndex(StringIndexer.BY_FIRST_LETTER, character).spliterator(), false)
+                        .map(Map.Entry::getValue)
+                        .collect(Collectors.toSet()))
+                        .isEmpty()));
+            });
+
+            // Ensure correctness from global perspective.
             executeTx(() -> assertThat(table.entryStream().count()).isEqualTo(0));
             assertThat(table.entryStream().count()).isEqualTo(0);
 
-            executeTx(() -> intended.forEach(entry -> table.insert(entry, entry)));
-            executeTx(() -> assertThat(table.entryStream().count()).isEqualTo(intended.size()));
-            assertThat(table.entryStream().count()).isEqualTo(intended.size());
-
-            executeTx(() -> {
-                assertThat(table.entryStream().count()).isEqualTo(intended.size());
-                intended.forEach(key -> assertThat(table.get(key)).isEqualTo(key));
-                table.clear();
-                assertThat(table.entryStream().count()).isEqualTo(0);
-                intended.forEach(key -> assertThat(table.get(key)).isNull());
-            });
+            executeTx(() -> groups.forEach(((character, strings) -> assertThat(StreamSupport.stream(
+                                table.getByIndex(StringIndexer.BY_FIRST_LETTER, character).spliterator(), false)
+                        .map(Map.Entry::getValue)
+                        .collect(Collectors.toSet()))
+                        .isEmpty())));
+            groups.forEach(((character, strings) -> assertThat(StreamSupport.stream(
+                            table.getByIndex(StringIndexer.BY_FIRST_LETTER, character).spliterator(), false)
+                    .map(Map.Entry::getValue)
+                    .collect(Collectors.toSet()))
+                    .isEmpty()));
         }
     }
 
     @Property(tries = NUM_OF_TRIES)
-    void testSecondaryIndexes(@ForAll @Size(SAMPLE_SIZE) Set<String> intended) {
+    void testUnmapSecondaryIndexesAndAbort(@ForAll @UniqueElements @Size(SAMPLE_SIZE)
+                                           Set<@AlphaChars @StringLength(min = 1) String> intended) {
         resetTests();
         try (final PersistedCorfuTable<String, String> table = setupTable(new StringIndexer())) {
             // StringIndexer does not work with empty strings (StringIndexOutOfBoundsException)
-            Set<String> filtered = intended.stream().filter(s -> !s.isEmpty()).collect(Collectors.toSet());
+            executeTx(() -> intended.forEach(value -> table.insert(StringUtils.reverse(value), value)));
 
-            executeTx(() -> filtered.forEach(value -> table.insert(value, value)));
-            Assertions.assertEquals(filtered.size(), table.size());
+            final Set<String> persisted = table.entryStream().map(Map.Entry::getValue).collect(Collectors.toSet());
+            assertThat(intended).isEqualTo(persisted);
 
-            executeTx(() -> filtered.forEach(value -> table.insert(value, value)));
-            Assertions.assertEquals(filtered.size(), table.size());
+            Map<Character, Set<String>> groups = persisted.stream()
+                    .collect(Collectors.groupingBy(s -> s.charAt(0), Collectors.toSet()));
 
             executeTx(() -> {
-                final Set<String> persisted = table.entryStream().map(Map.Entry::getValue).collect(Collectors.toSet());
-                Assertions.assertEquals(filtered, persisted);
-                Assertions.assertEquals(table.size(), persisted.size());
+                // Transactional getByIndex.
+                groups.forEach(((character, strings) -> assertThat(StreamSupport.stream(
+                                table.getByIndex(StringIndexer.BY_FIRST_LETTER, character).spliterator(), false)
+                        .map(Map.Entry::getValue)
+                        .collect(Collectors.toSet()))
+                        .isEqualTo(strings)));
+
+                intended.forEach(value -> table.delete(StringUtils.reverse(value)));
+
+                groups.forEach(((character, strings) -> assertThat(StreamSupport.stream(
+                                table.getByIndex(StringIndexer.BY_FIRST_LETTER, character).spliterator(), false)
+                        .map(Map.Entry::getValue)
+                        .collect(Collectors.toSet()))
+                        .isEmpty()));
+
+                getDefaultRuntime().getObjectsView().TXAbort();
             });
+
+            groups.forEach(((character, strings) -> assertThat(StreamSupport.stream(
+                            table.getByIndex(StringIndexer.BY_FIRST_LETTER, character).spliterator(), false)
+                    .map(Map.Entry::getValue)
+                    .collect(Collectors.toSet()))
+                    .isEqualTo(strings)));
         }
     }
 
-    /**
-     * A custom generator for a set of {@link Uuid}.
-     */
-    @Provide
-    Arbitrary<Set<Uuid>> uuidSet() {
-        return uuid().set();
+    @Property(tries = NUM_OF_TRIES)
+    void testSecondaryIndexes(@ForAll @UniqueElements @Size(SAMPLE_SIZE)
+                              Set<@AlphaChars @StringLength(min = 1) String> intended) {
+        resetTests();
+        try (final PersistedCorfuTable<String, String> table = setupTable(new StringIndexer())) {
+            executeTx(() -> intended.forEach(value -> table.insert(value, value)));
+
+            {
+                final Set<String> persisted = table.entryStream().map(Map.Entry::getValue).collect(Collectors.toSet());
+                assertThat(intended).isEqualTo(persisted);
+                Map<Character, Set<String>> groups = persisted.stream()
+                        .collect(Collectors.groupingBy(s -> s.charAt(0), Collectors.toSet()));
+
+                // Non-transactional getByIndex.
+                groups.forEach(((character, strings) -> assertThat(StreamSupport.stream(
+                                table.getByIndex(StringIndexer.BY_FIRST_LETTER, character).spliterator(), false)
+                        .map(Map.Entry::getValue)
+                        .collect(Collectors.toSet()))
+                        .isEqualTo(strings)));
+            }
+
+            executeTx(() -> {
+                final Set<String> persisted = table.entryStream().map(Map.Entry::getValue).collect(Collectors.toSet());
+
+                {
+                    assertThat(intended).isEqualTo(persisted);
+                    Map<Character, Set<String>> groups = persisted.stream()
+                            .collect(Collectors.groupingBy(s -> s.charAt(0), Collectors.toSet()));
+
+                    // Transactional getByIndex.
+                    groups.forEach(((character, strings) -> assertThat(StreamSupport.stream(
+                                    table.getByIndex(StringIndexer.BY_FIRST_LETTER, character).spliterator(), false)
+                            .map(Map.Entry::getValue)
+                            .collect(Collectors.toSet()))
+                            .isEqualTo(strings)));
+                }
+
+                intended.forEach(value -> table.insert(value, StringUtils.reverse(value)));
+                intended.forEach(value -> table.insert(StringUtils.reverse(value), StringUtils.reverse(value)));
+
+                {
+                    final Set<String> newPersisted = table.entryStream().map(Map.Entry::getValue).collect(Collectors.toSet());
+                    Map<Character, Set<String>> groups = newPersisted.stream()
+                            .collect(Collectors.groupingBy(s -> s.charAt(0), Collectors.toSet()));
+
+                    groups.forEach(((character, strings) -> assertThat(StreamSupport.stream(
+                                    table.getByIndex(StringIndexer.BY_FIRST_LETTER, character).spliterator(), false)
+                            .map(Map.Entry::getValue)
+                            .collect(Collectors.toSet()))
+                            .isEqualTo(strings)));
+                }
+            });
+        }
     }
 
     /**

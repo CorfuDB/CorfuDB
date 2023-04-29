@@ -1,24 +1,28 @@
 package org.corfudb.runtime.object;
 
-import com.google.common.collect.ImmutableMap;
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufUtil;
+import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.collections.RocksDbEntryIterator;
 import org.corfudb.util.serializer.ISerializer;
+import org.rocksdb.BlockBasedTableConfig;
+import org.rocksdb.BloomFilter;
 import org.rocksdb.ColumnFamilyDescriptor;
 import org.rocksdb.ColumnFamilyHandle;
+import org.rocksdb.ColumnFamilyOptions;
+import org.rocksdb.Filter;
+import org.rocksdb.IndexType;
 import org.rocksdb.OptimisticTransactionDB;
 import org.rocksdb.Options;
+import org.rocksdb.ReadOptions;
 import org.rocksdb.RocksDB;
 import org.rocksdb.RocksDBException;
 import org.rocksdb.RocksIterator;
-import org.rocksdb.WriteBatch;
 import org.rocksdb.WriteOptions;
 
 import java.nio.file.Path;
-import java.util.Map;
+import java.util.Set;
 
 /**
  * A concrete class that implements {@link RocksDbApi} using
@@ -27,50 +31,74 @@ import java.util.Map;
  * @param <S> extends SnapshotGenerator
  */
 @Slf4j
-public class RocksDbStore<S extends SnapshotGenerator<S>>
-        implements RocksDbApi<S>, RocksDbSnapshotGenerator<S> {
+public class RocksDbStore<S extends SnapshotGenerator<S>> implements
+        RocksDbApi<S>,
+        RocksDbSnapshotGenerator<S>,
+        ColumnFamilyRegistry {
 
     private final OptimisticTransactionDB rocksDb;
     private final String absolutePathString;
     private final WriteOptions writeOptions;
     private final Options rocksDbOptions;
-    private final PersistenceOptions persistenceOptions;
-    private final RocksDbColumnFamilyRegistry cfRegistry;
+
+    @Getter
+    private final ColumnFamilyHandle defaultColumnFamily;
+    @Getter
+    private final ColumnFamilyHandle secondaryIndexColumnFamily;
 
     public RocksDbStore(@NonNull Path dataPath,
                         @NonNull Options rocksDbOptions,
-                        @NonNull WriteOptions writeOptions,
-                        @NonNull PersistenceOptions persistenceOptions,
-                        @NonNull Map<String, ColumnFamilyDescriptor> columnFamilyDescriptors) throws RocksDBException {
+                        @NonNull WriteOptions writeOptions) throws RocksDBException {
         this.absolutePathString = dataPath.toFile().getAbsolutePath();
         this.rocksDbOptions = rocksDbOptions;
         this.writeOptions = writeOptions;
-        this.persistenceOptions = persistenceOptions;
 
         // Open the RocksDB instance
         RocksDB.destroyDB(this.absolutePathString, this.rocksDbOptions);
         this.rocksDb = OptimisticTransactionDB.open(rocksDbOptions, absolutePathString);
+        this.defaultColumnFamily = this.rocksDb.getDefaultColumnFamily();
 
-        // Create and register column families.
-        final ImmutableMap.Builder<String, ColumnFamilyHandle> columnFamilyMapBuilder = ImmutableMap.builder();
-        for (Map.Entry<String, ColumnFamilyDescriptor> entry : columnFamilyDescriptors.entrySet()) {
-            columnFamilyMapBuilder.put(entry.getKey(), this.rocksDb.createColumnFamily(entry.getValue()));
+        // There is no need to override default options and customize
+        // the behavior of individual column families.
+        try (ColumnFamilyOptions columnFamilyOptions = new ColumnFamilyOptions()) {
+            // The prefix is composed of Index ID (1 byte) and
+            // the secondary key hash (4 bytes).
+            columnFamilyOptions.useCappedPrefixExtractor(Byte.BYTES + Integer.BYTES);
+
+            // Define prefix bloom filters, which can reduce read
+            // amplification of prefix range queries.
+            Filter bloomFilter = new BloomFilter(10);
+            BlockBasedTableConfig tableConfig = new BlockBasedTableConfig();
+            tableConfig.setFilterPolicy(bloomFilter);
+
+            // The hash index, if enabled, will do the hash lookup when
+            // prefix extractor is provided.
+            tableConfig.setIndexType(IndexType.kHashSearch);
+            columnFamilyOptions.setTableFormatConfig(tableConfig);
+
+            // Use hash-map-based memtables to avoid binary search costs in memtables.
+            // BUG: Memtable doesn't concurrent writes (allow_concurrent_memtable_write)
+            // MemTableConfig memTableConfig = new HashLinkedListMemTableConfig();
+            // columnFamilyOptions.setMemTableConfig(memTableConfig);
+
+            this.secondaryIndexColumnFamily = this.rocksDb.createColumnFamily(
+                    new ColumnFamilyDescriptor("secondary-indexes".getBytes(), columnFamilyOptions));
         }
-
-        this.cfRegistry = new RocksDbColumnFamilyRegistry(
-                this.rocksDb.getDefaultColumnFamily(),
-                columnFamilyMapBuilder.build()
-        );
     }
 
     @Override
-    public byte[] get(@NonNull ByteBuf keyPayload) throws RocksDBException {
-        return rocksDb.get(keyPayload.array(), keyPayload.arrayOffset(), keyPayload.readableBytes());
+    public byte[] get(@NonNull ColumnFamilyHandle columnFamilyHandle,
+                      @NonNull ByteBuf keyPayload) throws RocksDBException {
+        return rocksDb.get(
+                columnFamilyHandle,
+                keyPayload.array(), keyPayload.arrayOffset(), keyPayload.readableBytes());
     }
 
     @Override
-    public void insert(@NonNull ByteBuf keyPayload, @NonNull ByteBuf valuePayload) throws RocksDBException {
+    public void insert(@NonNull ColumnFamilyHandle columnFamilyHandle,
+                       @NonNull ByteBuf keyPayload, @NonNull ByteBuf valuePayload) throws RocksDBException {
         rocksDb.put(
+                columnFamilyHandle,
                 writeOptions,
                 keyPayload.array(), keyPayload.arrayOffset(), keyPayload.readableBytes(),
                 valuePayload.array(), valuePayload.arrayOffset(), valuePayload.readableBytes()
@@ -78,8 +106,9 @@ public class RocksDbStore<S extends SnapshotGenerator<S>>
     }
 
     @Override
-    public void delete(@NonNull ByteBuf keyPayload) throws RocksDBException {
-        rocksDb.delete(writeOptions, keyPayload.array(), keyPayload.arrayOffset(), keyPayload.readableBytes());
+    public void delete(@NonNull ColumnFamilyHandle columnFamilyHandle,
+                       @NonNull ByteBuf keyPayload) throws RocksDBException {
+        rocksDb.delete(columnFamilyHandle, writeOptions, keyPayload.array(), keyPayload.arrayOffset(), keyPayload.readableBytes());
     }
 
     @Override
@@ -88,11 +117,31 @@ public class RocksDbStore<S extends SnapshotGenerator<S>>
     }
 
     @Override
+    public RocksIterator getRawIterator(ReadOptions readOptions, ColumnFamilyHandle columnFamilyHandle) {
+        return rocksDb.newIterator(columnFamilyHandle, readOptions);
+    }
+
+    @Override
+    public Set<ByteBuf> prefixScan(
+            ColumnFamilyHandle secondaryIndexesHandle, byte indexId,
+            Object secondaryKey, ISerializer serializer) {
+        return prefixScan(secondaryKey, secondaryIndexesHandle, indexId, serializer, new ReadOptions());
+    }
+
+    @Override
     public void clear() throws RocksDBException {
-        try (RocksIterator entryIterator = this.rocksDb.newIterator()) {
+        try (RocksIterator entryIterator = this.rocksDb.newIterator(defaultColumnFamily)) {
             entryIterator.seekToFirst();
             while (entryIterator.isValid()) {
-                rocksDb.delete(entryIterator.key());
+                rocksDb.delete(defaultColumnFamily, entryIterator.key());
+                entryIterator.next();
+            }
+        }
+
+        try (RocksIterator entryIterator = this.rocksDb.newIterator(secondaryIndexColumnFamily)) {
+            entryIterator.seekToFirst();
+            while (entryIterator.isValid()) {
+                rocksDb.delete(secondaryIndexColumnFamily, entryIterator.key());
                 entryIterator.next();
             }
         }
@@ -115,7 +164,6 @@ public class RocksDbStore<S extends SnapshotGenerator<S>>
 
     @Override
     public void close() throws RocksDBException {
-        cfRegistry.close();
         rocksDb.close();
         RocksDB.destroyDB(absolutePathString, rocksDbOptions);
         log.info("Cleared RocksDB data on {}", absolutePathString);
@@ -133,90 +181,13 @@ public class RocksDbStore<S extends SnapshotGenerator<S>>
     @Override
     public SMRSnapshot<S> getSnapshot(@NonNull ViewGenerator<S> viewGenerator,
                                       @NonNull VersionedObjectIdentifier version) {
-        return new DiskBackedSMRSnapshot<>(rocksDb, writeOptions,
-                persistenceOptions.consistencyModel, version, viewGenerator, cfRegistry);
-    }
-
-    /**
-     * Return the registry of column families associated with
-     * this RocksDbStore instance.
-     * @return The associated registry of column families.
-     */
-    @Override
-    public RocksDbColumnFamilyRegistry getRegisteredColumnFamilies() {
-        return cfRegistry;
+        return new DiskBackedSMRSnapshot<>(rocksDb, writeOptions, version, viewGenerator, this);
     }
 
     @Override
     public SMRSnapshot<S> getImplicitSnapshot(
             @NonNull ViewGenerator<S> viewGenerator,
             @NonNull VersionedObjectIdentifier version) {
-        return new AlwaysLatestSnapshot<>(rocksDb, viewGenerator, cfRegistry);
+        return new AlwaysLatestSnapshot<>(rocksDb, viewGenerator);
     }
-
-    /**
-     *
-     * @return
-     */
-    @Override
-    public BatchedUpdatesAdapter getBatchedUpdatesAdapter() {
-        return new WriteBatchAdapter(rocksDb, writeOptions);
-    }
-
-    private static class WriteBatchAdapter implements BatchedUpdatesAdapter {
-        private final OptimisticTransactionDB rocksDb;
-        private final WriteOptions writeOptions;
-        private final WriteBatch writeBatch;
-
-        private boolean isProcessed;
-
-        public WriteBatchAdapter(@NonNull OptimisticTransactionDB rocksDb,
-                                 @NonNull WriteOptions writeOptions) {
-            this.rocksDb = rocksDb;
-            this.writeOptions = writeOptions;
-            this.writeBatch = new WriteBatch();
-            this.isProcessed = false;
-        }
-
-        @Override
-        public void insert(@NonNull ColumnFamilyHandle cfh,
-                           @NonNull ByteBuf keyPayload,
-                           @NonNull ByteBuf valuePayload) throws RocksDBException {
-
-            if (isProcessed) {
-                throw new IllegalStateException();
-            }
-
-            writeBatch.put(cfh,
-                    ByteBufUtil.getBytes(keyPayload, keyPayload.arrayOffset(), keyPayload.readableBytes(), false),
-                    ByteBufUtil.getBytes(valuePayload, valuePayload.arrayOffset(), valuePayload.readableBytes(), false)
-            );
-        }
-
-        @Override
-        public void delete(@NonNull ColumnFamilyHandle cfh,
-                           @NonNull ByteBuf keyPayload) throws RocksDBException {
-
-            if (isProcessed) {
-                throw new IllegalStateException();
-            }
-
-            writeBatch.delete(cfh,
-                    ByteBufUtil.getBytes(keyPayload, keyPayload.arrayOffset(), keyPayload.readableBytes(), false)
-            );
-        }
-
-        @Override
-        public void process() throws RocksDBException {
-            isProcessed = true;
-            rocksDb.write(writeOptions, writeBatch);
-        }
-
-        @Override
-        public void close() {
-            writeBatch.close();
-        }
-
-    }
-
 }

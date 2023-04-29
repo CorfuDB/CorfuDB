@@ -1,7 +1,6 @@
 package org.corfudb.runtime.object;
 
 import lombok.NonNull;
-import org.corfudb.runtime.CorfuOptions.ConsistencyModel;
 import org.corfudb.runtime.collections.RocksDbEntryIterator;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.util.serializer.ISerializer;
@@ -25,30 +24,25 @@ public class DiskBackedSMRSnapshot<S extends SnapshotGenerator<S>> implements SM
     private final OptimisticTransactionDB rocksDb;
     private final Snapshot snapshot;
     private final ViewGenerator<S> viewGenerator;
-
     private final ReadOptions readOptions;
     private final WriteOptions writeOptions;
-
-    private final RocksDbColumnFamilyRegistry cfRegistry;
+    private final ColumnFamilyRegistry columnFamilyRegistry;
 
     // A set of iterators associated with this snapshot.
     private final Set<RocksDbEntryIterator<?, ?>> set;
 
     public DiskBackedSMRSnapshot(@NonNull OptimisticTransactionDB rocksDb,
                                  @NonNull WriteOptions writeOptions,
-                                 @NonNull ConsistencyModel consistencyModel,
                                  @NonNull VersionedObjectIdentifier version,
                                  @NonNull ViewGenerator<S> viewGenerator,
-                                 @NonNull RocksDbColumnFamilyRegistry cfRegistry) {
+                                 @NonNull ColumnFamilyRegistry columnFamilyRegistry) {
         this.rocksDb = rocksDb;
         this.writeOptions = writeOptions;
         this.viewGenerator = viewGenerator;
-
-        this.cfRegistry = cfRegistry;
         this.snapshot = rocksDb.getSnapshot();
-
         this.readOptions = new ReadOptions().setSnapshot(this.snapshot);
         this.version = version;
+        this.columnFamilyRegistry = columnFamilyRegistry;
         this.set = Collections.newSetFromMap(new WeakHashMap<>());
     }
 
@@ -77,7 +71,7 @@ public class DiskBackedSMRSnapshot<S extends SnapshotGenerator<S>> implements SM
     }
 
     public S consume() {
-        return viewGenerator.newView(new RocksDbTx<>(rocksDb, writeOptions, this, cfRegistry));
+        return viewGenerator.newView(new RocksDbTx<>(rocksDb, writeOptions, this, columnFamilyRegistry));
     }
 
     public void release() {

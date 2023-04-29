@@ -98,7 +98,7 @@ public class PersistedCorfuTable<K, V> implements ICorfuTable<K, V> {
 
     @Override
     public <I> Iterable<Map.Entry<K, V>> getByIndex(@Nonnull final Index.Name indexName, I indexKey) {
-        throw new UnsupportedOperationException("Not yet implemented.");
+        return proxy.access(corfuSmr -> corfuSmr.getByIndex(indexName, indexKey), null);
     }
     @Override
     public Map<String, ICorfuSMRUpcallTarget<DiskBackedCorfuTable<K, V>>> getSMRUpcallMap() {

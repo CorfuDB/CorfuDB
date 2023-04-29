@@ -43,6 +43,8 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
+import static org.corfudb.runtime.collections.DiskBackedCorfuTable.getDiskBackedCorfuTableOptions;
+
 /**
  * Wrapper over the CorfuTable.
  * It accepts a primary key - which is a protobuf message.
@@ -233,6 +235,9 @@ public class Table<K extends Message, V extends Message, M extends Message> {
                         .setStreamName(fullyQualifiedTableName)
                         .setStreamTags(streamTags)
                         .setSerializer(serializer);
+        final ProtobufIndexer protobufIndexer = new ProtobufIndexer(
+                tableParameters.getValueSchema(),
+                tableParameters.getSchemaOptions());
 
         // Check to see if we should be used a disk backed table.
         if (tableParameters.getPersistenceOptions().hasDataPath()) {
@@ -243,11 +248,11 @@ public class Table<K extends Message, V extends Message, M extends Message> {
             }
 
             builder.setTypeToken(PersistedCorfuTable.getTypeToken());
-            builder.setArguments(persistenceOptions.build(), serializer);
+            builder.setArguments(
+                    persistenceOptions.build(), getDiskBackedCorfuTableOptions(),
+                    serializer, protobufIndexer);
         } else {
-            builder.setArguments(new ProtobufIndexer(
-                    tableParameters.getValueSchema(),
-                    tableParameters.getSchemaOptions()));
+            builder.setArguments(protobufIndexer);
             builder.setTypeToken(PersistentCorfuTable.getTypeToken());
         }
 
