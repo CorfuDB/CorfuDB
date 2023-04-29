@@ -73,6 +73,8 @@ public class SnapshotSender {
 
     private final Optional<AtomicLong> messageCounter;
 
+    @Getter
+    @VisibleForTesting
     private volatile AtomicBoolean stopSnapshotSync = new AtomicBoolean(false);
 
     public SnapshotSender(CorfuRuntime runtime, SnapshotReader snapshotReader, DataSender dataSender,
@@ -197,6 +199,7 @@ public class SnapshotSender {
 
         // If we are starting a snapshot sync, send a start marker.
         if (startSnapshotSync) {
+            log.info("Shama Sending Snapshot start");
             dataSenderBufferManager.sendWithBuffering(getSnapshotSyncStartMarker(snapshotSyncEventId));
             startSnapshotSync = false;
             numMessages++;
@@ -275,7 +278,7 @@ public class SnapshotSender {
         // Report error to the application through the dataSender
         dataSenderBufferManager.onError(error);
 
-        log.error("SNAPSHOT SYNC is being CANCELED, due to {}", error.getDescription());
+        log.error("SNAPSHOT SYNC is being CANCELED for {}, due to {}", snapshotSyncEventId, error.getDescription());
 
         // Enqueue cancel event, this will cause re-entrance to snapshot sync to start a new cycle
         fsm.input(new LogReplicationEvent(LogReplicationEventType.SYNC_CANCEL,

@@ -39,6 +39,7 @@ import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
 import static org.corfudb.protocols.service.CorfuProtocolLogReplication.getLrEntryAckMsg;
@@ -448,6 +449,12 @@ public class LogReplicationSinkManager implements DataReceiver {
         }
 
         processSnapshotSyncApplied(entry);
+
+        if (entry.getMetadata().getSnapshotTimestamp() < baseSnapshotTimestamp) {
+            log.warn("Not transition to Log_Entry sync there is a msitmatch between the current snapshotTs {} and the " +
+                    "applied snapshot Ts {}", baseSnapshotTimestamp, entry.getMetadata().getSnapshotTimestamp());
+            return;
+        }
 
         rxState = RxState.LOG_ENTRY_SYNC;
 
