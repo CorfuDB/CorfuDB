@@ -4,6 +4,9 @@ import org.corfudb.common.config.ConfigParamsHelper;
 
 public class CorfuServerCmdLine {
 
+    public static final String METRICS_PORT_PARAM = "--metrics-port";
+    public static final String HEALTH_PORT_PARAM = "--health-port";
+
     private CorfuServerCmdLine() {
         // prevent class initialization
     }
@@ -39,7 +42,8 @@ public class CorfuServerCmdLine {
                     + "[-H <seconds>] [-I <cluster-id>] [-x <ciphers>] [-z <tls-protocols>]] "
                     + "[--disable-cert-expiry-check-file=<file_path>]"
                     + "[--metrics]"
-                    + "[--health-port=<health_port>]"
+                    + "[" + METRICS_PORT_PARAM + "=<metrics_port>]"
+                    + "[" + HEALTH_PORT_PARAM + "=<health_port>]"
                     + "[--snapshot-batch=<batch-size>] [--lock-lease=<lease-duration>]"
                     + "[--max-snapshot-entries-applied=<max-snapshot-entries-applied>]"
                     + "[-P <prefix>] [-R <retention>] <port>"
@@ -172,8 +176,10 @@ public class CorfuServerCmdLine {
                     + "              Number of threads dedicated for the logunit server [default: 4].\n"
                     + " --metrics                                                                "
                     + "              Enable metrics provider.\n                                  "
-                    + " --health-port=<health_port>                                              "
+                    + " " + HEALTH_PORT_PARAM + "=<health_port>                                              "
                     + "              Enable health api and bind to this port.\n                  "
+                    + " " + METRICS_PORT_PARAM + "=<metrics_port>                                              "
+                    + "              Enable metrics api and bind to this port.\n                  "
                     + " --snapshot-batch=<batch-size>                                            "
                     + "              Snapshot (Full) Sync batch size (number of entries)\n       "
                     + " --lrCacheSize=<cache-num-entries>"
