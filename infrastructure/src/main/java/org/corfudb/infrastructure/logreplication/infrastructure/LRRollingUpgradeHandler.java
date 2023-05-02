@@ -86,7 +86,7 @@ public class LRRollingUpgradeHandler {
             isClusterAllAtV2 = true;
             return false;
         } catch (NoSuchElementException e) {
-            log.info("Version table is not present, setup is a new installation");
+            log.info("Version table is not present, setup is a new installation", e);
             return false;
         }
     }
