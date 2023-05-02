@@ -3,6 +3,12 @@
 
     <property name="LOG_DIRECTORY" value="/var/log/corfu" />
 
+    <turboFilter class="ch.qos.logback.classic.turbo.MarkerFilter">
+        <Marker>NOT_IMPORTANT</Marker>
+        <OnMatch>DENY</OnMatch>
+        <OnMismatch>NEUTRAL</OnMismatch>
+    </turboFilter>
+
     <appender name="file" class="ch.qos.logback.core.rolling.RollingFileAppender">
         <file>${LOG_DIRECTORY}/corfu.9000.log</file>
         <rollingPolicy class="ch.qos.logback.core.rolling.FixedWindowRollingPolicy">

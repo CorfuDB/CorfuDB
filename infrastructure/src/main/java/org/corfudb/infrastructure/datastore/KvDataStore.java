@@ -3,6 +3,10 @@ package org.corfudb.infrastructure.datastore;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
+import org.corfudb.common.result.Result;
+import org.corfudb.runtime.exceptions.DataCorruptionException;
+
+import java.util.Optional;
 
 /**
  * Key Value data store abstraction that provides persistence for variables that need
@@ -32,12 +36,22 @@ public interface KvDataStore {
     <T> T get(KvRecord<T> key);
 
     /**
+     * Retrieves the value for a key under a prefix.
+     *
+     * @param key record meta information
+     * @return value stored under key
+     */
+    default <T> Optional<T> find(KvRecord<T> key) {
+        return Optional.ofNullable(get(key));
+    }
+
+    /**
      * Retrieves the value for a key or a default value
      *
      * @param key key meta info
      * @param defaultValue a default value
-     * @param <T>
-     * @return
+     * @param <T> value type
+     * @return value or a default value
      */
     <T> T get(KvRecord<T> key, T defaultValue);
 

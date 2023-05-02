@@ -20,7 +20,9 @@ import javax.annotation.Nullable;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
+import java.nio.file.CopyOption;
 import java.nio.file.Files;
+import java.nio.file.OpenOption;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
@@ -118,61 +120,7 @@ public class DataStore implements KvDataStore {
         return Caffeine.newBuilder()
                 .recordStats()
                 .maximumSize(dsCacheSize)
-                .writer(new CacheWriter<String, Object>() {
-                    @Override
-                    public void write(@Nonnull String key, @Nonnull Object value) {
-                        if (value == NullValue.NULL_VALUE) {
-                            return;
-                        }
-
-                        ByteBuf buffer = null;
-                        FileChannel writeChannel = null;
-
-                        try {
-                            String dsFileName = key + EXTENSION;
-                            Path path = Paths.get(logDirPath, dsFileName);
-                            Path tmpPath = Paths.get(logDirPath, dsFileName + ".tmp");
-
-                            String jsonPayload = JsonUtils.parser.toJson(value, value.getClass());
-                            byte[] bytes = jsonPayload.getBytes();
-
-                            buffer = Unpooled.directBuffer(bytes.length + Integer.BYTES);
-                            buffer.writeInt(getChecksum(bytes));
-                            buffer.writeBytes(bytes);
-                            ByteBuffer nioBuffer = buffer.nioBuffer();
-
-                            writeChannel = FileChannel.open(tmpPath,
-                                    StandardOpenOption.WRITE, StandardOpenOption.CREATE,
-                                    StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.SYNC);
-
-                            while (nioBuffer.hasRemaining()) {
-                                writeChannel.write(nioBuffer);
-                            }
-
-                            Files.move(tmpPath, path, StandardCopyOption.REPLACE_EXISTING,
-                                    StandardCopyOption.ATOMIC_MOVE);
-                            syncDirectory(logDirPath);
-                            // Invoking the cleanup on each disk file write is fine for performance
-                            // since DataStore files are not supposed to change too frequently
-                            cleanupTask.accept(dsFileName);
-                        } catch (IOException e) {
-                            throw new RuntimeException(e);
-                        } finally {
-                            if (buffer != null) {
-                                buffer.release();
-                            }
-                            IOUtils.closeQuietly(writeChannel);
-                        }
-                    }
-
-                    @Override
-                    public void delete(@Nonnull String key,
-                                       @Nullable Object value,
-                                       @Nonnull RemovalCause cause) {
-                        // Delete should not remove the underlying file.
-                        // Removal of underlying file is done by cleanupTask.
-                    }
-                })
+                .writer(new DataStoreCacheWriter())
                 .build();
     }
 
@@ -236,5 +184,70 @@ public class DataStore implements KvDataStore {
     @Override
     public <T> void delete(KvRecord<T> key) {
         cache.invalidate(key.getFullKeyName());
+    }
+
+
+    private class DataStoreCacheWriter implements CacheWriter<String, Object> {
+
+        @Override
+        public void write(@Nonnull String key, @Nonnull Object value) {
+            if (value == NullValue.NULL_VALUE) {
+                return;
+            }
+
+            ByteBuf buffer = null;
+            FileChannel writeChannel = null;
+
+            try {
+                String dsFileName = key + EXTENSION;
+                Path path = Paths.get(logDirPath, dsFileName);
+                Path tmpPath = Paths.get(logDirPath, dsFileName + ".tmp");
+
+                String jsonPayload = JsonUtils.parser.toJson(value, value.getClass());
+                byte[] bytes = jsonPayload.getBytes();
+
+                buffer = Unpooled
+                        .directBuffer(bytes.length + Integer.BYTES)
+                        .writeInt(getChecksum(bytes))
+                        .writeBytes(bytes);
+                ByteBuffer nioBuffer = buffer.nioBuffer();
+
+                OpenOption[] attrs = {
+                        StandardOpenOption.WRITE,
+                        StandardOpenOption.CREATE,
+                        StandardOpenOption.TRUNCATE_EXISTING,
+                        StandardOpenOption.SYNC
+                };
+                writeChannel = FileChannel.open(tmpPath, attrs);
+
+                while (nioBuffer.hasRemaining()) {
+                    writeChannel.write(nioBuffer);
+                }
+
+                CopyOption[] moveAttrs = {
+                        StandardCopyOption.REPLACE_EXISTING,
+                        StandardCopyOption.ATOMIC_MOVE
+                };
+                Files.move(tmpPath, path, moveAttrs);
+
+                syncDirectory(logDirPath);
+                // Invoking the cleanup on each disk file write is fine for performance
+                // since DataStore files are not supposed to change too frequently
+                cleanupTask.accept(dsFileName);
+            } catch (IOException e) {
+                throw new DataCorruptionException(e);
+            } finally {
+                if (buffer != null) {
+                    buffer.release();
+                }
+                IOUtils.closeQuietly(writeChannel);
+            }
+        }
+
+        @Override
+        public void delete(@Nonnull String key, @Nullable Object value, @Nonnull RemovalCause cause) {
+            // Delete should not remove the underlying file.
+            // Removal of underlying file is done by cleanupTask.
+        }
     }
 }

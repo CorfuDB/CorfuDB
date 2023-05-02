@@ -52,8 +52,8 @@ public class LogReplicationAckReader {
     // Last ack'd timestamp from Receiver
     private long lastAckedTimestamp = Address.NON_ADDRESS;
 
-    // Sync Type for which last Ack was received. Default to LOG_ENTRY as this is the initial FSM state
-    private SyncType lastSyncType = SyncType.LOG_ENTRY;
+    // Sync Type for which last Ack was received, it is initialized when setSyncType is called
+    private SyncType lastSyncType = null;
 
     private LogEntryReader logEntryReader;
 
@@ -344,79 +344,79 @@ public class LogReplicationAckReader {
     }
 
     public void markSnapshotSyncInfoCompleted() {
-        IRetry.build(IntervalRetry.class, () -> {
-            try {
-                lock.lock();
-                metadataManager.updateSnapshotSyncStatusCompleted(remoteClusterId,
-                        calculateRemainingEntriesToSend(baseSnapshotTimestamp), baseSnapshotTimestamp);
-            } catch (TransactionAbortedException tae) {
-                log.error("Error while attempting to markSnapshotSyncInfoCompleted for remote cluster {}.", remoteClusterId, tae);
-                throw new RetryNeededException();
-            } finally {
-                lock.unlock();
-            }
+            IRetry.build(IntervalRetry.class, () -> {
+                try {
+                    lock.lock();
+                    metadataManager.updateSnapshotSyncStatusCompleted(remoteClusterId,
+                            calculateRemainingEntriesToSend(baseSnapshotTimestamp), baseSnapshotTimestamp);
+                } catch (TransactionAbortedException tae) {
+                    log.error("Error while attempting to markSnapshotSyncInfoCompleted for remote cluster {}.", remoteClusterId, tae);
+                    throw new RetryNeededException();
+                } finally {
+                    lock.unlock();
+                }
 
-            if (log.isTraceEnabled()) {
-                log.trace("markSnapshotSyncInfoCompleted succeeds for remote cluster {}.", remoteClusterId);
-            }
-            return null;
-        }).run();
+                if (log.isTraceEnabled()) {
+                    log.trace("markSnapshotSyncInfoCompleted succeeds for remote cluster {}.", remoteClusterId);
+                }
+                return null;
+            }).run();
     }
 
     public void markSnapshotSyncInfoOngoing(boolean forced, UUID eventId) {
-        IRetry.build(IntervalRetry.class, () -> {
-            try {
-                lock.lock();
-                long remainingEntriesToSend = calculateRemainingEntriesToSend(lastAckedTimestamp);
-                metadataManager.updateSnapshotSyncStatusOngoing(remoteClusterId, forced, eventId,
-                        baseSnapshotTimestamp, remainingEntriesToSend);
-            } catch (TransactionAbortedException tae) {
-                log.error("Error while attempting to markSnapshotSyncInfoOngoing for event {}.", eventId, tae);
-                throw new RetryNeededException();
-            } finally {
-                lock.unlock();
-            }
+            IRetry.build(IntervalRetry.class, () -> {
+                try {
+                    lock.lock();
+                    long remainingEntriesToSend = calculateRemainingEntriesToSend(lastAckedTimestamp);
+                    metadataManager.updateSnapshotSyncStatusOngoing(remoteClusterId, forced, eventId,
+                            baseSnapshotTimestamp, remainingEntriesToSend);
+                } catch (TransactionAbortedException tae) {
+                    log.error("Error while attempting to markSnapshotSyncInfoOngoing for event {}.", eventId, tae);
+                    throw new RetryNeededException();
+                } finally {
+                    lock.unlock();
+                }
 
-            if (log.isTraceEnabled()) {
-                log.trace("markSnapshotSyncInfoOngoing succeeds with eventId{} and forced flag {}.", eventId, forced);
-            }
-            return null;
-        }).run();
+                if (log.isTraceEnabled()) {
+                    log.trace("markSnapshotSyncInfoOngoing succeeds with eventId{} and forced flag {}.", eventId, forced);
+                }
+                return null;
+            }).run();
     }
 
     public void markSnapshotSyncInfoOngoing() {
-        IRetry.build(IntervalRetry.class, () -> {
-            try {
-                lock.lock();
-                metadataManager.updateSyncStatus(remoteClusterId, SyncType.SNAPSHOT, SyncStatus.ONGOING);
-            } catch (TransactionAbortedException tae) {
-                log.error("Error while attempting to markSnapshotSyncInfoOngoing for cluster {}.", remoteClusterId, tae);
-                throw new RetryNeededException();
-            } finally {
-                lock.unlock();
-            }
+            IRetry.build(IntervalRetry.class, () -> {
+                try {
+                    lock.lock();
+                    metadataManager.updateSyncStatus(remoteClusterId, lastSyncType, SyncStatus.ONGOING);
+                } catch (TransactionAbortedException tae) {
+                    log.error("Error while attempting to markSnapshotSyncInfoOngoing for cluster {}.", remoteClusterId, tae);
+                    throw new RetryNeededException();
+                } finally {
+                    lock.unlock();
+                }
 
-            return null;
-        }).run();
+                return null;
+            }).run();
     }
 
     public void markSyncStatus(SyncStatus status) {
-        IRetry.build(IntervalRetry.class, () -> {
-            try {
-                lock.lock();
-                metadataManager.updateSyncStatus(remoteClusterId, lastSyncType, status);
-            } catch (TransactionAbortedException tae) {
-                log.error("Error while attempting to markSyncStatus as {}.", status, tae);
-                throw new RetryNeededException();
-            } finally {
-                lock.unlock();
-            }
+            IRetry.build(IntervalRetry.class, () -> {
+                try {
+                    lock.lock();
+                    metadataManager.updateSyncStatus(remoteClusterId, lastSyncType, status);
+                } catch (TransactionAbortedException tae) {
+                    log.error("Error while attempting to markSyncStatus as {}.", status, tae);
+                    throw new RetryNeededException();
+                } finally {
+                    lock.unlock();
+                }
 
-            if (log.isTraceEnabled()) {
-                log.trace("markSyncStatus succeeds as {}.", status);
-            }
-            return null;
-        }).run();
+                if (log.isTraceEnabled()) {
+                    log.trace("markSyncStatus succeeds as {}.", status);
+                }
+                return null;
+            }).run();
     }
 
     /**
@@ -446,22 +446,26 @@ public class LogReplicationAckReader {
     private class TsPollingTask implements Runnable {
         @Override
         public void run() {
-            IRetry.build(IntervalRetry.class, () -> {
-                try {
-                    lock.lock();
-                    long entriesToSend = calculateRemainingEntriesToSend(lastAckedTimestamp);
-                    metadataManager.setReplicationStatusTable(remoteClusterId, entriesToSend, lastSyncType);
-                } catch (TransactionAbortedException tae) {
-                    log.error("Error while attempting to set replication status for " +
-                                    "remote cluster {} with lastSyncType {}.",
-                            remoteClusterId, lastSyncType, tae);
-                    throw new RetryNeededException();
-                } finally {
-                    lock.unlock();
-                }
+                IRetry.build(IntervalRetry.class, () -> {
+                    try {
+                        lock.lock();
+                        if (lastSyncType == null) {
+                            log.info("lastSyncType is null before polling task run");
+                            return null;
+                        }
+                        long entriesToSend = calculateRemainingEntriesToSend(lastAckedTimestamp);
+                        metadataManager.updateRemainingEntriesToSend(remoteClusterId, entriesToSend, lastSyncType);
+                    } catch (TransactionAbortedException tae) {
+                        log.error("Error while attempting to set remaining entries for " +
+                                        "remote cluster {} with lastSyncType {}.",
+                                remoteClusterId, lastSyncType, tae);
+                        throw new RetryNeededException();
+                    } finally {
+                        lock.unlock();
+                    }
 
-                return null;
-            }).run();
+                    return null;
+                }).run();
         }
     }
 }

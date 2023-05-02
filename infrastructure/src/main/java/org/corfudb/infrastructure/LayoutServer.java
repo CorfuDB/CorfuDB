@@ -109,12 +109,13 @@ public class LayoutServer extends AbstractServer {
         // Set the executor to be single-threaded since all the handlers need to be synchronized
         this.executor = serverContext.getExecutorService(1, "layoutServer-");
         HealthMonitor.reportIssue(Issue.createInitIssue(Component.LAYOUT_SERVER));
-        if (serverContext.installSingleNodeLayoutIfAbsent()) {
-            setLayoutInHistory(getCurrentLayout());
-        }
-        if (getCurrentLayout() != null) {
+        Optional<Layout> maybeCurrentLayout = findCurrentLayout();
+        maybeCurrentLayout.ifPresent(currentLayout -> {
+            if (serverContext.installSingleNodeLayoutIfAbsent()) {
+                setLayoutInHistory(currentLayout);
+            }
             HealthMonitor.resolveIssue(Issue.createInitIssue(Component.LAYOUT_SERVER));
-        }
+        });
     }
 
     @Override
@@ -130,7 +131,7 @@ public class LayoutServer extends AbstractServer {
     }
 
     private boolean isBootstrapped(RequestMsg requestMsg) {
-        if (getCurrentLayout() == null) {
+        if (!findCurrentLayout().isPresent()) {
             log.debug("Received request but not bootstrapped! RequestMsg={}", TextFormat.shortDebugString(requestMsg));
             return false;
         }
@@ -187,7 +188,7 @@ public class LayoutServer extends AbstractServer {
         HeaderMsg responseHeader;
         ResponseMsg response;
 
-        if (getCurrentLayout() != null) {
+        if (findCurrentLayout().isPresent()) {
             log.warn("handleBootstrapLayoutRequest[{}]: Server is already bootstrapped!", requestHeader.getRequestId());
 
             responseHeader = getHeaderMsg(requestHeader, ClusterIdCheck.CHECK, EpochCheck.IGNORE);
@@ -203,15 +204,13 @@ public class LayoutServer extends AbstractServer {
                     requestHeader.getRequestId());
 
             responseHeader = getHeaderMsg(requestHeader, ClusterIdCheck.CHECK, EpochCheck.CHECK);
-            response = getResponseMsg(responseHeader,
-                    getBootstrapLayoutResponseMsg(false));
+            response = getResponseMsg(responseHeader, getBootstrapLayoutResponseMsg(false));
         } else if (layout.getClusterId() == null) {
             log.warn("handleBootstrapLayoutRequest[{}]: The layout={} does not have a clusterId",
                     requestHeader.getRequestId(), layout);
 
             responseHeader = getHeaderMsg(requestHeader, ClusterIdCheck.CHECK, EpochCheck.CHECK);
-            response = getResponseMsg(responseHeader,
-                    getBootstrapLayoutResponseMsg(false));
+            response = getResponseMsg(responseHeader, getBootstrapLayoutResponseMsg(false));
         } else {
             log.info("handleBootstrapLayoutRequest[{}]: Bootstrap with new layout={}", requestHeader.getRequestId(), layout);
             setCurrentLayout(layout);
@@ -219,8 +218,7 @@ public class LayoutServer extends AbstractServer {
             // Set serverContext's Current Node Locator using Channel ctx endpoint.
             updateNodeLocator(ctx, serverContext);
             responseHeader = getHeaderMsg(requestHeader, ClusterIdCheck.CHECK, EpochCheck.IGNORE);
-            response = getResponseMsg(responseHeader,
-                    getBootstrapLayoutResponseMsg(true));
+            response = getResponseMsg(responseHeader, getBootstrapLayoutResponseMsg(true));
             HealthMonitor.resolveIssue(Issue.createInitIssue(Component.LAYOUT_SERVER));
         }
 
@@ -270,8 +268,10 @@ public class LayoutServer extends AbstractServer {
                     requestHeader.getRequestId(), prepareRank, phase1Rank);
 
             responseHeader = getHeaderMsg(requestHeader, ClusterIdCheck.CHECK, EpochCheck.CHECK);
-            response = getResponseMsg(responseHeader, getPrepareLayoutResponseMsg(
-                    false, phase1Rank.getRank(), proposedLayout));
+            response = getResponseMsg(
+                    responseHeader,
+                    getPrepareLayoutResponseMsg(false, phase1Rank.getRank(), proposedLayout)
+            );
         } else {
             // Return the layout with the highest rank proposed before.
             Rank highestProposedRank = proposedLayout == null ?
@@ -281,8 +281,10 @@ public class LayoutServer extends AbstractServer {
             log.debug("handlePrepareLayoutRequest[{}]: New phase 1 rank={}", requestHeader.getRequestId(), prepareRank);
 
             responseHeader = getHeaderMsg(requestHeader, ClusterIdCheck.CHECK, EpochCheck.IGNORE);
-            response = getResponseMsg(responseHeader, getPrepareLayoutResponseMsg(
-                    true, highestProposedRank.getRank(), proposedLayout));
+            response = getResponseMsg(
+                    responseHeader,
+                    getPrepareLayoutResponseMsg(true, highestProposedRank.getRank(), proposedLayout)
+            );
         }
 
         r.sendResponse(response, ctx);
@@ -487,6 +489,14 @@ public class LayoutServer extends AbstractServer {
         r.sendResponse(response, ctx);
     }
 
+    public Optional<Layout> findCurrentLayout() {
+        return Optional.ofNullable(getCurrentLayout());
+    }
+
+    /**
+     * @deprecated use findLayout()
+     * @return current layout
+     */
     public Layout getCurrentLayout() {
         Layout layout = serverContext.getCurrentLayout();
         if (layout != null) {
@@ -512,8 +522,8 @@ public class LayoutServer extends AbstractServer {
      * Obtains the local endpoint from netty ctx to which the remote client connected to
      * and checks its presence in the layout.
      *
-     * @param ctx
-     * @param serverContext
+     * @param ctx netty handler context
+     * @param serverContext server context
      */
     protected static void updateNodeLocator(ChannelHandlerContext ctx, ServerContext serverContext) {
         String endpoint = getLocalEndpointFromCtx(ctx);

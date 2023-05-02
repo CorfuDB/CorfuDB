@@ -102,7 +102,7 @@ public class CorfuStore {
         Table table =
                 runtime.getTableRegistry().openTable(namespace, tableName, kClass, vClass, mClass, tableOptions);
         corfuStoreMetrics.recordTableCount();
-        log.info("openTable {}${} took {}ms", namespace, tableName, (System.currentTimeMillis() - startTime));
+        log.info(CorfuRuntime.LOG_NOT_IMPORTANT, "openTable {}${} took {}ms", namespace, tableName, (System.currentTimeMillis() - startTime));
         return table;
     }
 

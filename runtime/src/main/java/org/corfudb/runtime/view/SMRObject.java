@@ -137,7 +137,7 @@ public class SMRObject<T extends ICorfuSMR<T>> {
             final SMRObject<T> smrObject = build();
 
             try {
-                log.info("ObjectBuilder: open Corfu stream {} id {}", smrObject.getStreamName(),
+                log.info(CorfuRuntime.LOG_NOT_IMPORTANT, "ObjectBuilder: open Corfu stream {} id {}", smrObject.getStreamName(),
                         smrObject.getStreamID());
 
                 if (smrObject.getOption() == ObjectOpenOption.NO_CACHE) {

@@ -5,6 +5,7 @@ import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.infrastructure.logreplication.DataSender;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal.SyncType;
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationEventMetadata;
 import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
@@ -156,6 +157,7 @@ public class WaitSnapshotApplyState implements LogReplicationState {
     public void onEntry(LogReplicationState from) {
         log.info("OnEntry :: wait snapshot apply state");
         if (from.getType().equals(LogReplicationStateType.INITIALIZED)) {
+            fsm.getAckReader().setSyncType(SyncType.SNAPSHOT);
             stopSnapshotApply.set(false);
             fsm.getAckReader().markSnapshotSyncInfoOngoing();
         }
