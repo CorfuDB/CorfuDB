@@ -542,11 +542,15 @@ public class TableRegistry {
 
     /**
      * Adds the schema to the class map to enable serialization of this table data.
+     * This method is exposed as public purely for those tables whose value schema
+     * has changed under the hood from one type to another without changing the table name.
+     * So those tables can be accessed without hitting a serialization exception once the
+     * old type is added to the Serializer's known type map.
      *
      * @param msg Default message of this protobuf message.
      * @param <T> Type of message.
      */
-    private <T extends Message> void addTypeToClassMap(T msg) {
+    public <T extends Message> void addTypeToClassMap(T msg) {
         String typeUrl = getTypeUrl(msg.getDescriptorForType());
         // Register the schemas to schema table.
         ((ProtobufSerializer)runtime.getSerializers().getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE))
