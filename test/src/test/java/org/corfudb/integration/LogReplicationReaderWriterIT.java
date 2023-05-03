@@ -56,6 +56,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 @Slf4j
 public class LogReplicationReaderWriterIT extends AbstractIT {
@@ -271,8 +272,15 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
 
         long topologyConfigId = msgQ.get(0).getMetadata().getTopologyConfigID();
         long snapshot = msgQ.get(0).getMetadata().getSnapshotTimestamp();
-        logReplicationMetadataManager.updateReplicationMetadataField(getDefaultSession(),
-                LogReplicationMetadata.ReplicationMetadata.LASTSNAPSHOTSTARTED_FIELD_NUMBER, snapshot);
+        LogReplicationMetadata.ReplicationMetadata replicationMetadata =
+            logReplicationMetadataManager.getReplicationMetadata(getDefaultSession());
+
+        try (TxnContext txnContext = dstCorfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+            logReplicationMetadataManager.updateReplicationMetadata(txnContext, getDefaultSession(),
+                    replicationMetadata.toBuilder().setLastSnapshotStarted(snapshot).build());
+            txnContext.commit();
+        }
+
         writer.reset(topologyConfigId, snapshot);
 
         for (LogReplicationEntryMsg msg : msgQ) {

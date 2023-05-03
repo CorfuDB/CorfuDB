@@ -204,8 +204,7 @@ public class SessionManager {
 
                             //update topologyId for sink sessions
                             if (remoteSourceClustersUnchanged.contains(session.getSourceClusterId())) {
-                                metadataManager.updateReplicationMetadataField(txn, session,
-                                        ReplicationMetadata.TOPOLOGYCONFIGID_FIELD_NUMBER, newTopology.getTopologyConfigId());
+                                metadataManager.setTopologyConfigId(txn, session, newTopology.getTopologyConfigId());
                             }
                         }
                     });
