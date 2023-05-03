@@ -5,6 +5,7 @@ import com.google.protobuf.Timestamp;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.ILogReplicationVersionAdapter;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
+import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
@@ -74,7 +75,7 @@ public class LRRollingUpgradeHandler {
         }
     }
 
-    public boolean isLRUpgradeInProgress(TxnContext txnContext) {
+    public boolean isLRUpgradeInProgress(CorfuStore corfuStore, TxnContext txnContext) {
 
         if (isClusterAllAtV2) {
             return false;
@@ -109,7 +110,7 @@ public class LRRollingUpgradeHandler {
         } // else implies cluster upgrade has completed
 
         log.info("LRRollingUpgrade upgrade completed to version {}", nodeVersion);
-        migrateData(txnContext);
+        migrateData(corfuStore, txnContext);
         isClusterAllAtV2 = true;
         return false;
     }
@@ -122,8 +123,9 @@ public class LRRollingUpgradeHandler {
      *
      * @param txnContext All of the above must execute in the same transaction passed in.
      */
-    public void migrateData(TxnContext txnContext) {
-        // Data migration to be added here.
+    public void migrateData(CorfuStore corfuStore, TxnContext txnContext) {
+        // Currently only the LogReplicationMetadataManager needs data-migration
+        LogReplicationMetadataManager.migrateData(corfuStore, txnContext);
         addSnapshotSyncEventOnUpgradeCompletion(txnContext);
     }
 

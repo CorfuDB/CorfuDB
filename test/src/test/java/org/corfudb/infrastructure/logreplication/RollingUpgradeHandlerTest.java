@@ -48,7 +48,7 @@ public class RollingUpgradeHandlerTest extends AbstractViewTest {
 
         // Verify that an ongoing upgrade is detected because node version != cluster version
         try (TxnContext txnContext = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            Assert.assertTrue(rollingUpgradeHandler.isLRUpgradeInProgress(txnContext));
+            Assert.assertTrue(rollingUpgradeHandler.isLRUpgradeInProgress(corfuStore, txnContext));
             txnContext.commit();
         }
 
@@ -57,7 +57,7 @@ public class RollingUpgradeHandlerTest extends AbstractViewTest {
 
         // Verify that an ongoing upgrade is not detected because node version == cluster version
         try (TxnContext txnContext = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            Assert.assertFalse(rollingUpgradeHandler.isLRUpgradeInProgress(txnContext));
+            Assert.assertFalse(rollingUpgradeHandler.isLRUpgradeInProgress(corfuStore, txnContext));
             txnContext.commit();
         }
     }
