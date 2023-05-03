@@ -25,7 +25,6 @@ import org.junit.Test;
 import org.mockito.Mockito;
 
 import java.util.List;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
@@ -142,8 +141,8 @@ public class MetadataManagerTest extends AbstractViewTest {
                 IRetry.build(IntervalRetry.class, () -> {
                     CorfuStore corfuStore = new CorfuStore(corfuRuntime);
                     try (TxnContext txnContext = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-                        metadataManager.updateReplicationMetadataField(txnContext, defaultSession,
-                                ReplicationMetadata.TOPOLOGYCONFIGID_FIELD_NUMBER, topologyConfigId + 1);
+                        metadataManager.setTopologyConfigId(txnContext, defaultSession,
+                            topologyConfigId + 1);
                         txnContext.commit();
                     } catch (TransactionAbortedException tae) {
                         log.error("Transaction Aborted", tae);

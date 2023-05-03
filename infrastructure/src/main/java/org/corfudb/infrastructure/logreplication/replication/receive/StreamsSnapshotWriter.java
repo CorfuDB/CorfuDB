@@ -157,7 +157,7 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
 
         try (TxnContext txn = metadataManager.getTxnContext()) {
             updateLog(txn, smrEntries, shadowStreamUuid);
-            metadataManager.updateReplicationMetadataField(txn, session, ReplicationMetadata.LASTSNAPSHOTTRANSFERREDSEQNUMBER_FIELD_NUMBER, currentSeqNum);
+            metadataManager.setLastSnapshotTransferredSeqNum(txn, session, currentSeqNum);
             timestamp = txn.commit();
         }
 
@@ -191,8 +191,8 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
             return;
         }
 
-        metadataManager.updateReplicationMetadataField(txnContext, session, ReplicationMetadata.TOPOLOGYCONFIGID_FIELD_NUMBER, topologyConfigId);
-        metadataManager.updateReplicationMetadataField(txnContext, session, ReplicationMetadata.LASTSNAPSHOTSTARTED_FIELD_NUMBER, srcGlobalSnapshot);
+        ReplicationMetadata newMetadata = metadata.toBuilder().setLastSnapshotStarted(srcGlobalSnapshot).build();
+        metadataManager.updateReplicationMetadata(txnContext, session, newMetadata);
 
         for (SMREntry smrEntry : smrEntries) {
             txnContext.logUpdate(streamId, smrEntry, replicationContext.getConfig().getDataStreamToTagsMap().get(streamId));
@@ -475,8 +475,7 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
         try {
             IRetry.build(IntervalRetry.class, () -> {
                 try (TxnContext txnContext = metadataManager.getTxnContext()) {
-                    metadataManager.updateReplicationMetadataField(txnContext, session,
-                            ReplicationMetadata.TOPOLOGYCONFIGID_FIELD_NUMBER, topologyConfigId);
+                    metadataManager.setTopologyConfigId(txnContext, session, topologyConfigId);
                     streamsToClear.forEach(streamId -> {
                         clearStream(streamId, txnContext);
                     });

@@ -6,7 +6,6 @@ import com.google.protobuf.Message;
 import com.google.protobuf.Timestamp;
 import io.micrometer.core.instrument.Timer;
 import lombok.Getter;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
@@ -45,9 +44,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
@@ -207,14 +204,14 @@ public class LogReplicationMetadataManager {
         return entry.getPayload();
     }
 
-    /**
+/*    *//**
      * Update a single field of replication metadata for a given LR session as part of an ongoing transaction
      *
      * @param txn transaction context, for atomic commit
      * @param session unique identifier for LR Session
      * @param fieldNumber field number corresponding to attribute in replication metadata to be updated
      * @param value value to update
-     */
+     *//*
     public void updateReplicationMetadataField(TxnContext txn, LogReplicationSession session, int fieldNumber, Object value) {
         Descriptors.FieldDescriptor fd = ReplicationMetadata.getDescriptor().findFieldByNumber(fieldNumber);
         if (fd == null) {
@@ -231,15 +228,15 @@ public class LogReplicationMetadataManager {
         txn.putRecord(metadataTable, session, updatedMetadata, null);
 
         log.debug("Update metadata field {}, value={}, session={}", fd.getFullName(), value, session);
-    }
+    }*/
 
-    /**
+/*    *//**
      * Update a single field of replication metadata for a given LR session
      *
      * @param session       unique identifier for LR Session
      * @param fieldNumber   field number corresponding to attribute in replication metadata to be updated
      * @param value         value to update
-     */
+     *//*
     public void updateReplicationMetadataField(LogReplicationSession session, int fieldNumber, Object value) {
         try {
             IRetry.build(IntervalRetry.class, () -> {
@@ -256,7 +253,7 @@ public class LogReplicationMetadataManager {
             log.error("Unrecoverable exception when attempting to update replication metadata", e);
             throw new UnrecoverableCorfuInterruptedError(e);
         }
-    }
+    }*/
 
     /**
      * Update replication metadata for a given LR session as part of an ongoing transaction.
@@ -332,7 +329,7 @@ public class LogReplicationMetadataManager {
         return statusMap;
     }
 
-    // =========================== Replication Status Table Methods ===============================
+    // =========================== Replication Metadata Table Methods ===============================
 
 
     /**
@@ -376,8 +373,6 @@ public class LogReplicationMetadataManager {
             }
 
             ReplicationMetadata updatedMetadata = metadata.toBuilder()
-                    .setTopologyConfigId(topologyConfigId)  // Update the topologyConfigId to fence all other txs
-                    // that update the metadata at the same time
                     .setLastSnapshotStarted(snapshotStartTs)
                     .setLastSnapshotTransferred(Address.NON_ADDRESS) // Reset other metadata fields
                     .setLastSnapshotApplied(Address.NON_ADDRESS)
@@ -421,7 +416,6 @@ public class LogReplicationMetadataManager {
 
             ReplicationMetadata updatedMetadata = metadata.toBuilder()
                     .setLastSnapshotTransferred(ts)
-                    .setTopologyConfigId(topologyConfigId)
                     .build();
 
             // Update the topologyConfigId to fence all other transactions that update the metadata at the same time
@@ -449,7 +443,6 @@ public class LogReplicationMetadataManager {
                 return;
             }
 
-            // Update the topologyConfigId to fence all other transactions that update the metadata at the same time
             ReplicationMetadata updatedMetadata = metadata.toBuilder()
                     .setLastSnapshotApplied(ts)
                     .setLastLogEntryBatchProcessed(ts)
@@ -505,6 +498,20 @@ public class LogReplicationMetadataManager {
 
             updateReplicationMetadata(txn, session, updatedMetadata);
         }
+    }
+
+    public void setTopologyConfigId(TxnContext txn, LogReplicationSession session, long topologyConfigId) {
+        ReplicationMetadata metadata = queryReplicationMetadata(txn, session);
+
+        ReplicationMetadata updatedMetadata = metadata.toBuilder().setTopologyConfigId(topologyConfigId).build();
+        updateReplicationMetadata(txn, session, updatedMetadata);
+    }
+
+    public void setLastSnapshotTransferredSeqNum(TxnContext txn, LogReplicationSession session, long seqNum) {
+        ReplicationMetadata metadata = queryReplicationMetadata(txn, session);
+
+        ReplicationMetadata updatedMetadata = metadata.toBuilder().setLastSnapshotTransferredSeqNumber(seqNum).build();
+        updateReplicationMetadata(txn, session, updatedMetadata);
     }
 
     // =============================== Replication Event Table Methods ===================================
