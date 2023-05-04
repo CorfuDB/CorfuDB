@@ -91,10 +91,7 @@ public class LogEntryWriter extends SinkWriter {
                     try (TxnContext txnContext = metadataManager.getTxnContext()) {
 
                         // NOTE: The topology config id should be queried and validated for every opaque entry because the
-                        // Sink could have received concurrent topology config id changes. Here we are leveraging a
-                        // single read to fetch multiple metadata types. This will be cleanly handled when the
-                        // Metadata table's schema is changed to use the remote session as the key instead of
-                        // metadata type.
+                        // Sink could have received concurrent topology config id changes.
                         ReplicationMetadata metadata = metadataManager.queryReplicationMetadata(txnContext, session);
 
                         long persistedTopologyConfigId = metadata.getTopologyConfigId();
