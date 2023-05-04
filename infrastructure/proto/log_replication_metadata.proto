@@ -40,18 +40,18 @@ message LogReplicationMetadataVal {
 /*------- Log Replication Metadata Table V2 Schema ----------*/
 
 message ReplicationMetadata {
-  uint64 topologyConfigId = 1;
+  uint64 topology_config_id = 1;
   string version = 2;
-  int64 lastSnapshotStarted = 3;
-  int64 lastSnapshotTransferredSeqNumber = 4;
-  int64 lastSnapshotTransferred = 5;
-  int64 lastSnapshotApplied = 6;
-  int64 lastLogEntryApplied = 7;
-  org.corfudb.runtime.UuidMsg currentSnapshotCycleId = 8;
-  int64 currentCycleMinShadowStreamTs = 9;
-  SyncType snapshotSyncType = 10;
-  int64 snapshotSyncCompleteTime = 11;
-  int64 lastLogEntryBatchProcessed = 12;
+  int64 last_snapshot_started = 3;
+  int64 last_snapshot_transferred_seq_number = 4;
+  int64 last_snapshot_transferred = 5;
+  int64 last_snapshot_applied = 6;
+  int64 last_log_entry_applied = 7;
+  org.corfudb.runtime.UuidMsg current_snapshot_cycle_id = 8;
+  int64 current_cycle_min_shadow_stream_ts = 9;
+  SyncType snapshot_sync_type = 10;
+  int64 snapshot_sync_complete_time = 11;
+  int64 last_log_entry_batch_processed = 12;
 }
 
 /*--------END---------*/
@@ -130,8 +130,8 @@ message ReplicationEvent {
   enum ReplicationEventType {
     FORCE_SNAPSHOT_SYNC = 0;
   }
-  string clusterId = 1;
-  string eventId = 2;
+  string cluster_id = 1;
+  string event_id = 2;
   ReplicationEventType type = 3;
-  google.protobuf.Timestamp eventTimestamp = 4;
+  google.protobuf.Timestamp event_timestamp = 4;
 }
