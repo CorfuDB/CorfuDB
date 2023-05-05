@@ -77,8 +77,7 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 @SuppressWarnings("checkstyle:magicnumber")
 @RunWith(Parameterized.class)
 public class CorfuReplicationClusterConfigIT extends AbstractIT {
-    public static final String nettyPluginPath = "src/test/resources/transport/nettyConfig.properties";
-    public static final String grpcPluginPath = "src/test/resources/transport/grpcConfig.properties";
+    public static final String grpcPluginPath = "src/test/resources/transport/pluginConfig.properties";
     private static final String streamName = "Table001";
     private static final String LOCK_TABLE_NAME = "LOCK";
 

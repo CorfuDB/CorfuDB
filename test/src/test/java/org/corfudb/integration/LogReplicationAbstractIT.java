@@ -85,8 +85,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
 
     public static final String TAG_ONE = "tag_one";
 
-    public final static String nettyConfig = "src/test/resources/transport/nettyConfig.properties";
-    public final static String grpcConfig = "src/test/resources/transport/grpcConfig.properties";
+    public final static String grpcConfig = "src/test/resources/transport/pluginConfig.properties";
 
     public String pluginConfigFilePath;
 

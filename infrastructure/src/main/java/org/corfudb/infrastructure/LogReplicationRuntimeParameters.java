@@ -4,6 +4,7 @@ import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
 import lombok.Data;
 import org.corfudb.comm.ChannelImplementation;
+import org.corfudb.infrastructure.logreplication.config.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.transport.IChannelContext;
 
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
@@ -34,8 +35,8 @@ public class LogReplicationRuntimeParameters extends RuntimeParameters {
     // Local Cluster Identifier
     private String localClusterId;
 
-    // Plugin File Path (file with plugin configurations - absolute paths of JAR and canonical name of classes)
-    private String pluginFilePath;
+    // Log Replication Configuration (streams to replicate)
+    private LogReplicationConfig replicationConfig;
 
     // Topology Configuration Identifier (configuration epoch)
     private long topologyConfigId;
@@ -256,7 +257,6 @@ public class LogReplicationRuntimeParameters extends RuntimeParameters {
             runtimeParameters.setLocalClusterId(localClusterId);
             runtimeParameters.setRemoteClusterDescriptor(remoteClusterDescriptor);
             runtimeParameters.setTopologyConfigId(topologyConfigId);
-            runtimeParameters.setPluginFilePath(pluginFilePath);
             runtimeParameters.setChannelContext(channelContext);
             runtimeParameters.setMaxWriteSize(maxWriteSize);
             return runtimeParameters;

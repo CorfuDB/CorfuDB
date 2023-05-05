@@ -25,7 +25,7 @@ public class LogReplicationUpgradeManager {
 
     private ILogReplicationVersionAdapter logReplicationVersionAdapter;
 
-    private final String pluginConfigFilePath;
+    private final LogReplicationPluginConfig config;
 
     // The current version running on the local node, extracted from the plugin
     @Getter
@@ -45,8 +45,6 @@ public class LogReplicationUpgradeManager {
     }
 
     private void initVersionPlugin(CorfuRuntime runtime) {
-        log.info("Version plugin :: {}", pluginConfigFilePath);
-        LogReplicationPluginConfig config = new LogReplicationPluginConfig(pluginConfigFilePath);
         File jar = new File(config.getStreamFetcherPluginJARPath());
         try (URLClassLoader child = new URLClassLoader(new URL[]{jar.toURI().toURL()}, this.getClass().getClassLoader())) {
             Class plugin = Class.forName(config.getStreamFetcherClassCanonicalName(), true, child);
