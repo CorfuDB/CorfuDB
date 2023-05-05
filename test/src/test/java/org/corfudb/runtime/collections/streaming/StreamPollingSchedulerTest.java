@@ -34,6 +34,7 @@ import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.corfudb.runtime.exceptions.StreamingException.ExceptionCause.LISTENER_SUBSCRIBED;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.mock;
@@ -134,7 +135,7 @@ public class StreamPollingSchedulerTest {
         // Verify that the same listener can't be registered more than once
         assertThatThrownBy(() -> addTask(0, 10))
                 .isInstanceOf(StreamingException.class)
-                .hasMessage("StreamingManager::subscribe: listener already registered " + listener);
+                .satisfies(e -> assertThat(((StreamingException) e).getExceptionCause()).isEqualTo(LISTENER_SUBSCRIBED));
 
         Map<UUID, StreamAddressSpace> streamAddressSpaceMap = constructMockAddressMap(0, false);
         List<StreamAddressRange> rangeQueryList = constructRangeQueryList(0);
@@ -216,7 +217,7 @@ public class StreamPollingSchedulerTest {
         // Verify that the same listener can't be registered more than once
         assertThatThrownBy(() -> addTask(5, 10))
                 .isInstanceOf(StreamingException.class)
-                .hasMessage("StreamingManager::subscribe: listener already registered " + listener);
+                .satisfies(e -> assertThat(((StreamingException) e).getExceptionCause()).isEqualTo(LISTENER_SUBSCRIBED));
 
         List<StreamAddressRange> rangeQueryList = constructRangeQueryList(5);
         Map<UUID, StreamAddressSpace> streamAddressSpaceMap = constructMockAddressMap(5, false);
@@ -334,7 +335,7 @@ public class StreamPollingSchedulerTest {
 
         assertThatThrownBy(() -> addTask(0, 6))
                 .isInstanceOf(StreamingException.class)
-                .hasMessage("StreamingManager::subscribe: listener already registered " + listener);
+                .satisfies(e -> assertThat(((StreamingException) e).getExceptionCause()).isEqualTo(LISTENER_SUBSCRIBED));
 
         // Remove the listener and re-add, it shouldn't throw an exception
         streamPoller.removeTask(listener);
