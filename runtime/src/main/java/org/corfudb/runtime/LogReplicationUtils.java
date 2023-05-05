@@ -149,7 +149,7 @@ public final class LogReplicationUtils {
                 }
             }).run();
         } catch (InterruptedException e) {
-            throw new StreamingException(e);
+            throw new StreamingException(e, StreamingException.ExceptionCause.SUBSCRIBE_ERROR);
         } finally {
             MicroMeterUtils.time(subscribeTimer, "logreplication.subscribe.duration");
         }
@@ -163,7 +163,7 @@ public final class LogReplicationUtils {
                     TableOptions.fromProtoSchema(ReplicationStatus.class));
         } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
             log.error("Failed to open the Replication Status table", e);
-            throw new StreamingException(e);
+            throw new StreamingException(e, StreamingException.ExceptionCause.SUBSCRIBE_ERROR);
         }
     }
 
