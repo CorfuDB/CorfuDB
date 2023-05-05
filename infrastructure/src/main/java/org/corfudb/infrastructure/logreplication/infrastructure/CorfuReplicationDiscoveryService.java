@@ -9,6 +9,7 @@ import org.corfudb.common.config.ConfigParamNames;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.logreplication.infrastructure.DiscoveryServiceEvent.DiscoveryServiceEventType;
+import org.corfudb.infrastructure.logreplication.infrastructure.Utils.CorfuSaasEndpointProvider;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.CorfuReplicationClusterManagerAdapter;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
@@ -47,7 +48,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.corfudb.common.util.URLUtils.getHostFromEndpointURL;
@@ -116,6 +116,8 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
     /**
      * Current node's endpoint
      */
+    @Getter
+    @VisibleForTesting
     private final String localEndpoint;
 
     /**
@@ -179,6 +181,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         this.logReplicationLockId = serverContext.getNodeId();
         this.localEndpoint = serverContext.getLocalEndpoint();
         this.clusterManagerAdapter = getClusterManagerAdapter(serverContext.getPluginConfigFilePath());
+        CorfuSaasEndpointProvider.init(serverContext.getPluginConfigFilePath());
     }
 
     /**
@@ -208,7 +211,6 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         try {
             log.info("Start Log Replication Discovery Service");
 
-            setLocalNodeId();
             fetchTopology();
             processDiscoveredTopology(topologyDescriptor, true);
 
@@ -339,7 +341,9 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         if (topology.getLocalClusterDescriptor() != null && topology.getLocalNodeDescriptor() != null) {
             if (update) {
                 topologyDescriptor = topology;
-                localCorfuEndpoint = getCorfuEndpoint(getLocalHost(), topology.getLocalClusterDescriptor().getCorfuPort());
+                int port = topology.getLocalClusterDescriptor().getCorfuPort();
+                localCorfuEndpoint = CorfuSaasEndpointProvider.getCorfuSaasEndpoint()
+                        .orElseGet(() -> getCorfuEndpoint(getLocalHost(), port));
             }
             return true;
         }
@@ -444,6 +448,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
     private void fetchTopology() {
 
         connectToClusterManager();
+        this.localNodeId = clusterManagerAdapter.getLocalNodeId();
 
         try {
             IRetry.build(ExponentialBackoffRetry.class, () -> {
@@ -594,7 +599,8 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
                 log.info("Bootstrap the Log Replication Service");
                 upgradeManager = new LogReplicationUpgradeManager(getCorfuRuntime(),
                         serverContext.getPluginConfigFilePath());
-                sessionManager = new SessionManager(topologyDescriptor, getCorfuRuntime(), serverContext, upgradeManager);
+                sessionManager = new SessionManager(topologyDescriptor, getCorfuRuntime(), serverContext, upgradeManager,
+                        localCorfuEndpoint);
                 performRoleBasedSetup();
                 registerToLogReplicationLock();
                 bootstrapComplete = true;
@@ -752,41 +758,6 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
 
     private void recordLockRelease() {
         lockAcquireSample.ifPresent(LongTaskTimer.Sample::stop);
-    }
-
-    private void setLocalNodeId() {
-        // Retrieve system-specific node id
-        LogReplicationPluginConfig config = new LogReplicationPluginConfig(serverContext.getPluginConfigFilePath());
-        String nodeIdFilePath = config.getNodeIdFilePath();
-
-        // TODO[V2]: this code should come from plugin
-        if (nodeIdFilePath != null) {
-            File nodeIdFile = new File(nodeIdFilePath);
-            try (BufferedReader bufferedReader = new BufferedReader(new FileReader(nodeIdFile))) {
-                String line = bufferedReader.readLine();
-                localNodeId = line.split("=")[1].trim().toLowerCase();
-                log.info("Local node id={}", localNodeId);
-            } catch (IOException e) {
-                log.error("setupLocalNodeId failed", e);
-                throw new IllegalStateException(e.getCause());
-            }
-        } else {
-            log.error("setupLocalNodeId failed, because nodeId file path is missing!");
-            DefaultClusterConfig defaultClusterConfig = new DefaultClusterConfig();
-
-            // For testing purpose, it uses the default host to assign node id
-            if (getLocalHost().equals(defaultClusterConfig.getDefaultHost())) {
-                localNodeId = defaultClusterConfig.getDefaultNodeId(localEndpoint);
-
-                if (localNodeId == null) {
-                    throw new IllegalStateException("SetupLocalNodeId failed for testing");
-                }
-
-                log.info("Default node id={} for testing", localNodeId);
-            } else {
-                throw new IllegalArgumentException("NodeId file path is missing");
-            }
-        }
     }
 
     @Override
