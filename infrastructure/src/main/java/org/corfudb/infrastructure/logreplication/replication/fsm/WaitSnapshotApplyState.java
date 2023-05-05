@@ -9,6 +9,7 @@ import org.corfudb.infrastructure.logreplication.replication.send.LogReplication
 import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationUpgradeManager;
 import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
+import org.corfudb.runtime.LogReplication.SyncType;
 
 import java.util.Optional;
 import java.util.UUID;
@@ -157,6 +158,7 @@ public class WaitSnapshotApplyState implements LogReplicationState {
     public void onEntry(LogReplicationState from) {
         log.info("OnEntry :: wait snapshot apply state");
         if (from.getType().equals(LogReplicationStateType.INITIALIZED)) {
+            fsm.getAckReader().setSyncType(SyncType.SNAPSHOT);
             stopSnapshotApply.set(false);
             fsm.getAckReader().markSnapshotSyncInfoOngoing();
         }

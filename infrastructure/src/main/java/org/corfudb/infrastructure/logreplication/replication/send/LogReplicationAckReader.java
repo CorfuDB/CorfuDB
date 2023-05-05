@@ -53,7 +53,7 @@ public class LogReplicationAckReader {
     // Last ack'd timestamp from Receiver
     private long lastAckedTimestamp = Address.NON_ADDRESS;
 
-    // Sync Type for which last Ack was received, it is initialized where the timestamp polling task is created.
+    // Sync Type for which last Ack was received, it is initialized when setSyncType is called
     private SyncType lastSyncType = null;
 
     private LogEntryReader logEntryReader;
@@ -403,7 +403,7 @@ public class LogReplicationAckReader {
             IRetry.build(IntervalRetry.class, () -> {
                 try {
                     lock.lock();
-                    metadataManager.updateSyncStatus(session, SyncType.SNAPSHOT, SyncStatus.ONGOING);
+                    metadataManager.updateSyncStatus(session, lastSyncType, SyncStatus.ONGOING);
                 } catch (TransactionAbortedException tae) {
                     log.error("Error while attempting to markSnapshotSyncInfoOngoing for session {}.", session, tae);
                     throw new RetryNeededException();
@@ -446,9 +446,8 @@ public class LogReplicationAckReader {
     /**
      * Start periodic replication status update task (completion percentage)
      */
-    public void startSyncStatusUpdatePeriodicTask(SyncType syncType) {
+    public void startSyncStatusUpdatePeriodicTask() {
         log.info("Start sync status update periodic task");
-        lastSyncType = syncType;
         lastAckedTsPoller = Executors.newSingleThreadScheduledExecutor(
                 new ThreadFactoryBuilder().setNameFormat("ack-timestamp-reader-"+ session.hashCode()).build());
         lastAckedTsPoller.scheduleWithFixedDelay(new TsPollingTask(), 0, ACKED_TS_READ_INTERVAL_SECONDS,
@@ -475,10 +474,14 @@ public class LogReplicationAckReader {
                 IRetry.build(IntervalRetry.class, () -> {
                     try {
                         lock.lock();
+                        if (lastSyncType == null) {
+                            log.info("lastSyncType is null before polling task run");
+                            return null;
+                        }
                         long entriesToSend = calculateRemainingEntriesToSend(lastAckedTimestamp);
                         metadataManager.updateRemainingEntriesToSend(session, entriesToSend, lastSyncType);
                     } catch (TransactionAbortedException tae) {
-                        log.error("Error while attempting to set replication status for remote session {} with " +
+                        log.error("Error while attempting to set remaining entries for remote session {} with " +
                                 "lastSyncType {}.", session, lastSyncType, tae);
                         throw new RetryNeededException();
                     } finally {
@@ -488,7 +491,7 @@ public class LogReplicationAckReader {
                     return null;
                 }).run();
             } catch (InterruptedException e) {
-                log.error("Unrecoverable exception when attempting to setReplicationStatusTable", e);
+                log.error("Unrecoverable exception when attempting to updateRemainingEntriesToSend", e);
                 throw new UnrecoverableCorfuInterruptedError(e);
             }
         }

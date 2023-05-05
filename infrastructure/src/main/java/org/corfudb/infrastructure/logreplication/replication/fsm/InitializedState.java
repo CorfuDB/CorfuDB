@@ -2,7 +2,6 @@ package org.corfudb.infrastructure.logreplication.replication.fsm;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.LogReplication.SyncStatus;
-import org.corfudb.runtime.LogReplication.SyncType;
 
 /**
  * This class represents the Init state of the Log Replication State Machine.
@@ -78,17 +77,8 @@ public class InitializedState implements LogReplicationState {
 
     @Override
     public void onExit(LogReplicationState to) {
-        LogReplicationStateType type = to.getType();
-        SyncType toSyncType = null;
-
-        if (type.equals(LogReplicationStateType.IN_SNAPSHOT_SYNC) || type.equals(LogReplicationStateType.WAIT_SNAPSHOT_APPLY)) {
-            toSyncType = SyncType.SNAPSHOT;
-        } else if (type.equals(LogReplicationStateType.IN_LOG_ENTRY_SYNC)) {
-            toSyncType = SyncType.LOG_ENTRY;
-        }
-
         if (to != this && to.getType() != LogReplicationStateType.ERROR) {
-            fsm.getAckReader().startSyncStatusUpdatePeriodicTask(toSyncType);
+            fsm.getAckReader().startSyncStatusUpdatePeriodicTask();
         }
     }
 

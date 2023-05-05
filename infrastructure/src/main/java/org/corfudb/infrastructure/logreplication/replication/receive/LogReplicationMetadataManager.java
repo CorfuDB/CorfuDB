@@ -6,7 +6,6 @@ import com.google.protobuf.Message;
 import com.google.protobuf.Timestamp;
 import io.micrometer.core.instrument.Timer;
 import lombok.Getter;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
@@ -45,9 +44,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
@@ -704,18 +701,13 @@ public class LogReplicationMetadataManager {
             ReplicationStatus previous = entry.getPayload();
             SnapshotSyncInfo previousSnapshotSyncInfo = previous.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo();
 
-            if (type == SyncType.LOG_ENTRY && (previous.getSourceStatus().getReplicationInfo().getStatus().equals(SyncStatus.NOT_STARTED)
-                            || previousSnapshotSyncInfo.getStatus().equals(SyncStatus.STOPPED))) {
+            if ((previous.getSourceStatus().getReplicationInfo().getStatus().equals(SyncStatus.NOT_STARTED) &&
+                    previousSnapshotSyncInfo.getStatus().equals(SyncStatus.NOT_STARTED)) ||
+                    (previous.getSourceStatus().getReplicationInfo().getStatus().equals(SyncStatus.STOPPED) ||
+                            previousSnapshotSyncInfo.getStatus().equals(SyncStatus.STOPPED))) {
                 // Skip update of sync status, it will be updated once replication is resumed or started
-                log.info("syncStatusPoller :: skip replication status update, log entry replication is {}",
+                log.info("syncStatusPoller :: skip remaining entries update, replication status is {}",
                         previous.getSourceStatus().getReplicationInfo().getStatus());
-                txn.commit();
-                return;
-            } else if (type == SyncType.SNAPSHOT && (previousSnapshotSyncInfo.getStatus().equals(SyncStatus.NOT_STARTED)
-                    || previousSnapshotSyncInfo.getStatus().equals(SyncStatus.STOPPED))) {
-                // Skip update of sync status, it will be updated once replication is resumed or started
-                log.info("syncStatusPoller :: skip replication status update, snapshot sync is {}",
-                        previousSnapshotSyncInfo.getStatus());
                 txn.commit();
                 return;
             }
@@ -731,8 +723,6 @@ public class LogReplicationMetadataManager {
             log.debug("syncStatusPoller :: remaining entries updated for {}, session: {}, remainingEntries: {}" +
                     "snapshotSyncInfo: {}", type, session, remainingEntries, previousSnapshotSyncInfo);
         }
-        log.debug("syncStatusPoller :: polling task ran for {}, session: {}, remainingEntries: {}",
-                type, session, remainingEntries);
     }
 
     /**
