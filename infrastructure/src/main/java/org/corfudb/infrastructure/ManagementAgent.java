@@ -153,7 +153,7 @@ public class ManagementAgent {
             HealthMonitor.reportIssue(Issue.createInitIssue(Component.COMPACTOR));
         }
 
-        this.compactorService = new CompactorService(serverContext, runtimeSingletonResource,
+        this.compactorService = new CompactorService(serverContext, TRIGGER_INTERVAL,
                 new InvokeCheckpointingJvm(serverContext), new DynamicTriggerPolicy());
 
         // Creating the initialization task thread.

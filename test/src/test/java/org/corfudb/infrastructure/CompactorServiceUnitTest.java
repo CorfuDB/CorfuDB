@@ -17,7 +17,6 @@ import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.proto.RpcCommon;
 import org.corfudb.runtime.view.Layout;
-import org.corfudb.util.concurrent.SingletonResource;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.Matchers;
@@ -26,8 +25,7 @@ import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 import static org.mockito.Matchers.any;
@@ -62,7 +60,6 @@ public class CompactorServiceUnitTest {
     private static final String NODE_0 = "0";
     private static final String SLEEP_INTERRUPTED_EXCEPTION_MSG = "Sleep interrupted";
 
-
     @Before
     public void setup() throws Exception {
 
@@ -81,9 +78,9 @@ public class CompactorServiceUnitTest {
         doNothing().when(txn).putRecord(any(), any(), any(), any());
         when(txn.commit()).thenReturn(CorfuStoreMetadata.Timestamp.getDefaultInstance());
 
-        CompactorService compactorService = new CompactorService(serverContext,
-                SingletonResource.withInitial(() -> corfuRuntime), invokeCheckpointingJvm, dynamicTriggerPolicy);
-        compactorServiceSpy = spy(compactorService);
+        compactorServiceSpy = spy(new CompactorService(serverContext,
+                Duration.ofSeconds(SCHEDULER_INTERVAL), invokeCheckpointingJvm, dynamicTriggerPolicy));
+        doReturn(corfuRuntime).when(compactorServiceSpy).getCorfuRuntime();
         doReturn(leaderServices).when(compactorServiceSpy).getCompactorLeaderServices();
         doReturn(corfuStore).when(compactorServiceSpy).getCorfuStore();
         //Compaction enabled
