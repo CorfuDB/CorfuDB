@@ -13,9 +13,9 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.DistributedCheckpointerHelper;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.LambdaUtils;
-import org.corfudb.util.concurrent.SingletonResource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -35,36 +35,62 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 public class CompactorService implements ManagementService {
 
     private final ServerContext serverContext;
-    private final SingletonResource<CorfuRuntime> runtimeSingletonResource;
-    private final ScheduledExecutorService orchestratorThread;
+    private final Duration triggerInterval;
     private final InvokeCheckpointing checkpointerJvmManager;
     private final CompactionTriggerPolicy compactionTriggerPolicy;
-
+    private ScheduledExecutorService orchestratorThread;
     private Optional<CompactorLeaderServices> optionalCompactorLeaderServices = Optional.empty();
     private Optional<CorfuStore> optionalCorfuStore = Optional.empty();
     private Optional<DistributedCheckpointerHelper> optionalDistributedCheckpointerHelper = Optional.empty();
+    private Optional<CorfuRuntime> corfuRuntimeOptional = Optional.empty();
     private TrimLog trimLog;
     private final Logger log;
     private static final Duration LIVENESS_TIMEOUT = Duration.ofMinutes(1);
+    private static final int SYSTEM_DOWN_HANDLER_TRIGGER_LIMIT = 60;
 
-    CompactorService(@NonNull ServerContext serverContext,
-                     @NonNull SingletonResource<CorfuRuntime> runtimeSingletonResource,
+    public CompactorService(@NonNull ServerContext serverContext,
+                     @NonNull Duration triggerInterval,
                      @NonNull InvokeCheckpointing checkpointerJvmManager,
                      @NonNull CompactionTriggerPolicy compactionTriggerPolicy) {
         this.serverContext = serverContext;
-        this.runtimeSingletonResource = runtimeSingletonResource;
-
-        this.orchestratorThread = Executors.newSingleThreadScheduledExecutor(
-                new ThreadFactoryBuilder()
-                        .setNameFormat("Cmpt-" + serverContext.getServerConfig().get("<port>") + "-chkpter")
-                        .build());
+        this.triggerInterval = triggerInterval;
         this.checkpointerJvmManager = checkpointerJvmManager;
         this.compactionTriggerPolicy = compactionTriggerPolicy;
         this.log = LoggerFactory.getLogger("compactor-leader");
     }
 
-    private CorfuRuntime getCorfuRuntime() {
-        return runtimeSingletonResource.get();
+    private Runnable getSystemDownHandlerForCompactor() {
+        return () -> {
+            log.warn("CorfuRuntime for CompactorService stalled. Invoking systemDownHandler after {} "
+                    + "unsuccessful tries.", SYSTEM_DOWN_HANDLER_TRIGGER_LIMIT);
+            shutdown();
+            start(this.triggerInterval);
+        };
+    }
+
+    private CorfuRuntime getNewCorfuRuntime() {
+        final CorfuRuntime.CorfuRuntimeParameters params =
+                serverContext.getManagementRuntimeParameters();
+        params.setSystemDownHandlerTriggerLimit(SYSTEM_DOWN_HANDLER_TRIGGER_LIMIT);
+        params.setSystemDownHandler(getSystemDownHandlerForCompactor());
+        final CorfuRuntime runtime = CorfuRuntime.fromParameters(params);
+        try {
+            runtime.connect();
+        } catch (UnrecoverableCorfuError er) {
+            log.error("Unable to connect to server due to UnrecoverableCorfuError: ", er);
+            runtime.getParameters().getSystemDownHandler().run();
+            throw er;
+        }
+        log.info("getCorfuRuntime: Corfu Runtime connected successfully");
+        return runtime;
+    }
+
+    @VisibleForTesting
+    public CorfuRuntime getCorfuRuntime() {
+        if (!corfuRuntimeOptional.isPresent()) {
+            corfuRuntimeOptional = Optional.of(getNewCorfuRuntime());
+        }
+        return corfuRuntimeOptional.get();
     }
 
     /**
@@ -81,7 +107,11 @@ public class CompactorService implements ManagementService {
 
         this.trimLog = new TrimLog(getCorfuRuntime(), getCorfuStore());
 
-        orchestratorThread.scheduleWithFixedDelay(
+        orchestratorThread = Executors.newSingleThreadScheduledExecutor(
+                new ThreadFactoryBuilder()
+                        .setNameFormat("Cmpt-" + serverContext.getServerConfig().get("<port>") + "-chkpter")
+                        .build());
+        orchestratorThread.scheduleWithFixedDelay (
                 () -> LambdaUtils.runSansThrow(this::runOrchestrator),
                 interval.toMillis(),
                 interval.toMillis(),
@@ -176,7 +206,11 @@ public class CompactorService implements ManagementService {
                     checkpointerJvmManager.invokeCheckpointing();
                 }
             }
-        } catch (Exception ex) {
+        } catch (UnrecoverableCorfuError er) {
+            log.error("Encountered UnrecoverableCorfuError in runOrchestrator(): ", er);
+            getCorfuRuntime().getParameters().getSystemDownHandler().run();
+        }
+        catch (Exception ex) {
           log.error("Exception in runOrchestrator(): ", ex);
         } catch (Throwable t) {
             log.error("Encountered unexpected exception in runOrchestrator(): ", t);
@@ -200,7 +234,16 @@ public class CompactorService implements ManagementService {
     @Override
     public void shutdown() {
         checkpointerJvmManager.shutdown();
-        orchestratorThread.shutdownNow();
+        if (orchestratorThread != null) {
+            orchestratorThread.shutdownNow();
+        }
+        if (corfuRuntimeOptional.isPresent()) {
+            getCorfuRuntime().shutdown();
+        }
+        corfuRuntimeOptional = Optional.empty();
+        optionalCorfuStore = Optional.empty();
+        optionalCompactorLeaderServices = Optional.empty();
+        optionalDistributedCheckpointerHelper = Optional.empty();
         log.info("Compactor Orchestrator service shutting down.");
         HealthMonitor.reportIssue(Issue.createInitIssue(Component.COMPACTOR));
     }
