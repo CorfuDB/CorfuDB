@@ -3,7 +3,6 @@ package org.corfudb.infrastructure.logreplication.replication.send.logreader;
 import com.google.protobuf.TextFormat;
 import io.micrometer.core.instrument.DistributionSummary;
 import lombok.Getter;
-import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.common.util.Memory;
@@ -42,9 +41,9 @@ import static org.corfudb.protocols.service.CorfuProtocolLogReplication.getLrEnt
 @Slf4j
 public abstract class BaseSnapshotReader extends SnapshotReader {
     /**
-     * The max size of data for SMR entries in a replication message.
+     * The max size of data for SMR entries in data message.
      */
-    private final long maxTransferSize;
+    private final int maxDataSizePerMsg;
     private final Optional<DistributionSummary> messageSizeDistributionSummary;
     private final CorfuRuntime rt;
     private long snapshotTimestamp;
@@ -57,7 +56,7 @@ public abstract class BaseSnapshotReader extends SnapshotReader {
     private OpaqueEntry lastEntry = null;
 
     @Getter
-    private final ObservableValue<Integer> observeBiggerMsg = new ObservableValue(0);
+    private ObservableValue<Integer> observeBiggerMsg = new ObservableValue(0);
 
     protected final LogReplication.LogReplicationSession session;
     protected final LogReplicationContext replicationContext;
@@ -71,7 +70,7 @@ public abstract class BaseSnapshotReader extends SnapshotReader {
         this.session = session;
         this.replicationContext = replicationContext;
         this.rt.parseConfigurationString(runtime.getLayoutServers().get(0)).connect();
-        this.maxTransferSize = replicationContext.getConfig(session).getMaxTransferSize();
+        this.maxDataSizePerMsg = replicationContext.getConfig(session).getMaxDataSizePerMsg();
         this.messageSizeDistributionSummary = configureMessageSizeDistributionSummary();
         refreshStreamsToReplicateSet();
         log.info("Total of {} streams to replicate at initialization. Streams to replicate={}, Session={}",
@@ -132,7 +131,7 @@ public abstract class BaseSnapshotReader extends SnapshotReader {
     }
 
     /**
-     * Read log data from the current stream until the sum of all SMR entries sizeInBytes reaches the maxDataSizePerMsg.
+     * Read log data from the current stream until the sum of all SMR entries's sizeInBytes reaches the maxDataSizePerMsg.
      * @param stream
      * @return
      */
@@ -141,30 +140,24 @@ public abstract class BaseSnapshotReader extends SnapshotReader {
         int currentMsgSize = 0;
 
         try {
-            while (currentMsgSize < maxTransferSize) {
+            while (currentMsgSize < maxDataSizePerMsg) {
                 if (lastEntry != null) {
                     List<SMREntry> smrEntries = lastEntry.getEntries().get(stream.uuid);
                     if (smrEntries != null) {
                         int currentEntrySize = ReaderUtility.calculateSize(smrEntries);
+
                         if (currentEntrySize > DEFAULT_MAX_DATA_MSG_SIZE) {
-                            log.error("The current entry size {} is bigger than the max size {} supported",
+                            log.error("The current entry size {} is bigger than the maxDataSizePerMsg {} supported",
                                 currentEntrySize, DEFAULT_MAX_DATA_MSG_SIZE);
                             throw new IllegalSnapshotEntrySizeException(" The snapshot entry is bigger than the system supported");
-                        } else if (currentEntrySize > maxTransferSize) {
-                            // TODO: As of now, there is no plan to allow applications to change the max uncompressed
-                            //  tx size. (CorfuRuntime.MAX_UNCOMPRESSED_WRITE_SIZE).  So the transfer size(85 MB)
-                            //  will be higher than DEFAULT_MAX_DATA_MSG_SIZE(64 MB).
-                            // However, if this behavior changes in future, it is possible that
-                            // currentEntrySize <= DEFAULT_MAX_DATA_MSG_SIZE but currentEntrySize > maxTransferSize.
-                            // In that case, split the transaction (right now currentEntrySize contains the size of all
-                            // SMR entries in the transaction).
+                        } else if (currentEntrySize > maxDataSizePerMsg) {
                             observeBiggerMsg.setValue(observeBiggerMsg.getValue()+1);
-                            log.warn("The current entry size {} is bigger than the configured transfer size {}",
-                                currentEntrySize, maxTransferSize);
+                            log.warn("The current entry size {} is bigger than the configured maxDataSizePerMsg {}",
+                                currentEntrySize, maxDataSizePerMsg);
                         }
 
                         // Skip append this entry in this message. Will process it first at the next round.
-                        if (currentEntrySize + currentMsgSize > maxTransferSize && currentMsgSize != 0) {
+                        if (currentEntrySize + currentMsgSize > maxDataSizePerMsg && currentMsgSize != 0) {
                             break;
                         }
 
@@ -188,9 +181,8 @@ public abstract class BaseSnapshotReader extends SnapshotReader {
             throw e;
         }
 
-        log.trace("CurrentMsgSize {} lastEntrySize {}  maxTransferSize {}",
-            currentMsgSize, lastEntry == null ? 0 : ReaderUtility.calculateSize(lastEntry.getEntries().get(stream.uuid)),
-                    maxTransferSize);
+        log.trace("CurrentMsgSize {} lastEntrySize {}  maxDataSizePerMsg {}",
+            currentMsgSize, lastEntry == null ? 0 : ReaderUtility.calculateSize(lastEntry.getEntries().get(stream.uuid)), maxDataSizePerMsg);
         return new SMREntryList(currentMsgSize, smrList);
     }
 
@@ -218,7 +210,7 @@ public abstract class BaseSnapshotReader extends SnapshotReader {
      * @return
      */
     @Override
-    public @NonNull SnapshotReadMessage read(UUID syncRequestId) {
+    public SnapshotReadMessage read(UUID syncRequestId) {
         List<LogReplication.LogReplicationEntryMsg> messages = new ArrayList<>();
 
         boolean endSnapshotSync = false;
@@ -273,7 +265,7 @@ public abstract class BaseSnapshotReader extends SnapshotReader {
     public void reset(long ts) {
         // As the config should reflect the latest configuration read from registry table, it will be synced with the
         // latest registry table content instead of the given ts, while the streams to replicate will be read up to ts.
-        replicationContext.refreshConfig(session, true);
+        replicationContext.refresh();
         streams = replicationContext.getConfig(session).getStreamsToReplicate();
         streamsToSend = new PriorityQueue<>(streams);
         preMsgTs = Address.NON_ADDRESS;
@@ -290,7 +282,7 @@ public abstract class BaseSnapshotReader extends SnapshotReader {
     public static class OpaqueStreamIterator {
         private String name;
         private UUID uuid;
-        private final Iterator iterator;
+        private Iterator iterator;
         private long maxVersion; // the max address of the log entries processed for this stream.
 
         OpaqueStreamIterator(String name, CorfuRuntime rt, long snapshot) {
@@ -321,10 +313,10 @@ public abstract class BaseSnapshotReader extends SnapshotReader {
 
         // The total sizeInBytes of smrEntries in bytes.
         @Getter
-        private final int sizeInBytes;
+        private int sizeInBytes;
 
         @Getter
-        private final List<SMREntry> smrEntries;
+        private List<SMREntry> smrEntries;
 
         public SMREntryList(int size, List<SMREntry> smrEntries) {
             this.sizeInBytes = size;

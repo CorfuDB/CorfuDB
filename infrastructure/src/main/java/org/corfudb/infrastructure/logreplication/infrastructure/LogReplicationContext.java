@@ -3,8 +3,9 @@ package org.corfudb.infrastructure.logreplication.infrastructure;
 import com.google.common.annotations.VisibleForTesting;
 import lombok.Getter;
 import lombok.Setter;
-import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
+import org.corfudb.infrastructure.logreplication.config.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
+import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.util.serializer.ISerializer;
 
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -62,12 +63,12 @@ public class LogReplicationContext {
 
     /**
      * This method will be invoked when it is needed to check if registry has new entries, to get the up-to-date
-     * LogReplicationConfig, which mainly includes streams to replicate and data streams to tags map.
-     *
-     * @return The updated LogReplicationConfig that is up-to-date with registry table
+     * LogReplicationConfig, which mainly includes streams to replicate and data streams to tags map. Please note
+     * that this method is synchronized because LogReplicationContext is shared across sessions so each session
+     * will have its own threads to access it.
      */
-    public LogReplicationConfig refresh() {
-        return this.configManager.getUpdatedConfig();
+    public synchronized void refresh() {
+        this.configManager.getUpdatedConfig();
     }
 
     /**
@@ -75,8 +76,8 @@ public class LogReplicationContext {
      *
      * @return Current config in config manager.
      */
-    public LogReplicationConfig getConfig() {
-        return this.configManager.getConfig();
+    public LogReplicationConfig getConfig(LogReplicationSession session) {
+        return this.configManager.getSessionToConfigMap().get(session);
     }
 
     /**

@@ -32,7 +32,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getRequestMsg;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.doReturn;
@@ -66,7 +65,7 @@ public class LogReplicationServerTest {
     LogReplicationSession session = LogReplicationSession.newBuilder()
             .setSourceClusterId(sourceClusterId)
             .setSinkClusterId(SINK_CLUSTER_ID)
-            .setSubscriber(SessionManager.getDefaultSubscriber())
+            .setSubscriber(LogReplicationConfigManager.getDefaultSubscriber())
             .build();
 
     /**

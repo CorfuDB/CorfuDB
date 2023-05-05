@@ -50,7 +50,7 @@ public class MetadataManagerTest extends AbstractViewTest {
         configManager = Mockito.mock(LogReplicationConfigManager.class);
         Mockito.doReturn(corfuRuntime).when(configManager).getRuntime();
         utils = new TestUtils();
-        replicationContext = new LogReplicationContext(new LogReplicationConfigManager(corfuRuntime), topologyConfigId,
+        replicationContext = new LogReplicationContext(new LogReplicationConfigManager(corfuRuntime, LOCAL_SOURCE_CLUSTER_ID), topologyConfigId,
                 getEndpoint(SERVERS.PORT_0), true);
         metadataManager = new LogReplicationMetadataManager(corfuRuntime, replicationContext);
         metadataManager.addSession(defaultSession, topologyConfigId, true);

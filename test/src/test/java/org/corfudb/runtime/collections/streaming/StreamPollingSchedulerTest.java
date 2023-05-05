@@ -35,8 +35,8 @@ import java.util.concurrent.TimeUnit;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.corfudb.runtime.exceptions.StreamingException.ExceptionCause.LISTENER_SUBSCRIBED;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Matchers.any;
+import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.only;
 import static org.mockito.Mockito.times;
@@ -143,12 +143,6 @@ public class StreamPollingSchedulerTest {
 
         int numAddressesReceived = addressesInStreamAddressSpace.size();
 
-        Map<UUID, StreamAddressSpace> streamAddressSpaceMap = constructMockAddressMap(0, false);
-        List<StreamAddressRange> rangeQueryList = constructRangeQueryList(0);
-        when(sequencerView.getStreamsAddressSpace(rangeQueryList)).thenReturn(streamAddressSpaceMap);
-
-        int numAddressesReceived = addressesInStreamAddressSpace.size();
-
         streamPoller.schedule();
 
         // verify that the scheduler submitted a syncing task to read address 1 and 2
@@ -223,7 +217,7 @@ public class StreamPollingSchedulerTest {
         // Verify that the same listener can't be registered more than once
         assertThatThrownBy(() -> addTask(5, 10))
                 .isInstanceOf(StreamingException.class)
-                .hasMessage("StreamingManager::subscribe: listener already registered " + listener);
+                .satisfies(e -> assertThat(((StreamingException) e).getExceptionCause()).isEqualTo(LISTENER_SUBSCRIBED));
 
         List<StreamAddressRange> rangeQueryList = constructRangeQueryList(5);
         Map<UUID, StreamAddressSpace> streamAddressSpaceMap = constructMockAddressMap(5, false);

@@ -8,7 +8,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.config.ConfigParamNames;
 import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.ServerContext;
-import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
+import org.corfudb.infrastructure.logreplication.config.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.ISnapshotSyncPlugin;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
@@ -130,7 +130,7 @@ public class LogReplicationSinkManager implements DataReceiver {
                 .keyStore((String) serverContext.getServerConfig().get(ConfigParamNames.KEY_STORE))
                 .ksPasswordFile((String) serverContext.getServerConfig().get(ConfigParamNames.KEY_STORE_PASS_FILE))
                 .tlsEnabled((Boolean) serverContext.getServerConfig().get("--enable-tls"))
-                .maxCacheEntries(replicationContext.getConfigManager().getConfig().getMaxCacheSize())
+                .maxCacheEntries(replicationContext.getConfig(session).getMaxCacheSize())
                 .maxWriteSize(serverContext.getMaxWriteSize())
                 .build())
                 .parseConfigurationString(localCorfuEndpoint).connect();
@@ -147,7 +147,7 @@ public class LogReplicationSinkManager implements DataReceiver {
                                      String pluginConfigFilePath, LogReplicationSession session,
                                      LogReplicationContext context) {
         this.runtime =  CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder()
-                .maxCacheEntries(context.getConfigManager().getConfig().getMaxCacheSize()).build())
+                .maxCacheEntries(context.getConfig(session).getMaxCacheSize()).build())
                 .parseConfigurationString(localCorfuEndpoint).connect();
         this.metadataManager = metadataManager;
         this.pluginConfigFilePath = pluginConfigFilePath;

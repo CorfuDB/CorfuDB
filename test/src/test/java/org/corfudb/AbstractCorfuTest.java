@@ -67,6 +67,11 @@ public class AbstractCorfuTest {
             "testCheckpointTrimSourceBetweenSnapshotSync",
             "testCheckpointTrimSinkDuringLogEntrySync"));
 
+    // Tests cases in this set typically take more than 2 minutes to finish.
+    private static final Set<String> LONGER_TIMEOUT_TESTS = new HashSet<>(Arrays.asList(
+            "testCheckpointTrimSourceBetweenSnapshotSync",
+            "testCheckpointTrimSinkDuringLogEntrySync"));
+
     @AfterClass
     public static void shutdownNettyGroups() {
         TestThreadGroups.shutdownThreadGroups();

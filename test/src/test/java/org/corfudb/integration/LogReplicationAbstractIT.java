@@ -26,10 +26,10 @@ import com.google.protobuf.Message;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.CorfuInterClusterReplicationServer;
-import org.corfudb.infrastructure.logreplication.infrastructure.SessionManager;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultSnapshotSyncPlugin;
+import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.runtime.LogReplication.SnapshotSyncInfo;
 import org.corfudb.runtime.LogReplication.SnapshotSyncInfo.SnapshotSyncType;
 import org.corfudb.runtime.LogReplication.SyncType;
@@ -364,7 +364,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
         LogReplicationSession session = LogReplicationSession.newBuilder()
             .setSourceClusterId(new DefaultClusterConfig().getSourceClusterIds().get(0))
             .setSinkClusterId(new DefaultClusterConfig().getSinkClusterIds().get(0))
-            .setSubscriber(SessionManager.getDefaultSubscriber())
+            .setSubscriber(LogReplicationConfigManager.getDefaultSubscriber())
             .build();
 
         ReplicationStatus replicationStatus;
@@ -397,7 +397,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
         LogReplicationSession session = LogReplicationSession.newBuilder()
             .setSourceClusterId(sourceClusterId)
             .setSinkClusterId(sinkClusterId)
-            .setSubscriber(SessionManager.getDefaultSubscriber())
+            .setSubscriber(LogReplicationConfigManager.getDefaultSubscriber())
             .build();
 
         IRetry.build(IntervalRetry.class, () -> {
@@ -794,7 +794,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
         LogReplicationSession session = LogReplicationSession.newBuilder()
             .setSourceClusterId(new DefaultClusterConfig().getSourceClusterIds().get(0))
             .setSinkClusterId(new DefaultClusterConfig().getSinkClusterIds().get(0))
-            .setSubscriber(SessionManager.getDefaultSubscriber())
+            .setSubscriber(LogReplicationConfigManager.getDefaultSubscriber())
             .build();
 
         ReplicationStatus status = null;

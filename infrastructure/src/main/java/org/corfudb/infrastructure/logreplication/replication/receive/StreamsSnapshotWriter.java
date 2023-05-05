@@ -195,7 +195,7 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
         metadataManager.updateReplicationMetadataField(txnContext, session, ReplicationMetadata.LASTSNAPSHOTSTARTED_FIELD_NUMBER, srcGlobalSnapshot);
 
         for (SMREntry smrEntry : smrEntries) {
-            txnContext.logUpdate(streamId, smrEntry, replicationContext.getConfig().getDataStreamToTagsMap().get(streamId));
+            txnContext.logUpdate(streamId, smrEntry, replicationContext.getConfig(session).getDataStreamToTagsMap().get(streamId));
         }
     }
 
@@ -255,7 +255,7 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
 
     private void clearStream(UUID streamId, TxnContext txnContext) {
         SMREntry entry = new SMREntry(CLEAR_SMR_METHOD, new Array[0], Serializers.PRIMITIVE);
-        txnContext.logUpdate(streamId, entry, replicationContext.getConfig().getDataStreamToTagsMap().get(streamId));
+        txnContext.logUpdate(streamId, entry, replicationContext.getConfig(session).getDataStreamToTagsMap().get(streamId));
     }
 
     @Override
@@ -377,8 +377,8 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
     }
 
     private boolean maxEntriesLimitReached(UUID streamId, List<SMREntry> buffer) {
-        return streamId.equals(PROTOBUF_TABLE_ID) && buffer.size() == replicationContext.getConfig(session)
-                .getMaxSnapshotEntriesApplied();
+        return (streamId.equals(PROTOBUF_TABLE_ID) && buffer.size() == replicationContext.getConfig(session)
+                .getMaxSnapshotEntriesApplied());
     }
 
     /**
@@ -395,7 +395,7 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
         // Sync the config with registry table after applying its entries
         replicationContext.refresh();
 
-        for (String stream : replicationContext.getConfigManager().getConfig().getStreamsToReplicate()) {
+        for (String stream : replicationContext.getConfig(session).getStreamsToReplicate()) {
             UUID regularStreamId = CorfuRuntime.getStreamID(stream);
             if (regularStreamId.equals(REGISTRY_TABLE_ID)) {
                 // Skip registry table as it has been applied in advance
@@ -444,7 +444,7 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
         // checkpoint won't run on these streams
         Set<UUID> streamsToQuery = new HashSet<>();
         for (String replicatedStream :
-            replicationContext.getConfig().getStreamsToReplicate()) {
+            replicationContext.getConfig(session).getStreamsToReplicate()) {
             UUID id = CorfuRuntime.getStreamID(replicatedStream);
             if (replicatedStreamIds.contains(id) || MERGE_ONLY_STREAMS.contains(id)) {
                 continue;

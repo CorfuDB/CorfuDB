@@ -2,12 +2,15 @@ package org.corfudb.infrastructure.logreplication;
 
 import com.google.protobuf.Message;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.logreplication.config.LogReplicationFullTableConfig;
+import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
+import org.corfudb.infrastructure.logreplication.proto.Sample.Metadata;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
 import org.corfudb.infrastructure.logreplication.proto.Sample.IntValueTag;
-import org.corfudb.infrastructure.logreplication.proto.Sample.Metadata;
 import org.corfudb.infrastructure.logreplication.proto.Sample.StringKey;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.view.AbstractViewTest;
@@ -22,11 +25,12 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import static org.corfudb.runtime.LogReplicationLogicalGroupClient.LR_MODEL_METADATA_TABLE_NAME;
+import static org.corfudb.runtime.LogReplicationLogicalGroupClient.LR_REGISTRATION_TABLE_NAME;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 import static org.corfudb.runtime.view.TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME;
 import static org.corfudb.runtime.view.TableRegistry.REGISTRY_TABLE_NAME;
@@ -47,6 +51,8 @@ public class LogReplicationConfigManagerTest extends AbstractViewTest {
     private static final String TABLE4 = "Table004";
     private static final String TABLE5 = "Table005";
     private static final String TABLE6 = "Table006";
+    private static final String LOCAL_SOURCE_CLUSTER_ID = DefaultClusterConfig.getSourceClusterIds().get(0);
+    private static final String REMOTE_SINK_CLUSTER_ID = DefaultClusterConfig.getSinkClusterIds().get(0);
 
     @Before
     public void setup() throws Exception {
@@ -111,28 +117,51 @@ public class LogReplicationConfigManagerTest extends AbstractViewTest {
             String fullyQualifiedTableName = TableRegistry.getFullyQualifiedTableName(NAMESPACE, streamToDrop);
             streamsToDrop.add(CorfuRuntime.getStreamID(fullyQualifiedTableName));
         }
+        // These 2 client tables will be opened when LogReplicationConfigManager is instantiated. Manually add them
+        // to streamsToDrop.
+        streamsToDrop.add(CorfuRuntime.getStreamID(TableRegistry.getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE,
+                LR_MODEL_METADATA_TABLE_NAME)));
+        streamsToDrop.add(CorfuRuntime.getStreamID(TableRegistry.getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE,
+                LR_REGISTRATION_TABLE_NAME)));
     }
 
     @Test
     public void testConfigGeneration() {
-        LogReplicationConfigManager configManager = new LogReplicationConfigManager(runtime);
-        verifyExpectedConfigGenerated(configManager.getConfig());
+        LogReplicationConfigManager configManager = new LogReplicationConfigManager(runtime, LOCAL_SOURCE_CLUSTER_ID);
+        LogReplication.LogReplicationSession sampleSession = LogReplication.LogReplicationSession.newBuilder()
+                .setSourceClusterId(LOCAL_SOURCE_CLUSTER_ID)
+                .setSinkClusterId(REMOTE_SINK_CLUSTER_ID)
+                .setSubscriber(LogReplicationConfigManager.getDefaultSubscriber())
+                .build();
+        configManager.generateConfig(Collections.singleton(sampleSession));
+        verifyExpectedConfigGenerated((LogReplicationFullTableConfig) configManager.getSessionToConfigMap()
+                .get(sampleSession));
     }
 
     @Test
     public void testConfigUpdate() throws Exception {
-        LogReplicationConfigManager configManager = new LogReplicationConfigManager(runtime);
-        verifyExpectedConfigGenerated(configManager.getConfig());
+        LogReplicationConfigManager configManager = new LogReplicationConfigManager(runtime, LOCAL_SOURCE_CLUSTER_ID);
+        LogReplication.LogReplicationSession sampleSession = LogReplication.LogReplicationSession.newBuilder()
+                .setSourceClusterId(LOCAL_SOURCE_CLUSTER_ID)
+                .setSinkClusterId(REMOTE_SINK_CLUSTER_ID)
+                .setSubscriber(LogReplicationConfigManager.getDefaultSubscriber())
+                .build();
+        configManager.generateConfig(Collections.singleton(sampleSession));
+        verifyExpectedConfigGenerated((LogReplicationFullTableConfig) configManager.getSessionToConfigMap()
+                .get(sampleSession));
+
         // Open new tables and update the expected streams to replicate map, streams to drop and stream tags
         setupStreamsToReplicateAndTagsMap(Collections.singleton(TABLE5), SampleSchema.ValueFieldTagOne.class);
         setupStreamsToDrop(Collections.singleton(TABLE6), SampleSchema.Uuid.class);
-        verifyExpectedConfigGenerated(configManager.getUpdatedConfig());
+        configManager.getUpdatedConfig();
+        configManager.generateConfig(Collections.singleton(sampleSession));
+        verifyExpectedConfigGenerated((LogReplicationFullTableConfig) configManager.getSessionToConfigMap()
+                .get(sampleSession));
     }
 
-    private void verifyExpectedConfigGenerated(LogReplicationConfig actualConfig) {
-        Assert.assertTrue(Objects.equals(streamsToReplicate, actualConfig.getStreamsToReplicate()));
-        Assert.assertTrue(Objects.equals(streamsToDrop, actualConfig.getStreamsToDrop()));
-        Assert.assertTrue(Objects.equals(streamToTagsMap, actualConfig.getDataStreamToTagsMap()));
-
+    private void verifyExpectedConfigGenerated(LogReplicationFullTableConfig actualConfig) {
+        Assert.assertEquals(streamsToReplicate, actualConfig.getStreamsToReplicate());
+        Assert.assertEquals(streamsToDrop, actualConfig.getStreamsToDrop());
+        Assert.assertEquals(streamToTagsMap, actualConfig.getDataStreamToTagsMap());
     }
 }

@@ -240,6 +240,7 @@ public class LogReplicationMetadataManager {
      * @param fieldNumber   field number corresponding to attribute in replication metadata to be updated
      * @param value         value to update
      */
+    @VisibleForTesting
     public void updateReplicationMetadataField(LogReplicationSession session, int fieldNumber, Object value) {
         try {
             IRetry.build(IntervalRetry.class, () -> {

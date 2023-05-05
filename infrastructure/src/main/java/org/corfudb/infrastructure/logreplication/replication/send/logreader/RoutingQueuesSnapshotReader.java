@@ -12,6 +12,7 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
 
     public RoutingQueuesSnapshotReader(CorfuRuntime corfuRuntime, LogReplicationSession session,
                                        LogReplicationContext replicationContext) {
+        super(corfuRuntime, session, replicationContext);
     }
 
     @Override

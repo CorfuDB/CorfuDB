@@ -8,8 +8,6 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
-import org.corfudb.infrastructure.logreplication.exceptions.GroupDestinationChangeException;
-import org.corfudb.infrastructure.logreplication.exceptions.MessageSizeExceededException;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
@@ -41,8 +39,7 @@ import static org.corfudb.protocols.service.CorfuProtocolLogReplication.getLrEnt
 @Slf4j
 public abstract class BaseLogEntryReader extends LogEntryReader {
 
-    private static final LogReplication.LogReplicationEntryType MSG_TYPE =
-            LogReplication.LogReplicationEntryType.LOG_ENTRY_MESSAGE;
+    private final LogReplication.LogReplicationEntryType MSG_TYPE = LogReplication.LogReplicationEntryType.LOG_ENTRY_MESSAGE;
 
     // Opaque Stream wrapper for the stream to track for a given replication model
     private ModelBasedOpaqueStream modelBasedOpaqueStream;
@@ -56,7 +53,7 @@ public abstract class BaseLogEntryReader extends LogEntryReader {
     // the sequence number of the message based on the globalBaseSnapshot
     private long sequence;
 
-    private final long maxTransferSize;
+    private final int maxDataSizePerMsg;
 
     private final Optional<DistributionSummary> messageSizeDistributionSummary;
     private final Optional<Counter> deltaCounter;
@@ -77,7 +74,7 @@ public abstract class BaseLogEntryReader extends LogEntryReader {
     public BaseLogEntryReader(CorfuRuntime runtime, LogReplication.LogReplicationSession replicationSession,
                               LogReplicationContext replicationContext) {
         runtime.parseConfigurationString(runtime.getLayoutServers().get(0)).connect();
-        this.maxTransferSize = replicationContext.getConfig(replicationSession).getMaxTransferSize();
+        this.maxDataSizePerMsg = replicationContext.getConfig(replicationSession).getMaxDataSizePerMsg();
         this.currentProcessedEntryMetadata = new StreamIteratorMetadata(Address.NON_ADDRESS, false);
         this.messageSizeDistributionSummary = configureMessageSizeDistributionSummary();
         this.deltaCounter = configureDeltaCounter();
@@ -132,7 +129,7 @@ public abstract class BaseLogEntryReader extends LogEntryReader {
      * @return true, if the transaction entry has any valid stream to replicate.
      * false, otherwise.
      */
-    boolean isValidTransactionEntry(@NonNull OpaqueEntry entry) {
+    private boolean isValidTransactionEntry(@NonNull OpaqueEntry entry) {
         Set<UUID> txEntryStreamIds = new HashSet<>(entry.getEntries().keySet());
 
         // Sanity Check: discard if transaction stream opaque entry is empty (no streams are present)
@@ -146,7 +143,7 @@ public abstract class BaseLogEntryReader extends LogEntryReader {
         // table and add them to the list in that case.
         if (!getStreamUUIDs().containsAll(txEntryStreamIds)) {
             log.info("There could be additional streams to replicate in tx stream. Checking with registry table.");
-            replicationContext.refreshConfig(session, false);
+            replicationContext.refresh();
             // TODO: Add log message here for the newly found streams when we support incremental refresh.
         }
         // If none of the streams in the transaction entry are specified to be replicated, this is an invalid entry, skip
@@ -173,14 +170,13 @@ public abstract class BaseLogEntryReader extends LogEntryReader {
     }
 
     @Override
-    public LogReplication.LogReplicationEntryMsg read(UUID logEntryRequestId) throws TrimmedException,
-            MessageSizeExceededException, GroupDestinationChangeException {
+    public LogReplication.LogReplicationEntryMsg read(UUID logEntryRequestId) throws TrimmedException, MessageSizeExceededException {
         List<OpaqueEntry> opaqueEntryList = new ArrayList<>();
         int currentEntrySize = 0;
         int currentMsgSize = 0;
 
         try {
-            while (currentMsgSize < maxTransferSize) {
+            while (currentMsgSize < maxDataSizePerMsg) {
                 if (lastOpaqueEntry != null) {
 
                     if (lastOpaqueEntryValid) {
@@ -190,13 +186,13 @@ public abstract class BaseLogEntryReader extends LogEntryReader {
 
                         // If a message cannot be sent due to its size exceeding the maximum boundary,
                         // throw an exception and the replication will be stopped.
-                        if (currentEntrySize > maxTransferSize) {
+                        if (currentEntrySize > maxDataSizePerMsg) {
                             throw new MessageSizeExceededException();
                         }
 
                         // If it cannot fit into this message, skip appending this entry and it will
                         // be processed with the next message.
-                        if (currentEntrySize + currentMsgSize > maxTransferSize) {
+                        if (currentEntrySize + currentMsgSize > maxDataSizePerMsg) {
                             break;
                         }
 
@@ -221,8 +217,8 @@ public abstract class BaseLogEntryReader extends LogEntryReader {
                         lastOpaqueEntryValid);
             }
 
-            log.trace("Generate LogEntryDataMessage size {} with {} entries for maxTransferSize {}. lastEntry size {}",
-                currentMsgSize, opaqueEntryList.size(), maxTransferSize, lastOpaqueEntry == null ? 0 : currentEntrySize);
+            log.trace("Generate LogEntryDataMessage size {} with {} entries for maxDataSizePerMsg {}. lastEntry size {}",
+                currentMsgSize, opaqueEntryList.size(), maxDataSizePerMsg, lastOpaqueEntry == null ? 0 : currentEntrySize);
             final double currentMsgSizeSnapshot = currentMsgSize;
 
             messageSizeDistributionSummary.ifPresent(distribution -> distribution.record(currentMsgSizeSnapshot));
@@ -238,7 +234,7 @@ public abstract class BaseLogEntryReader extends LogEntryReader {
             return txMessage;
 
         } catch (Exception e) {
-            log.warn("Caught an exception while reading transaction stream", e);
+            log.warn("Caught an exception while reading transaction stream {}", e);
             throw e;
         }
     }
@@ -262,7 +258,7 @@ public abstract class BaseLogEntryReader extends LogEntryReader {
      *
      * @return UUIDs of streams to replicate
      */
-    Set<UUID> getStreamUUIDs() {
+    private Set<UUID> getStreamUUIDs() {
         return replicationContext.getConfig(session).getDataStreamToTagsMap().keySet();
     }
 
@@ -292,7 +288,7 @@ public abstract class BaseLogEntryReader extends LogEntryReader {
     @Override
     public void reset(long lastSentBaseSnapshotTimestamp, long lastAckedTimestamp) {
         // Sync with registry when entering into IN_LOG_ENTRY_SYNC state
-        replicationContext.refreshConfig(session, true);
+        replicationContext.refresh();
         this.currentProcessedEntryMetadata = new StreamIteratorMetadata(Address.NON_ADDRESS, false);
         setGlobalBaseSnapshot(lastSentBaseSnapshotTimestamp, lastAckedTimestamp);
         lastOpaqueEntry = null;

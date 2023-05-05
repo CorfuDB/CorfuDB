@@ -6,10 +6,10 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
-import org.corfudb.infrastructure.logreplication.infrastructure.SessionManager;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.transport.IClientServerRouter;
+import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationSinkManager;
 import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
@@ -159,7 +159,7 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
             session = LogReplicationSession.newBuilder()
                     .setSourceClusterId(getUUID(request.getHeader().getClusterId()).toString())
                     .setSinkClusterId(localClusterId)
-                    .setSubscriber(SessionManager.getDefaultSubscriber())
+                    .setSubscriber(LogReplicationConfigManager.getDefaultSubscriber())
                     .build();
         } else {
             session = request.getHeader().getSession();

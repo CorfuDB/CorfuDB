@@ -8,8 +8,8 @@ import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescripto
 import org.corfudb.infrastructure.logreplication.infrastructure.CorfuReplicationDiscoveryServiceAdapter;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationDiscoveryServiceException;
 import org.corfudb.infrastructure.logreplication.infrastructure.NodeDescriptor;
-import org.corfudb.infrastructure.logreplication.infrastructure.SessionManager;
 import org.corfudb.infrastructure.logreplication.infrastructure.TopologyDescriptor;
+import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
@@ -27,6 +27,7 @@ import org.corfudb.runtime.view.Address;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -62,9 +63,11 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
     public static final ClusterUuidMsg TP_SINGLE_SOURCE_SINK = ClusterUuidMsg.newBuilder().setLsb(7L).setMsb(7L).build();
     public static final ClusterUuidMsg TP_MULTI_SINK = ClusterUuidMsg.newBuilder().setLsb(8L).setMsb(8L).build();
     public static final ClusterUuidMsg TP_MULTI_SOURCE = ClusterUuidMsg.newBuilder().setLsb(9L).setMsb(9L).build();
+    public static final ClusterUuidMsg TP_MIXED_MODEL_THREE_SINK = ClusterUuidMsg.newBuilder().setLsb(10L).setMsb(10L).build();
     public static final ClusterUuidMsg TP_SINGLE_SOURCE_SINK_REV_CONNECTION = ClusterUuidMsg.newBuilder().setLsb(11L).setMsb(11L).build();
     public static final ClusterUuidMsg TP_MULTI_SOURCE_REV_CONNECTION = ClusterUuidMsg.newBuilder().setLsb(12L).setMsb(12L).build();
     public static final ClusterUuidMsg TP_MULTI_SINK_REV_CONNECTION = ClusterUuidMsg.newBuilder().setLsb(13L).setMsb(13L).build();
+    public static final ClusterUuidMsg OP_TWO_SINK_MIXED = ClusterUuidMsg.newBuilder().setLsb(14L).setMsb(14L).build();
 
     @Getter
     private long configId;
@@ -197,7 +200,7 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
         List<String> sourceClusterIds = topology.getSourceClusterIds();
         List<String> sourceCorfuPorts = topology.getSourceCorfuPorts();
         List<String> sourceLogReplicationPorts =
-            topology.getSourceLogReplicationPorts();
+                topology.getSourceLogReplicationPorts();
         List<String> sourceNodeNames = topology.getSourceNodeNames();
         List<String> sourceNodeHosts = topology.getSourceIpAddresses();
         List<String> sourceNodeIds = topology.getSourceNodeUuids();
@@ -205,7 +208,7 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
         List<String> sinkClusterIds = topology.getSinkClusterIds();
         List<String> sinkCorfuPorts = topology.getSinkCorfuPorts();
         List<String> sinkLogReplicationPorts =
-            topology.getSinkLogReplicationPorts();
+                topology.getSinkLogReplicationPorts();
         List<String> sinkNodeNames = topology.getSourceNodeNames();
         List<String> sinkNodeHosts = topology.getSinkIpAddresses();
         List<String> sinkNodeIds = topology.getSinkNodeUuids();
@@ -292,9 +295,9 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
 
         if(DefaultClusterConfig.getSourceClusterIds().contains(localCluster.getClusterId())) {
             remoteSinkToReplicationModels.put(topologyConfig.getRemoteSinkClusters().values().stream()
-                            .filter(cluster -> cluster.getClusterId()
-                                    .equals(DefaultClusterConfig.getSinkClusterIds().get(0)))
-                            .findFirst().get(), addModel(Arrays.asList(LogReplication.ReplicationModel.FULL_TABLE)));
+                    .filter(cluster -> cluster.getClusterId()
+                            .equals(DefaultClusterConfig.getSinkClusterIds().get(0)))
+                    .findFirst().get(), addModel(Arrays.asList(LogReplication.ReplicationModel.FULL_TABLE)));
 
             if(!isSinkConnectionStarter) {
                 connectionEndPoints.add(topologyConfig.getRemoteSinkClusters().values().stream()
@@ -494,6 +497,106 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
                 topologyConfig.getAllClustersInTopology(), connectionEndPoints, localNodeId);
 
         waitForTopologyInit.countDown();
+    }
+    private void createThreeSinkMixedModelTopology() {
+        topologyConfig = initConfig();
+        Map<ClusterDescriptor, Set<LogReplication.ReplicationModel>> remoteSourceToReplicationModels = new HashMap<>();
+        Map<ClusterDescriptor, Set<LogReplication.ReplicationModel>> remoteSinkToReplicationModels = new HashMap<>();
+        Set<ClusterDescriptor> connectionEndPoints = new HashSet<>();
+
+        ClusterDescriptor localCluster = findLocalCluster();
+        if (DefaultClusterConfig.getSourceClusterIds().contains(localCluster.getClusterId())) {
+            remoteSinkToReplicationModels.put(topologyConfig.getRemoteSinkClusters().values().stream()
+                            .filter(cluster -> cluster.getClusterId().equals(DefaultClusterConfig.getSinkClusterIds().get(0)))
+                            .findFirst().get(),
+                    addModel(Collections.singletonList(LogReplication.ReplicationModel.FULL_TABLE)));
+            remoteSinkToReplicationModels.put(topologyConfig.getRemoteSinkClusters().values().stream()
+                            .filter(cluster -> cluster.getClusterId().equals(DefaultClusterConfig.getSinkClusterIds().get(1)))
+                            .findFirst().get(),
+                    addModel(Collections.singletonList(LogReplication.ReplicationModel.LOGICAL_GROUPS)));
+            remoteSinkToReplicationModels.put(topologyConfig.getRemoteSinkClusters().values().stream()
+                            .filter(cluster -> cluster.getClusterId().equals(DefaultClusterConfig.getSinkClusterIds().get(2)))
+                            .findFirst().get(),
+                    addModel(Collections.singletonList(LogReplication.ReplicationModel.LOGICAL_GROUPS)));
+            if(!isSinkConnectionStarter) {
+                connectionEndPoints.addAll(topologyConfig.getRemoteSinkClusters().values());
+            }
+        } else if (localCluster.getClusterId() == DefaultClusterConfig.getSinkClusterIds().get(0)) {
+            remoteSourceToReplicationModels.put(topologyConfig.getRemoteSourceClusters().values().stream()
+                            .filter(cluster -> cluster.getClusterId().equals(DefaultClusterConfig.getSourceClusterIds().get(0)))
+                            .findFirst().get(),
+                    addModel(Collections.singletonList(LogReplication.ReplicationModel.FULL_TABLE)));
+            if(isSinkConnectionStarter) {
+                connectionEndPoints.addAll(remoteSourceToReplicationModels.keySet());
+            }
+
+        } else if (localCluster.getClusterId() == DefaultClusterConfig.getSinkClusterIds().get(1)) {
+            remoteSourceToReplicationModels.put(topologyConfig.getRemoteSourceClusters().values().stream()
+                            .filter(cluster -> cluster.getClusterId().equals(DefaultClusterConfig.getSourceClusterIds().get(0)))
+                            .findFirst().get(),
+                    addModel(Collections.singletonList(LogReplication.ReplicationModel.LOGICAL_GROUPS)));
+            if(isSinkConnectionStarter) {
+                connectionEndPoints.addAll(remoteSourceToReplicationModels.keySet());
+            }
+        } else if (localCluster.getClusterId() == DefaultClusterConfig.getSinkClusterIds().get(2)) {
+
+            remoteSourceToReplicationModels.put(topologyConfig.getRemoteSourceClusters().values().stream()
+                            .filter(cluster -> cluster.getClusterId().equals(DefaultClusterConfig.getSourceClusterIds().get(0)))
+                            .findFirst().get(),
+                    addModel(Collections.singletonList(LogReplication.ReplicationModel.LOGICAL_GROUPS)));
+            if(isSinkConnectionStarter) {
+                connectionEndPoints.addAll(remoteSourceToReplicationModels.keySet());
+            }
+        }
+        log.info("new Topology single-source-three-sink with mixed models: source: {} sink: {} connectionEndpoints: {}",
+                remoteSourceToReplicationModels, remoteSinkToReplicationModels, connectionEndPoints);
+
+        topologyConfig = new TopologyDescriptor(++configId, remoteSinkToReplicationModels, remoteSourceToReplicationModels,
+                topologyConfig.getAllClustersInTopology(), connectionEndPoints, localNodeId);
+        waitForTopologyInit.countDown();
+    }
+
+    private TopologyDescriptor generateTwoSinkMixedModelTopology() {
+        Map<ClusterDescriptor, Set<LogReplication.ReplicationModel>> remoteSourceToReplicationModels = new HashMap<>();
+        Map<ClusterDescriptor, Set<LogReplication.ReplicationModel>> remoteSinkToReplicationModels = new HashMap<>();
+        Set<ClusterDescriptor> connectionEndPoints = new HashSet<>();
+
+        ClusterDescriptor localCluster = findLocalCluster();
+        if (DefaultClusterConfig.getSourceClusterIds().contains(localCluster.getClusterId())) {
+            remoteSinkToReplicationModels.put(topologyConfig.getRemoteSinkClusters().values().stream()
+                            .filter(cluster -> cluster.getClusterId().equals(DefaultClusterConfig.getSinkClusterIds().get(0)))
+                            .findFirst().get(),
+                    addModel(Collections.singletonList(LogReplication.ReplicationModel.FULL_TABLE)));
+            remoteSinkToReplicationModels.put(topologyConfig.getRemoteSinkClusters().values().stream()
+                            .filter(cluster -> cluster.getClusterId().equals(DefaultClusterConfig.getSinkClusterIds().get(1)))
+                            .findFirst().get(),
+                    addModel(Collections.singletonList(LogReplication.ReplicationModel.LOGICAL_GROUPS)));
+            if(!isSinkConnectionStarter) {
+                connectionEndPoints.addAll(topologyConfig.getRemoteSinkClusters().values());
+            }
+        } else if (localCluster.getClusterId() == DefaultClusterConfig.getSinkClusterIds().get(0)) {
+            remoteSourceToReplicationModels.put(topologyConfig.getRemoteSourceClusters().values().stream()
+                            .filter(cluster -> cluster.getClusterId().equals(DefaultClusterConfig.getSourceClusterIds().get(0)))
+                            .findFirst().get(),
+                    addModel(Collections.singletonList(LogReplication.ReplicationModel.FULL_TABLE)));
+            if(isSinkConnectionStarter) {
+                connectionEndPoints.addAll(remoteSourceToReplicationModels.keySet());
+            }
+
+        } else if (localCluster.getClusterId() == DefaultClusterConfig.getSinkClusterIds().get(1)) {
+            remoteSourceToReplicationModels.put(topologyConfig.getRemoteSourceClusters().values().stream()
+                            .filter(cluster -> cluster.getClusterId().equals(DefaultClusterConfig.getSourceClusterIds().get(0)))
+                            .findFirst().get(),
+                    addModel(Collections.singletonList(LogReplication.ReplicationModel.LOGICAL_GROUPS)));
+            if(isSinkConnectionStarter) {
+                connectionEndPoints.addAll(remoteSourceToReplicationModels.keySet());
+            }
+        }
+        log.info("new Topology single-source-two-sink with mixed models: source: {} sink: {} connectionEndpoints: {}",
+                remoteSourceToReplicationModels, remoteSinkToReplicationModels, connectionEndPoints);
+
+        return new TopologyDescriptor(++configId, remoteSinkToReplicationModels, remoteSourceToReplicationModels,
+                topologyConfig.getAllClustersInTopology(), connectionEndPoints, localNodeId);
     }
 
 
@@ -762,10 +865,10 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
                         String sourceClusterId = localCluster.getClusterId();
 
                         LogReplicationSession session = LogReplicationSession.newBuilder()
-                            .setSinkClusterId(sinkClusterId)
-                            .setSourceClusterId(sourceClusterId)
-                            .setSubscriber(SessionManager.getDefaultSubscriber())
-                            .build();
+                                .setSinkClusterId(sinkClusterId)
+                                .setSourceClusterId(sourceClusterId)
+                                .setSubscriber(LogReplicationConfigManager.getDefaultSubscriber())
+                                .build();
                         clusterManager.forceSnapshotSync(session);
                     } catch (LogReplicationDiscoveryServiceException e) {
                         log.warn("Caught a RuntimeException ", e);
@@ -779,19 +882,26 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
                 } else if (entry.getKey().equals(OP_BACKUP)) {
                     clusterManager.getClusterManagerCallback()
                             .applyNewTopologyConfig(clusterManager.generateConfigWithBackup());
+                } else if (entry.getKey().equals(OP_TWO_SINK_MIXED)) {
+                    clusterManager.isSinkConnectionStarter = true;
+                    clusterManager.getClusterManagerCallback()
+                            .applyNewTopologyConfig(clusterManager.generateTwoSinkMixedModelTopology());
                 } else if (entry.getKey().equals(TP_SINGLE_SOURCE_SINK)) {
                     clusterManager.initSingleSourceSinkTopology();
                 } else if (entry.getKey().equals(TP_MULTI_SINK)) {
                     clusterManager.createSingleSourceMultiSinkTopology();
                 } else if (entry.getKey().equals(TP_MULTI_SOURCE)) {
                     clusterManager.createMultiSourceSingleSinkTopology();
-                } else if(entry.getKey().equals(TP_MULTI_SINK_REV_CONNECTION)) {
+                } else if (entry.getKey().equals(TP_MIXED_MODEL_THREE_SINK)) {
+                    clusterManager.isSinkConnectionStarter = true;
+                    clusterManager.createThreeSinkMixedModelTopology();
+                } else if (entry.getKey().equals(TP_MULTI_SINK_REV_CONNECTION)) {
                     clusterManager.isSinkConnectionStarter = true;
                     clusterManager.createSingleSourceMultiSinkTopology();
-                } else if(entry.getKey().equals(TP_MULTI_SOURCE_REV_CONNECTION)) {
+                } else if (entry.getKey().equals(TP_MULTI_SOURCE_REV_CONNECTION)) {
                     clusterManager.isSinkConnectionStarter = true;
                     clusterManager.createMultiSourceSingleSinkTopology();
-                } else if(entry.getKey().equals(TP_SINGLE_SOURCE_SINK_REV_CONNECTION)) {
+                } else if (entry.getKey().equals(TP_SINGLE_SOURCE_SINK_REV_CONNECTION)) {
                     clusterManager.isSinkConnectionStarter = true;
                     clusterManager.initSingleSourceSinkTopology();
                 }
@@ -870,11 +980,5 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
                 clusterManager.initSingleSourceSinkTopology();
             }
     }
-
-    @Override
-    public void onError(Throwable throwable) {
-        // Ignore
-    }
-}
 
 }
