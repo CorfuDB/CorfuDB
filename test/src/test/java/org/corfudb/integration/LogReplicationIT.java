@@ -8,6 +8,7 @@ import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
+import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationMetadata;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
@@ -77,8 +78,7 @@ import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
 @Slf4j
 public class LogReplicationIT extends AbstractIT implements Observer {
 
-    public static final String nettyConfig = "./test/src/test/resources/transport/nettyConfig.properties";
-    public static final String grpcConfig = "./test/src/test/resources/transport/grpcConfig.properties";
+    public static final String grpcConfig = "./test/src/test/resources/transport/pluginConfig.properties";
 
     private static final String SOURCE_ENDPOINT = DEFAULT_HOST + ":" + DEFAULT_PORT;
     private static final int WRITER_PORT = DEFAULT_PORT + 1;
@@ -194,6 +194,8 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
     private final CountDownLatch blockUntilFSMTransition = new CountDownLatch(1);
 
+    private LogReplicationPluginConfig pluginConfig;
+
     /**
      * Setup Test Environment
      *
@@ -240,9 +242,10 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         srcCorfuStore = new CorfuStore(srcDataRuntime);
         dstCorfuStore = new CorfuStore(dstDataRuntime);
 
+        pluginConfig = new LogReplicationPluginConfig(grpcConfig);
         metadataManager = new LogReplicationMetadataManager(dstTestRuntime,
                 new LogReplicationContext(new LogReplicationConfigManager(dstTestRuntime), 0,
-                "test" + SERVERS.PORT_0, true));
+                "test" + SERVERS.PORT_0, true, pluginConfig));
         metadataManager.addSession(session, 0, true);
 
         expectedAckTimestamp = new AtomicLong(Long.MAX_VALUE);
@@ -1229,9 +1232,8 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     @SuppressWarnings("checkstyle:magicnumber")
     private LogReplicationSourceManager setupSourceManagerAndObservedValues(Set<WAIT> waitConditions,
         TransitionSource function) throws InterruptedException {
-
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(srcTestRuntime);
-        LogReplicationUpgradeManager upgradeManager = new LogReplicationUpgradeManager(srcTestRuntime, grpcConfig);
+        LogReplicationUpgradeManager upgradeManager = new LogReplicationUpgradeManager(srcTestRuntime, pluginConfig);
 
         // This IT requires custom values to be set for the replication config.  Set these values so that the default
         // values are not used
@@ -1239,11 +1241,11 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         configManager.getConfig().setMaxMsgSize(SMALL_MSG_SIZE);
         configManager.getConfig().setMaxDataSizePerMsg(SMALL_MSG_SIZE * LogReplicationConfig.DATA_FRACTION_PER_MSG / 100);
 
-        LogReplicationContext context = new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT);
+        LogReplicationContext context = new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT, pluginConfig);
 
         // Data Sender
         sourceDataSender = new SourceForwardingDataSender(DESTINATION_ENDPOINT, testConfig, metadataManager,
-                grpcConfig, function, context);
+                function, context);
 
         // Source Manager
         LogReplicationRuntimeParameters runtimeParameters = LogReplicationRuntimeParameters.builder()

@@ -20,6 +20,7 @@ import org.corfudb.common.compression.Codec;
 import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
+import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationAckReader;
 import org.corfudb.infrastructure.logreplication.replication.fsm.EmptyDataSender;
@@ -90,7 +91,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
     private SnapshotReader snapshotReader;
     private LogReplicationAckReader ackReader;
 
-    private static final String pluginConfigFilePath = "src/test/resources/transport/nettyConfig.properties";
+    private static final String pluginConfigFilePath = "src/test/resources/transport/pluginConfig.properties";
 
     @Before
     public void setRuntime() {
@@ -472,7 +473,8 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         LogEntryReader logEntryReader = new TestLogEntryReader();
 
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(runtime, null);
-        LogReplicationUpgradeManager upgradeManager = new LogReplicationUpgradeManager(runtime, pluginConfigFilePath);
+        LogReplicationPluginConfig pluginConfig = new LogReplicationPluginConfig(pluginConfigFilePath);
+        LogReplicationUpgradeManager upgradeManager = new LogReplicationUpgradeManager(runtime, pluginConfig);
         LogReplicationSession session = DefaultClusterConfig.getSessions().get(0);
 
         switch(readerImpl) {
@@ -499,7 +501,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
                 CorfuRuntime runtime = getNewRuntime(getDefaultNode()).connect();
                 snapshotReader = new StreamsSnapshotReader(runtime, session,
                         new LogReplicationContext(configManager, TEST_TOPOLOGY_CONFIG_ID,
-                                "test:" + SERVERS.PORT_0));
+                                "test:" + SERVERS.PORT_0, pluginConfig));
                 dataSender = new TestDataSender();
                 break;
             default:
@@ -507,7 +509,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         }
 
         LogReplicationContext context = new LogReplicationContext(configManager, TEST_TOPOLOGY_CONFIG_ID,
-                "test:" + SERVERS.PORT_0, true);
+                "test:" + SERVERS.PORT_0, true, pluginConfig);
         LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(runtime, context);
         ackReader = new LogReplicationAckReader(metadataManager, runtime, session, context);
         fsm = new LogReplicationFSM(runtime, snapshotReader, dataSender, logEntryReader,

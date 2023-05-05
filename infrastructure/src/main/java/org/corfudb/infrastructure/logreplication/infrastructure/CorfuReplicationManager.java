@@ -35,8 +35,6 @@ public class CorfuReplicationManager {
 
     private final LogReplicationMetadataManager metadataManager;
 
-    private final String pluginFilePath;
-
     private final LogReplicationUpgradeManager upgradeManager;
 
     private TopologyDescriptor topology;
@@ -49,12 +47,10 @@ public class CorfuReplicationManager {
      * Constructor
      */
     public CorfuReplicationManager(TopologyDescriptor topology,
-                                   LogReplicationMetadataManager metadataManager,
-                                   String pluginFilePath, CorfuRuntime corfuRuntime,
+                                   LogReplicationMetadataManager metadataManager, CorfuRuntime corfuRuntime,
                                    LogReplicationUpgradeManager upgradeManager,
                                    LogReplicationContext replicationContext) {
         this.metadataManager = metadataManager;
-        this.pluginFilePath = pluginFilePath;
         this.corfuRuntime = corfuRuntime;
         this.localNodeDescriptor = topology.getLocalNodeDescriptor();
         this.upgradeManager = upgradeManager;
@@ -101,7 +97,6 @@ public class CorfuReplicationManager {
                 .localCorfuEndpoint(replicationContext.getLocalCorfuEndpoint())
                 .remoteClusterDescriptor(remoteCluster)
                 .localClusterId(localNodeDescriptor.getClusterId())
-                .pluginFilePath(pluginFilePath)
                 .topologyConfigId(topology.getTopologyConfigId())
                 .keyStore(corfuRuntime.getParameters().getKeyStore())
                 .tlsEnabled(corfuRuntime.getParameters().isTlsEnabled())

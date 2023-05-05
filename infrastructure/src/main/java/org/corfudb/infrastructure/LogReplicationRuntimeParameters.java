@@ -38,9 +38,6 @@ public class LogReplicationRuntimeParameters extends RuntimeParameters {
     // Log Replication Configuration (streams to replicate)
     private LogReplicationConfig replicationConfig;
 
-    // Plugin File Path (file with plugin configurations - absolute paths of JAR and canonical name of classes)
-    private String pluginFilePath;
-
     // Topology Configuration Identifier (configuration epoch)
     private long topologyConfigId;
 
@@ -260,7 +257,6 @@ public class LogReplicationRuntimeParameters extends RuntimeParameters {
             runtimeParameters.setLocalClusterId(localClusterId);
             runtimeParameters.setRemoteClusterDescriptor(remoteClusterDescriptor);
             runtimeParameters.setTopologyConfigId(topologyConfigId);
-            runtimeParameters.setPluginFilePath(pluginFilePath);
             runtimeParameters.setChannelContext(channelContext);
             runtimeParameters.setMaxWriteSize(maxWriteSize);
             return runtimeParameters;
