@@ -65,7 +65,8 @@ public class LRStreamingTask<K extends Message, V extends Message, M extends Mes
                     log.error("Replicated Table {} was not opened using the client runtime.  Please open the table " +
                             "before subscribing", nsToTableNamesEntry.getKey(), tableName);
                     throw new StreamingException(String.format("Please open the replicated table [%s:%s] using the " +
-                            "client runtime.", nsToTableNamesEntry.getKey(), tableName));
+                            "client runtime.", nsToTableNamesEntry.getKey(), tableName),
+                            StreamingException.ExceptionCause.SUBSCRIBE_ERROR);
                 }
                 String streamTag = nsToStreamTag.get(nsToTableNamesEntry.getKey());
                 UUID streamTagId = TableRegistry.getStreamIdForStreamTag(nsToTableNamesEntry.getKey(), streamTag);

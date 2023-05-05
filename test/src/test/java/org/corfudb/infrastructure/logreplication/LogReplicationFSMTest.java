@@ -9,7 +9,6 @@ import org.corfudb.common.compression.Codec;
 import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusKey;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal.SyncType;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SyncStatus;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
@@ -93,6 +92,9 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
     private static final int TEST_TOPOLOGY_CONFIG_ID = 1;
     private static final String TEST_LOCAL_CLUSTER_ID = "local_cluster";
     private static final String TEST_LOCAL_ENDPOINT_PREFIX = "test:";
+
+    private static final String LOCAL_SOURCE_CLUSTER_ID = DefaultClusterConfig.getSourceClusterIds().get(0);
+
 
     // This semaphore is used to block until the triggering event causes the transition to a new state
     private final Semaphore transitionAvailable = new Semaphore(1, true);
@@ -844,9 +846,10 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         String fullyQualifiedStreamName = TableRegistry.getFullyQualifiedTableName(TEST_NAMESPACE, TEST_STREAM_NAME);
         LogEntryReader logEntryReader = new TestLogEntryReader();
 
-        LogReplicationConfigManager configManager = new LogReplicationConfigManager(runtime, null);
+        LogReplicationConfigManager configManager = new LogReplicationConfigManager(runtime, LOCAL_SOURCE_CLUSTER_ID);
         LogReplicationUpgradeManager upgradeManager = new LogReplicationUpgradeManager(runtime, pluginConfigFilePath);
         LogReplicationSession session = DefaultClusterConfig.getSessions().get(0);
+        configManager.generateConfig(Collections.singleton(session));
 
         switch(readerImpl) {
             case EMPTY:

@@ -37,6 +37,12 @@ public class CorfuTestParameters {
      */
     public final Duration TIMEOUT_LONG;
 
+    /** A longer timeout, typically several minutes.
+     * Some test cases related to log replication could take a long time
+     * to finish.
+     */
+    public final Duration TIMEOUT_VERY_LONG;
+
     /** The number of iterations to run for a very small test.
      * This number will be about 10 by default, and should be used for
      * operations that need to be repeated just a few times.
