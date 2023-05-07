@@ -25,7 +25,8 @@ import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 import static org.mockito.Matchers.any;
@@ -80,7 +81,7 @@ public class CompactorServiceUnitTest {
 
         compactorServiceSpy = spy(new CompactorService(serverContext,
                 Duration.ofSeconds(SCHEDULER_INTERVAL), invokeCheckpointingJvm, dynamicTriggerPolicy));
-        doReturn(corfuRuntime).when(compactorServiceSpy).getCorfuRuntime();
+        doReturn(corfuRuntime).when(compactorServiceSpy).getNewCorfuRuntime();
         doReturn(leaderServices).when(compactorServiceSpy).getCompactorLeaderServices();
         doReturn(corfuStore).when(compactorServiceSpy).getCorfuStore();
         //Compaction enabled
