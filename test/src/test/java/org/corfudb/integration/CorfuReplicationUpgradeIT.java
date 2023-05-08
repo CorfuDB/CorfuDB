@@ -61,7 +61,7 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
             "./test/src/test/resources/transport/pluginConfigUpgradeSource.properties";
 
     private static final String TEST_PLUGIN_CONFIG_PATH_SINK =
-            "./test/src/test/resources/transport/grpcConfigUpgradeSink.properties";
+            "./test/src/test/resources/transport/pluginConfigUpgradeSink.properties";
 
     private static final String VERSION_STRING = "test_version";
     private static final String VERSION_KEY = "VERSION";

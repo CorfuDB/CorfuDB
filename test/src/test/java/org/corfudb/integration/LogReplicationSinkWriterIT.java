@@ -76,8 +76,6 @@ public class LogReplicationSinkWriterIT extends LogReplicationAbstractIT {
             assertThat(map.count()).isEqualTo(0);
         }
 
-        // Set the plugin config file path before starting the process
-        pluginConfigFilePath = grpcConfig;
         startLogReplicatorServers();
 
         // Verify snapshot sync completed and cluster went into log entry sync

@@ -85,9 +85,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
 
     public static final String TAG_ONE = "tag_one";
 
-    public final static String grpcConfig = "src/test/resources/transport/pluginConfig.properties";
-
-    public String pluginConfigFilePath;
+    public static String pluginConfigFilePath = "src/test/resources/transport/pluginConfig.properties";
 
     // Note: this flag is kept for debugging purposes only.
     // Log Replication Server should run as a process as the unexpected termination of it
@@ -132,6 +130,8 @@ public class LogReplicationAbstractIT extends AbstractIT {
 
     // default is single Source-Sink topology
     public ExampleSchemas.ClusterUuidMsg topologyType = DefaultClusterManager.TP_SINGLE_SOURCE_SINK;
+
+    public String transportType = "GRPC";
 
     public void testEndToEndSnapshotAndLogEntrySync() throws Exception {
         try {
@@ -605,12 +605,12 @@ public class LogReplicationAbstractIT extends AbstractIT {
                 // Start Log Replication Server on Source Site
                 sourceReplicationServer =
                     runReplicationServer(sourceReplicationServerPort, pluginConfigFilePath,
-                        lockLeaseDuration);
+                        lockLeaseDuration, transportType);
 
                 // Start Log Replication Server on Sink Site
                 sinkReplicationServer =
                     runReplicationServer(sinkReplicationServerPort, pluginConfigFilePath,
-                        lockLeaseDuration);
+                        lockLeaseDuration, transportType);
             } else {
                 executorService.submit(() -> {
                     CorfuInterClusterReplicationServer.main(new String[]{"-m", "--max-replication-data-message-size=" + MSG_SIZE,  "--plugin=" + pluginConfigFilePath,
@@ -696,7 +696,8 @@ public class LogReplicationAbstractIT extends AbstractIT {
         try {
             if (runProcess) {
                 // Start Log Replication Server on Source Site
-                sourceReplicationServer = runReplicationServer(sourceReplicationServerPort, pluginConfigFilePath, lockLeaseDuration);
+                sourceReplicationServer = runReplicationServer(sourceReplicationServerPort, pluginConfigFilePath,
+                        lockLeaseDuration, transportType);
             } else {
                 executorService.submit(() -> {
                     CorfuInterClusterReplicationServer.main(new String[]{"-m", "--plugin=" + pluginConfigFilePath,
@@ -712,7 +713,8 @@ public class LogReplicationAbstractIT extends AbstractIT {
         try {
             if (runProcess) {
                 // Start Log Replication Server on Source Site
-                sinkReplicationServer = runReplicationServer(sinkReplicationServerPort, pluginConfigFilePath, lockLeaseDuration);
+                sinkReplicationServer = runReplicationServer(sinkReplicationServerPort, pluginConfigFilePath,
+                        lockLeaseDuration, transportType);
             } else {
                 executorService.submit(() -> {
                     CorfuInterClusterReplicationServer.main(new String[]{"-m", "--plugin=" + pluginConfigFilePath,
