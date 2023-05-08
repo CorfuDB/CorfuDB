@@ -56,7 +56,6 @@ public class LogReplicationRuntimeParameters extends RuntimeParameters {
         private String localCorfuEndpoint;
         private String localClusterId;
         private ClusterDescriptor remoteClusterDescriptor;
-        private String pluginFilePath;
         private long topologyConfigId;
         private IChannelContext channelContext;
         private int maxWriteSize;
@@ -82,11 +81,6 @@ public class LogReplicationRuntimeParameters extends RuntimeParameters {
 
         public LogReplicationRuntimeParameters.LogReplicationRuntimeParametersBuilder remoteClusterDescriptor(ClusterDescriptor remoteLogReplicationCluster) {
             this.remoteClusterDescriptor = remoteLogReplicationCluster;
-            return this;
-        }
-
-        public LogReplicationRuntimeParameters.LogReplicationRuntimeParametersBuilder pluginFilePath(String pluginFilePath) {
-            this.pluginFilePath = pluginFilePath;
             return this;
         }
 

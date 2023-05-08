@@ -41,6 +41,7 @@ import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultTransportPluginSelector.TRANSPORT_TYPE_ENV_VARIABLE;
 
 /**
  * Integration tests.
@@ -83,6 +84,8 @@ public class AbstractIT extends AbstractCorfuTest {
     public static final Properties PROPERTIES = new Properties();
 
     public static final String TEST_SEQUENCE_LOG_PATH = CORFU_LOG_PATH + File.separator + "testSequenceLog";
+
+    private static final String TRANSPORT_TYPE_ENV_VARIABLE = "TransportType";
 
 
     public AbstractIT() {
@@ -360,26 +363,28 @@ public class AbstractIT extends AbstractCorfuTest {
                 .runServer();
     }
 
-    public Process runReplicationServer(int port, int corfuServerPort) throws IOException {
+    public Process runReplicationServer(int port, int corfuServerPort, String transportType) throws IOException {
         return new CorfuReplicationServerRunner()
                 .setHost(DEFAULT_HOST)
                 .setPort(port)
                 .setCorfuServerConnectionPort(corfuServerPort)
+                .setTransportType(transportType)
                 .runServer();
     }
 
-    public Process runReplicationServer(int port, int corfuServerPort, String pluginConfigFilePath) throws IOException {
+    public Process runReplicationServer(int port, int corfuServerPort, String pluginConfigFilePath, String transportType) throws IOException {
         return new CorfuReplicationServerRunner()
                 .setHost(DEFAULT_HOST)
                 .setPort(port)
                 .setCorfuServerConnectionPort(corfuServerPort)
                 .setPluginConfigFilePath(pluginConfigFilePath)
                 .setMsg_size(MSG_SIZE)
+                .setTransportType(transportType)
                 .runServer();
     }
 
     public Process runReplicationServer(int port, int corfuServerPort, String pluginConfigFilePath,
-                                        int lockLeaseDuration) throws IOException {
+                                        int lockLeaseDuration, String transportType) throws IOException {
         return new CorfuReplicationServerRunner()
                 .setHost(DEFAULT_HOST)
                 .setPort(port)
@@ -387,12 +392,13 @@ public class AbstractIT extends AbstractCorfuTest {
                 .setLockLeaseDuration(Integer.valueOf(lockLeaseDuration))
                 .setPluginConfigFilePath(pluginConfigFilePath)
                 .setMsg_size(MSG_SIZE)
+                .setTransportType(transportTye)
                 .runServer();
     }
 
     public Process runReplicationServerCustomMaxWriteSize(int port, int corfuServerPort,
                                                           String pluginConfigFilePath, int maxWriteSize,
-                                                          int maxEntriesApplied) throws IOException {
+                                                          int maxEntriesApplied, String transportType) throws IOException {
         return new CorfuReplicationServerRunner()
                 .setHost(DEFAULT_HOST)
                 .setPort(port)
@@ -401,6 +407,7 @@ public class AbstractIT extends AbstractCorfuTest {
                 .setMsg_size(MSG_SIZE)
                 .setMaxWriteSize(maxWriteSize)
                 .setMaxSnapshotEntriesApplied(maxEntriesApplied)
+                .setTransportType(transportType)
                 .runServer();
     }
 
@@ -665,6 +672,10 @@ public class AbstractIT extends AbstractCorfuTest {
         private int maxSnapshotEntriesApplied;
         private int corfuServerConnectionPort = 9000;
 
+        // Used only for testing. This is set as a system env in the LR process which is read by
+        // DefaultTransportPluginSelector.
+        private String transportType = "GRPC";
+
         /**
          * Create a command line string according to the properties set for a Corfu Server
          * Instance
@@ -748,6 +759,7 @@ public class AbstractIT extends AbstractCorfuTest {
                 logPath.mkdir();
             }
             ProcessBuilder builder = new ProcessBuilder();
+            builder.environment().putIfAbsent(TRANSPORT_TYPE_ENV_VARIABLE, transportType);
 
             builder.command(SH, HYPHEN_C, getCodeCoverageCmd() + getMetricsCmd(metricsConfigFile) +
                     " bin/corfu_replication_server " + getOptionsString());

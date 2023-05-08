@@ -55,7 +55,8 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
     private static final String UPGRADE_PLUGIN_PATH =
             "./test/src/test/resources/transport/pluginConfigUpgradeSource.properties";
 
-    private static final String NON_UPGRADE_PLUGIN_PATH = "src/test/resources/transport/pluginConfig.properties";
+    private static final String NON_UPGRADE_PLUGIN_PATH =
+            "./test/src/test/resources/transport/pluginConfigUpgradeSink.properties";
 
     private SnapshotSyncPluginListener snapshotSyncPluginListener;
 

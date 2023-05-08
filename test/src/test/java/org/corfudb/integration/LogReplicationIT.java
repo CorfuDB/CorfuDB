@@ -75,7 +75,7 @@ import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
 @Slf4j
 public class LogReplicationIT extends AbstractIT implements Observer {
 
-    public static final String grpcConfig = "./test/src/test/resources/transport/pluginConfig.properties";
+    public static final String pluginConfigFilePath = "./test/src/test/resources/transport/pluginConfig.properties";
 
     private static final String SOURCE_ENDPOINT = DEFAULT_HOST + ":" + DEFAULT_PORT;
     private static final int WRITER_PORT = DEFAULT_PORT + 1;
@@ -241,7 +241,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         srcCorfuStore = new CorfuStore(srcDataRuntime);
         dstCorfuStore = new CorfuStore(dstDataRuntime);
 
-        pluginConfig = new LogReplicationPluginConfig(grpcConfig);
+        pluginConfig = new LogReplicationPluginConfig(pluginConfigFilePath);
         metadataManager = new LogReplicationMetadataManager(dstTestRuntime,
                 new LogReplicationContext(new LogReplicationConfigManager(dstTestRuntime, LOCAL_SOURCE_CLUSTER_ID), 0,
                 "test" + SERVERS.PORT_0, true, pluginConfig));

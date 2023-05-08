@@ -115,6 +115,8 @@ public class LogReplicationPluginConfig {
 
             this.topologyManagerAdapterJARPath = getParentDir() + DEFAULT_JAR_PATH;
             this.topologyManagerAdapterName = DEFAULT_CLUSTER_MANAGER_CLASSNAME;
+
+            initTransportSelector(null);
         }
 
         log.debug("{} ", this);
