@@ -17,7 +17,6 @@ import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.proto.RpcCommon;
 import org.corfudb.runtime.view.Layout;
-import org.corfudb.util.concurrent.SingletonResource;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.Matchers;
@@ -62,18 +61,19 @@ public class CompactorServiceUnitTest {
     private static final String NODE_0 = "0";
     private static final String SLEEP_INTERRUPTED_EXCEPTION_MSG = "Sleep interrupted";
 
-
     @Before
-    public void setup() {
-
-        Map<String, Object> map = new HashMap<>();
-        map.put("<port>", "port");
-        when(serverContext.getLocalEndpoint()).thenReturn(NODE_ENDPOINT);
-        when(serverContext.getServerConfig()).thenReturn(map);
+    public void setup() throws Exception {
 
         CorfuRuntime.CorfuRuntimeParameters mockParams = mock(CorfuRuntime.CorfuRuntimeParameters.class);
         when(corfuRuntime.getParameters()).thenReturn(mockParams);
         when(mockParams.getCheckpointTriggerFreqMillis()).thenReturn(1L);
+
+        Map<String, Object> map = new HashMap<>();
+        map.put("<port>", "port");
+        when(serverContext.getManagementRuntimeParameters()).thenReturn(mockParams);
+        when(serverContext.getLocalEndpoint()).thenReturn(NODE_ENDPOINT);
+        when(serverContext.getServerConfig()).thenReturn(map);
+
 
         when(corfuStore.txn(CORFU_SYSTEM_NAMESPACE)).thenReturn(txn);
         when(txn.getRecord(CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME, CompactorMetadataTables.COMPACTION_MANAGER_KEY)).thenReturn(corfuStoreCompactionManagerEntry);
@@ -81,9 +81,9 @@ public class CompactorServiceUnitTest {
         doNothing().when(txn).putRecord(any(), any(), any(), any());
         when(txn.commit()).thenReturn(CorfuStoreMetadata.Timestamp.getDefaultInstance());
 
-        CompactorService compactorService = new CompactorService(serverContext,
-                SingletonResource.withInitial(() -> corfuRuntime), invokeCheckpointingJvm, dynamicTriggerPolicy);
-        compactorServiceSpy = spy(compactorService);
+        compactorServiceSpy = spy(new CompactorService(serverContext,
+                Duration.ofSeconds(SCHEDULER_INTERVAL), invokeCheckpointingJvm, dynamicTriggerPolicy));
+        doReturn(corfuRuntime).when(compactorServiceSpy).getNewCorfuRuntime();
         doReturn(leaderServices).when(compactorServiceSpy).getCompactorLeaderServices();
         doReturn(corfuStore).when(compactorServiceSpy).getCorfuStore();
         //Compaction enabled
@@ -97,6 +97,32 @@ public class CompactorServiceUnitTest {
         //isLeader becomes false
         when(mockLayout.getPrimarySequencer()).thenReturn(NODE_ENDPOINT + NODE_0);
 
+        when((CheckpointingStatus) corfuStoreCompactionManagerEntry.getPayload())
+                .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.FAILED).build())
+                .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED).build());
+        when(invokeCheckpointingJvm.isRunning()).thenReturn(false).thenReturn(true);
+        when(invokeCheckpointingJvm.isInvoked()).thenReturn(false).thenReturn(true);
+
+        compactorServiceSpy.start(Duration.ofSeconds(SCHEDULER_INTERVAL));
+        try {
+            TimeUnit.SECONDS.sleep(SLEEP_WAIT);
+        } catch (InterruptedException e) {
+            log.warn(SLEEP_INTERRUPTED_EXCEPTION_MSG, e);
+        }
+
+        verify(invokeCheckpointingJvm, times(1)).shutdown();
+        verify(invokeCheckpointingJvm).invokeCheckpointing();
+    }
+
+    @Test
+    public void runOrchestratorNonLeaderOnExceptionTest() throws Exception {
+        Layout mockLayout = mock(Layout.class);
+        when(corfuRuntime.invalidateLayout()).thenReturn(CompletableFuture.completedFuture(mockLayout));
+        //isLeader becomes false
+        when(mockLayout.getPrimarySequencer()).thenReturn(NODE_ENDPOINT + NODE_0);
+
+        when(compactorServiceSpy.getCompactorLeaderServices())
+                .thenThrow(new Exception("CompactorLeaderServices not initialized")).thenReturn(leaderServices);
         when((CheckpointingStatus) corfuStoreCompactionManagerEntry.getPayload())
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.FAILED).build())
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED).build());
