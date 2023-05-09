@@ -15,38 +15,33 @@ import java.util.Properties;
 @Slf4j
 public class CorfuSaasEndpointProvider {
     private static Optional<CorfuSaasEndpointProvider> instance = Optional.empty();
-
-    @Getter
-    private final String configFile;
-
-    @Getter
+    
     private final Optional<String> corfuSaasEndpoint;
 
     private CorfuSaasEndpointProvider(String configFile) {
-        this.configFile = configFile;
-        this.corfuSaasEndpoint = getEndpoint(configFile);
+        this.corfuSaasEndpoint = getCorfuSaasEndpoint(configFile);
     }
 
     public static void init(String pluginConfigFile) {
         instance = Optional.of(new CorfuSaasEndpointProvider(pluginConfigFile));
     }
 
-    private Optional<String> getEndpoint(String pluginConfigFilePath) {
+    private Optional<String> getCorfuSaasEndpoint(String pluginConfigFilePath) {
         if (pluginConfigFilePath != null) {
-            return extractEndpoint(pluginConfigFilePath);
+            return extractSaasEndpoint(pluginConfigFilePath);
         }
         log.warn("No plugin path found");
         return Optional.empty();
     }
 
-    private Optional<String> extractEndpoint(String path) {
+    private Optional<String> extractSaasEndpoint(String path) {
         try (InputStream input = new FileInputStream(path)) {
             Properties prop = new Properties();
             prop.load(input);
             String endpoint = prop.getProperty("saas_endpoint");
             return Optional.ofNullable(endpoint);
         } catch (IOException e) {
-            log.warn("Error extracting saas endpoint");
+            log.warn("Error extracting corfu saas endpoint");
             return Optional.empty();
         }
     }
