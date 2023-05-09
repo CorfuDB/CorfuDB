@@ -75,13 +75,16 @@ public class CompactorServiceIT extends AbstractIT {
                 .setPort(DEFAULT_PORT)
                 .setLogPath(com.google.common.io.Files.createTempDir().getAbsolutePath())
                 .build());
-        compactorServiceSpy = spy(new CompactorService(sc, SCHEDULER_INTERVAL, invokeCheckpointing, new DynamicTriggerPolicy()));
+
         CorfuRuntime.CorfuRuntimeParameters.CorfuRuntimeParametersBuilder paramsBuilder = CorfuRuntime.CorfuRuntimeParameters
                 .builder()
                 .checkpointTriggerFreqMillis(1);
+        doReturn(paramsBuilder.build()).when(sc).getManagementRuntimeParameters();
+        compactorServiceSpy = spy(new CompactorService(sc, SCHEDULER_INTERVAL, invokeCheckpointing, new DynamicTriggerPolicy()));
         runtime = spy(createRuntime(singleNodeEndpoint, paramsBuilder));
         runtime.getParameters().setSystemDownHandler(compactorServiceSpy.getSystemDownHandlerForCompactor(runtime));
         doReturn(runtime).when(compactorServiceSpy).getNewCorfuRuntime();
+
 
         runtime2 = spy(createRuntime(singleNodeEndpoint, paramsBuilder));
         runtime2.getParameters().setSystemDownHandler(compactorServiceSpy.getSystemDownHandlerForCompactor(runtime2));
@@ -123,16 +126,22 @@ public class CompactorServiceIT extends AbstractIT {
         verify(compactorServiceSpy, timeout(VERIFY_TIMEOUT.toMillis()).atLeastOnce()).getNewCorfuRuntime();
 
         Runnable invokeConcurrentSystemDownHandler = () -> {
-            runtime.getParameters().getSystemDownHandler().run();
+            try {
+                runtime.getParameters().getSystemDownHandler().run();
+            } catch (Exception e) {
+                System.out.println("Caught exception from down handler: " + e);
+            }
         };
 
         Thread t1 = new Thread(invokeConcurrentSystemDownHandler);
         Thread t2 = new Thread(invokeConcurrentSystemDownHandler);
-        t1.start(); t2.start();
-        t1.join(); t2.join();
+        t1.start();
+        t2.start();
+        t1.join();
+        t2.join();
 
-        verify(compactorServiceSpy, timeout(VERIFY_TIMEOUT.toMillis()).times(2)).start(any());
-        verify(compactorServiceSpy).shutdown();
         verify(compactorServiceSpy, times(2)).getSystemDownHandlerForCompactor(any());
+        verify(compactorServiceSpy, times(3)).start(any());
+        verify(compactorServiceSpy, times(2)).shutdown();
     }
 }
