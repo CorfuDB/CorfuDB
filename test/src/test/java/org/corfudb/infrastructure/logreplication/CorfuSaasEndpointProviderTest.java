@@ -14,11 +14,11 @@ public class CorfuSaasEndpointProviderTest {
      */
     @Test
     public void TestGetCorfuEndpoint_SaasEndpointPresent() {
-        final String PLUGIN_CONFIG_FILE_WITH_SAAS_ENDPOINT = "src/test/resources/transport/grpcConfig.properties";
+        final String PLUGIN_CONFIG_FILE_WITH_SAAS_ENDPOINT = "src/test/resources/transport/grpcSaasConfig.properties";
         CorfuSaasEndpointProvider.init(PLUGIN_CONFIG_FILE_WITH_SAAS_ENDPOINT);
         Optional<String> endpoint = CorfuSaasEndpointProvider.getCorfuSaasEndpoint();
         assertThat(endpoint.isPresent()).isTrue();
-        assertThat(endpoint.get()).isEqualTo("9000");
+        assertThat(endpoint.get()).isEqualTo("corfu:9000");
     }
 
     /**
@@ -27,7 +27,7 @@ public class CorfuSaasEndpointProviderTest {
      */
     @Test
     public void TestGetCorfuEndpoint_withoutSaasEndpoint() {
-        final String PLUGIN_CONFIG_FILE_WITHOUT_SAAS_ENDPOINT = "src/test/resources/transport/grpcConfigUpgradeSource.properties";
+        final String PLUGIN_CONFIG_FILE_WITHOUT_SAAS_ENDPOINT = "src/test/resources/transport/grpcConfig.properties";
         CorfuSaasEndpointProvider.init(PLUGIN_CONFIG_FILE_WITHOUT_SAAS_ENDPOINT);
         Optional<String> endpoint = CorfuSaasEndpointProvider.getCorfuSaasEndpoint();
         assertThat(endpoint.isPresent()).isFalse();
