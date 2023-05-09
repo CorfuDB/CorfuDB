@@ -98,6 +98,7 @@ public class CompactorLeaderServices {
             for (TableName table : tableNames) {
                 txn.putRecord(compactorMetadataTables.getCheckpointingStatusTable(), table, idleStatus, null);
             }
+            this.corfuRuntime.simulateFailure = true;
 
             // Also record the minToken as the earliest token BEFORE checkpointing is initiated
             // We take the current transaction's snapshot timestamp as this safe point

@@ -76,6 +76,8 @@ import static org.corfudb.common.util.URLUtils.getVersionFormattedEndpointURL;
 @Accessors(chain = true)
 public class CorfuRuntime {
 
+    public boolean simulateFailure = false;
+
     /**
      * The parameters used to configure this {@link CorfuRuntime}.
      */
@@ -1211,6 +1213,9 @@ public class CorfuRuntime {
                         // Try to get a layout.
                         CompletableFuture<Layout> layoutFuture =
                                 new LayoutClient(router, Layout.INVALID_EPOCH, Layout.INVALID_CLUSTER_ID).getLayout();
+                        if (simulateFailure) {
+                            throw new IllegalAccessException();
+                        }
                         // Wait for layout
                         Layout l = layoutFuture.get();
 

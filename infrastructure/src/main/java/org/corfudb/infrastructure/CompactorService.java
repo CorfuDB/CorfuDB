@@ -258,6 +258,7 @@ public class CompactorService implements ManagementService {
         }
         if (corfuRuntimeOptional.isPresent()) {
             corfuRuntimeOptional.get().shutdown();
+            corfuRuntimeOptional.get().simulateFailure = false;
             corfuRuntimeOptional = Optional.empty();
         }
         optionalCorfuStore = Optional.empty();
