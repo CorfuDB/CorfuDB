@@ -86,6 +86,7 @@ public class LogReplicationPluginConfig {
         try (InputStream input = new FileInputStream(filepath)) {
             Properties prop = new Properties();
             prop.load(input);
+            log.info("Shama props: {}", prop);
             this.transportPluginSelectorJARPath = prop.getProperty("transport_plugin_selector_JAR_path");
             this.transportPluginSelectorClassCanonicalName = prop.getProperty("transport_plugin_selector_class_name");
 
@@ -135,6 +136,8 @@ public class LogReplicationPluginConfig {
 
     private void initTransportSelector(Properties prop) {
         LogReplicationTransportSelectorPlugin transportSelector;
+        log.info("Shama transportPluginSelectorJARPath {} and transportPluginSelectorClassCanonicalName {}",
+                transportPluginSelectorJARPath, transportPluginSelectorClassCanonicalName);
         File jar = new File(transportPluginSelectorJARPath);
 
         try (URLClassLoader child = new URLClassLoader(new URL[]{jar.toURI().toURL()}, this.getClass().getClassLoader())) {
