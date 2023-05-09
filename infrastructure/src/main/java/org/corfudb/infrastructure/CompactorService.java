@@ -232,7 +232,7 @@ public class CompactorService implements ManagementService {
         } catch (Exception ex) {
           log.error("Exception in runOrchestrator(): ", ex);
         } catch (Throwable t) {
-            log.error("Encountered unexpected exception in runOrchestrator(): ", t);
+            log.error("Unexpected throwable encountered in runOrchestrator(): ", t);
             getCorfuRuntime().getParameters().getSystemDownHandler().run();
         }
     }

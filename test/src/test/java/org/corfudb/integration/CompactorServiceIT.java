@@ -6,6 +6,9 @@ import org.corfudb.infrastructure.InvokeCheckpointing;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.collections.CorfuStore;
+import org.corfudb.runtime.collections.CorfuStoreEntry;
+import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.WrongClusterException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.view.AddressSpaceView;
@@ -17,6 +20,7 @@ import java.io.IOException;
 import java.time.Duration;
 import java.util.UUID;
 
+import static org.mockito.Matchers.anyString;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.doCallRealMethod;
 import static org.mockito.Mockito.doThrow;
@@ -94,7 +98,7 @@ public class CompactorServiceIT extends AbstractIT {
     public void throwUnrecoverableCorfuErrorTest() throws Exception {
         createCompactorService();
         AddressSpaceView mockAddressSpaceView = spy(new AddressSpaceView(runtime));
-        Long address = 7L;
+        final Long address = 1L;
         doReturn(mockAddressSpaceView).when(runtime).getAddressSpaceView();
         doThrow(new UnrecoverableCorfuError(new InterruptedException("Thread interrupted"))).when(mockAddressSpaceView).read(eq(address), any(), any());
         compactorServiceSpy.start(SCHEDULER_INTERVAL);
@@ -119,18 +123,22 @@ public class CompactorServiceIT extends AbstractIT {
     public void invokeConcurrentSystemDownHandlerTest() throws Exception {
         createCompactorService();
 
+        CorfuStore corfuStore = mock(CorfuStore.class);
+        TxnContext txn = mock(TxnContext.class);
+        CorfuStoreEntry record = mock(CorfuStoreEntry.class);
+        doReturn(txn).when(corfuStore).txn(any());
+        doReturn(record).when(txn).getRecord(anyString(), any());
+        doReturn(null).when(record).getPayload();
+        doReturn(corfuStore).when(compactorServiceSpy).getCorfuStore();
+
         //return runtime2 when systemHandler is invoked the 2nd time
         doReturn(runtime).doReturn(runtime2).when(compactorServiceSpy).getNewCorfuRuntime();
         compactorServiceSpy.start(SCHEDULER_INTERVAL);
 
-        verify(compactorServiceSpy, timeout(VERIFY_TIMEOUT.toMillis()).atLeastOnce()).getNewCorfuRuntime();
+        verify(compactorServiceSpy, timeout(VERIFY_TIMEOUT.toMillis()).times(1)).getNewCorfuRuntime();
 
         Runnable invokeConcurrentSystemDownHandler = () -> {
-            try {
-                runtime.getParameters().getSystemDownHandler().run();
-            } catch (Exception e) {
-                System.out.println("Caught exception from down handler: " + e);
-            }
+            runtime.getParameters().getSystemDownHandler().run();
         };
 
         Thread t1 = new Thread(invokeConcurrentSystemDownHandler);
@@ -140,8 +148,10 @@ public class CompactorServiceIT extends AbstractIT {
         t1.join();
         t2.join();
 
+        final int invokeStartTimes = 3;
+        verify(compactorServiceSpy, timeout(VERIFY_TIMEOUT.toMillis())).getCompactorLeaderServices();
         verify(compactorServiceSpy, times(2)).getSystemDownHandlerForCompactor(any());
-        verify(compactorServiceSpy, times(3)).start(any());
+        verify(compactorServiceSpy, times(invokeStartTimes)).start(any());
         verify(compactorServiceSpy, times(2)).shutdown();
     }
 }
