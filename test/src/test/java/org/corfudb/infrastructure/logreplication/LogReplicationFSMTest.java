@@ -2,11 +2,17 @@ package org.corfudb.infrastructure.logreplication;
 
 import static java.lang.Thread.sleep;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig.getSessions;
+import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.NAMESPACE;
+import static org.corfudb.runtime.LogReplicationUtils.LR_STATUS_STREAM_TAG;
+import static org.corfudb.runtime.LogReplicationUtils.REPLICATION_STATUS_TABLE_NAME;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Observable;
 import java.util.Observer;
@@ -16,7 +22,6 @@ import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Semaphore;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.google.protobuf.ByteString;
 import com.google.protobuf.Message;
@@ -27,6 +32,7 @@ import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
+import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationAckReader;
 import org.corfudb.infrastructure.logreplication.replication.fsm.EmptyDataSender;
 import org.corfudb.infrastructure.logreplication.replication.fsm.EmptySnapshotReader;
@@ -62,7 +68,6 @@ import org.corfudb.runtime.collections.StreamListener;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
-import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.TableRegistry;
 import org.junit.After;
@@ -87,8 +92,10 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
     private static final String TEST_LOCAL_CLUSTER_ID = "local_cluster";
     private static final String TEST_LOCAL_ENDPOINT_PREFIX = "test:";
 
-    private static final String LOCAL_SOURCE_CLUSTER_ID = DefaultClusterConfig.getSourceClusterIds().get(0);
+    // Default session to used to initialize and update status table
+    private static final LogReplicationSession DEFAULT_SESSION = getSessions().get(0);
 
+    private static final String LOCAL_SOURCE_CLUSTER_ID = DefaultClusterConfig.getSourceClusterIds().get(0);
 
     // This semaphore is used to block until the triggering event causes the transition to a new state
     private final Semaphore transitionAvailable = new Semaphore(1, true);
@@ -960,7 +967,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
                 break;
             case STREAMS:
                 CorfuRuntime runtime = getNewRuntime(getDefaultNode()).connect();
-                snapshotReader = new StreamsSnapshotReader(runtime, session,
+                snapshotReader = new StreamsSnapshotReader(runtime, DEFAULT_SESSION,
                         new LogReplicationContext(configManager, TEST_TOPOLOGY_CONFIG_ID,
                                 "test:" + SERVERS.PORT_0));
                 dataSender = new TestDataSender();
@@ -972,11 +979,16 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         LogReplicationContext context = new LogReplicationContext(configManager, TEST_TOPOLOGY_CONFIG_ID,
                 "test:" + SERVERS.PORT_0, true);
         LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(runtime, context);
-        ackReader = new LogReplicationAckReader(metadataManager, runtime, session, context);
+
+        // Manually initialize the replication status table, needed for tests that check the
+        // source status so incoming needs to be set to false
+        metadataManager.addSession(DEFAULT_SESSION, 0, false);
+
+        ackReader = new LogReplicationAckReader(metadataManager, runtime, DEFAULT_SESSION, context);
         fsm = new LogReplicationFSM(runtime, snapshotReader, dataSender, logEntryReader,
                 new DefaultReadProcessor(runtime), upgradeManager,
                 Executors.newSingleThreadExecutor(new ThreadFactoryBuilder().setNameFormat("fsm-worker").build()),
-                ackReader, session, context);
+                ackReader, DEFAULT_SESSION, context);
         ackReader.setLogEntryReader(fsm.getLogEntryReader());
         transitionObservable = fsm.getNumTransitions();
         transitionObservable.addObserver(this);

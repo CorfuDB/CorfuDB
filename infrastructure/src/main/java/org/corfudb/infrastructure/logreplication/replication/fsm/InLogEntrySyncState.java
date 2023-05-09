@@ -2,7 +2,6 @@ package org.corfudb.infrastructure.logreplication.replication.fsm;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.LogReplication.SyncType;
-import org.corfudb.runtime.LogReplication.SyncStatus;
 import org.corfudb.infrastructure.logreplication.replication.send.LogEntrySender;
 
 import java.util.UUID;
@@ -161,8 +160,8 @@ public class InLogEntrySyncState implements LogReplicationState {
     }
 
     @Override
-    public void setTransitionSyncId(UUID eventId) {
-        transitionSyncId = eventId;
+    public void setTransitionEventId(UUID eventId) {
+        transitionEventId = eventId;
     }
 
     @Override
