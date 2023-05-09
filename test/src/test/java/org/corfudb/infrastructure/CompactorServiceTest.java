@@ -98,7 +98,7 @@ public class CompactorServiceTest extends AbstractViewTest {
      * @return The generated layout.
      */
     private Layout setup3NodeCluster(Double logSizeLimitPercentage) {
-        sc0 = new ServerContextBuilder()
+        sc0 = spy(new ServerContextBuilder()
                 .setSingle(false)
                 .setServerRouter(new TestServerRouter(SERVERS.PORT_0))
                 .setPort(SERVERS.PORT_0)
@@ -106,8 +106,8 @@ public class CompactorServiceTest extends AbstractViewTest {
                 .setCacheSizeHeapRatio(CACHE_SIZE_HEAP_RATIO)
                 .setLogPath(com.google.common.io.Files.createTempDir().getAbsolutePath())
                 .setLogSizeLimitPercentage(Double.toString(logSizeLimitPercentage))
-                .build();
-        sc1 = new ServerContextBuilder()
+                .build());
+        sc1 = spy(new ServerContextBuilder()
                 .setSingle(false)
                 .setServerRouter(new TestServerRouter(SERVERS.PORT_1))
                 .setPort(SERVERS.PORT_1)
@@ -115,8 +115,8 @@ public class CompactorServiceTest extends AbstractViewTest {
                 .setCacheSizeHeapRatio(CACHE_SIZE_HEAP_RATIO)
                 .setLogPath(com.google.common.io.Files.createTempDir().getAbsolutePath())
                 .setLogSizeLimitPercentage(Double.toString(logSizeLimitPercentage))
-                .build();
-        sc2 = new ServerContextBuilder()
+                .build());
+        sc2 = spy(new ServerContextBuilder()
                 .setSingle(false)
                 .setServerRouter(new TestServerRouter(SERVERS.PORT_2))
                 .setPort(SERVERS.PORT_2)
@@ -124,7 +124,7 @@ public class CompactorServiceTest extends AbstractViewTest {
                 .setCacheSizeHeapRatio(CACHE_SIZE_HEAP_RATIO)
                 .setLogPath(com.google.common.io.Files.createTempDir().getAbsolutePath())
                 .setLogSizeLimitPercentage(Double.toString(logSizeLimitPercentage))
-                .build();
+                .build());
 
         addServer(SERVERS.PORT_0, sc0);
         addServer(SERVERS.PORT_1, sc1);
@@ -183,6 +183,11 @@ public class CompactorServiceTest extends AbstractViewTest {
         } catch (Exception e) {
             log.warn("Caught exception while opening MetadataTables: ", e);
         }
+
+        doReturn(runtime0.getParameters()).when(sc0).getManagementRuntimeParameters();
+        doReturn(runtime1.getParameters()).when(sc1).getManagementRuntimeParameters();
+        doReturn(runtime2.getParameters()).when(sc2).getManagementRuntimeParameters();
+
         distributedCheckpointer0 = new ServerTriggeredCheckpointer(CheckpointerBuilder.builder()
                 .corfuRuntime(runtime0).cpRuntime(Optional.of(cpRuntime0)).persistedCacheRoot(Optional.empty())
                 .isClient(false).build(), corfuStore, compactorMetadataTables);

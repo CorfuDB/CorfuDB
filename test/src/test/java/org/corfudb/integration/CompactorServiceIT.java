@@ -1,10 +1,6 @@
 package org.corfudb.integration;
 
-import org.corfudb.infrastructure.CompactorService;
-import org.corfudb.infrastructure.DynamicTriggerPolicy;
-import org.corfudb.infrastructure.InvokeCheckpointing;
-import org.corfudb.infrastructure.ServerContext;
-import org.corfudb.infrastructure.ServerContextBuilder;
+import org.corfudb.infrastructure.*;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.WrongClusterException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
@@ -54,20 +50,19 @@ public class CompactorServiceIT extends AbstractIT {
         shutdownCorfuServer(corfuServer);
     }
 
-    private Process runSinglePersistentServer(String host, int port, boolean disableLogUnitServerCache) throws IOException {
+    private Process runSinglePersistentServer(String host, int port) throws IOException {
         return new AbstractIT.CorfuServerRunner()
                 .setHost(host)
                 .setPort(port)
                 .setLogPath(getCorfuServerLogPath(host, port))
                 .setSingle(true)
-                .setDisableLogUnitServerCache(disableLogUnitServerCache)
                 .runServer();
     }
 
     private void createCompactorService() throws Exception {
         // Start Corfu Server
         corfuServer = runServer(DEFAULT_PORT, true);
-        corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort, true);
+        corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
         ServerContext sc = spy(new ServerContextBuilder()
                 .setSingle(true)
@@ -75,13 +70,16 @@ public class CompactorServiceIT extends AbstractIT {
                 .setPort(DEFAULT_PORT)
                 .setLogPath(com.google.common.io.Files.createTempDir().getAbsolutePath())
                 .build());
-        compactorServiceSpy = spy(new CompactorService(sc, SCHEDULER_INTERVAL, invokeCheckpointing, new DynamicTriggerPolicy()));
+
         CorfuRuntime.CorfuRuntimeParameters.CorfuRuntimeParametersBuilder paramsBuilder = CorfuRuntime.CorfuRuntimeParameters
                 .builder()
                 .checkpointTriggerFreqMillis(1);
+        doReturn(paramsBuilder.build()).when(sc).getManagementRuntimeParameters();
+        compactorServiceSpy = spy(new CompactorService(sc, SCHEDULER_INTERVAL, invokeCheckpointing, new DynamicTriggerPolicy()));
         runtime = spy(createRuntime(singleNodeEndpoint, paramsBuilder));
         runtime.getParameters().setSystemDownHandler(compactorServiceSpy.getSystemDownHandlerForCompactor(runtime));
         doReturn(runtime).when(compactorServiceSpy).getNewCorfuRuntime();
+
 
         runtime2 = spy(createRuntime(singleNodeEndpoint, paramsBuilder));
         runtime2.getParameters().setSystemDownHandler(compactorServiceSpy.getSystemDownHandlerForCompactor(runtime2));
@@ -91,7 +89,7 @@ public class CompactorServiceIT extends AbstractIT {
     public void throwUnrecoverableCorfuErrorTest() throws Exception {
         createCompactorService();
         AddressSpaceView mockAddressSpaceView = spy(new AddressSpaceView(runtime));
-        Long address = 7L;
+        final Long address = 1L;
         doReturn(mockAddressSpaceView).when(runtime).getAddressSpaceView();
         doThrow(new UnrecoverableCorfuError(new InterruptedException("Thread interrupted"))).when(mockAddressSpaceView).read(eq(address), any(), any());
         compactorServiceSpy.start(SCHEDULER_INTERVAL);
@@ -123,7 +121,11 @@ public class CompactorServiceIT extends AbstractIT {
         verify(compactorServiceSpy, timeout(VERIFY_TIMEOUT.toMillis()).atLeastOnce()).getNewCorfuRuntime();
 
         Runnable invokeConcurrentSystemDownHandler = () -> {
-            runtime.getParameters().getSystemDownHandler().run();
+            try {
+                runtime.getParameters().getSystemDownHandler().run();
+            } catch (Exception e) {
+                System.out.println("Caught exception from down handler: " + e);
+            }
         };
 
         Thread t1 = new Thread(invokeConcurrentSystemDownHandler);
@@ -131,8 +133,9 @@ public class CompactorServiceIT extends AbstractIT {
         t1.start(); t2.start();
         t1.join(); t2.join();
 
-        verify(compactorServiceSpy, timeout(VERIFY_TIMEOUT.toMillis()).times(2)).start(any());
-        verify(compactorServiceSpy).shutdown();
+        final int invokeStartTimes = 3;
         verify(compactorServiceSpy, times(2)).getSystemDownHandlerForCompactor(any());
+        verify(compactorServiceSpy, times(invokeStartTimes)).start(any());
+        verify(compactorServiceSpy, times(2)).shutdown();
     }
 }

@@ -64,14 +64,16 @@ public class CompactorServiceUnitTest {
     @Before
     public void setup() throws Exception {
 
-        Map<String, Object> map = new HashMap<>();
-        map.put("<port>", "port");
-        when(serverContext.getLocalEndpoint()).thenReturn(NODE_ENDPOINT);
-        when(serverContext.getServerConfig()).thenReturn(map);
-
         CorfuRuntime.CorfuRuntimeParameters mockParams = mock(CorfuRuntime.CorfuRuntimeParameters.class);
         when(corfuRuntime.getParameters()).thenReturn(mockParams);
         when(mockParams.getCheckpointTriggerFreqMillis()).thenReturn(1L);
+
+        Map<String, Object> map = new HashMap<>();
+        map.put("<port>", "port");
+        when(serverContext.getManagementRuntimeParameters()).thenReturn(mockParams);
+        when(serverContext.getLocalEndpoint()).thenReturn(NODE_ENDPOINT);
+        when(serverContext.getServerConfig()).thenReturn(map);
+
 
         when(corfuStore.txn(CORFU_SYSTEM_NAMESPACE)).thenReturn(txn);
         when(txn.getRecord(CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME, CompactorMetadataTables.COMPACTION_MANAGER_KEY)).thenReturn(corfuStoreCompactionManagerEntry);
