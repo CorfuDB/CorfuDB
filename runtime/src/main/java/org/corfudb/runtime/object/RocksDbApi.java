@@ -8,6 +8,8 @@ import org.corfudb.runtime.collections.DiskBackedCorfuTable;
 import org.corfudb.runtime.collections.RocksDbEntryIterator;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.serializer.ISerializer;
+import org.corfudb.util.serializer.PrimitiveSerializer;
+import org.corfudb.util.serializer.Serializers;
 import org.rocksdb.ColumnFamilyHandle;
 import org.rocksdb.ReadOptions;
 import org.rocksdb.RocksDB;
@@ -68,7 +70,6 @@ public interface RocksDbApi<S extends SnapshotGenerator<S>> {
 
         final ByteBuf serializedSecondaryKey = Unpooled.buffer();
         serializer.serialize(secondaryKey, serializedSecondaryKey);
-
         final ByteBuf compositeKey = Unpooled.buffer();
 
         // Write the index ID (1 byte).

@@ -21,6 +21,7 @@ import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.ObjectsView.ObjectID;
 import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.util.serializer.ISerializer;
+import org.corfudb.util.serializer.SafeProtobufSerializer;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -52,7 +53,7 @@ import static org.corfudb.runtime.collections.DiskBackedCorfuTable.getDiskBacked
  * <p>
  */
 @Slf4j
-public class Table<K extends Message, V extends Message, M extends Message> {
+public class Table<K extends Message, V extends Message, M extends Message> implements AutoCloseable {
 
     // Accessor/Mutator threads can interleave in a way that create a deadlock because they can create a
     // circular dependency between the VersionLockedObject(VLO) lock and the common forkjoin thread pool. In order
@@ -250,7 +251,7 @@ public class Table<K extends Message, V extends Message, M extends Message> {
             builder.setTypeToken(PersistedCorfuTable.getTypeToken());
             builder.setArguments(
                     persistenceOptions.build(), getDiskBackedCorfuTableOptions(),
-                    serializer, protobufIndexer);
+                    new SafeProtobufSerializer(serializer), protobufIndexer);
         } else {
             builder.setArguments(protobufIndexer);
             builder.setTypeToken(PersistentCorfuTable.getTypeToken());
@@ -338,6 +339,11 @@ public class Table<K extends Message, V extends Message, M extends Message> {
                     entry.getValue().getPayload()));
         }
         return copy;
+    }
+
+    @Override
+    public void close() throws Exception {
+        corfuTable.close();
     }
 
     /**

@@ -4,7 +4,6 @@ import com.google.common.hash.HashFunction;
 import com.google.common.hash.Hashing;
 import io.micrometer.core.instrument.Timer;
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -20,7 +19,6 @@ import org.corfudb.runtime.object.ConsistencyView;
 import org.corfudb.runtime.object.PersistenceOptions;
 import org.corfudb.runtime.object.RocksDbApi;
 import org.corfudb.runtime.object.RocksDbSnapshotGenerator;
-import org.corfudb.runtime.object.RocksDbTx;
 import org.corfudb.runtime.object.SMRSnapshot;
 import org.corfudb.runtime.object.RocksDbStore;
 import org.corfudb.runtime.object.SnapshotGenerator;
@@ -28,6 +26,9 @@ import org.corfudb.runtime.object.VersionedObjectIdentifier;
 import org.corfudb.runtime.object.ViewGenerator;
 import org.corfudb.runtime.view.ObjectOpenOption;
 import org.corfudb.util.serializer.ISerializer;
+import org.corfudb.util.serializer.PrimitiveSerializer;
+import org.corfudb.util.serializer.ProtobufSerializer;
+import org.corfudb.util.serializer.Serializers;
 import org.rocksdb.CompressionType;
 import org.rocksdb.Options;
 import org.rocksdb.RocksDB;
@@ -41,8 +42,6 @@ import javax.annotation.Nullable;
 import java.util.AbstractMap;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -310,6 +309,11 @@ public class DiskBackedCorfuTable<K, V> implements
         for (Index.Spec<K, V, ?> index : indexSpec) {
             Iterable<?> mappedValues = index.getMultiValueIndexFunction().apply(primaryKey, value);
             for (Object secondaryKey : mappedValues) {
+                if (Objects.isNull(secondaryKey)) {
+                    log.warn("Null secondary keys are not supported.");
+                    continue;
+                }
+
                 final ByteBuf serializedIndexValue = Unpooled.buffer();
                 final ByteBuf serializedCompoundKey = getCompoundKey(
                         indexToId.get(index.getName().get()), secondaryKey, primaryKey);
@@ -326,6 +330,18 @@ public class DiskBackedCorfuTable<K, V> implements
 
     public static int hashBytes(byte[] serializedObject, int offset, int length) {
         return murmurHash3.hashBytes(serializedObject, offset, length).asInt();
+    }
+
+    /**
+     * Ideally, all serializers should be able to deal with any data type
+     * thrown at it. This is not the case with {@link ProtobufSerializer},
+     * which does not understand primitive data types.
+     *
+     * @param serializer default serializer that has been provided
+     * @param object the object to serialize
+     * @param target where to serialize the object
+     */
+    public static void serialize(ISerializer serializer, Object object, ByteBuf target) {
     }
 
     public DiskBackedCorfuTable<K, V> clear() {
