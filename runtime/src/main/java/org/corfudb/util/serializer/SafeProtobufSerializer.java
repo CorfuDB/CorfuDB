@@ -5,6 +5,11 @@ import org.corfudb.runtime.CorfuRuntime;
 
 import java.util.Objects;
 
+/**
+ * Ideally, all serializers should be able to deal with any data type
+ * thrown at it. This is not the case with {@link ProtobufSerializer},
+ * which does not understand primitive data types.
+ */
 public class SafeProtobufSerializer implements ISerializer {
 
     final ISerializer protobufSerializer;

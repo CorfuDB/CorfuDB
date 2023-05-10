@@ -2,6 +2,8 @@ package org.corfudb.runtime.collections;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.reflect.TypeToken;
+import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.object.ICorfuSMRUpcallTarget;
 import org.corfudb.runtime.object.MVOCorfuCompileProxy;
 
@@ -9,8 +11,10 @@ import javax.annotation.Nonnull;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+@Slf4j
 public class PersistedCorfuTable<K, V> implements ICorfuTable<K, V> {
 
     private MVOCorfuCompileProxy<PersistedCorfuTable<K, V>, DiskBackedCorfuTable<K, V>> proxy;
@@ -70,9 +74,10 @@ public class PersistedCorfuTable<K, V> implements ICorfuTable<K, V> {
     }
 
     @Override
+    @Deprecated
     public Set<K> keySet() {
-        // We only allow operations over streams and iterators.
-        throw new UnsupportedOperationException("Please use entryStream() API");
+        log.warn("keySet() is deprecated, please use entryStream() instead.");
+        return entryStream().map(Map.Entry::getKey).collect(Collectors.toSet());
     }
 
     @Override
@@ -97,7 +102,7 @@ public class PersistedCorfuTable<K, V> implements ICorfuTable<K, V> {
     }
 
     @Override
-    public <I> Iterable<Map.Entry<K, V>> getByIndex(@Nonnull final Index.Name indexName, I indexKey) {
+    public <I> Iterable<Map.Entry<K, V>> getByIndex(@NonNull final Index.Name indexName, @NonNull I indexKey) {
         return proxy.access(corfuSmr -> corfuSmr.getByIndex(indexName, indexKey), null);
     }
     @Override

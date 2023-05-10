@@ -76,10 +76,10 @@ public class DiskBackedCorfuTable<K, V> implements
 
     /**
      * A set of options defined for {@link DiskBackedCorfuTable}.
-     *
+     * <p>
      * For a set of options that dictate RocksDB memory usage can be found here:
-     * https://github.com/facebook/rocksdb/wiki/Memory-usage-in-RocksDB
-     *
+     * <a href="https://github.com/facebook/rocksdb/wiki/Memory-usage-in-RocksDB">...</a>
+     * <p>
      * Block Cache:  Which can be set via Options::setTableFormatConfig.
      *               Out of box, RocksDB will use LRU-based block cache
      *               implementation with 8MB capacity.
@@ -129,7 +129,6 @@ public class DiskBackedCorfuTable<K, V> implements
             this.indexSpec.add(index);
             this.indexToId.put(index.getName().get(), indexId++);
         }
-
 
         try {
             this.statistics = new Statistics();
@@ -255,6 +254,15 @@ public class DiskBackedCorfuTable<K, V> implements
         }
     }
 
+    /**
+     * Return a compound key consisting of: Index ID (1 byte) + Secondary Key Hash (4 bytes) +
+     * Serialized Secondary Key (Arbitrary) + Serialized Primary Key (Arbitrary)
+     *
+     * @param indexId a mapping (byte) that represents the specific index name/spec
+     * @param secondaryKey secondary key
+     * @param primaryKey primary key
+     * @return byte representation of the compound key
+     */
     private ByteBuf getCompoundKey(byte indexId, Object secondaryKey, K primaryKey) {
         final ByteBuf compositeKey = Unpooled.buffer();
 
@@ -284,11 +292,17 @@ public class DiskBackedCorfuTable<K, V> implements
         return compositeKey;
     }
 
-    private void unmapSecondaryIndexes(@NonNull K primaryKey, @NonNull V value) throws RocksDBException {
+    private void unmapSecondaryIndexes(@NonNull K primaryKey, @Nullable V value) throws RocksDBException {
+        if (Objects.isNull(value)) {
+            return;
+        }
+
         try {
             for (Index.Spec<K, V, ?> index : indexSpec) {
                 Iterable<?> mappedValues = index.getMultiValueIndexFunction().apply(primaryKey, value);
                 for (Object secondaryKey : mappedValues) {
+                    // Protobuf 3 does not allow for optional fields, so the secondary
+                    // key should never be null.
                     if (Objects.isNull(secondaryKey)) {
                         log.warn("{}: null secondary keys are not supported.", index.getName());
                         continue;
@@ -320,6 +334,8 @@ public class DiskBackedCorfuTable<K, V> implements
             for (Index.Spec<K, V, ?> index : indexSpec) {
                 Iterable<?> mappedValues = index.getMultiValueIndexFunction().apply(primaryKey, value);
                 for (Object secondaryKey : mappedValues) {
+                    // Protobuf 3 does not allow for optional fields, so the secondary
+                    // key should never be null.
                     if (Objects.isNull(secondaryKey)) {
                         log.warn("{}: null secondary keys are not supported.", index.getName());
                         continue;
@@ -353,18 +369,6 @@ public class DiskBackedCorfuTable<K, V> implements
         return murmurHash3.hashBytes(serializedObject, offset, length).asInt();
     }
 
-    /**
-     * Ideally, all serializers should be able to deal with any data type
-     * thrown at it. This is not the case with {@link ProtobufSerializer},
-     * which does not understand primitive data types.
-     *
-     * @param serializer default serializer that has been provided
-     * @param object the object to serialize
-     * @param target where to serialize the object
-     */
-    public static void serialize(ISerializer serializer, Object object, ByteBuf target) {
-    }
-
     public DiskBackedCorfuTable<K, V> clear() {
         try {
             rocksApi.clear();
@@ -385,7 +389,8 @@ public class DiskBackedCorfuTable<K, V> implements
         return rocksApi.exactSize();
     }
 
-    public <I> Iterable<Map.Entry<K, V>> getByIndex(@Nonnull final Index.Name indexName, I indexKey) {
+    public <I> Iterable<Map.Entry<K, V>> getByIndex(@NonNull final Index.Name indexName,
+                                                    @NonNull I indexKey) {
         String secondaryIndex = indexName.get();
         if (!secondaryIndexesAliasToPath.containsKey(secondaryIndex)) {
             return null;
