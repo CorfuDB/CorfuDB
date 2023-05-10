@@ -81,7 +81,6 @@ public interface RocksDbApi<S extends SnapshotGenerator<S>> {
         compositeKey.writeBytes(serializedSecondaryKey);
         final byte[] prefix = ByteBufUtil.getBytes(compositeKey);
 
-
         Set<ByteBuf> results = new HashSet<>();
 
         try (RocksIterator entryIterator = getRawIterator(readOptions, secondaryIndexesHandle)) {

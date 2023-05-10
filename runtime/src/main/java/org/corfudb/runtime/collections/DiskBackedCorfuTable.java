@@ -26,9 +26,7 @@ import org.corfudb.runtime.object.VersionedObjectIdentifier;
 import org.corfudb.runtime.object.ViewGenerator;
 import org.corfudb.runtime.view.ObjectOpenOption;
 import org.corfudb.util.serializer.ISerializer;
-import org.corfudb.util.serializer.PrimitiveSerializer;
 import org.corfudb.util.serializer.ProtobufSerializer;
-import org.corfudb.util.serializer.Serializers;
 import org.rocksdb.CompressionType;
 import org.rocksdb.Options;
 import org.rocksdb.RocksDB;
@@ -286,12 +284,16 @@ public class DiskBackedCorfuTable<K, V> implements
         return compositeKey;
     }
 
-    private void unmapSecondaryIndexes(@NonNull K primaryKey, @Nullable V value) throws RocksDBException {
-        // TODO(Zach): Disable secondary indexes if corruption occurs during unmap/map process.
-        if (!Objects.isNull(value)) {
+    private void unmapSecondaryIndexes(@NonNull K primaryKey, @NonNull V value) throws RocksDBException {
+        try {
             for (Index.Spec<K, V, ?> index : indexSpec) {
                 Iterable<?> mappedValues = index.getMultiValueIndexFunction().apply(primaryKey, value);
                 for (Object secondaryKey : mappedValues) {
+                    if (Objects.isNull(secondaryKey)) {
+                        log.warn("{}: null secondary keys are not supported.", index.getName());
+                        continue;
+                    }
+
                     final ByteBuf serializedCompoundKey = getCompoundKey(
                             indexToId.get(index.getName().get()), secondaryKey, primaryKey);
                     try {
@@ -301,30 +303,49 @@ public class DiskBackedCorfuTable<K, V> implements
                     }
                 }
             }
+        } catch (Exception fatal) {
+            log.error("Received an exception while computing the index. " +
+                    "This is most likely an issue with the client's indexing function.", fatal);
+
+            close(); // Do not leave the table in an inconsistent state.
+
+            // In case of both a transactional and non-transactional operation, the client
+            // is going to receive UnrecoverableCorfuError along with the appropriate cause.
+            throw fatal;
         }
     }
 
     private void mapSecondaryIndexes(@NonNull K primaryKey, @NonNull V value) throws RocksDBException {
-        // TODO(Zach): Disable secondary indexes if corruption occurs during unmap/map process.
-        for (Index.Spec<K, V, ?> index : indexSpec) {
-            Iterable<?> mappedValues = index.getMultiValueIndexFunction().apply(primaryKey, value);
-            for (Object secondaryKey : mappedValues) {
-                if (Objects.isNull(secondaryKey)) {
-                    log.warn("Null secondary keys are not supported.");
-                    continue;
-                }
+        try {
+            for (Index.Spec<K, V, ?> index : indexSpec) {
+                Iterable<?> mappedValues = index.getMultiValueIndexFunction().apply(primaryKey, value);
+                for (Object secondaryKey : mappedValues) {
+                    if (Objects.isNull(secondaryKey)) {
+                        log.warn("{}: null secondary keys are not supported.", index.getName());
+                        continue;
+                    }
 
-                final ByteBuf serializedIndexValue = Unpooled.buffer();
-                final ByteBuf serializedCompoundKey = getCompoundKey(
-                        indexToId.get(index.getName().get()), secondaryKey, primaryKey);
-                try {
-                    rocksApi.insert(columnFamilyRegistry.getSecondaryIndexColumnFamily(),
-                            serializedCompoundKey, serializedIndexValue);
-                } finally {
-                    serializedCompoundKey.release();
-                    serializedIndexValue.release();
+                    final ByteBuf serializedIndexValue = Unpooled.buffer();
+                    final ByteBuf serializedCompoundKey = getCompoundKey(
+                            indexToId.get(index.getName().get()), secondaryKey, primaryKey);
+                    try {
+                        rocksApi.insert(columnFamilyRegistry.getSecondaryIndexColumnFamily(),
+                                serializedCompoundKey, serializedIndexValue);
+                    } finally {
+                        serializedCompoundKey.release();
+                        serializedIndexValue.release();
+                    }
                 }
             }
+        } catch (Exception fatal) {
+            log.error("Received an exception while computing the index. " +
+                    "This is most likely an issue with the client's indexing function.", fatal);
+
+            close(); // Do not leave the table in an inconsistent state.
+
+            // In case of both a transactional and non-transactional operation, the client
+            // is going to receive UnrecoverableCorfuError along with the appropriate cause.
+            throw fatal;
         }
     }
 
