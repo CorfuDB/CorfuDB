@@ -68,4 +68,10 @@ public interface CorfuReplicationClusterManagerAdapter {
      * @return node ID
      */
     String getLocalNodeId();
+
+    /**
+     * Get if the current deployment is SaaS or on-prem
+     * @return true if SaaS, otherwise false
+     */
+    boolean isSaasDeployment();
 }

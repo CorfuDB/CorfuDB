@@ -8,7 +8,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.logreplication.infrastructure.DiscoveryServiceEvent.DiscoveryServiceEventType;
-import org.corfudb.infrastructure.logreplication.infrastructure.Utils.CorfuSaasEndpointProvider;
+import org.corfudb.infrastructure.logreplication.infrastructure.utils.CorfuSaasEndpointProvider;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.CorfuReplicationClusterManagerAdapter;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
@@ -173,7 +173,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         this.localEndpoint = serverContext.getLocalEndpoint();
         this.clusterManagerAdapter = getClusterManagerAdapter(serverContext.getPluginConfigFilePath());
         this.runtime = runtime;
-        CorfuSaasEndpointProvider.init(serverContext.getPluginConfigFilePath());
+        CorfuSaasEndpointProvider.init(serverContext.getPluginConfigFilePath(), clusterManagerAdapter.isSaasDeployment());
     }
 
     /**

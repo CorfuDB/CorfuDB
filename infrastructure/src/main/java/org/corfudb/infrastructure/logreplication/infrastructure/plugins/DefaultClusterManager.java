@@ -201,6 +201,11 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
         return localNodeId;
     }
 
+    @Override
+    public boolean isSaasDeployment() {
+        return false;
+    }
+
     private TopologyDescriptor initConfig() {
         Map<ClusterDescriptor, Set<LogReplication.ReplicationModel>> sourceClustersToReplicationModel = new HashMap<>();
         Map<ClusterDescriptor, Set<LogReplication.ReplicationModel>> sinkClustersToReplicationModel= new HashMap<>();
