@@ -42,6 +42,8 @@ import org.corfudb.util.Sleep;
 import org.corfudb.util.serializer.Serializers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.Marker;
+import org.slf4j.MarkerFactory;
 
 import javax.annotation.Nonnull;
 import java.nio.file.Path;
@@ -167,6 +169,8 @@ public class CorfuRuntime {
      */
     @Getter
     private volatile boolean isShutdown = false;
+
+    public static final Marker LOG_NOT_IMPORTANT = MarkerFactory.getMarker("NOT_IMPORTANT");
 
 
     /**

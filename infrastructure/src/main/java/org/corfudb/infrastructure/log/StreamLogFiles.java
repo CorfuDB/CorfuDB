@@ -336,7 +336,7 @@ public class StreamLogFiles implements StreamLog {
     Segment getSegmentHandleForAddress(long address) {
         long segmentId = address / RECORDS_PER_LOG_FILE;
         Segment handle = openSegments.computeIfAbsent(segmentId,
-                a -> new Segment(a, logDir, logSizeQuota));
+                a -> new Segment(a, RECORDS_PER_LOG_FILE, logDir, logSizeQuota));
         handle.retain();
         return handle;
     }

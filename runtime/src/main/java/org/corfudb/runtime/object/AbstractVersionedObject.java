@@ -191,6 +191,12 @@ public abstract class AbstractVersionedObject<S extends SnapshotGenerator<S>> {
                     if (!te.isRetriable() || x == (trimRetry - 1)) {
                         throw te;
                     }
+                } catch (Exception ex) {
+                    log.warn("SnapshotProxy[{}] encountered an exception during sync to {} on attempt {} of {}",
+                            Utils.toReadableId(getID()), timestamp, x + 1, trimRetry, ex);
+
+                    resetUnsafe();
+                    throw ex;
                 }
             }
 

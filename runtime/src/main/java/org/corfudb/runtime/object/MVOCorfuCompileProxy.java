@@ -89,7 +89,7 @@ public class MVOCorfuCompileProxy<
 
         // Linearize this read against a timestamp
         long timestamp = rt.getSequencerView().query(getStreamID());
-        log.debug("Access[{}] conflictObj={} version={}", this, conflictObject, timestamp);
+        log.trace("Access[{}] conflictObj={} version={}", this, conflictObject, timestamp);
 
         // Perform underlying access
         ICorfuSMRSnapshotProxy<S> snapshotProxy = underlyingMVO.getSnapshotProxy(timestamp);

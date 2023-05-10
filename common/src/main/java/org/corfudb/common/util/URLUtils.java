@@ -7,6 +7,8 @@ import org.apache.http.conn.util.InetAddressUtils;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
+import java.util.function.Predicate;
+import java.util.regex.Pattern;
 
 /**
  * Contains Utility methods to work with URIs or the Socket Addresses.
@@ -19,8 +21,20 @@ public final class URLUtils {
 
     private static final String COLON_SEPERATOR = ":";
 
+    // Matches things like "corfu" or "log-replication-0"
+    private static final Predicate<String> SAAS_PATTERN1 = Pattern.compile("^[a-z-]+(-\\d+)?$").asPredicate();
+
+    // Matches things like "corfu-0.corfu-headless.dev-env-23.svc.cluster.local"
+    private static final Predicate<String> SAAS_PATTERN2 = Pattern.compile("^[a-z-]+(-\\d+)?.[a-z-]+.[a-z0-9-]+.svc.cluster.local$").asPredicate();
+
+    private static final Predicate<String> SAAS_PATTERN = SAAS_PATTERN1.or(SAAS_PATTERN2);
+
     private URLUtils() {
         // prevent instantiation of this class
+    }
+
+    public static boolean hostMatchesSaasPattern(String host) {
+        return SAAS_PATTERN.test(host);
     }
 
     /**
@@ -54,12 +68,21 @@ public final class URLUtils {
      * @return a version-formatted endpoint
      */
     public static String getVersionFormattedEndpointURL(String address) {
-        return getVersionFormattedHostAddress(address.substring(0, address.lastIndexOf(':'))) +
-                address.substring(address.lastIndexOf(COLON_SEPERATOR));
+        int lastColonIndex = address.lastIndexOf(COLON_SEPERATOR);
+        // if ':' is present, return a substring
+        if (lastColonIndex != -1) {
+            String host = address.substring(0, lastColonIndex);
+            return getVersionFormattedHostAddress(host) +
+                    address.substring(lastColonIndex);
+        } else {
+            log.warn("getVersionFormattedEndpointURL: Could not find colon in the address '{}'.", address);
+            return address;
+        }
     }
 
     /**
      * Returns a version-formatted URL that contains the formatted host address.
+     * If host matches saas pattern, returns as is.
      *
      * @param host host address that needs formatting
      * @return version-formatted address
@@ -78,7 +101,9 @@ public final class URLUtils {
         String formattedHost = host.trim().split("%")[0];
 
         try {
-            if (InetAddressUtils.isIPv6Address(InetAddress.getByName(formattedHost).getHostAddress())
+            if (hostMatchesSaasPattern(formattedHost)) {
+                return formattedHost;
+            } else if (InetAddressUtils.isIPv6Address(InetAddress.getByName(formattedHost).getHostAddress())
                 && formattedHost.charAt(0)!='[' && formattedHost.charAt(formattedHost.length()-1)!=']') {
                 formattedHost = '[' + formattedHost + ']';
             }

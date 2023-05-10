@@ -1,9 +1,9 @@
 package org.corfudb.infrastructure.logreplication.replication.fsm;
 
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SyncStatus;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal.SyncType;
 import org.corfudb.infrastructure.logreplication.replication.send.LogEntrySender;
-import org.corfudb.runtime.LogReplication.ReplicationStatusVal.SyncType;
-import org.corfudb.runtime.LogReplication.SyncStatus;
 
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;

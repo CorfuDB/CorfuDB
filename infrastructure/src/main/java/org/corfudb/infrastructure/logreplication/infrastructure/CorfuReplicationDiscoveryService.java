@@ -20,12 +20,12 @@ import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogRepli
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.ClusterRole;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.TopologyConfigurationMsg;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEvent;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEventKey;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.exceptions.RetryExhaustedException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
@@ -195,12 +195,6 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     private boolean serverStarted = false;
 
     /**
-     * Indicates the replication status has been set as NOT_STARTED.
-     * It should be reset if its role changes to Standby.
-     */
-    private boolean statusFlag = false;
-
-    /**
      * This is the listener to the replication event table shared by the nodes in the cluster.
      * When a non-leader node is called to do the enforcedSnapshotSync, it will write the event to
      * the shared event-table and the leader node will be notified to do the work.
@@ -343,8 +337,12 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
 
         logReplicationServerHandler = new LogReplicationServer(serverContext, logReplicationConfig,
             logReplicationMetadataManager, localCorfuEndpoint, topologyDescriptor.getTopologyConfigId(), localNodeId);
-        logReplicationServerHandler.setActive(localClusterDescriptor.getRole().equals(ClusterRole.ACTIVE));
-        logReplicationServerHandler.setStandby(localClusterDescriptor.getRole().equals(ClusterRole.STANDBY));
+        if (localClusterDescriptor.getRole().equals(ClusterRole.ACTIVE)) {
+            logReplicationServerHandler.setActive(true);
+            addDefaultReplicationStatus();
+        } else if (localClusterDescriptor.getRole().equals(ClusterRole.STANDBY)) {
+            logReplicationServerHandler.setStandby(true);
+        }
 
         interClusterReplicationService = new CorfuInterClusterReplicationServerNode(
                 serverContext,
@@ -497,7 +495,6 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                 }
                 replicationManager.setTopology(topologyDescriptor);
                 replicationManager.start();
-                updateReplicationStatus();
                 lockAcquireSample = recordLockAcquire(localClusterDescriptor.getRole());
                 processCountOnLockAcquire(localClusterDescriptor.getRole());
                 break;
@@ -506,7 +503,6 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                 log.info("Start as Sink (receiver)");
                 interClusterReplicationService.getLogReplicationServer().getSinkManager().reset();
                 interClusterReplicationService.getLogReplicationServer().setLeadership(true);
-                statusFlag = false;
                 lockAcquireSample = recordLockAcquire(localClusterDescriptor.getRole());
                 processCountOnLockAcquire(localClusterDescriptor.getRole());
                 break;
@@ -620,6 +616,10 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
             // Consider the case of async configuration changes, non-lead nodes could overwrite
             // the replication status if it has already completed by the lead node
             resetReplicationStatusTableWithRetry();
+            // In the event of Standby -> Active we should add the default replication values
+            if (localClusterDescriptor.getRole() == ClusterRole.ACTIVE) {
+                addDefaultReplicationStatus();
+            }
         }
 
         log.debug("Persist new topologyConfigId {}, cluster id={}, role={}", topologyDescriptor.getTopologyConfigId(),
@@ -793,13 +793,13 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      * snapshot sync is in the apply phase)
      */
     @Override
-    public Map<String, LogReplication.ReplicationStatusVal> queryReplicationStatus() {
+    public Map<String, LogReplicationMetadata.ReplicationStatusVal> queryReplicationStatus() {
         if (localClusterDescriptor == null || logReplicationMetadataManager == null) {
             log.warn("Cluster configuration has not been pushed to current LR node.");
             return null;
         } else if (localClusterDescriptor.getRole() == ClusterRole.ACTIVE) {
-            Map<String, LogReplication.ReplicationStatusVal> mapReplicationStatus = logReplicationMetadataManager.getReplicationRemainingEntries();
-            Map<String, LogReplication.ReplicationStatusVal> mapToSend = new HashMap<>(mapReplicationStatus);
+            Map<String, LogReplicationMetadata.ReplicationStatusVal> mapReplicationStatus = logReplicationMetadataManager.getReplicationRemainingEntries();
+            Map<String, LogReplicationMetadata.ReplicationStatusVal> mapToSend = new HashMap<>(mapReplicationStatus);
             // If map contains local cluster, remove (as it might have been added by the SinkManager) but this node
             // has an active role.
             if (mapToSend.containsKey(localClusterDescriptor.getClusterId())) {
@@ -903,10 +903,10 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         lockAcquireSample.ifPresent(LongTaskTimer.Sample::stop);
     }
 
-    private void updateReplicationStatus() {
-        if (!statusFlag) {
-            replicationManager.updateStatusAsNotStarted();
-            statusFlag = true;
+    private void addDefaultReplicationStatus() {
+        // Add default entry to Replication Status Table
+        for (ClusterDescriptor clusterDescriptor : topologyDescriptor.getStandbyClusters().values()) {
+            logReplicationMetadataManager.initializeReplicationStatusTable(clusterDescriptor.clusterId);
         }
     }
 

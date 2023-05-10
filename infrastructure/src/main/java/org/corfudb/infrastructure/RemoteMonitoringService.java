@@ -108,12 +108,9 @@ public class RemoteMonitoringService implements ManagementService {
         this.clusterContext = clusterContext;
         this.failureDetector = failureDetector;
         this.localMonitoringService = localMonitoringService;
-
         ClusterAdvisor advisor = ClusterAdvisorFactory.createForStrategy(
-                ClusterType.COMPLETE_GRAPH,
-                serverContext.getLocalEndpoint()
+                ClusterType.COMPLETE_GRAPH
         );
-
         this.detectionTasksScheduler = Executors.newSingleThreadScheduledExecutor(
                 new ThreadFactoryBuilder()
                         .setDaemon(true)
@@ -145,14 +142,12 @@ public class RemoteMonitoringService implements ManagementService {
         HealingAgent healingAgent = HealingAgent.builder()
                 .advisor(advisor)
                 .fsAdvisor(fsAdvisor)
-                .localEndpoint(serverContext.getLocalEndpoint())
                 .runtimeSingleton(runtimeSingletonResource)
                 .failureDetectorWorker(failureDetectorWorker)
                 .dataStore(fdDataStore)
                 .build();
 
         FailuresAgent failuresAgent = FailuresAgent.builder()
-                .localEndpoint(serverContext.getLocalEndpoint())
                 .fdDataStore(fdDataStore)
                 .advisor(advisor)
                 .fsAdvisor(fsAdvisor)
@@ -172,6 +167,8 @@ public class RemoteMonitoringService implements ManagementService {
                 .sequencerBootstrapper(sequencerBootstrapper)
                 .failureDetectorWorker(failureDetectorWorker)
                 .build();
+
+
     }
 
     private CorfuRuntime getCorfuRuntime() {
@@ -245,13 +242,12 @@ public class RemoteMonitoringService implements ManagementService {
      *  </pre>
      */
     private synchronized CompletableFuture<DetectorTask> runDetectionTasks() {
-
+        String localEndpoint = serverContext.getLocalEndpoint();
         return getCorfuRuntime()
                 .invalidateLayout()
                 .thenApply(serverContext::saveManagementLayout)
                 //check if this node can handle failures (if the node is in the cluster)
                 .thenCompose(ourLayout -> {
-                    String localEndpoint = serverContext.getLocalEndpoint();
                     FailureDetectorHelper helper = new FailureDetectorHelper(ourLayout, localEndpoint);
 
                     return helper.handleReconfigurationsAsync();
@@ -274,7 +270,7 @@ public class RemoteMonitoringService implements ManagementService {
                                 return pollReport;
                             })
                             //Execute failure detector task using failureDetectorWorker executor
-                            .thenCompose(pollReport -> fdService.runFailureDetectorTask(pollReport, ourLayout));
+                            .thenCompose(pollReport -> fdService.runFailureDetectorTask(pollReport, ourLayout, localEndpoint));
                 }).thenApply(task -> {
                     Issue issue = Issue.createIssue(Component.FAILURE_DETECTOR,
                             SOME_NODES_ARE_UNRESPONSIVE,

@@ -11,7 +11,6 @@ import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManag
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
-import org.corfudb.runtime.LogReplication.SyncStatus;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalRetry;
 import org.corfudb.util.retry.RetryNeededException;
@@ -231,6 +230,8 @@ public class CorfuReplicationManager {
                 topology.addStandbyCluster(clusterInfo);
                 startLogReplicationRuntime(clusterInfo);
             }
+            // Initialize default replication status values for the new standby
+            metadataManager.initializeReplicationStatusTable(clusterId);
         }
 
         // The connection id or other transportation plugin's info could've changed for
@@ -255,17 +256,5 @@ public class CorfuReplicationManager {
             standbyRuntime.getSourceManager().stopLogReplication();
             standbyRuntime.getSourceManager().startForcedSnapshotSync(event.getEventId());
         }
-    }
-
-    /**
-     * Update Replication Status as NOT_STARTED.
-     * Should be called only once in an active lifecycle.
-     */
-    public void updateStatusAsNotStarted() {
-        runtimeToRemoteCluster.values().forEach(corfuLogReplicationRuntime ->
-                corfuLogReplicationRuntime
-                        .getSourceManager()
-                        .getAckReader()
-                        .markSyncStatus(SyncStatus.NOT_STARTED));
     }
 }

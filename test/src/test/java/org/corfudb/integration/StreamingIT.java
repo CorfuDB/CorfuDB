@@ -1039,7 +1039,7 @@ public class StreamingIT extends AbstractIT {
 
         // Run X number of checkpoint/trim (on each run, trigger runtimeGC)
         for (int i = 0; i < numCheckpointTrimCycles; i++) {
-            checkpointAndTrim(namespace, Arrays.asList(defaultTableName, randomTableName), false);
+            checkpointAndTrim(runtime, namespace, Arrays.asList(defaultTableName, randomTableName), false);
             runtime.getGarbageCollector().runRuntimeGC();
             long seqNumberAfterTrim = store.getHighestSequence(namespace, defaultTableName);
             assertThat(seqNumberAfterTrim).isEqualTo(seqNumBeforeTrim);
@@ -1437,7 +1437,7 @@ public class StreamingIT extends AbstractIT {
         store = new CorfuStore(runtime);
     }
 
-    private Token checkpointAndTrim(String namespace, List<String> tablesToCheckpoint, boolean partialTrim) {
+    public static Token checkpointAndTrim(CorfuRuntime runtime, String namespace, List<String> tablesToCheckpoint, boolean partialTrim) {
         MultiCheckpointWriter<PersistentCorfuTable<?, ?>> mcw = new MultiCheckpointWriter<>();
         tablesToCheckpoint.forEach(tableName -> {
             PersistentCorfuTable<Uuid, CorfuRecord<SampleSchema.EventInfo, SampleSchema.ManagedResources>> corfuTable =

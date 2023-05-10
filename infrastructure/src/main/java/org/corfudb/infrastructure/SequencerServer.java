@@ -524,8 +524,11 @@ public class SequencerServer extends AbstractServer {
 
             // Note: we reuse the request header as the ignore_cluster_id and
             // ignore_epoch fields are the same in both cases.
-            r.sendResponse(getResponseMsg(getHeaderMsg(req.getHeader()),
-                    getBootstrapSequencerResponseMsg(false)), ctx);
+            ResponseMsg responseMsg = getResponseMsg(
+                    getHeaderMsg(req.getHeader()),
+                    getBootstrapSequencerResponseMsg(false)
+            );
+            r.sendResponse(responseMsg, ctx);
             return;
         }
 

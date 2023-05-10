@@ -3,14 +3,13 @@ package org.corfudb.integration;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.LRRollingUpgradeHandler;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultAdapterForUpgradeActive;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
-import org.corfudb.runtime.LogReplication.ReplicationStatusKey;
-import org.corfudb.runtime.LogReplication.ReplicationStatusVal;
 import org.corfudb.utils.CommonTypes;
 import org.corfudb.utils.LogReplicationStreams;
 import org.junit.Assert;
@@ -25,8 +24,6 @@ import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager.LOG_REPLICATION_PLUGIN_VERSION_TABLE;
-import static org.corfudb.runtime.LogReplicationUtils.LR_STATUS_STREAM_TAG;
-import static org.corfudb.runtime.LogReplicationUtils.REPLICATION_STATUS_TABLE;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 @Slf4j
@@ -91,16 +88,16 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
 
         // Subscribe to replication status table on Standby (to be sure data change on status are captured)
         corfuStoreStandby.openTable(LogReplicationMetadataManager.NAMESPACE,
-                REPLICATION_STATUS_TABLE,
-                ReplicationStatusKey.class,
-                ReplicationStatusVal.class,
+                LogReplicationMetadataManager.REPLICATION_STATUS_TABLE,
+                LogReplicationMetadata.ReplicationStatusKey.class,
+                LogReplicationMetadata.ReplicationStatusVal.class,
                 null,
-                TableOptions.fromProtoSchema(ReplicationStatusVal.class));
+                TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
 
         CountDownLatch statusUpdateLatch = new CountDownLatch(2);
         ReplicationStatusListener standbyListener = new ReplicationStatusListener(statusUpdateLatch, false);
         corfuStoreStandby.subscribeListener(standbyListener, LogReplicationMetadataManager.NAMESPACE,
-                LR_STATUS_STREAM_TAG);
+                LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
 
         setupVersionTable(corfuStoreActive, false);
         setupVersionTable(corfuStoreStandby, false);
@@ -185,16 +182,16 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
 
         // Subscribe to replication status table on Standby (to be sure data change on status are captured)
         corfuStoreStandby.openTable(LogReplicationMetadataManager.NAMESPACE,
-                REPLICATION_STATUS_TABLE,
-                ReplicationStatusKey.class,
-                ReplicationStatusVal.class,
+                LogReplicationMetadataManager.REPLICATION_STATUS_TABLE,
+                LogReplicationMetadata.ReplicationStatusKey.class,
+                LogReplicationMetadata.ReplicationStatusVal.class,
                 null,
-                TableOptions.fromProtoSchema(ReplicationStatusVal.class));
+                TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
 
         CountDownLatch statusUpdateLatch = new CountDownLatch(2);
         ReplicationStatusListener standbyListener = new ReplicationStatusListener(statusUpdateLatch, false);
         corfuStoreStandby.subscribeListener(standbyListener, LogReplicationMetadataManager.NAMESPACE,
-                LR_STATUS_STREAM_TAG);
+                LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
 
         setupVersionTable(corfuStoreActive, false);
         setupVersionTable(corfuStoreStandby, false);
@@ -234,7 +231,7 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         statusUpdateLatch = new CountDownLatch(2);
         standbyListener = new ReplicationStatusListener(statusUpdateLatch, false);
         corfuStoreStandby.subscribeListener(standbyListener, LogReplicationMetadataManager.NAMESPACE,
-                LR_STATUS_STREAM_TAG);
+                LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
 
         // Trigger a snapshot sync by stopping the active LR and running a CP+trim
         stopActiveLogReplicator();
@@ -281,16 +278,16 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
 
         // Subscribe to replication status table on Standby (to be sure data change on status are captured)
         corfuStoreStandby.openTable(LogReplicationMetadataManager.NAMESPACE,
-                REPLICATION_STATUS_TABLE,
-                ReplicationStatusKey.class,
-                ReplicationStatusVal.class,
+                LogReplicationMetadataManager.REPLICATION_STATUS_TABLE,
+                LogReplicationMetadata.ReplicationStatusKey.class,
+                LogReplicationMetadata.ReplicationStatusVal.class,
                 null,
-                TableOptions.fromProtoSchema(ReplicationStatusVal.class));
+                TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
 
         CountDownLatch statusUpdateLatch = new CountDownLatch(2);
         ReplicationStatusListener standbyListener = new ReplicationStatusListener(statusUpdateLatch, false);
         corfuStoreStandby.subscribeListener(standbyListener, LogReplicationMetadataManager.NAMESPACE,
-                LR_STATUS_STREAM_TAG);
+                LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
 
         log.info(">> Open map(s) on active and standby");
         openMaps(FIVE, false);
@@ -349,7 +346,7 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         statusUpdateLatch = new CountDownLatch(2);
         standbyListener = new ReplicationStatusListener(statusUpdateLatch, false);
         corfuStoreStandby.subscribeListener(standbyListener, LogReplicationMetadataManager.NAMESPACE,
-                LR_STATUS_STREAM_TAG);
+                LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
 
         // Upgrade the active site
         log.info(">> Upgrading the active site ...");
@@ -409,16 +406,16 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
 
         // Subscribe to replication status table on Standby (to be sure data change on status are captured)
         corfuStoreStandby.openTable(LogReplicationMetadataManager.NAMESPACE,
-                REPLICATION_STATUS_TABLE,
-                ReplicationStatusKey.class,
-                ReplicationStatusVal.class,
+                LogReplicationMetadataManager.REPLICATION_STATUS_TABLE,
+                LogReplicationMetadata.ReplicationStatusKey.class,
+                LogReplicationMetadata.ReplicationStatusVal.class,
                 null,
-                TableOptions.fromProtoSchema(ReplicationStatusVal.class));
+                TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
 
         CountDownLatch statusUpdateLatch = new CountDownLatch(2);
         ReplicationStatusListener standbyListener = new ReplicationStatusListener(statusUpdateLatch, false);
         corfuStoreStandby.subscribeListener(standbyListener, LogReplicationMetadataManager.NAMESPACE,
-                LR_STATUS_STREAM_TAG);
+                LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
 
         log.info(">> Open map(s) on active and standby");
         openMaps(2, false);
@@ -516,16 +513,16 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
 
         // Subscribe to replication status table on Standby (to be sure data change on status are captured)
         corfuStoreStandby.openTable(LogReplicationMetadataManager.NAMESPACE,
-                REPLICATION_STATUS_TABLE,
-                ReplicationStatusKey.class,
-                ReplicationStatusVal.class,
+                LogReplicationMetadataManager.REPLICATION_STATUS_TABLE,
+                LogReplicationMetadata.ReplicationStatusKey.class,
+                LogReplicationMetadata.ReplicationStatusVal.class,
                 null,
-                TableOptions.fromProtoSchema(ReplicationStatusVal.class));
+                TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
 
         CountDownLatch statusUpdateLatch = new CountDownLatch(2);
         ReplicationStatusListener standbyListener = new ReplicationStatusListener(statusUpdateLatch, false);
         corfuStoreStandby.subscribeListener(standbyListener, LogReplicationMetadataManager.NAMESPACE,
-                LR_STATUS_STREAM_TAG);
+                LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
 
         log.info(">> Open map(s) on active and standby");
         openMaps(2, false);
@@ -583,7 +580,7 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         statusUpdateLatch = new CountDownLatch(2);
         standbyListener = new ReplicationStatusListener(statusUpdateLatch, false);
         corfuStoreStandby.subscribeListener(standbyListener, LogReplicationMetadataManager.NAMESPACE,
-                LR_STATUS_STREAM_TAG);
+                LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
 
         stopActiveLogReplicator();
 
@@ -657,16 +654,16 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
 
         // Subscribe to replication status table on Standby (to be sure data change on status are captured)
         corfuStoreStandby.openTable(LogReplicationMetadataManager.NAMESPACE,
-                REPLICATION_STATUS_TABLE,
-                ReplicationStatusKey.class,
-                ReplicationStatusVal.class,
+                LogReplicationMetadataManager.REPLICATION_STATUS_TABLE,
+                LogReplicationMetadata.ReplicationStatusKey.class,
+                LogReplicationMetadata.ReplicationStatusVal.class,
                 null,
-                TableOptions.fromProtoSchema(ReplicationStatusVal.class));
+                TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
 
         CountDownLatch statusUpdateLatch = new CountDownLatch(2);
         ReplicationStatusListener standbyListener = new ReplicationStatusListener(statusUpdateLatch, false);
         corfuStoreStandby.subscribeListener(standbyListener, LogReplicationMetadataManager.NAMESPACE,
-                LR_STATUS_STREAM_TAG);
+                LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
 
         log.info(">> Open map(s) on active and standby");
         openMaps(2, false);
@@ -751,7 +748,7 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         statusUpdateLatch = new CountDownLatch(2);
         standbyListener = new ReplicationStatusListener(statusUpdateLatch, false);
         corfuStoreStandby.subscribeListener(standbyListener, LogReplicationMetadataManager.NAMESPACE,
-                LR_STATUS_STREAM_TAG);
+                LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
 
 
         // Now upgrade the active site

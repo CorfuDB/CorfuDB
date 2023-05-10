@@ -66,7 +66,6 @@ public class HandOfGodIT extends GenericIntegrationTest {
                     clientFixture.getTimeout(),
                     clientFixture.getPollPeriod()
             );
-
             // Verify layout contains only the node that is up
             corfuClient.invalidateLayout();
             Layout layout = corfuClient.getLayout();

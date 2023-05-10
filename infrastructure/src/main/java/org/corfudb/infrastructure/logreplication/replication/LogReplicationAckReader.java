@@ -4,6 +4,8 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SyncStatus;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal.SyncType;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.replication.send.LogEntrySender;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.LogEntryReader;
@@ -12,8 +14,6 @@ import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
-import org.corfudb.runtime.LogReplication.ReplicationStatusVal.SyncType;
-import org.corfudb.runtime.LogReplication.SyncStatus;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
@@ -52,8 +52,8 @@ public class LogReplicationAckReader {
     // Last ack'd timestamp from Receiver
     private long lastAckedTimestamp = Address.NON_ADDRESS;
 
-    // Sync Type for which last Ack was received. Default to LOG_ENTRY as this is the initial FSM state
-    private SyncType lastSyncType = SyncType.LOG_ENTRY;
+    // Sync Type for which last Ack was received, it is initialized when setSyncType is called
+    private SyncType lastSyncType = null;
 
     private LogEntryReader logEntryReader;
 
@@ -399,7 +399,7 @@ public class LogReplicationAckReader {
             IRetry.build(IntervalRetry.class, () -> {
                 try {
                     lock.lock();
-                    metadataManager.updateSyncStatus(remoteClusterId, SyncType.SNAPSHOT, SyncStatus.ONGOING);
+                    metadataManager.updateSyncStatus(remoteClusterId, lastSyncType, SyncStatus.ONGOING);
                 } catch (TransactionAbortedException tae) {
                     log.error("Error while attempting to markSnapshotSyncInfoOngoing for cluster {}.", remoteClusterId, tae);
                     throw new RetryNeededException();
@@ -470,10 +470,14 @@ public class LogReplicationAckReader {
                 IRetry.build(IntervalRetry.class, () -> {
                     try {
                         lock.lock();
+                        if (lastSyncType == null) {
+                            log.info("lastSyncType is null before polling task run");
+                            return null;
+                        }
                         long entriesToSend = calculateRemainingEntriesToSend(lastAckedTimestamp);
-                        metadataManager.setReplicationStatusTable(remoteClusterId, entriesToSend, lastSyncType);
+                        metadataManager.updateRemainingEntriesToSend(remoteClusterId, entriesToSend, lastSyncType);
                     } catch (TransactionAbortedException tae) {
-                        log.error("Error while attempting to set replication status for " +
+                        log.error("Error while attempting to set remaining entries for " +
                                         "remote cluster {} with lastSyncType {}.",
                                 remoteClusterId, lastSyncType, tae);
                         throw new RetryNeededException();
@@ -484,7 +488,7 @@ public class LogReplicationAckReader {
                     return null;
                 }).run();
             } catch (InterruptedException e) {
-                log.error("Unrecoverable exception when attempting to setReplicationStatusTable", e);
+                log.error("Unrecoverable exception when attempting to updateRemainingEntriesToSend", e);
                 throw new UnrecoverableCorfuInterruptedError(e);
             }
         }

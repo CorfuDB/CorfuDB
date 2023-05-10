@@ -1,7 +1,7 @@
 package org.corfudb.infrastructure.logreplication.replication.fsm;
 
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.LogReplication.SyncStatus;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SyncStatus;
 
 /**
  * This class represents the stopped state of the Log Replication State Machine.

@@ -34,7 +34,7 @@
         <dependency>
             <groupId>io.micrometer</groupId>
             <artifactId>micrometer-registry-prometheus</artifactId>
-            <version>1.5.5</version>
+            <version>1.10.5</version>
         </dependency>
         <dependency>
             <groupId>net.jpountz.lz4</groupId>

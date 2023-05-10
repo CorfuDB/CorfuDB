@@ -22,6 +22,11 @@
             <version>${project.version}</version>
         </dependency>
         <dependency>
+            <groupId>org.corfudb</groupId>
+            <artifactId>infrastructure</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
             <groupId>com.offbytwo</groupId>
             <artifactId>docopt</artifactId>
             <version>0.6.0.20150202</version>

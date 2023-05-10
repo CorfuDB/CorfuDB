@@ -69,7 +69,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
             MVOCorfuCompileProxy<?, S> proxy, ICorfuSMRAccess<R, S> accessFunction, Object[] conflictObject) {
         long startAccessTime = System.nanoTime();
         try {
-            log.debug("Access[{},{}] conflictObj={}", this, proxy, conflictObject);
+            log.trace("Access[{},{}] conflictObj={}", this, proxy, conflictObject);
 
             // First, we add this access to the read set
             addToReadSet(proxy, conflictObject);
