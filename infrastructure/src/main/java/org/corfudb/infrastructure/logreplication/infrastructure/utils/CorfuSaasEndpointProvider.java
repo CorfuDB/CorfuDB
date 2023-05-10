@@ -1,6 +1,5 @@
-package org.corfudb.infrastructure.logreplication.infrastructure.Utils;
+package org.corfudb.infrastructure.logreplication.infrastructure.utils;
 
-import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.FileInputStream;
@@ -13,24 +12,33 @@ import java.util.Properties;
  * Helper methods to retrieve the corfu's SaaS endpoint.
  */
 @Slf4j
-public class CorfuSaasEndpointProvider {
-    private static Optional<CorfuSaasEndpointProvider> instance = Optional.empty();
+public final class CorfuSaasEndpointProvider {
+    private static CorfuSaasEndpointProvider instance;
     
     private final Optional<String> corfuSaasEndpoint;
 
-    private CorfuSaasEndpointProvider(String configFile) {
+    private final boolean isSaasDeployment;
+
+    private CorfuSaasEndpointProvider(String configFile, boolean isSaasDeployment) {
+        this.isSaasDeployment = isSaasDeployment;
         this.corfuSaasEndpoint = getCorfuSaasEndpoint(configFile);
     }
 
-    public static void init(String pluginConfigFile) {
-        instance = Optional.of(new CorfuSaasEndpointProvider(pluginConfigFile));
+    public static void init(String pluginConfigFile, boolean isSaasDeployment) {
+        instance = new CorfuSaasEndpointProvider(pluginConfigFile, isSaasDeployment);
     }
 
     private Optional<String> getCorfuSaasEndpoint(String pluginConfigFilePath) {
+        // if not SaaS deployment, return an empty optional
+        if(!isSaasDeployment) {
+            log.debug("Not a SaaS deployment");
+            return Optional.empty();
+        }
+
         if (pluginConfigFilePath != null) {
             return extractSaasEndpoint(pluginConfigFilePath);
         }
-        log.warn("No plugin path found");
+        log.warn("plugin config file not found {}", pluginConfigFilePath);
         return Optional.empty();
     }
 
@@ -46,7 +54,11 @@ public class CorfuSaasEndpointProvider {
         }
     }
 
+    /**
+     * Get SaaS endpoint for corfu
+     * @return endpoint when deployment is saas, otherwise return null
+     */
     public static Optional<String> getCorfuSaasEndpoint() {
-        return instance.flatMap(i -> i.corfuSaasEndpoint);
+        return instance.corfuSaasEndpoint;
     }
 }
