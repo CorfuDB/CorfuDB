@@ -195,13 +195,13 @@ public class LogReplicationUpgradeManager {
     }
 
     private VersionResult verifyVersionResult(TxnContext txn) {
-        CorfuStoreEntry<VersionString, Version, Uuid> record =
+        CorfuStoreEntry<VersionString, Version, Uuid> entry =
             txn.getRecord(LOG_REPLICATION_PLUGIN_VERSION_TABLE, versionString);
-        if (record.getPayload() == null) {
+        if (entry.getPayload() == null) {
             log.info("LR initializing. Version unset");
             return VersionResult.UNSET;
-        } else if (!record.getPayload().getVersion().equals(nodeVersion)) {
-            log.info("LR upgraded. Version changed from {} to {}", nodeVersion, record.getPayload().getVersion());
+        } else if (!entry.getPayload().getVersion().equals(nodeVersion)) {
+            log.info("LR upgraded. Version changed from {} to {}", nodeVersion, entry.getPayload().getVersion());
             return VersionResult.CHANGE;
         }
         return VersionResult.SAME;
