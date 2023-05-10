@@ -1,39 +1,94 @@
 package org.corfudb.infrastructure.logreplication.infrastructure;
 
+import com.google.common.annotations.VisibleForTesting;
 import lombok.Getter;
-import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
-import org.corfudb.infrastructure.logreplication.transport.IChannelContext;
+import lombok.Setter;
+import org.corfudb.infrastructure.logreplication.config.LogReplicationConfig;
+import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
+import org.corfudb.runtime.LogReplication.LogReplicationSession;
+import org.corfudb.util.serializer.ISerializer;
+
+import java.util.concurrent.atomic.AtomicBoolean;
+
+import static org.corfudb.util.serializer.ProtobufSerializer.PROTOBUF_SERIALIZER_CODE;
 
 /**
  * This class represents the Log Replication Context.
  *
  * It contains all abstractions required to initiate log replication either as
- * an active cluster (source) or as standby cluster (standby).
+ * a source or as sink cluster.
  *
  * @author amartinezman
  */
 public class LogReplicationContext {
 
     @Getter
-    private LogReplicationConfig config;
+    @Setter
+    private final LogReplicationConfigManager configManager;
 
     @Getter
-    private TopologyDescriptor topology;
+    private final String localCorfuEndpoint;
 
     @Getter
-    private String localCorfuEndpoint;
+    @Setter
+    private long topologyConfigId;
 
     @Getter
-    private IChannelContext channelContext;
+    @Setter
+    private final AtomicBoolean isLeader;
 
     /**
      * Constructor
      **/
-    public LogReplicationContext(LogReplicationConfig config,  TopologyDescriptor topology, String localCorfuEndpoint,
-                                 IChannelContext channelContext) {
-        this.config = config;
-        this.topology = topology;
+    public LogReplicationContext(LogReplicationConfigManager configManager, long topologyConfigId,
+                                 String localCorfuEndpoint) {
+        this.configManager = configManager;
+        this.topologyConfigId = topologyConfigId;
         this.localCorfuEndpoint = localCorfuEndpoint;
-        this.channelContext = channelContext;
+        this.isLeader = new AtomicBoolean(false);
     }
+
+    @VisibleForTesting
+    public LogReplicationContext(LogReplicationConfigManager configManager, long topologyConfigId,
+                                 String localCorfuEndpoint, boolean isLeader) {
+        this.configManager = configManager;
+        this.topologyConfigId = topologyConfigId;
+        this.localCorfuEndpoint = localCorfuEndpoint;
+        this.isLeader = new AtomicBoolean(isLeader);
+    }
+
+    public void setIsLeader(boolean newValue) {
+        this.isLeader.set(newValue);
+    }
+
+    /**
+     * This method will be invoked when it is needed to check if registry has new entries, to get the up-to-date
+     * LogReplicationConfig, which mainly includes streams to replicate and data streams to tags map. Please note
+     * that this method is synchronized because LogReplicationContext is shared across sessions so each session
+     * will have its own threads to access it.
+     */
+    public synchronized void refresh() {
+        this.configManager.getUpdatedConfig();
+    }
+
+    /**
+     * Exposed method for log replicator to get current config.
+     *
+     * @return Current config in config manager.
+     */
+    public LogReplicationConfig getConfig(LogReplicationSession session) {
+        return this.configManager.getSessionToConfigMap().get(session);
+    }
+
+    /**
+     * In general, log replication is happening in stream layer and data should not be materialized. Currently,
+     * the only case we need to deserialize data is in log replication writers, where registry table entries need
+     * to be deserialized to read the schema options.
+     *
+     * @return ProtobufSerializer for deserialize registry table entries in log replication writer.
+     */
+    public ISerializer getProtobufSerializer() {
+        return configManager.getRuntime().getSerializers().getSerializer(PROTOBUF_SERIALIZER_CODE);
+    }
+
 }

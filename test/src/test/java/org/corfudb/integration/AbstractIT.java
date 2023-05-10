@@ -56,6 +56,7 @@ public class AbstractIT extends AbstractCorfuTest {
     static final String DEFAULT_ENDPOINT = DEFAULT_HOST + ":" + DEFAULT_PORT;
 
     static final String CORFU_PROJECT_DIR = new File("..").getAbsolutePath() + File.separator;
+
     public static final String CORFU_LOG_PATH = PARAMETERS.TEST_TEMP_DIR;
 
     static final long DEFAULT_MVO_CACHE_SIZE = 100;
@@ -73,7 +74,7 @@ public class AbstractIT extends AbstractCorfuTest {
     private static final long SHUTDOWN_RETRY_WAIT = 500;
 
     // Config the msg size for log replication data
-    // sent from active cluster to the standby cluster.
+    // sent from source cluster to the sink cluster.
     // We set it as 128KB to make multiple messages during the tests.
     private static final int MSG_SIZE = 131072;
 
