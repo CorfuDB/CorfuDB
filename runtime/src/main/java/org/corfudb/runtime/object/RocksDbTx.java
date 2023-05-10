@@ -21,10 +21,12 @@ import org.rocksdb.WriteOptions;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.corfudb.util.Utils.startsWith;
 
@@ -56,6 +58,20 @@ public class RocksDbTx<S extends SnapshotGenerator<S>> implements RocksDbApi<S> 
             try {
                 return txn.get(columnFamilyHandle, readOptions, ByteBufUtil.getBytes(
                         keyPayload, keyPayload.arrayOffset(), keyPayload.readableBytes(), false));
+            } catch (RocksDBException e) {
+                throw new UnrecoverableCorfuError(e);
+            }
+        });
+    }
+
+    @Override
+    public List<byte[]> multiGet(@NonNull ColumnFamilyHandle columnFamilyHandle,
+                                 @NonNull List<byte[]> arrayKeys) {
+        return snapshot.executeInSnapshot(readOptions -> {
+            try {
+                final List<ColumnFamilyHandle> columFamilies = arrayKeys.stream()
+                        .map(ignore -> columnFamilyHandle).collect(Collectors.toList());
+                return txn.multiGetAsList(readOptions, columFamilies, arrayKeys);
             } catch (RocksDBException e) {
                 throw new UnrecoverableCorfuError(e);
             }

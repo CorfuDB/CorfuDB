@@ -17,7 +17,9 @@ import org.rocksdb.RocksDBException;
 import org.rocksdb.RocksIterator;
 import org.rocksdb.Transaction;
 
+import java.util.Collection;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
@@ -33,6 +35,9 @@ public interface RocksDbApi<S extends SnapshotGenerator<S>> {
 
     byte[] get(@NonNull ColumnFamilyHandle columnHandle,
                @NonNull ByteBuf keyPayload) throws RocksDBException;
+
+    List<byte[]> multiGet(@NonNull ColumnFamilyHandle columnFamilyHandle,
+                          @NonNull List<byte[]> arrayKeys) throws RocksDBException;
 
     void insert(@NonNull ColumnFamilyHandle columnHandle,
                 @NonNull ByteBuf keyPayload,

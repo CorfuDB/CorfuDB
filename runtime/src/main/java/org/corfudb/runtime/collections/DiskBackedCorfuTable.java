@@ -1,9 +1,11 @@
 package org.corfudb.runtime.collections;
 
+import com.google.common.collect.Streams;
 import com.google.common.hash.HashFunction;
 import com.google.common.hash.Hashing;
 import io.micrometer.core.instrument.Timer;
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -38,8 +40,10 @@ import org.rocksdb.WriteOptions;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.util.AbstractMap;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -47,6 +51,7 @@ import java.util.Set;
 import java.util.Spliterator;
 import java.util.Spliterators;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
@@ -391,21 +396,32 @@ public class DiskBackedCorfuTable<K, V> implements
 
     public <I> Iterable<Map.Entry<K, V>> getByIndex(@NonNull final Index.Name indexName,
                                                     @NonNull I indexKey) {
-        String secondaryIndex = indexName.get();
-        if (!secondaryIndexesAliasToPath.containsKey(secondaryIndex)) {
-            return null;
-        }
-        byte indexId = indexToId.get(secondaryIndexesAliasToPath.get(secondaryIndex));
-        Set<ByteBuf> keys = rocksApi.prefixScan(
-                columnFamilyRegistry.getSecondaryIndexColumnFamily(), indexId, indexKey, serializer);
+        final List<ByteBuf> byteBufKeys = new ArrayList<>();
 
-        Set<Map.Entry<K, V>> result = new HashSet<>();
-        for (ByteBuf key: keys) {
-            K sKey = (K) serializer.deserialize(key, null);
-            result.add(new AbstractMap.SimpleEntry<>(sKey, get(sKey)));
-        }
+        try {
+            String secondaryIndex = indexName.get();
+            if (!secondaryIndexesAliasToPath.containsKey(secondaryIndex)) {
+                return null;
+            }
 
-        return result;
+            byte indexId = indexToId.get(secondaryIndexesAliasToPath.get(secondaryIndex));
+            byteBufKeys.addAll(rocksApi.prefixScan(
+                    columnFamilyRegistry.getSecondaryIndexColumnFamily(), indexId, indexKey, serializer));
+            final List<byte[]> arrayKeys = byteBufKeys.stream()
+                    .map(ByteBufUtil::getBytes)
+                    .collect(Collectors.toList());
+            final List<byte[]> arrayValues = rocksApi.multiGet(columnFamilyRegistry.getDefaultColumnFamily(), arrayKeys);
+
+            return Streams.zip(byteBufKeys.stream(), arrayValues.stream(), (key, value) ->
+                    new AbstractMap.SimpleEntry<>(
+                            (K) serializer.deserialize(key, null),
+                            (V) serializer.deserialize(Unpooled.copiedBuffer(value), null)
+                    )).collect(Collectors.toSet());
+        } catch (RocksDBException e) {
+            throw new UnrecoverableCorfuError(e);
+        } finally {
+            byteBufKeys.forEach(ByteBuf::release);
+        }
     }
 
     @Override

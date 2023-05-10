@@ -12,8 +12,12 @@ import org.rocksdb.RocksDBException;
 import org.rocksdb.RocksIterator;
 import org.rocksdb.Transaction;
 
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.locks.StampedLock;
+import java.util.stream.Collectors;
 
 /**
  * A concrete class that implements {@link RocksDbApi} using
@@ -36,8 +40,17 @@ public class RocksDbReadCommittedTx<S extends SnapshotGenerator<S>> implements R
     @Override
     public byte[] get(@NonNull ColumnFamilyHandle columnFamilyHandle,
                       @NonNull ByteBuf keyPayload) throws RocksDBException {
-        return this.rocksDb.get(columnFamilyHandle, readOptions, ByteBufUtil.getBytes(
+        return rocksDb.get(columnFamilyHandle, readOptions, ByteBufUtil.getBytes(
                 keyPayload, keyPayload.arrayOffset(), keyPayload.readableBytes(), false));
+    }
+
+    @Override
+    public List<byte[]> multiGet(@NonNull ColumnFamilyHandle columnFamilyHandle,
+                                 @NonNull List<byte[]> arrayKeys) throws RocksDBException {
+        final List<ColumnFamilyHandle> columFamilies = arrayKeys.stream()
+                .map(ignore -> columnFamilyHandle).collect(Collectors.toList());
+
+        return rocksDb.multiGetAsList(columFamilies, arrayKeys);
     }
 
     @Override

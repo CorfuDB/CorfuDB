@@ -1,6 +1,7 @@
 package org.corfudb.runtime.object;
 
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufUtil;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -22,7 +23,11 @@ import org.rocksdb.RocksIterator;
 import org.rocksdb.WriteOptions;
 
 import java.nio.file.Path;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * A concrete class that implements {@link RocksDbApi} using
@@ -92,6 +97,14 @@ public class RocksDbStore<S extends SnapshotGenerator<S>> implements
         return rocksDb.get(
                 columnFamilyHandle,
                 keyPayload.array(), keyPayload.arrayOffset(), keyPayload.readableBytes());
+    }
+
+    @Override
+    public List<byte[]> multiGet(@NonNull ColumnFamilyHandle columnFamilyHandle,
+                                 @NonNull List<byte[]> arrayKeys) throws RocksDBException {
+        final List<ColumnFamilyHandle> columFamilies = arrayKeys.stream()
+                .map(ignore -> columnFamilyHandle).collect(Collectors.toList());
+        return rocksDb.multiGetAsList(columFamilies, arrayKeys);
     }
 
     @Override
