@@ -7,7 +7,6 @@ import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientSer
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
-import org.corfudb.infrastructure.logreplication.utils.LogReplicationUpgradeManager;
 import org.corfudb.runtime.CorfuRuntime;
 
 import java.util.HashMap;
@@ -37,8 +36,6 @@ public class CorfuReplicationManager {
 
     private final String pluginFilePath;
 
-    private final LogReplicationUpgradeManager upgradeManager;
-
     private TopologyDescriptor topology;
 
     private final LogReplicationContext replicationContext;
@@ -51,13 +48,11 @@ public class CorfuReplicationManager {
     public CorfuReplicationManager(TopologyDescriptor topology,
                                    LogReplicationMetadataManager metadataManager,
                                    String pluginFilePath, CorfuRuntime corfuRuntime,
-                                   LogReplicationUpgradeManager upgradeManager,
                                    LogReplicationContext replicationContext) {
         this.metadataManager = metadataManager;
         this.pluginFilePath = pluginFilePath;
         this.corfuRuntime = corfuRuntime;
         this.localNodeDescriptor = topology.getLocalNodeDescriptor();
-        this.upgradeManager = upgradeManager;
         this.topology = topology;
         this.replicationContext = replicationContext;
         this.replicationSessionToRuntimeParams = new HashMap<>();
@@ -80,7 +75,7 @@ public class CorfuReplicationManager {
                     parameters = replicationSessionToRuntimeParams.get(replicationSession);
                 }
                 replicationRuntime = new CorfuLogReplicationRuntime(parameters,
-                        metadataManager, upgradeManager, replicationSession, replicationContext, router);
+                        metadataManager, replicationSession, replicationContext, router);
                 sessionRuntimeMap.put(replicationSession, replicationRuntime);
                 router.addRuntimeFSM(replicationSession, replicationRuntime);
                 replicationRuntime.start();
@@ -158,7 +153,6 @@ public class CorfuReplicationManager {
     public void updateTopology(TopologyDescriptor newTopology) {
         this.topology = newTopology;
     }
-
 
     public void refreshRuntime(LogReplicationSession session, ClusterDescriptor cluster, long topologyConfigId) {
         // The connection id or other transportation plugin's info could've changed for existing Sink clusters,
