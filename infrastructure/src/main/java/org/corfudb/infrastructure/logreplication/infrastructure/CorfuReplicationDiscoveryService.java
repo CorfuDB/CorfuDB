@@ -88,11 +88,6 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
     private static final int SYSTEM_EXIT_ERROR_CODE = -3;
 
     /**
-     * Responsible for version management
-     */
-    private LogReplicationUpgradeManager upgradeManager;
-
-    /**
      * Responsible for creating and maintaining the replication sessions associated with each remote cluster and
      * replication model
      */
@@ -612,9 +607,8 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
                 localEndpoint, localNodeId, topology.getLocalClusterDescriptor(), topology);
             if (!bootstrapComplete) {
                 log.info("Bootstrap the Log Replication Service");
-                upgradeManager = new LogReplicationUpgradeManager(getCorfuRuntime(),
-                        serverContext.getPluginConfigFilePath());
-                sessionManager = new SessionManager(topologyDescriptor, getCorfuRuntime(), serverContext, upgradeManager);
+                new LogReplicationUpgradeManager(getCorfuRuntime(), serverContext.getPluginConfigFilePath());
+                sessionManager = new SessionManager(topologyDescriptor, getCorfuRuntime(), serverContext);
                 performRoleBasedSetup();
                 registerToLogReplicationLock();
                 bootstrapComplete = true;

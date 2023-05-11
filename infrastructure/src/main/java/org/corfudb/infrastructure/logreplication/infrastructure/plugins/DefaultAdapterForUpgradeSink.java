@@ -7,7 +7,5 @@ import org.corfudb.runtime.CorfuRuntime;
  * get the set of streams to replicate.
  */
 public class DefaultAdapterForUpgradeSink extends DefaultAdapterForUpgrade {
-    public DefaultAdapterForUpgradeSink(CorfuRuntime runtime) {
-        super(runtime);
-    }
+    public DefaultAdapterForUpgradeSink(CorfuRuntime runtime) {}
 }

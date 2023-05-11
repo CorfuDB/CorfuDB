@@ -5,19 +5,13 @@ import com.google.protobuf.Timestamp;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.ILogReplicationVersionAdapter;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
-import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
-import org.corfudb.runtime.LogReplication;
-import org.corfudb.runtime.LogReplicationUtils;
-import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.Table;
-import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
 
 import java.time.Instant;
 import java.util.NoSuchElementException;
 import java.util.UUID;
 
-import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.NAMESPACE;
 import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.REPLICATION_EVENT_TABLE_NAME;
 import static org.corfudb.infrastructure.logreplication.utils.LogReplicationUpgradeManager.LOG_REPLICATION_PLUGIN_VERSION_TABLE;
 
@@ -79,45 +73,37 @@ public class LRRollingUpgradeHandler {
     }
 
     public boolean isLRUpgradeInProgress(TxnContext txnContext) {
-
-        if (isClusterAllAtV2) {
-            return false;
-        }
-
         try {
             // If LOG_REPLICATION_PLUGIN_VERSION_TABLE exists, it indicates an upgrade from a
             // previous version was performed. It has since been removed in the current version.
             txnContext.getTable(LOG_REPLICATION_PLUGIN_VERSION_TABLE);
-        } catch (NoSuchElementException e) {
-            log.info("Version table is not present, setup is a new installation");
+
+            if (isClusterAllAtV2) {
+                return false;
+            }
+            String nodeVersion = versionAdapter.getNodeVersion();
+            /**
+             * The ideal way to check the versions is to encapsulate the code version
+             * into Corfu's Layout information so that even when nodes are down
+             * or unresponsive it would be possible to determine if rolling upgrade
+             * is running. But since that is a bigger change we resort to the
+             * boolean check while ensuring migrateData() is idempotent and is a NO-OP
+             * when invoked on a fully upgraded cluster.
+             */
+            String pinnedClusterVersion = versionAdapter.getPinnedClusterVersion(txnContext);
+            boolean isClusterUpgradeInProgress = !nodeVersion.equals(pinnedClusterVersion);
+            if (isClusterUpgradeInProgress) {
+                return true;
+            } // else implies cluster upgrade has completed
+
+            log.info("LRRollingUpgrade upgrade completed to version {}", nodeVersion);
+            migrateData(txnContext);
             isClusterAllAtV2 = true;
             return false;
-        } catch (IllegalArgumentException e) {
-            // The table was found but never opened by this runtime.  This means LR has been upgraded from an older
-            // version.
-            log.info("Version table found but not opened.  This is an old setup being upgraded to LRv2.  Continue.");
+        } catch (NoSuchElementException e) {
+            log.info("Version table is not present, setup is a new installation", e);
+            return false;
         }
-
-        String nodeVersion = versionAdapter.getNodeVersion();
-
-        /**
-         * The ideal way to check the versions is to encapsulate the code version
-         * into Corfu's Layout information so that even when nodes are down
-         * or unresponsive it would be possible to determine if rolling upgrade
-         * is running. But since that is a bigger change we resort to the
-         * boolean check while ensuring migrateData() is idempotent and is a NO-OP
-         * when invoked on a fully upgraded cluster.
-         */
-        String pinnedClusterVersion = versionAdapter.getPinnedClusterVersion(txnContext);
-        boolean isClusterUpgradeInProgress = !nodeVersion.equals(pinnedClusterVersion);
-        if (isClusterUpgradeInProgress) {
-            return true;
-        } // else implies cluster upgrade has completed
-
-        log.info("LRRollingUpgrade upgrade completed to version {}", nodeVersion);
-        migrateData(txnContext);
-        isClusterAllAtV2 = true;
-        return false;
     }
 
     /**
@@ -129,8 +115,7 @@ public class LRRollingUpgradeHandler {
      * @param txnContext All of the above must execute in the same transaction passed in.
      */
     public void migrateData(TxnContext txnContext) {
-        // Currently only the LogReplicationMetadataManager needs data-migration
-        LogReplicationMetadataManager.migrateData(txnContext);
+        // Data migration to be added here.
         addSnapshotSyncEventOnUpgradeCompletion(txnContext);
     }
 

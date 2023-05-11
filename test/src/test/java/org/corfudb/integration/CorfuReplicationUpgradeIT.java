@@ -2,16 +2,18 @@ package org.corfudb.integration;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.LRRollingUpgradeHandler;
+import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultAdapterForUpgrade;
+import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultAdapterForUpgradeSink;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultAdapterForUpgradeSource;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEvent;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEventInfoKey;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
+import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.LogReplication.ReplicationStatus;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
-import org.corfudb.runtime.LogReplication.LogReplicationSession;
-import org.corfudb.utils.CommonTypes;
-import org.corfudb.utils.LogReplicationStreams;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -26,7 +28,7 @@ import java.util.stream.Collectors;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.runtime.LogReplicationUtils.REPLICATION_STATUS_TABLE_NAME;
 import static org.corfudb.runtime.LogReplicationUtils.LR_STATUS_STREAM_TAG;
-import static org.corfudb.infrastructure.logreplication.utils.LogReplicationUpgradeManager.LOG_REPLICATION_PLUGIN_VERSION_TABLE;
+import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.REPLICATION_EVENT_TABLE_NAME;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 import static org.junit.Assert.fail;
 
@@ -57,47 +59,12 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
     private static final int TOTAL_SINK_STATUS_ENTRIES_INIT_SNAPSHOT_SYNC =
         1 + NUM_SNAPSHOT_SYNC_UPDATES_ON_SINK_STATUS_TABLE;
 
-    private static final String NON_UPGRADE_PLUGIN_PATH =
-            "./test/src/test/resources/transport/pluginConfig.properties";
-
     private static final String TEST_PLUGIN_CONFIG_PATH_SOURCE =
             "./test/src/test/resources/transport/grpcConfigUpgradeSource.properties";
 
     private static final String TEST_PLUGIN_CONFIG_PATH_SINK =
             "./test/src/test/resources/transport/grpcConfigUpgradeSink.properties";
 
-    private static final String VERSION_STRING = "test_version";
-    private static final String VERSION_KEY = "VERSION";
-    private static final String UPGRADE_VERSION_STRING = "new_version";
-
-    private void openVersionTables() throws Exception {
-        corfuStoreSource.openTable(CORFU_SYSTEM_NAMESPACE,
-                LOG_REPLICATION_PLUGIN_VERSION_TABLE, LogReplicationStreams.VersionString.class,
-                LogReplicationStreams.Version.class, CommonTypes.Uuid.class, TableOptions.builder().build());
-
-        corfuStoreSink.openTable(CORFU_SYSTEM_NAMESPACE,
-                LOG_REPLICATION_PLUGIN_VERSION_TABLE, LogReplicationStreams.VersionString.class,
-                LogReplicationStreams.Version.class, CommonTypes.Uuid.class, TableOptions.builder().build());
-    }
-
-    /**
-     * This test verifies that LR startup is paused until rolling upgrade completes, i.e., all nodes in a cluster are
-     * on the same version.
-     * 1. Start the Source and Sink clusters and wait for initial snapshot sync to complete
-     * 2. Simulate rolling upgrade on the Sink Cluster as follows:
-     *  a) stop the Sink cluster
-     *  b) start the Sink cluster in a state where node and cluster versions are different, i.e., rolling upgrade in
-     *  progress
-     *  c) Write some data on the Source
-     *  d) Verify no data written in c) is observed on the Sink as it is paused
-     *  e) End rolling upgrade using the upgrade test plugin
-     *  f) Verify that the Sink cluster now has the data from c)
-     * 3. Simulate rolling upgrade on the Source cluster and verify that no snapshot sync gets triggered by it as it
-     * is paused.
-     * 4. End rolling upgrade on Source cluster using the upgrade test plugin
-     * 5. Verify that a forced snapshot sync now gets triggered.
-     * @throws Exception
-     */
     @Test
     public void testLogEntrySyncAfterSinkUpgraded() throws Exception {
         log.info(">> Setup source and sink Corfu's");
@@ -138,9 +105,6 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         ReplicationStatusListener sinkListener = new ReplicationStatusListener(statusUpdateLatch, false);
         corfuStoreSink.subscribeListener(sinkListener, CORFU_SYSTEM_NAMESPACE, LR_STATUS_STREAM_TAG);
 
-        setupVersionTable(corfuStoreSource, false);
-        setupVersionTable(corfuStoreSink, false);
-
         pluginConfigFilePath = TEST_PLUGIN_CONFIG_PATH_SOURCE;
         startSourceLogReplicator();
 
@@ -165,9 +129,7 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         // Upgrade the sink site
         log.info(">> Upgrading the sink site ...");
         pluginConfigFilePath = TEST_PLUGIN_CONFIG_PATH_SINK;
-        upgradeSite(false, corfuStoreSink);
-        verifyVersion(corfuStoreSink, UPGRADE_VERSION_STRING, true);
-        verifyVersion(corfuStoreSource, VERSION_STRING, false);
+        verifyRollingUpgrade(false);
 
         // Verify that subsequent log entry sync is successful
         log.info("Write more data on the source");
@@ -235,9 +197,6 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         corfuStoreSink.subscribeListener(sinkListener, CORFU_SYSTEM_NAMESPACE,
                 LR_STATUS_STREAM_TAG);
 
-        setupVersionTable(corfuStoreSource, false);
-        setupVersionTable(corfuStoreSink, false);
-
         pluginConfigFilePath = TEST_PLUGIN_CONFIG_PATH_SOURCE;
         startSourceLogReplicator();
 
@@ -268,9 +227,7 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
 
         log.info(">> Upgrading the sink site ...");
         pluginConfigFilePath = TEST_PLUGIN_CONFIG_PATH_SINK;
-        upgradeSite(false, corfuStoreSink);
-        verifyVersion(corfuStoreSink, UPGRADE_VERSION_STRING, true);
-        verifyVersion(corfuStoreSource, VERSION_STRING, false);
+        verifyRollingUpgrade(false);
 
         latchSnapshotSyncPlugin = new CountDownLatch(2);
         snapshotSyncPluginListener = new SnapshotSyncPluginListener(latchSnapshotSyncPlugin);
@@ -350,9 +307,6 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
             assertThat(map.count()).isEqualTo(0);
         }
 
-        setupVersionTable(corfuStoreSource, false);
-        setupVersionTable(corfuStoreSink, false);
-
         pluginConfigFilePath = TEST_PLUGIN_CONFIG_PATH_SOURCE;
         startSourceLogReplicator();
 
@@ -377,9 +331,7 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         // Upgrade the sink site first
         log.info(">> Upgrading the sink site ...");
         pluginConfigFilePath = TEST_PLUGIN_CONFIG_PATH_SINK;
-        upgradeSite(false, corfuStoreSink);
-        verifyVersion(corfuStoreSink, UPGRADE_VERSION_STRING, true);
-        verifyVersion(corfuStoreSource, VERSION_STRING, false);
+        verifyRollingUpgrade(false);
         log.info(">> Plugin config verified after sink upgrade");
 
         // Upgrading the source site will force a snapshot sync
@@ -394,9 +346,7 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         // Upgrade the source site
         log.info(">> Upgrading the source site ...");
         pluginConfigFilePath = TEST_PLUGIN_CONFIG_PATH_SOURCE;
-        upgradeSite(true, corfuStoreSource);
-        verifyVersion(corfuStoreSource, UPGRADE_VERSION_STRING, true);
-        verifyVersion(corfuStoreSink, UPGRADE_VERSION_STRING, true);
+        verifyRollingUpgrade(true);
 
         // Verify that snapshot sync was triggered by checking the number of
         // updates to the ReplicationStatus table on the sink.
@@ -439,9 +389,6 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         for (int i = 1; i <= 2; i++) {
             streamsToReplicateSource.add(TABLE_PREFIX + i);
         }
-
-        setupVersionTable(corfuStoreSource, false);
-        setupVersionTable(corfuStoreSink, false);
 
         // Two updates are expected onStart of snapshot sync and onEnd.
         CountDownLatch latchSnapshotSyncPlugin = new CountDownLatch(2);
@@ -501,9 +448,7 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         for (int i = 2; i <= 3; i++) {
             streamsToReplicateSink.add(TABLE_PREFIX + i);
         }
-        upgradeSite(false, corfuStoreSink);
-        verifyVersion(corfuStoreSink, UPGRADE_VERSION_STRING, true);
-        verifyVersion(corfuStoreSource, VERSION_STRING, false);
+        verifyRollingUpgrade(false);
 
         List<String> sourceOnlyStreams = streamsToReplicateSource.stream()
                 .filter(s -> !streamsToReplicateSink.contains(s))
@@ -553,8 +498,6 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         for (int i = 1; i <= 2; i++) {
             streamsToReplicateSource.add(TABLE_PREFIX + i);
         }
-        setupVersionTable(corfuStoreSource, false);
-        setupVersionTable(corfuStoreSink, false);
 
         // Two updates are expected onStart of snapshot sync and onEnd.
         CountDownLatch latchSnapshotSyncPlugin = new CountDownLatch(2);
@@ -624,9 +567,7 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
             streamsToReplicateSink.add(TABLE_PREFIX + i);
         }
         pluginConfigFilePath = TEST_PLUGIN_CONFIG_PATH_SINK;
-        upgradeSite(false, corfuStoreSink);
-        verifyVersion(corfuStoreSink, UPGRADE_VERSION_STRING, true);
-        verifyVersion(corfuStoreSource, VERSION_STRING, false);
+        verifyRollingUpgrade(false);
 
         latchSnapshotSyncPlugin = new CountDownLatch(2);
         snapshotSyncPluginListener = new SnapshotSyncPluginListener(latchSnapshotSyncPlugin);
@@ -695,13 +636,10 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
             streamsToReplicateSource.add(TABLE_PREFIX + i);
         }
 
-        setupVersionTable(corfuStoreSource, false);
-        setupVersionTable(corfuStoreSink, false);
-
-        Set<String> streamsToReplicateSink = new HashSet<>();
-        for (int i = 2; i <= 3; i++) {
-            streamsToReplicateSink.add(TABLE_PREFIX + i);
-        }
+        // Two updates are expected onStart of snapshot sync and onEnd.
+        CountDownLatch latchSnapshotSyncPlugin = new CountDownLatch(2);
+        SnapshotSyncPluginListener snapshotSyncPluginListener = new SnapshotSyncPluginListener(latchSnapshotSyncPlugin);
+        subscribeToSnapshotSyncPluginTable(snapshotSyncPluginListener);
 
         // Subscribe to replication status table on Sink (to be sure data change on status are captured)
         corfuStoreSink.openTable(CORFU_SYSTEM_NAMESPACE,
@@ -756,9 +694,7 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
             streamsToReplicateSink.add(TABLE_PREFIX + i);
         }
         pluginConfigFilePath = TEST_PLUGIN_CONFIG_PATH_SINK;
-        upgradeSite(false, corfuStoreSink);
-        verifyVersion(corfuStoreSink, UPGRADE_VERSION_STRING, true);
-        verifyVersion(corfuStoreSource, VERSION_STRING, false);
+        verifyRollingUpgrade(false);
 
         List<String> sourceOnlyStreams = streamsToReplicateSource.stream()
                 .filter(s -> !streamsToReplicateSink.contains(s))
@@ -807,9 +743,7 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         // Now upgrade the source site
         pluginConfigFilePath = TEST_PLUGIN_CONFIG_PATH_SINK;
         openMapsAfterUpgradeSource(sourceOnlyStreams, sinkOnlyStreams);
-        upgradeSite(true, corfuStoreSource);
-        verifyVersion(corfuStoreSink, UPGRADE_VERSION_STRING, true);
-        verifyVersion(corfuStoreSource, UPGRADE_VERSION_STRING, true);
+        verifyRollingUpgrade(true);
 
         // Verify that snapshot sync was triggered by checking the number of
         // updates to the ReplicationStatus table on the sink.
@@ -829,38 +763,6 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
 
         corfuStoreSink.unsubscribeListener(snapshotSyncPluginListener);
         corfuStoreSink.unsubscribeListener(sinkListener);
-    }
-
-    private void upgradeSite(boolean source, CorfuStore corfuStore) throws Exception {
-        if (source) {
-            stopSourceLogReplicator();
-        } else {
-            stopSinkLogReplicator();
-        }
-
-        // Write a new version to the plugin version table so that an upgrade
-        // is detected
-        setupVersionTable(corfuStore, true);
-
-        if (source) {
-            startSourceLogReplicator();
-        } else {
-            startSinkLogReplicator();
-        }
-    }
-
-        CountDownLatch statusUpdateLatch = new CountDownLatch(1);
-        sinkStatusListener = new SnapshotApplyCompletionListener(statusUpdateLatch);
-        corfuStoreSink.subscribeListener(sinkStatusListener, CORFU_SYSTEM_NAMESPACE, LR_STATUS_STREAM_TAG);
-
-        // Upgrade the source site
-        log.info(">> Upgrading the source site ...");
-        performRollingUpgrade(true);
-
-        // Verify that snapshot sync completed successfully by checking the replication status on the Source
-        statusUpdateLatch.await();
-
-        corfuStoreSink.unsubscribeListener(sinkStatusListener);
     }
 
     private void openMapsAfterUpgrade(List<String> sourceOnlyStreams, List<String> sinkOnlyStreams) throws Exception {
@@ -952,15 +854,6 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         }
     }
 
-    private void verifyNoMoreDataOnSink(int numExpectedEntries) throws Exception {
-        for (int i = 0; i < FIVE; i++) {
-            for (Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata> map : mapNameToMapSink.values()) {
-                assertThat(map.count()).isEqualTo(numExpectedEntries);
-            }
-            TimeUnit.MILLISECONDS.sleep(1);
-        }
-    }
-
     /**
      * Code coverage test for the simple LRRollingUpgradeHandler to test if we are able to successfully
      * 1. Simulate startRollingUpgrade()
@@ -975,19 +868,7 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         log.info(">> Setup replication for testing during rolling upgrade of active cluster");
         setupSourceAndSinkCorfu();
 
-        DefaultAdapterForUpgradeSource defaultAdapterForUpgradeSource = new DefaultAdapterForUpgradeSource(sourceRuntime);
-        defaultAdapterForUpgradeSource.startRollingUpgrade(corfuStoreSource);
-        LRRollingUpgradeHandler rollingUpgradeHandler = new LRRollingUpgradeHandler(defaultAdapterForUpgradeSource);
-
-        try (TxnContext txnContext = corfuStoreSource.txn(DefaultAdapterForUpgradeSource.NAMESPACE)) {
-            Assert.assertTrue(rollingUpgradeHandler.isLRUpgradeInProgress(txnContext));
-        }
-
-        defaultAdapterForUpgradeSource.endRollingUpgrade(corfuStoreSource);
-
-        try (TxnContext txnContext = corfuStoreSource.txn(DefaultAdapterForUpgradeSource.NAMESPACE)) {
-            Assert.assertFalse(rollingUpgradeHandler.isLRUpgradeInProgress(txnContext));
-        }
+        verifyRollingUpgrade(true);
 
         if (sourceCorfu != null) {
             sourceCorfu.destroy();
@@ -1000,6 +881,40 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         }
         if (sinkReplicationServer != null) {
             sinkReplicationServer.destroy();
+        }
+    }
+
+    private void verifyRollingUpgrade(boolean source) throws Exception {
+        CorfuStore corfuStore;
+        DefaultAdapterForUpgrade defaultAdapterForUpgrade;
+
+        if (source) {
+            corfuStore = corfuStoreSource;
+            defaultAdapterForUpgrade = new DefaultAdapterForUpgradeSource(sourceRuntime);
+        } else {
+            corfuStore = corfuStoreSink;
+            defaultAdapterForUpgrade = new DefaultAdapterForUpgradeSink(sinkRuntime);
+        }
+
+        corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, REPLICATION_EVENT_TABLE_NAME,
+                ReplicationEventInfoKey.class,
+                ReplicationEvent.class,
+                null,
+                TableOptions.fromProtoSchema(ReplicationEvent.class));
+
+        LRRollingUpgradeHandler rollingUpgradeHandler = new LRRollingUpgradeHandler(defaultAdapterForUpgrade);
+        defaultAdapterForUpgrade.startRollingUpgrade(corfuStore);
+
+        try (TxnContext txnContext = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+            Assert.assertTrue(rollingUpgradeHandler.isLRUpgradeInProgress(txnContext));
+            txnContext.commit();
+        }
+
+        defaultAdapterForUpgrade.endRollingUpgrade();
+
+        try (TxnContext txnContext = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+            Assert.assertFalse(rollingUpgradeHandler.isLRUpgradeInProgress(txnContext));
+            txnContext.commit();
         }
     }
 }
