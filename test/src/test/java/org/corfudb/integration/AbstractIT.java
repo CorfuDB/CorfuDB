@@ -713,7 +713,7 @@ public class AbstractIT extends AbstractCorfuTest {
             }
 
             if (maxWriteSize != 0) {
-                command.append(" --max-write-size=").append(maxWriteSize);
+                command.append(" --max-replication-write-size=").append(maxWriteSize);
             }
 
             if (maxSnapshotEntriesApplied != 0) {
