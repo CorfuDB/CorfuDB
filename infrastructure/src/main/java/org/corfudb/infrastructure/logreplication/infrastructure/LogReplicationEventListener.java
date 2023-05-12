@@ -82,7 +82,8 @@ public final class LogReplicationEventListener implements StreamListener {
                     // In later versions of LRv2, the Log Replication process will run even when nodes are on
                     // different versions.  At that time, this event will be processed as an update from this
                     // block.
-                    triggerForcedSnapshotSyncForAllSessions(event);
+                    discoveryService.input(new DiscoveryServiceEvent(DiscoveryServiceEventType.ENFORCE_SNAPSHOT_SYNC,
+                            key.getSession(), event.getEventId()));
                 } else {
                     log.warn("Received invalid event :: id={}, type={}, cluster_id={} ts={}", event.getEventId(),
                         event.getType(), event.getClusterId(), event.getEventTimestamp());

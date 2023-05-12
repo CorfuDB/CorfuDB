@@ -1,6 +1,7 @@
 package org.corfudb.integration;
 
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.logreplication.infrastructure.*;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultAdapterForUpgrade;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
