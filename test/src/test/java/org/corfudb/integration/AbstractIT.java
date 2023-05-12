@@ -782,8 +782,8 @@ public class AbstractIT extends AbstractCorfuTest {
                 command.append(" --lock-lease=").append(lockLeaseDuration);
             }
 
-            if (maxUncompressedTxSize != 0) {
-                command.append(" --runtime-max-uncompressed-size=").append(maxUncompressedTxSize);
+            if (maxWriteSize != 0) {
+                command.append(" --max-replication-write-size=").append(maxWriteSize);
             }
 
             if (maxSnapshotEntriesApplied != 0) {
