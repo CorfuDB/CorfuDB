@@ -37,7 +37,8 @@ public class LogReplicationConfig {
     // Default value for the max number of entries applied in a single transaction on Sink during snapshot sync
     public static final int DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED = 50;
 
-    // Log Replication default max data message size is 64MB
+    // Max message size supported by protocol buffers is 64MB. Log Replication uses this limit as the default message
+    // size to batch and send data across over to the other side.
     public static final int MAX_DATA_MSG_SIZE_SUPPORTED = (64 << 20);
 
     // Log Replication default max cache number of entries
