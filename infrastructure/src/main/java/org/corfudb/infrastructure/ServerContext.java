@@ -297,7 +297,7 @@ public class ServerContext implements AutoCloseable {
      * @return max write size of a transaction
      */
     public int getMaxWriteSize() {
-        String val = getServerConfig(String.class, "--max-write-size");
+        String val = getServerConfig(String.class, "--max-replication-write-size");
         return val == null ? Integer.MAX_VALUE : Integer.parseInt(val);
     }
 
