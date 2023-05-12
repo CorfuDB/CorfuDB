@@ -81,6 +81,8 @@ public class LRRollingUpgradeHandler {
         }
 
         try {
+            // If LOG_REPLICATION_PLUGIN_VERSION_TABLE exists, it indicates an upgrade from a
+            // previous version was performed. It has since been removed in the current version.
             txnContext.getTable(LOG_REPLICATION_PLUGIN_VERSION_TABLE);
         } catch (NoSuchElementException e) {
             log.info("Version table is not present, setup is a new installation");

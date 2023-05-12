@@ -479,7 +479,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
      *
      * @param event discovery event
      */
-    public void processTopologyChangeNotification(DiscoveryServiceEvent event) {
+    private void processTopologyChangeNotification(DiscoveryServiceEvent event) {
         if (event.getTopologyConfig().getTopologyConfigId() < topologyDescriptor.getTopologyConfigId()) {
             log.debug("Stale Topology Change Notification, current={}, received={}",
                     topologyDescriptor.getTopologyConfigId(), event.getTopologyConfig().getTopologyConfigId());
@@ -494,12 +494,6 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         log.debug("Received topology change, topology={}", event.getTopologyConfig());
 
         TopologyDescriptor discoveredTopology = event.getTopologyConfig();
-
-
-        if (!isSource(discoveredTopology) && !isSink(discoveredTopology)) {
-            log.debug("Cluster is neither SOURCE nor SINK.  Not performing role-based setup.");
-            return;
-        }
 
         boolean isValid;
         try {

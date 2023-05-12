@@ -89,8 +89,6 @@ public class ServerContext implements AutoCloseable {
     // Corfu Replication Server
     public static final String PLUGIN_CONFIG_FILE_PATH = "../resources/corfu_plugin_config.properties";
 
-    private static final int CORFU_PORT = 9000;
-
     /** The node Id, stored as a base64 string. */
     private static final String NODE_ID = "NODE_ID";
 

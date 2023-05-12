@@ -26,8 +26,8 @@ public class RollingUpgradeHandlerTest extends AbstractViewTest {
     }
 
     /**
-     * Code coverage test for LRRollingUpgradeHandler to test if we are able to successfully detect if rolling
-     * upgrade is in progress based on the node and cluster versions returned from the plugin.
+     * Test if we are able to successfully detect if rolling upgrade is in progress based on the node and cluster
+     * versions returned from the plugin.
      * 1. Simulate an ongoing upgrade by invoking startRollingUpgrade() on the plugin
      * 2. verify that rolling upgrade is detected
      * 3. simulate the end of an upgrade by invoking endRollingUpgrade() on the plugin
