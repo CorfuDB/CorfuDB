@@ -2,7 +2,6 @@ package org.corfudb.infrastructure.logreplication.transport.sample;
 
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
-import io.grpc.netty.shaded.io.grpc.netty.NettyChannelBuilder;
 import io.grpc.stub.StreamObserver;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -18,7 +17,6 @@ import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
 import org.corfudb.util.NodeLocator;
 
 import javax.annotation.Nonnull;
-import java.net.InetSocketAddress;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -79,7 +77,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
             try {
                 NodeLocator nodeLocator = NodeLocator.parseString(node.getEndpoint());
                 log.info("GRPC create connection to node{}@{}:{}", node.getNodeId(), nodeLocator.getHost(), nodeLocator.getPort());
-                ManagedChannel channel = NettyChannelBuilder.forAddress(new InetSocketAddress(nodeLocator.getHost(), nodeLocator.getPort()))
+                ManagedChannel channel = ManagedChannelBuilder.forAddress(nodeLocator.getHost(), nodeLocator.getPort())
                         .usePlaintext()
                         .build();
                 channelMap.put(node.getNodeId(), channel);
@@ -143,7 +141,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
     private void queryLeadership(String nodeId, RequestMsg request) {
         try {
             if (blockingStubMap.containsKey(nodeId)) {
-                ResponseMsg response = blockingStubMap.get(nodeId).withDeadlineAfter(10, TimeUnit.SECONDS).queryLeadership(request);
+                ResponseMsg response = blockingStubMap.get(nodeId).withWaitForReady().queryLeadership(request);
                 receive(response);
             } else {
                 log.warn("Stub not found for remote endpoint {}. Dropping message of type {}",
@@ -159,7 +157,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
     private void requestMetadata(String nodeId, RequestMsg request) {
         try {
             if (blockingStubMap.containsKey(nodeId)) {
-                ResponseMsg response = blockingStubMap.get(nodeId).withDeadlineAfter(10, TimeUnit.SECONDS).negotiate(request);
+                ResponseMsg response = blockingStubMap.get(nodeId).withWaitForReady().negotiate(request);
                 receive(response);
             } else {
                 log.warn("Stub not found for remote endpoint {}. Dropping message of type {}",
