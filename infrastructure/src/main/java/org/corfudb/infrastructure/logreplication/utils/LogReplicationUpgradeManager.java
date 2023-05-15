@@ -7,14 +7,11 @@ import org.corfudb.infrastructure.logreplication.infrastructure.plugins.ILogRepl
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuStore;
-import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 
 import java.io.File;
 import java.net.URL;
 import java.net.URLClassLoader;
-
-import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 /**
  * Manages version and upgrade-related metadata and provides utility methods for the same.
@@ -34,33 +31,17 @@ public class LogReplicationUpgradeManager {
     @Getter
     private static String nodeVersion;
 
-    public LogReplicationUpgradeManager(CorfuRuntime runtime, String pluginConfigFilePath) {
+    public LogReplicationUpgradeManager(CorfuStore corfuStore, String pluginConfigFilePath) {
         this.pluginConfigFilePath = pluginConfigFilePath;
-        CorfuStore corfuStore = new CorfuStore(runtime);
-        initVersionPlugin(runtime);
+        initVersionPlugin(corfuStore.getRuntime());
         initLogReplicationRollingUpgradeHandler(corfuStore);
     }
 
     /**
-     * Instantiate the LogReplicator's Rolling Upgrade Handler and invoke its
-     * check the first time, so it can cache the result in the common case
-     * where there is no rolling upgrade in progress.
-     *
-     * @param corfuStore - instance of the store to which the check is made with.
+     * Instantiate the LogReplicator's Rolling Upgrade Handler
      */
     private void initLogReplicationRollingUpgradeHandler(CorfuStore corfuStore) {
-        this.lrRollingUpgradeHandler = new LRRollingUpgradeHandler(logReplicationVersionAdapter);
-        final int retries = 3;
-        for (int i = retries; i>=0; i--) {
-            try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-                log.info("LRRollingUpgradeHandler: Prestart check isUpgradeOn: {}",
-                    lrRollingUpgradeHandler.isLRUpgradeInProgress(txn));
-                txn.commit();
-                break;
-            } catch (Exception ex) {
-                log.error("Fatal error: Failed to get LR upgrade status", ex);
-            }
-        }
+        this.lrRollingUpgradeHandler = new LRRollingUpgradeHandler(logReplicationVersionAdapter, corfuStore);
     }
 
     private void initVersionPlugin(CorfuRuntime runtime) {

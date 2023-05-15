@@ -11,6 +11,11 @@ import org.corfudb.common.config.ConfigParamsHelper;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.common.util.URLUtils.NetworkInterfaceVersion;
 import org.corfudb.infrastructure.ServerContext;
+import org.corfudb.infrastructure.logreplication.utils.LogReplicationUpgradeManager;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.collections.CorfuStore;
+import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.util.GitRepositoryState;
 import org.docopt.Docopt;
 import org.slf4j.LoggerFactory;
@@ -18,6 +23,7 @@ import org.slf4j.LoggerFactory;
 import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 
 import static org.corfudb.common.util.URLUtils.getHostFromEndpointURL;
 import static org.corfudb.common.util.URLUtils.getVersionFormattedEndpointURL;
@@ -67,9 +73,8 @@ public class CorfuInterClusterReplicationServer implements Runnable {
                     + "[-k <seqcache>] [-T <threads>] [-B <size>] [-i <channel-implementation>] "
                     + "[-H <seconds>] [-I <cluster-id>] [-x <ciphers>] [-z <tls-protocols>]] "
                     + "[--disable-cert-expiry-check-file=<file_path>]"
-                    + "[--metrics] [--corfu-port-for-lr=<corfu-port-for-lr>]"
-                    + "[-P <prefix>] [-R <retention>] [--runtime-max-uncompressed-size=<runtime-max-uncompressed-size>]"
-                    + "<port>\n"
+                    + "[--metrics]"
+                    + "[-P <prefix>] [-R <retention>] <port> <corfu-server-port>\n"
                     + "\n"
                     + "Options:\n"
                     + " -l <path>, --log-path=<path>                                             "
@@ -314,13 +319,75 @@ public class CorfuInterClusterReplicationServer implements Runnable {
      */
     private void startDiscoveryService(ServerContext serverContext) {
 
+        CorfuRuntime runtime = getRuntime(serverContext);
+        CorfuStore corfuStore = new CorfuStore(runtime);
+
+        LogReplicationUpgradeManager upgradeManager =
+                new LogReplicationUpgradeManager(corfuStore, serverContext.getPluginConfigFilePath());
+
+        // Check if an upgrade is in progress.  If it is, wait for it to complete
+        log.info("Wait for any ongoing rolling upgrade to complete.");
+
+        while(isUpgradeInProgress(upgradeManager, corfuStore)) {
+            // Wait before checking again.
+            sleep();
+        }
+
+        // Upgrade has completed.  Start the discovery Service
         log.info("Start Discovery Service.");
 
         // Start LogReplicationDiscovery Service, responsible for
         // acquiring lock, retrieving Site Manager Info and processing this info
         // so this node is initialized as Source (sender) or Sink (receiver)
-        replicationDiscoveryService = new CorfuReplicationDiscoveryService(serverContext);
+        replicationDiscoveryService = new CorfuReplicationDiscoveryService(serverContext, runtime);
         replicationDiscoveryService.start();
+    }
+
+    private CorfuRuntime getRuntime(ServerContext serverContext) {
+
+        String localCorfuEndpoint = getCorfuEndpoint(getHostFromEndpointURL(serverContext.getLocalEndpoint()),
+            serverContext.getCorfuServerConnectionPort());
+
+        return CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder()
+            .trustStore((String) serverContext.getServerConfig().get(ConfigParamNames.TRUST_STORE))
+            .tsPasswordFile((String) serverContext.getServerConfig().get(ConfigParamNames.TRUST_STORE_PASS_FILE))
+            .keyStore((String) serverContext.getServerConfig().get(ConfigParamNames.KEY_STORE))
+            .ksPasswordFile((String) serverContext.getServerConfig().get(ConfigParamNames.KEY_STORE_PASS_FILE))
+            .tlsEnabled((Boolean) serverContext.getServerConfig().get("--enable-tls"))
+            .systemDownHandler(() -> System.exit(SYSTEM_EXIT_ERROR_CODE))
+            .maxCacheEntries(serverContext.getLogReplicationCacheMaxSize()/2)
+            .maxWriteSize(serverContext.getMaxWriteSize())
+            .build())
+            .parseConfigurationString(localCorfuEndpoint).connect();
+    }
+
+    private String getCorfuEndpoint(String localHostAddress, int port) {
+        return getVersionFormattedEndpointURL(localHostAddress, port);
+    }
+
+    private boolean isUpgradeInProgress(LogReplicationUpgradeManager upgradeManager, CorfuStore corfuStore) {
+        boolean isUpgraded = true;
+        try (TxnContext txnContext = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+            isUpgraded = upgradeManager.getLrRollingUpgradeHandler().isLRUpgradeInProgress(txnContext);
+            txnContext.commit();
+        } catch (TransactionAbortedException e) {
+            // TODO V2: This exception needs to be caught to handle concurrent writes to the Replication Event table
+            //  from multiple nodes.  The retry should be done in LRRollingUpgradeHandler where the event is
+            //  written.  It is not currently possible because the transaction is committed outside
+            //  LRRollingUpgradeHandler.  When the new wrapper for isLRUpgradeInProgress() without TxnContext is
+            //  available, this try-catch block should be moved there.
+            log.warn("TX Abort when writing to the Replication Event Table.  The table was already updated by another" +
+                    " node.", e);
+        }
+        return isUpgraded;
+    }
+
+    private void sleep() {
+        try {
+            TimeUnit.MILLISECONDS.sleep(DEFAULT_UPGRADE_CHECK_DELAY_MS);
+        } catch (InterruptedException e) {
+            log.debug("Sleep Interrupted", e);
+        }
     }
 
     /**

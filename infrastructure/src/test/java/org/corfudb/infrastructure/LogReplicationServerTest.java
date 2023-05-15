@@ -189,8 +189,7 @@ public class LogReplicationServerTest {
      */
     @Test
     public void testHandleMetadataResponse() {
-        final LogReplicationMetadataResponseMsg entry =  LogReplicationMetadataResponseMsg
-                .newBuilder().build();
+        final LogReplicationMetadataResponseMsg entry = LogReplicationMetadataResponseMsg.newBuilder().build();
         final HeaderMsg header = HeaderMsg.newBuilder().setRequestId(2L).setSession(session).build();
         final ResponseMsg response = ResponseMsg.newBuilder()
                 .setHeader(header)

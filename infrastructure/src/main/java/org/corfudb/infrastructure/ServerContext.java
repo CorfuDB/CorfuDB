@@ -312,7 +312,7 @@ public class ServerContext implements AutoCloseable {
     }
 
     public int getCorfuServerConnectionPort() {
-        String val = getServerConfig(String.class, "--corfu-port-for-lr");
+        String val = getServerConfig(String.class, "<corfu-server-port>");
         return Integer.parseInt(val);
     }
 

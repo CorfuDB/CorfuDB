@@ -29,7 +29,7 @@ public class CorfuReplicationE2EIT extends LogReplicationAbstractIT {
 
         List<String> transportPlugins = Arrays.asList(
                 "src/test/resources/transport/grpcConfig.properties"
-//                "src/test/resources/transport/nettyConfig.properties"
+                //"src/test/resources/transport/nettyConfig.properties"
         );
 
         List<ExampleSchemas.ClusterUuidMsg> topologyTypes = Arrays.asList(
