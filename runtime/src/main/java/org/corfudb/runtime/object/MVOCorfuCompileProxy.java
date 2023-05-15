@@ -31,7 +31,7 @@ public class MVOCorfuCompileProxy<
         implements ICorfuSMRProxy<S> {
 
     @Getter
-    private final AbstractVersionedObject<S> underlyingMVO;
+    private final MultiVersionObject<S> underlyingMVO;
 
     private final CorfuRuntime rt;
 

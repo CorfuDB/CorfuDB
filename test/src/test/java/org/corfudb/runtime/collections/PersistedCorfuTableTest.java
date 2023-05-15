@@ -86,6 +86,10 @@ import static org.corfudb.common.metrics.micrometer.MeterRegistryProvider.MeterR
 @RunWith(MockitoJUnitRunner.class)
 public class PersistedCorfuTableTest extends AbstractViewTest implements AutoCloseable {
 
+    static {
+        ByteBuddyAgent.install();
+    }
+
     private static final String defaultTableName = "diskBackedTable";
     private static final String alternateTableName = "diskBackedTable2";
     private static final String diskBackedDirectory = "/tmp/";
