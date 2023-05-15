@@ -148,7 +148,7 @@ public class RemoteSourceLeadershipManager {
                 log.debug("Remote leader has changed. old leader {}", oldLeader);
                 resetRemoteLeader(oldLeader);
                 verifyRemoteLeader(this, connectedNodes, session.getSourceClusterId(), router,
-                        RemoteSourceLeadershipManager.class);;
+                        RemoteSourceLeadershipManager.class);
                 break;
             default: {
                 log.warn("Unexpected communication event {}", event.getType());
