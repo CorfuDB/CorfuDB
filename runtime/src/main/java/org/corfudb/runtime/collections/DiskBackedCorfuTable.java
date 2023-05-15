@@ -28,7 +28,6 @@ import org.corfudb.runtime.object.VersionedObjectIdentifier;
 import org.corfudb.runtime.object.ViewGenerator;
 import org.corfudb.runtime.view.ObjectOpenOption;
 import org.corfudb.util.serializer.ISerializer;
-import org.corfudb.util.serializer.ProtobufSerializer;
 import org.rocksdb.CompressionType;
 import org.rocksdb.Options;
 import org.rocksdb.RocksDB;
@@ -66,10 +65,10 @@ public class DiskBackedCorfuTable<K, V> implements
         ConsistencyView {
 
     private static final HashFunction murmurHash3 = Hashing.murmur3_32();
-    public static final String DISK_BACKED = "diskBacked";
-    public static final String TRUE = "true";
-    public static final int BOUND = 100;
-    public static final int SAMPLING_RATE = 40;
+    private static final String DISK_BACKED = "diskBacked";
+    private static final String TRUE = "true";
+    private static final int BOUND = 100;
+    private static final int SAMPLING_RATE = 40;
 
     private final WriteOptions writeOptions = new WriteOptions()
             .setDisableWAL(true)
@@ -106,17 +105,16 @@ public class DiskBackedCorfuTable<K, V> implements
 
     private final PersistenceOptions persistenceOptions;
     private final ISerializer serializer;
-    private final RocksDbApi<DiskBackedCorfuTable<K, V>> rocksApi;
+    private final RocksDbApi rocksApi;
     private final RocksDbSnapshotGenerator<DiskBackedCorfuTable<K, V>> rocksDbSnapshotGenerator;
     private final ColumnFamilyRegistry columnFamilyRegistry;
-
     private final String metricsId;
-    @Getter
-    private final Statistics statistics;
-
     private final Map<String, String> secondaryIndexesAliasToPath;
     private final Map<String, Byte> indexToId;
     private final Set<Index.Spec<K, V, ?>> indexSpec;
+
+    @Getter
+    private final Statistics statistics;
 
     public DiskBackedCorfuTable(@NonNull PersistenceOptions persistenceOptions,
                                 @NonNull Options rocksDbOptions,
@@ -366,7 +364,7 @@ public class DiskBackedCorfuTable<K, V> implements
 
             // In case of both a transactional and non-transactional operation, the client
             // is going to receive UnrecoverableCorfuError along with the appropriate cause.
-            throw fatal;
+            throw new UnrecoverableCorfuError(fatal);
         }
     }
 
@@ -439,7 +437,7 @@ public class DiskBackedCorfuTable<K, V> implements
 
     @Override
     public SMRSnapshot<DiskBackedCorfuTable<K, V>> generateSnapshot(VersionedObjectIdentifier version) {
-        if (persistenceOptions.getConsistencyModel() == READ_COMMITTED) {
+        if (getConsistencyModel() == READ_COMMITTED) {
             return rocksDbSnapshotGenerator.getImplicitSnapshot(this, version);
         }
         return rocksDbSnapshotGenerator.getSnapshot(this, version);
@@ -461,7 +459,7 @@ public class DiskBackedCorfuTable<K, V> implements
     }
 
     @Override
-    public DiskBackedCorfuTable<K, V> newView(@NonNull RocksDbApi<DiskBackedCorfuTable<K, V>> rocksApi) {
+    public DiskBackedCorfuTable<K, V> newView(@NonNull RocksDbApi rocksApi) {
         if (!isRoot()) {
             throw new IllegalStateException("Only the root object cen generate new views.");
         }

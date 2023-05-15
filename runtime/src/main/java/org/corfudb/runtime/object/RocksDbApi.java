@@ -31,7 +31,7 @@ import static org.corfudb.util.Utils.startsWith;
  *
  * @param <S>
  */
-public interface RocksDbApi<S extends SnapshotGenerator<S>> {
+public interface RocksDbApi {
 
     byte[] get(@NonNull ColumnFamilyHandle columnHandle,
                @NonNull ByteBuf keyPayload) throws RocksDBException;

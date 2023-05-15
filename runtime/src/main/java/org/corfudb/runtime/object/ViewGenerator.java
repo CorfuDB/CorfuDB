@@ -16,5 +16,5 @@ public interface ViewGenerator<S extends SnapshotGenerator<S>> {
      * @param rocksApi object that the view is going to be based on
      * @return         a new view
      */
-    S newView(@NonNull RocksDbApi<S> rocksApi);
+    S newView(@NonNull RocksDbApi rocksApi);
 }

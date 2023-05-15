@@ -50,6 +50,7 @@ import org.junit.Test;
 import java.io.IOException;
 import java.nio.file.Paths;
 import java.time.Duration;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -539,7 +540,6 @@ public class CorfuStoreIT extends AbstractIT {
                         .build(),
                 runtime,
                 runtime.getSerializers().getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE),
-                null,
                 new HashSet<>(Collections.singletonList(LOG_REPLICATOR_STREAM_INFO.getStreamId())));
 
         // Now this badTable is completely hidden from both the TableRegistry and the Serializer!

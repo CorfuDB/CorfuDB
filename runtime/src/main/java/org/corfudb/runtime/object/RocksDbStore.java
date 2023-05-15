@@ -1,7 +1,6 @@
 package org.corfudb.runtime.object;
 
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufUtil;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -23,8 +22,6 @@ import org.rocksdb.RocksIterator;
 import org.rocksdb.WriteOptions;
 
 import java.nio.file.Path;
-import java.util.Arrays;
-import java.util.Collection;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -37,7 +34,7 @@ import java.util.stream.Collectors;
  */
 @Slf4j
 public class RocksDbStore<S extends SnapshotGenerator<S>> implements
-        RocksDbApi<S>,
+        RocksDbApi,
         RocksDbSnapshotGenerator<S>,
         ColumnFamilyRegistry {
 

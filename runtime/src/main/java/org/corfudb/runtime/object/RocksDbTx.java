@@ -36,7 +36,7 @@ import static org.corfudb.util.Utils.startsWith;
  *
  * @param <S> extends SnapshotGenerator
  */
-public class RocksDbTx<S extends SnapshotGenerator<S>> implements RocksDbApi<S> {
+public class RocksDbTx<S extends SnapshotGenerator<S>> implements RocksDbApi {
 
     private final DiskBackedSMRSnapshot<S> snapshot;
     private final Transaction txn;

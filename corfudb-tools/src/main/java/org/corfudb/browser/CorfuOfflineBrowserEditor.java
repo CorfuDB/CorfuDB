@@ -16,9 +16,9 @@ import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
-import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.CorfuDynamicKey;
 import org.corfudb.runtime.collections.CorfuDynamicRecord;
+import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.util.serializer.DynamicProtobufSerializer;
 
@@ -326,7 +326,7 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
     }
 
     @Override
-    public CorfuTable<CorfuDynamicKey, CorfuDynamicRecord> getTable(String namespace, String tableName) {
+    public ICorfuTable<CorfuDynamicKey, CorfuDynamicRecord> getTable(String namespace, String tableName) {
         return null;
     }
 

@@ -28,7 +28,7 @@ import java.util.stream.Collectors;
  *
  * @param <S> extends SnapshotGenerator
  */
-public class RocksDbReadCommittedTx<S extends SnapshotGenerator<S>> implements RocksDbApi<S> {
+public class RocksDbReadCommittedTx<S extends SnapshotGenerator<S>> implements RocksDbApi {
     private final OptimisticTransactionDB rocksDb;
     private final ReadOptions readOptions;
 
