@@ -10,10 +10,11 @@ import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.proto.RpcCommon;
 import org.junit.Before;
 import org.junit.Test;
-import org.mockito.Matchers;
 
 import java.util.concurrent.TimeUnit;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -35,8 +36,8 @@ public class DynamicTriggerPolicyUnitTest {
     public void setup() {
         this.dynamicTriggerPolicy = new DynamicTriggerPolicy();
 
-        when(corfuStore.txn(Matchers.any())).thenReturn(txn);
-        when(txn.getRecord(Matchers.anyString(), Matchers.any(Message.class))).thenReturn(corfuStoreEntry);
+        when(corfuStore.txn(any())).thenReturn(txn);
+        when(txn.getRecord(anyString(), any(Message.class))).thenReturn(corfuStoreEntry);
         doNothing().when(txn).delete(CompactorMetadataTables.COMPACTION_CONTROLS_TABLE, CompactorMetadataTables.FREEZE_TOKEN);
         when(txn.commit()).thenReturn(CorfuStoreMetadata.Timestamp.getDefaultInstance());
     }

@@ -18,7 +18,6 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
-import org.mockito.Matchers;
 
 import java.time.Duration;
 import java.util.Arrays;
@@ -76,7 +75,7 @@ public class CompactorLeaderServicesUnitTest {
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.FAILED).build());
         when(corfuStore.listTables(null)).thenReturn(Collections.singletonList(tableName));
         when(corfuRuntime.getAddressSpaceView()).thenReturn(mock(AddressSpaceView.class));
-        doNothing().when(txn).putRecord(Matchers.any(), Matchers.any(), Matchers.any(), Matchers.any());
+        doNothing().when(txn).putRecord(any(), any(), any(), any());
         Assert.assertEquals(CompactorLeaderServices.LeaderInitStatus.SUCCESS, compactorLeaderServices.initCompactionCycle());
     }
 
@@ -103,7 +102,7 @@ public class CompactorLeaderServicesUnitTest {
 
         ArgumentCaptor<CheckpointingStatus> captor = ArgumentCaptor.forClass(CheckpointingStatus.class);
         final int numTimesPutCalled = 3;
-        verify(txn, times(numTimesPutCalled)).putRecord(Matchers.any(), Matchers.any(), captor.capture(), Matchers.any());
+        verify(txn, times(numTimesPutCalled)).putRecord(any(), any(), captor.capture(), any());
 
         Assert.assertEquals(StatusType.COMPLETED, captor.getAllValues().get(0).getStatus());
         Assert.assertEquals(StatusType.FAILED, captor.getAllValues().get(1).getStatus());
@@ -143,11 +142,11 @@ public class CompactorLeaderServicesUnitTest {
 
         final int numTimePutInvoked = 4;
         ArgumentCaptor<CheckpointingStatus> putCaptor = ArgumentCaptor.forClass(CheckpointingStatus.class);
-        verify(txn, times(numTimePutInvoked)).putRecord(Matchers.any(), Matchers.any(),
-                putCaptor.capture(), Matchers.any());
+        verify(txn, times(numTimePutInvoked)).putRecord(any(), any(),
+                putCaptor.capture(), any());
 
         ArgumentCaptor<StringKey> deleteCaptor = ArgumentCaptor.forClass(StringKey.class);
-        verify(txn, times(2)).delete(Matchers.anyString(), deleteCaptor.capture());
+        verify(txn, times(2)).delete(anyString(), deleteCaptor.capture());
 
         Assert.assertEquals(StatusType.COMPLETED, putCaptor.getAllValues().get(0).getStatus());
         Assert.assertEquals(StatusType.FAILED, putCaptor.getAllValues().get(1).getStatus());

@@ -23,7 +23,6 @@ import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.concurrent.SingletonResource;
 import org.junit.Test;
-import org.mockito.Matchers;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -38,6 +37,8 @@ import java.util.concurrent.TimeUnit;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.fail;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doNothing;
@@ -376,7 +377,7 @@ public class CompactorServiceTest extends AbstractViewTest {
         SingletonResource<CorfuRuntime> runtimeSingletonResource1 = SingletonResource.withInitial(() -> runtime0);
 
         CompactorService compactorService1 = new CompactorService(sc0, runtimeSingletonResource1, mockInvokeJvm0, dynamicTriggerPolicy0);
-        when(dynamicTriggerPolicy0.shouldTrigger(Matchers.anyLong(), Matchers.any())).thenReturn(true).thenReturn(false);
+        when(dynamicTriggerPolicy0.shouldTrigger(anyLong(), any())).thenReturn(true).thenReturn(false);
         compactorService1.start(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
 
         try {
@@ -400,12 +401,12 @@ public class CompactorServiceTest extends AbstractViewTest {
         SingletonResource<CorfuRuntime> runtimeSingletonResource2 = SingletonResource.withInitial(() -> runtime1);
 
         CompactorService compactorService1 = new CompactorService(sc0, runtimeSingletonResource1, mockInvokeJvm0, dynamicTriggerPolicy0);
-        when(dynamicTriggerPolicy0.shouldTrigger(Matchers.anyLong(), Matchers.any())).thenReturn(true).thenReturn(false);
+        when(dynamicTriggerPolicy0.shouldTrigger(anyLong(), any())).thenReturn(true).thenReturn(false);
         compactorService1.start(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
 
         DynamicTriggerPolicy dynamicTriggerPolicy1 = mock(DynamicTriggerPolicy.class);
         CompactorService compactorService2 = new CompactorService(sc1, runtimeSingletonResource2, mockInvokeJvm1, dynamicTriggerPolicy1);
-        when(dynamicTriggerPolicy1.shouldTrigger(Matchers.anyLong(), Matchers.any())).thenReturn(false);
+        when(dynamicTriggerPolicy1.shouldTrigger(anyLong(), any())).thenReturn(false);
         compactorService2.start(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
 
         try {
@@ -436,13 +437,13 @@ public class CompactorServiceTest extends AbstractViewTest {
         SingletonResource<CorfuRuntime> runtimeSingletonResource2 = SingletonResource.withInitial(() -> runtime2);
         CompactorService compactorService2 = new CompactorService(sc2, runtimeSingletonResource2, mockInvokeJvm2, dynamicTriggerPolicy2);
 
-        when(dynamicTriggerPolicy0.shouldTrigger(Matchers.anyLong(), Matchers.any())).thenReturn(true).thenReturn(false);
+        when(dynamicTriggerPolicy0.shouldTrigger(anyLong(), any())).thenReturn(true).thenReturn(false);
         compactorService0.start(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
 
-        when(dynamicTriggerPolicy1.shouldTrigger(Matchers.anyLong(), Matchers.any())).thenReturn(false);
+        when(dynamicTriggerPolicy1.shouldTrigger(anyLong(), any())).thenReturn(false);
         compactorService1.start(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
 
-        when(dynamicTriggerPolicy2.shouldTrigger(Matchers.anyLong(), Matchers.any())).thenReturn(false);
+        when(dynamicTriggerPolicy2.shouldTrigger(anyLong(), any())).thenReturn(false);
         compactorService2.start(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
 
         try {
@@ -477,13 +478,13 @@ public class CompactorServiceTest extends AbstractViewTest {
         SingletonResource<CorfuRuntime> runtimeSingletonResource2 = SingletonResource.withInitial(() -> runtime2);
         CompactorService compactorService2 = new CompactorService(sc2, runtimeSingletonResource2, mockInvokeJvm2, dynamicTriggerPolicy2);
 
-        when(dynamicTriggerPolicy0.shouldTrigger(Matchers.anyLong(), Matchers.any())).thenReturn(true).thenReturn(false);
+        when(dynamicTriggerPolicy0.shouldTrigger(anyLong(), any())).thenReturn(true).thenReturn(false);
         compactorService0.start(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
 
-        when(dynamicTriggerPolicy1.shouldTrigger(Matchers.anyLong(), Matchers.any())).thenReturn(false);
+        when(dynamicTriggerPolicy1.shouldTrigger(anyLong(), any())).thenReturn(false);
         compactorService1.start(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
 
-        when(dynamicTriggerPolicy2.shouldTrigger(Matchers.anyLong(), Matchers.any())).thenReturn(false);
+        when(dynamicTriggerPolicy2.shouldTrigger(anyLong(), any())).thenReturn(false);
         compactorService2.start(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
 
         try {
@@ -509,7 +510,7 @@ public class CompactorServiceTest extends AbstractViewTest {
         SingletonResource<CorfuRuntime> runtimeSingletonResource1 = SingletonResource.withInitial(() -> runtime0);
 
         CompactorService compactorService1 = new CompactorService(sc0, runtimeSingletonResource1, mockInvokeJvm0, dynamicTriggerPolicy0);
-        when(dynamicTriggerPolicy0.shouldTrigger(Matchers.anyLong(), Matchers.any())).thenReturn(true).thenReturn(false);
+        when(dynamicTriggerPolicy0.shouldTrigger(anyLong(), any())).thenReturn(true).thenReturn(false);
         compactorService1.start(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
 
         Table<StringKey, RpcCommon.TokenMsg, Message> checkpointTable = openCompactionControlsTable();
@@ -555,7 +556,7 @@ public class CompactorServiceTest extends AbstractViewTest {
         testSetup(logSizeLimitPercentageFull);
         SingletonResource<CorfuRuntime> runtimeSingletonResource0 = SingletonResource.withInitial(() -> runtime0);
         CompactorService compactorService0 = new CompactorService(sc0, runtimeSingletonResource0, mockInvokeJvm0, new DynamicTriggerPolicy());
-        when(dynamicTriggerPolicy0.shouldTrigger(Matchers.anyLong(), Matchers.any())).thenReturn(false);
+        when(dynamicTriggerPolicy0.shouldTrigger(anyLong(), any())).thenReturn(false);
         compactorService0.start(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
 
         try {
@@ -588,7 +589,7 @@ public class CompactorServiceTest extends AbstractViewTest {
         testSetup(logSizeLimitPercentageLow);
         SingletonResource<CorfuRuntime> runtimeSingletonResource1 = SingletonResource.withInitial(() -> runtime0);
         CompactorService compactorService0 = new CompactorService(sc0, runtimeSingletonResource1, mockInvokeJvm0, dynamicTriggerPolicy0);
-        when(dynamicTriggerPolicy0.shouldTrigger(Matchers.anyLong(), Matchers.any())).thenReturn(true).thenReturn(false);
+        when(dynamicTriggerPolicy0.shouldTrigger(anyLong(), any())).thenReturn(true).thenReturn(false);
         compactorService0.start(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
 
         // Write entries to the stream until the quota has been exhausted.

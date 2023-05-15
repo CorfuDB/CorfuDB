@@ -431,7 +431,7 @@ public class ManagementServerTest {
 
         try (MockedStatic<ReconfigurationEventHandler> configMocked = mockStatic(ReconfigurationEventHandler.class)) {
             managementServer.handleMessage(request, mChannelHandlerContext, mServerRouter);
-            configMocked.verify(never(), () -> ReconfigurationEventHandler.handleFailure(any(), any(), any(), any()));
+            configMocked.verify(() -> ReconfigurationEventHandler.handleFailure(any(), any(), any(), any()), never());
         }
 
         // Verify that a NOT_BOOTSTRAPPED error was sent through the router.
@@ -457,7 +457,7 @@ public class ManagementServerTest {
 
         try (MockedStatic<ReconfigurationEventHandler> configMocked = mockStatic(ReconfigurationEventHandler.class)) {
             managementServer.handleMessage(request, mChannelHandlerContext, mServerRouter);
-            configMocked.verify(never(), () -> ReconfigurationEventHandler.handleFailure(any(), any(), any(), any()));
+            configMocked.verify(() -> ReconfigurationEventHandler.handleFailure(any(), any(), any(), any()), never());
         }
 
         // Assert that the payload has a REPORT_FAILURE response and that the base
@@ -546,7 +546,7 @@ public class ManagementServerTest {
 
         try (MockedStatic<ReconfigurationEventHandler> configMocked = mockStatic(ReconfigurationEventHandler.class)) {
             managementServer.handleMessage(request, mChannelHandlerContext, mServerRouter);
-            configMocked.verify(never(), () -> ReconfigurationEventHandler.handleHealing(any(), any(), any()));
+            configMocked.verify(() -> ReconfigurationEventHandler.handleHealing(any(), any(), any()), never());
         }
 
         // Verify that a NOT_BOOTSTRAPPED error was sent through the router.
@@ -572,7 +572,7 @@ public class ManagementServerTest {
 
         try (MockedStatic<ReconfigurationEventHandler> configMocked = mockStatic(ReconfigurationEventHandler.class)) {
             managementServer.handleMessage(request, mChannelHandlerContext, mServerRouter);
-            configMocked.verify(never(), () -> ReconfigurationEventHandler.handleHealing(any(), any(), any()));
+            configMocked.verify(() -> ReconfigurationEventHandler.handleHealing(any(), any(), any()), never());
         }
 
         // Assert that the payload has a HEAL_FAILURE response and that the base

@@ -15,7 +15,7 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.runners.MockitoJUnitRunner;
+import org.mockito.junit.MockitoJUnitRunner;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -34,9 +34,9 @@ import static org.corfudb.protocols.service.CorfuProtocolLayout.getProposeLayout
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getHeaderMsg;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getResponseMsg;
 import static org.corfudb.runtime.view.Layout.fromJSONString;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.anyLong;
-import static org.mockito.Matchers.eq;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;

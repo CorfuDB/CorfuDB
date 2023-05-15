@@ -71,7 +71,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.corfudb.runtime.view.ObjectsView.LOG_REPLICATOR_STREAM_INFO;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 import static org.corfudb.runtime.view.TableRegistry.getFullyQualifiedTableName;
-import static org.mockito.Matchers.isNull;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.spy;
 

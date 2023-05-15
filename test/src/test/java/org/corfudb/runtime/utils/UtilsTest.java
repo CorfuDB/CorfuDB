@@ -3,7 +3,7 @@ package org.corfudb.runtime.utils;
 import static org.assertj.core.api.Java6Assertions.assertThat;
 import static org.assertj.core.api.Java6Assertions.assertThatThrownBy;
 import static org.corfudb.runtime.view.Layout.ReplicationMode.CHAIN_REPLICATION;
-import static org.mockito.Matchers.anyString;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;

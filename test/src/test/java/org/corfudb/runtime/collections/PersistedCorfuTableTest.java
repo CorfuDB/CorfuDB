@@ -9,6 +9,7 @@ import io.netty.buffer.ByteBufUtil;
 import lombok.Builder;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
+import net.bytebuddy.agent.ByteBuddyAgent;
 import net.jqwik.api.Arbitraries;
 import net.jqwik.api.Arbitrary;
 import net.jqwik.api.ForAll;
@@ -21,6 +22,7 @@ import net.jqwik.api.constraints.UniqueElements;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuOptions.ConsistencyModel;
 import org.corfudb.runtime.CorfuRuntime;
@@ -42,8 +44,9 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
+import org.mockito.MockedStatic;
 import org.mockito.Mockito;
-import org.mockito.runners.MockitoJUnitRunner;
+import org.mockito.junit.MockitoJUnitRunner;
 import org.rocksdb.Env;
 import org.rocksdb.OptimisticTransactionDB;
 import org.rocksdb.Options;
@@ -67,13 +70,14 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 import java.util.stream.LongStream;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.times;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy;
 import static org.corfudb.common.metrics.micrometer.MeterRegistryProvider.MeterRegistryInitializer.initClientMetrics;
@@ -922,34 +926,37 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
 
     @Test
     public void testExternalProvider() throws InterruptedException, IOException {
-        Logger logger = Mockito.mock(Logger.class);
-        List<String> logMessages = new ArrayList<>();
+        final Logger logger = Mockito.mock(Logger.class);
+        final List<String> logMessages = new ArrayList<>();
+        final CountDownLatch countDownLatch = new CountDownLatch(10);
+        final String tableFolderName = "metered-table";
+
         Mockito.doAnswer(invocation -> {
             synchronized (this) {
-                String logMessage = invocation.getArgumentAt(0, String.class);
+                String logMessage = invocation.getArgument(0, String.class);
+                if (logMessage.startsWith(tableFolderName)) {
+                    countDownLatch.countDown();
+                }
                 logMessages.add(logMessage);
                 return null;
             }
         }).when(logger).debug(logCaptor.capture());
 
         final Duration loggingInterval = Duration.ofMillis(100);
-        final String tableFolderName = "metered-table";
         initClientMetrics(logger, loggingInterval, PersistedCorfuTableTest.class.toString());
 
-        try (PersistedCorfuTable<String, String> ignored = setupTable(tableFolderName)) {
-            TimeUnit.MILLISECONDS.sleep(loggingInterval.multipliedBy(2).toMillis());
+        PersistedCorfuTable<String, String> table = setupTable(tableFolderName);
+        countDownLatch.await();
+        synchronized (this) {
             assertThat(logMessages.stream().filter(log -> log.contains("rocksdb"))
                     .filter(log -> log.startsWith(tableFolderName))
                     .findAny()).isPresent();
         }
 
-        // The table should have been closed by now.
-        // No new messages should be generated.
-        TimeUnit.MILLISECONDS.sleep(loggingInterval.multipliedBy(2).toMillis());
-        logMessages.clear();
-        TimeUnit.MILLISECONDS.sleep(loggingInterval.multipliedBy(2).toMillis());
-        assertThat(logMessages.stream().filter(log -> log.contains("rocksdb"))
-                .filter(log -> log.startsWith(tableFolderName))
-                .findAny()).isNotPresent();
+        try (MockedStatic<MeterRegistryProvider> myClassMock =
+                    Mockito.mockStatic(MeterRegistryProvider.class)) {
+            table.close();
+            myClassMock.verify(() -> MeterRegistryProvider.unregisterExternalSupplier(any()), times(1));
+        }
     }
 }
