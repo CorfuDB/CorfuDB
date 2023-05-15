@@ -32,7 +32,7 @@ public class CorfuReplicationMultiSinkIT extends CorfuReplicationMultiSourceSink
 
         List<String> transportPlugins = Arrays.asList(
             "src/test/resources/transport/grpcConfig.properties"
-//            "src/test/resources/transport/nettyConfig.properties"
+            //"src/test/resources/transport/nettyConfig.properties"
         );
 
         List<String> absolutePathPlugins = new ArrayList<>();
