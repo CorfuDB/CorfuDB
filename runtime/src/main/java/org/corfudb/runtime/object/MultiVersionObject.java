@@ -191,8 +191,8 @@ public class MultiVersionObject<S extends SnapshotGenerator<S>> {
                                 final VersionedObjectIdentifier voId = new VersionedObjectIdentifier(getID(), materializedUpTo);
                                 currentObject.generateIntermediarySnapshot(voId, objectOpenOption)
                                         .ifPresent(newSnapshot -> {
-                                            setCurrentSnapshot(newSnapshot);
-                                            mvoCache.put(voId, removeAndGetPreviousSnapshot());
+                                            final SMRSnapshot<S> previousSnapshot = setCurrentSnapshot(newSnapshot);
+                                            mvoCache.put(voId, previousSnapshot);
                                         });
                             }
 
@@ -214,8 +214,8 @@ public class MultiVersionObject<S extends SnapshotGenerator<S>> {
             final VersionedObjectIdentifier voId = new VersionedObjectIdentifier(getID(), materializedUpTo);
             currentObject.generateTargetSnapshot(voId, objectOpenOption, getCurrentSnapshot())
                     .ifPresent(newSnapshot -> {
-                        setCurrentSnapshot(newSnapshot);
-                        mvoCache.put(voId, removeAndGetPreviousSnapshot());
+                        final SMRSnapshot<S> previousSnapshot = setCurrentSnapshot(newSnapshot);
+                        mvoCache.put(voId, previousSnapshot);
                     });
         };
 
@@ -226,8 +226,9 @@ public class MultiVersionObject<S extends SnapshotGenerator<S>> {
         return snapshotFifo.getLast();
     }
 
-    private void setCurrentSnapshot(SMRSnapshot<S> newSnapshot) {
-        snapshotFifo.add(newSnapshot);
+    private SMRSnapshot<S> setCurrentSnapshot(SMRSnapshot<S> newSnapshot) {
+        snapshotFifo.addLast(newSnapshot);
+        return removeAndGetPreviousSnapshot();
     }
 
     private SMRSnapshot<S> removeAndGetPreviousSnapshot() {
