@@ -9,7 +9,6 @@ import io.netty.buffer.ByteBufUtil;
 import lombok.Builder;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
-import net.bytebuddy.agent.ByteBuddyAgent;
 import net.jqwik.api.Arbitraries;
 import net.jqwik.api.Arbitrary;
 import net.jqwik.api.ForAll;
@@ -68,7 +67,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
@@ -85,10 +83,6 @@ import static org.corfudb.common.metrics.micrometer.MeterRegistryProvider.MeterR
 @Slf4j
 @RunWith(MockitoJUnitRunner.class)
 public class PersistedCorfuTableTest extends AbstractViewTest implements AutoCloseable {
-
-    static {
-        ByteBuddyAgent.install();
-    }
 
     private static final String defaultTableName = "diskBackedTable";
     private static final String alternateTableName = "diskBackedTable2";
@@ -794,11 +788,8 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
      */
     @Provide
     Arbitrary<Uuid> uuid() {
-        return Arbitraries.integers().map(idx -> UUID.randomUUID()).map(
-                uuid -> Uuid.newBuilder()
-                        .setMsb(uuid.getMostSignificantBits())
-                        .setLsb(uuid.getLeastSignificantBits())
-                        .build());
+        return Arbitraries.integers().map(
+                idx -> Uuid.newBuilder().setMsb(idx).setLsb(idx).build());
     }
 
     /**
@@ -834,12 +825,18 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
     void dataStoreIntegration(
             @ForAll @StringLength(min = STRING_MIN, max = STRING_MAX) @AlphaChars String namespace,
             @ForAll @StringLength(min = STRING_MIN, max = STRING_MAX) @AlphaChars String tableName,
-            @ForAll("uuid") Uuid firstId,
-            @ForAll("eventInfo") EventInfo firstEvent,
-            @ForAll("uuidSet") @Size(SAMPLE_SIZE) Set<Uuid> ids,
-            @ForAll("eventInfoSet") @Size(SAMPLE_SIZE) Set<EventInfo> events)
+            @ForAll("uuidSet") @Size(SAMPLE_SIZE + 1) Set<Uuid> ids,
+            @ForAll("eventInfoSet") @Size(SAMPLE_SIZE + 1) Set<EventInfo> events)
             throws Exception {
         resetTests();
+
+        final Uuid firstId = ids.stream().findFirst().orElseThrow(IllegalStateException::new);
+        final EventInfo firstEvent = events.stream().findAny().orElseThrow(IllegalStateException::new);
+        assertThat(ids.remove(firstId)).isTrue();
+        assertThat(events.remove(firstEvent)).isTrue();
+
+        assertThat(ids.size()).isEqualTo(SAMPLE_SIZE);
+        assertThat(events.size()).isEqualTo(SAMPLE_SIZE);
 
         // Creating Corfu Store using a connected corfu client.
         CorfuStore corfuStore = new CorfuStore(getDefaultRuntime());
@@ -856,7 +853,6 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
                                 .persistentDataPath(persistedCacheLocation)
                                 .build())) {
 
-
             SampleSchema.ManagedResources metadata = SampleSchema.ManagedResources.newBuilder()
                     .setCreateUser("MrProto").build();
 
@@ -872,12 +868,14 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
                     .build();
 
             try (TxnContext tx = corfuStore.txn(namespace)) {
+                assertThat(events.size()).isEqualTo(ids.size());
+
                 Streams.zip(ids.stream(), events.stream(), SimpleEntry::new)
                         .forEach(pair -> tx.putRecord(table, pair.getKey(), pair.getValue(), metadata));
-                tx.commit();
+                CorfuStoreMetadata.Timestamp t = tx.commit();
             }
 
-            SimpleEntry<Uuid, EventInfo> sample = Streams
+            final SimpleEntry<Uuid, EventInfo> sample = Streams
                     .zip(ids.stream(), events.stream(), SimpleEntry::new)
                     .findAny().orElseThrow(() -> new InvalidObjectException("Invalid state."));
 
@@ -885,7 +883,7 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
                 assertThat(tx.getRecord(tableName, sample.getKey()).getPayload())
                         .isEqualTo(sample.getValue());
 
-                Collection<Message> secondaryIndex = tx
+                final Collection<Message> secondaryIndex = tx
                         .getByIndex(tableName, "event_time", sample.getValue().getEventTime())
                         .stream().map(CorfuStoreEntry::getPayload).collect(Collectors.toList());
 
@@ -896,13 +894,13 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
                         .collect(Collectors.toList()));
 
                 events.add(firstEvent);
-                Set<EventInfo> filteredEvents = events.stream().filter(
+                final Set<EventInfo> filteredEvents = events.stream().filter(
                                 event -> event.getEventTime() > medianEventTime)
                         .collect(Collectors.toSet());
-                List<CorfuStoreEntry<Uuid, EventInfo, SampleSchema.ManagedResources>> queryResult =
+                final List<CorfuStoreEntry<Uuid, EventInfo, SampleSchema.ManagedResources>> queryResult =
                         tx.executeQuery(tableName,
-                                record -> ((EventInfo) record.getPayload()).getEventTime() > medianEventTime);
-                Set<EventInfo> scannedValues = queryResult.stream()
+                                record -> record.getPayload().getEventTime() > medianEventTime);
+                final Set<EventInfo> scannedValues = queryResult.stream()
                         .map(CorfuStoreEntry::getPayload).collect(Collectors.toSet());
 
                 assertThat(filteredEvents.size()).isGreaterThan(0).isLessThan(SAMPLE_SIZE);
@@ -922,7 +920,6 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
                             .setTableName(tableName)
                             .build());
         }
-
     }
 
     @Captor

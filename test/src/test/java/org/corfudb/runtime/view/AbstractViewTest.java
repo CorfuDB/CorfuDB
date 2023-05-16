@@ -5,6 +5,7 @@ import io.netty.channel.DefaultEventLoopGroup;
 import io.netty.channel.EventLoopGroup;
 import lombok.Data;
 import lombok.Getter;
+import net.bytebuddy.agent.ByteBuddyAgent;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.infrastructure.BaseServer;
 import org.corfudb.infrastructure.IServerRouter;
@@ -86,6 +87,11 @@ import static org.corfudb.protocols.service.CorfuProtocolSequencer.getBootstrapS
  * Created by mwei on 12/22/15.
  */
 public abstract class AbstractViewTest extends AbstractCorfuTest {
+
+    static {
+        ByteBuddyAgent.install();
+    }
+
     private static final int QUIET_PERIOD = 100;
     private static final int TIMEOUT = 300;
     static final int MVO_CACHE_SIZE = 5000;
