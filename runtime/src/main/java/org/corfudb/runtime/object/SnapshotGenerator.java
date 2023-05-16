@@ -21,11 +21,26 @@ public interface SnapshotGenerator<T> extends AutoCloseable {
      */
     SMRSnapshot<T> generateSnapshot(VersionedObjectIdentifier version);
 
+    /**
+     * Create a target snapshot associated with the provided version.
+     *
+     * @param version version associated with the intermediary snapshot
+     * @param objectOpenOption how this object was opened
+     * @param previousSnapshot previously generated snapshot
+     * @return a new snapshot associated with the provided version.
+     */
     Optional<SMRSnapshot<T>> generateTargetSnapshot(
             VersionedObjectIdentifier version,
             ObjectOpenOption objectOpenOption,
             SMRSnapshot<T> previousSnapshot);
 
+    /**
+     * Create an intermediary snapshot associated with the provided version.
+     *
+     * @param version version associated with the intermediary snapshot
+     * @param objectOpenOption how this object was opened
+     * @return a new snapshot associated with the provided version.
+     */
     Optional<SMRSnapshot<T>> generateIntermediarySnapshot(
             VersionedObjectIdentifier version,
             ObjectOpenOption objectOpenOption);

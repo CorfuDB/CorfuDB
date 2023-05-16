@@ -101,6 +101,10 @@ public class MultiVersionObject<S extends SnapshotGenerator<S>> {
      */
     private final ObjectOpenOption objectOpenOption;
 
+    /**
+     * We always keep two snapshots: [Previous Snapshot, Current Snapshot]
+     * The FIFO acts as a sliding window.
+     */
     protected volatile ArrayDeque<SMRSnapshot<S>> snapshotFifo
             = new ArrayDeque<>(snapshotFifoSize);
     private final Logger correctnessLogger = LoggerFactory.getLogger("correctness");

@@ -448,6 +448,8 @@ public class DiskBackedCorfuTable<K, V> implements
             VersionedObjectIdentifier version,
             ObjectOpenOption objectOpenOption,
             SMRSnapshot<DiskBackedCorfuTable<K, V>> previousSnapshot) {
+        // We always generate an intermediary snapshot, therefore,
+        // there is no reason for generating a target snapshot.
         return Optional.empty();
     }
 
