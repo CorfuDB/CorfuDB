@@ -21,14 +21,14 @@ public final class CorfuSaasEndpointProvider {
 
     private CorfuSaasEndpointProvider(String configFile, boolean isSaasDeployment) {
         this.isSaasDeployment = isSaasDeployment;
-        this.corfuSaasEndpoint = getCorfuSaasEndpoint(configFile);
+        this.corfuSaasEndpoint = getCorfuSaasEndpointFromConfig(configFile);
     }
 
     public static void init(String pluginConfigFile, boolean isSaasDeployment) {
         instance = new CorfuSaasEndpointProvider(pluginConfigFile, isSaasDeployment);
     }
 
-    private Optional<String> getCorfuSaasEndpoint(String pluginConfigFilePath) {
+    private Optional<String> getCorfuSaasEndpointFromConfig(String pluginConfigFilePath) {
         // if not SaaS deployment, return an empty optional
         if(!isSaasDeployment) {
             log.debug("Not a SaaS deployment");
@@ -49,7 +49,7 @@ public final class CorfuSaasEndpointProvider {
             String endpoint = prop.getProperty("saas_endpoint");
             return Optional.ofNullable(endpoint);
         } catch (IOException e) {
-            log.warn("Error extracting corfu saas endpoint");
+            log.error("Error extracting corfu saas endpoint", e);
             return Optional.empty();
         }
     }
