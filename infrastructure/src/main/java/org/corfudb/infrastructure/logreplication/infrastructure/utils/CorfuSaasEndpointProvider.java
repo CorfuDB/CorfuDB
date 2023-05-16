@@ -49,7 +49,7 @@ public final class CorfuSaasEndpointProvider {
             String endpoint = prop.getProperty("saas_endpoint");
             return Optional.ofNullable(endpoint);
         } catch (IOException e) {
-            log.error("Error extracting corfu saas endpoint", e);
+            log.warn("Error extracting corfu saas endpoint");
             return Optional.empty();
         }
     }
