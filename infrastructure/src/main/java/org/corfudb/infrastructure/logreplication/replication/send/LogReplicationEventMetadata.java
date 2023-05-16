@@ -33,15 +33,6 @@ public class LogReplicationEventMetadata {
     private boolean forceSnapshotSync = false;
 
     /**
-     * Empty Metadata
-     *
-     * @return an empty instance of log replication event metadata
-     */
-    public static LogReplicationEventMetadata empty() {
-        return new LogReplicationEventMetadata(NIL_UUID, -1L);
-    }
-
-    /**
      * Constructor
      *
      * @param requestId identifier of the request that preceded this event.

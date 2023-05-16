@@ -810,7 +810,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
      *
      */
     @Test
-    public void testTransitionFromInSnapshotSync_whenMultipleSnapshotSync() throws Exception {
+    public void testTransitionFromInSnapshotSyncWhenMultipleSnapshotSync() throws Exception {
 
         initLogReplicationFSM(ReaderImplementation.EMPTY);
 
@@ -839,10 +839,10 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         transition(LogReplicationEventType.SNAPSHOT_SYNC_CONTINUE, LogReplicationStateType.IN_SNAPSHOT_SYNC, snapshotSync1, true);
 
         // Simulate a new incoming Snapshot sync request
-        UUID SnapshotSync2 = UUID.randomUUID();
+        UUID snapshotSync2 = UUID.randomUUID();
 
         // Transition #3: Snapshot sync continue -> IN_SNAPSHOT_SYNC state
-        transition(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST, LogReplicationStateType.IN_SNAPSHOT_SYNC, SnapshotSync2, false);
+        transition(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST, LogReplicationStateType.IN_SNAPSHOT_SYNC, snapshotSync2, false);
 
         // Poll for the current pending messages and check that none exist with the UUID of snapshotSync1,
         // since they should have been cleared
@@ -861,10 +861,10 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         transition(LogReplicationEventType.SNAPSHOT_SYNC_CONTINUE, LogReplicationStateType.IN_SNAPSHOT_SYNC, snapshotSync1, false);
 
         // Transition #5: new sync's snapshot sync continue
-        transition(LogReplicationEventType.SNAPSHOT_SYNC_CONTINUE, LogReplicationStateType.IN_SNAPSHOT_SYNC, SnapshotSync2, false);
+        transition(LogReplicationEventType.SNAPSHOT_SYNC_CONTINUE, LogReplicationStateType.IN_SNAPSHOT_SYNC, snapshotSync2, false);
 
         // Transition #6: new sync's transfer completed -> WAIT_SNAPSHOT_APPLY
-        transition(LogReplicationEventType.SNAPSHOT_TRANSFER_COMPLETE, LogReplicationStateType.WAIT_SNAPSHOT_APPLY,SnapshotSync2, true);
+        transition(LogReplicationEventType.SNAPSHOT_TRANSFER_COMPLETE, LogReplicationStateType.WAIT_SNAPSHOT_APPLY,snapshotSync2, true);
 
         // Transition #7: old sync's snapshot sync continue -> ignored by FSM
         transition(LogReplicationEventType.SNAPSHOT_SYNC_CONTINUE, LogReplicationStateType.WAIT_SNAPSHOT_APPLY, snapshotSync1, false);
@@ -888,7 +888,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
      *
      */
     @Test
-    public void testTransitionFromWaitSnapshotApply_whenMultipleSnapshotSync() throws Exception {
+    public void testTransitionFromWaitSnapshotApplyWhenMultipleSnapshotSync() throws Exception {
 
         initLogReplicationFSM(ReaderImplementation.EMPTY);
 
