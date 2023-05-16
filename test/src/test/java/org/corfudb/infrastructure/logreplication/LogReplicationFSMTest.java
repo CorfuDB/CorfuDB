@@ -4,6 +4,7 @@ import static java.lang.Thread.sleep;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig.getSessions;
 import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.NAMESPACE;
+import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
 import static org.corfudb.runtime.LogReplicationUtils.LR_STATUS_STREAM_TAG;
 import static org.corfudb.runtime.LogReplicationUtils.REPLICATION_STATUS_TABLE_NAME;
 
@@ -22,6 +23,7 @@ import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Semaphore;
+import java.util.stream.Collectors;
 
 import com.google.protobuf.ByteString;
 import com.google.protobuf.Message;
@@ -821,6 +823,18 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         // Transition #1: Snapshot sync request -> IN_SNAPSHOT_SYNC state
         UUID snapshotSync1 = transition(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST, LogReplicationStateType.IN_SNAPSHOT_SYNC);
 
+        // Poll for the current pending messages and check that they are written with the UUID of snapshotSync1
+        // Insert delay to give time for entries to be added
+        insertDelay(1000);
+        Set<UUID> pendingMessageUUIDs = fsm.getSnapshotSender()
+                .getDataSenderBufferManager()
+                .getPendingMessages()
+                .getPendingEntries()
+                .stream()
+                .map(entry -> getUUID(entry.getData().getMetadata().getSyncRequestId()))
+                .collect(Collectors.toSet());
+        Assert.assertTrue(pendingMessageUUIDs.contains(snapshotSync1));
+
         // Transition #2: Snapshot sync continue -> IN_SNAPSHOT_SYNC state
         transition(LogReplicationEventType.SNAPSHOT_SYNC_CONTINUE, LogReplicationStateType.IN_SNAPSHOT_SYNC, snapshotSync1, true);
 
@@ -829,7 +843,19 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
 
         // Transition #3: Snapshot sync continue -> IN_SNAPSHOT_SYNC state
         transition(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST, LogReplicationStateType.IN_SNAPSHOT_SYNC, SnapshotSync2, false);
-        assertThat(fsm.getSnapshotSender().getDataSenderBufferManager().getPendingMessages().getSize()).isZero();
+
+        // Poll for the current pending messages and check that none exist with the UUID of snapshotSync1,
+        // since they should have been cleared
+        // Insert delay to give time for entries to be cleared/added
+        insertDelay(1000);
+        pendingMessageUUIDs = fsm.getSnapshotSender()
+                .getDataSenderBufferManager()
+                .getPendingMessages()
+                .getPendingEntries()
+                .stream()
+                .map(entry -> getUUID(entry.getData().getMetadata().getSyncRequestId()))
+                .collect(Collectors.toSet());
+        Assert.assertFalse(pendingMessageUUIDs.contains(snapshotSync1));
 
         // Transition #4: old sync's snapshot sync continue -> ignored by FSM
         transition(LogReplicationEventType.SNAPSHOT_SYNC_CONTINUE, LogReplicationStateType.IN_SNAPSHOT_SYNC, snapshotSync1, false);
