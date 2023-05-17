@@ -47,8 +47,7 @@ public class SMRObject<T extends ICorfuSMR> {
     @NonNull
     private final ISerializer serializer;
 
-    @NonNull
-    private final ObjectOpenOption option;
+    private final ObjectOpenOption openOption;
 
     @NonNull
     private final Object[] arguments;
@@ -59,7 +58,6 @@ public class SMRObject<T extends ICorfuSMR> {
     public static class Builder<T extends ICorfuSMR> {
 
         private ISerializer serializer = Serializers.getDefaultSerializer();
-        private ObjectOpenOption openOption = ObjectOpenOption.CACHE;
         private Object[] arguments = new Object[0];
         @Getter
         private Class<T> type;
@@ -137,7 +135,7 @@ public class SMRObject<T extends ICorfuSMR> {
                 log.info(CorfuRuntime.LOG_NOT_IMPORTANT, "ObjectBuilder: open Corfu stream {} id {}", smrObject.getStreamName(),
                         smrObject.getStreamID());
 
-                if (smrObject.getOption() == ObjectOpenOption.NO_CACHE) {
+                if (smrObject.getOpenOption() == ObjectOpenOption.NO_CACHE) {
                     return CorfuCompileWrapperBuilder.getWrapper(smrObject);
                 } else {
                     ObjectsView.ObjectID<T> oid = new ObjectsView.ObjectID(streamID, type);

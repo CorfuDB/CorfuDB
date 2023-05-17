@@ -434,7 +434,7 @@ public class StreamViewTest extends AbstractViewTest {
                 .build()
                 .setStreamName(stream)
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
-                .option(ObjectOpenOption.NO_CACHE)
+                .openOption(ObjectOpenOption.NO_CACHE)
                 .open();
 
         tableCopy.size();

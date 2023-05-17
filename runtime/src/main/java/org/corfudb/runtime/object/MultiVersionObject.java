@@ -217,10 +217,7 @@ public class MultiVersionObject<S extends SnapshotGenerator<S>> {
 
             final VersionedObjectIdentifier voId = new VersionedObjectIdentifier(getID(), materializedUpTo);
             currentObject.generateTargetSnapshot(voId, objectOpenOption, getCurrentSnapshot())
-                    .ifPresent(newSnapshot -> {
-                        final SMRSnapshot<S> previousSnapshot = setCurrentSnapshot(newSnapshot);
-                        mvoCache.put(voId, previousSnapshot);
-                    });
+                    .ifPresent(this::setCurrentSnapshot);
         };
 
         MicroMeterUtils.time(syncStreamRunnable, "mvo.sync.timer", STREAM_ID_TAG_NAME, getID().toString());

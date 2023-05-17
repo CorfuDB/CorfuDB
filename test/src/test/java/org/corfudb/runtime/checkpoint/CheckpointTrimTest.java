@@ -56,7 +56,7 @@ public class CheckpointTrimTest extends AbstractViewTest {
         PersistentCorfuTable<String, String> newTestTable = getDefaultRuntime().getObjectsView()
                 .build()
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
-                .option(ObjectOpenOption.NO_CACHE)
+                .openOption(ObjectOpenOption.NO_CACHE)
                 .setStreamName("test")
                 .open();
 
@@ -158,7 +158,7 @@ public class CheckpointTrimTest extends AbstractViewTest {
         PersistentCorfuTable<String, String> newTestMap = getDefaultRuntime().getObjectsView()
                 .build()
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
-                .option(ObjectOpenOption.NO_CACHE)
+                .openOption(ObjectOpenOption.NO_CACHE)
                 .setStreamName("test")
                 .open();
 
@@ -398,7 +398,7 @@ public class CheckpointTrimTest extends AbstractViewTest {
         PersistentCorfuTable<String, String> newTestTable = getDefaultRuntime().getObjectsView()
                 .build()
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
-                .option(ObjectOpenOption.NO_CACHE)
+                .openOption(ObjectOpenOption.NO_CACHE)
                 .setStreamName("test")
                 .open();
 

@@ -512,14 +512,14 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
                 .build()
                 .setStreamID(streamA)
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
-                .option(ObjectOpenOption.CACHE)
+                .openOption(ObjectOpenOption.CACHE)
                 .open();
 
         PersistentCorfuTable<String, String> tableB = rt.getObjectsView()
                 .build()
                 .setStreamID(streamB)
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
-                .option(ObjectOpenOption.NO_CACHE)
+                .openOption(ObjectOpenOption.NO_CACHE)
                 .open();
 
         String key = "key";

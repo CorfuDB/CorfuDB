@@ -91,6 +91,6 @@ public class CorfuCompileWrapperBuilder {
                 smrObject.getArguments(),
                 smrObject.getSerializer(),
                 smrObject.getStreamTags(),
-                smrObject.getOption());
+                smrObject.getOpenOption());
     }
 }
