@@ -115,13 +115,12 @@ public class LogReplicationSinkManager implements DataReceiver {
     /**
      * Constructor Sink Manager
      *
-     * @param localCorfuEndpoint endpoint for local corfu server
      * @param metadataManager manages log replication session's metadata
      * @param serverContext server level context
      * @param session log replication session unique identifier
      * @param replicationContext log replication context
      */
-    public LogReplicationSinkManager(String localCorfuEndpoint, LogReplicationMetadataManager metadataManager,
+    public LogReplicationSinkManager(LogReplicationMetadataManager metadataManager,
                                      ServerContext serverContext, LogReplicationSession session,
                                      LogReplicationContext replicationContext) {
 
@@ -135,7 +134,7 @@ public class LogReplicationSinkManager implements DataReceiver {
                 .maxCacheEntries(replicationContext.getConfig(session).getMaxCacheSize())
                 .maxWriteSize(serverContext.getMaxWriteSize())
                 .build())
-                .parseConfigurationString(localCorfuEndpoint).connect();
+                .parseConfigurationString(replicationContext.getLocalCorfuEndpoint()).connect();
         this.pluginConfigFilePath = serverContext.getPluginConfigFilePath();
         this.topologyConfigId = replicationContext.getTopologyConfigId();
         this.session = session;
