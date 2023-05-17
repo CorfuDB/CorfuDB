@@ -42,7 +42,7 @@
         <!-- Dependency versions -->
         <slf4j.version>1.7.32</slf4j.version>
         <netty.version>4.1.89.Final</netty.version>
-        <netty.tcnative.version>2.0.56.Final</netty.tcnative.version>
+        <netty.tcnative.version>2.0.60.Final</netty.tcnative.version>
         <protobuf.version>3.21.7</protobuf.version>
         <commons.io.version>2.11.0</commons.io.version>
         <lombok.version>1.18.30</lombok.version>
@@ -349,9 +349,7 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.11.0</version>
                 <configuration>
-                    <compilerVersion>1.8</compilerVersion>
-                    <source>1.8</source>
-                    <target>1.8</target>
+                    <release>11</release>
                     <encoding>${project.build.sourceEncoding}</encoding>
                     <showDeprecation>false</showDeprecation>
                     <compilerArgs>

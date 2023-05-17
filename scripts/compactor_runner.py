@@ -91,18 +91,13 @@ class CommandBuilder(object):
             cmd.append("-XX:+UseConcMarkSweepGC")
         if "UseG1GC" in GCParameters and GCParameters["UseG1GC"] is True:
             cmd.append("-XX:+UseG1GC")
-        if "PrintGCDetails" in GCParameters and GCParameters["PrintGCDetails"] is True:
-            cmd.append("-XX:+PrintGCDetails")
-        if "PrintGCTimeStamps" in GCParameters and  GCParameters["PrintGCTimeStamps"] is True:
-            cmd.append("-XX:+PrintGCTimeStamps")
-        if "PrintGCDateStamps" in GCParameters and  GCParameters["PrintGCDateStamps"] is True:
-            cmd.append("-XX:+PrintGCDateStamps")
-        if "UseGCLogFileRotation" in GCParameters and GCParameters["UseGCLogFileRotation"] is True:
-            cmd.append("-XX:+UseGCLogFileRotation")
-
-        cmd.append("-Xloggc:" + GCParameters["Logpath"])
-        cmd.append("-XX:NumberOfGCLogFiles=" + str(GCParameters["NumberOfGCLogFiles"]))
-        cmd.append("-XX:GCLogFileSize=" + GCParameters["GCLogFileSize"])
+        if "PrintGCDetails" in GCParameters and GCParameters['PrintGCDetails'] is True:
+            gc_str = '-Xlog:safepoint,gc*=debug:file=' + GCParameters["Logpath"]
+            if 'PrintGCTimeStamps' in GCParameters and GCParameters['PrintGCTimeStamps'] is True:
+                gc_str += ':time'
+            if 'UseGCLogFileRotation' in GCParameters and GCParameters['UseGCLogFileRotation'] is True:
+                gc_str += ':filecount=' + str(GCParameters['NumberOfGCLogFiles']) + ',filesize=' + GCParameters['GCLogFileSize']
+            cmd.append(gc_str)
 
         ConfigFiles = compactor_config["ConfigFiles"]
         cmd.append("-Djava.io.tmpdir=" + ConfigFiles["TempDir"])
