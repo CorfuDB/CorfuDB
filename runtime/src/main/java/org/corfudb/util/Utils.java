@@ -1,8 +1,5 @@
 package org.corfudb.util;
 
-import jdk.internal.org.objectweb.asm.util.Printer;
-import jdk.internal.org.objectweb.asm.util.Textifier;
-import jdk.internal.org.objectweb.asm.util.TraceMethodVisitor;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
@@ -40,9 +37,6 @@ public class Utils {
     private Utils() {
         // prevent instantiation of this class
     }
-
-    private static final Printer printer = new Textifier();
-    private static final TraceMethodVisitor mp = new TraceMethodVisitor(printer);
 
     private static final char[] hexArray = "0123456789ABCDEF".toCharArray();
 
