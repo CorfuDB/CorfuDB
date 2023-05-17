@@ -26,7 +26,7 @@
         <dependency>
             <groupId>com.squareup</groupId>
             <artifactId>javapoet</artifactId>
-            <version>1.7.0</version>
+            <version>1.13.0</version>
         </dependency>
     </dependencies>
 
@@ -36,6 +36,7 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <configuration>
+                    <release>11</release>
                     <compilerArgument>-proc:none</compilerArgument>
                 </configuration>
             </plugin>
