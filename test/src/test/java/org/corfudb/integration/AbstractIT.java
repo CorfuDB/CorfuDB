@@ -18,11 +18,7 @@ import org.corfudb.util.serializer.ISerializer;
 import org.junit.After;
 import org.junit.Before;
 
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
+import java.io.*;
 import java.lang.reflect.Field;
 import java.net.URISyntaxException;
 import java.net.URL;
@@ -41,7 +37,6 @@ import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultTransportPluginSelector.TRANSPORT_TYPE_ENV_VARIABLE;
 
 /**
  * Integration tests.
@@ -392,7 +387,7 @@ public class AbstractIT extends AbstractCorfuTest {
                 .setLockLeaseDuration(Integer.valueOf(lockLeaseDuration))
                 .setPluginConfigFilePath(pluginConfigFilePath)
                 .setMsg_size(MSG_SIZE)
-                .setTransportType(transportTye)
+                .setTransportType(transportType)
                 .runServer();
     }
 
