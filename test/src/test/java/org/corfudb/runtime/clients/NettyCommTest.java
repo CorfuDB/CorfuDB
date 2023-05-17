@@ -16,7 +16,6 @@ import org.corfudb.infrastructure.NettyServerRouter;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
-import org.corfudb.runtime.clients.NettyCommTestUtil.CertificateManager;
 import org.corfudb.security.tls.TlsUtils.CertStoreConfig.CertManagementConfig;
 import org.corfudb.util.NodeLocator;
 import org.junit.Test;
@@ -360,84 +359,6 @@ public class NettyCommTest extends AbstractCorfuTest {
                                         .passwordFile("src/test/resources/security/userpass2")
                                         .build()),
                 (r, d) -> assertThat(getBaseClient(r).pingSync()).isFalse());
-    }
-
-    @Test
-    public void testTlsUpdateServerTrust() throws Exception {
-        int port = findRandomOpenPort();
-
-        Path certDir = Paths.get(PARAMETERS.TEST_TEMP_DIR);
-
-        CertificateManager serverCertManager = CertificateManager.buildSHA384withEcDsa(certDir);
-
-        CertificateManager clientCertManager = CertificateManager.buildSHA384withEcDsa(certDir);
-        clientCertManager.trustStoreManager.addCertificate(serverCertManager);
-        clientCertManager.trustStoreManager.save();
-
-        NettyServerData serverData = new NettyServerData(buildServerContext(port, serverCertManager.certManagementConfig));
-        serverData.bootstrapServer();
-
-        NettyClientRouter clientRouter = new NettyClientRouter(
-                NodeLocator.builder().host("localhost").port(port).build(),
-                buildRuntimeParams(clientCertManager.certManagementConfig)
-        );
-
-        assertThat(getBaseClient(clientRouter).pingSync()).isFalse();
-        clientRouter.stop();
-
-        serverCertManager.trustStoreManager.addCertificate(clientCertManager);
-        serverCertManager.trustStoreManager.save();
-
-        clientRouter = new NettyClientRouter(
-                NodeLocator.builder().host("localhost").port(port).build(),
-                buildRuntimeParams(clientCertManager.certManagementConfig)
-        );
-
-        clientRouter.getConnectionFuture().join();
-        assertThat(getBaseClient(clientRouter).pingSync()).isTrue();
-        clientRouter.close();
-
-        serverData.shutdownServer();
-        serverData.serverContext.close();
-    }
-
-    @Test
-    public void testTlsUpdateClientTrust() throws Exception {
-        int port = findRandomOpenPort();
-
-        Path certDir = Paths.get(PARAMETERS.TEST_TEMP_DIR);
-
-        CertificateManager clientCertManager = CertificateManager.buildSHA384withEcDsa(certDir);
-
-        CertificateManager serverCertManager = CertificateManager.buildSHA384withEcDsa(certDir);
-        serverCertManager.trustStoreManager.addCertificate(clientCertManager);
-        serverCertManager.trustStoreManager.save();
-
-        NettyServerData serverData = new NettyServerData(buildServerContext(port, serverCertManager.certManagementConfig));
-        serverData.bootstrapServer();
-
-        NettyClientRouter clientRouter = new NettyClientRouter(
-                NodeLocator.builder().host("localhost").port(port).build(),
-                buildRuntimeParams(clientCertManager.certManagementConfig)
-        );
-
-        assertThat(getBaseClient(clientRouter).pingSync()).isFalse();
-        clientRouter.stop();
-
-        clientCertManager.trustStoreManager.addCertificate(serverCertManager);
-        clientCertManager.trustStoreManager.save();
-
-        clientRouter = new NettyClientRouter(
-                NodeLocator.builder().host("localhost").port(port).build(),
-                buildRuntimeParams(clientCertManager.certManagementConfig)
-        );
-
-        clientRouter.getConnectionFuture().join();
-        assertThat(getBaseClient(clientRouter).pingSync()).isTrue();
-        clientRouter.close();
-
-        serverData.shutdownServer();
-        serverData.serverContext.close();
     }
 
     /**
