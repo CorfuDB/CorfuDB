@@ -169,7 +169,7 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         verifyInitialSnapshotSyncAfterStartup(FIVE, NUM_WRITES);
 
         // Upgrade the sink site first
-        log.info(">> Upgrading the sink site ...");
+        log.info(">> Upgrading the sink site ....");
         performRollingUpgrade(false);
 
         // Upgrading the source site will force a snapshot sync
