@@ -125,10 +125,10 @@ public class CompactorServiceIT extends AbstractIT {
 
         CorfuStore corfuStore = mock(CorfuStore.class);
         TxnContext txn = mock(TxnContext.class);
-        CorfuStoreEntry record = mock(CorfuStoreEntry.class);
+        CorfuStoreEntry corfuStoreEntry = mock(CorfuStoreEntry.class);
         doReturn(txn).when(corfuStore).txn(any());
-        doReturn(record).when(txn).getRecord(anyString(), any());
-        doReturn(null).when(record).getPayload();
+        doReturn(corfuStoreEntry).when(txn).getRecord(anyString(), any());
+        doReturn(null).when(corfuStoreEntry).getPayload();
         doReturn(corfuStore).when(compactorServiceSpy).getCorfuStore();
 
         //return runtime2 when systemHandler is invoked the 2nd time
