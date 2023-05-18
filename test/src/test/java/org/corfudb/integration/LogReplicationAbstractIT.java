@@ -467,15 +467,14 @@ public class LogReplicationAbstractIT extends AbstractIT {
         public void onNext(CorfuStreamEntries results) {
             results.getEntries().forEach((schema, entries) -> entries.forEach(e -> {
                 log.info("Operation: {}", e.getOperation());
-                ReplicationStatus status = (ReplicationStatus) e.getPayload();
-
-                log.info("Status: {}", status);
-
                 // TODO pankti:  Clean up and add a comment when this operation will be received and reason for this
                 //  condition.
                 if (e.getOperation() == CorfuStreamEntry.OperationType.CLEAR) {
                     return;
                 }
+                ReplicationStatus status = (ReplicationStatus) e.getPayload();
+
+                log.info("Status: {}", status);
                 log.info("Adding: {}", status);
                 accumulatedStatus.add(status.getSinkStatus().getDataConsistent());
                 if (this.waitSnapshotStatusComplete &&
