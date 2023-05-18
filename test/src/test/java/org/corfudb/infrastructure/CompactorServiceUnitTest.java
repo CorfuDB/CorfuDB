@@ -9,6 +9,7 @@ import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus.StatusType;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
+import org.corfudb.runtime.DistributedCheckpointerHelper;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStoreEntry;
 import org.corfudb.runtime.collections.TxnContext;
@@ -19,7 +20,6 @@ import org.corfudb.runtime.proto.RpcCommon;
 import org.corfudb.runtime.view.Layout;
 import org.junit.Before;
 import org.junit.Test;
-import org.mockito.Matchers;
 
 import java.time.Duration;
 import java.util.HashMap;
@@ -30,6 +30,7 @@ import java.util.concurrent.CompletableFuture;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 import static org.mockito.Matchers.any;
 import static org.mockito.Mockito.after;
+import static org.mockito.Matchers.anyLong;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doReturn;
@@ -140,7 +141,7 @@ public class CompactorServiceUnitTest {
         when((CheckpointingStatus) corfuStoreCompactionManagerEntry.getPayload())
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.FAILED).build())
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED).build());
-        when(dynamicTriggerPolicy.shouldTrigger(Matchers.anyLong(), Matchers.any(CorfuStore.class))).thenReturn(true).thenReturn(false);
+        when(dynamicTriggerPolicy.shouldTrigger(anyLong(), any(CorfuStore.class), any(DistributedCheckpointerHelper.class))).thenReturn(true).thenReturn(false);
         doNothing().when(leaderServices).validateLiveness();
         doReturn(CompactorLeaderServices.LeaderInitStatus.SUCCESS).when(leaderServices).initCompactionCycle();
         when(invokeCheckpointingJvm.isRunning()).thenReturn(false).thenReturn(true);
@@ -164,7 +165,7 @@ public class CompactorServiceUnitTest {
         when(txn.commit()).thenThrow(new TransactionAbortedException(
                         new TxResolutionInfo(UUID.randomUUID(), new Token(0, 0)),
                         AbortCause.CONFLICT, new Throwable(), null));
-        when(dynamicTriggerPolicy.shouldTrigger(Matchers.anyLong(), Matchers.any(CorfuStore.class))).thenReturn(true);
+        when(dynamicTriggerPolicy.shouldTrigger(anyLong(), any(CorfuStore.class), any(DistributedCheckpointerHelper.class))).thenReturn(true);
         doReturn(CompactorLeaderServices.LeaderInitStatus.SUCCESS).when(leaderServices).initCompactionCycle();
 
         compactorServiceSpy.start(Duration.ofSeconds(SCHEDULER_INTERVAL));
@@ -185,7 +186,7 @@ public class CompactorServiceUnitTest {
         when((CheckpointingStatus) corfuStoreCompactionManagerEntry.getPayload())
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.FAILED).build())
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED).build());
-        when(dynamicTriggerPolicy.shouldTrigger(Matchers.anyLong(), Matchers.any(CorfuStore.class))).thenReturn(true).thenReturn(false);
+        when(dynamicTriggerPolicy.shouldTrigger(anyLong(), any(CorfuStore.class), any(DistributedCheckpointerHelper.class))).thenReturn(true).thenReturn(false);
         doNothing().when(leaderServices).validateLiveness();
         doReturn(CompactorLeaderServices.LeaderInitStatus.SUCCESS).when(leaderServices).initCompactionCycle();
         when(invokeCheckpointingJvm.isRunning())

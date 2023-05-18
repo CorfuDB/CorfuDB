@@ -215,7 +215,7 @@ public class CompactorService implements ManagementService {
                         compactorLeaderServices.validateLiveness();
                     }
                 } else if (compactionTriggerPolicy.shouldTrigger(
-                        this.corfuRuntimeParameters.getCheckpointTriggerFreqMillis(), getCorfuStore())) {
+                        this.corfuRuntimeParameters.getCheckpointTriggerFreqMillis(), getCorfuStore(), getDistributedCheckpointerHelper())) {
                     trimLog.invokePrefixTrim(getCorfuRuntime(), getCorfuStore());
                     compactionTriggerPolicy.markCompactionCycleStart();
                     compactorLeaderServices.initCompactionCycle();
