@@ -2,15 +2,13 @@ package org.corfudb.infrastructure;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
+import com.google.protobuf.ByteString;
 import com.google.protobuf.TextFormat;
-import io.micrometer.core.instrument.Meter;
-import io.micrometer.core.instrument.Tags;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Builder;
 import lombok.Builder.Default;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.infrastructure.SequencerServerCache.ConflictTxStream;
 import org.corfudb.protocols.CorfuProtocolCommon;
@@ -39,6 +37,7 @@ import org.corfudb.util.Utils;
 
 import javax.annotation.Nonnull;
 import java.lang.invoke.MethodHandles;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -275,11 +274,33 @@ public class SequencerServer extends AbstractServer {
                     txInfo, txSnapshotTimestamp, trimMark);
             return new TxResolutionResponse(TokenType.TX_ABORT_SEQ_TRIM);
         }
+
+        // The maxConflictNewSequencer is modified whenever a server is elected
+        // as the 'new' sequencer, we immediately set its value to the max timestamp
+        // evicted from the cache at that time. If a txSnapshotTimestamp falls
+        // under this threshold we can report that the cause of abort is due to
+        // a NEW_SEQUENCER (not able to hold these in its cache).
+        long maxConflictNewSequencer = cache.getMaxConflictNewSequencer();
+        if (txSnapshotTimestamp.getSequence() < maxConflictNewSequencer) {
+            log.debug("ABORT[{}] ts[{}] WILDCARD New Sequencer ts=[{}]",
+                    txInfo, txSnapshotTimestamp, maxConflictNewSequencer);
+            return new TxResolutionResponse(TokenType.TX_ABORT_NEWSEQ);
+        }
+
+        // If the txSnapshotTimestamp did not fall under the new sequencer threshold
+        // but it does fall under the latest evicted timestamp we report the cause of
+        // abort as SEQUENCER_OVERFLOW
+        long maxConflictWildcard = cache.getMaxConflictWildcard();
+        if (txSnapshotTimestamp.getSequence() < maxConflictWildcard) {
+            log.debug("ABORT[{}] ts[{}] WILDCARD ts=[{}]",
+                    txInfo, txSnapshotTimestamp, maxConflictWildcard);
+            return new TxResolutionResponse(TokenType.TX_ABORT_SEQ_OVERFLOW);
+        }
+
         MicroMeterUtils.measure(txInfo.getConflictSet().size(), "sequencer.tx-resolution.num_streams");
         for (Map.Entry<UUID, Set<byte[]>> conflictStream : txInfo.getConflictSet().entrySet()) {
 
-            // if conflict-parameters are present, check for conflict based on conflict-parameter
-            // updates
+            // if conflict-parameters are present, check for conflict based on conflict-parameter updates
             Set<byte[]> conflictParamSet = conflictStream.getValue();
             //check for conflict based on streams updates
             if (conflictParamSet == null || conflictParamSet.isEmpty()) {
@@ -295,9 +316,7 @@ public class SequencerServer extends AbstractServer {
 
             // for each key pair, check for conflict; if not present, check against the wildcard
             for (byte[] conflictParam : conflictParamSet) {
-
-                Long keyAddress = cache.get(new ConflictTxStream(conflictStream.getKey(),
-                        conflictParam, Address.NON_ADDRESS));
+                Long keyAddress = cache.get(new ConflictTxStream(conflictStream.getKey(), conflictParam));
 
                 if (log.isTraceEnabled()){
                     log.trace("Commit-ck[{}] conflict-key[{}](ts={})",
@@ -313,28 +332,6 @@ public class SequencerServer extends AbstractServer {
                             conflictParam,
                             conflictStream.getKey()
                     );
-                }
-
-                // The maxConflictNewSequencer is modified whenever a server is elected
-                // as the 'new' sequencer, we immediately set its value to the max timestamp
-                // evicted from the cache at that time. If a txSnapshotTimestamp falls
-                // under this threshold we can report that the cause of abort is due to
-                // a NEW_SEQUENCER (not able to hold these in its cache).
-                long maxConflictNewSequencer = cache.getMaxConflictNewSequencer();
-                if (txSnapshotTimestamp.getSequence() < maxConflictNewSequencer) {
-                    log.debug("ABORT[{}] ts[{}] WILDCARD New Sequencer ts=[{}]",
-                            txInfo, txSnapshotTimestamp, maxConflictNewSequencer);
-                    return new TxResolutionResponse(TokenType.TX_ABORT_NEWSEQ);
-                }
-
-                // If the txSnapshotTimestamp did not fall under the new sequencer threshold
-                // but it does fall under the latest evicted timestamp we report the cause of
-                // abort as SEQUENCER_OVERFLOW
-                long maxConflictWildcard = cache.getMaxConflictWildcard();
-                if (txSnapshotTimestamp.getSequence() < maxConflictWildcard) {
-                    log.debug("ABORT[{}] ts[{}] WILDCARD ts=[{}]",
-                            txInfo, txSnapshotTimestamp, maxConflictWildcard);
-                    return new TxResolutionResponse(TokenType.TX_ABORT_SEQ_OVERFLOW);
                 }
             }
         }
@@ -400,7 +397,7 @@ public class SequencerServer extends AbstractServer {
         if (trimMark < req.getPayload().getSequencerTrimRequest().getTrimMark()) {
             // Advance the trim mark, if the new trim request has a higher trim mark.
             trimMark = req.getPayload().getSequencerTrimRequest().getTrimMark();
-            cache.invalidateUpTo(trimMark);
+            cache.evictUpTo(trimMark);
 
             // Remove trimmed addresses from each address map and set new trim mark
             for (StreamAddressSpace streamAddressSpace : streamsAddressMap.values()) {
@@ -487,7 +484,7 @@ public class SequencerServer extends AbstractServer {
         if (!bootstrapWithoutTailsUpdate) {
             globalLogTail = req.getPayload().getBootstrapSequencerRequest().getGlobalTail();
             cache = sequencerFactoryHelper.getSequencerServerCache(
-                    cache.getCacheSize(),
+                    cache.getCapacity(),
                     globalLogTail - 1
             );
 
@@ -710,15 +707,20 @@ public class SequencerServer extends AbstractServer {
 
         // update the cache of conflict parameters
         if (tokenRequest.hasTxnResolution()) {
-            tokenRequest.getTxnResolution().getWriteConflictParamsSetList()
-                    .forEach((item) -> {
-                        // insert an entry with the new timestamp using the
-                        // hash code based on the param and the stream id.
-                        item.getValueList().forEach(conflictParam ->
-                                cache.put(new ConflictTxStream(getUUID(item.getKey()),
-                                        conflictParam.toByteArray(), newTail - 1)));
-                    });
+            List<ConflictTxStream> conflictTxStreamList = tokenRequest.getTxnResolution()
+                    .getWriteConflictParamsSetList()
+                    .parallelStream()
+                    .flatMap(conflictKeysForStream -> {
+                        final UUID streamId = getUUID(conflictKeysForStream.getKey());
+                        return conflictKeysForStream.getValueList()
+                                .stream()
+                                .map(ByteString::toByteArray)
+                                .map(conflictParam -> new ConflictTxStream(streamId, conflictParam));
+                    }).collect(Collectors.toCollection(ArrayList::new));
+
+           cache.put(conflictTxStreamList, newTail - 1);
         }
+
         if (log.isTraceEnabled()) {
             log.trace("handleAllocation: token={} backpointers={}",
                     globalLogTail, backPointerMap.build());
@@ -744,7 +746,7 @@ public class SequencerServer extends AbstractServer {
      * The response contains the requested streams address maps and the global log tail.
      */
     @RequestHandler(type = PayloadCase.STREAMS_ADDRESS_REQUEST)
-    private void handleStreamsAddressRequest(@Nonnull RequestMsg req,
+    public void handleStreamsAddressRequest(@Nonnull RequestMsg req,
                                              @Nonnull ChannelHandlerContext ctx,
                                              @Nonnull IServerRouter r) {
         StreamsAddressRequestMsg streamsAddressRequest =
