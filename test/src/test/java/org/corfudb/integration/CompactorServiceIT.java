@@ -58,20 +58,19 @@ public class CompactorServiceIT extends AbstractIT {
         shutdownCorfuServer(corfuServer);
     }
 
-    private Process runSinglePersistentServer(String host, int port, boolean disableLogUnitServerCache) throws IOException {
+    private Process runSinglePersistentServer(String host, int port) throws IOException {
         return new AbstractIT.CorfuServerRunner()
                 .setHost(host)
                 .setPort(port)
                 .setLogPath(getCorfuServerLogPath(host, port))
                 .setSingle(true)
-                .setDisableLogUnitServerCache(disableLogUnitServerCache)
                 .runServer();
     }
 
     private void createCompactorService() throws Exception {
         // Start Corfu Server
         corfuServer = runServer(DEFAULT_PORT, true);
-        corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort, true);
+        corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
         ServerContext sc = spy(new ServerContextBuilder()
                 .setSingle(true)
