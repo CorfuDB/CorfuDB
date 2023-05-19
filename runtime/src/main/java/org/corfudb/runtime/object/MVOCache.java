@@ -5,17 +5,25 @@ import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.RemovalNotification;
 import com.google.common.collect.ImmutableSet;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.micrometer.core.instrument.binder.cache.GuavaCacheMetrics;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.util.LambdaUtils;
 
 import javax.annotation.Nonnull;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 
@@ -32,6 +40,12 @@ public class MVOCache<T extends ICorfuSMR<T>> {
      */
     @Getter
     private final Cache<VersionedObjectIdentifier, T> objectCache;
+
+    private ScheduledExecutorService recorder = null;
+
+    private Map<UUID, Integer> evictionCounter = null;
+
+    private final Boolean isCacheEntryMetricsDisabled;
 
     public MVOCache(@Nonnull CorfuRuntime corfuRuntime) {
 
@@ -51,16 +65,65 @@ public class MVOCache<T extends ICorfuSMR<T>> {
 
         MeterRegistryProvider.getInstance()
                 .map(registry -> GuavaCacheMetrics.monitor(registry, objectCache, "mvo_cache"));
+
+        isCacheEntryMetricsDisabled = corfuRuntime.getParameters().isCacheEntryMetricsDisabled();
+        if (Boolean.FALSE.equals(isCacheEntryMetricsDisabled)) {
+            recorder = Executors.newSingleThreadScheduledExecutor(
+                    new ThreadFactoryBuilder()
+                            .setDaemon(true)
+                            .setNameFormat("MVOCache-Recorder")
+                            .build()
+            );
+            recorder.scheduleAtFixedRate(
+                    () -> LambdaUtils.runSansThrow(this::runRecorder),
+                    30,
+                    60,
+                    TimeUnit.SECONDS
+            );
+
+            evictionCounter = new ConcurrentHashMap<>();
+        }
+    }
+
+    private void runRecorder() {
+        Map<UUID, Long> tableCount = objectCache.asMap().keySet().stream()
+                .collect(Collectors.groupingBy(key -> key.getObjectId(), Collectors.counting()));
+
+        // List of table UUIDs and the table's snapshot count,
+        // sorted in descending order by snapshot count.
+        // Ignore the tables whose count is smaller than 10.
+        List<Map.Entry<UUID, Long>> sortedTableCount = tableCount.entrySet()
+                .stream().filter(e -> e.getValue() >= 10)
+                .sorted(Map.Entry.comparingByValue(Comparator.reverseOrder()))
+                .collect(Collectors.toList());
+
+        // List of table UUIDs and the table's eviction count in the last record interval,
+        // sorted in descending order by eviction count.
+        // Ignore the tables whose count is smaller than 10.
+        List<Map.Entry<UUID, Integer>> sortedEvictionCount = evictionCounter.entrySet()
+                .stream().filter(e -> e.getValue() >= 10)
+                .sorted(Map.Entry.comparingByValue(Comparator.reverseOrder()))
+                .collect(Collectors.toList());
+        evictionCounter.clear();
+        log.info("MVOCache snapshot counts: {}\nMVOCache eviction counts: {}", sortedTableCount, sortedEvictionCount);
     }
 
     private void handleEviction(RemovalNotification<VersionedObjectIdentifier, T> notification) {
         log.trace("handleEviction: evicting {} cause {}", notification.getKey(), notification.getCause());
+
+        if (Boolean.FALSE.equals(isCacheEntryMetricsDisabled)) {
+            evictionCounter.compute(notification.getKey().getObjectId(),
+                    (uuid, currentValue) -> currentValue == null ? 1 : currentValue + 1);
+        }
     }
 
     /**
      * Shutdown the MVOCache and perform any necessary cleanup.
      */
     public void shutdown() {
+        if (recorder != null) {
+            recorder.shutdownNow();
+        }
     }
 
     /**
