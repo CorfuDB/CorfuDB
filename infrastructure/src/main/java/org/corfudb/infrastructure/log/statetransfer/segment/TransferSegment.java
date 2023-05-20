@@ -53,75 +53,92 @@ public class TransferSegment {
      * @return A transfer segment range that holds the data necessary to execute the transfer.
      */
     public TransferSegmentRange toTransferSegmentRange(Optional<Long> committedTail) {
-        return committedTail.map(tail -> {
-            if (tail < startAddress) {
-                // If the tail is below the start address, this segment is a single range
-                // that is to be transferred via replication protocol.
-                return TransferSegmentRangeSingle
-                        .builder()
-                        .startAddress(startAddress)
-                        .endAddress(endAddress)
-                        .typeOfTransfer(PROTOCOL_READ)
-                        .availableServers(Optional.empty())
-                        .split(false)
-                        .status(getStatus().toBuilder().build())
-                        .unknownAddressesInRange(ImmutableList.of())
-                        .build();
-            } else if (tail >= endAddress) {
-                // If the tail is greater or equal to the end address, this segment is a single
-                // range that is to be transferred via consistent read protocol.
-                return TransferSegmentRangeSingle
-                        .builder()
-                        .startAddress(startAddress)
-                        .endAddress(endAddress)
-                        .typeOfTransfer(CONSISTENT_READ)
-                        .availableServers(Optional.of(ImmutableList.copyOf(getLogUnitServers())))
-                        .split(false)
-                        .status(getStatus().toBuilder().build())
-                        .unknownAddressesInRange(ImmutableList.of())
-                        .build();
-            } else {
-                // If the tail is in the middle of a transfer segment, this segment is a split
-                // range, the first half of it will be transferred via consistent read, and
-                // the second half - via replication protocol.
-                TransferSegmentRangeSingle first = TransferSegmentRangeSingle
-                        .builder()
-                        .startAddress(startAddress)
-                        .endAddress(tail)
-                        .typeOfTransfer(CONSISTENT_READ)
-                        .availableServers(Optional.of(ImmutableList.copyOf(getLogUnitServers())))
-                        .split(true)
-                        .status(getStatus().toBuilder().build())
-                        .unknownAddressesInRange(ImmutableList.of())
-                        .build();
+        return committedTail
+                .map(this::getTransferSegmentRange)
+                .orElse(getProtocolTransferSegment());
+    }
 
-                TransferSegmentRangeSingle second = TransferSegmentRangeSingle
-                        .builder()
-                        .startAddress(tail + 1)
-                        .endAddress(endAddress)
-                        .typeOfTransfer(PROTOCOL_READ)
-                        .availableServers(Optional.empty())
-                        .split(true)
-                        .status(getStatus().toBuilder().build())
-                        .unknownAddressesInRange(ImmutableList.of())
-                        .build();
+    private TransferSegmentRange getTransferSegmentRange(Long tail) {
+        if (tail < startAddress) {
+            return getProtocolTransferSegment();
+        } else if (tail >= endAddress) {
+            return getConsistentReadSegment();
+        } else {
+            return getSplitRangeSegment(tail);
+        }
+        // If the committed tail is not present (we failed to retrieve it earlier),
+        // this segment is a single range and is to be transferred via replication protocol.
+    }
 
-                return TransferSegmentRangeSplit.builder()
-                        .splitSegments(new Tuple<>(first, second))
-                        .build();
-            }
-            // If the committed tail is not present (we failed to retrieve it earlier),
-            // this segment is a single range and is to be transferred via replication protocol.
-        }).orElse(TransferSegmentRangeSingle
+    /**
+     * If the tail is below the start address, this segment is a single range
+     * that is to be transferred via replication protocol.
+     * @return protocol read segment
+     */
+    private TransferSegmentRangeSingle getProtocolTransferSegment() {
+        return TransferSegmentRangeSingle
                 .builder()
                 .startAddress(startAddress)
                 .endAddress(endAddress)
                 .typeOfTransfer(PROTOCOL_READ)
                 .availableServers(Optional.empty())
                 .split(false)
+                .status(status)
+                .unknownAddressesInRange(ImmutableList.of())
+                .build();
+    }
+
+    /**
+     * If the tail is in the middle of a transfer segment, this segment is a split
+     * range, the first half of it will be transferred via consistent read, and
+     * the second half - via replication protocol.
+     * @param tail tail
+     * @return split range segment
+     */
+    private TransferSegmentRangeSplit getSplitRangeSegment(Long tail) {
+        TransferSegmentRangeSingle first = TransferSegmentRangeSingle
+                .builder()
+                .startAddress(startAddress)
+                .endAddress(tail)
+                .typeOfTransfer(CONSISTENT_READ)
+                .availableServers(Optional.of(ImmutableList.copyOf(getLogUnitServers())))
+                .split(true)
                 .status(getStatus().toBuilder().build())
                 .unknownAddressesInRange(ImmutableList.of())
-                .build());
+                .build();
+
+        TransferSegmentRangeSingle second = TransferSegmentRangeSingle
+                .builder()
+                .startAddress(tail + 1)
+                .endAddress(endAddress)
+                .typeOfTransfer(PROTOCOL_READ)
+                .availableServers(Optional.empty())
+                .split(true)
+                .status(status)
+                .unknownAddressesInRange(ImmutableList.of())
+                .build();
+
+        return TransferSegmentRangeSplit.builder()
+                .splitSegments(new Tuple<>(first, second))
+                .build();
+    }
+
+    /**
+     * If the tail is greater or equal to the end address, this segment is a single
+     * range that is to be transferred via consistent read protocol.
+     * @return consistent read segment
+     */
+    private TransferSegmentRangeSingle getConsistentReadSegment() {
+        return TransferSegmentRangeSingle
+                .builder()
+                .startAddress(startAddress)
+                .endAddress(endAddress)
+                .typeOfTransfer(CONSISTENT_READ)
+                .availableServers(Optional.of(ImmutableList.copyOf(getLogUnitServers())))
+                .split(false)
+                .status(getStatus().toBuilder().build())
+                .unknownAddressesInRange(ImmutableList.of())
+                .build();
     }
 
     public static class TransferSegmentBuilder {
