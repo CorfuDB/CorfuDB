@@ -55,14 +55,14 @@ public class TransferSegment {
     public TransferSegmentRange toTransferSegmentRange(Optional<Long> committedTail) {
         return committedTail
                 .map(this::getTransferSegmentRange)
-                .orElse(getSingleRangeSegment());
+                .orElse(getSingleRangeProtocolReadSegment());
     }
 
     private TransferSegmentRange getTransferSegmentRange(Long tail) {
         if (tail < startAddress) {
-            return getSingleRangeSegment();
+            return getSingleRangeProtocolReadSegment();
         } else if (tail >= endAddress) {
-            return getConsistentReadSegment();
+            return getSingleRangeConsistentReadSegment();
         } else {
             return getSplitRangeSegment(tail);
         }
@@ -75,7 +75,7 @@ public class TransferSegment {
      * that is to be transferred via replication protocol.
      * @return protocol read segment
      */
-    private TransferSegmentRangeSingle getSingleRangeSegment() {
+    private TransferSegmentRangeSingle getSingleRangeProtocolReadSegment() {
         return TransferSegmentRangeSingle
                 .builder()
                 .startAddress(startAddress)
@@ -128,7 +128,7 @@ public class TransferSegment {
      * range that is to be transferred via consistent read protocol.
      * @return consistent read segment
      */
-    private TransferSegmentRangeSingle getConsistentReadSegment() {
+    private TransferSegmentRangeSingle getSingleRangeConsistentReadSegment() {
         return TransferSegmentRangeSingle
                 .builder()
                 .startAddress(startAddress)
