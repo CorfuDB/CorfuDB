@@ -280,7 +280,7 @@ public class RestoreRedundancyMergeSegments extends Action {
         log.info("getTransferSegments: transfer workload: {}", transferSegmentRanges);
 
         // Perform a state transfer on the transfer segment ranges and return the updated
-        // transferred transfer segment list.
+        // transferred segment list.
         ImmutableList<TransferSegment> transferList = transferManager
                 .handleTransfer(transferSegmentRanges);
 

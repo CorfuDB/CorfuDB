@@ -57,7 +57,7 @@ public class RedundancyCalculatorTest extends LayoutBasedTestHelper implements T
                         createStatus(NOT_TRANSFERRED, Optional.empty())));
 
         ImmutableList<TransferSegment> result = redundancyCalculator
-                .createStateList(layout, -1L);
+                .createStateList(layout, NON_ADDRESS);
 
         assertThat(transformListToMock(result)).isEqualTo(expected);
 
@@ -69,7 +69,7 @@ public class RedundancyCalculatorTest extends LayoutBasedTestHelper implements T
                 new MockedSegment(2L, 3L,
                         createStatus(RESTORED, Optional.empty())));
 
-        result = redundancyCalculator.createStateList(layout, -1L);
+        result = redundancyCalculator.createStateList(layout, NON_ADDRESS);
 
         assertThat(transformListToMock(result))
                 .isEqualTo(expected);
@@ -179,7 +179,7 @@ public class RedundancyCalculatorTest extends LayoutBasedTestHelper implements T
         RedundancyCalculator calculator = new RedundancyCalculator(LOCALHOST);
 
         ImmutableList<TransferSegment> transferSegments =
-                calculator.createStateList(testLayout, -1L);
+                calculator.createStateList(testLayout, NON_ADDRESS);
 
         MockedSegment presentSegment = new MockedSegment(0L,
                 20L,
