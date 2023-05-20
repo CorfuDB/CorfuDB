@@ -129,13 +129,13 @@ public class RestoreRedundancyMergeSegments extends Action {
                 long trimMark = trimLog(runtime, currentLayout);
 
                 // Retrieve a current cluster committed tail.
-                Optional<Long> committedTail =
-                        tryGetCommittedTail(runtime.getLayoutView().getRuntimeLayout());
+                Optional<Long> committedTail = tryGetCommittedTail(runtime.getLayoutView().getRuntimeLayout());
 
                 // Execute state transfer and return the list of transferred transfer segments.
-                ImmutableList<TransferSegment> transferredSegments = ImmutableList.copyOf(
-                        getTransferSegments(transferManager, currentLayout,
-                                trimMark, committedTail));
+                List<TransferSegment> transferSegments = getTransferSegments(
+                        transferManager, currentLayout, trimMark, committedTail
+                );
+                ImmutableList<TransferSegment> transferredSegments = ImmutableList.copyOf(transferSegments);
 
                 // Get segments that were trimmed but do not include the current node, if any.
                 ImmutableList<TransferSegment> trimmedNotRestoredSegments =

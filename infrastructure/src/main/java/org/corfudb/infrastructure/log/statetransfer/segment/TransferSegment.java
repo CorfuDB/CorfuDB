@@ -6,8 +6,10 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.ToString;
 import org.corfudb.common.util.Tuple;
+import org.corfudb.runtime.view.Address;
 
 import java.util.Optional;
 
@@ -34,11 +36,13 @@ public class TransferSegment {
     /**
      * A status of a transfer of a segment.
      */
+    @NonNull
     private final TransferSegmentStatus status;
 
     /**
      * A list of log unit servers available for this segment.
      */
+    @NonNull
     private final ImmutableList<String> logUnitServers;
 
     /**
@@ -103,7 +107,8 @@ public class TransferSegment {
                         .build();
 
                 return TransferSegmentRangeSplit.builder()
-                        .splitSegments(new Tuple<>(first, second)).build();
+                        .splitSegments(new Tuple<>(first, second))
+                        .build();
             }
             // If the committed tail is not present (we failed to retrieve it earlier),
             // this segment is a single range and is to be transferred via replication protocol.
@@ -122,23 +127,16 @@ public class TransferSegment {
     public static class TransferSegmentBuilder {
 
         public void verify() {
-            if (startAddress < 0L || endAddress < 0L) {
+            long minAddress = Address.getMinAddress();
+            if (startAddress < minAddress || endAddress < minAddress) {
                 throw new IllegalStateException(
                         String.format("Start: %s or end: %s " +
                                 "can not be negative.", startAddress, endAddress));
             }
             if (startAddress > endAddress) {
-                throw new IllegalStateException(
-                        String.format("Start: %s can not be " +
-                                "greater than end: %s.", startAddress, endAddress));
-            }
-
-            if (status == null) {
-                throw new IllegalStateException("Status should be defined.");
-            }
-
-            if (logUnitServers == null) {
-                throw new IllegalStateException("Log unit servers should be present.");
+                String errStrMsg = "Start: %s can not be greater than end: %s.";
+                String errStr = String.format(errStrMsg, startAddress, endAddress);
+                throw new IllegalStateException(errStr);
             }
         }
 
