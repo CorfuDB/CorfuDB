@@ -754,7 +754,7 @@ public class AbstractIT extends AbstractCorfuTest {
                 logPath.mkdir();
             }
             ProcessBuilder builder = new ProcessBuilder();
-            builder.environment().putIfAbsent(TRANSPORT_TYPE_ENV_VARIABLE, transportType);
+            //builder.environment().putIfAbsent(TRANSPORT_TYPE_ENV_VARIABLE, transportType);
 
             builder.command(SH, HYPHEN_C, getCodeCoverageCmd() + getMetricsCmd(metricsConfigFile) +
                     " bin/corfu_replication_server " + getOptionsString());
