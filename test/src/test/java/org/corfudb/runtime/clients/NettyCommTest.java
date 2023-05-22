@@ -394,9 +394,10 @@ public class NettyCommTest extends AbstractCorfuTest {
 
         clientRouter.getConnectionFuture().join();
         assertThat(getBaseClient(clientRouter).pingSync()).isTrue();
-        clientRouter.stop();
+        clientRouter.close();
 
         serverData.shutdownServer();
+        serverData.serverContext.close();
     }
 
     @Test
@@ -432,9 +433,10 @@ public class NettyCommTest extends AbstractCorfuTest {
 
         clientRouter.getConnectionFuture().join();
         assertThat(getBaseClient(clientRouter).pingSync()).isTrue();
-        clientRouter.stop();
+        clientRouter.close();
 
         serverData.shutdownServer();
+        serverData.serverContext.close();
     }
 
     /**
@@ -444,15 +446,30 @@ public class NettyCommTest extends AbstractCorfuTest {
      * @throws Exception Any Exception thrown during the test
      */
     @Test
-    public void testTlsCipherRSA() throws Exception {
+    public void testTlsCipherRsaKeyStoreRsa() throws Exception {
         tlsCipherTestHelper(TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256.name(), KeyStoreType.RSA,
                 true, TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256);
+    }
+    @Test
+    public void testTlsCipherRsaKeyStoreEcdsa() throws Exception {
         tlsCipherTestHelper(TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256.name(), KeyStoreType.ECDSA,
                 false, null);
+    }
+
+    @Test
+    public void testTlsCipherRsaKeyStoreRsaEcdsa() throws Exception {
         tlsCipherTestHelper(TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256.name(), KeyStoreType.RSA_ECDSA,
                 true, TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256);
+    }
+
+    @Test
+    public void testTlsCipherRsaKeyStoreRsaRsa() throws Exception {
         tlsCipherTestHelper(TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256.name(), KeyStoreType.RSA_RSA,
                 true, TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256);
+    }
+
+    @Test
+    public void testTlsCipherRsaKeyStoreEcdsaEcdsa() throws Exception {
         tlsCipherTestHelper(TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256.name(), KeyStoreType.ECDSA_ECDSA,
                 false, null);
     }
@@ -464,12 +481,19 @@ public class NettyCommTest extends AbstractCorfuTest {
      * @throws Exception Any Exception thrown during the test
      */
     @Test
-    public void testTlsCipherEcdsa() throws Exception {
+    public void testTlsCipherEcdsaKeyStoreRsa() throws Exception {
         tlsCipherTestHelper(TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384.name(), KeyStoreType.RSA,
                 false, null);
+    }
+
+    @Test
+    public void testTlsCipherEcdsaKeyStoreEcdsa() throws Exception {
         tlsCipherTestHelper(TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384.name(), KeyStoreType.ECDSA,
                 true, TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384);
+    }
 
+    @Test
+    public void testTlsCipherEcdsaKeyStoreRsaEcdsa() throws Exception {
         // When OpenSsl is the SSL provider
         // TLS fails sometimes, depending on the environment to find a Cipher when both RSA and ECDSA are in the trust store
         // javax.net.ssl.SSLHandshakeException: error:1417A0C1:SSL routines:tls_post_process_client_hello:no shared cipher
@@ -485,10 +509,16 @@ public class NettyCommTest extends AbstractCorfuTest {
             tlsCipherTestHelper(TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384.name(), KeyStoreType.RSA_ECDSA,
                     true, TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384);
         }
+    }
 
+    @Test
+    public void testTlsCipherEcdsaKeyStoreRsaRsa() throws Exception {
         tlsCipherTestHelper(TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384.name(), KeyStoreType.RSA_RSA,
                 false, null);
+    }
 
+    @Test
+    public void testTlsCipherEcdsaKeystoreEcdsaEcdsa() throws Exception {
         tlsCipherTestHelper(TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384.name(), KeyStoreType.ECDSA_ECDSA,
                 true, TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384);
     }
@@ -500,13 +530,19 @@ public class NettyCommTest extends AbstractCorfuTest {
      * @throws Exception Any Exception thrown during the test
      */
     @Test
-    public void testTlsCipherRsaAndEcdsa() throws Exception {
+    public void testTlsCipherRsaAndEcdsaKeyStoreRsa() throws Exception {
         tlsCipherTestHelper(ConfigParamsHelper.getTlsCiphersCSV(), KeyStoreType.RSA,
                 true, TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256);
+    }
 
+    @Test
+    public void testTlsCipherRsaAndEcdsaKeyStoreEcdsa() throws Exception {
         tlsCipherTestHelper(ConfigParamsHelper.getTlsCiphersCSV(), KeyStoreType.ECDSA,
                 true, TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384);
+    }
 
+    @Test
+    public void testTlsCipherRsaAndEcdsaKeyStoreRsaEcdsa() throws Exception {
         if (OpenSsl.isAvailable()) {
             // when OpenSsl is the SSL provider
             // Picks RSA Cipher TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 when both are given
@@ -518,10 +554,16 @@ public class NettyCommTest extends AbstractCorfuTest {
             tlsCipherTestHelper(ConfigParamsHelper.getTlsCiphersCSV(), KeyStoreType.RSA_ECDSA,
                     true, TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384);
         }
+    }
 
+    @Test
+    public void testTlsCipherRsaAndEcdsaKeyStoreRsaRsa() throws Exception {
         tlsCipherTestHelper(ConfigParamsHelper.getTlsCiphersCSV(), KeyStoreType.RSA_RSA,
                 true, TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256);
+    }
 
+    @Test
+    public void testTlsCipherRsaAndEcdsaKeyStoreEcdsaEcdsa() throws Exception {
         tlsCipherTestHelper(ConfigParamsHelper.getTlsCiphersCSV(), KeyStoreType.ECDSA_ECDSA,
                 true, TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384);
     }
@@ -607,8 +649,9 @@ public class NettyCommTest extends AbstractCorfuTest {
         } finally {
             try {
                 if (ncr != null) {
-                    ncr.stop();
+                    ncr.close();
                 }
+                d.serverContext.close();
             } catch (Exception ex) {
                 log.warn("Error shutting down client...", ex);
             }
@@ -682,6 +725,7 @@ public class NettyCommTest extends AbstractCorfuTest {
                             nsr,
                             address,
                             Integer.parseInt((String) serverContext.getServerConfig().get("<port>")));
+            f.syncUninterruptibly();
         }
 
         void shutdownServer() {
