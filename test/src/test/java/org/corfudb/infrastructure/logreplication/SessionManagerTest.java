@@ -30,7 +30,6 @@ import static org.mockito.Matchers.anyObject;
 public class SessionManagerTest extends AbstractViewTest {
     private CorfuRuntime corfuRuntime;
     private TopologyDescriptor topology;
-    private String pluginFilPath = "src/test/resources/transport/pluginConfig.properties";
     LogReplicationClientServerRouter router;
     CorfuReplicationManager replicationManager;
     LogReplicationServer msgHandler;
