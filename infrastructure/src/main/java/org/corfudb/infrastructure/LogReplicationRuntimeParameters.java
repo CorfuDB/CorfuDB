@@ -4,10 +4,8 @@ import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
 import lombok.Data;
 import org.corfudb.comm.ChannelImplementation;
-import org.corfudb.infrastructure.logreplication.config.LogReplicationConfig;
-import org.corfudb.infrastructure.logreplication.transport.IChannelContext;
-
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
+import org.corfudb.infrastructure.logreplication.transport.IChannelContext;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.RuntimeParameters;
 import org.corfudb.runtime.RuntimeParametersBuilder;
@@ -34,9 +32,6 @@ public class LogReplicationRuntimeParameters extends RuntimeParameters {
 
     // Local Cluster Identifier
     private String localClusterId;
-
-    // Log Replication Configuration (streams to replicate)
-    private LogReplicationConfig replicationConfig;
 
     // Topology Configuration Identifier (configuration epoch)
     private long topologyConfigId;

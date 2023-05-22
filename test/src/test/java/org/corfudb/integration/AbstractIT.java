@@ -18,7 +18,11 @@ import org.corfudb.util.serializer.ISerializer;
 import org.junit.After;
 import org.junit.Before;
 
-import java.io.*;
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.lang.reflect.Field;
 import java.net.URISyntaxException;
 import java.net.URL;
@@ -79,8 +83,6 @@ public class AbstractIT extends AbstractCorfuTest {
     public static final Properties PROPERTIES = new Properties();
 
     public static final String TEST_SEQUENCE_LOG_PATH = CORFU_LOG_PATH + File.separator + "testSequenceLog";
-
-    private static final String TRANSPORT_TYPE_ENV_VARIABLE = "TransportType";
 
 
     public AbstractIT() {
@@ -754,7 +756,6 @@ public class AbstractIT extends AbstractCorfuTest {
                 logPath.mkdir();
             }
             ProcessBuilder builder = new ProcessBuilder();
-            //builder.environment().putIfAbsent(TRANSPORT_TYPE_ENV_VARIABLE, transportType);
 
             builder.command(SH, HYPHEN_C, getCodeCoverageCmd() + getMetricsCmd(metricsConfigFile) +
                     " bin/corfu_replication_server " + getOptionsString());
