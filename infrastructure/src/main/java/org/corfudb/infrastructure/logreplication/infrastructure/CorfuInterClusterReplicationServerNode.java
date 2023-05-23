@@ -4,6 +4,7 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.ServerContext;
+import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientServerRouter;
 
 import javax.annotation.Nonnull;
@@ -35,6 +36,8 @@ public class CorfuInterClusterReplicationServerNode {
 
     private final LogReplicationClientServerRouter router;
 
+    private final LogReplicationPluginConfig pluginConfig;
+
     /**
      * Log Replication Server initialization.
      *
@@ -43,11 +46,13 @@ public class CorfuInterClusterReplicationServerNode {
      */
     // TODO v2: the serverContext will need to evaluated to use corfu's construct vs create a new context for LR
     public CorfuInterClusterReplicationServerNode(@Nonnull ServerContext serverContext,
-                                                  LogReplicationClientServerRouter router) {
+                                                  LogReplicationClientServerRouter router,
+                                                  LogReplicationContext replicationContext) {
 
         this.serverContext = serverContext;
         this.router = router;
         this.serverStarted = false;
+        this.pluginConfig = replicationContext.getPluginConfig();
         startServer();
     }
 
@@ -66,7 +71,7 @@ public class CorfuInterClusterReplicationServerNode {
     private void startAndListen() {
         if (!serverStarted) {
             log.info("Starting server transport adapter ...");
-            CompletableFuture<Boolean> cf = this.router.createTransportServerAdapter(serverContext);
+            CompletableFuture<Boolean> cf = this.router.createTransportServerAdapter(serverContext, pluginConfig);
             try {
                 serverStarted = cf.get();
             } catch (ExecutionException th) {
