@@ -85,6 +85,8 @@ public class CorfuReplicationMultiSourceSinkIT extends AbstractIT {
 
     protected String pluginConfigFilePath;
 
+    protected String transportType = "GRPC";
+
     // Listens to incoming data on streams/tables on a Sink cluster
     private List<ReplicatedStreamsListener> dataListeners = new ArrayList<>();
 
@@ -158,12 +160,12 @@ public class CorfuReplicationMultiSourceSinkIT extends AbstractIT {
     protected void startReplicationServers() throws Exception {
         for (int i = 0; i < numSourceClusters; i++) {
             sourceReplicationServers.add(runReplicationServer(sourceReplicationPorts.get(i), sourceCorfuPorts.get(i),
-                    pluginConfigFilePath));
+                    pluginConfigFilePath, transportType));
         }
 
         for (int i = 0; i < numSinkClusters; i++) {
             sinkReplicationServers.add(runReplicationServer(sinkReplicationPorts.get(i), sinkCorfuPorts.get(i),
-                    pluginConfigFilePath));
+                    pluginConfigFilePath, transportType));
         }
     }
 
