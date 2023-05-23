@@ -87,7 +87,11 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
     private Table<StringKey, IntValueTag, Metadata> noisyMap;
 
     public CorfuReplicationReconfigurationIT(Pair<String, ExampleSchemas.ClusterUuidMsg> pluginAndTopologyType) {
-        this.pluginConfigFilePath = pluginAndTopologyType.getKey();
+        if (pluginAndTopologyType.getKey().equals("GRPC")) {
+            System.setProperty("transport", "GRPC");
+        } else {
+            System.setProperty("transport", "NETTY");
+        }
         this.topologyType = pluginAndTopologyType.getValue();
     }
 
@@ -96,8 +100,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
     public static Collection<Pair<String, ExampleSchemas.ClusterUuidMsg>> input() {
 
         List<String> transportPlugins = Arrays.asList(
-                "src/test/resources/transport/grpcConfig.properties"
-                //"src/test/resources/transport/nettyConfig.properties"
+                "GRPC"
         );
 
         List<ExampleSchemas.ClusterUuidMsg> topologyTypes = Arrays.asList(

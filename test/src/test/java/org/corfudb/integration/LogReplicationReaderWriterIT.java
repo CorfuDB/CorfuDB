@@ -4,6 +4,7 @@ import com.google.common.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
+import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
 import org.corfudb.infrastructure.logreplication.proto.Sample.IntValue;
@@ -22,6 +23,7 @@ import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
+import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuStore;
@@ -38,8 +40,8 @@ import org.corfudb.runtime.view.StreamOptions;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
-import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.junit.Test;
+import org.mockito.Mockito;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -53,7 +55,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -230,8 +231,9 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
         int cnt = 0;
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(rt, LOCAL_SOURCE_CLUSTER_ID);
         configManager.generateConfig(Collections.singleton(getDefaultSession()));
+        LogReplicationContext context = new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT,
+                Mockito.mock(LogReplicationPluginConfig.class));
 
-        LogReplicationContext context = new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT);
         StreamsSnapshotReader reader = new StreamsSnapshotReader(rt, getDefaultSession(), context);
 
         reader.reset(rt.getAddressSpaceView().getLogTail());
@@ -269,7 +271,8 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
         logReplicationMetadataManager.addSession(getDefaultSession(), 0, true);
 
         StreamsSnapshotWriter writer = new StreamsSnapshotWriter(rt, logReplicationMetadataManager,
-            getDefaultSession(), new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT));
+            getDefaultSession(), new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT,
+                Mockito.mock(LogReplicationPluginConfig.class)));
 
         if (msgQ.isEmpty()) {
             log.debug("msgQ is empty");
@@ -303,7 +306,8 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
         configManager.generateConfig(Collections.singleton(getDefaultSession()));
 
         StreamsLogEntryReader reader = new StreamsLogEntryReader(rt, getDefaultSession(),
-                new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT));
+                new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT,
+                        Mockito.mock(LogReplicationPluginConfig.class)));
         reader.setGlobalBaseSnapshot(Address.NON_ADDRESS, Address.NON_ADDRESS);
 
         LogReplicationEntryMsg entry;
@@ -340,7 +344,8 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
                 getReplicationContext(configManager, 0, "test", true));
         logReplicationMetadataManager.addSession(getDefaultSession(),0, true);
         LogEntryWriter writer = new LogEntryWriter(logReplicationMetadataManager, getDefaultSession(),
-                new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT));
+                new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT,
+                        Mockito.mock(LogReplicationPluginConfig.class)));
 
         if (msgQ.isEmpty()) {
             log.debug("msgQ is EMPTY");
@@ -353,7 +358,8 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
 
     private LogReplicationContext getReplicationContext(LogReplicationConfigManager configManager, long topologyConfigId,
                                                         String localCorfuEndpoint, boolean isLeader) {
-        return new LogReplicationContext(configManager, topologyConfigId, localCorfuEndpoint, isLeader);
+        return new LogReplicationContext(configManager, topologyConfigId, localCorfuEndpoint, isLeader,
+                Mockito.mock(LogReplicationPluginConfig.class));
     }
 
     private void accessTxStream(Iterator<ILogData> iterator, int num) {
