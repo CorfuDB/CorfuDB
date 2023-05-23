@@ -212,15 +212,15 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
      * Initiate and start the transport layer server. All the sessions use this server to receive messages.
      *
      * @param serverContext
+     * @param pluginConfig
      * @return
      */
-    public CompletableFuture<Boolean> createTransportServerAdapter(ServerContext serverContext) {
-
-        LogReplicationPluginConfig config = new LogReplicationPluginConfig(serverContext.getPluginConfigFilePath());
-        File jar = new File(config.getTransportAdapterJARPath());
+    public CompletableFuture<Boolean> createTransportServerAdapter(ServerContext serverContext,
+                                                                   LogReplicationPluginConfig pluginConfig) {
+        File jar = new File(pluginConfig.getTransportAdapterJARPath());
 
         try (URLClassLoader child = new URLClassLoader(new URL[]{jar.toURI().toURL()}, this.getClass().getClassLoader())) {
-            Class adapter = Class.forName(config.getTransportServerClassCanonicalName(), true, child);
+            Class adapter = Class.forName(pluginConfig.getTransportServerClassCanonicalName(), true, child);
             this.serverChannelAdapter = (IServerChannelAdapter) adapter
                     .getDeclaredConstructor(ServerContext.class, LogReplicationClientServerRouter.class)
                     .newInstance(serverContext, this);
@@ -233,26 +233,25 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
 
     /**
      * Initiate the transport layer client. All the sessions use this client to send messages.
-     * @param pluginFilePath
+     * @param pluginConfig
      */
-    public void createTransportClientAdapter(String pluginFilePath) {
+    public void createTransportClientAdapter(LogReplicationPluginConfig pluginConfig) {
         if(this.clientChannelAdapter != null) {
             log.trace("The client channel adapter is already initialized");
             return;
         }
 
-        LogReplicationPluginConfig config = new LogReplicationPluginConfig(pluginFilePath);
-        File jar = new File(config.getTransportAdapterJARPath());
+        File jar = new File(pluginConfig.getTransportAdapterJARPath());
 
         try (URLClassLoader child = new URLClassLoader(new URL[]{jar.toURI().toURL()}, this.getClass().getClassLoader())) {
             // Instantiate Channel Adapter (external implementation of the channel / transport)
-            Class adapterType = Class.forName(config.getTransportClientClassCanonicalName(), true, child);
+            Class adapterType = Class.forName(pluginConfig.getTransportClientClassCanonicalName(), true, child);
             this.clientChannelAdapter = (IClientChannelAdapter) adapterType
                     .getDeclaredConstructor(String.class, LogReplicationClientServerRouter.class)
                     .newInstance(this.localClusterId, this);
         } catch (Exception e) {
             log.error("Fatal error: Failed to initialize transport adapter {}",
-                    config.getTransportClientClassCanonicalName(), e);
+                    pluginConfig.getTransportClientClassCanonicalName(), e);
             throw new UnrecoverableCorfuError(e);
         }
     }

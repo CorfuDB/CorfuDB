@@ -4,6 +4,7 @@ import com.google.common.annotations.VisibleForTesting;
 import lombok.Getter;
 import lombok.Setter;
 import org.corfudb.infrastructure.logreplication.config.LogReplicationConfig;
+import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.util.serializer.ISerializer;
@@ -37,23 +38,28 @@ public class LogReplicationContext {
     @Setter
     private final AtomicBoolean isLeader;
 
+    @Getter
+    private final LogReplicationPluginConfig pluginConfig;
+
     /**
      * Constructor
      **/
     public LogReplicationContext(LogReplicationConfigManager configManager, long topologyConfigId,
-                                 String localCorfuEndpoint) {
+                                 String localCorfuEndpoint, LogReplicationPluginConfig pluginConfig) {
         this.configManager = configManager;
         this.topologyConfigId = topologyConfigId;
         this.localCorfuEndpoint = localCorfuEndpoint;
+        this.pluginConfig = pluginConfig;
         this.isLeader = new AtomicBoolean(false);
     }
 
     @VisibleForTesting
     public LogReplicationContext(LogReplicationConfigManager configManager, long topologyConfigId,
-                                 String localCorfuEndpoint, boolean isLeader) {
+                                 String localCorfuEndpoint, boolean isLeader, LogReplicationPluginConfig pluginConfig) {
         this.configManager = configManager;
         this.topologyConfigId = topologyConfigId;
         this.localCorfuEndpoint = localCorfuEndpoint;
+        this.pluginConfig = pluginConfig;
         this.isLeader = new AtomicBoolean(isLeader);
     }
 

@@ -30,13 +30,14 @@ public class LogReplicationPluginConfig {
 
     public static final String DEFAULT_JAR_PATH = "/infrastructure/target/infrastructure-0.3.1-SNAPSHOT.jar";
 
-    // Since the change is focused on GRPC.
-    // TODO: Shama to remove uncomment/remove the default transport, once the change for netty is in
-//    public static final String DEFAULT_SERVER_CLASSNAME = "org.corfudb.infrastructure.logreplication.transport.sample.NettyLogReplicationServerChannelAdapter";
-//    public static final String DEFAULT_CLIENT_CLASSNAME = "org.corfudb.infrastructure.logreplication.transport.sample.NettyLogReplicationClientChannelAdapter";
 
-    public static final String DEFAULT_SERVER_CLASSNAME = "org.corfudb.infrastructure.logreplication.transport.sample.GRPCLogReplicationServerChannelAdapter";
-    public static final String DEFAULT_CLIENT_CLASSNAME = "org.corfudb.infrastructure.logreplication.transport.sample.GRPCLogReplicationClientChannelAdapter";
+    public static final String NETTY_DEFAULT_SERVER_CLASSNAME = "org.corfudb.infrastructure.logreplication.transport.sample.NettyLogReplicationServerChannelAdapter";
+    public static final String NETTY_DEFAULT_CLIENT_CLASSNAME = "org.corfudb.infrastructure.logreplication.transport.sample.NettyLogReplicationClientChannelAdapter";
+
+    public static final String GRPC_DEFAULT_SERVER_CLASSNAME = "org.corfudb.infrastructure.logreplication.transport.sample.GRPCLogReplicationServerChannelAdapter";
+    public static final String GRPC_DEFAULT_CLIENT_CLASSNAME = "org.corfudb.infrastructure.logreplication.transport.sample.GRPCLogReplicationClientChannelAdapter";
+
+    public static final String DEFAULT_TRANSPORT_SELECTOR_CLASSNAME = "org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultTransportPluginSelector";
 
     // Stream Fetcher Plugin
     public static final String DEFAULT_STREAM_FETCHER_JAR_PATH = "/target/infrastructure-0.3.1-SNAPSHOT.jar";

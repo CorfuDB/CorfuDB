@@ -53,9 +53,11 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
     private static final int TOTAL_SINK_STATUS_ENTRIES_INIT_SNAPSHOT_SYNC =
         1 + NUM_SNAPSHOT_SYNC_UPDATES_ON_SINK_STATUS_TABLE;
 
-    private static final String UPGRADE_PLUGIN_PATH = "src/test/resources/transport/grpcConfigForUpgrade.properties";
+    private static final String UPGRADE_PLUGIN_PATH =
+            "./test/src/test/resources/transport/pluginConfigForUpgrade.properties";
 
-    private static final String NON_UPGRADE_PLUGIN_PATH = "src/test/resources/transport/grpcConfig.properties";
+    private static final String NON_UPGRADE_PLUGIN_PATH =
+            "./test/src/test/resources/transport/pluginConfig.properties";
 
     private SnapshotSyncPluginListener snapshotSyncPluginListener;
 

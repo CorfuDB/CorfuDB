@@ -133,8 +133,7 @@ public class LogReplicationSinkManager implements DataReceiver {
                 .maxCacheEntries(replicationContext.getConfig(session).getMaxCacheSize())
                 .maxWriteSize(serverContext.getMaxWriteSize())
                 .build())
-                .parseConfigurationString(localCorfuEndpoint).connect();
-        this.pluginConfigFilePath = serverContext.getPluginConfigFilePath();
+                .parseConfigurationString(replicationContext.getLocalCorfuEndpoint()).connect();
         this.topologyConfigId = replicationContext.getTopologyConfigId();
         this.session = session;
         this.metadataManager = metadataManager;
@@ -144,13 +143,12 @@ public class LogReplicationSinkManager implements DataReceiver {
 
     @VisibleForTesting
     public LogReplicationSinkManager(String localCorfuEndpoint, LogReplicationMetadataManager metadataManager,
-                                     String pluginConfigFilePath, LogReplicationSession session,
+                                     LogReplicationSession session,
                                      LogReplicationContext context) {
         this.runtime =  CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder()
                 .maxCacheEntries(context.getConfig(session).getMaxCacheSize()).build())
                 .parseConfigurationString(localCorfuEndpoint).connect();
         this.metadataManager = metadataManager;
-        this.pluginConfigFilePath = pluginConfigFilePath;
         this.session = session;
         this.replicationContext = context;
 
@@ -159,13 +157,11 @@ public class LogReplicationSinkManager implements DataReceiver {
 
     @VisibleForTesting
     public LogReplicationSinkManager(String localCorfuEndpoint, LogReplicationConfig config,
-                                     LogReplicationMetadataManager metadataManager, String pluginConfigFilePath,
-                                     LogReplicationSession session) {
+                                     LogReplicationMetadataManager metadataManager, LogReplicationSession session) {
             this.runtime =  CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder()
                     .maxCacheEntries(config.getMaxCacheSize())
                     .build())
                     .parseConfigurationString(localCorfuEndpoint).connect();
-            this.pluginConfigFilePath = pluginConfigFilePath;
             this.session = session;
             this.metadataManager = metadataManager;
 

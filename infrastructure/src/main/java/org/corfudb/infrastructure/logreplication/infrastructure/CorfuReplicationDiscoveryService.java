@@ -32,8 +32,6 @@ import org.corfudb.utils.lock.states.LockState;
 
 import javax.annotation.Nonnull;
 import java.io.File;
-import java.io.FileReader;
-import java.io.IOException;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.time.Duration;
@@ -174,23 +172,23 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         this.serverContext = serverContext;
         this.logReplicationLockId = serverContext.getNodeId();
         this.localEndpoint = serverContext.getLocalEndpoint();
-        this.clusterManagerAdapter = getClusterManagerAdapter(serverContext.getPluginConfigFilePath());
         this.runtime = runtime;
+        this.pluginConfig = new LogReplicationPluginConfig(serverContext.getPluginConfigFilePath());
+        this.clusterManagerAdapter = getClusterManagerAdapter();
+        CorfuSaasEndpointProvider.init(serverContext.getPluginConfigFilePath(), clusterManagerAdapter.isSaasDeployment());
     }
 
     /**
      * Create the Cluster Manager Adapter, i.e., the adapter to external provider of the topology.
      *
-     * @param pluginConfigFilePath      the file path to the cluster manager plugin
      * @return cluster manager adapter instance
      */
-    private CorfuReplicationClusterManagerAdapter getClusterManagerAdapter(String pluginConfigFilePath) {
+    private CorfuReplicationClusterManagerAdapter getClusterManagerAdapter() {
 
-        LogReplicationPluginConfig config = new LogReplicationPluginConfig(pluginConfigFilePath);
-        File jar = new File(config.getTopologyManagerAdapterJARPath());
+        File jar = new File(pluginConfig.getTopologyManagerAdapterJARPath());
 
         try (URLClassLoader child = new URLClassLoader(new URL[]{jar.toURI().toURL()}, this.getClass().getClassLoader())) {
-            Class adapter = Class.forName(config.getTopologyManagerAdapterName(), true, child);
+            Class adapter = Class.forName(pluginConfig.getTopologyManagerAdapterName(), true, child);
             return (CorfuReplicationClusterManagerAdapter) adapter.getDeclaredConstructor().newInstance();
         } catch (Exception e) {
             log.error("Fatal error: Failed to create serverAdapter", e);
@@ -400,7 +398,8 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         }
 
         if (interClusterServerNode == null) {
-            interClusterServerNode = new CorfuInterClusterReplicationServerNode(serverContext, sessionManager.getRouter());
+            interClusterServerNode = new CorfuInterClusterReplicationServerNode(serverContext, sessionManager.getRouter(),
+                    sessionManager.getReplicationContext());
         } else {
             //Start the server again as it was previously shutdown due to topology change.(start operation is idempotent)
             interClusterServerNode.startServer();
@@ -567,7 +566,8 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
                 localEndpoint, localNodeId, topology.getLocalClusterDescriptor(), topology);
             if (!bootstrapComplete) {
                 log.info("Bootstrap the Log Replication Service");
-                sessionManager = new SessionManager(topologyDescriptor, runtime, serverContext);
+                sessionManager = new SessionManager(topologyDescriptor, runtime, serverContext, localCorfuEndpoint,
+                        pluginConfig);
                 registerToLogReplicationLock();
                 bootstrapComplete = true;
             }

@@ -22,10 +22,8 @@ public class CorfuReplicationTrimIT extends LogReplicationAbstractIT {
     @Before
     public void setupPluginPath() {
         if(runProcess) {
-            File f = new File(grpcConfig);
+            File f = new File(pluginConfigFilePath);
             this.pluginConfigFilePath = f.getAbsolutePath();
-        } else {
-            this.pluginConfigFilePath = grpcConfig;
         }
     }
 

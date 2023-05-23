@@ -19,7 +19,7 @@ import java.util.List;
 public class CorfuReplicationE2EIT extends LogReplicationAbstractIT {
 
     public CorfuReplicationE2EIT(Pair<String, ExampleSchemas.ClusterUuidMsg> pluginAndTopologyType) {
-        this.pluginConfigFilePath = pluginAndTopologyType.getKey();
+        this.transportType = pluginAndTopologyType.getKey();
         this.topologyType = pluginAndTopologyType.getValue();
     }
 
@@ -28,8 +28,7 @@ public class CorfuReplicationE2EIT extends LogReplicationAbstractIT {
     public static Collection<Pair<String, ExampleSchemas.ClusterUuidMsg>> input() {
 
         List<String> transportPlugins = Arrays.asList(
-                "src/test/resources/transport/grpcConfig.properties"
-                //"src/test/resources/transport/nettyConfig.properties"
+                "GRPC"
         );
 
         List<ExampleSchemas.ClusterUuidMsg> topologyTypes = Arrays.asList(
@@ -67,7 +66,7 @@ public class CorfuReplicationE2EIT extends LogReplicationAbstractIT {
      */
     @Test
     public void testLogReplicationEndToEnd() throws Exception {
-        log.debug("Using plugin :: {}", pluginConfigFilePath);
+        log.debug("Using plugin :: {}", transportType);
         testEndToEndSnapshotAndLogEntrySyncUFO(false, true, 1, true);
     }
 
@@ -80,7 +79,7 @@ public class CorfuReplicationE2EIT extends LogReplicationAbstractIT {
 
     @Test
     public void testDiskBasedLogReplicationEndToEnd() throws Exception {
-        log.debug("Using plugin :: {}", pluginConfigFilePath);
+        log.debug("Using plugin :: {}", transportType);
         testEndToEndSnapshotAndLogEntrySyncUFO(true, true, 1, true);
     }
 
