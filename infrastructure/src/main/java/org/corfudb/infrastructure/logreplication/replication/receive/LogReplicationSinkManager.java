@@ -102,8 +102,6 @@ public class LogReplicationSinkManager implements DataReceiver {
 
     private ISnapshotSyncPlugin snapshotSyncPlugin;
 
-    private final String pluginConfigFilePath;
-
     private ExecutorService applyExecutor;
 
     @Getter
@@ -135,7 +133,6 @@ public class LogReplicationSinkManager implements DataReceiver {
                 .maxWriteSize(serverContext.getMaxWriteSize())
                 .build())
                 .parseConfigurationString(replicationContext.getLocalCorfuEndpoint()).connect();
-        this.pluginConfigFilePath = serverContext.getPluginConfigFilePath();
         this.topologyConfigId = replicationContext.getTopologyConfigId();
         this.session = session;
         this.metadataManager = metadataManager;
@@ -145,13 +142,12 @@ public class LogReplicationSinkManager implements DataReceiver {
 
     @VisibleForTesting
     public LogReplicationSinkManager(String localCorfuEndpoint, LogReplicationMetadataManager metadataManager,
-                                     String pluginConfigFilePath, LogReplicationSession session,
+                                     LogReplicationSession session,
                                      LogReplicationContext context) {
         this.runtime =  CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder()
                 .maxCacheEntries(context.getConfig(session).getMaxCacheSize()).build())
                 .parseConfigurationString(localCorfuEndpoint).connect();
         this.metadataManager = metadataManager;
-        this.pluginConfigFilePath = pluginConfigFilePath;
         this.session = session;
         this.replicationContext = context;
 
@@ -160,13 +156,11 @@ public class LogReplicationSinkManager implements DataReceiver {
 
     @VisibleForTesting
     public LogReplicationSinkManager(String localCorfuEndpoint, LogReplicationConfig config,
-                                     LogReplicationMetadataManager metadataManager, String pluginConfigFilePath,
-                                     LogReplicationSession session) {
+                                     LogReplicationMetadataManager metadataManager, LogReplicationSession session) {
             this.runtime =  CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder()
                     .maxCacheEntries(config.getMaxCacheSize())
                     .build())
                     .parseConfigurationString(localCorfuEndpoint).connect();
-            this.pluginConfigFilePath = pluginConfigFilePath;
             this.session = session;
             this.metadataManager = metadataManager;
 
@@ -229,7 +223,7 @@ public class LogReplicationSinkManager implements DataReceiver {
     }
 
     private ISnapshotSyncPlugin getOnSnapshotSyncPlugin() {
-        LogReplicationPluginConfig config = new LogReplicationPluginConfig(pluginConfigFilePath);
+        LogReplicationPluginConfig config = replicationContext.getPluginConfig();
         File jar = new File(config.getSnapshotSyncPluginJARPath());
         try (URLClassLoader child = new URLClassLoader(new URL[]{jar.toURI().toURL()}, this.getClass().getClassLoader())) {
             Class plugin = Class.forName(config.getSnapshotSyncPluginCanonicalName(), true, child);
