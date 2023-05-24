@@ -33,7 +33,6 @@ import org.corfudb.comm.ChannelImplementation;
 import org.corfudb.common.config.ConfigParamNames;
 import org.corfudb.infrastructure.datastore.DataStore;
 import org.corfudb.infrastructure.datastore.KvDataStore.KvRecord;
-import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
 import org.corfudb.infrastructure.paxos.PaxosDataStore;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
@@ -311,7 +310,7 @@ public class ServerContext implements AutoCloseable {
 
     public int getCorfuServerConnectionPort() {
         String val = getServerConfig(String.class, "--corfu-port-for-lr");
-        return val == null ?  DEFAULT_CORFU_PORT : Integer.parseInt(val);
+        return val == null ? DEFAULT_CORFU_PORT : Integer.parseInt(val);
     }
 
     /**
