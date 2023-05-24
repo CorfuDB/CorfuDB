@@ -26,17 +26,16 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
 
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 import static org.mockito.Matchers.any;
+import static org.mockito.Mockito.after;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
-import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.verify;
 
@@ -57,9 +56,8 @@ public class CompactorServiceUnitTest {
 
     private static final int SCHEDULER_INTERVAL = 1;
     private static final String NODE_ENDPOINT = "NodeEndpoint";
-    private static final int SLEEP_WAIT = 8;
+    private static final Duration TIMEOUT = Duration.ofSeconds(8);
     private static final String NODE_0 = "0";
-    private static final String SLEEP_INTERRUPTED_EXCEPTION_MSG = "Sleep interrupted";
 
     @Before
     public void setup() throws Exception {
@@ -104,14 +102,9 @@ public class CompactorServiceUnitTest {
         when(invokeCheckpointingJvm.isInvoked()).thenReturn(false).thenReturn(true);
 
         compactorServiceSpy.start(Duration.ofSeconds(SCHEDULER_INTERVAL));
-        try {
-            TimeUnit.SECONDS.sleep(SLEEP_WAIT);
-        } catch (InterruptedException e) {
-            log.warn(SLEEP_INTERRUPTED_EXCEPTION_MSG, e);
-        }
 
-        verify(invokeCheckpointingJvm, times(1)).shutdown();
-        verify(invokeCheckpointingJvm).invokeCheckpointing();
+        verify(invokeCheckpointingJvm, timeout(TIMEOUT.toMillis())).shutdown();
+        verify(invokeCheckpointingJvm, timeout(TIMEOUT.toMillis())).invokeCheckpointing();
     }
 
     @Test
@@ -130,14 +123,9 @@ public class CompactorServiceUnitTest {
         when(invokeCheckpointingJvm.isInvoked()).thenReturn(false).thenReturn(true);
 
         compactorServiceSpy.start(Duration.ofSeconds(SCHEDULER_INTERVAL));
-        try {
-            TimeUnit.SECONDS.sleep(SLEEP_WAIT);
-        } catch (InterruptedException e) {
-            log.warn(SLEEP_INTERRUPTED_EXCEPTION_MSG, e);
-        }
 
-        verify(invokeCheckpointingJvm, times(1)).shutdown();
-        verify(invokeCheckpointingJvm).invokeCheckpointing();
+        verify(invokeCheckpointingJvm, timeout(TIMEOUT.toMillis())).shutdown();
+        verify(invokeCheckpointingJvm, timeout(TIMEOUT.toMillis())).invokeCheckpointing();
     }
 
     @Test
@@ -159,15 +147,10 @@ public class CompactorServiceUnitTest {
         when(invokeCheckpointingJvm.isInvoked()).thenReturn(false).thenReturn(true);
 
         compactorServiceSpy.start(Duration.ofSeconds(SCHEDULER_INTERVAL));
-        try {
-            TimeUnit.SECONDS.sleep(SLEEP_WAIT);
-        } catch (InterruptedException e) {
-            log.warn(SLEEP_INTERRUPTED_EXCEPTION_MSG, e);
-        }
 
-        verify(leaderServices).validateLiveness();
-        verify(leaderServices).initCompactionCycle();
-        verify(invokeCheckpointingJvm, times(1)).shutdown();
+        verify(leaderServices, timeout(TIMEOUT.toMillis())).validateLiveness();
+        verify(leaderServices, timeout(TIMEOUT.toMillis())).initCompactionCycle();
+        verify(invokeCheckpointingJvm, timeout(TIMEOUT.toMillis())).shutdown();
     }
 
     @Test
@@ -185,13 +168,8 @@ public class CompactorServiceUnitTest {
         doReturn(CompactorLeaderServices.LeaderInitStatus.SUCCESS).when(leaderServices).initCompactionCycle();
 
         compactorServiceSpy.start(Duration.ofSeconds(SCHEDULER_INTERVAL));
-        try {
-            TimeUnit.SECONDS.sleep(SLEEP_WAIT);
-        } catch (InterruptedException e) {
-            log.warn(SLEEP_INTERRUPTED_EXCEPTION_MSG, e);
-        }
 
-        verify(leaderServices, never()).initCompactionCycle();
+        verify(leaderServices, after((int) TIMEOUT.toMillis()).never()).initCompactionCycle();
     }
 
     @Test
@@ -215,18 +193,9 @@ public class CompactorServiceUnitTest {
         when(invokeCheckpointingJvm.isInvoked()).thenReturn(false).thenReturn(true);
 
         compactorServiceSpy.start(Duration.ofSeconds(SCHEDULER_INTERVAL));
-        while (true) {
-            try {
-                TimeUnit.SECONDS.sleep(SLEEP_WAIT);
-                break;
-            } catch (InterruptedException e) {
-                //sleep gets interrupted on throwable, hence the loop
-                log.warn(SLEEP_INTERRUPTED_EXCEPTION_MSG, e);
-            }
-        }
 
-        verify(leaderServices).initCompactionCycle();
-        verify(invokeCheckpointingJvm, times(1)).shutdown();
+        verify(leaderServices, timeout(TIMEOUT.toMillis())).initCompactionCycle();
+        verify(invokeCheckpointingJvm, timeout(TIMEOUT.toMillis())).shutdown();
     }
 
     @Test
@@ -245,14 +214,9 @@ public class CompactorServiceUnitTest {
         when(invokeCheckpointingJvm.isInvoked()).thenReturn(false).thenReturn(true);
 
         compactorServiceSpy.start(Duration.ofSeconds(SCHEDULER_INTERVAL));
-        try {
-            TimeUnit.SECONDS.sleep(SLEEP_WAIT);
-        } catch (InterruptedException e) {
-            log.warn(SLEEP_INTERRUPTED_EXCEPTION_MSG, e);
-        }
 
-        verify(leaderServices, never()).validateLiveness();
-        verify(leaderServices, never()).initCompactionCycle();
+        verify(leaderServices, after((int) TIMEOUT.toMillis()).never()).validateLiveness();
+        verify(leaderServices, after((int) TIMEOUT.toMillis()).never()).initCompactionCycle();
         verify(leaderServices, atLeastOnce()).finishCompactionCycle();
     }
 }
