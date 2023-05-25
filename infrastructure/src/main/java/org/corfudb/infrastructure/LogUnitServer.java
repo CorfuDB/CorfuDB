@@ -31,6 +31,7 @@ import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.PriorityLevel;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg.PayloadCase;
+import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.Utils;
 
@@ -433,8 +434,11 @@ public class LogUnitServer extends AbstractServer {
 
             // Note: we reuse the request header as the ignore_cluster_id and
             // ignore_epoch fields are the same in both cases.
-            router.sendResponse(getResponseMsg(getHeaderMsg(req.getHeader()),
-                    getKnownAddressResponseMsg(knownAddresses)), ctx);
+            ResponseMsg responseMsg = getResponseMsg(
+                    getHeaderMsg(req.getHeader()),
+                    getKnownAddressResponseMsg(knownAddresses)
+            );
+            router.sendResponse(responseMsg, ctx);
         } catch (Exception e) {
             handleException(e, ctx, req, router);
         }

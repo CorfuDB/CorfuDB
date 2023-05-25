@@ -8,7 +8,7 @@ import javax.annotation.Nonnull;
 /**
  *
  * A workflow action. All workflow actions must extend this class.
- *
+ * <p>
  * Created by Maithem on 10/25/17.
  */
 
@@ -27,14 +27,13 @@ public abstract class Action {
     /**
      * The implementation of the action
      * @param runtime A runtime that the action will use to execute
-     * @throws Exception
+     * @throws Exception error
      */
     public abstract void impl(@Nonnull CorfuRuntime runtime) throws Exception;
 
     /**
      * Execute the action.
      */
-    @Nonnull
     public void execute(@Nonnull CorfuRuntime runtime, int numRetry) {
         for (int x = 0; x < numRetry; x++) {
             try {
