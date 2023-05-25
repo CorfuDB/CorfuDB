@@ -240,8 +240,11 @@ public class LogUnitServer extends AbstractServer {
 
         // Note: we reuse the request header as the ignore_cluster_id and
         // ignore_epoch fields are the same in both cases.
-        router.sendResponse(getResponseMsg(getHeaderMsg(req.getHeader()),
-                getCommittedTailResponseMsg(streamLog.getCommittedTail())), ctx);
+        ResponseMsg committedTailResp = getResponseMsg(
+                getHeaderMsg(req.getHeader()),
+                getCommittedTailResponseMsg(streamLog.getCommittedTail())
+        );
+        router.sendResponse(committedTailResp, ctx);
     }
 
     /**

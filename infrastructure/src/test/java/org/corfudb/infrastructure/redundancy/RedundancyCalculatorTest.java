@@ -340,7 +340,7 @@ public class RedundancyCalculatorTest extends LayoutBasedTestHelper implements T
                         .startAddress(3)
                         .endAddress(2)
                         .status(status)
-                        .build()).isInstanceOf(NullPointerException.class);
+                        .build()).isInstanceOf(IllegalStateException.class);
 
         // status should be defined.
         assertThatThrownBy(() ->
