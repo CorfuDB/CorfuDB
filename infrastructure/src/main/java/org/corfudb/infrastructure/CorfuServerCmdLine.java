@@ -193,7 +193,7 @@ public class CorfuServerCmdLine {
                     + "              Max number of entries applied in a snapshot transaction.  50 by default."
                     + "              For special tables only\n.                                  "
                     + " --corfu-port-for-lr=<corfu-port-for-lr>                                  "
-                    + "              Port on which Log Replicator can connect to Corfu\n         "
+                    + "              Port on which Log Replicator can connect to Corfu [default: 9000]\n         "
                     + " -h, --help                                                               "
                     + "              Show this screen\n"
                     + " --version                                                                "

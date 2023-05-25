@@ -194,7 +194,7 @@ public class CorfuInterClusterReplicationServer implements Runnable {
                     + " --max-write-size=<max-write-size>"
                     + "              Max size of a write in a single corfu transaction.  Integer.MAX_VALUE by default\n "
                     + "--corfu-port-for-lr=<corfu-port-for-lr>                                   "
-                    + "              Port on which Log Replicator can connect to Corfu Server\n  "
+                    + "              Port on which Log Replicator can connect to Corfu Server [default: 9000].\n"
                     + "                                                                          "
                     + " --lock-lease=<lease-duration>                                            "
                     + "              Lock lease duration in seconds\n                            "
