@@ -2,6 +2,7 @@ package org.corfudb.infrastructure.log;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.corfudb.AbstractCorfuTest.PARAMETERS;
 import static org.corfudb.infrastructure.log.Segment.METADATA_SIZE;
 import static org.corfudb.infrastructure.log.Segment.VERSION;
 import static org.corfudb.infrastructure.log.StreamLogFiles.RECORDS_PER_LOG_FILE;
@@ -20,10 +21,10 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 import org.apache.commons.io.FileUtils;
 import org.assertj.core.api.Assertions;
-import org.corfudb.AbstractCorfuTest;
 import org.corfudb.infrastructure.BatchProcessor.BatchProcessorContext;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
@@ -39,7 +40,8 @@ import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.test.LsofSpec;
 import org.corfudb.util.serializer.Serializers;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 import static org.corfudb.infrastructure.log.SegmentUtils.getByteBufferWithMetaData;
 import static org.corfudb.infrastructure.utils.Crc32c.getChecksum;
@@ -47,7 +49,7 @@ import static org.corfudb.infrastructure.utils.Crc32c.getChecksum;
 /**
  * Created by maithem on 11/2/16.
  */
-public class StreamLogFilesTest extends AbstractCorfuTest {
+public class StreamLogFilesTest  {
 
     private String getDirPath() {
         return PARAMETERS.TEST_TEMP_DIR;
@@ -68,6 +70,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
      * @throws Exception spec exception
      */
     @Test
+    @Timeout(unit = TimeUnit.MINUTES, value = 5)
     public void testProtectionFromDataLossInCaseOfExceptionDuringDataLoad() throws Exception {
         String logDir = com.google.common.io.Files.createTempDir().getAbsolutePath();
         Path logPath = Paths.get(logDir, "log", "0.log");
@@ -107,6 +110,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
     }
     
     @Test
+    @Timeout(unit = TimeUnit.MINUTES, value = 5)
     public void testWriteReadWithChecksum() {
         // Enable checksum, then append and read the same entry
         StreamLog log = new StreamLogFiles(getContext(), new BatchProcessorContext());
@@ -128,6 +132,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
     }
 
     @Test
+    @Timeout(unit = TimeUnit.MINUTES, value = 5)
     public void testBatchWrite() throws Exception {
         ServerContext sc = getContext();
         StreamLog log = new StreamLogFiles(sc, new BatchProcessorContext());
@@ -149,6 +154,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
     }
 
     @Test
+    @Timeout(unit = TimeUnit.MINUTES, value = 5)
     public void testRangeWriteTrim() throws Exception {
         StreamLog log = new StreamLogFiles(getContext(), new BatchProcessorContext());
 
@@ -175,6 +181,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
     }
 
     @Test
+    @Timeout(unit = TimeUnit.MINUTES, value = 5)
     public void testRangeWriteAfterPrefixTrim() throws Exception {
         // This test tries to write a range right after a part of the range to be
         // written is prefix trimmed.
@@ -207,6 +214,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
     }
 
     @Test
+    @Timeout(unit = TimeUnit.MINUTES, value = 5)
     public void badRangeWrite() throws Exception {
         ServerContext sc = getContext();
         StreamLog log = new StreamLogFiles(sc, new BatchProcessorContext());
@@ -245,6 +253,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
     }
 
     @Test
+    @Timeout(unit = TimeUnit.MINUTES, value = 5)
     public void testRangeOverwrite() throws Exception {
         ServerContext sc = getContext();
         StreamLog log = new StreamLogFiles(sc, new BatchProcessorContext());
@@ -264,6 +273,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
     }
 
     @Test
+    @Timeout(unit = TimeUnit.MINUTES, value = 5)
     public void writingTrimmedEntries() throws Exception {
         ServerContext sc = getContext();
         StreamLog log = new StreamLogFiles(sc, new BatchProcessorContext());
@@ -308,6 +318,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
     }
 
     @Test
+    @Timeout(unit = TimeUnit.MINUTES, value = 5)
     public void testOverwriteException() {
         StreamLog log = new StreamLogFiles(getContext(), new BatchProcessorContext());
         ByteBuf b = Unpooled.buffer();
@@ -321,6 +332,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
     }
 
     @Test
+    @Timeout(unit = TimeUnit.MINUTES, value = 5)
     public void testReadingUnknownAddress() {
         StreamLog log = new StreamLogFiles(getContext(), new BatchProcessorContext());
         ByteBuf b = Unpooled.buffer();
@@ -337,6 +349,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
     }
 
     @Test
+    @Timeout(unit = TimeUnit.MINUTES, value = 5)
     public void testStreamLogDataCorruption() throws Exception {
         // This test manipulates a log file directly and manipulates
         // log records by overwriting some parts of the record simulating
@@ -380,6 +393,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
     }
 
     @Test
+    @Timeout(unit = TimeUnit.MINUTES, value = 5)
     @SuppressWarnings("checkstyle:magicnumber")
     public void testSync() throws Exception {
         StreamLogFiles log = new StreamLogFiles(getContext(), new BatchProcessorContext());
@@ -409,6 +423,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
     }
 
     @Test
+    @Timeout(unit = TimeUnit.MINUTES, value = 5)
     public void testWritingFileHeader() throws Exception {
         StreamLogFiles log = new StreamLogFiles(getContext(), new BatchProcessorContext());
         writeToLog(log, 0L);
@@ -421,6 +436,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
     }
 
     @Test
+    @Timeout(unit = TimeUnit.MINUTES, value = 5)
     public void testGetGlobalTail() {
         StreamLogFiles log = new StreamLogFiles(getContext(), new BatchProcessorContext());
 
@@ -451,6 +467,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
     }
 
     @Test
+    @Timeout(unit = TimeUnit.MINUTES, value = 5)
     public void testPrefixTrim() {
         String logDir = getContext().getServerConfig().get("--log-path") + File.separator + "log";
         StreamLogFiles log = new StreamLogFiles(getContext(), new BatchProcessorContext());
@@ -516,6 +533,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
     }
 
     @Test
+    @Timeout(unit = TimeUnit.MINUTES, value = 5)
     public void testPrefixTrimAndStartUp() {
         StreamLog log = new StreamLogFiles(getContext(), new BatchProcessorContext());
         log.prefixTrim(StreamLogFiles.RECORDS_PER_LOG_FILE / 2);
@@ -531,6 +549,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
     }
 
     @Test
+    @Timeout(unit = TimeUnit.MINUTES, value = 5)
     public void testPrefixTrimAfterRestart() {
         String logDir = getContext().getServerConfig().get("--log-path") + File.separator + "log";
         StreamLog log = new StreamLogFiles(getContext(), new BatchProcessorContext());
@@ -557,6 +576,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
      * files and data is cleared.
      */
     @Test
+    @Timeout(unit = TimeUnit.MINUTES, value = 5)
     public void testResetStreamLog() {
         String logDir = getContext().getServerConfig().get("--log-path") + File.separator + "log";
         StreamLogFiles log = new StreamLogFiles(getContext(), new BatchProcessorContext());
@@ -578,18 +598,23 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         assertThat(log.getLogTail()).isEqualTo(globalTailBeforeReset);
         assertThat(log.getTrimMark()).isEqualTo(trimMarkBeforeReset);
 
-        log.reset();
-        assertThat(log.getOpenSegments()).isEmpty();
+        log.updateCommittedTail(22000);
 
-        final int expectedFilesAfterReset = 0;
-        final long globalTailAfterReset = Address.NON_ADDRESS;
-        final long trimMarkAfterReset = 0L;
+        log.reset();
+        assertThat(log.getOpenSegments()).hasSize(0);
+
+        final int expectedFilesAfterReset = 2;
         assertThat(logsDir.list()).hasSize(expectedFilesAfterReset);
+
+        final long globalTailAfterReset = 20000 + 1;
         assertThat(log.getLogTail()).isEqualTo(globalTailAfterReset);
+
+        final long trimMarkAfterReset = trimMarkBeforeReset;
         assertThat(log.getTrimMark()).isEqualTo(trimMarkAfterReset);
     }
 
     @Test
+    @Timeout(unit = TimeUnit.MINUTES, value = 5)
     public void partialHeaderMetadataTest() throws Exception {
         String logDir = getContext().getServerConfig().get("--log-path") + File.separator + "log";
         String logFilePath = logDir + File.separator + 0 + ".log";
@@ -617,6 +642,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
     }
 
     @Test
+    @Timeout(unit = TimeUnit.MINUTES, value = 5)
     public void partialHeaderTest() throws Exception {
         String logDir = getContext().getServerConfig().get("--log-path") + File.separator + "log";
         String logFilePath = logDir + File.separator + 0 + ".log";
@@ -652,6 +678,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
     }
 
     @Test
+    @Timeout(unit = TimeUnit.MINUTES, value = 5)
     public void partialEntryTest() throws Exception {
         StreamLog log = new StreamLogFiles(getContext(), new BatchProcessorContext());
 
@@ -708,6 +735,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
     }
 
     @Test
+    @Timeout(unit = TimeUnit.MINUTES, value = 5)
     public void estimateSizeTest() throws IOException {
         // Create two nested directories and create files in each,
         // the estimated size should reflect the total sum of all file sizes

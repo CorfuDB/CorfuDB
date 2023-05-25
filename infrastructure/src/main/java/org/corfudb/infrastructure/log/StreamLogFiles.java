@@ -108,13 +108,13 @@ public class StreamLogFiles implements StreamLog {
 
         // Starting address initialization should happen before
         // initializing the tail segment (i.e. initializeMaxGlobalAddress)
-        logMetadata = new LogMetadata();
+        logMetadata = new LogMetadata(dataStore);
         initializeLogMetadata();
 
         // This can happen if a prefix trim happens on
         // addresses that haven't been written
         if (Math.max(logMetadata.getGlobalTail(), 0L) < getTrimMark()) {
-            syncTailSegment(getTrimMark() - 1);
+            logMetadata.syncTailSegment(getTrimMark() - 1);
         }
 
     }
@@ -166,8 +166,7 @@ public class StreamLogFiles implements StreamLog {
         // Note: if a checkpoint END record is not found (i.e., incomplete) this data is not considered
         // for stream trim mark computation.
         for (long currentSegment = tailSegment; currentSegment >= startingSegment; currentSegment--) {
-            Segment segment = getSegmentHandleForAddress(currentSegment * RECORDS_PER_LOG_FILE + 1);
-            try {
+            try (Segment segment = getSegmentHandleForAddress(currentSegment * RECORDS_PER_LOG_FILE + 1)) {
                 for (Long address : segment.getAddresses()) {
                     // skip trimmed entries
                     if (address < dataStore.getStartingAddress()) {
@@ -176,8 +175,6 @@ public class StreamLogFiles implements StreamLog {
                     LogData logEntry = read(address);
                     logMetadata.update(logEntry, true);
                 }
-            } finally {
-                segment.close();
             }
         }
 
@@ -233,16 +230,6 @@ public class StreamLogFiles implements StreamLog {
         dataStore.updateCommittedTail(committedTail);
     }
 
-    private void syncTailSegment(long address) {
-        // TODO(Maithem) since writing a record and setting the tail segment is not
-        // an atomic operation, it is possible to set an incorrect tail segment. In
-        // that case we will need to scan more than one segment
-        logMetadata.updateGlobalTail(address);
-        long segment = address / RECORDS_PER_LOG_FILE;
-
-        dataStore.updateTailSegment(segment);
-    }
-
     @Override
     public void prefixTrim(long address) {
         if (isTrimmed(address)) {
@@ -256,7 +243,7 @@ public class StreamLogFiles implements StreamLog {
         // expose disk sync functionality.
         long newStartingAddress = address + 1;
         dataStore.updateStartingAddress(newStartingAddress);
-        syncTailSegment(address);
+        logMetadata.syncTailSegment(address);
         log.debug("Trimmed prefix, new address {}", newStartingAddress);
         currentTrimMark.ifPresent(counter -> counter.set(newStartingAddress));
         // Trim address space maps.
@@ -327,6 +314,13 @@ public class StreamLogFiles implements StreamLog {
         log.info("trimPrefix: completed, end segment {}", endSegment);
     }
 
+    Segment getSegmentHandleForSegment(long segmentId) {
+        Segment handle = openSegments.computeIfAbsent(segmentId,
+                a -> new Segment(a, RECORDS_PER_LOG_FILE, logDir, logSizeQuota));
+        handle.retain();
+        return handle;
+    }
+
     /**
      * Return a SegmentHandle for a corresponding log address.
      *
@@ -335,10 +329,7 @@ public class StreamLogFiles implements StreamLog {
      */
     Segment getSegmentHandleForAddress(long address) {
         long segmentId = address / RECORDS_PER_LOG_FILE;
-        Segment handle = openSegments.computeIfAbsent(segmentId,
-                a -> new Segment(a, RECORDS_PER_LOG_FILE, logDir, logSizeQuota));
-        handle.retain();
-        return handle;
+        return getSegmentHandleForSegment(segmentId);
     }
 
 
@@ -455,7 +446,7 @@ public class StreamLogFiles implements StreamLog {
                 Segment sh = getSegmentHandleForAddress(entries.get(0).getGlobalAddress());
                 numBytes += sh.write(entries);
                 sh.release();
-                syncTailSegment(entries.get(entries.size() - 1).getGlobalAddress());
+                logMetadata.syncTailSegment(entries.get(entries.size() - 1).getGlobalAddress());
                 logMetadata.update(entries);
             }
 
@@ -483,7 +474,7 @@ public class StreamLogFiles implements StreamLog {
                 throw new OverwriteException(overwriteCause);
             } else {
                 long size = segment.write(address, entry);
-                syncTailSegment(address);
+                logMetadata.syncTailSegment(address);
                 logMetadata.update(entry, false);
 
                 MicroMeterUtils.measure(size, "logunit.write.throughput");
@@ -623,18 +614,34 @@ public class StreamLogFiles implements StreamLog {
         Lock lock = resetLock.writeLock();
         lock.lock();
 
-        try {
-            // Close segments before deleting their corresponding log files
-            closeAllSegmentHandlers();
-            Preconditions.checkState(openSegments.isEmpty());
-            deleteFilesMatchingFilter(file -> true);
+        long committedTail = getCommittedTail();
+        long latestSegment = getSegmentId(getLogTail());
+        long committedTailSegment = getSegmentId(committedTail);
 
-            dataStore.resetStartingAddress();
-            dataStore.resetTailSegment();
-            logMetadata = new LogMetadata();
+        try {
+            for (long currSegmentId = committedTailSegment; currSegmentId <= latestSegment; currSegmentId++) {
+                // Close segments before deleting their corresponding log files
+                String segmentFilePath;
+                try(Segment sh = getSegmentHandleForSegment(currSegmentId)) {
+                    openSegments.remove(sh.id);
+                    segmentFilePath = sh.segmentFilePath;
+                }
+
+                deleteFilesMatchingFilter(file -> file.getAbsolutePath().equals(segmentFilePath));
+            }
+
+            long newTailAddress = committedTailSegment * RECORDS_PER_LOG_FILE + 1;
+
+            if (getSegmentId(dataStore.getStartingAddress()) == committedTailSegment) {
+                dataStore.updateStartingAddress(newTailAddress);
+            }
+
+            logMetadata = new LogMetadata(dataStore);
+            logMetadata.syncTailSegment(newTailAddress);
+            initializeLogMetadata();
+
             // would this lose the gauges pre-reset?
             removeLocalGauges();
-            logSizeQuota.reset();
 
             log.info("reset: Completed");
         } finally {

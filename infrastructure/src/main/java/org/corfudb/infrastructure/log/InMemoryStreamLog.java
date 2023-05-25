@@ -2,6 +2,7 @@ package org.corfudb.infrastructure.log;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.BatchProcessor.BatchProcessorContext;
+import org.corfudb.infrastructure.datastore.DataStore;
 import org.corfudb.infrastructure.log.FileSystemAgent.FileSystemConfig;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
@@ -37,6 +38,7 @@ public class InMemoryStreamLog implements StreamLog {
     private volatile LogMetadata logMetadata;
     private AtomicLong committedTail;
     private final FileSystemAgent fsAgent;
+    private final StreamLogDataStore dataStore;
 
     /**
      * Returns an object that stores a stream log in memory.
@@ -45,7 +47,11 @@ public class InMemoryStreamLog implements StreamLog {
         logCache = new ConcurrentHashMap<>();
         trimmed = ConcurrentHashMap.newKeySet();
         startingAddress = 0;
-        logMetadata = new LogMetadata();
+        Map<String, Object> opts = new HashMap<>();
+        opts.put("--memory", true);
+        this.dataStore = new StreamLogDataStore(new DataStore(opts, fileName -> {
+        }));
+        logMetadata = new LogMetadata(dataStore);
         committedTail = new AtomicLong(Address.NON_ADDRESS);
 
         Path dummyLogDir = new File(".").toPath().toAbsolutePath();
@@ -223,7 +229,7 @@ public class InMemoryStreamLog implements StreamLog {
     @Override
     public void reset() {
         startingAddress = 0;
-        logMetadata = new LogMetadata();
+        logMetadata = new LogMetadata(dataStore);
         // Clear the trimmed addresses record.
         trimmed.clear();
         // Clearing all data from the cache.
