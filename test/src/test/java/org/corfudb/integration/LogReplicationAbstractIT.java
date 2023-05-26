@@ -454,7 +454,8 @@ public class LogReplicationAbstractIT extends AbstractIT {
         @Getter
         List<Boolean> accumulatedStatus = new ArrayList<>();
 
-        private final CountDownLatch countDownLatch;
+        private CountDownLatch countDownLatch;
+
         private boolean waitSnapshotStatusComplete;
 
         public ReplicationStatusListener(CountDownLatch countdownLatch, boolean waitSnapshotStatusComplete) {
@@ -465,16 +466,13 @@ public class LogReplicationAbstractIT extends AbstractIT {
         @Override
         public void onNext(CorfuStreamEntries results) {
             results.getEntries().forEach((schema, entries) -> entries.forEach(e -> {
-                log.info("Operation: {}", e.getOperation());
-                // TODO pankti:  Clean up and add a comment when this operation will be received and reason for this
-                //  condition.
+
+                // Replication Status table gets cleared as part of the simulated upgrade in
+                // CorfuReplicationUpgradeIT.  These updates must be ignored.
                 if (e.getOperation() == CorfuStreamEntry.OperationType.CLEAR) {
                     return;
                 }
                 ReplicationStatus status = (ReplicationStatus) e.getPayload();
-
-                log.info("Status: {}", status);
-                log.info("Adding: {}", status);
                 accumulatedStatus.add(status.getSinkStatus().getDataConsistent());
                 if (this.waitSnapshotStatusComplete &&
                     status.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus()
@@ -484,14 +482,12 @@ public class LogReplicationAbstractIT extends AbstractIT {
             }));
 
             if (!this.waitSnapshotStatusComplete) {
-                log.info("Counting Down");
                 countDownLatch.countDown();
             }
         }
 
         @Override
         public void onError(Throwable throwable) {
-            log.error("Error in Replication Status Listener: {}", throwable);
             fail("onError for ReplicationStatusListener : " + throwable.toString());
         }
     }
