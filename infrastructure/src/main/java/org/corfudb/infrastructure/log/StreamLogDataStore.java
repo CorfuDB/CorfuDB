@@ -93,6 +93,15 @@ public class StreamLogDataStore {
     }
 
     /**
+     * Reset starting address.
+     */
+    public void resetStartingAddress() {
+        log.info("Reset starting address. Current address: {}", startingAddress.get());
+        dataStore.put(STARTING_ADDRESS_RECORD, ZERO_ADDRESS);
+        startingAddress.set(ZERO_ADDRESS);
+    }
+
+    /**
      * Returns the dataStore starting address.
      *
      * @return the starting address
@@ -157,6 +166,16 @@ public class StreamLogDataStore {
         dataStore.put(TAIL_SEGMENT_RECORD, latestAddress);
         tailSegment.set(latestAddress);
     }
+
+    /**
+     * Reset tail segment.
+     */
+    public void resetTailSegment() {
+        log.info("Reset tail segment. Current segment: {}", tailSegment.get());
+        dataStore.put(TAIL_SEGMENT_RECORD, ZERO_ADDRESS);
+        tailSegment.set(ZERO_ADDRESS);
+    }
+
 
     /**
      * Reset committed log tail.

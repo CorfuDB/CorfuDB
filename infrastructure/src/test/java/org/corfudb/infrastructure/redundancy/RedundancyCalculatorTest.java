@@ -224,6 +224,7 @@ public class RedundancyCalculatorTest extends LayoutBasedTestHelper implements T
 
         RedundancyCalculator calculator = new RedundancyCalculator(LOCALHOST);
         Layout layout = calculator.restoreRedundancyForSegment(segment, testLayout);
+        System.out.println(layout);
         assertThat(layout.getFirstSegment().getFirstStripe().getLogServers())
                 .contains(LOCALHOST);
 

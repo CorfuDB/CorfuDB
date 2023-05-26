@@ -16,6 +16,7 @@ import org.corfudb.runtime.exceptions.LogUnitException;
 import org.corfudb.runtime.exceptions.OverwriteCause;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.runtime.view.Layout;
 
 import java.io.File;
 import java.io.FileFilter;
@@ -80,6 +81,8 @@ public class StreamLogFiles implements StreamLog {
 
     private final FileSystemAgent fsAgent;
 
+    private final ServerContext sc;
+
     /**
      * Returns a file-based stream log object.
      *
@@ -87,7 +90,7 @@ public class StreamLogFiles implements StreamLog {
      *                      segment and start address
      */
     public StreamLogFiles(ServerContext serverContext, BatchProcessorContext batchProcessorContext) {
-
+        sc = serverContext;
         logDir = Paths.get(serverContext.getServerConfig().get("--log-path").toString(), "log");
         openSegments = new ConcurrentHashMap<>();
         this.dataStore = new StreamLogDataStore(serverContext.getDataStore());
@@ -614,37 +617,55 @@ public class StreamLogFiles implements StreamLog {
         Lock lock = resetLock.writeLock();
         lock.lock();
 
-        long committedTail = getCommittedTail();
-        long latestSegment = getSegmentId(getLogTail());
-        long committedTailSegment = getSegmentId(committedTail);
-
         try {
-            for (long currSegmentId = committedTailSegment; currSegmentId <= latestSegment; currSegmentId++) {
-                // Close segments before deleting their corresponding log files
-                String segmentFilePath;
-                try(Segment sh = getSegmentHandleForSegment(currSegmentId)) {
-                    openSegments.remove(sh.id);
-                    segmentFilePath = sh.segmentFilePath;
+            final Layout currentLayout = sc.getCurrentLayout();
+            final List<String> logServers = currentLayout
+                    .getFirstSegment()
+                    .getFirstStripe()
+                    .getLogServers();
+            log.info("Current layout before reset: {}", currentLayout);
+            if (!logServers.contains(sc.getLocalEndpoint())) {
+                closeAllSegmentHandlers();
+                Preconditions.checkState(openSegments.isEmpty());
+                deleteFilesMatchingFilter(file -> true);
+
+                dataStore.resetStartingAddress();
+                dataStore.resetTailSegment();
+                logMetadata = new LogMetadata(dataStore);
+                // would this lose the gauges pre-reset?
+                removeLocalGauges();
+                logSizeQuota.reset();
+            }
+            else {
+                long committedTail = getCommittedTail();
+                long latestSegment = getSegmentId(getLogTail());
+                long committedTailSegment = getSegmentId(committedTail);
+                for (long currSegmentId = committedTailSegment; currSegmentId <= latestSegment; currSegmentId++) {
+                    // Close segments before deleting their corresponding log files
+                    String segmentFilePath;
+                    try(Segment sh = getSegmentHandleForSegment(currSegmentId)) {
+                        openSegments.remove(sh.id);
+                        segmentFilePath = sh.segmentFilePath;
+                    }
+
+                    deleteFilesMatchingFilter(file -> file.getAbsolutePath().equals(segmentFilePath));
                 }
 
-                deleteFilesMatchingFilter(file -> file.getAbsolutePath().equals(segmentFilePath));
+                long newTailAddress = committedTailSegment * RECORDS_PER_LOG_FILE + 1;
+
+                if (getSegmentId(dataStore.getStartingAddress()) == committedTailSegment) {
+                    dataStore.updateStartingAddress(newTailAddress);
+                }
+
+                logMetadata = new LogMetadata(dataStore);
+                logMetadata.syncTailSegment(newTailAddress);
+                initializeLogMetadata();
+                // would this lose the gauges pre-reset?
+                removeLocalGauges();
             }
 
-            long newTailAddress = committedTailSegment * RECORDS_PER_LOG_FILE + 1;
-
-            if (getSegmentId(dataStore.getStartingAddress()) == committedTailSegment) {
-                dataStore.updateStartingAddress(newTailAddress);
-            }
-
-            logMetadata = new LogMetadata(dataStore);
-            logMetadata.syncTailSegment(newTailAddress);
-            initializeLogMetadata();
-
-            // would this lose the gauges pre-reset?
-            removeLocalGauges();
-
-            log.info("reset: Completed");
         } finally {
+            log.info("reset: Finished");
             lock.unlock();
         }
     }
