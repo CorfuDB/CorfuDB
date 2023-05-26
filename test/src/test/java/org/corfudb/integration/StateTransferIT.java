@@ -108,9 +108,9 @@ public class StateTransferIT extends AbstractIT {
      * Then a block of data entries is written to the cluster.
      * 1 node - 9002 is added to the cluster, and triggers parallel transfer from two nodes.
      * Fail a node during transfer to verify it does not fail the transfer process.
-     * Finally the addition of node 9002 in the layout is verified.
+     * Finally, the addition of node 9002 in the layout is verified.
      *
-     * @throws Exception
+     * @throws Exception error
      */
     private void verifyStateTransferWithNodeFailure(int killNode) throws Exception {
         final int PORT_0 = 9000;
@@ -205,7 +205,7 @@ public class StateTransferIT extends AbstractIT {
      * Restart a node during transfer to verify it does not fail the transfer process.
      * Finally verify two rounds of transfer completes.
      *
-     * @throws Exception
+     * @throws Exception error
      */
     private void verifyStateTransferWithNodeRestart(int restartNode) throws Exception {
         final int PORT_0 = 9000;
