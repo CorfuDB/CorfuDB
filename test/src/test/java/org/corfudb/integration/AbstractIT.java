@@ -722,7 +722,7 @@ public class AbstractIT extends AbstractCorfuTest {
         private Integer lockLeaseDuration;
         private int maxUncompressedTxSize = 0;
         private int maxSnapshotEntriesApplied;
-        private int corfuServerConnectionPort = 9000;
+        private int corfuServerConnectionPort = 0;
 
         // Used only for testing. This is set as a system env in the LR process which is read by
         // DefaultTransportPluginSelector.
@@ -795,8 +795,7 @@ public class AbstractIT extends AbstractCorfuTest {
             }
 
             command.append(" -d ").append(logLevel).append(" ")
-                    .append(port).append(" ")
-                    .append(corfuServerConnectionPort);
+                    .append(port);
 
             return command.toString();
         }
