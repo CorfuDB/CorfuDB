@@ -18,7 +18,7 @@ public class BoundedMap {
     public BoundedMap(long offset, int size) {
         Preconditions.checkArgument(offset >= 0);
         Preconditions.checkArgument(size > 0);
-        Preconditions.checkArgument(Math.addExact(offset, size) < Integer.MAX_VALUE);
+        Math.addExact(offset, size);
         this.offset = offset;
         this.array = new AtomicLongArray(size);
         for (int idx = 0; idx < array.length(); idx++) {
