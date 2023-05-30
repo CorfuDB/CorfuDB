@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
@@ -28,6 +29,7 @@ import com.google.protobuf.DynamicMessage;
 import com.google.protobuf.InvalidProtocolBufferException;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.runtime.CorfuOptions;
@@ -39,12 +41,14 @@ import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.ExampleSchemas.ExampleTableName;
 import org.corfudb.runtime.ExampleSchemas.ManagedMetadata;
 import org.corfudb.runtime.collections.CorfuRecord;
+import org.corfudb.runtime.collections.CorfuStoreEntry;
 import org.corfudb.runtime.collections.CorfuStoreShim;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.CorfuDynamicKey;
 import org.corfudb.runtime.collections.CorfuDynamicRecord;
 import org.corfudb.runtime.collections.ICorfuTable;
+import org.corfudb.runtime.collections.ManagedTxnContext;
 import org.corfudb.runtime.collections.PersistedStreamingMap;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.collections.StreamListener;
@@ -57,11 +61,15 @@ import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.util.serializer.DynamicProtobufSerializer;
+import org.corfudb.util.serializer.ProtobufSerializer;
 import org.rocksdb.Options;
 
 import com.google.protobuf.util.JsonFormat;
 
 import javax.annotation.Nonnull;
+
+import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.METADATA_TABLE_PREFIX_NAME;
+import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.REPLICATION_STATUS_TABLE;
 
 /**
  * This is the CorfuStore Browser/Editor Tool which prints data in a given
@@ -580,6 +588,12 @@ public class CorfuStoreBrowserEditor implements CorfuBrowserEditorCommands {
                 " in table " + tableName + " and namespace " + namespace +
                 ".  Stream Id " + streamUUID);
 
+        if (tableName.equals(REPLICATION_STATUS_TABLE)) {
+            return deleteBypassingSerializerForLrStatusTable(namespace, tableName, keysToDelete, streamUUID);
+        } else if (tableName.contains(METADATA_TABLE_PREFIX_NAME)) {
+            return deleteBypassingSerializerForLrMetadataTable(namespace, tableName, keysToDelete, streamUUID);
+        }
+
         ICorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table =
                 getTable(namespace, tableName);
 
@@ -886,5 +900,102 @@ public class CorfuStoreBrowserEditor implements CorfuBrowserEditorCommands {
         formatMapping = formatMapping.substring(0, formatMapping.length() - 2);
         System.out.println("Tag: " + tag + " --- Total Tables: " + tables.size()
             + " TableNames: " + formatMapping);
+    }
+
+    private int deleteBypassingSerializerForLrStatusTable(String namespace, String tableName, List<String> keysToDelete,
+                                                          UUID streamUUID ) {
+        runtime.getSerializers().removeSerializer(dynamicProtobufSerializer);
+        ProtobufSerializer protoSerializer = new ProtobufSerializer(new ConcurrentHashMap<>());
+        runtime.getSerializers().registerSerializer(protoSerializer);
+
+        CorfuStoreShim store = new CorfuStoreShim(runtime);
+        int numKeysDeleted = 0;
+
+        try {
+            store.openTable(namespace,
+                    tableName,
+                    LogReplicationMetadata.ReplicationStatusKey.class,
+                    LogReplicationMetadata.ReplicationStatusVal.class,
+                    null,
+                    TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
+
+        } catch (Exception ex) {
+            log.error("Unable to open table " + namespace + "$" + tableName);
+            throw new RuntimeException("Unable to open table.");
+        }
+
+        try (ManagedTxnContext txn = store.tx(namespace)) {
+            for (String keyToDelete : keysToDelete) {
+                LogReplicationMetadata.ReplicationStatusKey keyMsg = LogReplicationMetadata.ReplicationStatusKey
+                        .newBuilder()
+                        .setClusterId(keyToDelete)
+                        .build();
+                CorfuStoreEntry record = txn.getRecord(tableName, keyMsg);
+
+                if (record.getPayload() != null) {
+                    System.out.println("Bypassing the DynamicSerializer and Deleting record with Key " + keyToDelete +
+                            " in table " + tableName + " and namespace " + namespace +
+                            ".  Stream Id " + streamUUID);
+                    txn.delete(tableName, keyMsg);
+                    numKeysDeleted++;
+                } else {
+                    System.out.println("Key: " + keyMsg.getClusterId() + " is not found in table " + tableName);
+                }
+                System.out.println("\n======================\n");
+            }
+            txn.commit();
+        } catch (TransactionAbortedException tae) {
+            log.error("Transaction to delete records {} aborted.", keysToDelete, tae);
+        }
+
+        return numKeysDeleted;
+    }
+
+    private int deleteBypassingSerializerForLrMetadataTable(String namespace, String tableName, List<String> keysToDelete,
+                                                            UUID streamUUID ) {
+        runtime.getSerializers().removeSerializer(dynamicProtobufSerializer);
+        ProtobufSerializer protoSerializer = new ProtobufSerializer(new ConcurrentHashMap<>());
+        runtime.getSerializers().registerSerializer(protoSerializer);
+
+        CorfuStoreShim store = new CorfuStoreShim(runtime);
+        int numKeysDeleted = 0;
+
+        try {
+            store.openTable(namespace,
+                    tableName,
+                    LogReplicationMetadata.LogReplicationMetadataKey.class,
+                    LogReplicationMetadata.LogReplicationMetadataVal.class,
+                    null,
+                    TableOptions.fromProtoSchema(LogReplicationMetadata.LogReplicationMetadataVal.class));
+
+        } catch (Exception ex) {
+            log.error("Unable to open table " + namespace + "$" + tableName);
+            throw new RuntimeException("Unable to open table.");
+        }
+
+        try (ManagedTxnContext txn = store.tx(namespace)) {
+            for (String keyToDelete : keysToDelete) {
+                LogReplicationMetadata.LogReplicationMetadataKey keyMsg = LogReplicationMetadata.LogReplicationMetadataKey
+                        .newBuilder()
+                        .setKey(keyToDelete).build();
+                CorfuStoreEntry record = txn.getRecord(tableName, keyMsg);
+
+                if (record.getPayload() != null) {
+                    System.out.println("Bypassing the DynamicSerializer and Deleting record with Key " + keyToDelete +
+                            " in table " + tableName + " and namespace " + namespace +
+                            ".  Stream Id " + streamUUID);
+                    txn.delete(tableName, keyMsg);
+                    numKeysDeleted++;
+                } else {
+                    System.out.println("Key: " + keyMsg.getKey() + " is not found in table " + tableName);
+                }
+                System.out.println("\n======================\n");
+            }
+            txn.commit();
+        } catch (TransactionAbortedException tae) {
+            log.error("Transaction to delete records {} aborted.", keysToDelete, tae);
+        }
+
+        return numKeysDeleted;
     }
 }

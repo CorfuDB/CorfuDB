@@ -2,6 +2,7 @@ package org.corfudb.integration;
 
 import com.google.protobuf.Any;
 import com.google.protobuf.DynamicMessage;
+import com.google.protobuf.Message;
 import com.google.protobuf.UnknownFieldSet;
 
 import java.io.File;
@@ -22,6 +23,7 @@ import java.util.concurrent.ConcurrentMap;
 
 import org.corfudb.browser.CorfuOfflineBrowserEditor;
 import org.corfudb.browser.CorfuStoreBrowserEditor;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
@@ -731,6 +733,45 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         TxnContext tx = store.txn(NAMESPACE);
         tx.putRecord(table1, uuidKey, uuidVal, metadata);
         tx.commit();
+
+        // Add records to LR Status table
+        final String CORFU_SYSTEM_NAMESPACE = "CorfuSystem";
+        final String REPLICATION_STATUS_TABLE = "LogReplicationStatus";
+        final Table<LogReplicationMetadata.ReplicationStatusKey,
+                LogReplicationMetadata.ReplicationStatusVal, Message> replicationStatusTable = store.openTable(
+                        CORFU_SYSTEM_NAMESPACE,
+                        REPLICATION_STATUS_TABLE,
+                        LogReplicationMetadata.ReplicationStatusKey.class,
+                        LogReplicationMetadata.ReplicationStatusVal.class,
+                        null,
+                        TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
+
+        final String statusKey = "sample";
+        LogReplicationMetadata.ReplicationStatusKey keyMsg = LogReplicationMetadata.ReplicationStatusKey.newBuilder()
+                .setClusterId(statusKey).build();
+        LogReplicationMetadata.ReplicationStatusVal valMsg = LogReplicationMetadata.ReplicationStatusVal.newBuilder()
+                .build();
+        TxnContext LrTx = store.txn(CORFU_SYSTEM_NAMESPACE);
+        LrTx.putRecord(replicationStatusTable, keyMsg, valMsg, null);
+        LrTx.commit();
+
+        // Add records to LR METADATA table
+        final String METADATA_TABLE = "CORFU-REPLICATION-WRITER-adf1dd99-f837-44db-a756-92775a3a0464";
+        final Table<LogReplicationMetadata.LogReplicationMetadataKey, LogReplicationMetadata.LogReplicationMetadataVal, Message> metadataTable =
+                store.openTable(CORFU_SYSTEM_NAMESPACE,
+                        METADATA_TABLE,
+                        LogReplicationMetadata.LogReplicationMetadataKey.class,
+                        LogReplicationMetadata.LogReplicationMetadataVal.class,
+                        null,
+                        TableOptions.fromProtoSchema(LogReplicationMetadata.LogReplicationMetadataVal.class));
+
+        final String metadataKey = "lastSnapshotStarted";
+        LogReplicationMetadata.LogReplicationMetadataKey key2 = LogReplicationMetadata.LogReplicationMetadataKey.newBuilder().setKey(metadataKey).build();
+        LogReplicationMetadata.LogReplicationMetadataVal val2 = LogReplicationMetadata.LogReplicationMetadataVal.newBuilder().setVal("1").build();
+        TxnContext LrMetadataTx = store.txn(CORFU_SYSTEM_NAMESPACE);
+        LrMetadataTx.putRecord(metadataTable, key2, val2, null);
+        LrMetadataTx.commit();
+
         runtime.shutdown();
 
         runtime = createRuntime(singleNodeEndpoint);
@@ -770,6 +811,16 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
             newValString));
         // Try to delete a deleted key and verify it is a no-op
         assertThat(browser.deleteRecords(NAMESPACE, TABLE_NAME, Arrays.asList(keyString), batchSize)).isZero();
+
+        // Try to delete an existing key from LR STATUS table
+        assertThat(browser.deleteRecords(CORFU_SYSTEM_NAMESPACE, REPLICATION_STATUS_TABLE, Arrays.asList(statusKey), 1)).isEqualTo(1);
+        // Try to delete a non-existing key from LR STATUS table
+        assertThat(browser.deleteRecords(CORFU_SYSTEM_NAMESPACE, REPLICATION_STATUS_TABLE, Arrays.asList(statusKey), 1)).isZero();
+        // Try to delete an existing key from LR METADATA table
+        assertThat(browser.deleteRecords(CORFU_SYSTEM_NAMESPACE, METADATA_TABLE, Arrays.asList(metadataKey), 1)).isEqualTo(1);
+        // Try to delete a non-existing key from LR METADATA table
+        assertThat(browser.deleteRecords(CORFU_SYSTEM_NAMESPACE, METADATA_TABLE, Arrays.asList(metadataKey), 1)).isZero();
+
         runtime.shutdown();
     }
 
