@@ -22,6 +22,7 @@ import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.locks.ReentrantLock;
 
 import com.google.protobuf.ByteString;
 import com.google.protobuf.Message;
@@ -844,6 +845,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(runtime, LOCAL_SOURCE_CLUSTER_ID);
         LogReplicationPluginConfig pluginConfig = new LogReplicationPluginConfig(pluginConfigFilePath);
         LogReplicationSession session = DefaultClusterConfig.getSessions().get(0);
+        configManager.getSessionLockMap().put(session, new ReentrantLock());
         configManager.generateConfig(Collections.singleton(session), true);
 
         switch(readerImpl) {

@@ -50,6 +50,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 
 import static org.corfudb.infrastructure.logreplication.config.LogReplicationConfig.MERGE_ONLY_STREAMS;
@@ -93,6 +94,9 @@ public class LogReplicationConfigManager {
     // Map from a session to its corresponding config.
     @Getter
     private final Map<LogReplicationSession, LogReplicationConfig> sessionToConfigMap = new ConcurrentHashMap<>();
+
+    @Getter
+    private final Map<LogReplicationSession, ReentrantLock> sessionLockMap = new ConcurrentHashMap<>();
 
     // Set of registered log replication subscribers.
     @Getter
@@ -194,18 +198,23 @@ public class LogReplicationConfigManager {
      */
     public void generateConfig(Set<LogReplicationSession> sessions, boolean registryTableOnly) {
         sessions.forEach(session -> {
-                switch (session.getSubscriber().getModel()) {
-                    case FULL_TABLE:
-                        log.debug("Generating FULL_TABLE config for session {}",
-                                TextFormat.shortDebugString(session));
-                        generateFullTableConfig(session);
-                        break;
-                    case LOGICAL_GROUPS:
-                        log.debug("Generating LOGICAL_GROUP config for session {}",
-                                TextFormat.shortDebugString(session));
-                        generateLogicalGroupConfig(session, registryTableOnly);
-                        break;
-                    default: break;
+                sessionLockMap.get(session).lock();
+                try {
+                    switch (session.getSubscriber().getModel()) {
+                        case FULL_TABLE:
+                            log.debug("Generating FULL_TABLE config for session {}",
+                                    TextFormat.shortDebugString(session));
+                            generateFullTableConfig(session);
+                            break;
+                        case LOGICAL_GROUPS:
+                            log.debug("Generating LOGICAL_GROUP config for session {}",
+                                    TextFormat.shortDebugString(session));
+                            generateLogicalGroupConfig(session, registryTableOnly);
+                            break;
+                        default: break;
+                    }
+                } finally {
+                    sessionLockMap.get(session).unlock();
                 }
         });
     }
