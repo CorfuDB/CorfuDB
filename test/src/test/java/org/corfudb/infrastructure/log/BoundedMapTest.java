@@ -62,9 +62,6 @@ public class BoundedMapTest {
 
         assertThatThrownBy(() -> new BoundedMap(Long.MAX_VALUE, 1))
                 .isInstanceOf(ArithmeticException.class);
-
-        assertThatThrownBy(() -> new BoundedMap(Long.MAX_VALUE - 10, 5))
-                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
