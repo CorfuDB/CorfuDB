@@ -66,13 +66,11 @@ public class LogicalGroupLogEntryReader extends BaseLogEntryReader {
     boolean isValidTransactionEntry(@NonNull OpaqueEntry entry) {
         Set<UUID> txEntryStreamIds = new HashSet<>(entry.getEntries().keySet());
 
-        if (txEntryStreamIds.contains(CLIENT_CONFIG_TABLE_ID)) {
-
-            if (isCurrentSessionImpacted(entry.getEntries().get(CLIENT_CONFIG_TABLE_ID))) {
-                log.info("Group destination change detected, log entry sync will be stopped and a forced snapshot " +
-                        "sync will be triggered！");
-                throw new GroupDestinationChangeException();
-            }
+        if (txEntryStreamIds.contains(CLIENT_CONFIG_TABLE_ID) &&
+                isCurrentSessionImpacted(entry.getEntries().get(CLIENT_CONFIG_TABLE_ID))) {
+            log.info("Group destination change detected, log entry sync will be stopped and a forced snapshot " +
+                    "sync will be triggered！");
+            throw new GroupDestinationChangeException();
         }
 
         return super.isValidTransactionEntry(entry);

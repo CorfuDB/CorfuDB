@@ -10,7 +10,7 @@ public enum LogReplicationError {
     LOG_ENTRY_MESSAGE_SIZE_EXCEEDED(3, "log Replication Entry Message exceeds max allowed size." +
             "Log Replication is TERMINATED."),
     GROUP_DESTINATION_CHANGE(4, "group destination changed during log entry sync"),
-    UNKNOWN (5, "unknown exception caused sync cancel.");
+    UNKNOWN(5, "unknown exception caused sync cancel.");
 
     private final int code;
     private final String description;

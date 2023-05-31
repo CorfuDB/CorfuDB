@@ -379,7 +379,7 @@ public class LogReplicationConfigManager {
         if (currentLogTail != lastClientConfigTableLogTail) {
             lastClientConfigTableLogTail = currentLogTail;
             try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-                clientConfigTableEntries = txn.executeQuery(clientConfigTable, record -> true);
+                clientConfigTableEntries = txn.executeQuery(clientConfigTable, e -> true);
                 txn.commit();
             }
             return true;
