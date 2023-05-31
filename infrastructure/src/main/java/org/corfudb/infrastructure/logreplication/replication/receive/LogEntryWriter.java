@@ -190,6 +190,9 @@ public class LogEntryWriter extends SinkWriter {
             } catch (IllegalArgumentException e) {
                 log.error("Metadata mismatch detected in entry with sequence " + opaqueEntry.getVersion(), e);
                 return false;
+            } catch (InterruptedException e) {
+                log.error("Could not apply entry with sequence " + opaqueEntry.getVersion());
+                return false;
             }
         }
         // lastMsgTs always tracks the timestamp of the last Opaque Entry in a LogReplicationEntryMsg which was

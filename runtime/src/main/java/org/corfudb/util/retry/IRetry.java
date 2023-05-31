@@ -1,9 +1,8 @@
 package org.corfudb.util.retry;
 
-import lombok.SneakyThrows;
-import org.corfudb.runtime.exceptions.RetryExhaustedException;
-
 import java.util.function.Consumer;
+
+import lombok.SneakyThrows;
 
 
 /**
@@ -38,7 +37,7 @@ public interface IRetry<E extends Exception, F extends Exception, G extends Exce
     static <T extends Exception, U extends Exception, R, Z extends IRetry> IRetry<T, U,
             RuntimeException, RuntimeException, R, Z> build(Class<Z> retryType,
                                                             Class<? extends T> firstExceptionType,
-                                                            Class<? extends U> secondExceptionType, IRetryable<T, U, RuntimeException,
+            Class<? extends U> secondExceptionType, IRetryable<T, U, RuntimeException,
             RuntimeException, R> runFunction) {
         return build(retryType, firstExceptionType, secondExceptionType, RuntimeException.class,
                 RuntimeException.class, runFunction);
@@ -46,9 +45,9 @@ public interface IRetry<E extends Exception, F extends Exception, G extends Exce
 
     static <T extends Exception, U extends Exception, V extends Exception, R,
             Z extends IRetry> IRetry<T, U, V, RuntimeException, R,
-            Z> build(Class<Z> retryType, Class<? extends T> firstExceptionType,
-                     Class<? extends U> secondExceptionType,
-                     Class<? extends V> thirdExceptionType, IRetryable<T, U, V,
+            Z> build(Class<Z> retryType,Class<? extends T> firstExceptionType,
+                                                Class<? extends U> secondExceptionType,
+            Class<? extends V> thirdExceptionType, IRetryable<T, U, V,
             RuntimeException, R> runFunction) {
         return build(retryType, firstExceptionType, secondExceptionType, thirdExceptionType,
                 RuntimeException.class, runFunction);
@@ -57,11 +56,11 @@ public interface IRetry<E extends Exception, F extends Exception, G extends Exce
     @SneakyThrows
     static <T extends Exception, U extends Exception, V extends Exception, W extends Exception, R,
             Z extends IRetry>
-    IRetry<T, U, V, W, R, Z> build(Class<Z> retryType,
-                                   Class<? extends T> firstExceptionType,
-                                   Class<? extends U> secondExceptionType,
-                                   Class<? extends V> thirdExceptionType,
-                                   Class<? extends W> fourthExceptionType, IRetryable<T,
+                IRetry<T, U, V, W, R, Z> build(Class<Z> retryType,
+                                               Class<? extends T> firstExceptionType,
+                                               Class<? extends U> secondExceptionType,
+                                               Class<? extends V> thirdExceptionType,
+                                               Class<? extends W> fourthExceptionType, IRetryable<T,
             U, V,
             W, R> runFunction) {
         return (IRetry<T, U, V, W, R, Z>) retryType.getConstructor(IRetryable.class)
@@ -73,7 +72,7 @@ public interface IRetry<E extends Exception, F extends Exception, G extends Exce
      * Run the retry. This function may never return.
      */
     default O run()
-            throws E, F, G, H {
+            throws E, F, G, H, InterruptedException {
         while (true) {
             try {
                 return getRunFunction().retryFunction();
@@ -107,6 +106,8 @@ public interface IRetry<E extends Exception, F extends Exception, G extends Exce
     /**
      * Apply the retry logic.
      */
-    void nextWait();
+    void nextWait() throws InterruptedException;
+
+
 
 }

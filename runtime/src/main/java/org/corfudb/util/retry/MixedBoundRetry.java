@@ -110,7 +110,7 @@ public class MixedBoundRetry<E extends Exception, F extends Exception,
     }
 
     @Override
-    public O run() throws E, F, G, H {
+    public O run() throws E, F, G, H, InterruptedException {
         endSession = System.currentTimeMillis() + overallMaxRetryDuration.toMillis();
         lastDuration = baseDuration;
         while (true) {

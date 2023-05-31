@@ -82,16 +82,21 @@ abstract class StreamListenerResumePolicy implements StreamListener {
                 "Error=", throwable);
 
         if (throwable instanceof UnreachableClusterException) {
-            IRetry.build(IntervalRetry.class, () -> {
-                try {
-                    log.info("Subscribe onError");
-                    resumeSubscription();
-                } catch (UnreachableClusterException e) {
-                    log.error("Error while attempting to re-subscribe listener after onError.", e);
-                    throw new RetryNeededException();
-                }
-                return null;
-            }).run();
+            try {
+                IRetry.build(IntervalRetry.class, () -> {
+                    try {
+                        log.info("Subscribe onError");
+                        resumeSubscription();
+                    } catch (UnreachableClusterException e) {
+                        log.error("Error while attempting to re-subscribe listener after onError.", e);
+                        throw new RetryNeededException();
+                    }
+                    return null;
+                }).run();
+            } catch (InterruptedException e) {
+                log.error("Unrecoverable exception when attempting to re-subscribe listener.", e);
+                throw new UnrecoverableCorfuInterruptedError(e);
+            }
         } else {
             resumeSubscription();
         }

@@ -3,9 +3,7 @@ package org.corfudb.util.retry;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.util.Sleep;
 
-import java.time.Duration;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -35,8 +33,8 @@ public class IntervalRetry<E extends Exception, F extends Exception,
      *
      */
     @Override
-    public void nextWait() {
-        Sleep.sleepUninterruptibly(Duration.ofMillis(retryInterval));
+    public void nextWait() throws InterruptedException {
+        TimeUnit.MILLISECONDS.sleep(retryInterval);
     }
 
 }

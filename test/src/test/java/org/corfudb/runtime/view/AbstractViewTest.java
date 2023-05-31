@@ -16,7 +16,6 @@ import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.infrastructure.TestServerRouter;
 import org.corfudb.infrastructure.management.FailureDetector;
-import org.corfudb.infrastructure.management.NetworkStretcher;
 import org.corfudb.protocols.service.CorfuProtocolMessage;
 import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
 import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
@@ -40,7 +39,6 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 
 import javax.annotation.Nonnull;
-import java.time.Duration;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Map;
@@ -344,11 +342,6 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
      */
     void setAggressiveDetectorTimeouts(int... managementServersPorts) {
         Arrays.stream(managementServersPorts).forEach(port -> {
-            NetworkStretcher stretcher = NetworkStretcher.builder()
-                    .periodDelta(PARAMETERS.TIMEOUT_VERY_SHORT)
-                    .maxPeriod(PARAMETERS.TIMEOUT_VERY_SHORT)
-                    .initialPollInterval(PARAMETERS.TIMEOUT_VERY_SHORT)
-                    .build();
             FailureDetector.PollConfig config = FailureDetector.PollConfig
                     .builder()
                     .maxDetectionDuration(PARAMETERS.TIMEOUT_SHORT)

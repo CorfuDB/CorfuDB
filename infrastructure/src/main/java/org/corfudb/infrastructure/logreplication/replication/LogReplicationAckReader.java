@@ -344,6 +344,7 @@ public class LogReplicationAckReader {
     }
 
     public void markSnapshotSyncInfoCompleted() {
+        try {
             IRetry.build(IntervalRetry.class, () -> {
                 try {
                     lock.lock();
@@ -361,9 +362,14 @@ public class LogReplicationAckReader {
                 }
                 return null;
             }).run();
+        } catch (InterruptedException e) {
+            log.error("Unrecoverable exception when attempting to markSnapshotSyncInfoCompleted.", e);
+            throw new UnrecoverableCorfuInterruptedError(e);
+        }
     }
 
     public void markSnapshotSyncInfoOngoing(boolean forced, UUID eventId) {
+        try {
             IRetry.build(IntervalRetry.class, () -> {
                 try {
                     lock.lock();
@@ -382,9 +388,14 @@ public class LogReplicationAckReader {
                 }
                 return null;
             }).run();
+        } catch (InterruptedException e) {
+            log.error("Unrecoverable exception when attempting to markSnapshotSyncInfoOngoing.", e);
+            throw new UnrecoverableCorfuInterruptedError(e);
+        }
     }
 
     public void markSnapshotSyncInfoOngoing() {
+        try {
             IRetry.build(IntervalRetry.class, () -> {
                 try {
                     lock.lock();
@@ -398,9 +409,14 @@ public class LogReplicationAckReader {
 
                 return null;
             }).run();
+        } catch (InterruptedException e) {
+            log.error("Unrecoverable exception when attempting to markSnapshotSyncInfoOngoing.", e);
+            throw new UnrecoverableCorfuInterruptedError(e);
+        }
     }
 
     public void markSyncStatus(SyncStatus status) {
+        try {
             IRetry.build(IntervalRetry.class, () -> {
                 try {
                     lock.lock();
@@ -417,6 +433,10 @@ public class LogReplicationAckReader {
                 }
                 return null;
             }).run();
+        } catch (InterruptedException e) {
+            log.error("Unrecoverable exception when attempting to markSyncStatus as {}.", status, e);
+            throw new UnrecoverableCorfuInterruptedError(e);
+        }
     }
 
     /**
@@ -446,6 +466,7 @@ public class LogReplicationAckReader {
     private class TsPollingTask implements Runnable {
         @Override
         public void run() {
+            try {
                 IRetry.build(IntervalRetry.class, () -> {
                     try {
                         lock.lock();
@@ -466,6 +487,10 @@ public class LogReplicationAckReader {
 
                     return null;
                 }).run();
+            } catch (InterruptedException e) {
+                log.error("Unrecoverable exception when attempting to updateRemainingEntriesToSend", e);
+                throw new UnrecoverableCorfuInterruptedError(e);
+            }
         }
     }
 }

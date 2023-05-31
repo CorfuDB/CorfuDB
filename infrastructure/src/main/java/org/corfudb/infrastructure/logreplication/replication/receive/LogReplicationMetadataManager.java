@@ -111,6 +111,7 @@ public class LogReplicationMetadataManager {
     }
 
     public void initializeReplicationStatusTable(String remoteClusterId) {
+        try {
             IRetry.build(IntervalRetry.class, () -> {
                 try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
                     ReplicationStatusKey replicationStatusKey = ReplicationStatusKey.newBuilder()
@@ -140,6 +141,10 @@ public class LogReplicationMetadataManager {
                 }
                 return null;
             }).run();
+        } catch (InterruptedException e) {
+            log.error("Unrecoverable exception when attempting to add default sync status.", e);
+            throw new UnrecoverableCorfuInterruptedError(e);
+        }
     }
 
     public TxnContext getTxnContext() {
@@ -279,6 +284,7 @@ public class LogReplicationMetadataManager {
             return;
         }
 
+        try {
             IRetry.build(IntervalRetry.class, () -> {
                 try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
                     for (LogReplicationMetadataType type : LogReplicationMetadataType.values()) {
@@ -307,6 +313,11 @@ public class LogReplicationMetadataManager {
                 log.info("Update topologyConfigId, new metadata {}", this);
                 return null;
             }).run();
+        } catch (InterruptedException e) {
+            log.error("Unrecoverable exception when updating the topology " +
+                "config id", e);
+            throw new UnrecoverableCorfuInterruptedError(e);
+        }
     }
 
     /**

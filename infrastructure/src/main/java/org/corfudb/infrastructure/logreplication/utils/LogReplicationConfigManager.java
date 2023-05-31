@@ -161,24 +161,29 @@ public class LogReplicationConfigManager {
      * @return True if registry table address space changed and the in-memory entries are refreshed.
      */
     public boolean loadRegistryTableEntries() {
-        return IRetry.build(ExponentialBackoffRetry.class, () -> {
-            try {
-                StreamAddressSpace currentAddressSpace = rt.getSequencerView().getStreamAddressSpace(
-                        new StreamAddressRange(REGISTRY_TABLE_ID, Long.MAX_VALUE, Address.NON_ADDRESS));
-                long currentLogTail = currentAddressSpace.getTail();
-                if (currentLogTail != lastRegistryTableLogTail) {
-                    lastRegistryTableLogTail = currentLogTail;
-                    ICorfuTable<TableName, CorfuRecord<TableDescriptors, TableMetadata>> registryTable =
-                            rt.getTableRegistry().getRegistryTable();
-                    registryTableEntries = registryTable.entryStream().collect(Collectors.toList());
-                    return true;
+        try {
+            return IRetry.build(ExponentialBackoffRetry.class, () -> {
+                try {
+                    StreamAddressSpace currentAddressSpace = rt.getSequencerView().getStreamAddressSpace(
+                            new StreamAddressRange(REGISTRY_TABLE_ID, Long.MAX_VALUE, Address.NON_ADDRESS));
+                    long currentLogTail = currentAddressSpace.getTail();
+                    if (currentLogTail != lastRegistryTableLogTail) {
+                        lastRegistryTableLogTail = currentLogTail;
+                        ICorfuTable<TableName, CorfuRecord<TableDescriptors, TableMetadata>> registryTable =
+                                rt.getTableRegistry().getRegistryTable();
+                        registryTableEntries = registryTable.entryStream().collect(Collectors.toList());
+                        return true;
+                    }
+                } catch (Exception e) {
+                    log.error("Exception caught when syncing with registry table, retry needed", e);
+                    throw new RetryNeededException();
                 }
-            } catch (Exception e) {
-                log.error("Exception caught when syncing with registry table, retry needed", e);
-                throw new RetryNeededException();
-            }
-            return false;
-        }).setOptions(x -> x.setMaxRetryThreshold(Duration.ofSeconds(SYNC_THRESHOLD))).run();
+                return false;
+            }).setOptions(x -> x.setMaxRetryThreshold(Duration.ofSeconds(SYNC_THRESHOLD))).run();
+        } catch (InterruptedException e) {
+            log.error("Cannot sync with registry table, LR stopped", e);
+            throw new UnrecoverableCorfuInterruptedError(e);
+        }
     }
 
     /**
@@ -272,32 +277,37 @@ public class LogReplicationConfigManager {
             throw new UnrecoverableCorfuError(e);
         }
 
-        if (currentVersion == null) {
-            currentVersion = logReplicationVersionAdapter.getNodeVersion();
-        }
-
-        IRetry.build(IntervalRetry.class, () -> {
-            try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-                VersionResult result = verifyVersionResult(txn);
-                if (result.equals(VersionResult.UNSET) || result.equals(VersionResult.CHANGE)) {
-                    // Case of upgrade or initial boot: sync version table with plugin info
-                    boolean isUpgraded = result.equals(VersionResult.CHANGE);
-                    log.info("Current version from plugin = {}, isUpgraded = {}", currentVersion, isUpgraded);
-                    // Persist upgrade flag so a snapshot-sync is enforced upon negotiation
-                    // (when it is set to true)
-                    Version version = Version.newBuilder()
-                            .setVersion(currentVersion)
-                            .setIsUpgraded(isUpgraded)
-                            .build();
-                    txn.putRecord(pluginVersionTable, versionString, version, defaultMetadata);
-                }
-                txn.commit();
-                return null;
-            } catch (TransactionAbortedException e) {
-                log.warn("Exception on getStreamsToReplicate()", e);
-                throw new RetryNeededException();
+        try {
+            if (currentVersion == null) {
+                currentVersion = logReplicationVersionAdapter.getNodeVersion();
             }
-        }).run();
+
+            IRetry.build(IntervalRetry.class, () -> {
+                try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+                    VersionResult result = verifyVersionResult(txn);
+                    if (result.equals(VersionResult.UNSET) || result.equals(VersionResult.CHANGE)) {
+                        // Case of upgrade or initial boot: sync version table with plugin info
+                        boolean isUpgraded = result.equals(VersionResult.CHANGE);
+                        log.info("Current version from plugin = {}, isUpgraded = {}", currentVersion, isUpgraded);
+                        // Persist upgrade flag so a snapshot-sync is enforced upon negotiation
+                        // (when it is set to true)
+                        Version version = Version.newBuilder()
+                                .setVersion(currentVersion)
+                                .setIsUpgraded(isUpgraded)
+                                .build();
+                        txn.putRecord(pluginVersionTable, versionString, version, defaultMetadata);
+                    }
+                    txn.commit();
+                    return null;
+                } catch (TransactionAbortedException e) {
+                    log.warn("Exception on getStreamsToReplicate()", e);
+                    throw new RetryNeededException();
+                }
+            }).run();
+        } catch (InterruptedException e) {
+            log.error("Unrecoverable exception when updating version table", e);
+            throw new UnrecoverableCorfuInterruptedError(e);
+        }
     }
 
     private VersionResult verifyVersionResult(TxnContext txn) {
@@ -346,22 +356,27 @@ public class LogReplicationConfigManager {
 
         log.info("Reset isUpgraded flag");
 
-        IRetry.build(IntervalRetry.class, () -> {
-            try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-                VersionString versionString = VersionString.newBuilder()
-                        .setName(VERSION_PLUGIN_KEY).build();
-                CorfuStoreEntry<VersionString, Version, Uuid> versionEntry =
-                        txn.getRecord(LOG_REPLICATION_PLUGIN_VERSION_TABLE, versionString);
-                Version version = Version.newBuilder().mergeFrom(versionEntry.getPayload()).setIsUpgraded(false).build();
+        try {
+            IRetry.build(IntervalRetry.class, () -> {
+                try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+                    VersionString versionString = VersionString.newBuilder()
+                            .setName(VERSION_PLUGIN_KEY).build();
+                    CorfuStoreEntry<VersionString, Version, Uuid> versionEntry =
+                            txn.getRecord(LOG_REPLICATION_PLUGIN_VERSION_TABLE, versionString);
+                    Version version = Version.newBuilder().mergeFrom(versionEntry.getPayload()).setIsUpgraded(false).build();
 
-                txn.putRecord(pluginVersionTable, versionString, version, defaultMetadata);
-                txn.commit();
-            } catch (TransactionAbortedException e) {
-                log.warn("Exception when resetting upgrade flag in version table", e);
-                throw new RetryNeededException();
-            }
-            return null;
-        }).run();
+                    txn.putRecord(pluginVersionTable, versionString, version, defaultMetadata);
+                    txn.commit();
+                } catch (TransactionAbortedException e) {
+                    log.warn("Exception when resetting upgrade flag in version table", e);
+                    throw new RetryNeededException();
+                }
+                return null;
+            }).run();
+        } catch (InterruptedException e) {
+            log.error("Unrecoverable exception when resetting upgrade flag in version table", e);
+            throw new UnrecoverableCorfuInterruptedError(e);
+        }
     }
 
     public CorfuRuntime getConfigRuntime() {

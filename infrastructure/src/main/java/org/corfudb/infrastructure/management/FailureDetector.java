@@ -22,6 +22,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.clients.ManagementClient;
 import org.corfudb.runtime.exceptions.RetryExhaustedException;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.Sleep;
@@ -168,6 +169,10 @@ public class FailureDetector implements IDetector {
             }).setOptions(retrySettings).run();
         } catch (RetryExhaustedException re) {
             log.debug("Poll round finished. Took: {}ms", System.currentTimeMillis() - start);
+        }
+        catch (InterruptedException ie) {
+            log.error("Interrupted exception occurred.");
+            throw new UnrecoverableCorfuInterruptedError(ie);
         }
 
         //Aggregation step
