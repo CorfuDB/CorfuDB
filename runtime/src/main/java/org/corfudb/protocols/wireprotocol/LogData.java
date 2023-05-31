@@ -18,6 +18,7 @@ import org.corfudb.util.serializer.Serializers;
 
 import java.nio.ByteBuffer;
 import java.util.EnumMap;
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
@@ -353,23 +354,27 @@ public class LogData implements IMetadata, ILogData {
      */
     @Override
     public boolean equals(Object o) {
-        if (o == this) {
-            return true;
-        } else if (!(o instanceof LogData)) {
-            return false;
-        } else {
-            LogData other = (LogData) o;
-            if (compareTo(other) == 0) {
-                boolean sameClientId = getClientId() == null ? other.getClientId() == null :
-                        getClientId().equals(other.getClientId());
-                boolean sameThreadId = getThreadId() == null ? other.getThreadId() == null :
-                        getThreadId().equals(other.getThreadId());
-
-                return sameClientId && sameThreadId;
-            }
-
+        if (o == null) {
             return false;
         }
+
+        if (o == this) {
+            return true;
+        }
+
+        if (!(o instanceof LogData)) {
+            return false;
+        }
+
+        LogData other = (LogData) o;
+        if (compareTo(other) != 0) {
+            return false;
+        }
+
+        boolean sameClientId = Objects.equals(getClientId(), other.getClientId());
+        boolean sameThreadId = Objects.equals(getThreadId(), other.getThreadId());
+
+        return sameClientId && sameThreadId;
     }
 
     @Override

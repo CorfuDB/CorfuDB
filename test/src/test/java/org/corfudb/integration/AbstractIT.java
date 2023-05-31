@@ -248,7 +248,7 @@ public class AbstractIT extends AbstractCorfuTest {
      * @param verifier     Layout predicate to test the refreshed layout.
      * @param corfuRuntime corfu runtime.
      */
-    public static void waitForLayoutChange(
+    public static Layout waitForLayoutChange(
             Predicate<Layout> verifier, CorfuRuntime corfuRuntime) throws InterruptedException {
 
         corfuRuntime.invalidateLayout();
@@ -263,6 +263,8 @@ public class AbstractIT extends AbstractCorfuTest {
             TimeUnit.MILLISECONDS.sleep(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
         }
         assertThat(verifier.test(refreshedLayout)).isTrue();
+
+        return refreshedLayout;
     }
 
     /**

@@ -17,6 +17,7 @@ import org.corfudb.runtime.exceptions.OverwriteCause;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.util.JsonUtils;
 
 import java.io.File;
 import java.io.FileFilter;
@@ -623,14 +624,15 @@ public class StreamLogFiles implements StreamLog {
                     .getFirstSegment()
                     .getFirstStripe()
                     .getLogServers();
-            log.info("Current layout before reset: {}", currentLayout);
+
+            log.info("Current layout before reset: {}", JsonUtils.toJson(currentLayout));
             if (!logServers.contains(sc.getLocalEndpoint())) {
                 closeAllSegmentHandlers();
                 Preconditions.checkState(openSegments.isEmpty());
                 deleteFilesMatchingFilter(file -> true);
 
-                dataStore.resetStartingAddress();
-                dataStore.resetTailSegment();
+                dataStore.resetStartingAddress(StreamLogDataStore.ZERO_ADDRESS);
+                dataStore.resetTailSegment(StreamLogDataStore.ZERO_ADDRESS);
                 logMetadata = new LogMetadata(dataStore);
                 // would this lose the gauges pre-reset?
                 removeLocalGauges();
@@ -651,19 +653,18 @@ public class StreamLogFiles implements StreamLog {
                     deleteFilesMatchingFilter(file -> file.getAbsolutePath().equals(segmentFilePath));
                 }
 
-                long newTailAddress = committedTailSegment * RECORDS_PER_LOG_FILE + 1;
-
-                if (getSegmentId(dataStore.getStartingAddress()) == committedTailSegment) {
-                    dataStore.updateStartingAddress(newTailAddress);
+                long newTailAddress = StreamLogDataStore.ZERO_ADDRESS;
+                if (committedTailSegment > 0) {
+                    newTailAddress = committedTailSegment * RECORDS_PER_LOG_FILE + 1;
                 }
 
+                dataStore.resetStartingAddress(newTailAddress);
                 logMetadata = new LogMetadata(dataStore);
                 logMetadata.syncTailSegment(newTailAddress);
                 initializeLogMetadata();
                 // would this lose the gauges pre-reset?
                 removeLocalGauges();
             }
-
         } finally {
             log.info("reset: Finished");
             lock.unlock();
