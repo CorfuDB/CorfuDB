@@ -67,11 +67,14 @@ public class LogReplicationContext {
     }
 
     /**
-     * This method will be invoked when it is needed to check if registry has new entries, to get the up-to-date
-     * LogReplicationConfig, which mainly includes streams to replicate and data streams to tags map.
+     * This method will be invoked when it is needed to get the up-to-date LogReplicationConfig by checking registry
+     * table or other config related tables.
+     *
+     * @param session LogReplicationSession to refresh the config.
+     * @param registryTableOnly True if only registry table is used for config generation or update.
      */
-    public void refresh(LogReplicationSession session, boolean updateGroupConfig) {
-        this.configManager.getUpdatedConfig(session, updateGroupConfig);
+    public void refresh(LogReplicationSession session, boolean registryTableOnly) {
+        this.configManager.getUpdatedConfig(session, registryTableOnly);
     }
 
     /**

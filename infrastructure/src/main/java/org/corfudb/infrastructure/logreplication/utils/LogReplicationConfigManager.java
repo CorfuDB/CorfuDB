@@ -190,9 +190,9 @@ public class LogReplicationConfigManager {
      * Generate LogReplicationConfig for all given sessions based on there replication model.
      *
      * @param sessions set of sessions for which to generate config.
-     * @param updateGroupConfig True if the group destinations config is also supposed to be updated.
+     * @param registryTableOnly True if only update config from registry table.
      */
-    public void generateConfig(Set<LogReplicationSession> sessions, boolean updateGroupConfig) {
+    public void generateConfig(Set<LogReplicationSession> sessions, boolean registryTableOnly) {
         sessions.forEach(session -> {
                 switch (session.getSubscriber().getModel()) {
                     case FULL_TABLE:
@@ -203,7 +203,7 @@ public class LogReplicationConfigManager {
                     case LOGICAL_GROUPS:
                         log.debug("Generating LOGICAL_GROUP config for session {}",
                                 TextFormat.shortDebugString(session));
-                        generateLogicalGroupConfig(session, updateGroupConfig);
+                        generateLogicalGroupConfig(session, registryTableOnly);
                         break;
                     default: break;
                 }
@@ -330,14 +330,29 @@ public class LogReplicationConfigManager {
     }
 
     /**
-     * If registry table has updates, update the streams to replicate and tags for each session based
-     * on the latest registry table entries.
+     * Get updated LogReplicationConfig for the given session.
+     *
+     * @param session LogReplicationSession to get updated config for.
+     * @param registryTableOnly True if only registry table is used for config generation or update.
      */
-    public void getUpdatedConfig(LogReplicationSession session, boolean updateGroupConfig) {
-        syncWithClientConfigTable();
-        syncWithRegistryTable();
+    public void getUpdatedConfig(LogReplicationSession session, boolean registryTableOnly) {
+        boolean registryTableUpdated = syncWithRegistryTable();
 
-        generateConfig(Collections.singleton(session), updateGroupConfig);
+        switch (session.getSubscriber().getModel()) {
+            case FULL_TABLE:
+                if (registryTableUpdated) {
+                    generateConfig(Collections.singleton(session), registryTableOnly);
+                }
+                break;
+            case LOGICAL_GROUPS:
+                boolean clientConfigTableUpdated = syncWithClientConfigTable();
+                if (registryTableUpdated || clientConfigTableUpdated) {
+                    generateConfig(Collections.singleton(session), registryTableOnly);
+                }
+                break;
+            default:
+                break;
+        }
     }
 
     /**

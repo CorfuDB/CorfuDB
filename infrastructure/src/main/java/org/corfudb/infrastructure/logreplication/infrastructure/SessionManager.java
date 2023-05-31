@@ -323,7 +323,7 @@ public class SessionManager {
         log.info("Total of {} outgoing sessions created with subscriber {}, sessions={}", sessionsToAdd.size(),
                 subscriber, sessionsToAdd);
 
-        configManager.generateConfig(sessionsToAdd, true);
+        configManager.generateConfig(sessionsToAdd, false);
     }
 
     private void createIncomingSessionsBySubscriber(ReplicationSubscriber subscriber) {
@@ -364,7 +364,7 @@ public class SessionManager {
         log.info("Total of {} incoming sessions created with subscriber {}, sessions={}", sessionsToAdd.size(),
                 subscriber, sessionsToAdd);
 
-        configManager.generateConfig(sessionsToAdd, true);
+        configManager.generateConfig(sessionsToAdd, false);
     }
 
     private void logNewlyAddedSessionInfo() {

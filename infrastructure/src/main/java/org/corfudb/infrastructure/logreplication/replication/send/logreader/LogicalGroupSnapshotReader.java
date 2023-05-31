@@ -161,7 +161,7 @@ public class LogicalGroupSnapshotReader extends BaseSnapshotReader {
     public void reset(long ts) {
         // As the config should reflect the latest configuration read from registry table, it will be synced with the
         // latest registry table content instead of the given ts, while the streams to replicate will be read up to ts.
-        replicationContext.refresh(session, true);
+        replicationContext.refresh(session, false);
         preMsgTs = Address.NON_ADDRESS;
         currentMsgTs = Address.NON_ADDRESS;
         snapshotTimestamp = ts;

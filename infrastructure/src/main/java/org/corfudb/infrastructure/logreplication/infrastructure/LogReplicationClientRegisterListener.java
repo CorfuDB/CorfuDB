@@ -71,7 +71,7 @@ public class LogReplicationClientRegisterListener extends StreamListenerResumeOr
      */
     public void start() {
         CorfuStoreMetadata.Timestamp timestamp = configManager.preprocessAndGetTail();
-        configManager.generateConfig(sessionManager.getSessions(), true);
+        configManager.generateConfig(sessionManager.getSessions(), false);
 
         log.info("Start log replication listener for client config tables from {}", timestamp);
         try {
@@ -162,7 +162,7 @@ public class LogReplicationClientRegisterListener extends StreamListenerResumeOr
         // TODO (V2 / Chris): In next PR this listener will be only for client register/unregister, remember to avoid
         //  clearing all the in-memory fields in onClientListenerResume method in next PR.
         CorfuStoreMetadata.Timestamp timestamp = configManager.onClientListenerResume();
-        configManager.generateConfig(sessionManager.getSessions(), true);
+        configManager.generateConfig(sessionManager.getSessions(), false);
         sessionManager.getSessions().forEach(session -> {
             SnapshotSyncUtils.enforceSnapshotSync(session, corfuStore);
         });
