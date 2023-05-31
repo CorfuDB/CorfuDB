@@ -5,11 +5,12 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.infrastructure.logreplication.DataSender;
+import org.corfudb.infrastructure.logreplication.exceptions.GroupDestinationChangeException;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent.LogReplicationEventType;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationFSM;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.LogEntryReader;
-import org.corfudb.infrastructure.logreplication.replication.send.logreader.MessageSizeExceededException;
+import org.corfudb.infrastructure.logreplication.exceptions.MessageSizeExceededException;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.exceptions.TrimmedException;
 
@@ -60,8 +61,7 @@ public class LogEntrySender {
      *                          the application callback for data transmission
      * @param logReplicationFSM log replication FSM to insert events upon message acknowledgement
      */
-    public LogEntrySender(LogEntryReader logEntryReader, DataSender dataSender,
-                          LogReplicationFSM logReplicationFSM) {
+    public LogEntrySender(LogEntryReader logEntryReader, DataSender dataSender, LogReplicationFSM logReplicationFSM) {
 
         this.logEntryReader = logEntryReader;
         this.logReplicationFSM = logReplicationFSM;
@@ -71,7 +71,7 @@ public class LogEntrySender {
     /**
      * Read and send incremental updates (log entries)
      *
-     * @param logEntrySyncEventId
+     * @param logEntrySyncEventId Transition event id that cased FSM transits into IN_LOG_ENTRY_SYNC state.
      */
     public void send(UUID logEntrySyncEventId) {
 
@@ -130,6 +130,10 @@ public class LogEntrySender {
             } catch (MessageSizeExceededException me) {
                 log.error("Caught Message Size Exceeded Exception while reading for {}", logEntrySyncEventId);
                 cancelLogEntrySync(LogReplicationError.LOG_ENTRY_MESSAGE_SIZE_EXCEEDED,
+                        LogReplicationEventType.SYNC_CANCEL, logEntrySyncEventId);
+                return;
+            } catch (GroupDestinationChangeException gce) {
+                cancelLogEntrySync(LogReplicationError.GROUP_DESTINATION_CHANGE,
                         LogReplicationEventType.SYNC_CANCEL, logEntrySyncEventId);
                 return;
             } catch (Exception e) {

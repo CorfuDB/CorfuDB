@@ -24,7 +24,6 @@ import static org.corfudb.util.serializer.ProtobufSerializer.PROTOBUF_SERIALIZER
 public class LogReplicationContext {
 
     @Getter
-    @Setter
     private final LogReplicationConfigManager configManager;
 
     @Getter
@@ -35,7 +34,6 @@ public class LogReplicationContext {
     private long topologyConfigId;
 
     @Getter
-    @Setter
     private final AtomicBoolean isLeader;
 
     @Getter
@@ -68,13 +66,14 @@ public class LogReplicationContext {
     }
 
     /**
-     * This method will be invoked when it is needed to check if registry has new entries, to get the up-to-date
-     * LogReplicationConfig, which mainly includes streams to replicate and data streams to tags map. Please note
-     * that this method is synchronized because LogReplicationContext is shared across sessions so each session
-     * will have its own threads to access it.
+     * This method will be invoked when it is needed to get the up-to-date LogReplicationConfig by checking registry
+     * table or other config related tables.
+     *
+     * @param session LogReplicationSession to refresh the config.
+     * @param updateGroupDestinationConfig True if group destination config needs to be updated.
      */
-    public synchronized void refresh() {
-        this.configManager.getUpdatedConfig();
+    public void refreshConfig(LogReplicationSession session, boolean updateGroupDestinationConfig) {
+        this.configManager.getUpdatedConfig(session, updateGroupDestinationConfig);
     }
 
     /**
@@ -96,5 +95,4 @@ public class LogReplicationContext {
     public ISerializer getProtobufSerializer() {
         return configManager.getRuntime().getSerializers().getSerializer(PROTOBUF_SERIALIZER_CODE);
     }
-
 }

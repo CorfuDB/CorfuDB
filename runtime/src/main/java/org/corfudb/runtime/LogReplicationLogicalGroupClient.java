@@ -16,6 +16,8 @@ import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
+import org.corfudb.runtime.object.transactions.TransactionalContext;
+import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.util.retry.ExponentialBackoffRetry;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.RetryNeededException;
@@ -191,7 +193,10 @@ public class LogReplicationLogicalGroupClient {
                                 .addAllDestinationIds(finalRemoteDestinations)
                                 .build();
                     }
-
+                    // Manually add stream tag to the write set of this txn, such that relevant LogEntryReaders could
+                    // be able to track the corresponding opaque stream.
+                    TransactionalContext.getRootContext().getWriteSetInfo().getStreamTags()
+                            .add(ObjectsView.getLogicalGroupStreamTagInfo(clientName).getStreamId());
                     txn.putRecord(sourceMetadataTable, clientInfoKey, clientDestinations, null);
                     txn.commit();
                     return null;
@@ -250,7 +255,10 @@ public class LogReplicationLogicalGroupClient {
                                 .build();
                         txn.putRecord(sourceMetadataTable, clientInfoKey, clientDestinations, null);
                     }
-
+                    // Manually add stream tag to the write set of this txn, such that relevant LogEntryReaders could
+                    // be able to track the corresponding opaque stream.
+                    TransactionalContext.getRootContext().getWriteSetInfo().getStreamTags()
+                            .add(ObjectsView.getLogicalGroupStreamTagInfo(clientName).getStreamId());
                     txn.commit();
                     return null;
                 } catch (TransactionAbortedException tae) {
@@ -322,6 +330,10 @@ public class LogReplicationLogicalGroupClient {
                                 clientName, logicalGroup));
                     }
 
+                    // Manually add stream tag to the write set of this txn, such that relevant LogEntryReaders could
+                    // be able to track the corresponding opaque stream.
+                    TransactionalContext.getRootContext().getWriteSetInfo().getStreamTags()
+                            .add(ObjectsView.getLogicalGroupStreamTagInfo(clientName).getStreamId());
                     txn.commit();
                     return null;
                 } catch (TransactionAbortedException tae) {

@@ -30,6 +30,7 @@ public class LogReplicationLogicalGroupConfig extends LogReplicationConfig {
     @Setter
     private Map<String, Set<String>> logicalGroupToStreams;
 
+
     public LogReplicationLogicalGroupConfig(@NonNull LogReplicationSession session,
                                             @NonNull Set<String> streamsToReplicate,
                                             @NonNull Map<UUID, List<UUID>> dataStreamToTagsMap,
