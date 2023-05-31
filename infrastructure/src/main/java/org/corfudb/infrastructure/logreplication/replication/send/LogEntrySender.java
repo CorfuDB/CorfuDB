@@ -5,11 +5,14 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.infrastructure.logreplication.DataSender;
+import org.corfudb.infrastructure.logreplication.exceptions.GroupDestinationChangeException;
+import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent.LogReplicationEventType;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationFSM;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.LogEntryReader;
-import org.corfudb.infrastructure.logreplication.replication.send.logreader.MessageSizeExceededException;
+import org.corfudb.infrastructure.logreplication.exceptions.MessageSizeExceededException;
+import org.corfudb.infrastructure.logreplication.utils.SnapshotSyncUtils;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.exceptions.TrimmedException;
 
@@ -43,6 +46,8 @@ public class LogEntrySender {
      */
     private final LogReplicationFSM logReplicationFSM;
 
+    private final LogReplicationContext replicationContext;
+
     private volatile boolean taskActive = false;
 
     /**
@@ -60,18 +65,19 @@ public class LogEntrySender {
      *                          the application callback for data transmission
      * @param logReplicationFSM log replication FSM to insert events upon message acknowledgement
      */
-    public LogEntrySender(LogEntryReader logEntryReader, DataSender dataSender,
-                          LogReplicationFSM logReplicationFSM) {
+    public LogEntrySender(LogEntryReader logEntryReader, DataSender dataSender, LogReplicationFSM logReplicationFSM,
+                          LogReplicationContext replicationContext) {
 
         this.logEntryReader = logEntryReader;
         this.logReplicationFSM = logReplicationFSM;
         this.dataSenderBufferManager = new LogEntrySenderBufferManager(dataSender, logReplicationFSM.getAckReader());
+        this.replicationContext = replicationContext;
     }
 
     /**
      * Read and send incremental updates (log entries)
      *
-     * @param logEntrySyncEventId
+     * @param logEntrySyncEventId Transition event id that cased FSM transits into IN_LOG_ENTRY_SYNC state.
      */
     public void send(UUID logEntrySyncEventId) {
 
@@ -131,6 +137,11 @@ public class LogEntrySender {
                 log.error("Caught Message Size Exceeded Exception while reading for {}", logEntrySyncEventId);
                 cancelLogEntrySync(LogReplicationError.LOG_ENTRY_MESSAGE_SIZE_EXCEEDED,
                         LogReplicationEventType.SYNC_CANCEL, logEntrySyncEventId);
+                return;
+            } catch (GroupDestinationChangeException gce) {
+                cancelLogEntrySync(LogReplicationError.GROUP_DESTINATION_CHANGE,
+                        LogReplicationEventType.SYNC_CANCEL, logEntrySyncEventId);
+                SnapshotSyncUtils.enforceSnapshotSync(logReplicationFSM.getSession(), replicationContext.getCorfuStore());
                 return;
             } catch (Exception e) {
                 log.error("Caught exception at log entry sender", e);

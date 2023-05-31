@@ -6,6 +6,7 @@ import lombok.Setter;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -29,6 +30,15 @@ public class LogReplicationLogicalGroupConfig extends LogReplicationConfig {
     @Getter
     @Setter
     private Map<String, Set<String>> logicalGroupToStreams;
+
+
+    /**
+     * Logical groups removed from this replication session. A CLEAR entry needs to be sent for these streams
+     * during snapshot sync
+     */
+    @Getter
+    @Setter
+    private Map<String, Set<String>> removedGroupToStreams = new HashMap<>();
 
     public LogReplicationLogicalGroupConfig(@NonNull LogReplicationSession session,
                                             @NonNull Set<String> streamsToReplicate,

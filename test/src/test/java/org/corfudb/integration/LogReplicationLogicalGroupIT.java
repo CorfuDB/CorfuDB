@@ -633,8 +633,6 @@ public class LogReplicationLogicalGroupIT extends CorfuReplicationMultiSourceSin
         // Remove groupB from Sink3 and verify groupB tables' data no longer replicated to Sink3
         logicalGroupClient.removeDestinations(GROUP_B,
                 Collections.singletonList(DefaultClusterConfig.getSinkClusterIds().get(SINK3_INDEX)));
-        // Pause the test thread for a while to let the destination removal and new config take effect.
-        TimeUnit.SECONDS.sleep(SLEEP_INTERVAL);
 
         for (int i = targetWrites; i < targetWrites + NUM_WRITES; i++) {
             StringKey key = StringKey.newBuilder().setKey(String.valueOf(i)).build();
@@ -652,7 +650,8 @@ public class LogReplicationLogicalGroupIT extends CorfuReplicationMultiSourceSin
         verifyGroupBTableData(sinkCorfuStores.get(SINK2_INDEX),
                 targetWrites + NUM_WRITES, sinkTablesGroupBOnSink2);
 
-        verifyGroupBTableData(sinkCorfuStores.get(SINK3_INDEX), targetWrites, sinkTablesGroupB);
+        // After removing groupB from Sink3, the data from groupB tables on Sink3 should be cleared.
+        verifyGroupBTableData(sinkCorfuStores.get(SINK3_INDEX), 0, sinkTablesGroupB);
     }
 
     /**
@@ -742,9 +741,6 @@ public class LogReplicationLogicalGroupIT extends CorfuReplicationMultiSourceSin
         logicalGroupClient.removeDestinations(GROUP_B,
                 Collections.singletonList(DefaultClusterConfig.getSinkClusterIds().get(SINK2_INDEX)));
 
-        // Pause the test thread for a while to let the destination removal and new config take effect.
-        TimeUnit.SECONDS.sleep(SLEEP_INTERVAL);
-
         int targetWrites = 2 * NUM_WRITES;
         for (int i = NUM_WRITES; i < targetWrites; i++) {
             StringKey key = StringKey.newBuilder().setKey(String.valueOf(i)).build();
@@ -764,8 +760,9 @@ public class LogReplicationLogicalGroupIT extends CorfuReplicationMultiSourceSin
 
         verifyGroupATableData(sinkCorfuStores.get(SINK2_INDEX), targetWrites, sinkTablesGroupA);
         verifyGroupBTableData(sinkCorfuStores.get(SINK3_INDEX), targetWrites, sinkTablesGroupB);
-        verifyGroupATableData(sinkCorfuStores.get(SINK3_INDEX), NUM_WRITES, sinkTablesGroupAOnSink3);
-        verifyGroupBTableData(sinkCorfuStores.get(SINK2_INDEX), NUM_WRITES, sinkTablesGroupBOnSink2);
+        // After removing group from Sink, the tables for those groups should be cleared from related Sinks.
+        verifyGroupATableData(sinkCorfuStores.get(SINK3_INDEX), 0, sinkTablesGroupAOnSink3);
+        verifyGroupBTableData(sinkCorfuStores.get(SINK2_INDEX), 0, sinkTablesGroupBOnSink2);
 
         // Add GROUP_A and GROUP_B back and verify new data is replicated to Sink2 and Sink3
         logicalGroupClient.addDestinations(GROUP_A,

@@ -844,7 +844,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(runtime, LOCAL_SOURCE_CLUSTER_ID);
         LogReplicationPluginConfig pluginConfig = new LogReplicationPluginConfig(pluginConfigFilePath);
         LogReplicationSession session = DefaultClusterConfig.getSessions().get(0);
-        configManager.generateConfig(Collections.singleton(session));
+        configManager.generateConfig(Collections.singleton(session), true);
 
         switch(readerImpl) {
             case EMPTY:

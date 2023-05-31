@@ -134,7 +134,7 @@ public class LogReplicationConfigManagerTest extends AbstractViewTest {
                 .setSinkClusterId(REMOTE_SINK_CLUSTER_ID)
                 .setSubscriber(LogReplicationConfigManager.getDefaultSubscriber())
                 .build();
-        configManager.generateConfig(Collections.singleton(sampleSession));
+        configManager.generateConfig(Collections.singleton(sampleSession), true);
         verifyExpectedConfigGenerated((LogReplicationFullTableConfig) configManager.getSessionToConfigMap()
                 .get(sampleSession));
     }
@@ -147,15 +147,15 @@ public class LogReplicationConfigManagerTest extends AbstractViewTest {
                 .setSinkClusterId(REMOTE_SINK_CLUSTER_ID)
                 .setSubscriber(LogReplicationConfigManager.getDefaultSubscriber())
                 .build();
-        configManager.generateConfig(Collections.singleton(sampleSession));
+        configManager.generateConfig(Collections.singleton(sampleSession), true);
         verifyExpectedConfigGenerated((LogReplicationFullTableConfig) configManager.getSessionToConfigMap()
                 .get(sampleSession));
 
         // Open new tables and update the expected streams to replicate map, streams to drop and stream tags
         setupStreamsToReplicateAndTagsMap(Collections.singleton(TABLE5), SampleSchema.ValueFieldTagOne.class);
         setupStreamsToDrop(Collections.singleton(TABLE6), SampleSchema.Uuid.class);
-        configManager.getUpdatedConfig();
-        configManager.generateConfig(Collections.singleton(sampleSession));
+        configManager.getUpdatedConfig(sampleSession, true);
+        configManager.generateConfig(Collections.singleton(sampleSession), true);
         verifyExpectedConfigGenerated((LogReplicationFullTableConfig) configManager.getSessionToConfigMap()
                 .get(sampleSession));
     }

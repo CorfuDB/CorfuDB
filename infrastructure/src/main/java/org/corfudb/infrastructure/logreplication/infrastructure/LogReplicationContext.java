@@ -7,6 +7,7 @@ import org.corfudb.infrastructure.logreplication.config.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
+import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.util.serializer.ISerializer;
 
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -24,7 +25,6 @@ import static org.corfudb.util.serializer.ProtobufSerializer.PROTOBUF_SERIALIZER
 public class LogReplicationContext {
 
     @Getter
-    @Setter
     private final LogReplicationConfigManager configManager;
 
     @Getter
@@ -35,7 +35,6 @@ public class LogReplicationContext {
     private long topologyConfigId;
 
     @Getter
-    @Setter
     private final AtomicBoolean isLeader;
 
     @Getter
@@ -69,12 +68,10 @@ public class LogReplicationContext {
 
     /**
      * This method will be invoked when it is needed to check if registry has new entries, to get the up-to-date
-     * LogReplicationConfig, which mainly includes streams to replicate and data streams to tags map. Please note
-     * that this method is synchronized because LogReplicationContext is shared across sessions so each session
-     * will have its own threads to access it.
+     * LogReplicationConfig, which mainly includes streams to replicate and data streams to tags map.
      */
-    public synchronized void refresh() {
-        this.configManager.getUpdatedConfig();
+    public void refresh(LogReplicationSession session, boolean updateGroupConfig) {
+        this.configManager.getUpdatedConfig(session, updateGroupConfig);
     }
 
     /**
@@ -97,4 +94,14 @@ public class LogReplicationContext {
         return configManager.getRuntime().getSerializers().getSerializer(PROTOBUF_SERIALIZER_CODE);
     }
 
+    /**
+     * Get the CorfuStore from LogReplicationConfigManager, whose table registry is guaranteed to have log replication
+     * related system tables opened. It is also useful to help perform forced snapshot syncs driven by the sessions
+     * themselves (for example, in the case of group destination change in LOGICAL_GROUP replication).
+     *
+     * @return CorfuStore from LogReplicationConfigManager
+     */
+    public CorfuStore getCorfuStore() {
+        return configManager.getCorfuStore();
+    }
 }
