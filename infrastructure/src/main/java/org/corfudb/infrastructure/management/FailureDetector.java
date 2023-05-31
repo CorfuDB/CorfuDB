@@ -1,9 +1,7 @@
 package org.corfudb.infrastructure.management;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Sets;
 import io.micrometer.core.instrument.Timer;
 import lombok.Builder;
 import lombok.Builder.Default;
@@ -12,7 +10,6 @@ import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
-import org.corfudb.infrastructure.RemoteMonitoringService;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.NodeState;
@@ -25,7 +22,6 @@ import org.corfudb.runtime.exceptions.RetryExhaustedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.CFUtils;
-import org.corfudb.util.Sleep;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.MixedBoundRetry;
 import org.corfudb.util.retry.RetryNeededException;
@@ -34,7 +30,6 @@ import javax.annotation.Nonnull;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -169,8 +164,7 @@ public class FailureDetector implements IDetector {
             }).setOptions(retrySettings).run();
         } catch (RetryExhaustedException re) {
             log.debug("Poll round finished. Took: {}ms", System.currentTimeMillis() - start);
-        }
-        catch (InterruptedException ie) {
+        } catch (InterruptedException ie) {
             log.error("Interrupted exception occurred.");
             throw new UnrecoverableCorfuInterruptedError(ie);
         }
@@ -297,6 +291,7 @@ public class FailureDetector implements IDetector {
 
         return clusterState;
     }
+
     @Builder(toBuilder = true)
     @Getter
     public static class PollConfig {

@@ -18,7 +18,7 @@ import java.util.Random;
  * will be thrown inside of the run() method.
  */
 public class MixedBoundRetry<E extends Exception, F extends Exception,
-        G extends Exception, H extends Exception, O, A extends IRetry> extends AbstractRetry<E, F,
+        G extends Exception, H extends Exception, O> extends AbstractRetry<E, F,
         G, H, O, MixedBoundRetry> {
 
     /**
