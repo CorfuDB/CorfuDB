@@ -156,6 +156,7 @@ public class LogReplicationConfigManager {
         registeredSubscribers.add(getDefaultLogicalGroupSubscriber());
         openClientConfigTables();
         syncWithRegistryTable();
+        syncWithClientConfigTable();
     }
 
     private void openClientConfigTables() {
@@ -210,24 +211,24 @@ public class LogReplicationConfigManager {
         });
     }
 
-    private void generateLogicalGroupConfig(LogReplicationSession session, boolean updateGroupConfig) {
+    private void generateLogicalGroupConfig(LogReplicationSession session, boolean registryTableOnly) {
         Map<UUID, List<UUID>> streamToTagsMap = new HashMap<>();
         Set<String> streamsToReplicate = new HashSet<>();
         // Check if the local cluster is the Sink for this session. Sink side will honor whatever Source side send
         // instead of relying on groupSinksMap to filter the streams to replicate.
         boolean isSink = session.getSinkClusterId().equals(localClusterId);
-        Map<String, Set<String>> groupSinksMap = getGroupSinksMapBySubscriber(session.getSubscriber());
+        Map<String, Set<String>> groupToSinksMap = getGroupToSinksMapForSubscriber(session.getSubscriber());
         Map<String, Set<String>> logicalGroupToStreams = new HashMap<>();
 
-        if (!updateGroupConfig) {
+        if (registryTableOnly) {
             // If group config is not supposed to be updated, get it from existing config
             logicalGroupToStreams.putAll(((LogReplicationLogicalGroupConfig) sessionToConfigMap.get(session))
                     .getLogicalGroupToStreams());
         } else if (!isSink) {
-            groupSinksMap.entrySet().stream()
+            groupToSinksMap.entrySet().stream()
                     .filter(entry -> entry.getValue().contains(session.getSinkClusterId()))
                     .map(Map.Entry::getKey)
-                    .forEachOrdered(group -> logicalGroupToStreams.put(group, new HashSet<>()));
+                    .forEach(group -> logicalGroupToStreams.put(group, new HashSet<>()));
             log.debug("Targeted logical groups={}", logicalGroupToStreams.keySet());
         }
 
@@ -253,9 +254,9 @@ public class LogReplicationConfigManager {
                     logicalGroupToStreams.put(logicalGroup, relatedStreams);
                     // Collect tags for this stream
                     List<UUID> tags = streamToTagsMap.getOrDefault(streamId, new ArrayList<>());
-                    tags.addAll(entry.getValue().getMetadata().getTableOptions().getStreamTagList().stream()
+                    entry.getValue().getMetadata().getTableOptions().getStreamTagList().stream()
                             .map(streamTag -> TableRegistry.getStreamIdForStreamTag(entry.getKey().getNamespace(), streamTag))
-                            .collect(Collectors.toList()));
+                            .forEach(tags::add);
                     streamToTagsMap.put(streamId, tags);
                 }
             }
@@ -265,7 +266,7 @@ public class LogReplicationConfigManager {
             // If the session's config has been generated before, it's required to compute the diff and set removed
             // groups (and streams belong to those groups).
             LogReplicationLogicalGroupConfig config = (LogReplicationLogicalGroupConfig) sessionToConfigMap.get(session);
-            if (updateGroupConfig) {
+            if (!registryTableOnly) {
                 updateRemovedGroups(config, logicalGroupToStreams);
             }
             config.setStreamsToReplicate(streamsToReplicate);
@@ -336,19 +337,15 @@ public class LogReplicationConfigManager {
      * @param registryTableOnly True if only registry table is used for config generation or update.
      */
     public void getUpdatedConfig(LogReplicationSession session, boolean registryTableOnly) {
-        boolean registryTableUpdated = syncWithRegistryTable();
+        syncWithRegistryTable();
 
         switch (session.getSubscriber().getModel()) {
             case FULL_TABLE:
-                if (registryTableUpdated) {
-                    generateConfig(Collections.singleton(session), registryTableOnly);
-                }
+                generateConfig(Collections.singleton(session), registryTableOnly);
                 break;
             case LOGICAL_GROUPS:
-                boolean clientConfigTableUpdated = syncWithClientConfigTable();
-                if (registryTableUpdated || clientConfigTableUpdated) {
-                    generateConfig(Collections.singleton(session), registryTableOnly);
-                }
+                syncWithClientConfigTable();
+                generateConfig(Collections.singleton(session), registryTableOnly);
                 break;
             default:
                 break;
@@ -359,48 +356,49 @@ public class LogReplicationConfigManager {
      * Check if the registry table's log tail moved or not. If it has moved ahead, we need to update
      * lastRegistryTableLogTail and in-memory registry table entries, which will be used for construct
      * LogReplicationConfig objects.
-     *
-     * @return True if registry table has new entries and the in-memory data structures are updated.
      */
-    private synchronized boolean syncWithRegistryTable() {
-        // TODO (V2 / Chris): the operation of check current tail + generate updated config + update last log tail
-        //  should be atomic operation in multi replication session env.
+    private synchronized void syncWithRegistryTable() {
         StreamAddressSpace currentAddressSpace = runtime.getSequencerView().getStreamAddressSpace(
             new StreamAddressRange(REGISTRY_TABLE_ID, Long.MAX_VALUE, Address.NON_ADDRESS));
         long currentLogTail = currentAddressSpace.getTail();
 
         // Check if the log tail of registry table moved ahead
         if (currentLogTail != lastRegistryTableLogTail) {
-            lastRegistryTableLogTail = currentLogTail;
             registryTableEntries = runtime.getTableRegistry().getRegistryTable().entryStream().collect(Collectors.toList());
-            return true;
+            lastRegistryTableLogTail = currentLogTail;
         }
-
-        return false;
     }
 
     /**
      * Check if the client config table (groups to Sinks map for LOGICAL_GROUP use case) has new updates or not.
      * If the table's log tail moved, update the in-memory client config table entry with the latest table content.
-     *
-     * @return True if client config table's log tail moved, false otherwise.
      */
-    private synchronized boolean syncWithClientConfigTable() {
+    private synchronized void syncWithClientConfigTable() {
         StreamAddressSpace currentAddressSpace = runtime.getSequencerView().getStreamAddressSpace(
                 new StreamAddressRange(CLIENT_CONFIG_TABLE_ID, Long.MAX_VALUE, Address.NON_ADDRESS));
         long currentLogTail = currentAddressSpace.getTail();
 
         // Check if the log tail of client config table moved ahead
         if (currentLogTail != lastClientConfigTableLogTail) {
-            lastClientConfigTableLogTail = currentLogTail;
-            try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-                clientConfigTableEntries = txn.executeQuery(clientConfigTable, e -> true);
-                txn.commit();
+            List<CorfuStoreEntry<ClientDestinationInfoKey, DestinationInfoVal, Message>> newEntries = new ArrayList<>();
+            try {
+                IRetry.build(IntervalRetry.class, () -> {
+                    try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+                        newEntries.addAll(txn.executeQuery(clientConfigTable, e -> true));
+                        txn.commit();
+                        return null;
+                    } catch (TransactionAbortedException tae) {
+                        log.error("Failed to sync with client configuration table table due to Txn Abort, retrying", tae);
+                        throw new RetryNeededException();
+                    }
+                }).run();
+            } catch (InterruptedException e) {
+                log.error("Unable to sync with client configuration table", e);
+                throw new UnrecoverableCorfuInterruptedError(e);
             }
-            return true;
+            clientConfigTableEntries = newEntries;
+            lastClientConfigTableLogTail = currentLogTail;
         }
-
-        return false;
     }
 
     /**
@@ -409,7 +407,7 @@ public class LogReplicationConfigManager {
      * @param subscriber Subscriber whose groups to Sinks map will be returned
      * @return Given subscriber's groups to Sinks map.
      */
-    private Map<String, Set<String>> getGroupSinksMapBySubscriber(ReplicationSubscriber subscriber) {
+    private Map<String, Set<String>> getGroupToSinksMapForSubscriber(ReplicationSubscriber subscriber) {
         Map<String, Set<String>> groupSinksMap = new HashMap<>();
         clientConfigTableEntries.stream()
                 .filter(corfuStreamEntry ->
@@ -439,10 +437,10 @@ public class LogReplicationConfigManager {
         existingRemovedGroupToStreams.entrySet().removeIf(entry -> logicalGroupToStreams.containsKey(entry.getKey()));
 
         // Add elements to newlyRemovedGroupToStreams
-        Map<String, Set<String>> newlyRemovedGroupToStreams = new HashMap<>(existingGroupToStreams.entrySet()
+        Map<String, Set<String>> newlyRemovedGroupToStreams = existingGroupToStreams.entrySet()
                 .stream()
                 .filter(entry -> !logicalGroupToStreams.containsKey(entry.getKey()))
-                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue)));
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
 
         Preconditions.checkArgument(Sets.intersection(newlyRemovedGroupToStreams.keySet(),
                 existingRemovedGroupToStreams.keySet()).isEmpty());

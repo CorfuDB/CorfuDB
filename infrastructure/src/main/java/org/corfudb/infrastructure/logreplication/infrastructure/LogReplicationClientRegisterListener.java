@@ -73,7 +73,7 @@ public class LogReplicationClientRegisterListener extends StreamListenerResumeOr
         CorfuStoreMetadata.Timestamp timestamp = configManager.preprocessAndGetTail();
         configManager.generateConfig(sessionManager.getSessions(), false);
 
-        log.info("Start log replication listener for client config tables from {}", timestamp);
+        log.info("Start log replication listener for client registration table from {}", timestamp);
         try {
             corfuStore.subscribeListener(this, CORFU_SYSTEM_NAMESPACE, CLIENT_CONFIG_TAG, tablesOfInterest, timestamp);
             started.set(true);

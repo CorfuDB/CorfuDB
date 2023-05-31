@@ -73,7 +73,7 @@ public class LogReplicationContext {
      * @param session LogReplicationSession to refresh the config.
      * @param registryTableOnly True if only registry table is used for config generation or update.
      */
-    public void refresh(LogReplicationSession session, boolean registryTableOnly) {
+    public void refreshConfig(LogReplicationSession session, boolean registryTableOnly) {
         this.configManager.getUpdatedConfig(session, registryTableOnly);
     }
 
@@ -98,9 +98,9 @@ public class LogReplicationContext {
     }
 
     /**
-     * Get the CorfuStore from LogReplicationConfigManager, whose table registry is guaranteed to have log replication
-     * related system tables opened. It is also useful to help perform forced snapshot syncs driven by the sessions
-     * themselves (for example, in the case of group destination change in LOGICAL_GROUP replication).
+     * Get the CorfuStore from LogReplicationConfigManager, whose table registry is guaranteed to have client config
+     * tables and merge-only tables opened. It is also useful to help perform forced snapshot syncs driven by the
+     * sessions themselves (for example, in the case of group destination change in LOGICAL_GROUP replication).
      *
      * @return CorfuStore from LogReplicationConfigManager
      */

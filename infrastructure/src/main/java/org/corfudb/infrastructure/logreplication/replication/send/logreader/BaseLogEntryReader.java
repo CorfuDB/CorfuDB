@@ -146,7 +146,7 @@ public abstract class BaseLogEntryReader extends LogEntryReader {
         // table and add them to the list in that case.
         if (!getStreamUUIDs().containsAll(txEntryStreamIds)) {
             log.info("There could be additional streams to replicate in tx stream. Checking with registry table.");
-            replicationContext.refresh(session, true);
+            replicationContext.refreshConfig(session, true);
             // TODO: Add log message here for the newly found streams when we support incremental refresh.
         }
         // If none of the streams in the transaction entry are specified to be replicated, this is an invalid entry, skip
@@ -292,7 +292,7 @@ public abstract class BaseLogEntryReader extends LogEntryReader {
     @Override
     public void reset(long lastSentBaseSnapshotTimestamp, long lastAckedTimestamp) {
         // Sync with registry when entering into IN_LOG_ENTRY_SYNC state
-        replicationContext.refresh(session, false);
+        replicationContext.refreshConfig(session, false);
         this.currentProcessedEntryMetadata = new StreamIteratorMetadata(Address.NON_ADDRESS, false);
         setGlobalBaseSnapshot(lastSentBaseSnapshotTimestamp, lastAckedTimestamp);
         lastOpaqueEntry = null;

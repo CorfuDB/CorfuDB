@@ -266,7 +266,7 @@ public abstract class BaseSnapshotReader extends SnapshotReader {
     public void reset(long ts) {
         // As the config should reflect the latest configuration read from registry table, it will be synced with the
         // latest registry table content instead of the given ts, while the streams to replicate will be read up to ts.
-        replicationContext.refresh(session, true);
+        replicationContext.refreshConfig(session, true);
         streams = replicationContext.getConfig(session).getStreamsToReplicate();
         streamsToSend = new PriorityQueue<>(streams);
         preMsgTs = Address.NON_ADDRESS;
