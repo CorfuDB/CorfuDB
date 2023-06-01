@@ -310,14 +310,14 @@ public abstract class BaseSnapshotReader extends SnapshotReader {
     /**
      * Record a list of SMR entries
      */
-    static class SMREntryList {
+    private static class SMREntryList {
 
         // The total sizeInBytes of smrEntries in bytes.
         @Getter
-        private int sizeInBytes;
+        private final int sizeInBytes;
 
         @Getter
-        private List<SMREntry> smrEntries;
+        private final List<SMREntry> smrEntries;
 
         public SMREntryList(int size, List<SMREntry> smrEntries) {
             this.sizeInBytes = size;

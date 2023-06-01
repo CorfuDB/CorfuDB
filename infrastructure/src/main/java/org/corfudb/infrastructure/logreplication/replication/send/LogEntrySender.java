@@ -141,7 +141,6 @@ public class LogEntrySender {
             } catch (GroupDestinationChangeException gce) {
                 cancelLogEntrySync(LogReplicationError.GROUP_DESTINATION_CHANGE,
                         LogReplicationEventType.SYNC_CANCEL, logEntrySyncEventId);
-                SnapshotSyncUtils.enforceSnapshotSync(logReplicationFSM.getSession(), replicationContext.getCorfuStore());
                 return;
             } catch (Exception e) {
                 log.error("Caught exception at log entry sender", e);

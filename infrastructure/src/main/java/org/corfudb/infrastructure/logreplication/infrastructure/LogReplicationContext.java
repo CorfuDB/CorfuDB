@@ -96,15 +96,4 @@ public class LogReplicationContext {
     public ISerializer getProtobufSerializer() {
         return configManager.getRuntime().getSerializers().getSerializer(PROTOBUF_SERIALIZER_CODE);
     }
-
-    /**
-     * Get the CorfuStore from LogReplicationConfigManager, whose table registry is guaranteed to have client config
-     * tables and merge-only tables opened. It is also useful to help perform forced snapshot syncs driven by the
-     * sessions themselves (for example, in the case of group destination change in LOGICAL_GROUP replication).
-     *
-     * @return CorfuStore from LogReplicationConfigManager
-     */
-    public CorfuStore getCorfuStore() {
-        return configManager.getCorfuStore();
-    }
 }

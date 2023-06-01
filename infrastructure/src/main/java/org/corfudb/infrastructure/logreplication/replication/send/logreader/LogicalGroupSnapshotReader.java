@@ -96,14 +96,14 @@ public class LogicalGroupSnapshotReader extends BaseSnapshotReader {
             }
         }
 
-        if (currentStreamHasNext()) {
+        if (!isReadingStreamToClear && currentStreamHasNext()) {
             msg = read(currentStreamInfo, syncRequestId);
             if (msg != null) {
                 messages.add(msg);
             }
         }
 
-        if (!currentStreamHasNext()) {
+        if (isReadingStreamToClear || !currentStreamHasNext()) {
             log.debug("Snapshot log reader finished reading stream id={}, name={}", currentStreamInfo.uuid,
                     currentStreamInfo.name);
             currentStreamInfo = null;
@@ -146,9 +146,6 @@ public class LogicalGroupSnapshotReader extends BaseSnapshotReader {
 
     @Override
     boolean currentStreamHasNext() {
-        if (isReadingStreamToClear) {
-            return false;
-        }
         return currentStreamInfo.iterator.hasNext() || lastEntry != null;
     }
 

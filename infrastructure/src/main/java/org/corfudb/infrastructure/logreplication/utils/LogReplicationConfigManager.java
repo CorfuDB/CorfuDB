@@ -75,7 +75,6 @@ public class LogReplicationConfigManager {
     @Getter
     private final CorfuRuntime runtime;
 
-    @Getter
     private final CorfuStore corfuStore;
 
     private final String localClusterId;
@@ -266,9 +265,7 @@ public class LogReplicationConfigManager {
             // If the session's config has been generated before, it's required to compute the diff and set removed
             // groups (and streams belong to those groups).
             LogReplicationLogicalGroupConfig config = (LogReplicationLogicalGroupConfig) sessionToConfigMap.get(session);
-            if (!registryTableOnly) {
-                updateRemovedGroups(config, logicalGroupToStreams);
-            }
+            updateRemovedGroups(config, logicalGroupToStreams);
             config.setStreamsToReplicate(streamsToReplicate);
             config.setDataStreamToTagsMap(streamToTagsMap);
             config.setLogicalGroupToStreams(logicalGroupToStreams);

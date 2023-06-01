@@ -50,8 +50,9 @@ public class LogicalGroupLogEntryReader extends BaseLogEntryReader {
     }
 
     /**
-     * Verify the transaction entry is valid, i.e., if the entry contains any
-     * of the streams to be replicated.
+     * Verify the transaction entry is valid. For LOGICAL_GROUP case, it will check:
+     * (1) If current session is impacted by group destinations change
+     * (2) If the opaque entry contains newly opened streams to replicate
      * <p>
      * Notice that a transaction stream entry can be fully or partially replicated,
      * i.e., if only a subset of streams in the transaction entry are part of the streams
@@ -68,8 +69,8 @@ public class LogicalGroupLogEntryReader extends BaseLogEntryReader {
 
         if (txEntryStreamIds.contains(CLIENT_CONFIG_TABLE_ID) &&
                 isCurrentSessionImpacted(entry.getEntries().get(CLIENT_CONFIG_TABLE_ID))) {
-            log.info("Group destination change detected, log entry sync will be stopped and a forced snapshot " +
-                    "sync will be triggered！");
+            log.info("Group destination change detected, log entry sync will be stopped and a snapshot sync " +
+                    "will be triggered！");
             throw new GroupDestinationChangeException();
         }
 
