@@ -220,7 +220,7 @@ public class StreamingIT extends AbstractIT {
         Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
         // Start a Corfu runtime.
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
 
         CorfuStore store = new CorfuStore(runtime);
 
@@ -347,7 +347,7 @@ public class StreamingIT extends AbstractIT {
         Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
         // Start a Corfu runtime.
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
 
         CorfuStore store = new CorfuStore(runtime);
 
@@ -478,7 +478,7 @@ public class StreamingIT extends AbstractIT {
     public void testStreamingPrevValue() throws Exception {
         // Run a corfu server and start runtime
         Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
-        runtime = createRuntimeWithCache(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntimeWithCache(singleNodeEndpoint);
         CorfuStore store = new CorfuStore(runtime);
         String ns = "test_namespace";
         String tn = "tableA";
@@ -521,7 +521,7 @@ public class StreamingIT extends AbstractIT {
         Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
         // Start a Corfu runtime.
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
 
         CorfuStore store = new CorfuStore(runtime);
 
@@ -643,7 +643,7 @@ public class StreamingIT extends AbstractIT {
         Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
         // Start a Corfu runtime.
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
 
         CorfuStore store = new CorfuStore(runtime);
 
@@ -717,7 +717,7 @@ public class StreamingIT extends AbstractIT {
         Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
         // Start a Corfu runtime.
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
         CorfuStore store = new CorfuStore(runtime);
 
         // Record the initial timestamp.
@@ -784,7 +784,7 @@ public class StreamingIT extends AbstractIT {
         Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
         // Start a Corfu runtime.
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
         CorfuStore store = new CorfuStore(runtime);
 
         // Record the initial timestamp.
@@ -897,7 +897,7 @@ public class StreamingIT extends AbstractIT {
         Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
         // Start a Corfu runtime.
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
 
         CorfuStore store = new CorfuStore(runtime);
 
@@ -964,7 +964,7 @@ public class StreamingIT extends AbstractIT {
     @Test
     public void testFullSyncDeltaSyncPattern() throws Exception {
         // Run a corfu server & initialize CorfuStore
-        initializeCorfu();
+        CorfuRuntime runtime = initializeCorfu();
 
         final int numUpdates = 10;
         final int indexDefault= 0;
@@ -1013,7 +1013,7 @@ public class StreamingIT extends AbstractIT {
     @Test
     public void testStreamingConsecutiveCheckpoints() throws Exception {
         // Run a corfu server & initialize CorfuStore
-        initializeCorfu();
+        CorfuRuntime runtime = initializeCorfu();
 
         // Record the initial timestamp.
         Timestamp initTs = Timestamp.newBuilder().setEpoch(0L).setSequence(Address.NON_ADDRESS).build();
@@ -1066,7 +1066,7 @@ public class StreamingIT extends AbstractIT {
     @Test
     public void testClientExceptions() throws Exception {
         // Run a corfu server & initialize Corfu Store
-        initializeCorfu();
+        CorfuRuntime runtime = initializeCorfu();
 
         // Write a number of updates to a certain table
         final int numUpdates = 20;
@@ -1252,7 +1252,7 @@ public class StreamingIT extends AbstractIT {
         Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
         // Start a Corfu runtime.
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
 
         CorfuStore store = new CorfuStore(runtime);
 
@@ -1322,7 +1322,7 @@ public class StreamingIT extends AbstractIT {
         Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
         // Start a Corfu runtime.
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
         CorfuStore store = new CorfuStore(runtime);
 
         final String namespace = "test_namespace";
@@ -1431,10 +1431,12 @@ public class StreamingIT extends AbstractIT {
         }
     }
 
-    private void initializeCorfu() throws Exception {
+    private CorfuRuntime initializeCorfu() throws Exception {
         corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
         store = new CorfuStore(runtime);
+
+        return runtime;
     }
 
     public static Token checkpointAndTrim(CorfuRuntime runtime, String namespace, List<String> tablesToCheckpoint, boolean partialTrim) {
@@ -1446,23 +1448,23 @@ public class StreamingIT extends AbstractIT {
             mcw.addMap(corfuTable);
         });
 
-        CorfuRuntime rt = createRuntime(runtime.getLayoutServers().get(0));
+        //CorfuRuntime rt = createRuntime(runtime.getLayoutServers().get(0));
 
         // Add Registry Table
-        mcw.addMap(rt.getTableRegistry().getRegistryTable());
-        mcw.addMap(rt.getTableRegistry().getProtobufDescriptorTable());
+        mcw.addMap(runtime.getTableRegistry().getRegistryTable());
+        mcw.addMap(runtime.getTableRegistry().getProtobufDescriptorTable());
         // Checkpoint & Trim
-        Token trimPoint = mcw.appendCheckpoints(rt, "StreamingIT");
+        Token trimPoint = mcw.appendCheckpoints(runtime, "StreamingIT");
         if (partialTrim) {
             final int trimOffset = 5;
-            Long sequenceModified = trimPoint.getSequence() - trimOffset;
+            long sequenceModified = trimPoint.getSequence() - trimOffset;
             Token partialTrimMark = Token.of(trimPoint.getEpoch(), sequenceModified);
-            rt.getAddressSpaceView().prefixTrim(partialTrimMark);
+            runtime.getAddressSpaceView().prefixTrim(partialTrimMark);
         } else {
-            rt.getAddressSpaceView().prefixTrim(trimPoint);
+            runtime.getAddressSpaceView().prefixTrim(trimPoint);
         }
-        rt.getAddressSpaceView().gc();
-        rt.getObjectsView().getObjectCache().clear();
+        runtime.getAddressSpaceView().gc();
+        runtime.getObjectsView().getObjectCache().clear();
         return trimPoint;
     }
 }

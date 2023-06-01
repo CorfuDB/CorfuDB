@@ -136,7 +136,7 @@ public class SecurityIT extends AbstractIT {
         final Process corfuServer = runSinglePersistentServerTls(false);
 
         // Start a Corfu runtime
-        runtime = new CorfuRuntime(singleNodeEndpoint)
+        CorfuRuntime runtime = new CorfuRuntime(singleNodeEndpoint)
                 .enableTls(runtimePathToKeyStore,
                         runtimePathToKeyStorePassword,
                         runtimePathToTrustStore,
@@ -197,7 +197,7 @@ public class SecurityIT extends AbstractIT {
                 .tsPasswordFile(runtimePathToTrustStorePassword)
                 .systemDownHandler(getShutdownHandler());
 
-        runtime = createRuntime(DEFAULT_ENDPOINT, paramsBuilder);
+        CorfuRuntime runtime = createRuntime(DEFAULT_ENDPOINT, paramsBuilder);
 
         // Create CorfuTable
         PersistentCorfuTable<String, Object> testTable = createCorfuTable(runtime, "volbeat");
@@ -229,7 +229,7 @@ public class SecurityIT extends AbstractIT {
      * @throws InterruptedException when shutdown retry sleep is interrupted
      */
     @Test
-    public void testServerWithEnabledCertExpiry() throws IOException, InterruptedException {
+    public void testServerWithEnabledCertExpiry() throws Exception {
         // Overriding with expired runtime keystore
         String runtimePathToKeyStoreExpired = getPropertyAbsolutePath(
                         "runtimePathToKeyStoreExpired");
@@ -263,7 +263,7 @@ public class SecurityIT extends AbstractIT {
      * @throws InterruptedException when shutdown retry sleep is interrupted
      */
     @Test
-    public void testServerWithDisabledCertExpiryCheckAndExpiredCerts() throws IOException, InterruptedException {
+    public void testServerWithDisabledCertExpiryCheckAndExpiredCerts() throws Exception {
         // set disableCertExpiryCheckFile
         disableCertExpiryCheckFile = getPropertyAbsolutePath(
                 "disableCertExpiryCheckFile");
@@ -301,7 +301,7 @@ public class SecurityIT extends AbstractIT {
      * @throws InterruptedException when shutdown retry sleep is interrupted
      */
     @Test
-    public void testServerWithDisabledCertExpiryCheckAndValidCerts() throws IOException, InterruptedException {
+    public void testServerWithDisabledCertExpiryCheckAndValidCerts() throws Exception {
         // set disableCertExpiryCheckFile
         disableCertExpiryCheckFile = getPropertyAbsolutePath(
                 "disableCertExpiryCheckFile");
