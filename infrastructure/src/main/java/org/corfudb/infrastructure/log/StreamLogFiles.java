@@ -601,7 +601,6 @@ public class StreamLogFiles implements StreamLog {
         log.info("deleteFilesMatchingFilter: completed, deleted {} files, freed {} bytes", numFiles, freedBytes);
     }
 
-
     /**
      * TODO(Maithem) remove this method. Obtaining a new instance should happen
      * through instantiation not by clearing this class' state
@@ -612,6 +611,18 @@ public class StreamLogFiles implements StreamLog {
      */
     @Override
     public void reset() {
+        final Layout currentLayout = sc.getCurrentLayout();
+        final List<String> logServers = currentLayout
+                .getFirstSegment()
+                .getFirstStripe()
+                .getLogServers();
+
+        log.info("Current layout before reset: {}", JsonUtils.toJson(currentLayout));
+        boolean fullReset = !logServers.contains(sc.getLocalEndpoint());
+        reset(fullReset);
+    }
+
+    public void reset(boolean fullReset) {
         // Trim all segments
         log.warn("Reset. Global Tail:{}", logMetadata.getGlobalTail());
 
@@ -619,14 +630,7 @@ public class StreamLogFiles implements StreamLog {
         lock.lock();
 
         try {
-            final Layout currentLayout = sc.getCurrentLayout();
-            final List<String> logServers = currentLayout
-                    .getFirstSegment()
-                    .getFirstStripe()
-                    .getLogServers();
-
-            log.info("Current layout before reset: {}", JsonUtils.toJson(currentLayout));
-            if (!logServers.contains(sc.getLocalEndpoint())) {
+            if (fullReset) {
                 closeAllSegmentHandlers();
                 Preconditions.checkState(openSegments.isEmpty());
                 deleteFilesMatchingFilter(file -> true);
@@ -658,7 +662,6 @@ public class StreamLogFiles implements StreamLog {
                     newTailAddress = committedTailSegment * RECORDS_PER_LOG_FILE + 1;
                 }
 
-                dataStore.resetStartingAddress(newTailAddress);
                 logMetadata = new LogMetadata(dataStore);
                 logMetadata.syncTailSegment(newTailAddress);
                 initializeLogMetadata();

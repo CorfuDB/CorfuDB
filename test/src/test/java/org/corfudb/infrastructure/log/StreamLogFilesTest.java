@@ -558,8 +558,9 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
      */
     @Test
     public void testResetStreamLog() {
-        String logDir = getContext().getServerConfig().get("--log-path") + File.separator + "log";
-        StreamLogFiles log = new StreamLogFiles(getContext(), new BatchProcessorContext());
+        ServerContext sc = getContext();
+        String logDir = sc.getServerConfig().get("--log-path") + File.separator + "log";
+        StreamLogFiles log = new StreamLogFiles(sc, new BatchProcessorContext());
 
         final long numSegments = 3;
         for (long x = 0; x < RECORDS_PER_LOG_FILE * numSegments; x++) {
@@ -580,7 +581,8 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
 
         log.updateCommittedTail(22000);
 
-        log.reset();
+        boolean fullReset = false;
+        log.reset(fullReset);
         assertThat(log.getOpenSegments()).hasSize(0);
 
         final int expectedFilesAfterReset = 2;
