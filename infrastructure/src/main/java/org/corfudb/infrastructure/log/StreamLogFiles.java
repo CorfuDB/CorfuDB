@@ -641,8 +641,7 @@ public class StreamLogFiles implements StreamLog {
                 // would this lose the gauges pre-reset?
                 removeLocalGauges();
                 logSizeQuota.reset();
-            }
-            else {
+            } else {
                 long committedTail = getCommittedTail();
                 long latestSegment = getSegmentId(getLogTail());
                 long committedTailSegment = getSegmentId(committedTail);

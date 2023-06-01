@@ -331,11 +331,6 @@ public class StateTransferIT extends AbstractIT {
         List<Long> addresses = new ArrayList<>(map0.keySet());
         Collections.sort(addresses);
 
-        for (Long address : addresses) {
-            LogDataInfo info = LogDataInfo.from(map0.get(address));
-            System.out.println(info);
-        }
-
         for (Long addr : addresses) {
             if (!map1.containsKey(addr)) {
                 fail("localhost:9001, missing address: " + addr);
