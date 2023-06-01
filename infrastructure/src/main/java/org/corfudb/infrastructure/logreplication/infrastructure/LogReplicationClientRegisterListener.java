@@ -71,7 +71,6 @@ public class LogReplicationClientRegisterListener extends StreamListenerResumeOr
      */
     public void start() {
         CorfuStoreMetadata.Timestamp timestamp = configManager.preprocessAndGetTail();
-        configManager.generateConfig(sessionManager.getSessions(), false);
 
         log.info("Start log replication listener for client registration table from {}", timestamp);
         try {
@@ -160,7 +159,6 @@ public class LogReplicationClientRegisterListener extends StreamListenerResumeOr
     @Override
     protected CorfuStoreMetadata.Timestamp performFullSync() {
         CorfuStoreMetadata.Timestamp timestamp = configManager.onClientListenerResume();
-        configManager.generateConfig(sessionManager.getSessions(), false);
         sessionManager.getSessions().forEach(session -> {
             SnapshotSyncUtils.enforceSnapshotSync(session, corfuStore);
         });
