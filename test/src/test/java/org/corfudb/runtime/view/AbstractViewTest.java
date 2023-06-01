@@ -345,8 +345,8 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
             FailureDetector.PollConfig config = FailureDetector.PollConfig
                     .builder()
                     .maxDetectionDuration(PARAMETERS.TIMEOUT_SHORT)
-                    .maxSleepBetweenRetries(PARAMETERS.TIMEOUT_VERY_SHORT)
-                    .initSleepBetweenRetries(PARAMETERS.TIMEOUT_VERY_SHORT)
+                    .maxSleepBetweenRetries(PARAMETERS.TIMEOUT_SHORT)
+                    .initSleepBetweenRetries(PARAMETERS.TIMEOUT_SHORT)
                     .jitterFactor(0)
                     .build();
             FailureDetector failureDetector = getManagementServer(port)
