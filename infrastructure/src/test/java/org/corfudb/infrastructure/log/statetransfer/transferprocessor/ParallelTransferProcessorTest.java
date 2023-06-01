@@ -20,9 +20,9 @@ import static org.corfudb.infrastructure.log.statetransfer.transferprocessor.Tra
 
 class ParallelTransferProcessorTest {
 
+    private Stream<TransferBatchRequest> createStream(
+            int numBatches, Optional<ImmutableList<String>> nodes) {
 
-    private final Stream<TransferBatchRequest> createStream(int numBatches,
-                                                            Optional<ImmutableList<String>> nodes) {
         return IntStream.range(0, numBatches)
                 .boxed()
                 .map(x -> TransferBatchRequest
