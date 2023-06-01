@@ -7,7 +7,6 @@ import org.corfudb.infrastructure.logreplication.config.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
-import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.util.serializer.ISerializer;
 
 import java.util.concurrent.atomic.AtomicBoolean;

@@ -69,7 +69,7 @@ public class LogicalGroupLogEntryReader extends BaseLogEntryReader {
 
         if (txEntryStreamIds.contains(CLIENT_CONFIG_TABLE_ID) &&
                 isCurrentSessionImpacted(entry.getEntries().get(CLIENT_CONFIG_TABLE_ID))) {
-            log.info("Group destination change detected, log entry sync will be stopped and a snapshot sync " +
+            log.info("Group destination change detected, log entry sync will be stopped and a new snapshot sync " +
                     "will be triggered！");
             throw new GroupDestinationChangeException();
         }
@@ -107,6 +107,9 @@ public class LogicalGroupLogEntryReader extends BaseLogEntryReader {
             CorfuRecord<DestinationInfoVal, Message> destinations =
                     (CorfuRecord<DestinationInfoVal, Message>) protobufSerializer.deserialize(valueBuf, null);
 
+            // From a session's point of view, there are 2 ways it could be impacted:
+            // (1) a new group is added to have current session's Sink as its destination
+            // (2) an existing group (already in config) no longer has current session's Sink as its destination
             boolean isGroupAdded = !groups.contains(clientInfoKey.getGroupName()) &&
                     destinations.getPayload().getDestinationIdsList().contains(session.getSinkClusterId());
             boolean isGroupRemoved = groups.contains(clientInfoKey.getGroupName()) &&
@@ -114,15 +117,10 @@ public class LogicalGroupLogEntryReader extends BaseLogEntryReader {
 
 
             if (isGroupAdded || isGroupRemoved) {
-                if (isGroupAdded) {
-                    log.info("New group added for the Sink of current session. Group=[{}], Sinks=[{}]",
-                            clientInfoKey.getGroupName(), destinations.getPayload().getDestinationIdsList());
-                }
-
-                if (isGroupRemoved) {
-                    log.info("Group removed from the Sink of current session. Group=[{}], Sinks=[{}]",
-                            clientInfoKey.getGroupName(), destinations.getPayload().getDestinationIdsList());
-                }
+                String groupChangeMessage = isGroupAdded ? "New group added for the Sink of current session. " :
+                        "Group removed from the Sink of current session. ";
+                log.info(groupChangeMessage + "Group=[{}], Sinks=[{}]", clientInfoKey.getGroupName(),
+                        destinations.getPayload().getDestinationIdsList());
 
                 return true;
             }

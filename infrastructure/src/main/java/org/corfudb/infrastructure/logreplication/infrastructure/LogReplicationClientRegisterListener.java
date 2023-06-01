@@ -159,8 +159,6 @@ public class LogReplicationClientRegisterListener extends StreamListenerResumeOr
      */
     @Override
     protected CorfuStoreMetadata.Timestamp performFullSync() {
-        // TODO (V2 / Chris): In next PR this listener will be only for client register/unregister, remember to avoid
-        //  clearing all the in-memory fields in onClientListenerResume method in next PR.
         CorfuStoreMetadata.Timestamp timestamp = configManager.onClientListenerResume();
         configManager.generateConfig(sessionManager.getSessions(), false);
         sessionManager.getSessions().forEach(session -> {

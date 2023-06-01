@@ -6,13 +6,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.infrastructure.logreplication.DataSender;
 import org.corfudb.infrastructure.logreplication.exceptions.GroupDestinationChangeException;
-import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent.LogReplicationEventType;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationFSM;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.LogEntryReader;
 import org.corfudb.infrastructure.logreplication.exceptions.MessageSizeExceededException;
-import org.corfudb.infrastructure.logreplication.utils.SnapshotSyncUtils;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.exceptions.TrimmedException;
 
@@ -46,8 +44,6 @@ public class LogEntrySender {
      */
     private final LogReplicationFSM logReplicationFSM;
 
-    private final LogReplicationContext replicationContext;
-
     private volatile boolean taskActive = false;
 
     /**
@@ -65,13 +61,11 @@ public class LogEntrySender {
      *                          the application callback for data transmission
      * @param logReplicationFSM log replication FSM to insert events upon message acknowledgement
      */
-    public LogEntrySender(LogEntryReader logEntryReader, DataSender dataSender, LogReplicationFSM logReplicationFSM,
-                          LogReplicationContext replicationContext) {
+    public LogEntrySender(LogEntryReader logEntryReader, DataSender dataSender, LogReplicationFSM logReplicationFSM) {
 
         this.logEntryReader = logEntryReader;
         this.logReplicationFSM = logReplicationFSM;
         this.dataSenderBufferManager = new LogEntrySenderBufferManager(dataSender, logReplicationFSM.getAckReader());
-        this.replicationContext = replicationContext;
     }
 
     /**

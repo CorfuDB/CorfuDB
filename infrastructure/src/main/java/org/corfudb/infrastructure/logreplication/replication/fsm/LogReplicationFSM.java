@@ -230,7 +230,7 @@ public class LogReplicationFSM {
         this.ackReader = ackReader;
         this.snapshotSender = new SnapshotSender(runtime, snapshotReader, dataSender, readProcessor,
                 replicationContext.getConfig(session).getMaxNumMsgPerBatch(), this);
-        this.logEntrySender = new LogEntrySender(logEntryReader, dataSender, this, replicationContext);
+        this.logEntrySender = new LogEntrySender(logEntryReader, dataSender, this);
         this.logReplicationFSMWorkers = workers;
         this.logReplicationFSMConsumer = Executors.newSingleThreadExecutor(new
             ThreadFactoryBuilder().setNameFormat("replication-fsm-consumer-" + session.hashCode())
@@ -265,7 +265,7 @@ public class LogReplicationFSM {
         this.ackReader = ackReader;
         this.snapshotSender = new SnapshotSender(runtime, snapshotReader, dataSender, readProcessor,
                 replicationContext.getConfig(session).getMaxNumMsgPerBatch(), this);
-        this.logEntrySender = new LogEntrySender(logEntryReader, dataSender, this, replicationContext);
+        this.logEntrySender = new LogEntrySender(logEntryReader, dataSender, this);
         this.logReplicationFSMWorkers = workers;
         this.logReplicationFSMConsumer = Executors.newSingleThreadExecutor(new
                 ThreadFactoryBuilder().setNameFormat("replication-fsm-consumer-" + session.hashCode())
