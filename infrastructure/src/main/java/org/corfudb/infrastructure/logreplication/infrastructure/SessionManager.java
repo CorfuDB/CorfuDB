@@ -33,6 +33,7 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 
 import java.util.concurrent.CompletableFuture;
@@ -58,7 +59,7 @@ public class SessionManager {
 
     private final String localCorfuEndpoint;
 
-    private CorfuReplicationManager replicationManager;
+    private final CorfuReplicationManager replicationManager;
 
     private final LogReplicationConfigManager configManager;
 
@@ -83,9 +84,9 @@ public class SessionManager {
     private final LogReplicationContext replicationContext;
 
     @Getter
-    private LogReplicationClientServerRouter router;
+    private final LogReplicationClientServerRouter router;
 
-    private LogReplicationServer incomingMsgHandler;
+    private final LogReplicationServer incomingMsgHandler;
 
     /**
      * Constructor
@@ -323,6 +324,8 @@ public class SessionManager {
         log.info("Total of {} outgoing sessions created with subscriber {}, sessions={}", sessionsToAdd.size(),
                 subscriber, sessionsToAdd);
 
+        configManager.getSessionLockMap().putAll(sessionsToAdd.stream()
+                .collect(Collectors.toMap(session -> session, session -> new ReentrantLock())));
         configManager.generateConfig(sessionsToAdd, false);
     }
 
@@ -364,6 +367,8 @@ public class SessionManager {
         log.info("Total of {} incoming sessions created with subscriber {}, sessions={}", sessionsToAdd.size(),
                 subscriber, sessionsToAdd);
 
+        configManager.getSessionLockMap().putAll(sessionsToAdd.stream()
+                .collect(Collectors.toMap(session -> session, session -> new ReentrantLock())));
         configManager.generateConfig(sessionsToAdd, false);
     }
 
@@ -497,6 +502,8 @@ public class SessionManager {
                 incomingMsgHandler.stopSinkManagerForSession(session);
             }
             this.sessions.remove(session);
+            this.configManager.getSessionToConfigMap().remove(session);
+            this.configManager.getSessionLockMap().remove(session);
             if (incomingSessions.contains(session)) {
                 incomingMsgHandler.stopSinkManagerForSession(session);
             }

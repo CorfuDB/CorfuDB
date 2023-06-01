@@ -28,6 +28,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 
 import static org.corfudb.runtime.LogReplicationLogicalGroupClient.LR_MODEL_METADATA_TABLE_NAME;
@@ -41,9 +42,9 @@ public class LogReplicationConfigManagerTest extends AbstractViewTest {
     private CorfuRuntime runtime;
     private CorfuStore corfuStore;
 
-    private Set<String> streamsToReplicate = new HashSet<>();
-    private Set<UUID> streamsToDrop = new HashSet<>();
-    private Map<UUID, List<UUID>> streamToTagsMap = new HashMap<>();
+    private final Set<String> streamsToReplicate = new HashSet<>();
+    private final Set<UUID> streamsToDrop = new HashSet<>();
+    private final Map<UUID, List<UUID>> streamToTagsMap = new HashMap<>();
 
     private static final String NAMESPACE = "LR-Test";
     private static final String TABLE1 = "Table001";
@@ -134,6 +135,7 @@ public class LogReplicationConfigManagerTest extends AbstractViewTest {
                 .setSinkClusterId(REMOTE_SINK_CLUSTER_ID)
                 .setSubscriber(LogReplicationConfigManager.getDefaultSubscriber())
                 .build();
+        configManager.getSessionLockMap().put(sampleSession, new ReentrantLock());
         configManager.generateConfig(Collections.singleton(sampleSession), false);
         verifyExpectedConfigGenerated((LogReplicationFullTableConfig) configManager.getSessionToConfigMap()
                 .get(sampleSession));
@@ -147,6 +149,7 @@ public class LogReplicationConfigManagerTest extends AbstractViewTest {
                 .setSinkClusterId(REMOTE_SINK_CLUSTER_ID)
                 .setSubscriber(LogReplicationConfigManager.getDefaultSubscriber())
                 .build();
+        configManager.getSessionLockMap().put(sampleSession, new ReentrantLock());
         configManager.generateConfig(Collections.singleton(sampleSession), false);
         verifyExpectedConfigGenerated((LogReplicationFullTableConfig) configManager.getSessionToConfigMap()
                 .get(sampleSession));

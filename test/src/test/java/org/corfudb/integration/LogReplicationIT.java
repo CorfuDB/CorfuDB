@@ -53,6 +53,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.ReentrantLock;
 
 import static java.lang.Thread.sleep;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -1235,6 +1236,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(srcTestRuntime, LOCAL_SOURCE_CLUSTER_ID);
         LogReplicationContext context = new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT, pluginConfig);
 
+        configManager.getSessionLockMap().put(session, new ReentrantLock());
         configManager.generateConfig(Collections.singleton(session), true);
 
         // This IT requires custom values to be set for the replication config.  Set these values so that the default

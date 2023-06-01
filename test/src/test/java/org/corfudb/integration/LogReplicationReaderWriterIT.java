@@ -55,6 +55,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -230,6 +231,7 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
     public static void readSnapshotMsgs(List<LogReplicationEntryMsg> msgQ, CorfuRuntime rt, boolean blockOnSem) {
         int cnt = 0;
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(rt, LOCAL_SOURCE_CLUSTER_ID);
+        configManager.getSessionLockMap().put(getDefaultSession(), new ReentrantLock());
         configManager.generateConfig(Collections.singleton(getDefaultSession()), true);
         LogReplicationContext context = new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT,
                 Mockito.mock(LogReplicationPluginConfig.class));
@@ -264,6 +266,7 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
     public void writeSnapshotMsgs(List<LogReplicationEntryMsg> msgQ, CorfuRuntime rt) {
 
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(rt, LOCAL_SINK_CLUSTER_ID);
+        configManager.getSessionLockMap().put(getDefaultSession(), new ReentrantLock());
         configManager.generateConfig(Collections.singleton(getDefaultSession()), true);
 
         LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt,
@@ -303,6 +306,7 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
                                         boolean blockOnce) throws TrimmedException {
 
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(rt, LOCAL_SOURCE_CLUSTER_ID);
+        configManager.getSessionLockMap().put(getDefaultSession(), new ReentrantLock());
         configManager.generateConfig(Collections.singleton(getDefaultSession()), true);
 
         StreamsLogEntryReader reader = new StreamsLogEntryReader(rt, getDefaultSession(),
@@ -338,6 +342,7 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
     private void writeLogEntryMsgs(List<LogReplicationEntryMsg> msgQ, CorfuRuntime rt) {
 
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(rt, LOCAL_SINK_CLUSTER_ID);
+        configManager.getSessionLockMap().put(getDefaultSession(), new ReentrantLock());
         configManager.generateConfig(Collections.singleton(getDefaultSession()), true);
 
         LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt,
