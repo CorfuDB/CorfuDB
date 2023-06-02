@@ -11,15 +11,22 @@ import org.corfudb.common.config.ConfigParamsHelper;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.common.util.URLUtils.NetworkInterfaceVersion;
 import org.corfudb.infrastructure.ServerContext;
+import org.corfudb.infrastructure.logreplication.infrastructure.plugins.CorfuReplicationClusterManagerAdapter;
+import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
+import org.corfudb.infrastructure.logreplication.infrastructure.utils.CorfuSaasEndpointProvider;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationUpgradeManager;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.GitRepositoryState;
 import org.docopt.Docopt;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
+import java.net.URL;
+import java.net.URLClassLoader;
 import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
@@ -312,6 +319,12 @@ public class CorfuInterClusterReplicationServer implements Runnable {
      * @param serverContext server context (server information)
      */
     private void startDiscoveryService(ServerContext serverContext) {
+        // instantiate clusterManager to find if the deployment is a SaaS deployment. This is used for computing the
+        // localCorfuEndpoint for the corfu runtime.
+        // This instance of clusterManager is further passed to discoveryService
+        CorfuReplicationClusterManagerAdapter clusterManagerAdapter =
+                getClusterManagerAdapter(serverContext.getPluginConfigFilePath());
+        CorfuSaasEndpointProvider.init(serverContext.getPluginConfigFilePath(), clusterManagerAdapter.isSaasDeployment());
 
         CorfuRuntime runtime = getRuntime(serverContext);
         CorfuStore corfuStore = new CorfuStore(runtime);
@@ -333,14 +346,33 @@ public class CorfuInterClusterReplicationServer implements Runnable {
         // Start LogReplicationDiscovery Service, responsible for
         // acquiring lock, retrieving Site Manager Info and processing this info
         // so this node is initialized as Source (sender) or Sink (receiver)
-        replicationDiscoveryService = new CorfuReplicationDiscoveryService(serverContext, runtime);
+        replicationDiscoveryService = new CorfuReplicationDiscoveryService(serverContext, runtime, clusterManagerAdapter);
         replicationDiscoveryService.start();
+    }
+
+    /**
+     * Create the Cluster Manager Adapter, i.e., the adapter to external provider of the topology.
+     *
+     * @return cluster manager adapter instance
+     */
+    private CorfuReplicationClusterManagerAdapter getClusterManagerAdapter(String pluginConfig) {
+        LogReplicationPluginConfig config = new LogReplicationPluginConfig(pluginConfig);
+        File jar = new File(config.getTopologyManagerAdapterJARPath());
+
+        try (URLClassLoader child = new URLClassLoader(new URL[]{jar.toURI().toURL()}, this.getClass().getClassLoader())) {
+            Class adapter = Class.forName(config.getTopologyManagerAdapterName(), true, child);
+            return (CorfuReplicationClusterManagerAdapter) adapter.getDeclaredConstructor().newInstance();
+        } catch (Exception e) {
+            log.error("Fatal error: Failed to create serverAdapter", e);
+            throw new UnrecoverableCorfuError(e);
+        }
     }
 
     private CorfuRuntime getRuntime(ServerContext serverContext) {
 
-        String localCorfuEndpoint = getCorfuEndpoint(getHostFromEndpointURL(serverContext.getLocalEndpoint()),
-            serverContext.getCorfuServerConnectionPort());
+        String localCorfuEndpoint = CorfuSaasEndpointProvider.getCorfuSaasEndpoint()
+                .orElseGet(() ->getCorfuEndpoint(getHostFromEndpointURL(serverContext.getLocalEndpoint()),
+            serverContext.getCorfuServerConnectionPort()));
 
         return CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder()
             .trustStore((String) serverContext.getServerConfig().get(ConfigParamNames.TRUST_STORE))
