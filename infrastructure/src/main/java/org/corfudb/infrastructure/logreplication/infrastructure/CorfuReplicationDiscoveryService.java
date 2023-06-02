@@ -37,6 +37,7 @@ import java.net.URLClassLoader;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -628,6 +629,11 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
             return replicationStatusMap;
         }
 
+        if (sessionManager == null) {
+            log.warn("Log Replication Service has not been bootstrapped yet.");
+            return replicationStatusMap;
+        }
+
         if (!isSource(topologyDescriptor) && !isSink(topologyDescriptor)) {
             log.error("Received Replication Status Query in Incorrect Role, cluster is neither SOURCE/SINK");
             return replicationStatusMap;
@@ -729,11 +735,17 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
 
     @Override
     public Set<LogReplicationSession> getOutgoingSessions() {
-        return sessionManager.getOutgoingSessions();
+        if (sessionManager != null) {
+            return sessionManager.getOutgoingSessions();
+        }
+        return new HashSet<>();
     }
 
     @Override
     public Set<LogReplicationSession> getIncomingSessions() {
-        return sessionManager.getIncomingSessions();
+        if (sessionManager != null) {
+            return sessionManager.getIncomingSessions();
+        }
+        return new HashSet<>();
     }
 }
