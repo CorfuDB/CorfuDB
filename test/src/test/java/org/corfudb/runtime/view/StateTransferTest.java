@@ -1275,11 +1275,9 @@ public class StateTransferTest extends AbstractViewTest {
             addServer(SERVERS.PORT_1, sc1);
             addServer(SERVERS.PORT_2, sc2);
 
-            // Add rule to drop all msgs except for service discovery ones
+            // Drop heal requests
             addServerRule(SERVERS.PORT_2, new TestRule().requestMatches(
-                    msg -> !msg.getPayload().getPayloadCase().equals(PayloadCase.BOOTSTRAP_LAYOUT_REQUEST)).drop());
-            addServerRule(SERVERS.PORT_2, new TestRule().requestMatches(
-                    msg -> !msg.getPayload().getPayloadCase().equals(PayloadCase.BOOTSTRAP_MANAGEMENT_REQUEST)).drop());
+                    msg -> msg.getPayload().getPayloadCase().equals(PayloadCase.HEAL_FAILURE_REQUEST)).drop());
 
             final long writtenAddressesBatch1 = 1500L;
             final long writtenAddressesBatch2 = 3000L;
@@ -1323,7 +1321,6 @@ public class StateTransferTest extends AbstractViewTest {
             setAggressiveTimeouts(l1, rt,
                     getManagementServer(SERVERS.PORT_0).getManagementAgent().getCorfuRuntime());
             setAggressiveDetectorTimeouts(SERVERS.PORT_0);
-
             // write a non-consolidated logs
             Set<Long> noWriteHoles = new HashSet<>(Arrays.asList(10L, 100L, 1000L, 2000L, 2500L, 2550L));
 
@@ -1342,7 +1339,6 @@ public class StateTransferTest extends AbstractViewTest {
             waitForLayoutChange(layout -> layout.getUnresponsiveServers().isEmpty() &&
                             layout.segments.size() == 1,
                     rt);
-
             // Verify CT and data
             long committedTail = rt.getAddressSpaceView().getCommittedTail();
 

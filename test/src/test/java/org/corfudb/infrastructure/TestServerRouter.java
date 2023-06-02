@@ -115,7 +115,14 @@ public class TestServerRouter implements IServerRouter {
         if (validateRequest(request, ctx)) {
             if (as != null) {
                 // refactor and move threading to handler
-                as.handleMessage(request, ctx, this);
+                if (rules.stream()
+                        .allMatch(x -> x.evaluateRequest(request, this))) {
+                    as.handleMessage(request, ctx, this);
+                }
+                else {
+                    log.trace("Server: {}. Dropping request: {}", port, request.getPayload().getPayloadCase());
+                }
+
             }
             else {
                 log.trace("Unregistered message of type {} sent to router", request.getPayload().getPayloadCase());

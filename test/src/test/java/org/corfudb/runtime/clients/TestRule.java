@@ -98,6 +98,15 @@ public class TestRule {
         return true;
     }
 
+    public boolean evaluateRequest(RequestMsg msg, IServerRouter router) {
+        if (msg == null) {
+            return false;
+        } else if (match(msg) && drop) {
+            return false;
+        }
+        return true;
+    }
+
     /**
      * Returns whether or not the rule matches the given request message.
      */
