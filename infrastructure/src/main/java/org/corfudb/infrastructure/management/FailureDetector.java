@@ -166,7 +166,7 @@ public class FailureDetector implements IDetector {
             log.debug("Poll round finished. Took: {}ms", System.currentTimeMillis() - start);
         } catch (InterruptedException ie) {
             log.error("Interrupted exception occurred.");
-            throw new UnrecoverableCorfuInterruptedError(ie);
+            // throw new UnrecoverableCorfuInterruptedError(ie);
         }
 
         //Aggregation step
