@@ -4,6 +4,7 @@ import com.google.protobuf.Message;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CompactorMetadataTables;
 import org.corfudb.runtime.CorfuStoreMetadata;
+import org.corfudb.runtime.DistributedCheckpointerHelper;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStoreEntry;
 import org.corfudb.runtime.collections.TxnContext;
@@ -47,14 +48,14 @@ public class DynamicTriggerPolicyUnitTest {
         when(corfuStoreEntry.getPayload()).thenReturn(null);
 
         dynamicTriggerPolicy.markCompactionCycleStart();
-        assert !dynamicTriggerPolicy.shouldTrigger(INTERVAL, corfuStore);
+        assert !dynamicTriggerPolicy.shouldTrigger(INTERVAL, corfuStore, new DistributedCheckpointerHelper(corfuStore));
 
         try {
             TimeUnit.MILLISECONDS.sleep(INTERVAL * 2);
         } catch (InterruptedException e) {
             log.warn("Sleep interrupted: ", e);
         }
-        assert dynamicTriggerPolicy.shouldTrigger(INTERVAL, corfuStore);
+        assert dynamicTriggerPolicy.shouldTrigger(INTERVAL, corfuStore, new DistributedCheckpointerHelper(corfuStore));
     }
 
     @Test
@@ -62,20 +63,20 @@ public class DynamicTriggerPolicyUnitTest {
         when((RpcCommon.TokenMsg) corfuStoreEntry.getPayload()).thenReturn(null)
                 .thenReturn(null)
                 .thenReturn(RpcCommon.TokenMsg.getDefaultInstance());
-        assert dynamicTriggerPolicy.shouldTrigger(INTERVAL, corfuStore);
+        assert dynamicTriggerPolicy.shouldTrigger(INTERVAL, corfuStore, new DistributedCheckpointerHelper(corfuStore));
     }
 
     @Test
     public void testDisableCompaction() throws Exception {
         when((RpcCommon.TokenMsg) corfuStoreEntry.getPayload()).thenReturn(RpcCommon.TokenMsg.getDefaultInstance()).thenReturn(null);
-        assert !dynamicTriggerPolicy.shouldTrigger(INTERVAL, corfuStore);
+        assert !dynamicTriggerPolicy.shouldTrigger(INTERVAL, corfuStore, new DistributedCheckpointerHelper(corfuStore));
     }
 
     @Test
     public void testCheckpointFrozen() throws Exception {
         when((RpcCommon.TokenMsg) corfuStoreEntry.getPayload()).thenReturn(null).thenReturn(RpcCommon.TokenMsg.newBuilder()
                 .setSequence(System.currentTimeMillis()).build());
-        assert !dynamicTriggerPolicy.shouldTrigger(INTERVAL, corfuStore);
+        assert !dynamicTriggerPolicy.shouldTrigger(INTERVAL, corfuStore, new DistributedCheckpointerHelper(corfuStore));
     }
 
     @Test
@@ -85,7 +86,7 @@ public class DynamicTriggerPolicyUnitTest {
                 .thenReturn(null)
                 .thenReturn(RpcCommon.TokenMsg.newBuilder().setSequence(System.currentTimeMillis() - patience).build())
                 .thenReturn(RpcCommon.TokenMsg.newBuilder().setSequence(System.currentTimeMillis()).build());
-        assert dynamicTriggerPolicy.shouldTrigger(INTERVAL, corfuStore);
+        assert dynamicTriggerPolicy.shouldTrigger(INTERVAL, corfuStore, new DistributedCheckpointerHelper(corfuStore));
         verify(txn, times(1)).delete(CompactorMetadataTables.COMPACTION_CONTROLS_TABLE, CompactorMetadataTables.FREEZE_TOKEN);
     }
 }
