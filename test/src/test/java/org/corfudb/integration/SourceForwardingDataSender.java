@@ -42,7 +42,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * (for processing).
  */
 @Slf4j
-public class SourceForwardingDataSender extends AbstractIT implements DataSender {
+public class SourceForwardingDataSender implements DataSender {
 
     private final static int DROP_INCREMENT = 4;
 
@@ -101,6 +101,12 @@ public class SourceForwardingDataSender extends AbstractIT implements DataSender
 
     private LogReplicationSession session = DefaultClusterConfig.getSessions().get(0);
 
+    private boolean dropSnapshotStartMsg;
+
+    private int numSnapshotStartDrops;
+
+    private int numStartMsgsDropped;
+
     @SneakyThrows
     public SourceForwardingDataSender(String destinationEndpoint, LogReplicationIT.TestConfig testConfig,
                                       LogReplicationMetadataManager metadataManager,
@@ -131,11 +137,27 @@ public class SourceForwardingDataSender extends AbstractIT implements DataSender
                 ReplicationStatus.class,
                 null,
                 TableOptions.fromProtoSchema(ReplicationStatus.class));
+        this.dropSnapshotStartMsg = testConfig.isDropSnapshotStartMsg();
+        this.numSnapshotStartDrops = testConfig.getNumDropsForSnapshotStart();
     }
 
     @Override
     public CompletableFuture<LogReplicationEntryMsg> send(LogReplicationEntryMsg message) {
-        log.info("Send message: " + message.getMetadata().getEntryType() + " for:: " + message.getMetadata().getTimestamp());
+        // Check if the SNAPSHOT_START message must be dropped
+        if (dropSnapshotStartMsg && message.getMetadata().getEntryType() == LogReplicationEntryType.SNAPSHOT_START) {
+            if (numSnapshotStartDrops != Integer.MAX_VALUE) {
+                // If a limited number of START messages must be dropped, drop them only if the number is yet to be
+                // reached
+                if (numStartMsgsDropped < numSnapshotStartDrops) {
+                    numStartMsgsDropped++;
+                    return new CompletableFuture<>();
+                }
+            } else {
+                return new CompletableFuture<>();
+            }
+        }
+
+        log.trace("Send message: " + message.getMetadata().getEntryType() + " for:: " + message.getMetadata().getTimestamp());
         if (ifDropMsg > 0 && msgCnt == droppingNum || dropACKLevel == 2 && message.getMetadata().getTimestamp() >= lastAckDropped) {
             log.info("****** Drop msg {} log entry ts {}",  msgCnt, message.getMetadata().getTimestamp());
             if (ifDropMsg == DROP_MSG_ONCE) {

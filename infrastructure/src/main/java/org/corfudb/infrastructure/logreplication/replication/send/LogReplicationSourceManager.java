@@ -41,7 +41,6 @@ public class LogReplicationSourceManager {
 
     private static final int DEFAULT_FSM_WORKER_THREADS = 1;
 
-    @VisibleForTesting
     private final LogReplicationFSM logReplicationFSM;
 
     private final LogReplicationRuntimeParameters parameters;
@@ -50,10 +49,8 @@ public class LogReplicationSourceManager {
 
     private final LogReplicationAckReader ackReader;
 
-    @VisibleForTesting
     private int countACKs = 0;
 
-    @VisibleForTesting
     private ObservableAckMsg ackMessages = new ObservableAckMsg();
 
     /**
