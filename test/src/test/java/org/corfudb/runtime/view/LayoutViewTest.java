@@ -358,12 +358,13 @@ public class LayoutViewTest extends AbstractViewTest {
         Layout oldLayout = new Layout(l);
         l.setEpoch(l.getEpoch() + 1);
         corfuRuntime.getLayoutView().getRuntimeLayout(l).sealMinServerSet();
-
-        // We receive responses from PORT_0 and PORT_2
         corfuRuntime.getLayoutView().updateLayout(newLayout, 1L);
 
+        // Node0 did not participate in layout change
         assertThat(getLayoutServer(SERVERS.PORT_0).getCurrentLayout()).isEqualTo(oldLayout);
-        assertThat(getLayoutServer(SERVERS.PORT_1).getCurrentLayout()).isEqualTo(newLayout);
+        // Node1 is unresponsive and management server is down, so layout is old
+        assertThat(getLayoutServer(SERVERS.PORT_1).getCurrentLayout()).isEqualTo(oldLayout);
+        // Node2 & Node3 had a quorum on a new layout
         assertThat(getLayoutServer(SERVERS.PORT_2).getCurrentLayout()).isEqualTo(newLayout);
         assertThat(getLayoutServer(SERVERS.PORT_3).getCurrentLayout()).isEqualTo(newLayout);
     }
