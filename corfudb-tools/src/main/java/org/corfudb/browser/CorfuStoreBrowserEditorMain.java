@@ -1,5 +1,11 @@
 package org.corfudb.browser;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumMap;
 import java.util.List;
@@ -41,7 +47,9 @@ public class CorfuStoreBrowserEditorMain {
         listTagsForTable,
         listTagsMap,
         printMetadataMap,
-        addRecord
+        addRecord,
+        updateOrAddReplicationGroup,
+        deleteReplicationGroup
     }
 
     private static final String USAGE = "Usage: corfu-browser "+
@@ -49,6 +57,9 @@ public class CorfuStoreBrowserEditorMain {
         "[--host=<host>] [--port=<port>] " +
         "[--offline-db-dir=<dbDir>] " +
         "[--namespace=<namespace>] [--tablename=<tablename>] " +
+        "[--clientName=<clientName>]" + "[--logicalGroup=<logicalGroup>] " +
+        "[--logicalGroupDestinations=<logicalGroupDestinations>]" +
+        "[--logicalGroupDestinationsFilePath=<logicalGroupDestinationsFilePath>]" +
         "[--keystore=<keystore_file>] [--ks_password=<keystore_password>] " +
         "[--truststore=<truststore_file>] [--truststore_password=<truststore_password>] " +
         "[--diskPath=<pathToTempDirForLargeTables>] "+
@@ -66,9 +77,14 @@ public class CorfuStoreBrowserEditorMain {
         + "--port=<port>   Port\n"
         + "--operation=<listTables|infoTable|showTable|clearTable"
         + "|editTable|deleteRecord|loadTable|listenOnTable|listTags|listTagsMap"
-        + "|listTablesForTag|listTagsForTable|listAllProtos> Operation\n"
+        + "|listTablesForTag|listTagsForTable|listAllProtos|updateOrAddReplicationGroup|deleteReplicationGroup> Operation\n"
         + "--namespace=<namespace>   Namespace\n"
         + "--tablename=<tablename>   Table Name\n"
+        + "--clientName=<clientName> name of the client using Logical Group replication model\n"
+        + "--logicalGroup=<logicalGroup> logical group for the Logical Group replication model\n"
+        + "--logicalGroupDestinations=<logicalGroupDestinations> destination for a logical group\n"
+        + "--logicalGroupDestinationsFilePath=<logicalGroupDestinationsFilePath> Path to file having all destinations to " +
+            "a logical group in one jason array\n"
         + "--tag=<tag>  Stream tag of interest\n"
         + "--keystore=<keystore_file> KeyStore File\n"
         + "--ks_password=<keystore_password> KeyStore Password\n"
@@ -378,6 +394,44 @@ public class CorfuStoreBrowserEditorMain {
                 } else {
                     log.error("Print metadata map for a specific address. Specify using tag --address");
                 }
+            case updateOrAddReplicationGroup:
+                String clientName = opts.get("--clientName").toString();
+                String logicalGroup = opts.get("--logicalGroup").toString();
+                Preconditions.checkArgument(isValid(clientName),
+                        "clientName is null or empty.");
+                Preconditions.checkArgument(isValid(logicalGroup),
+                        "logicalGroup is null or empty.");
+
+                List<String> destinations = new ArrayList<>();
+
+                if (opts.get("--logicalGroupDestinations") != null) {
+                    destinations.add(String.valueOf(opts.get("--logicalGroupDestinations")));
+                } else if (opts.get("--logicalGroupDestinationsFilePath") != null) {
+                    Path filePath = Paths.get(String.valueOf(opts.get("--logicalGroupDestinationsFilePath")));
+                    try {
+                        destinations.addAll(Files.readAllLines(filePath, StandardCharsets.UTF_8));
+                    } catch (IOException e) {
+                        log.error("Unable to read file {}"+filePath.toString(), e);
+                        return 0;
+                    }
+                } else {
+                    log.error("Specify the destinations for the logical group by --logicalGroupDestinations or " +
+                            "--logicalGroupDestinationsFilePath");
+                }
+
+                return browser.updateOrAddReplicationGroup(clientName, logicalGroup, destinations);
+
+            case deleteReplicationGroup:
+                String clientNameToDeleteFrom = opts.get("--clientName").toString();
+                String logicalGroupToDelete = opts.get("--logicalGroup").toString();
+
+                Preconditions.checkArgument(isValid(clientNameToDeleteFrom),
+                        "clientName is null or empty.");
+                Preconditions.checkArgument(isValid(logicalGroupToDelete),
+                        "logicalGroup is null or empty.");
+
+                return browser.deleteReplicationGroup(clientNameToDeleteFrom, logicalGroupToDelete);
+
             default:
                 break;
         }
@@ -387,4 +441,5 @@ public class CorfuStoreBrowserEditorMain {
     private static boolean isValid(final String str) {
         return str != null && !str.isEmpty();
     }
+
 }

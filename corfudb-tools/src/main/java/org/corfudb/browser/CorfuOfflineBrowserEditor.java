@@ -385,6 +385,16 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
         return null;
     }
 
+    @Override
+    public int deleteReplicationGroup(String clientName, String logicalGroup) {
+        return 0;
+    }
+
+    @Override
+    public int updateOrAddReplicationGroup(String clientName, String logicalGroup, List<String> remoteDestinations) {
+        return 0;
+    }
+
     class CorfuTableDescriptor {
         @Getter
         private final UUID streamID;
