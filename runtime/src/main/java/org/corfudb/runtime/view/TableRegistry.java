@@ -433,8 +433,8 @@ public class TableRegistry {
             if (currentSchema != null) {
                 log.info("Schema change in {}: {} -> {}", protoName,
                         currentSchema.getPayload().getVersion(), newProtoFd.getPayload().getVersion());
-                log.debug("Old Descriptor {}", currentSchema.getPayload().getFileDescriptor());
-                log.debug("New Descriptor {}", newProtoFd.getPayload().getFileDescriptor());
+                log.trace("Old Descriptor {}", currentSchema.getPayload().getFileDescriptor());
+                log.trace("New Descriptor {}", newProtoFd.getPayload().getFileDescriptor());
             }
         }
         return schemaChangeDetected;
