@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure.logreplication.replication.send;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import lombok.Getter;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
@@ -33,8 +34,9 @@ import java.util.concurrent.locks.ReentrantLock;
 @ToString
 @Slf4j
 public class LogReplicationAckReader {
-    private final LogReplicationMetadataManager metadataManager;
+    @Getter
     private final CorfuRuntime runtime;
+    private final LogReplicationMetadataManager metadataManager;
     private final LogReplicationSession session;
     private final LogReplicationContext replicationContext;
 

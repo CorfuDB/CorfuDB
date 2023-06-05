@@ -1,13 +1,20 @@
 package org.corfudb.integration;
 
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.logreplication.infrastructure.*;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultAdapterForUpgrade;
+import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEvent;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEventInfoKey;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusKey;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
+import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.LogReplication.ReplicationStatus;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
 import org.corfudb.runtime.collections.CorfuStreamEntry;
+import org.corfudb.runtime.collections.CorfuStreamEntry.OperationType;
 import org.corfudb.runtime.collections.StreamListener;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
@@ -17,6 +24,7 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -25,6 +33,10 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.infrastructure.logreplication.infrastructure.LRRollingUpgradeHandler.V1_METADATA_TABLE_PREFIX;
+import static org.corfudb.infrastructure.logreplication.infrastructure.LRRollingUpgradeHandler.V1_STATUS_TABLE_NAME;
+import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.REPLICATION_EVENT_TABLE_NAME;
+import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.tryOpenTable;
 import static org.corfudb.runtime.LogReplicationUtils.REPLICATION_STATUS_TABLE_NAME;
 import static org.corfudb.runtime.LogReplicationUtils.LR_STATUS_STREAM_TAG;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
@@ -72,6 +84,7 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
     @Test
     public void testLRNotStartedUntilRollingUpgradeCompletes() throws Exception {
         verifyInitialSnapshotSyncAfterStartup(FIVE, NUM_WRITES);
+        openV1StatusAndMetadataTables();
 
         // Simulate a rolling upgrade on the plugin
         stopSinkLogReplicator();
@@ -120,6 +133,30 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         // Verify that a forced snapshot sync gets triggered
         statusUpdateLatch.await();
         verifyDataOnSink(NUM_WRITES + NUM_WRITES/2);
+    }
+
+    @Test
+    public void testForceSyncEventRemovedAfterUpgrade() throws Exception {
+        verifyInitialSnapshotSyncAfterStartup(FIVE, NUM_WRITES);
+
+        // Upgrade the sink site first
+        log.info(">> Upgrading the sink site ...");
+        performRollingUpgrade(false);
+
+        CountDownLatch upgradeForceSyncEventRemovalLatch = new CountDownLatch(1);
+        UpgradeForceSyncEventRemovalListener upgradeForceSyncEventRemovalListener =
+                new UpgradeForceSyncEventRemovalListener(upgradeForceSyncEventRemovalLatch);
+
+        tryOpenTable(corfuStoreSource, CORFU_SYSTEM_NAMESPACE, REPLICATION_EVENT_TABLE_NAME,
+                ReplicationEventInfoKey.class, ReplicationEvent.class, null);
+        corfuStoreSource.subscribeListener(upgradeForceSyncEventRemovalListener, CORFU_SYSTEM_NAMESPACE,
+                LogReplicationMetadataManager.LR_STREAM_TAG, Collections.singletonList(REPLICATION_EVENT_TABLE_NAME));
+
+        // Upgrade the source site
+        log.info(">> Upgrading the source site ...");
+        performRollingUpgrade(true);
+
+        upgradeForceSyncEventRemovalLatch.await();
     }
 
     @Test
@@ -528,12 +565,13 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         long expected = countDownLatch.getCount();
         for (int i = 0; i < FIVE; i++) {
             Assert.assertEquals(expected, countDownLatch.getCount());
+            TimeUnit.MILLISECONDS.sleep(2);
         }
-        TimeUnit.MILLISECONDS.sleep(2);
     }
 
     private void performRollingUpgrade(boolean source) throws Exception {
         DefaultAdapterForUpgrade defaultAdapterForUpgrade;
+        openV1StatusAndMetadataTables();
 
         if (source) {
             stopSourceLogReplicator();
@@ -566,6 +604,32 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         // Reset the static versions back to the initial values so that subsequent invocations do not use the stale
         // values
         defaultAdapterForUpgrade.reset();
+    }
+
+    private void openV1StatusAndMetadataTables() {
+        // Open dummy V1 status tables which are used to construct the sessions, used to perform a full sync for upgrade
+        tryOpenTable(corfuStoreSource, CORFU_SYSTEM_NAMESPACE, V1_STATUS_TABLE_NAME,
+                ReplicationStatusKey.class, ReplicationStatusVal.class, null);
+        tryOpenTable(corfuStoreSink, CORFU_SYSTEM_NAMESPACE, V1_STATUS_TABLE_NAME,
+                ReplicationStatusKey.class, ReplicationStatusVal.class, null);
+        // Open dummy V1 metadata table of which the name is used to retrieve the cluster IDs, also used for full sync
+        tryOpenTable(corfuStoreSource, CORFU_SYSTEM_NAMESPACE,
+                String.join("", V1_METADATA_TABLE_PREFIX, DefaultClusterConfig.getSourceClusterIds().get(0)),
+                LogReplicationMetadata.LogReplicationMetadataKey.class,
+                LogReplicationMetadata.LogReplicationMetadataVal.class,
+                null);
+
+        // Add a replication key-value pair to status table which would be expected to exist on an older setup
+        try (TxnContext txnContext = corfuStoreSource.txn(CORFU_SYSTEM_NAMESPACE)) {
+            ReplicationStatusKey key = ReplicationStatusKey.newBuilder()
+                    .setClusterId(DefaultClusterConfig.getSinkClusterIds().get(0))
+                    .build();
+            ReplicationStatusVal val = ReplicationStatusVal.newBuilder()
+                    .build();
+
+            txnContext.putRecord(txnContext.getTable(V1_STATUS_TABLE_NAME), key, val, null);
+            txnContext.commit();
+        }
     }
 
     @After
@@ -622,6 +686,29 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         @Override
         public void onError(Throwable throwable) {
             fail("onError for SnapshotApplyCompletionListener : " + throwable.toString());
+        }
+    }
+
+
+    private class UpgradeForceSyncEventRemovalListener implements StreamListener {
+        private CountDownLatch countDownLatch;
+
+        UpgradeForceSyncEventRemovalListener(CountDownLatch countDownLatch) {
+            this.countDownLatch = countDownLatch;
+        }
+
+        @Override
+        public void onNext(CorfuStreamEntries results) {
+            results.getEntries().forEach((schema, entries) -> entries.forEach(e -> {
+                if (e.getOperation() == OperationType.DELETE) {
+                    countDownLatch.countDown();
+                }
+            }));
+        }
+
+        @Override
+        public void onError(Throwable throwable) {
+            fail("onError for upgradeForceSyncEventRemovalListener : " + throwable.toString());
         }
     }
 }

@@ -7,8 +7,10 @@ import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.infrastructure.logreplication.DataSender;
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationEventMetadata;
 import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
+import org.corfudb.infrastructure.logreplication.utils.SnapshotSyncUtils;
 import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
 import org.corfudb.runtime.LogReplication.SyncType;
+import org.corfudb.runtime.collections.CorfuStore;
 
 import java.util.Optional;
 import java.util.UUID;
@@ -97,6 +99,7 @@ public class WaitSnapshotApplyState implements LogReplicationState {
                 log.debug("Snapshot Apply in progress {}. Verify status.", transitionEventId);
                 return this;
             case SNAPSHOT_APPLY_COMPLETE:
+                SnapshotSyncUtils.removeUpgradeSnapshotSyncEvent(event, new CorfuStore(fsm.getAckReader().getRuntime()));
                 UUID snapshotSyncApplyId = event.getMetadata().getRequestId();
                 /*
                  This is required as in the following sequence of events:

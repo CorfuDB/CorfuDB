@@ -130,6 +130,7 @@ message ReplicationEvent {
   enum ReplicationEventType {
     FORCE_SNAPSHOT_SYNC = 0;
     UPGRADE_COMPLETION_FORCE_SNAPSHOT_SYNC = 1; // Intent to queue force sync for all sessions
+    UPGRADE_COMPLETION_FORCE_SNAPSHOT_SYNC_RETRIGGER = 2; // If initial event is aborted this is used as placeholder so a second event is not queued
   }
   string clusterId = 1;
   string eventId = 2;

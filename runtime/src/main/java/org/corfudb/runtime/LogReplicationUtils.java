@@ -49,7 +49,8 @@ public final class LogReplicationUtils {
     public static final String LR_STATUS_STREAM_TAG = "lr_status";
 
     // Retain the old name from LR v1 to avoid polluting the registry table with stale entries.
-    public static final String REPLICATION_STATUS_TABLE_NAME = "LogReplicationStatus";
+    // TODO (Shreay): Confirm usage of both v1 and v2 tables or how it can be avoided
+    public static final String REPLICATION_STATUS_TABLE_NAME = "NewLogReplicationStatus";
 
     private LogReplicationUtils() { }
 

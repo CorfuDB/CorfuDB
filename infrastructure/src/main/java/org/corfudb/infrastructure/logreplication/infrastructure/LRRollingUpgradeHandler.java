@@ -25,6 +25,7 @@ import java.util.stream.Collectors;
 
 import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.NAMESPACE;
 import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.REPLICATION_EVENT_TABLE_NAME;
+import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.tryOpenTable;
 import static org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager.getDefaultSubscriber;
 import static org.corfudb.infrastructure.logreplication.utils.LogReplicationUpgradeManager.LOG_REPLICATION_PLUGIN_VERSION_TABLE;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
@@ -78,14 +79,21 @@ public class LRRollingUpgradeHandler {
 
         // Handle legacy types first.
         LogReplicationMetadataManager.addLegacyTypesToSerializer(corfuStore);
+        // Open both V1 and V2 status tables.
         LogReplicationMetadataManager.tryOpenTable(corfuStore, NAMESPACE,
                 LogReplicationUtils.REPLICATION_STATUS_TABLE_NAME,
                 LogReplication.LogReplicationSession.class,
                 LogReplication.ReplicationStatus.class, null);
+        tryOpenTable(corfuStore, NAMESPACE,
+                V1_STATUS_TABLE_NAME,
+                LogReplication.LogReplicationSession.class,
+                LogReplication.ReplicationStatus.class, null);
         // Open the event table, which is used to log the intent for triggering a forced snapshot sync upon upgrade
-        // completion
-        LogReplicationMetadataManager.tryOpenTable(corfuStore, NAMESPACE, REPLICATION_EVENT_TABLE_NAME,
-                LogReplicationMetadata.ReplicationEventInfoKey.class, LogReplicationMetadata.ReplicationEvent.class, null);
+        // completion.
+        tryOpenTable(corfuStore, NAMESPACE,
+                REPLICATION_EVENT_TABLE_NAME,
+                LogReplicationMetadata.ReplicationEventInfoKey.class,
+                LogReplicationMetadata.ReplicationEvent.class, null);
     }
 
     public boolean isLRUpgradeInProgress(CorfuStore corfuStore, TxnContext txnContext) {
@@ -150,6 +158,8 @@ public class LRRollingUpgradeHandler {
      */
     @VisibleForTesting
     public List<LogReplicationSession> buildSessionsFromOldMetadata(CorfuStore corfuStore, TxnContext txnContext) {
+        List<LogReplicationSession> sessions = new ArrayList<>();
+
         // Get the sinkClusterIds from the keys of the status table entries
         List<ReplicationStatusKey> statusTableKeys = new ArrayList<>(txnContext.keySet(V1_STATUS_TABLE_NAME));
         List<String> sinkClusterIds = statusTableKeys.stream()
@@ -157,29 +167,28 @@ public class LRRollingUpgradeHandler {
                 .collect(Collectors.toList());
 
         if (sinkClusterIds.isEmpty()) {
-            throw new IllegalStateException("No V1 metadata found");
-        }
+            log.info("No V1 metadata found");
+        } else {
+            // Get the localClusterIds from suffix's of the old metadata table names and filter out the
+            // known sink clusters IDs from the status table to get the sourceClusterIds
+            List<String> sourceClusterIds = corfuStore.listTables(CORFU_SYSTEM_NAMESPACE)
+                    .stream()
+                    .map(TableName::getTableName)
+                    .filter(fullName -> fullName.startsWith(V1_METADATA_TABLE_PREFIX))
+                    .map(fullName -> fullName.substring(V1_METADATA_TABLE_PREFIX.length()))
+                    .filter(remoteId -> !sinkClusterIds.contains(remoteId))
+                    .collect(Collectors.toList());
 
-        // Get the localClusterIds from suffix's of the old metadata table names and filter out the
-        // known sink clusters IDs from the status table to get the sourceClusterIds
-        List<String> sourceClusterIds = corfuStore.listTables(CORFU_SYSTEM_NAMESPACE)
-                .stream()
-                .map(TableName::getTableName)
-                .filter(fullName -> fullName.startsWith(V1_METADATA_TABLE_PREFIX))
-                .map(fullName -> fullName.substring(V1_METADATA_TABLE_PREFIX.length()))
-                .filter(remoteId -> !sinkClusterIds.contains(remoteId))
-                .collect(Collectors.toList());
-
-        // Construct the sessions using the source and sink cluster IDs
-        List<LogReplicationSession> sessions = new ArrayList<>();
-        for (String sourceClusterId : sourceClusterIds) {
-            sessions.addAll(sinkClusterIds.stream()
-                    .map(remoteId -> LogReplicationSession.newBuilder()
-                            .setSourceClusterId(sourceClusterId)
-                            .setSinkClusterId(remoteId)
-                            .setSubscriber(getDefaultSubscriber())
-                            .build())
-                    .collect(Collectors.toList()));
+            // Construct the sessions using the source and sink cluster IDs
+            for (String sourceClusterId : sourceClusterIds) {
+                sessions.addAll(sinkClusterIds.stream()
+                        .map(remoteId -> LogReplicationSession.newBuilder()
+                                .setSourceClusterId(sourceClusterId)
+                                .setSinkClusterId(remoteId)
+                                .setSubscriber(getDefaultSubscriber())
+                                .build())
+                        .collect(Collectors.toList()));
+            }
         }
 
         return sessions;
@@ -206,7 +215,7 @@ public class LRRollingUpgradeHandler {
             Table<LogReplicationMetadata.ReplicationEventInfoKey, LogReplicationMetadata.ReplicationEvent, Message> replicationEventTable =
                     txnContext.getTable(REPLICATION_EVENT_TABLE_NAME);
 
-            log.info("Forced snapshot sync will be triggered due to completion of rolling upgrade");
+            log.info("Forced snapshot sync will be triggered due to completion of rolling upgrade for event with id: {}", rollingUpgradeForceSyncId);
             txnContext.putRecord(replicationEventTable, key, event, null);
         }
     }
