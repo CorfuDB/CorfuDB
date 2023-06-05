@@ -1,5 +1,6 @@
 package org.corfudb.runtime.object;
 
+import com.google.common.base.Preconditions;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
@@ -8,8 +9,6 @@ import org.corfudb.runtime.collections.DiskBackedCorfuTable;
 import org.corfudb.runtime.collections.RocksDbEntryIterator;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.serializer.ISerializer;
-import org.corfudb.util.serializer.PrimitiveSerializer;
-import org.corfudb.util.serializer.Serializers;
 import org.rocksdb.ColumnFamilyHandle;
 import org.rocksdb.ReadOptions;
 import org.rocksdb.RocksDB;
@@ -17,27 +16,26 @@ import org.rocksdb.RocksDBException;
 import org.rocksdb.RocksIterator;
 import org.rocksdb.Transaction;
 
-import java.util.Collection;
-import java.util.HashSet;
+import java.nio.ByteBuffer;
 import java.util.List;
-import java.util.Objects;
-import java.util.Set;
 
 import static org.corfudb.util.Utils.startsWith;
 
 /**
  * Interface that is required to unify {@link RocksDB} and
  * {@link Transaction} interfaces.
- *
- * @param <S>
  */
 public interface RocksDbApi {
+
+    boolean ALLOCATE_DIRECT_BUFFERS = true;
 
     byte[] get(@NonNull ColumnFamilyHandle columnHandle,
                @NonNull ByteBuf keyPayload) throws RocksDBException;
 
-    List<byte[]> multiGet(@NonNull ColumnFamilyHandle columnFamilyHandle,
-                          @NonNull List<byte[]> arrayKeys) throws RocksDBException;
+    void multiGet(
+            @NonNull ColumnFamilyHandle columnFamilyHandle,
+            @NonNull List<ByteBuffer> keys,
+            @NonNull List<ByteBuffer> values) throws RocksDBException;
 
     void insert(@NonNull ColumnFamilyHandle columnHandle,
                 @NonNull ByteBuf keyPayload,
@@ -51,9 +49,12 @@ public interface RocksDbApi {
 
     RocksIterator getRawIterator(ReadOptions readOptions, ColumnFamilyHandle columnFamilyHandle);
 
-    Set<ByteBuf> prefixScan(ColumnFamilyHandle secondaryIndexesHandle,
-                            byte indexId, Object secondaryKey,
-                            ISerializer serializer);
+    void prefixScan(
+            ColumnFamilyHandle secondaryIndexesHandle,
+            byte indexId, Object secondaryKey,
+            ISerializer serializer,
+            List<ByteBuffer> keys,
+            List<ByteBuffer> values);
 
     /**
      * Given a secondary key, return all primary keys that map to it.
@@ -62,13 +63,16 @@ public interface RocksDbApi {
      * @param secondaryIndexesHandle table family where secondary indexes reside
      * @param indexId a static numerical representation of the index name
      * @param serializer serializer used for (de)serializing keys/values
-     * @param readOptions default read options
      * @return A set of serialized primary keys associated with
      *         the specified secondary key.
      */
-    default Set<ByteBuf> prefixScan(Object secondaryKey,
-            ColumnFamilyHandle secondaryIndexesHandle, byte indexId,
-            ISerializer serializer, ReadOptions originalReadOptions) {
+    default void prefixScan(
+            Object secondaryKey, ColumnFamilyHandle secondaryIndexesHandle, byte indexId,
+            ISerializer serializer, ReadOptions originalReadOptions,
+            List<ByteBuffer> keys, List<ByteBuffer> values, boolean allocateDirectBuffer) {
+
+        Preconditions.checkState(keys.isEmpty(), "Key set should always be empty.");
+        Preconditions.checkState(values.isEmpty(), "Value set should always be empty.");
 
         ReadOptions readOptions = new ReadOptions(originalReadOptions)
                 .setPrefixSameAsStart(true);
@@ -86,8 +90,6 @@ public interface RocksDbApi {
         compositeKey.writeBytes(serializedSecondaryKey);
         final byte[] prefix = ByteBufUtil.getBytes(compositeKey);
 
-        Set<ByteBuf> results = new HashSet<>();
-
         try (RocksIterator entryIterator = getRawIterator(readOptions, secondaryIndexesHandle)) {
             entryIterator.seek(partialPrefix);
             while (entryIterator.isValid() && !startsWith(entryIterator.key(), partialPrefix)) {
@@ -95,9 +97,16 @@ public interface RocksDbApi {
             }
 
             while (entryIterator.isValid() && startsWith(entryIterator.key(), prefix)) {
-                final ByteBuf serializedPrimaryKey = Unpooled.wrappedBuffer(entryIterator.key(),
-                        prefix.length, entryIterator.key().length - prefix.length);
-                results.add(serializedPrimaryKey);
+                final ByteBuffer serializedPrimaryKey = ByteBuffer
+                        .allocateDirect(entryIterator.key().length - prefix.length)
+                        .put(entryIterator.key(), prefix.length, entryIterator.key().length - prefix.length);
+
+                keys.add(serializedPrimaryKey);
+                if (allocateDirectBuffer) {
+                    final int valueSize = Unpooled.wrappedBuffer(entryIterator.value()).readInt();
+                    values.add(ByteBuffer.allocateDirect(valueSize));
+                }
+
                 entryIterator.next();
             }
         } catch (Exception unexpected) {
@@ -107,7 +116,7 @@ public interface RocksDbApi {
             compositeKey.release();
         }
 
-        return results;
+        keys.forEach(ByteBuffer::flip);
     }
 
     void clear() throws RocksDBException;

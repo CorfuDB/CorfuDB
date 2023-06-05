@@ -21,9 +21,9 @@ import org.rocksdb.RocksDBException;
 import org.rocksdb.RocksIterator;
 import org.rocksdb.WriteOptions;
 
+import java.nio.ByteBuffer;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -78,6 +78,7 @@ public class RocksDbStore<S extends SnapshotGenerator<S>> implements
             tableConfig.setIndexType(IndexType.kHashSearch);
             columnFamilyOptions.setTableFormatConfig(tableConfig);
 
+
             // Use hash-map-based memtables to avoid binary search costs in memtables.
             // BUG: Memtable doesn't concurrent writes (allow_concurrent_memtable_write)
             // MemTableConfig memTableConfig = new HashLinkedListMemTableConfig();
@@ -97,11 +98,13 @@ public class RocksDbStore<S extends SnapshotGenerator<S>> implements
     }
 
     @Override
-    public List<byte[]> multiGet(@NonNull ColumnFamilyHandle columnFamilyHandle,
-                                 @NonNull List<byte[]> arrayKeys) throws RocksDBException {
-        final List<ColumnFamilyHandle> columFamilies = arrayKeys.stream()
+    public void multiGet(
+            @NonNull ColumnFamilyHandle columnFamilyHandle,
+            @NonNull List<ByteBuffer> keys,
+            @NonNull List<ByteBuffer> values) throws RocksDBException {
+        final List<ColumnFamilyHandle> columFamilies = keys.stream()
                 .map(ignore -> columnFamilyHandle).collect(Collectors.toList());
-        return rocksDb.multiGetAsList(columFamilies, arrayKeys);
+        rocksDb.multiGetByteBuffers(columFamilies, keys, values);
     }
 
     @Override
@@ -132,10 +135,13 @@ public class RocksDbStore<S extends SnapshotGenerator<S>> implements
     }
 
     @Override
-    public Set<ByteBuf> prefixScan(
+    public void prefixScan(
             ColumnFamilyHandle secondaryIndexesHandle, byte indexId,
-            Object secondaryKey, ISerializer serializer) {
-        return prefixScan(secondaryKey, secondaryIndexesHandle, indexId, serializer, new ReadOptions());
+            Object secondaryKey, ISerializer serializer,
+            List<ByteBuffer> keys,
+            List<ByteBuffer> values) {
+        prefixScan(secondaryKey, secondaryIndexesHandle, indexId, serializer,
+                new ReadOptions(), keys, values, ALLOCATE_DIRECT_BUFFERS);
     }
 
     @Override

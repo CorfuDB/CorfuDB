@@ -11,21 +11,10 @@ import org.apache.commons.lang3.ArrayUtils;
 import org.corfudb.runtime.collections.RocksDbEntryIterator;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.serializer.ISerializer;
-import org.rocksdb.ColumnFamilyHandle;
-import org.rocksdb.OptimisticTransactionDB;
-import org.rocksdb.ReadOptions;
-import org.rocksdb.RocksDBException;
-import org.rocksdb.RocksIterator;
-import org.rocksdb.Transaction;
-import org.rocksdb.WriteOptions;
+import org.rocksdb.*;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Objects;
-import java.util.Set;
+import java.nio.ByteBuffer;
+import java.util.*;
 import java.util.stream.Collectors;
 
 import static org.corfudb.util.Utils.startsWith;
@@ -65,13 +54,22 @@ public class RocksDbTx<S extends SnapshotGenerator<S>> implements RocksDbApi {
     }
 
     @Override
-    public List<byte[]> multiGet(@NonNull ColumnFamilyHandle columnFamilyHandle,
-                                 @NonNull List<byte[]> arrayKeys) {
-        return snapshot.executeInSnapshot(readOptions -> {
+    public void multiGet(@NonNull ColumnFamilyHandle columnFamilyHandle,
+                         @NonNull List<ByteBuffer> keys,
+                         @NonNull List<ByteBuffer> values) {
+        snapshot.executeInSnapshot(readOptions -> {
             try {
-                final List<ColumnFamilyHandle> columFamilies = arrayKeys.stream()
+                final List<ColumnFamilyHandle> columFamilies = keys.stream()
                         .map(ignore -> columnFamilyHandle).collect(Collectors.toList());
-                return txn.multiGetAsList(readOptions, columFamilies, arrayKeys);
+                final List<byte[]> keysArray = keys.stream()
+                        .map(buffer -> {
+                            byte[] key = new byte[buffer.remaining()];
+                            buffer.get(key);
+                            return key;
+                        })
+                        .collect(Collectors.toList());
+                List<byte[]> valuesArray = txn.multiGetAsList(readOptions, columFamilies, keysArray);
+                valuesArray.stream().map(ByteBuffer::wrap).forEach(values::add);
             } catch (RocksDBException e) {
                 throw new UnrecoverableCorfuError(e);
             }
@@ -109,10 +107,11 @@ public class RocksDbTx<S extends SnapshotGenerator<S>> implements RocksDbApi {
         return txn.getIterator(readOptions, columnFamilyHandle);
     }
 
-    public Set<ByteBuf> prefixScan(ColumnFamilyHandle secondaryIndexesHandle,
-                                 byte indexId, Object secondaryKey, ISerializer serializer) {
-        return snapshot.executeInSnapshot(readOptions -> {
-            return prefixScan(secondaryKey, secondaryIndexesHandle, indexId, serializer, readOptions);
+    public void prefixScan(ColumnFamilyHandle secondaryIndexesHandle, byte indexId, Object secondaryKey,
+                           ISerializer serializer, List<ByteBuffer> keys, List<ByteBuffer> values) {
+        snapshot.executeInSnapshot(readOptions -> {
+            prefixScan(secondaryKey, secondaryIndexesHandle, indexId, serializer, readOptions, keys, values,
+                    !ALLOCATE_DIRECT_BUFFERS);
         });
     }
 

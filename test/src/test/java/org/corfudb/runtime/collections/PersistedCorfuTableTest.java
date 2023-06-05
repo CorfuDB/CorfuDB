@@ -154,6 +154,8 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
         PersistenceOptionsBuilder persistenceOptions = PersistenceOptions.builder()
                 .dataPath(Paths.get(diskBackedDirectory, streamName));
 
+        getDefaultRuntime().getSerializers().registerSerializer(serializer);
+
         return getDefaultRuntime().getObjectsView().build()
                 .setTypeToken(PersistedCorfuTable.<String, String>getTypeToken())
                 .setArguments(persistenceOptions.build(), options, serializer, registry)
@@ -175,6 +177,8 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
         if (!readYourWrites) {
             persistenceOptions.consistencyModel(ConsistencyModel.READ_COMMITTED);
         }
+
+        getDefaultRuntime().getSerializers().registerSerializer(serializer);
 
         return getDefaultRuntime().getObjectsView().build()
                 .setTypeToken(PersistedCorfuTable.<String, V>getTypeToken())

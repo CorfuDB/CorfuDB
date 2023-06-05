@@ -5,7 +5,6 @@ import com.google.common.hash.HashFunction;
 import com.google.common.hash.Hashing;
 import io.micrometer.core.instrument.Timer;
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -28,6 +27,8 @@ import org.corfudb.runtime.object.VersionedObjectIdentifier;
 import org.corfudb.runtime.object.ViewGenerator;
 import org.corfudb.runtime.view.ObjectOpenOption;
 import org.corfudb.util.serializer.ISerializer;
+import org.rocksdb.BlockBasedTableConfig;
+import org.rocksdb.BloomFilter;
 import org.rocksdb.CompressionType;
 import org.rocksdb.Options;
 import org.rocksdb.RocksDB;
@@ -38,6 +39,7 @@ import org.rocksdb.WriteOptions;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+import java.nio.ByteBuffer;
 import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -99,6 +101,10 @@ public class DiskBackedCorfuTable<K, V> implements
 
         options.setCreateIfMissing(true);
         options.setCompressionType(CompressionType.LZ4_COMPRESSION);
+
+        BlockBasedTableConfig blockBasedTableConfig = new BlockBasedTableConfig();
+        blockBasedTableConfig.setFilterPolicy(new BloomFilter(10));
+        options.setTableFormatConfig(blockBasedTableConfig);
 
         return options;
     }
@@ -219,7 +225,7 @@ public class DiskBackedCorfuTable<K, V> implements
 
                 // Update secondary indexes with new mappings.
                 unmapSecondaryIndexes(key, previous);
-                mapSecondaryIndexes(key, value);
+                mapSecondaryIndexes(key, value, valuePayload.readableBytes());
             }
 
             // Insert the primary key-value mapping into the default column family.
@@ -332,7 +338,7 @@ public class DiskBackedCorfuTable<K, V> implements
         }
     }
 
-    private void mapSecondaryIndexes(@NonNull K primaryKey, @NonNull V value) throws RocksDBException {
+    private void mapSecondaryIndexes(@NonNull K primaryKey, @NonNull V value, int valueSize) throws RocksDBException {
         try {
             for (Index.Spec<K, V, ?> index : indexSpec) {
                 Iterable<?> mappedValues = index.getMultiValueIndexFunction().apply(primaryKey, value);
@@ -345,6 +351,7 @@ public class DiskBackedCorfuTable<K, V> implements
                     }
 
                     final ByteBuf serializedIndexValue = Unpooled.buffer();
+                    serializedIndexValue.writeInt(valueSize);
                     final ByteBuf serializedCompoundKey = getCompoundKey(
                             indexToId.get(index.getName().get()), secondaryKey, primaryKey);
                     try {
@@ -394,7 +401,8 @@ public class DiskBackedCorfuTable<K, V> implements
 
     public <I> Iterable<Map.Entry<K, V>> getByIndex(@NonNull final Index.Name indexName,
                                                     @NonNull I indexKey) {
-        final List<ByteBuf> byteBufKeys = new ArrayList<>();
+        final List<ByteBuffer> keys = new ArrayList<>();
+        final List<ByteBuffer> values = new ArrayList<>();
 
         try {
             String secondaryIndex = indexName.get();
@@ -403,22 +411,21 @@ public class DiskBackedCorfuTable<K, V> implements
             }
 
             byte indexId = indexToId.get(secondaryIndexesAliasToPath.get(secondaryIndex));
-            byteBufKeys.addAll(rocksApi.prefixScan(
-                    columnFamilyRegistry.getSecondaryIndexColumnFamily(), indexId, indexKey, serializer));
-            final List<byte[]> arrayKeys = byteBufKeys.stream()
-                    .map(ByteBufUtil::getBytes)
-                    .collect(Collectors.toList());
-            final List<byte[]> arrayValues = rocksApi.multiGet(columnFamilyRegistry.getDefaultColumnFamily(), arrayKeys);
+            rocksApi.prefixScan(columnFamilyRegistry.getSecondaryIndexColumnFamily(),
+                    indexId, indexKey, serializer, keys, values);
 
-            return Streams.zip(byteBufKeys.stream(), arrayValues.stream(), (key, value) ->
-                    new AbstractMap.SimpleEntry<>(
-                            (K) serializer.deserialize(key, null),
-                            (V) serializer.deserialize(Unpooled.copiedBuffer(value), null)
-                    )).collect(Collectors.toSet());
+            // Prevent the keys from being consumed.
+            final List<ByteBuffer> duplicateKeys = keys.stream().map(ByteBuffer::duplicate)
+                    .collect(Collectors.toList());
+            rocksApi.multiGet(columnFamilyRegistry.getDefaultColumnFamily(), duplicateKeys, values);
+
+            return Streams.zip(keys.stream(), values.stream(), (key, value) ->
+                    new AbstractMap.SimpleEntry<K, V>(
+                            (K) serializer.deserialize(Unpooled.wrappedBuffer(key), null),
+                            (V) serializer.deserialize(Unpooled.wrappedBuffer(value), null)
+                    )).collect(Collectors.toList());
         } catch (RocksDBException e) {
             throw new UnrecoverableCorfuError(e);
-        } finally {
-            byteBufKeys.forEach(ByteBuf::release);
         }
     }
 

@@ -5,17 +5,10 @@ import io.netty.buffer.ByteBufUtil;
 import lombok.NonNull;
 import org.corfudb.runtime.collections.RocksDbEntryIterator;
 import org.corfudb.util.serializer.ISerializer;
-import org.rocksdb.ColumnFamilyHandle;
-import org.rocksdb.OptimisticTransactionDB;
-import org.rocksdb.ReadOptions;
-import org.rocksdb.RocksDBException;
-import org.rocksdb.RocksIterator;
-import org.rocksdb.Transaction;
+import org.rocksdb.*;
 
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.List;
-import java.util.Set;
+import java.nio.ByteBuffer;
+import java.util.*;
 import java.util.concurrent.locks.StampedLock;
 import java.util.stream.Collectors;
 
@@ -45,12 +38,12 @@ public class RocksDbReadCommittedTx<S extends SnapshotGenerator<S>> implements R
     }
 
     @Override
-    public List<byte[]> multiGet(@NonNull ColumnFamilyHandle columnFamilyHandle,
-                                 @NonNull List<byte[]> arrayKeys) throws RocksDBException {
-        final List<ColumnFamilyHandle> columFamilies = arrayKeys.stream()
-                .map(ignore -> columnFamilyHandle).collect(Collectors.toList());
-
-        return rocksDb.multiGetAsList(columFamilies, arrayKeys);
+    public void multiGet(
+            @NonNull ColumnFamilyHandle columnFamilyHandle,
+            @NonNull List<ByteBuffer> keys,
+            @NonNull List<ByteBuffer> values) throws RocksDBException {
+        final List<ColumnFamilyHandle> columFamilies = Collections.emptyList();
+        rocksDb.multiGetByteBuffers(columFamilies, keys, values);
     }
 
     @Override
@@ -97,7 +90,9 @@ public class RocksDbReadCommittedTx<S extends SnapshotGenerator<S>> implements R
     }
 
     @Override
-    public Set<ByteBuf> prefixScan(ColumnFamilyHandle secondaryIndexesHandle, byte indexId, Object secondaryKey, ISerializer serializer) {
-        return prefixScan(secondaryKey, secondaryIndexesHandle, indexId, serializer, new ReadOptions());
+    public void prefixScan(ColumnFamilyHandle secondaryIndexesHandle, byte indexId, Object secondaryKey, ISerializer serializer,
+                           List<ByteBuffer> keys, List<ByteBuffer> values) {
+        prefixScan(secondaryKey, secondaryIndexesHandle, indexId, serializer,
+                new ReadOptions(), keys, values, ALLOCATE_DIRECT_BUFFERS);
     }
 }
