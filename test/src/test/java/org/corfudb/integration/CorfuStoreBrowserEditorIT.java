@@ -833,14 +833,11 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         destinations.add("dest1");
         destinations.add("dest2");
         //Try to insert into LR_MODEL_METADATA_TABLE_NAME table
-        browser.updateOrAddReplicationGroup(clientName, logicalGroup, destinations);
-        assertThat(browser.printTableInfo(CORFU_SYSTEM_NAMESPACE, LR_MODEL_METADATA_TABLE_NAME)).isOne();
-        // Try to delete a Group which is not present.
-        browser.deleteReplicationGroup(clientName, "group2");
-        assertThat(browser.printTableInfo(CORFU_SYSTEM_NAMESPACE, LR_MODEL_METADATA_TABLE_NAME)).isOne();
+        assertThat(browser.updateOrAddReplicationGroup(clientName, logicalGroup, destinations)).isOne();
         // Try to delete a Group which is present in the table.
-        browser.deleteReplicationGroup(clientName, logicalGroup);
-        assertThat(browser.printTableInfo(CORFU_SYSTEM_NAMESPACE, LR_MODEL_METADATA_TABLE_NAME)).isZero();
+        assertThat(browser.deleteReplicationGroup(clientName, logicalGroup)).isOne();
+        // Try to delete a Group which is not present.
+        assertThat(browser.deleteReplicationGroup(clientName, logicalGroup)).isZero();
 
         runtime.shutdown();
     }

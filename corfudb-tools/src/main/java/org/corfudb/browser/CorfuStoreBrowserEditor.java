@@ -891,6 +891,10 @@ public class CorfuStoreBrowserEditor implements CorfuBrowserEditorCommands {
         System.out.println("Inserting a record to " + LR_MODEL_METADATA_TABLE_NAME);
         System.out.println("\n======================\n");
 
+        runtime.getSerializers().removeSerializer(dynamicProtobufSerializer);
+        ProtobufSerializer protoSerializer = new ProtobufSerializer(new ConcurrentHashMap<>());
+        runtime.getSerializers().registerSerializer(protoSerializer);
+
         CorfuStoreShim store = new CorfuStoreShim(runtime);
         AtomicInteger numGroupInserted = new AtomicInteger();
 
@@ -946,6 +950,10 @@ public class CorfuStoreBrowserEditor implements CorfuBrowserEditorCommands {
         System.out.println("\n======================\n");
         System.out.println("Deleting logical group " + logicalGroup + " from " + LR_MODEL_METADATA_TABLE_NAME);
         System.out.println("\n======================\n");
+
+        runtime.getSerializers().removeSerializer(dynamicProtobufSerializer);
+        ProtobufSerializer protoSerializer = new ProtobufSerializer(new ConcurrentHashMap<>());
+        runtime.getSerializers().registerSerializer(protoSerializer);
 
         CorfuStoreShim store = new CorfuStoreShim(runtime);
         AtomicInteger numGroupsDeleted = new AtomicInteger();
@@ -1040,17 +1048,21 @@ public class CorfuStoreBrowserEditor implements CorfuBrowserEditorCommands {
         CorfuStoreShim store = new CorfuStoreShim(runtime);
         int numKeysDeleted = 0;
 
+        // open table if not opened already
         try {
-            store.openTable(namespace,
-                    tableName,
-                    LogReplication.LogReplicationSession.class,
-                    LogReplicationMetadata.ReplicationStatusVal.class,
-                    null,
-                    TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
-
-        } catch (Exception ex) {
-            log.error("Unable to open table " + namespace + "$" + tableName);
-            throw new RuntimeException("Unable to open table.");
+            store.getTable(namespace, tableName);
+        } catch (NoSuchElementException | IllegalArgumentException e) {
+            log.warn("Failed getTable operation, opening table.", e);
+            try {
+                store.openTable(namespace,
+                        tableName,
+                        LogReplication.LogReplicationSession.class,
+                        LogReplicationMetadata.ReplicationStatusVal.class,
+                        null,
+                        TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
+            } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException exe) {
+                log.error("Error seen while trying to open table ", exe);
+            }
         }
 
         try (ManagedTxnContext txn = store.tx(namespace)) {
@@ -1086,17 +1098,21 @@ public class CorfuStoreBrowserEditor implements CorfuBrowserEditorCommands {
         CorfuStoreShim store = new CorfuStoreShim(runtime);
         int numKeysDeleted = 0;
 
+        // open table if not opened already
         try {
-            store.openTable(namespace,
-                    tableName,
-                    LogReplicationSession.class,
-                    LogReplicationMetadata.ReplicationMetadata.class,
-                    null,
-                    TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationMetadata.class));
-
-        } catch (Exception ex) {
-            log.error("Unable to open table " + namespace + "$" + tableName);
-            throw new RuntimeException("Unable to open table.");
+            store.getTable(namespace, tableName);
+        } catch (NoSuchElementException | IllegalArgumentException e) {
+            log.warn("Failed getTable operation, opening table.", e);
+            try {
+                store.openTable(namespace,
+                        tableName,
+                        LogReplicationSession.class,
+                        LogReplicationMetadata.ReplicationMetadata.class,
+                        null,
+                        TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationMetadata.class));
+            } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException exe) {
+                log.error("Error seen while trying to open table ", exe);
+            }
         }
 
         try (ManagedTxnContext txn = store.tx(namespace)) {
