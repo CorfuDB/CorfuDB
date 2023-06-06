@@ -27,6 +27,7 @@ import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TableParameters;
 import org.corfudb.runtime.collections.streaming.StreamingManager;
+import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.SerializerException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.transactions.TransactionType;
@@ -247,7 +248,12 @@ public class TableRegistry {
         }
         TableMetadata tableMetadata = metadataBuilder.build();
 
-        int numRetries = 9; // Since this is an internal transaction, retry a few times before giving up.
+        // Since this is an internal transaction, retry a few times before giving up.
+        final int minRetryCount = 16;
+        // Some clients open a large number of tables in parallel using ForkJoin thread pools
+        // greatly increasing the chances of collisions and transaction aborts.
+        // So set the number of retries as a factor of the number of cores in the system.
+        int numRetries = Math.max(minRetryCount, Runtime.getRuntime().availableProcessors());
         while (numRetries-- > 0) {
             // Schema validation to ensure that there is either proper modification of the schema across open calls.
             // Or no modification to the protobuf files.
@@ -293,7 +299,17 @@ public class TableRegistry {
                 this.runtime.getObjectsView().TXEnd();
                 break;
             } catch (TransactionAbortedException txAbort) {
+                if (txAbort.getAbortCause() == AbortCause.CONFLICT &&
+                        txAbort.getConflictStream().equals(protobufDescriptorTable.getCorfuStreamID())) {
+                    // Updates to protobuf descriptor tables are internal so conflicts hit here
+                    // should not count towards the normal retry count.
+                    log.info("registerTable {}${} failed due to conflict in protobuf descriptors. Retrying",
+                            namespace, tableName);
+                    numRetries++;
+                    continue;
+                }
                 if (numRetries <= 0) {
+                    log.error("registerTable failed. Retries exhausted. Cause {}", numRetries, txAbort);
                     throw txAbort;
                 }
                 log.info("registerTable: commit failed. Will retry {} times. Cause {}", numRetries, txAbort);
