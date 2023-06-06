@@ -106,6 +106,13 @@ public class AddressSpaceView extends AbstractView implements AutoCloseable {
         cacheBuilder.maximumSize(maxCacheEntries);
         log.info("AddressSpaceView readCache size is set to {}", maxCacheEntries);
 
+        if (maxCacheEntries == 0) {
+            log.warn("Since AddressSpaceView readCache size is 0, " +
+                    "overriding CorfuRuntime bulkReadSize and checkpointReadBatchSize to 1.");
+            runtime.getParameters().setBulkReadSize(1);
+            runtime.getParameters().setCheckpointReadBatchSize(1);
+        }
+
         if (concurrencyLevel != 0) {
             cacheBuilder.concurrencyLevel(concurrencyLevel);
         }

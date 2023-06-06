@@ -20,10 +20,13 @@ public class CompactorConfigUnitTest {
     private static final String truststore = "truststore";
     private static final String ks_password = "ks_password";
     private static final String truststore_password = "truststore_password";
-    private static final int bulkReadSize = 50;
+    private static final int bulkReadSize = 20;
+    private static final int maxCacheEntries = 20;
     private static final String SPACE = " ";
     private final String baseCmd = "--hostname=" + hostname + " --port=" + port +
-            " --tlsEnabled=true --bulkReadSize=" + bulkReadSize + " --keystore=" + keystore + " --ks_password=" +
+            " --tlsEnabled=true --bulkReadSize=" + bulkReadSize +
+            " --maxCacheEntries=" + maxCacheEntries +
+            " --keystore=" + keystore + " --ks_password=" +
             ks_password + " --truststore=" + truststore + " --truststore_password=" + truststore_password;
 
     @Test
@@ -40,7 +43,9 @@ public class CompactorConfigUnitTest {
                 .systemDownHandlerTriggerLimit(CompactorBaseConfig.SYSTEM_DOWN_HANDLER_TRIGGER_LIMIT)
                 .systemDownHandler(corfuCompactorControlsConfig.getDefaultSystemDownHandler())
                 .clientName(hostname)
-                .cacheDisabled(true)
+                .cacheDisabled(false)
+                .maxCacheEntries(bulkReadSize)
+                .maxMvoCacheEntries(0)
                 .build();
 
         assertEquals(Optional.empty(), corfuCompactorControlsConfig.getPersistedCacheRoot());

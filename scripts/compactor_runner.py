@@ -29,6 +29,7 @@ import yaml
 
 COMPACTOR_CONTROLS_CLASS_NAME = "org.corfudb.compactor.CompactorController"
 COMPACTOR_CHECKPOINTER_CLASS_NAME = "org.corfudb.compactor.CompactorCheckpointer"
+MAX_CACHE_ENTRIES = 20
 COMPACTOR_BULK_READ_SIZE = 20
 COMPACTOR_JVM_XMX = 1024
 FORCE_DISABLE_CHECKPOINTING = "FORCE_DISABLE_CHECKPOINTING"
@@ -146,6 +147,7 @@ class CommandBuilder(object):
         cmd.append("--port=" + self._config.corfu_port)
         cmd.append("--tlsEnabled=true")
         cmd.append("--bulkReadSize=" + str(COMPACTOR_BULK_READ_SIZE))
+        cmd.append("--maxCacheEntries=" + str(MAX_CACHE_ENTRIES))
 
         Security = compactor_config["Security"]
         cmd.append("--keystore=" + Security["Keystore"])

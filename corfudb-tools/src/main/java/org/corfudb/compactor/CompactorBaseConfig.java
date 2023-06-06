@@ -91,13 +91,18 @@ public class CompactorBaseConfig {
             builder.bulkReadSize(Integer.parseInt(bulkReadSizeStr));
         });
 
+        getOpt("--maxCacheEntries").ifPresent(maxCacheEntries -> {
+            builder.maxCacheEntries(Integer.parseInt(maxCacheEntries));
+        });
+
+        builder.maxMvoCacheEntries(0);
+
         builder.clientName(host);
         builder.systemDownHandlerTriggerLimit(SYSTEM_DOWN_HANDLER_TRIGGER_LIMIT)
                 .systemDownHandler(defaultSystemDownHandler);
 
         params = builder
                 .priorityLevel(PriorityLevel.HIGH)
-                .cacheDisabled(true)
                 .build();
     }
 
@@ -128,6 +133,7 @@ public class CompactorBaseConfig {
                 "[--persistedCacheRoot=<pathToTempDirForLargeTables>] " +
                 "[--maxWriteSize=<maxWriteSizeLimit>] " +
                 "[--bulkReadSize=<bulkReadSize>] " +
+                "[--maxCacheEntries=<maxCacheEntries>] " +
                 "[--tlsEnabled=<tls_enabled>]";
 
         public static final String OPTIONS_PARAMS =
@@ -139,7 +145,8 @@ public class CompactorBaseConfig {
                 + "--truststore_password=<truststore_password> Truststore Password\n"
                 + "--persistedCacheRoot=<pathToTempDirForLargeTables> Path to Temp Dir\n"
                 + "--maxWriteSize=<maxWriteSize> Max write size smaller than 2GB\n"
-                + "--bulkReadSize=<bulkReadSize> Read size for chain replication\n"
+                + "--bulkReadSize=<bulkReadSize> Number of log entries read in one batch\n"
+                + "--maxCacheEntries=<maxCacheEntries> AddressSpaceView read cache size\n"
                 + "--tlsEnabled=<tls_enabled>";
     }
 }
