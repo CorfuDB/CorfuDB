@@ -167,18 +167,33 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
     /**
      * Constructor Discovery Service
      *
-     * @param serverContext the server context proving settings
-     * @param runtime Corfu runtime which connects to the local corfu
-     * @param clusterManagerAdapter cluster manager for receiving topology configuration information.
+     * @param serverContext current server's context
      */
-    public CorfuReplicationDiscoveryService(@Nonnull ServerContext serverContext, @Nonnull CorfuRuntime runtime,
-                                            @Nonnull CorfuReplicationClusterManagerAdapter clusterManagerAdapter) {
+    public CorfuReplicationDiscoveryService(@Nonnull ServerContext serverContext, @Nonnull CorfuRuntime runtime) {
         this.serverContext = serverContext;
         this.logReplicationLockId = serverContext.getNodeId();
         this.localEndpoint = serverContext.getLocalEndpoint();
         this.runtime = runtime;
         this.pluginConfig = new LogReplicationPluginConfig(serverContext.getPluginConfigFilePath());
-        this.clusterManagerAdapter = clusterManagerAdapter;
+        this.clusterManagerAdapter = getClusterManagerAdapter();
+    }
+
+    /**
+     * Create the Cluster Manager Adapter, i.e., the adapter to external provider of the topology.
+     *
+     * @return cluster manager adapter instance
+     */
+    private CorfuReplicationClusterManagerAdapter getClusterManagerAdapter() {
+
+        File jar = new File(pluginConfig.getTopologyManagerAdapterJARPath());
+
+        try (URLClassLoader child = new URLClassLoader(new URL[]{jar.toURI().toURL()}, this.getClass().getClassLoader())) {
+            Class adapter = Class.forName(pluginConfig.getTopologyManagerAdapterName(), true, child);
+            return (CorfuReplicationClusterManagerAdapter) adapter.getDeclaredConstructor().newInstance();
+        } catch (Exception e) {
+            log.error("Fatal error: Failed to create serverAdapter", e);
+            throw new UnrecoverableCorfuError(e);
+        }
     }
 
     /**

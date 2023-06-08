@@ -11,7 +11,7 @@ import org.corfudb.common.config.ConfigParamsHelper;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.common.util.URLUtils.NetworkInterfaceVersion;
 import org.corfudb.infrastructure.ServerContext;
-import org.corfudb.infrastructure.logreplication.infrastructure.plugins.CorfuReplicationClusterManagerAdapter;
+import org.corfudb.infrastructure.logreplication.infrastructure.plugins.ILogReplicationVersionAdapter;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.utils.CorfuSaasEndpointProvider;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationUpgradeManager;
@@ -319,18 +319,15 @@ public class CorfuInterClusterReplicationServer implements Runnable {
      * @param serverContext server context (server information)
      */
     private void startDiscoveryService(ServerContext serverContext) {
-        // instantiate clusterManager to find if the deployment is a SaaS deployment. This is used for computing the
-        // localCorfuEndpoint for the corfu runtime.
-        // This instance of clusterManager is further passed to discoveryService
-        CorfuReplicationClusterManagerAdapter clusterManagerAdapter =
-                getClusterManagerAdapter(serverContext.getPluginConfigFilePath());
-        CorfuSaasEndpointProvider.init(serverContext.getPluginConfigFilePath(), clusterManagerAdapter.isSaasDeployment());
+
+        ILogReplicationVersionAdapter versionPlugin = initVersionPlugin(serverContext.getPluginConfigFilePath());
+        CorfuSaasEndpointProvider.init(serverContext.getPluginConfigFilePath(), versionPlugin.isSaasDeployment());
 
         CorfuRuntime runtime = getRuntime(serverContext);
         CorfuStore corfuStore = new CorfuStore(runtime);
 
         LogReplicationUpgradeManager upgradeManager =
-                new LogReplicationUpgradeManager(corfuStore, serverContext.getPluginConfigFilePath());
+                new LogReplicationUpgradeManager(corfuStore, versionPlugin);
 
         // Check if an upgrade is in progress.  If it is, wait for it to complete
         log.info("Wait for any ongoing rolling upgrade to complete.");
@@ -346,24 +343,20 @@ public class CorfuInterClusterReplicationServer implements Runnable {
         // Start LogReplicationDiscovery Service, responsible for
         // acquiring lock, retrieving Site Manager Info and processing this info
         // so this node is initialized as Source (sender) or Sink (receiver)
-        replicationDiscoveryService = new CorfuReplicationDiscoveryService(serverContext, runtime, clusterManagerAdapter);
+        replicationDiscoveryService = new CorfuReplicationDiscoveryService(serverContext, runtime);
         replicationDiscoveryService.start();
     }
 
-    /**
-     * Create the Cluster Manager Adapter, i.e., the adapter to external provider of the topology.
-     *
-     * @return cluster manager adapter instance
-     */
-    private CorfuReplicationClusterManagerAdapter getClusterManagerAdapter(String pluginConfig) {
-        LogReplicationPluginConfig config = new LogReplicationPluginConfig(pluginConfig);
-        File jar = new File(config.getTopologyManagerAdapterJARPath());
-
+    private ILogReplicationVersionAdapter initVersionPlugin(String pluginConfigFilePath) {
+        log.info("Version plugin :: {}", pluginConfigFilePath);
+        LogReplicationPluginConfig config = new LogReplicationPluginConfig(pluginConfigFilePath);
+        File jar = new File(config.getStreamFetcherPluginJARPath());
         try (URLClassLoader child = new URLClassLoader(new URL[]{jar.toURI().toURL()}, this.getClass().getClassLoader())) {
-            Class adapter = Class.forName(config.getTopologyManagerAdapterName(), true, child);
-            return (CorfuReplicationClusterManagerAdapter) adapter.getDeclaredConstructor().newInstance();
+            Class plugin = Class.forName(config.getStreamFetcherClassCanonicalName(), true, child);
+            return (ILogReplicationVersionAdapter)
+                    plugin.getDeclaredConstructor().newInstance();
         } catch (Exception e) {
-            log.error("Fatal error: Failed to create serverAdapter", e);
+            log.error("Fatal error: Failed to get Log Replicator Version Plugin", e);
             throw new UnrecoverableCorfuError(e);
         }
     }
