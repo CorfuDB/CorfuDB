@@ -100,7 +100,9 @@ public class CorfuStoreBrowserEditor implements CorfuBrowserEditorCommands {
      * @param runtime CorfuRuntime which has connected to the server
      */
     public CorfuStoreBrowserEditor(CorfuRuntime runtime) {
-        this(runtime, null);
+        this.runtime = runtime;
+        this.diskPath = null;
+        this.dynamicProtobufSerializer = null;
     }
 
     /**
@@ -891,10 +893,6 @@ public class CorfuStoreBrowserEditor implements CorfuBrowserEditorCommands {
         System.out.println("Inserting a record to " + LR_MODEL_METADATA_TABLE_NAME);
         System.out.println("\n======================\n");
 
-        runtime.getSerializers().removeSerializer(dynamicProtobufSerializer);
-        ProtobufSerializer protoSerializer = new ProtobufSerializer(new ConcurrentHashMap<>());
-        runtime.getSerializers().registerSerializer(protoSerializer);
-
         CorfuStoreShim store = new CorfuStoreShim(runtime);
         AtomicInteger numGroupInserted = new AtomicInteger();
 
@@ -950,10 +948,6 @@ public class CorfuStoreBrowserEditor implements CorfuBrowserEditorCommands {
         System.out.println("\n======================\n");
         System.out.println("Deleting logical group " + logicalGroup + " from " + LR_MODEL_METADATA_TABLE_NAME);
         System.out.println("\n======================\n");
-
-        runtime.getSerializers().removeSerializer(dynamicProtobufSerializer);
-        ProtobufSerializer protoSerializer = new ProtobufSerializer(new ConcurrentHashMap<>());
-        runtime.getSerializers().registerSerializer(protoSerializer);
 
         CorfuStoreShim store = new CorfuStoreShim(runtime);
         AtomicInteger numGroupsDeleted = new AtomicInteger();

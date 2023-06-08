@@ -131,7 +131,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
 
             // Create CorfuStoreBrowser on its own dedicated runtime
             CorfuRuntime browserRuntime = createRuntime(singleNodeEndpoint);
-            CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(browserRuntime);
+            CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(browserRuntime, null);
 
             committedTimestamps.forEach(ts -> {
                 EnumMap<IMetadata.LogUnitMetadataType, Object> metadataMap = browser.printMetadataMap(ts.getSequence());
@@ -200,7 +200,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
 
         final int one = 1;
         runtime = createRuntime(singleNodeEndpoint);
-        CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime);
+        CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime, null);
         // Invoke listTables and verify table count
         Assert.assertEquals(browser.listTables(NAMESPACE), one);
 
@@ -266,7 +266,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         final int batchSize = 10;
         final int itemSize = 100;
 
-        CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime);
+        CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime, null);
         Assert.assertEquals(browser.loadTable(NAMESPACE, TABLE_NAME, numItems, batchSize, itemSize), batchSize);
         runtime.shutdown();
     }
@@ -299,7 +299,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         });
 
         runtime = createRuntime(singleNodeEndpoint);
-        CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime);
+        CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime, null);
 
         // (1) List Stream Tags
         Set<String> tagsInRegistry = browser.listStreamTags();
@@ -373,7 +373,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         populateRegistryTable(NAMESPACE, TABLE_NAME);
 
         runtime = createRuntime(singleNodeEndpoint);
-        CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime);
+        CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime, null);
         assertThat(browser.printAllProtoDescriptors()).isEqualTo(expectedFiles);
 
         runtime.shutdown();
@@ -453,7 +453,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         runtime.shutdown();
 
         runtime = createRuntime(singleNodeEndpoint);
-        CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime);
+        CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime, null);
         ICorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table2 = browser.getTable(NAMESPACE, TABLE_NAME);
         browser.printTable(NAMESPACE, TABLE_NAME);
         Assert.assertEquals(1, table2.size());
@@ -574,7 +574,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         runtime.shutdown();
 
         runtime = createRuntime(singleNodeEndpoint);
-        CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime);
+        CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime, null);
         // Invoke listTables and verify table count
         final int three = 3;
         Assert.assertEquals(three,
@@ -780,7 +780,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         runtime.shutdown();
 
         runtime = createRuntime(singleNodeEndpoint);
-        CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime);
+        CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime, null);
         // Invoke listTables and verify table count
         Assert.assertEquals(browser.listTables(NAMESPACE), 1);
 
@@ -826,6 +826,11 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         // Try to delete a non-existing key from LR METADATA table
         assertThat(browser.deleteRecords(CORFU_SYSTEM_NAMESPACE, METADATA_TABLE_NAME, Arrays.asList(session.toString()), 1)).isZero();
 
+        runtime.shutdown();
+
+        // create a browser with default serializer in the runtime.
+        runtime = createRuntime(singleNodeEndpoint);
+        browser = new CorfuStoreBrowserEditor(runtime);
         // Try insert/delete from LR_MODEL_METADATA_TABLE_NAME table. Note:this table has not been opened in the test suit.
         String clientName = "sampleClient";
         String logicalGroup = "group1";
@@ -896,7 +901,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         runtime.shutdown();
 
         runtime = createRuntime(singleNodeEndpoint);
-        CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime);
+        CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime, null);
 
         int deletedRecordCount = browser.deleteRecordsFromFile(NAMESPACE, TABLE_NAME,
                 pathToRecordsToDelete, numRecords / 10);
@@ -944,7 +949,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         runtime.shutdown();
 
         runtime = createRuntime(singleNodeEndpoint);
-        CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime);
+        CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime, null);
         // Invoke listTables and verify table count
         Assert.assertEquals(1, browser.printTable(NAMESPACE, TABLE_NAME));
 
@@ -1026,7 +1031,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         runtime.shutdown();
 
         runtime = createRuntime(singleNodeEndpoint);
-        CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime);
+        CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime, null);
 
         // Invoke printTable and verify table count
         Assert.assertEquals(1, browser.printTable(NAMESPACE, TABLE_NAME));
@@ -1095,7 +1100,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         // Start a Corfu runtime
         runtime = createRuntime(singleNodeEndpoint);
 
-        CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime);
+        CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime, null);
 
         // Invoke printTable and verify table count
         Assert.assertEquals(0, browser.listTables(NAMESPACE));

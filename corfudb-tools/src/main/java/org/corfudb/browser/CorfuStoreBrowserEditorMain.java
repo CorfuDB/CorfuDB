@@ -210,11 +210,21 @@ public class CorfuStoreBrowserEditorMain {
             runtime.connect();
             log.info("Successfully connected to {}", singleNodeEndpoint);
 
-            if (opts.get("--diskPath") != null) {
-                browser = new CorfuStoreBrowserEditor(runtime, opts.get(
-                        "--diskPath").toString());
-            } else {
+            if (OperationType.valueOf(operation).equals(OperationType.updateOrAddReplicationGroup) ||
+                    OperationType.valueOf(operation).equals(OperationType.deleteReplicationGroup)) {
+                // Create a browser with the default protobuf serializer in the runtime.
+                // The 2 operations are on an LR internal table, for logical group replication model, which may not be
+                // open yet. Since corfu owns these tables, we directly use the table's protobuf definition to open/edit
+                // the table.
                 browser = new CorfuStoreBrowserEditor(runtime);
+            } else {
+                // Create a browser with dynamic protobuf serializer registered with the runtime
+                if (opts.get("--diskPath") != null) {
+                    browser = new CorfuStoreBrowserEditor(runtime, opts.get(
+                            "--diskPath").toString());
+                } else {
+                    browser = new CorfuStoreBrowserEditor(runtime, null);
+                }
             }
         } else if (offlineDbDir != null) {
             browser = new CorfuOfflineBrowserEditor(offlineDbDir);
