@@ -523,7 +523,6 @@ public class AbstractIT extends AbstractCorfuTest {
         private boolean disableHost = false;
         private String networkInterface = null;
         private NetworkInterfaceVersion networkInterfaceVersion = null;
-        private boolean disableLogUnitServerCache = false;
 
 
         /**
@@ -535,12 +534,8 @@ public class AbstractIT extends AbstractCorfuTest {
         public String getOptionsString() {
             StringBuilder command = new StringBuilder();
 
-            if (disableLogUnitServerCache) {
-                command.append("-c ").append(0);
-            }
-
             if (!disableHost) {
-                command.append(" -a ").append(host);
+                command.append("-a ").append(host);
             }
 
             if (logPath != null) {
@@ -713,7 +708,7 @@ public class AbstractIT extends AbstractCorfuTest {
             }
 
             if (maxWriteSize != 0) {
-                command.append(" --max-replication-write-size=").append(maxWriteSize);
+                command.append(" --max-write-size=").append(maxWriteSize);
             }
 
             if (maxSnapshotEntriesApplied != 0) {

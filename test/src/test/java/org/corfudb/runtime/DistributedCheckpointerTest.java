@@ -479,17 +479,19 @@ public class DistributedCheckpointerTest extends AbstractViewTest {
                 .persistedCacheRoot(Optional.empty())
                 .build(), corfuStore, compactorMetadataTables);
         distributedCheckpointer.checkpointTables();
-        //If the leader doesn't invoke the validateLiveness method, it will never invoke finishCompactionCycle
+
+        ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+        scheduler.scheduleWithFixedDelay(compactorLeaderServices1::validateLiveness, 0,
+                LIVENESS_TIMEOUT, TimeUnit.MILLISECONDS);
 
         try {
-            while (!verifyCheckpointStatusTable(StatusType.COMPLETED, 0)) {
-                TimeUnit.MILLISECONDS.sleep(LIVENESS_TIMEOUT);
-            }
+            TimeUnit.MILLISECONDS.sleep(LIVENESS_TIMEOUT);
         } catch (InterruptedException e) {
             log.warn(SLEEP_INTERRUPTED_EXCEPTION_MSG, e);
         }
 
         assert verifyManagerStatus(StatusType.STARTED);
+        assert verifyCheckpointStatusTable(StatusType.COMPLETED, 0);
     }
 
     @Test

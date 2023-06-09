@@ -1,8 +1,6 @@
 package org.corfudb.infrastructure;
 
 import com.google.common.collect.ImmutableMap;
-import io.micrometer.prometheus.PrometheusConfig;
-import io.micrometer.prometheus.PrometheusMeterRegistry;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.Channel;
@@ -15,13 +13,10 @@ import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.handler.codec.LengthFieldPrepender;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslHandler;
-import io.prometheus.client.exporter.HTTPServer;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.io.IOUtils;
 import org.corfudb.common.config.ConfigParamNames;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
-import org.corfudb.common.metrics.micrometer.MeterRegistryProvider.MeterRegistryInitializer;
 import org.corfudb.infrastructure.ManagementServer.ManagementServerInitializer;
 import org.corfudb.infrastructure.health.HealthMonitor;
 import org.corfudb.infrastructure.health.HttpServerInitializer;
@@ -38,7 +33,6 @@ import org.corfudb.util.GitRepositoryState;
 import javax.annotation.Nonnull;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLException;
-import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -51,8 +45,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Pattern;
 
 import static org.corfudb.common.util.URLUtils.getVersionFormattedHostAddress;
-import static org.corfudb.infrastructure.CorfuServerCmdLine.HEALTH_PORT_PARAM;
-import static org.corfudb.infrastructure.CorfuServerCmdLine.METRICS_PORT_PARAM;
 
 
 /**
@@ -76,8 +68,6 @@ public class CorfuServerNode implements AutoCloseable {
     private ChannelFuture bindFuture;
 
     private ChannelFuture httpServerFuture;
-
-    private HTTPServer metricsServer;
 
     /**
      * Corfu Server initialization.
@@ -125,54 +115,22 @@ public class CorfuServerNode implements AutoCloseable {
      */
     public ChannelFuture start() {
         final int corfuPort = Integer.parseInt((String) serverContext.getServerConfig().get("<port>"));
-        bindFuture = bindServer(
-                serverContext.getWorkerGroup(),
+        bindFuture = bindServer(serverContext.getWorkerGroup(),
                 this::configureBootstrapOptions,
                 serverContext,
                 router,
                 (String) serverContext.getServerConfig().get("--address"),
-                corfuPort
-        );
-
-        Optional<Integer> maybeHealthPort = Optional
-                .ofNullable(serverContext.getServerConfig().get(HEALTH_PORT_PARAM))
-                .map(healthApiPort -> Integer.parseInt(healthApiPort.toString()));
-
-        maybeHealthPort.ifPresent(healthApiPort -> {
-            if (healthApiPort == corfuPort) {
+                corfuPort);
+        String healthReportFlag = "--health-port";
+        if (serverContext.getServerConfig().get(healthReportFlag) != null) {
+            final int healthApiPort = Integer.parseInt((String) serverContext.getServerConfig().get(healthReportFlag));
+            if (healthApiPort != corfuPort) {
+                httpServerFuture = bindHttpServer(serverContext.getWorkerGroup(), this::configureBootstrapOptions, serverContext,
+                        healthApiPort);
+            } else {
                 log.warn("Port unification is not currently supported. Health server will not be started.");
-            } else {
-                httpServerFuture = bindHttpServer(
-                        serverContext.getWorkerGroup(),
-                        this::configureBootstrapOptions,
-                        serverContext,
-                        healthApiPort
-                );
             }
-        });
-
-        Optional<Integer> maybeMetricsPort = Optional
-                .ofNullable(serverContext.getServerConfig().get(METRICS_PORT_PARAM))
-                .map(metricsApiPort -> Integer.parseInt(metricsApiPort.toString()));
-
-        maybeMetricsPort.ifPresent(metricsApiPort -> {
-            if (metricsApiPort == corfuPort) {
-                log.warn("Port unification is not currently supported. Metrics server will not be started.");
-            } else {
-                PrometheusMeterRegistry prometheusRegistry = new PrometheusMeterRegistry(PrometheusConfig.DEFAULT);
-                MeterRegistryInitializer.getMeterRegistry().add(prometheusRegistry);
-
-                try {
-                    metricsServer = new HTTPServer.Builder()
-                            .withPort(metricsApiPort)
-                            .withRegistry(prometheusRegistry.getPrometheusRegistry())
-                            .build();
-                    log.info("Metrics server run on: " + metricsServer.getPort() + " port");
-                } catch (IOException e) {
-                    throw new IllegalStateException(e);
-                }
-            }
-        });
+        }
 
         return bindFuture.syncUninterruptibly();
     }
@@ -235,7 +193,6 @@ public class CorfuServerNode implements AutoCloseable {
             }
         });
         HealthMonitor.shutdown();
-        IOUtils.closeQuietly(metricsServer, ex -> {});
         log.info("close: Server shutdown and resources released");
     }
 

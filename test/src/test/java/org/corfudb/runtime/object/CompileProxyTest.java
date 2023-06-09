@@ -164,7 +164,7 @@ public class CompileProxyTest extends AbstractViewTest {
                     if (sharedCounter.CAS(INITIAL, t) == INITIAL)
                         casSucceeded.incrementAndGet();
         });
-        executeScheduled(concurrency, PARAMETERS.TIMEOUT_NORMAL);
+        executeScheduled(concurrency, PARAMETERS.TIMEOUT_SHORT);
 
         // check that exactly one CAS succeeded
         assertThat(sharedCounter.getValue())
@@ -311,7 +311,7 @@ public class CompileProxyTest extends AbstractViewTest {
         scheduleConcurrently(concurrency, t -> {
             map.insert(Integer.toString(t), "world");
         });
-        executeScheduled(concurrency, PARAMETERS.TIMEOUT_NORMAL);
+        executeScheduled(concurrency, PARAMETERS.TIMEOUT_SHORT);
 
         // check that map contains keys with every thread index
         for (int i = 0; i < concurrency; i++)
@@ -376,7 +376,7 @@ public class CompileProxyTest extends AbstractViewTest {
         scheduleConcurrently(concurrency, t -> {
             sharedCorfuCompound.set(sharedCorfuCompound.new Inner("A"+t, "B"+t), t);
         });
-        executeScheduled(concurrency, PARAMETERS.TIMEOUT_NORMAL);
+        executeScheduled(concurrency, PARAMETERS.TIMEOUT_SHORT);
 
         // sanity checks on the final value of sharedCorfuCompound
         assertThat(sharedCorfuCompound.getID())

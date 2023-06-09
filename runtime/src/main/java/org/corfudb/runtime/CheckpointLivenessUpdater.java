@@ -57,7 +57,7 @@ public class CheckpointLivenessUpdater implements LivenessUpdater {
     @Override
     public void start() {
         executorService.scheduleWithFixedDelay(
-                this::updateHeartbeat,
+                () -> LambdaUtils.runSansThrow(this::updateHeartbeat),
                 UPDATE_INTERVAL.toMillis() / 2,
                 UPDATE_INTERVAL.toMillis(), TimeUnit.MILLISECONDS);
     }
@@ -86,8 +86,6 @@ public class CheckpointLivenessUpdater implements LivenessUpdater {
             }
         } catch (Exception e) {
             log.warn("Unable to update liveness for table: {} due to exception: {}", table, e.getStackTrace());
-        } catch (Throwable t) {
-            corfuStore.getRuntime().getParameters().getSystemDownHandler().run();
         }
     }
 

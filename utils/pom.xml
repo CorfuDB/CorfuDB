@@ -52,7 +52,7 @@
                             <goal>run</goal>
                         </goals>
                         <configuration>
-                            <protocVersion>${protobuf.version}</protocVersion>
+                            <protocVersion>3.6.1</protocVersion>
                             <includeStdTypes>true</includeStdTypes>
                             <addProtoSources>inputs</addProtoSources>
                                 <includeMavenTypes>direct</includeMavenTypes>

@@ -25,13 +25,11 @@ public class CompactorBaseConfig {
     public static final int DEFAULT_CP_MAX_WRITE_SIZE = 25 << 20;
     public static final int SYSTEM_DOWN_HANDLER_TRIGGER_LIMIT = 100;  // Corfu default is 20
     public static final int CORFU_LOG_CHECKPOINT_ERROR = 3;
-    private static final int SYSTEM_EXIT_ERROR_CODE = -3;
     public static final String USAGE = "Usage: compactor-runner";
     public static final String OPTIONS = "Options:\n";
 
     private final Runnable defaultSystemDownHandler = () -> {
-        log.error("Exiting since the SystemDownHandler is invoked after " + SYSTEM_DOWN_HANDLER_TRIGGER_LIMIT + " retries.");
-        System.exit(SYSTEM_EXIT_ERROR_CODE);
+        throw new UnreachableClusterException("Cluster is unavailable");
     };
 
     private Map<String, Object> opts;

@@ -1,6 +1,5 @@
 package org.corfudb.runtime;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.micrometer.core.instrument.Timer;
 import io.netty.channel.ChannelOption;
@@ -1140,8 +1139,7 @@ public class CorfuRuntime {
      * @param layout The layout to check.
      * @throws WrongClusterException If the layout belongs to the wrong cluster.
      */
-    @VisibleForTesting
-    public void checkClusterId(@Nonnull Layout layout) {
+    private void checkClusterId(@Nonnull Layout layout) {
         // We haven't adopted a clusterId yet.
         if (clusterId == null) {
             clusterId = layout.getClusterId();

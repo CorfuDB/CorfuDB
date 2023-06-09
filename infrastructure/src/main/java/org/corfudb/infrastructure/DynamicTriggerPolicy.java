@@ -52,7 +52,8 @@ public class DynamicTriggerPolicy implements CompactionTriggerPolicy {
      * @return true if compaction cycle should run, false otherwise
      */
     @Override
-    public boolean shouldTrigger(long interval, CorfuStore corfuStore, DistributedCheckpointerHelper distributedCheckpointerHelper) {
+    public boolean shouldTrigger(long interval, CorfuStore corfuStore) throws Exception {
+        DistributedCheckpointerHelper distributedCheckpointerHelper = new DistributedCheckpointerHelper(corfuStore);
 
         if (distributedCheckpointerHelper.isCompactionDisabled()) {
             log.warn("Compaction has been disabled");

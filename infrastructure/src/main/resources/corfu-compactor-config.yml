@@ -25,10 +25,3 @@ Security:
   Truststore: /certs/truststore.jks
   TruststorePassword: /password/password
 
-# The below param values will be replaced during runtime by corfu-server init script
-ServerAddress:
-  Hostname:
-  Port: 9000
-  # The below params are used only for self ip discovery
-  NetworkInterface: eth0
-  NetworkInterfaceVersion: IPv4
