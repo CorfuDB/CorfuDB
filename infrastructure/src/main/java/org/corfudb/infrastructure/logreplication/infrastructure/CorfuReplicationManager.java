@@ -30,6 +30,7 @@ public class CorfuReplicationManager {
 
     private final NodeDescriptor localNodeDescriptor;
 
+    @Getter
     private final CorfuRuntime corfuRuntime;
 
     private final LogReplicationMetadataManager metadataManager;

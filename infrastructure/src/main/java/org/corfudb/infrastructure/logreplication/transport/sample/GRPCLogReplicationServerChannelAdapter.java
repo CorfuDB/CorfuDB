@@ -6,7 +6,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientServerRouter;
 import org.corfudb.infrastructure.logreplication.transport.server.IServerChannelAdapter;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.proto.service.CorfuMessage;
+import org.corfudb.util.retry.IRetry;
+import org.corfudb.util.retry.IntervalRetry;
+import org.corfudb.util.retry.RetryNeededException;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
@@ -22,7 +26,7 @@ public class GRPCLogReplicationServerChannelAdapter extends IServerChannelAdapte
     /*
      * GRPC Server used for listening and dispatching incoming calls.
      */
-    private final Server server;
+    private Server server;
 
     private final int port;
 
@@ -59,13 +63,27 @@ public class GRPCLogReplicationServerChannelAdapter extends IServerChannelAdapte
     public CompletableFuture<Boolean> start() {
         CompletableFuture<Boolean> serverCompletable = new CompletableFuture<>();
         try {
-            server.start();
-            serverCompletable.complete(true);
-            log.info("Server started, listening on {}", port);
-        } catch (Exception e) {
-            log.error("Caught exception while starting server on port {}", port, e);
-            serverCompletable.completeExceptionally(e);
+            IRetry.build(IntervalRetry.class, () -> {
+                try {
+                    server.start();
+                    serverCompletable.complete(true);
+                    log.info("Server started, listening on {}", port);
+                } catch (IllegalStateException ise) {
+                    log.warn("gRPC server already started or shutdown, instantiating a new one.", ise);
+                    this.server = ServerBuilder.forPort(port).addService(service)
+                            .executor(Executors.newSingleThreadScheduledExecutor()).build();
+                    throw new RetryNeededException();
+                } catch (Exception e) {
+                    log.error("Caught exception while starting server on port {}", port, e);
+                    serverCompletable.completeExceptionally(e);
+                }
+                return null;
+            }).run();
+        } catch (InterruptedException e) {
+            log.error("Unrecoverable exception when starting gRPC server.", e);
+            throw new UnrecoverableCorfuInterruptedError(e);
         }
+
         return serverCompletable;
     }
 
