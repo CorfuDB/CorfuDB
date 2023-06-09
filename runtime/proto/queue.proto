@@ -18,6 +18,12 @@ message CorfuQueueMetadataMsg {
 
 // This message forms the value part of the payload used for LogReplication over Routing Queues
 message RoutingTableEntryMsg {
-    string destinations = 1;
-    bytes opaque_payload = 2;
+    // List of unique destinations from topology.
+    repeated string destinations = 1;
+
+    // An optional field placed in the full sync queue to denote the end of a snapshot sync.
+    bool is_snapshot_end = 2;
+
+    // The actual payload carrying data that will be replicated to the destinations specified.
+    bytes opaque_payload = 3;
 }
