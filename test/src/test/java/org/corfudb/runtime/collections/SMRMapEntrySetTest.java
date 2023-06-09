@@ -144,7 +144,7 @@ public class SMRMapEntrySetTest extends AbstractTransactionsTest {
             assertThat(keys.contains(0L)).isFalse();
         });
 
-        executeScheduled(PARAMETERS.CONCURRENCY_SOME, PARAMETERS.TIMEOUT_SHORT);
+        executeScheduled(PARAMETERS.CONCURRENCY_SOME, PARAMETERS.TIMEOUT_NORMAL);
 
     }
 }

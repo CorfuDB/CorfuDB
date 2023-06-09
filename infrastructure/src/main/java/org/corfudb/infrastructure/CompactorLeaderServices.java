@@ -63,7 +63,7 @@ public class CompactorLeaderServices {
         this.nodeEndpoint = nodeEndpoint;
         this.corfuStore = corfuStore;
         this.livenessValidator = livenessValidator;
-        this.trimLog = new TrimLog(corfuRuntime, corfuStore);
+        this.trimLog = new TrimLog();
         this.log = LoggerFactory.getLogger("compactor-leader");
     }
 
@@ -268,7 +268,7 @@ public class CompactorLeaderServices {
                     txn.delete(CompactorMetadataTables.COMPACTION_CONTROLS_TABLE, CompactorMetadataTables.INSTANT_TIGGER_WITH_TRIM);
                     txn.commit();
                     log.info("Invoking trimlog() due to InstantTrigger with trim found");
-                    trimLog.invokePrefixTrim();
+                    trimLog.invokePrefixTrim(corfuRuntime, corfuStore);
                     return;
                 }
 

@@ -216,7 +216,7 @@ public class CheckpointWriter<T extends ICorfuTable<?, ?>> {
         return tags;
     }
 
-    private Token forceNoOpEntry() {
+    public Token forceNoOpEntry() {
         Set<UUID> streamsToAdvance = new HashSet<>();
         if (serializer instanceof DynamicProtobufSerializer) {
             // One of the use-cases of a no-op entry written by the checkpointer is to always - even for empty streams -

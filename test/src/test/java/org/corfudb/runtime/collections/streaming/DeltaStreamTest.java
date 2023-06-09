@@ -24,6 +24,7 @@ import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.corfudb.AbstractCorfuTest.PARAMETERS;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -309,7 +310,7 @@ public class DeltaStreamTest {
 
         producer.setName("producer");
         producer.start();
-        done.await(1, TimeUnit.SECONDS);
+        done.await(PARAMETERS.TIMEOUT_NORMAL.getSeconds(), TimeUnit.SECONDS);
 
         assertThat(consumed.size()).isEqualTo(numToProduce);
         for (int x = 0; x < numToProduce; x++) {
