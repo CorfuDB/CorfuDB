@@ -15,7 +15,7 @@ import java.util.stream.Stream;
 
 public class PersistentCorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR {
 
-    private MVOCorfuCompileProxy<PersistentCorfuTable<K, V>, ImmutableCorfuTable<K, V>> proxy;
+    private MVOCorfuCompileProxy<ImmutableCorfuTable<K, V>> proxy;
 
     private final Map<String, ICorfuSMRUpcallTarget<ImmutableCorfuTable<K, V>>> upcallTargetMap
         = ImmutableMap.<String, ICorfuSMRUpcallTarget<ImmutableCorfuTable<K, V>>>builder()
@@ -29,13 +29,13 @@ public class PersistentCorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR 
     }
 
     @Override
-    public void setCorfuSMRProxy(MVOCorfuCompileProxy<?, ?> proxy) {
-        this.proxy = (MVOCorfuCompileProxy<PersistentCorfuTable<K, V>, ImmutableCorfuTable<K, V>>) proxy;
+    public void setCorfuSMRProxy(MVOCorfuCompileProxy<?> proxy) {
+        this.proxy = (MVOCorfuCompileProxy<ImmutableCorfuTable<K, V>>) proxy;
     }
 
     @Override
     // TODO: use proper return type
-    public MVOCorfuCompileProxy<?, ?> getCorfuSMRProxy() {
+    public MVOCorfuCompileProxy<?> getCorfuSMRProxy() {
         return proxy;
     }
 

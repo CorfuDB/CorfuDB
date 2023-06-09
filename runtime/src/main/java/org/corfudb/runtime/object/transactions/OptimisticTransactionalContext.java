@@ -66,7 +66,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
      */
     @Override
     public <R, S extends SnapshotGenerator<S> & ConsistencyView> R access(
-            MVOCorfuCompileProxy<?, S> proxy, ICorfuSMRAccess<R, S> accessFunction, Object[] conflictObject) {
+            MVOCorfuCompileProxy<S> proxy, ICorfuSMRAccess<R, S> accessFunction, Object[] conflictObject) {
         long startAccessTime = System.nanoTime();
         try {
             log.trace("Access[{},{}] conflictObj={}", this, proxy, conflictObject);
@@ -97,7 +97,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
      */
     @Override
     public long logUpdate(
-            MVOCorfuCompileProxy<?, ?> proxy, SMREntry updateEntry, Object[] conflictObjects) {
+            MVOCorfuCompileProxy<?> proxy, SMREntry updateEntry, Object[] conflictObjects) {
         long startLogUpdateTime = System.nanoTime();
 
         try {

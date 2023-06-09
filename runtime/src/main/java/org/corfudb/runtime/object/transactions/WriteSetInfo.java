@@ -26,7 +26,7 @@ public class WriteSetInfo extends ConflictSetInfo {
     // The actual updates to mutated objects.
     MultiObjectSMREntry writeSet = new MultiObjectSMREntry();
 
-    public long add(MVOCorfuCompileProxy<?, ?> proxy,
+    public long add(MVOCorfuCompileProxy<?> proxy,
                     SMREntry updateEntry, Object[] conflictObjects) {
         synchronized (getRootContext().getTransactionID()) {
 

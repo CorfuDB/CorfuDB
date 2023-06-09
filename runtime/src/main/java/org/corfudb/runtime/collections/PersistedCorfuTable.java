@@ -17,7 +17,7 @@ import java.util.stream.Stream;
 @Slf4j
 public class PersistedCorfuTable<K, V> implements ICorfuTable<K, V> {
 
-    private MVOCorfuCompileProxy<PersistedCorfuTable<K, V>, DiskBackedCorfuTable<K, V>> proxy;
+    private MVOCorfuCompileProxy<DiskBackedCorfuTable<K, V>> proxy;
 
     private final Map<String, ICorfuSMRUpcallTarget<DiskBackedCorfuTable<K, V>>> upcallTargetMap
             = ImmutableMap.<String, ICorfuSMRUpcallTarget<DiskBackedCorfuTable<K, V>>>builder()
@@ -31,12 +31,12 @@ public class PersistedCorfuTable<K, V> implements ICorfuTable<K, V> {
     }
 
     @Override
-    public void setCorfuSMRProxy(MVOCorfuCompileProxy<?, ?> proxy) {
-        this.proxy = (MVOCorfuCompileProxy<PersistedCorfuTable<K, V>, DiskBackedCorfuTable<K, V>>) proxy;
+    public void setCorfuSMRProxy(MVOCorfuCompileProxy<?> proxy) {
+        this.proxy = (MVOCorfuCompileProxy< DiskBackedCorfuTable<K, V>>) proxy;
     }
 
     @Override
-    public MVOCorfuCompileProxy<?, ?> getCorfuSMRProxy() {
+    public MVOCorfuCompileProxy<?> getCorfuSMRProxy() {
         return proxy;
     }
 

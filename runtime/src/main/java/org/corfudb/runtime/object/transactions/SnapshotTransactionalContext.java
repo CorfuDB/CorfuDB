@@ -30,7 +30,7 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
      */
     @Override
     public <R, S extends SnapshotGenerator<S> & ConsistencyView> R access(
-            MVOCorfuCompileProxy<?, S> proxy, ICorfuSMRAccess<R, S> accessFunction, Object[] conflictObject) {
+            MVOCorfuCompileProxy<S> proxy, ICorfuSMRAccess<R, S> accessFunction, Object[] conflictObject) {
         long startAccessTime = System.nanoTime();
         try {
             return getAndCacheSnapshotProxy(proxy, getSnapshotTimestamp().getSequence())
@@ -63,7 +63,7 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
      * @return The address the update was written at.
      */
     @Override
-    public long logUpdate(MVOCorfuCompileProxy<?, ?> proxy,
+    public long logUpdate(MVOCorfuCompileProxy<?> proxy,
                           SMREntry updateEntry, Object[] conflictObject) {
         throw new UnsupportedOperationException(
                 "Can't modify object during a read-only transaction!");

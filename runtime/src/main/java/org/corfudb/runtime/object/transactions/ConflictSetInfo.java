@@ -55,7 +55,7 @@ public class ConflictSetInfo {
     }
 
     /** Add an operation into this conflict set. */
-    public <T> void add(MVOCorfuCompileProxy<?, ?> proxy, Object[] conflictObjects) {
+    public <T> void add(MVOCorfuCompileProxy<?> proxy, Object[] conflictObjects) {
         // Add the conflict objects to the set for this proxy,
         // creating a new set if needed.
         conflicts.compute(proxy, (p, c) -> {

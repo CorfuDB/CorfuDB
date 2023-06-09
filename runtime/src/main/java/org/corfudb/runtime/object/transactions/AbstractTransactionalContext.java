@@ -97,7 +97,7 @@ public abstract class AbstractTransactionalContext implements
      * The global-log position that the transaction snapshots in all reads.
      */
     @Getter(lazy = true)
-    private final Token snapshotTimestamp = obtainSnapshotTimestamp();
+    private final Token snapshotTimestamp = obtainSnapshotTimestamp(getTransaction().getSnapshot());
 
     /**
      * The address that the transaction was committed at.
@@ -135,7 +135,7 @@ public abstract class AbstractTransactionalContext implements
     private final ConflictSetInfo readSetInfo = new ConflictSetInfo();
 
     // TODO: Make into a class?
-    protected final Map<MVOCorfuCompileProxy<?, ?>, ICorfuSMRSnapshotProxy<?>> snapshotProxyMap = new HashMap<>();
+    protected final Map<MVOCorfuCompileProxy<?>, ICorfuSMRSnapshotProxy<?>> snapshotProxyMap = new HashMap<>();
 
     /**
      * Cache of last known position of streams accessed in this transaction.
@@ -153,7 +153,7 @@ public abstract class AbstractTransactionalContext implements
     }
 
     protected <S extends SnapshotGenerator<S> & ConsistencyView> ICorfuSMRSnapshotProxy<S> getAndCacheSnapshotProxy(
-            MVOCorfuCompileProxy<?, S> proxy, long ts) {
+            MVOCorfuCompileProxy<S> proxy, long ts) {
         // TODO: Refactor me to avoid casting on ICorfuSMRProxyInternal type.
         ICorfuSMRSnapshotProxy<S> snapshotProxy = (ICorfuSMRSnapshotProxy<S>) snapshotProxyMap.get(proxy);
         if (snapshotProxy == null) {
@@ -164,7 +164,7 @@ public abstract class AbstractTransactionalContext implements
         return snapshotProxy;
     }
 
-    protected void updateKnownStreamPosition(@NonNull MVOCorfuCompileProxy<?, ?> proxy, long position) {
+    protected void updateKnownStreamPosition(@NonNull MVOCorfuCompileProxy<?> proxy, long position) {
         Long val = knownStreamsPosition.get(proxy.getStreamID());
 
         if (val != null) {
@@ -194,7 +194,7 @@ public abstract class AbstractTransactionalContext implements
      * @return The return value of the access function.
      */
     public abstract <R, S extends SnapshotGenerator<S> & ConsistencyView> R access(
-            MVOCorfuCompileProxy<?, S> proxy, ICorfuSMRAccess<R, S> accessFunction, Object[] conflictObject);
+            MVOCorfuCompileProxy<S> proxy, ICorfuSMRAccess<R, S> accessFunction, Object[] conflictObject);
 
     /**
      * Log an SMR update to the Corfu log.
@@ -206,7 +206,7 @@ public abstract class AbstractTransactionalContext implements
      * @return The address the update was written at.
      */
     public abstract long logUpdate(
-            MVOCorfuCompileProxy<?, ?> proxy, SMREntry updateEntry, Object[] conflictObject);
+            MVOCorfuCompileProxy<?> proxy, SMREntry updateEntry, Object[] conflictObject);
 
     public abstract void logUpdate(UUID streamId, SMREntry updateEntry);
 
@@ -281,11 +281,10 @@ public abstract class AbstractTransactionalContext implements
      *
      * @return the current global tail
      */
-    private Token obtainSnapshotTimestamp() {
+    private Token obtainSnapshotTimestamp(Token txnBuilderTs) {
         long startSnapshotTime = System.nanoTime();
         try {
             final AbstractTransactionalContext parentCtx = getParentContext();
-            final Token txnBuilderTs = getTransaction().getSnapshot();
             if (parentCtx != null) {
                 // If we're in a nested transaction, the first read timestamp
                 // needs to come from the root.
@@ -320,7 +319,7 @@ public abstract class AbstractTransactionalContext implements
      * @param conflictObjects The fine-grained conflict information, if
      *                        available.
      */
-    public void addToReadSet(MVOCorfuCompileProxy<?, ?> proxy, Object[] conflictObjects) {
+    public void addToReadSet(MVOCorfuCompileProxy<?> proxy, Object[] conflictObjects) {
         getReadSetInfo().add(proxy, conflictObjects);
     }
 
@@ -342,7 +341,7 @@ public abstract class AbstractTransactionalContext implements
      * @return a synthetic "address" in the write-set, to be used for
      *     checking upcall results
      */
-    long addToWriteSet(MVOCorfuCompileProxy<?, ?> proxy,
+    long addToWriteSet(MVOCorfuCompileProxy<?> proxy,
                        SMREntry updateEntry, Object[] conflictObjects) {
         return getWriteSetInfo().add(proxy, updateEntry, conflictObjects);
     }
