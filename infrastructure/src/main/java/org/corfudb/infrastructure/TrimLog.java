@@ -16,13 +16,17 @@ import java.util.concurrent.TimeUnit;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 public class TrimLog {
+    private final CorfuRuntime corfuRuntime;
+    private final CorfuStore corfuStore;
     private final Logger log;
 
-    TrimLog() {
+    TrimLog(CorfuRuntime corfuRuntime, CorfuStore corfuStore) {
+        this.corfuStore = corfuStore;
+        this.corfuRuntime = corfuRuntime;
         this.log = LoggerFactory.getLogger("compactor-leader");
     }
 
-    private Optional<Long> getTrimAddress(CorfuStore corfuStore) {
+    private Optional<Long> getTrimAddress() {
         Optional<Long> trimAddress = Optional.empty();
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             CheckpointingStatus managerStatus = (CheckpointingStatus) txn.getRecord(
@@ -45,8 +49,8 @@ public class TrimLog {
     /**
      * Perform log-trimming on CorfuDB
      */
-    public void invokePrefixTrim(CorfuRuntime corfuRuntime, CorfuStore corfuStore) {
-        Optional<Long> trimAddress = getTrimAddress(corfuStore);
+    public void invokePrefixTrim() {
+        Optional<Long> trimAddress = getTrimAddress();
         if (!trimAddress.isPresent()) {
             return;
         }

@@ -99,12 +99,6 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
     // We observe the transition counter to know that a transition occurred.
     private ObservableValue transitionObservable;
 
-    // Flag which determines if state transitions to non-terminal states will be observed.  As updates to the observable
-    // can be delivered with a delay, validating based on non-terminal states can cause intermittent failures(FSM may
-    // have moved to the next state by the time the update callback is received).  So tests can set this flag to
-    // avoid observing such non-terminal transitions.
-    private boolean observeTransitions = true;
-
     // Flag indicating if we should observer a snapshot sync, this is to interrupt it at any given stage
     private boolean observeSnapshotSync = false;
     private int limitSnapshotMessages = 0;
@@ -607,10 +601,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         testSnapshotSender(BATCH_SIZE);
     }
 
-    private void testSnapshotSender(int batchSize) {
-
-        // Set the flag to avoid observing transitions to non-terminal states
-        observeTransitions = false;
+    private void testSnapshotSender(int batchSize) throws Exception {
 
         // Initialize State Machine
         initLogReplicationFSM(ReaderImplementation.TEST);
@@ -627,19 +618,24 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         // Write to Stream will write to some addresses.  SnapshotReader should only read from those addresses
         ((TestSnapshotReader) snapshotReader).setSeqNumsToRead(seqNums);
 
-        // Input the Snapshot Sync Request to the FSM.
-        LogReplicationEvent event = new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST);
-        fsm.input(event);
+        // Initial acquire of semaphore, the transition method will block until a transition occurs
+        transitionAvailable.acquire();
 
-        // Once Snapshot Sync starts, the data must be sent and the fsm will eventually reach the terminal
-        // IN_LOG_ENTRY_SYNC state
-        while(fsm.getState().getType() != LogReplicationStateType.IN_LOG_ENTRY_SYNC) {
-            log.debug("Current State = {}, Waiting for IN_LOG_ENTRY_SYNC state", fsm.getState().getType());
-        }
-        assertThat(fsm.getState().getType()).isEqualTo(LogReplicationStateType.IN_LOG_ENTRY_SYNC);
+        // Transition #1: Snapshot Sync Request
+        UUID snapshotSyncRequestId = transition(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST, LogReplicationStateType.IN_SNAPSHOT_SYNC);
 
-        // Verify that the expected data was captured in the TestSender's queue.
+        // Block until the snapshot sync completes and next transition occurs.
+        // The transition should happen to IN_LOG_ENTRY_SYNC state.
         Queue<LogReplicationEntryMsg> listenerQueue = ((TestDataSender) dataSender).getEntryQueue();
+
+        while(!fsm.getState().getType().equals(LogReplicationStateType.WAIT_SNAPSHOT_APPLY)) {
+            transitionAvailable.acquire();
+        }
+
+        assertThat(fsm.getState().getType()).isEqualTo(LogReplicationStateType.WAIT_SNAPSHOT_APPLY);
+
+        transition(LogReplicationEventType.SNAPSHOT_APPLY_COMPLETE, LogReplicationStateType.IN_LOG_ENTRY_SYNC, snapshotSyncRequestId, true);
+        assertThat(fsm.getState().getType()).isEqualTo(LogReplicationStateType.IN_LOG_ENTRY_SYNC);
 
         assertThat(listenerQueue.size()).isEqualTo(NUM_ENTRIES);
 
@@ -967,9 +963,6 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
      */
     @Override
     public void update(Observable obs, Object arg) {
-        if (!observeTransitions) {
-            return;
-        }
         if (obs.equals(transitionObservable)) {
             while (!transitionAvailable.hasQueuedThreads()) {
                 // Wait until some thread is waiting to acquire...
