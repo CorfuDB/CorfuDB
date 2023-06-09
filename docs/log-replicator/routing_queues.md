@@ -1,0 +1,112 @@
+## Log Replication via Routing Queues
+
+[Primary Requirements](#primary-requirements)
+
+[LR Client on Sender](#client-on-sender)
+
+[LR Server on Sender](#log-entry-reader-in-server-on-sender)
+
+[LR Full Snapshot Sync Sender](#full-sync-sender)
+
+[LR Server on Receiver](#lr-server-on-sink)
+
+[LR Client on Receiver](#lr-client-on-sink)
+
+### Primary requirements
+When a transaction touches a record on the source cluster that mutation
+needs to be disseminated to one or more sites with one or more tables modified on the sink cluster.
+
+Client will provide one or more opaque payloads with a list of destinations in a transaction.
+LR client on the sender intercepts this in the same transaction, transforms & persists this in corfu.
+
+**If a payload needs to go to multiple sites, that payload must not be duplicated since there can be
+several sites.**
+LR server on the same sender's cluster must send this persisted data to the sites.
+
+The payload is opaque to LR, the receiver is the one that needs to read this data and apply the updates to various tables.
+
+### Client on sender
+The main api intercepting the transaction is something like 
+```java
+class LRoutingQueueClient {
+    public boolean transmitLogEntryMessage(byte[] payload, List<String> destinations);
+    public boolean transmitLogEntryMessages(List<LRMessageWithDestinations> messages); // optional?
+}
+
+class LRMessageWithDestinations {
+    public byte[] payload;
+    public List<String> destinations;
+}
+```
+The first api to be called as many times as needed within the same transaction
+where the application is persisting data.
+
+Under the hood this api translates to a single `logUpdate(UUID streamId, SMREntry updateEntry, List<UUID> streamTags);`
+to the new shared `LogEntryRoutingQ` as follows
+
+```protobuf
+// prepare this to look like a CorfuQueue update
+message RoutingTableEntryMsg {
+  repeated string destinations = 1;
+  required bytes opaque_payload = 2;
+}
+```
+
+1. `transmitLogEntryMessage()` just does one `logUpdate()` to the `LogEntryRoutingQ` stream per call
+adding one stream tag per destination, completely bypassing the Object Layer.
+This is done to save memory, it does mean that LR at this point will not be able to apply backpressure using techniques like number of outstanding entries in this queue.
+2.Each `logUpdate()` of this update will need look exactly like a CorfuQueue's enqueue(RoutingTableEntryMsg) operation.
+   1. This is done for 2 reasons - the queue's id captures the sequencer's address which can later be used for negotiation
+   2. Tools like browser can be used to debug and display outstanding entries.
+   3. OPTIONAL:Update the queue id generated for that destination in a normal LR metadata table per destination, so that this last seen queue id can be used to compare against a snapshot sync negotiation request & avoid a full sync
+
+### Log Entry Reader In Server on Sender
+The new Routing Queue based Log Entry reader is started per discovered destination and does the following:
+1. Listens on the destination specific stream tag.
+2. Reads the logUpdate of the global shared `LogEntryRoutingQ` tagged with its destination tag
+3. Deserializes all Queue entry (RoutingTableEntryMsg) -> puts all these in an ArrayList specific only to this update or transaction.
+4. Search for my specific destination and get its payload
+5. Remove the destinations field, just replicate the queue without the destination
+6. Change the stream id in the opaque entry as `RoutingQ_desination_name` because on the sink we only want one queue for both full snapshot sync and log entry sync.
+7. replicates this & then the list can be garbage collected
+
+```java
+/** EXAMPLE
+logUpdate("UUID_OF_THE_SHARED_QUEUE",
+Destination1, Destination2,...100 -> PayloadA --> give it unique PayloadOffset
+Destination3, Destination4 -> PayloadB,
+ stream_tag_destination1, stream_tag_destination2....
+)
+ 
+ // Optional optimization to avoid searching if we are always given all the payloads together
+logUpdate("UUID_OF_ROUTING_TABLE", (PayloadIdentifier -> PayloadInBytes
+"0"-> DESTINATION1->payloadId_1, DESTINATION2->payloadOffset1, DESTINATION3->payloadOffset2, Destinatio4->payloadOffset2)
+"1"->PAYLOAD_A,
+"2"->PAYLOAD_B)
+tag_for_destination1, tag_for_destination2...
+)
+ */
+```
+
+## Full Sync Sender
+`RoutingQ_<destination_name>` is the stream to which the full sync data is written to as queue.
+LR Server requests a full sync and puts a record in its internal metadata table.
+LR Client listens to this and requests a full sync via callback.
+The supplied data is placed in the above queue.
+LR Server which is listening for updates to this `RoutingQ_<destination_name>` wakes up and starts transmitting.
+LR Client places an end marker.
+LR Server observes this end marker and concludes the snapshot sync and transitions state machine to log entry sync.
+
+This is same stream to which delta update are applied to on the sink side, which means the source transforms the data read from
+`LogEntryRoutingQ` is the global shared queue.
+and changes the name of the stream to `RoutingQueue_<destination_name>`
+We only need 1 queue for the receiver/Sink.
+
+## LR Server on Sink
+Minimal to no changes here - incoming Queue data is simply applied into the `RoutingQueue_<destination_name>`
+
+## LR Client on Sink
+Similar to the ReplicationGroup routing model, listens to both the ReplicationStatus table and the routing queue.
+Identifies when a full sync as started and delivers full sync messages.
+If there are log entry message, these are also delivered subsequently.
+It is up to the client to read the envelope information and apply its contents to the respective tables.

@@ -15,3 +15,9 @@ message CorfuGuidMsg {
 message CorfuQueueMetadataMsg {
     int64 txSequence = 1;
 }
+
+// This message forms the value part of the payload used for LogReplication over Routing Queues
+message RoutingTableEntryMsg {
+    string destinations = 1;
+    bytes opaque_payload = 2;
+}
