@@ -62,10 +62,16 @@ Under the hood this api translates to a single `logUpdate(UUID streamId, SMREntr
 to the new shared `LRQ_Send_LogEntries` as follows
 
 ```protobuf
+enum ReplicationType {
+  LOG_ENTRY = 0; // Default value indicating absence of any full sync.
+  FULL_SYNC = 1; // This entry was made during a full sync
+  LAST_FULL_SYNC_ENTRY = 2; // Last entry denoting the end marker of a full sync
+}
+
 // prepare this to look like a CorfuQueue update
 message RoutingTableEntryMsg {
   repeated string destinations = 1;
-  required bool is_snapshot_end = 2;
+  required ReplicationType type = 2;
   required bytes opaque_payload = 3;
 }
 ```
@@ -137,3 +143,4 @@ The receiver side routing queue (LRQ_Recv_<client_name>_<remote_id>) needs to be
 5. On_error callback implementation
 6. Routing queue listener interface would delete the queue entries based on the success/failure case. The client interface would reflect the success/failure case returning boolean
 7. Listener interface would provide RoutingTableEntryMsg message type to client and client would further extract out its payload
+8. It is up to the client to read the envelope information and apply its contents to the respective tables.
