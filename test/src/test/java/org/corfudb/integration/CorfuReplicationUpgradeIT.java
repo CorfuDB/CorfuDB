@@ -74,7 +74,8 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
 
         // Simulate a rolling upgrade on the plugin
         stopSinkLogReplicator();
-        DefaultAdapterForUpgrade defaultAdapterForUpgrade = new DefaultAdapterForUpgrade(sinkRuntime);
+        DefaultAdapterForUpgrade defaultAdapterForUpgrade = new DefaultAdapterForUpgrade();
+        defaultAdapterForUpgrade.openVersionTable(sinkRuntime);
         defaultAdapterForUpgrade.startRollingUpgrade();
 
         // Wait till the Sink Cluster is in a paused state after starting.  This is indicated by a 'CLEAR' entry
@@ -100,7 +101,9 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
 
         // Simulate a rolling upgrade on Source
         stopSourceLogReplicator();
-        defaultAdapterForUpgrade = new DefaultAdapterForUpgrade(sourceRuntime);
+        defaultAdapterForUpgrade = new DefaultAdapterForUpgrade();
+        defaultAdapterForUpgrade.openVersionTable(sourceRuntime);
+        defaultAdapterForUpgrade.openVersionTable(sourceRuntime);
         defaultAdapterForUpgrade.startRollingUpgrade();
 
         CountDownLatch statusUpdateLatch = new CountDownLatch(1);
@@ -533,10 +536,12 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
 
         if (source) {
             stopSourceLogReplicator();
-            defaultAdapterForUpgrade = new DefaultAdapterForUpgrade(sourceRuntime);
+            defaultAdapterForUpgrade = new DefaultAdapterForUpgrade();
+            defaultAdapterForUpgrade.openVersionTable(sourceRuntime);
         } else {
             stopSinkLogReplicator();
-            defaultAdapterForUpgrade = new DefaultAdapterForUpgrade(sinkRuntime);
+            defaultAdapterForUpgrade = new DefaultAdapterForUpgrade();
+            defaultAdapterForUpgrade.openVersionTable(sinkRuntime);
         }
 
         defaultAdapterForUpgrade.startRollingUpgrade();
