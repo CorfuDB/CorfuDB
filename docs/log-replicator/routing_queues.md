@@ -30,13 +30,16 @@ The payload is opaque to LR, the receiver is the one that needs to read this dat
 LR Server on source and sink will have one session per remote destination.
 Data from the clients will be written into the following well known Routing Queues
 1. `LRQ_Send_LogEntries`: This is the one shared queue on the sender where delta updates are placed transactionally.
+   1. Entries here are not checkpointed and are lost after a trim cycle.
 2. `LRQ_Send_SnapSync`: This is the one shared queue on the sender where full snapshot sync updates are placed.
+   1. Entries in this queue are not checkpointed and data loss occurs after a trim cycle.
 3. `LRQ_Recv_<remote_id>`: This is the queue where the LR on Sink places the updates arriving from the remote source.
+   1. Entries in this queue are checkpointed normally.
 
 Each update made carries destinations and is also tagged with a destination specific stream tag with the following convention:
 1. `lrq_logentry_<remote_id>`: Destination specific stream tag applied when entries are placed into `LRQ_Send_LogEntries`
 2. `lrq_snapsync_<remote_id>`: Destination specific stream tag applied when entries are placed into `LRQ_Send_SnapSync`
-3. `lrq_recv`: This is the tag applied on the sink by LR server to all updates be it full sync or snapshot sync.
+3. `lrq_recv`: This is the tag applied on the sink by LR server to all updates be it full sync or log entry sync.
 
 ### Client on sender
 The main api intercepting the transaction is something like 
@@ -82,7 +85,7 @@ The new Routing Queue based Log Entry reader is started per discovered destinati
 4. Search for my specific destination and get its payload
 5. Remove the destinations field, just replicate the queue without the destination
 6. Change the stream id in the opaque entry as `LRQ_Recv_<my_source_id>` because on the sink we only want one queue for both full snapshot sync and log entry sync.
-7. Applies the stream tag `lrq_recv`
+7. Applies the stream tag `lrq_recv`. This is the one stream tag the listener on the sink will subscribe to.
 8. replicates this & then the current read entry can be garbage collected
 
 ```java
