@@ -4,23 +4,32 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.google.common.primitives.UnsignedBytes;
+
+import java.lang.reflect.InvocationTargetException;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.TreeMap;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.checkerframework.checker.units.qual.C;
+import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuRuntime;
 import com.google.common.reflect.TypeToken;
 import com.google.protobuf.ByteString;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.MultiCheckpointWriter;
+import org.corfudb.runtime.Queue;
+import org.corfudb.runtime.Queue.RoutingTableEntryMsg;
 import org.corfudb.runtime.collections.CorfuQueue.CorfuQueueRecord;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.SMRObject;
+import org.corfudb.util.serializer.ProtobufSerializer;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
 
@@ -58,6 +67,12 @@ public class CorfuQueueTest extends AbstractViewTest {
         rt.getObjectsView().TXBegin();
         runnable.run();
         rt.getObjectsView().TXEnd();
+    }
+    private void executeTxn(CorfuStore store, String namespace, Consumer<TxnContext> mutation) {
+        try (TxnContext tx = store.txn(namespace)) {
+            mutation.accept(tx);
+            tx.commit();
+        }
     }
 
     @Test
@@ -270,4 +285,37 @@ public class CorfuQueueTest extends AbstractViewTest {
                     .isEqualTo(String.valueOf(itemIdx));
         });
     }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void logUpdateThatLooksLikeEnqueue() {
+        final CorfuStore corfuStore = new CorfuStore(createDefaultRuntime());
+        final String namespace = "some_ns";
+        final String tableName = "some_table";
+        Table<Queue.CorfuGuidMsg, RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg> q = null;
+        try {
+            q = corfuStore.openQueue(namespace, tableName, RoutingTableEntryMsg.class,
+                    TableOptions.fromProtoSchema(RoutingTableEntryMsg.class));
+        } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
+            throw new RuntimeException(e);
+        }
+        final Table<Queue.CorfuGuidMsg, RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg> finalQ = q;
+        final byte[] foo = {'a', 'b', 'c'};
+        executeTxn(corfuStore, namespace, (TxnContext tx) -> tx.enqueue(finalQ,
+                RoutingTableEntryMsg.newBuilder().setOpaquePayload(ByteString.copyFrom(foo)).build()));
+
+        Object[] smrArgs = new Object[2];
+        smrArgs[0] = Queue.CorfuGuidMsg.newBuilder().setInstanceId(1).build();
+        smrArgs[1] = RoutingTableEntryMsg.newBuilder().setOpaquePayload(ByteString.copyFrom(foo)).build();
+        executeTxn(corfuStore, namespace, (TxnContext tx) -> tx.logUpdate(finalQ.getStreamUUID(),
+                new SMREntry("put", smrArgs, corfuStore.getRuntime().getSerializers().getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE))
+        ));
+
+        // validate if logUpdate and enqueu produces same result
+        executeTxn(corfuStore, namespace, (TxnContext tx) -> {
+            //RoutingTableEntryMsg entry = tx.entryList(finalQ).get(0).getEntry();
+            assertThat(tx.entryList(finalQ).get(0).getEntry()).isEqualTo(foo);
+        });
+    }
+
 }
