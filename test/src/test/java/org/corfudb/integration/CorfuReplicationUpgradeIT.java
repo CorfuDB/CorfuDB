@@ -12,6 +12,7 @@ import org.corfudb.infrastructure.logreplication.proto.Sample;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.LogReplication.ReplicationStatus;
+import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
 import org.corfudb.runtime.collections.CorfuStreamEntry;
 import org.corfudb.runtime.collections.CorfuStreamEntry.OperationType;
@@ -34,7 +35,6 @@ import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.infrastructure.logreplication.infrastructure.LRRollingUpgradeHandler.V1_METADATA_TABLE_PREFIX;
-import static org.corfudb.infrastructure.logreplication.infrastructure.LRRollingUpgradeHandler.V1_STATUS_TABLE_NAME;
 import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.REPLICATION_EVENT_TABLE_NAME;
 import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.tryOpenTable;
 import static org.corfudb.runtime.LogReplicationUtils.REPLICATION_STATUS_TABLE_NAME;
@@ -84,7 +84,6 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
     @Test
     public void testLRNotStartedUntilRollingUpgradeCompletes() throws Exception {
         verifyInitialSnapshotSyncAfterStartup(FIVE, NUM_WRITES);
-        openV1StatusAndMetadataTables();
 
         // Simulate a rolling upgrade on the plugin
         stopSinkLogReplicator();
@@ -429,6 +428,8 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         verifyDataOnSink(numWrites);
 
         corfuStoreSink.unsubscribeListener(sinkStatusListener);
+
+        openV1StatusAndMetadataTables();
     }
 
     private void verifySnapshotSyncAfterCPTrim() throws Exception {
@@ -571,7 +572,6 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
 
     private void performRollingUpgrade(boolean source) throws Exception {
         DefaultAdapterForUpgrade defaultAdapterForUpgrade;
-        openV1StatusAndMetadataTables();
 
         if (source) {
             stopSourceLogReplicator();
@@ -606,11 +606,31 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         defaultAdapterForUpgrade.reset();
     }
 
-    private void openV1StatusAndMetadataTables() {
-        // Open dummy V1 status tables which are used to construct the sessions, used to perform a full sync for upgrade
-        tryOpenTable(corfuStoreSource, CORFU_SYSTEM_NAMESPACE, V1_STATUS_TABLE_NAME,
+    public void exposeStatusTableTypesAndClear(CorfuStore corfuStore) {
+        // In mixed state, the able registry needs to be exposed to both V1 (ReplicationStatusKey, ReplicationStatusVal)
+        // and V2 (LogReplicationSession, ReplicationMetadata) status table types.
+        LogReplicationMetadataManager.addLegacyTypesToSerializer(corfuStoreSource);
+        corfuStore.getRuntime().getTableRegistry().addTypeToClassMap(LogReplicationSession.getDefaultInstance());
+        corfuStore.getRuntime().getTableRegistry().addTypeToClassMap(ReplicationStatus.getDefaultInstance());
+
+        // Specific to this IT we should also clear the V2 table entries populated on startup to simulate an
+        // older setup.
+        tryOpenTable(corfuStore, CORFU_SYSTEM_NAMESPACE, REPLICATION_STATUS_TABLE_NAME,
                 ReplicationStatusKey.class, ReplicationStatusVal.class, null);
-        tryOpenTable(corfuStoreSink, CORFU_SYSTEM_NAMESPACE, V1_STATUS_TABLE_NAME,
+        try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+            txn.clear(REPLICATION_STATUS_TABLE_NAME);
+            txn.commit();
+        }
+    }
+
+    private void openV1StatusAndMetadataTables() {
+        exposeStatusTableTypesAndClear(corfuStoreSource);
+        exposeStatusTableTypesAndClear(corfuStoreSink);
+
+        // Open dummy V1 status tables which are used to construct the sessions, used to perform a full sync for upgrade
+        tryOpenTable(corfuStoreSource, CORFU_SYSTEM_NAMESPACE, REPLICATION_STATUS_TABLE_NAME,
+                ReplicationStatusKey.class, ReplicationStatusVal.class, null);
+        tryOpenTable(corfuStoreSink, CORFU_SYSTEM_NAMESPACE, REPLICATION_STATUS_TABLE_NAME,
                 ReplicationStatusKey.class, ReplicationStatusVal.class, null);
         // Open dummy V1 metadata table of which the name is used to retrieve the cluster IDs, also used for full sync
         tryOpenTable(corfuStoreSource, CORFU_SYSTEM_NAMESPACE,
@@ -627,7 +647,7 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
             ReplicationStatusVal val = ReplicationStatusVal.newBuilder()
                     .build();
 
-            txnContext.putRecord(txnContext.getTable(V1_STATUS_TABLE_NAME), key, val, null);
+            txnContext.putRecord(txnContext.getTable(REPLICATION_STATUS_TABLE_NAME), key, val, null);
             txnContext.commit();
         }
     }

@@ -27,7 +27,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.corfudb.infrastructure.logreplication.infrastructure.LRRollingUpgradeHandler.V1_METADATA_TABLE_PREFIX;
-import static org.corfudb.infrastructure.logreplication.infrastructure.LRRollingUpgradeHandler.V1_STATUS_TABLE_NAME;
+import static org.corfudb.runtime.LogReplicationUtils.REPLICATION_STATUS_TABLE_NAME;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 public class RollingUpgradeHandlerTest extends AbstractViewTest {
@@ -82,7 +82,7 @@ public class RollingUpgradeHandlerTest extends AbstractViewTest {
     @Test
     public void testSessionCreationFromMetadataTables()
             throws InvocationTargetException, NoSuchMethodException, IllegalAccessException {
-        DefaultAdapterForUpgrade defaultAdapterForUpgrade = new DefaultAdapterForUpgrade(corfuRuntime);
+        DefaultAdapterForUpgrade defaultAdapterForUpgrade = new DefaultAdapterForUpgrade();
 
         List<String> sourceAndSinkClusterIds = Stream.concat(
                 DefaultClusterConfig.getSourceClusterIds().stream(),
@@ -101,7 +101,7 @@ public class RollingUpgradeHandlerTest extends AbstractViewTest {
 
         Table<ReplicationStatusKey, ReplicationStatusVal, Message> statusTable = corfuStore.openTable(
                 CORFU_SYSTEM_NAMESPACE,
-                V1_STATUS_TABLE_NAME,
+                REPLICATION_STATUS_TABLE_NAME,
                 LogReplicationMetadata.ReplicationStatusKey.class,
                 ReplicationStatusVal.class,
                 null,
