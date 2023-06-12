@@ -1,9 +1,16 @@
 package org.corfudb.universe;
 
+import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.io.IOUtils;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
+@Slf4j
 public class UniverseAppUtil {
 
     /**
@@ -17,10 +24,14 @@ public class UniverseAppUtil {
             return version;
         }
 
-        try {
-            Path path = Paths.get(ClassLoader.getSystemResource("corfu.version").toURI());
-            return new String(Files.readAllBytes(path));
-        } catch (Exception e) {
+        log.info("getting input stream");
+
+        try (InputStream inputStream = ClassLoader.getSystemResourceAsStream("corfu.version")) {
+            if (inputStream == null) {
+                throw new IllegalStateException("Corfu version file not found");
+            }
+            return IOUtils.toString(inputStream, StandardCharsets.UTF_8);
+        } catch (IOException e) {
             throw new IllegalStateException("Corfu version file not found");
         }
     }
