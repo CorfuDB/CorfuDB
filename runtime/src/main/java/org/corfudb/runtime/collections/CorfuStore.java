@@ -221,6 +221,17 @@ public class CorfuStore {
                 false);
     }
 
+    @Nonnull
+    public ScopedTransaction scopedTxn(
+            @Nonnull final String namespace, IsolationLevel isolationLevel,
+            Table<?, ?, ?>... tables) {
+        return new ScopedTransaction(
+                this.runtime,
+                namespace,
+                isolationLevel,
+                tables);
+    }
+
     /**
      * Return the address of the latest update made in this table.
      * <p>
