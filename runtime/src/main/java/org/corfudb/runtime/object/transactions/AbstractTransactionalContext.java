@@ -12,9 +12,9 @@ import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.ConsistencyView;
 import org.corfudb.runtime.object.ICorfuSMRAccess;
-import org.corfudb.runtime.object.ICorfuSMRSnapshotProxy;
 import org.corfudb.runtime.object.MVOCorfuCompileProxy;
 import org.corfudb.runtime.object.SnapshotGenerator;
+import org.corfudb.runtime.object.SnapshotProxy;
 import org.corfudb.runtime.object.transactions.TransactionalContext.PreCommitListener;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.util.Utils;
@@ -135,7 +135,7 @@ public abstract class AbstractTransactionalContext implements
     private final ConflictSetInfo readSetInfo = new ConflictSetInfo();
 
     // TODO: Make into a class?
-    protected final Map<MVOCorfuCompileProxy<?>, ICorfuSMRSnapshotProxy<?>> snapshotProxyMap = new HashMap<>();
+    protected final Map<MVOCorfuCompileProxy<?>, SnapshotProxy<?>> snapshotProxyMap = new HashMap<>();
 
     /**
      * Cache of last known position of streams accessed in this transaction.
@@ -152,10 +152,10 @@ public abstract class AbstractTransactionalContext implements
         AbstractTransactionalContext.log.trace("TXBegin[{}]", this);
     }
 
-    protected <S extends SnapshotGenerator<S> & ConsistencyView> ICorfuSMRSnapshotProxy<S> getAndCacheSnapshotProxy(
+    protected <S extends SnapshotGenerator<S> & ConsistencyView> SnapshotProxy<S> getAndCacheSnapshotProxy(
             MVOCorfuCompileProxy<S> proxy, long ts) {
         // TODO: Refactor me to avoid casting on ICorfuSMRProxyInternal type.
-        ICorfuSMRSnapshotProxy<S> snapshotProxy = (ICorfuSMRSnapshotProxy<S>) snapshotProxyMap.get(proxy);
+        SnapshotProxy<S> snapshotProxy = (SnapshotProxy<S>) snapshotProxyMap.get(proxy);
         if (snapshotProxy == null) {
             snapshotProxy = proxy.getUnderlyingMVO().getSnapshotProxy(ts);
             snapshotProxyMap.put(proxy, snapshotProxy);
@@ -196,7 +196,6 @@ public abstract class AbstractTransactionalContext implements
      *                       of the object.
      * @param conflictObject Fine-grained conflict information, if available.
      * @param <R>            The return type of the access function.
-     * @param <T>            The type of the proxy's underlying object.
      * @return The return value of the access function.
      */
     public abstract <R, S extends SnapshotGenerator<S> & ConsistencyView> R access(
@@ -208,7 +207,6 @@ public abstract class AbstractTransactionalContext implements
      * @param proxy          The proxy which generated the update.
      * @param updateEntry    The entry which we are writing to the log.
      * @param conflictObject Fine-grained conflict information, if available.
-     * @param <T>            The type of the proxy's underlying object.
      * @return The address the update was written at.
      */
     public abstract long logUpdate(

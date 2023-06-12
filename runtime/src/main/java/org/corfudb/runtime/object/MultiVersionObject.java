@@ -261,7 +261,7 @@ public class MultiVersionObject<S extends SnapshotGenerator<S> & ConsistencyView
      * @param timestamp The desired version of the object.
      * @return A snapshot proxy containing the most recent state of the object for the provided timestamp.
      */
-    public ICorfuSMRSnapshotProxy<S> getSnapshotProxy(long timestamp) {
+    public SnapshotProxy<S> getSnapshotProxy(long timestamp) {
         final VersionedObjectIdentifier voId = new VersionedObjectIdentifier(getID(), timestamp);
         long lockTs = lock.tryOptimisticRead();
 
@@ -271,7 +271,7 @@ public class MultiVersionObject<S extends SnapshotGenerator<S> & ConsistencyView
 
         if (lockTs != 0) {
             try {
-                Optional<ICorfuSMRSnapshotProxy<S>> snapshot = getSnapshotUnsafe(voId, lockTs);
+                Optional<SnapshotProxy<S>> snapshot = getSnapshotUnsafe(voId, lockTs);
                 if (snapshot.isPresent()) {
                     // Lock was validated within getSnapshotUnsafe.
                     return snapshot.get();
@@ -300,7 +300,7 @@ public class MultiVersionObject<S extends SnapshotGenerator<S> & ConsistencyView
             }
 
             // Check if our timestamp has since been materialized by another thread.
-            Optional<ICorfuSMRSnapshotProxy<S>> snapshot = getSnapshotUnsafe(voId, lockTs);
+            Optional<SnapshotProxy<S>> snapshot = getSnapshotUnsafe(voId, lockTs);
             if (snapshot.isPresent()) {
                 return snapshot.get();
             }
@@ -372,7 +372,7 @@ public class MultiVersionObject<S extends SnapshotGenerator<S> & ConsistencyView
      * @return If available, a snapshot proxy containing the most recent state of the object for
      * the provided timestamp.
      */
-    private Optional<ICorfuSMRSnapshotProxy<S>> getSnapshotUnsafe(@Nonnull VersionedObjectIdentifier voId, long lockTs) {
+    private Optional<SnapshotProxy<S>> getSnapshotUnsafe(@Nonnull VersionedObjectIdentifier voId, long lockTs) {
         final long startTime = System.nanoTime();
         boolean isLockStampValid = false;
         SnapshotProxy<S> snapshotProxy = null;
