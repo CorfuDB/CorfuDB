@@ -27,6 +27,7 @@ import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.Queue;
 import org.corfudb.runtime.Queue.RoutingTableEntryMsg;
 import org.corfudb.runtime.collections.CorfuQueue.CorfuQueueRecord;
+import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.util.serializer.ProtobufSerializer;
@@ -306,10 +307,12 @@ public class CorfuQueueTest extends AbstractViewTest {
 
         Object[] smrArgs = new Object[2];
         smrArgs[0] = Queue.CorfuGuidMsg.newBuilder().setInstanceId(1).build();
-        smrArgs[1] = RoutingTableEntryMsg.newBuilder().setOpaquePayload(ByteString.copyFrom(foo)).build();
+        smrArgs[1] = new CorfuRecord(RoutingTableEntryMsg.newBuilder().setOpaquePayload(ByteString.copyFrom(foo)).build(), Queue.CorfuQueueMetadataMsg.getDefaultInstance());
         executeTxn(corfuStore, namespace, (TxnContext tx) -> tx.logUpdate(finalQ.getStreamUUID(),
                 new SMREntry("put", smrArgs, corfuStore.getRuntime().getSerializers().getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE))
         ));
+
+        // TransactionalContext.getRootContext().addPreCommitListener(callback);
 
         // validate if logUpdate and enqueu produces same result
         executeTxn(corfuStore, namespace, (TxnContext tx) -> {
