@@ -3,7 +3,6 @@ package org.corfudb.runtime.object.transactions;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
-import org.corfudb.runtime.CorfuOptions;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.AppendException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
@@ -11,6 +10,7 @@ import org.corfudb.runtime.object.ConsistencyView;
 import org.corfudb.runtime.object.ICorfuSMRAccess;
 import org.corfudb.runtime.object.MVOCorfuCompileProxy;
 import org.corfudb.runtime.object.SnapshotGenerator;
+import org.corfudb.runtime.object.SnapshotProxy;
 
 import java.util.HashSet;
 import java.util.List;
@@ -79,8 +79,9 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
 
             // Get snapshot timestamp in advance, so it is not performed under the VLO lock
             long ts = getSnapshotTimestamp().getSequence();
-            return getAndCacheSnapshotProxy(proxy, ts)
-                    .access(accessFunction, version -> updateKnownStreamPosition(proxy, version));
+            SnapshotProxy<S> snapshotProxy = getAndCacheSnapshotProxy(proxy, ts);
+            updateKnownStreamPosition(proxy, snapshotProxy.getSnapshotVersionSupplier().get());
+            return snapshotProxy.access(accessFunction, conflictObject);
         } finally {
             dbNanoTime += (System.nanoTime() - startAccessTime);
         }
@@ -106,7 +107,8 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                     this, proxy, updateEntry.getSMRMethod(),
                     updateEntry.getSMRArguments(), conflictObjects);
 
-            getAndCacheSnapshotProxy(proxy, getSnapshotTimestamp().getSequence()).logUpdate(updateEntry);
+            getAndCacheSnapshotProxy(proxy, getSnapshotTimestamp().getSequence())
+                    .logUpdate(updateEntry.getSMRMethod(), updateEntry.getSMRArguments());
             return addToWriteSet(proxy, updateEntry, conflictObjects);
         } finally {
             dbNanoTime += (System.nanoTime() - startLogUpdateTime);
