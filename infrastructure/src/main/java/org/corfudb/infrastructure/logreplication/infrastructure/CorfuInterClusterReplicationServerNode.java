@@ -57,11 +57,11 @@ public class CorfuInterClusterReplicationServerNode {
                     .setNameFormat("replication-server-runner").build());
         }
         // Start and listen to the server
-        logReplicationServerRunner.submit(() -> this.startAndListen());
+        logReplicationServerRunner.submit(this::startAndListen);
     }
 
     /**
-     * Wait on the transport frameworks's server until it is shutdown.
+     * Wait on the transport framework's server until it is shutdown.
      */
     private void startAndListen() {
         if (!serverStarted) {
