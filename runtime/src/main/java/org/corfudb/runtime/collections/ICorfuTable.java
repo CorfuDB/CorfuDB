@@ -52,4 +52,6 @@ public interface ICorfuTable<K, V> {
     void close();
 
     boolean isTableCached();
+
+    ICorfuTable<K, V> generateImmutableView(long sequence);
 }
