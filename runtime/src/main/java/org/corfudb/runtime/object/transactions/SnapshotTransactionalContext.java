@@ -6,6 +6,7 @@ import org.corfudb.runtime.object.ConsistencyView;
 import org.corfudb.runtime.object.ICorfuSMRAccess;
 import org.corfudb.runtime.object.MVOCorfuCompileProxy;
 import org.corfudb.runtime.object.SnapshotGenerator;
+import org.corfudb.runtime.object.SnapshotProxy;
 
 import java.util.List;
 import java.util.UUID;
@@ -33,8 +34,10 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
             MVOCorfuCompileProxy<S> proxy, ICorfuSMRAccess<R, S> accessFunction, Object[] conflictObject) {
         long startAccessTime = System.nanoTime();
         try {
-            return getAndCacheSnapshotProxy(proxy, getSnapshotTimestamp().getSequence())
-                    .access(accessFunction, version -> updateKnownStreamPosition(proxy, version));
+            SnapshotProxy<S> snapshotProxy = getAndCacheSnapshotProxy(proxy, getSnapshotTimestamp().getSequence());
+            R result = snapshotProxy.access(accessFunction, conflictObject);
+            updateKnownStreamPosition(proxy, snapshotProxy.getSnapshotVersionSupplier().get());
+            return result;
         } finally {
             dbNanoTime += (System.nanoTime() - startAccessTime);
         }
