@@ -284,7 +284,7 @@ public class TableRegistry {
                     if (streamAddressSpace.size() == 0
                             && streamAddressSpace.getTrimMark() != Address.NON_ADDRESS) {
                         log.info("Found trimmed table that is re-opened. Reset table {}", fullyQualifiedTableName);
-                        resetTrimmedTable(fullyQualifiedTableName, this.runtime);
+                        resetTrimmedTable(fullyQualifiedTableName);
                     }
                 }
                 if (oldRecord == null || protoFileChanged || tableRecordChanged(oldRecord, newRecord)) {
@@ -315,7 +315,7 @@ public class TableRegistry {
      *
      * @param fullyQualifiedTableName get the fullyQualified name of a table
      */
-    public static void resetTrimmedTable(String fullyQualifiedTableName, CorfuRuntime runtime) {
+    private void resetTrimmedTable(String fullyQualifiedTableName) {
         if (!TransactionalContext.isInTransaction()) {
             throw new IllegalStateException(
                     "resetTrimmedTable cannot be invoked outside a transaction.");
@@ -323,7 +323,7 @@ public class TableRegistry {
 
         UUID streamId = CorfuRuntime.getStreamID(fullyQualifiedTableName);
         PersistentCorfuTable<TableName, CorfuRecord<TableDescriptors, TableMetadata>> corfuTable =
-                runtime.getObjectsView().build()
+                this.runtime.getObjectsView().build()
                         .setTypeToken(new TypeToken<PersistentCorfuTable<TableName, CorfuRecord<TableDescriptors, TableMetadata>>>() {
 
                         })
