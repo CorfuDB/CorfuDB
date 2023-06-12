@@ -15,6 +15,7 @@ import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.WrongClusterException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
+import org.corfudb.runtime.view.TableRegistry;
 
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
@@ -171,8 +172,19 @@ public abstract class DistributedCheckpointer {
         for (int retry = 0; retry < MAX_RETRIES; retry++) {
             CheckpointWriter<ICorfuTable<?,?>> cpw = null;
             try {
-                cpw = checkpointWriterFn.apply(tableName);
-                cpw.appendCheckpoint(Optional.of(livenessUpdater));
+                if (LogReplicationUtils.skipCheckpointFor(tableName)) {
+                    String fullyQualifiedName = TableRegistry.getFullyQualifiedTableName(
+                            tableName.getNamespace(), tableName.getTableName());
+                    log.info("{} Append Empty checkpoint for {}", clientName, fullyQualifiedName);
+                    this.livenessUpdater.notifyOnSyncComplete();
+                    try (TxnContext tx = corfuStore.txn(tableName.getNamespace())) {
+                        TableRegistry.resetTrimmedTable(fullyQualifiedName, corfuRuntime);
+                        tx.commit();
+                    }
+                } else {
+                    cpw = checkpointWriterFn.apply(tableName);
+                    cpw.appendCheckpoint(Optional.of(livenessUpdater));
+                }
                 returnStatus = StatusType.COMPLETED;
                 break;
             } catch (RuntimeException re) {

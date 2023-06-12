@@ -17,6 +17,7 @@ import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.LogReplication.ReplicationStatus;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalRetry;
 import org.corfudb.util.retry.RetryNeededException;
@@ -62,6 +63,15 @@ public final class LogReplicationUtils {
     public static final String REPLICATED_QUEUE_TAG = "lrq_recv";
 
     // ---- End RoutingQueue Model constants -------/
+
+    public static boolean skipCheckpointFor(CorfuStoreMetadata.TableName tableName) {
+        if (tableName.getNamespace().equals(CORFU_SYSTEM_NAMESPACE) &&
+                (tableName.getTableName().equals(LOG_ENTRY_SYNC_QUEUE_NAME_SENDER) ||
+                        (tableName.getTableName().equals(SNAPSHOT_SYNC_QUEUE_NAME_SENDER)))) {
+            return true;
+        }
+        return false;
+    }
 
     private LogReplicationUtils() { }
 
