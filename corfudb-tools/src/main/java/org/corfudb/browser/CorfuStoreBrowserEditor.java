@@ -127,21 +127,23 @@ public class CorfuStoreBrowserEditor implements CorfuBrowserEditorCommands {
 
         String fullTableName = TableRegistry.getFullyQualifiedTableName(namespace, tableName);
 
-        SMRObject.Builder<ICorfuTable<CorfuDynamicKey, CorfuDynamicRecord>> corfuTableBuilder =
-                runtime.getObjectsView().<ICorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>build()
-                        .setStreamName(fullTableName)
-                        .setSerializer(dynamicProtobufSerializer);
-
         if (diskPath == null) {
-            corfuTableBuilder.setTypeToken(PersistentCorfuTable.getTypeToken());
+            return runtime.getObjectsView().<PersistentCorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>build()
+                            .setStreamName(fullTableName)
+                            .setSerializer(dynamicProtobufSerializer)
+                            .setTypeToken(PersistentCorfuTable.<CorfuDynamicKey, CorfuDynamicRecord>getTypeToken())
+                            .open();
         } else {
-            PersistenceOptions persistenceOptions = PersistenceOptions.builder()
+            final PersistenceOptions persistenceOptions = PersistenceOptions.builder()
                     .dataPath(Paths.get(diskPath)).build();
-            corfuTableBuilder.setTypeToken(PersistedCorfuTable.getTypeToken())
-                    .setArguments(persistenceOptions, dynamicProtobufSerializer);
+            return runtime.getObjectsView().<PersistedCorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>build()
+                    .setStreamName(fullTableName)
+                    .setSerializer(dynamicProtobufSerializer)
+                    .setTypeToken(PersistedCorfuTable.<CorfuDynamicKey, CorfuDynamicRecord>getTypeToken())
+                    .setArguments(persistenceOptions, dynamicProtobufSerializer)
+                    .open();
         }
 
-        return corfuTableBuilder.open();
     }
 
     /**

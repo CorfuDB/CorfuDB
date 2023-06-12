@@ -4,7 +4,6 @@ import com.google.common.reflect.TypeToken;
 import com.google.protobuf.Descriptors;
 import com.google.protobuf.Message;
 import lombok.SneakyThrows;
-import net.bytebuddy.agent.ByteBuddyAgent;
 import org.apache.commons.lang3.tuple.Pair;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuOptions;

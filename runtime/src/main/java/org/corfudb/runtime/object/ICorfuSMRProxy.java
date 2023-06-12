@@ -1,5 +1,7 @@
 package org.corfudb.runtime.object;
 
+import org.corfudb.util.serializer.ISerializer;
+
 import java.util.Set;
 import java.util.UUID;
 
@@ -10,7 +12,7 @@ import java.util.UUID;
  * @param <T> The type of the SMR object.
  * Created by mwei on 11/10/16.
  */
-public interface ICorfuSMRProxy<T> {
+public interface ICorfuSMRProxy<S extends SnapshotGenerator<S> & ConsistencyView> {
 
     /**
      * Access the state of the object.
@@ -20,7 +22,7 @@ public interface ICorfuSMRProxy<T> {
      * @param <R>            The type to return.
      * @return The result of the accessMethod
      */
-    <R> R access(ICorfuSMRAccess<R, T> accessMethod, Object[] conflictObject);
+    <R> R access(ICorfuSMRAccess<R, S> accessMethod, Object[] conflictObject);
 
     /**
      * Record an SMR function to the log before returning.
@@ -46,4 +48,10 @@ public interface ICorfuSMRProxy<T> {
      * @return stream tags on of the object the proxy is managing
      */
     Set<UUID> getStreamTags();
+
+    boolean isObjectCached();
+
+    MultiVersionObject<S> getUnderlyingMVO();
+
+    ISerializer getSerializer();
 }

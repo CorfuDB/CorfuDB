@@ -5,17 +5,17 @@ import com.google.common.reflect.TypeToken;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.ICorfuSMRProxy;
 import org.corfudb.runtime.object.ICorfuSMRUpcallTarget;
-import org.corfudb.runtime.object.MVOCorfuCompileProxy;
 
 import javax.annotation.Nonnull;
 import java.util.Map;
 import java.util.Set;
-import java.util.UUID;
 import java.util.stream.Stream;
 
-public class PersistentCorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR {
+public class PersistentCorfuTable<K, V> implements
+        ICorfuTable<K, V>,
+        ICorfuSMR<ImmutableCorfuTable<K, V>> {
 
-    private MVOCorfuCompileProxy<ImmutableCorfuTable<K, V>> proxy;
+    private ICorfuSMRProxy<ImmutableCorfuTable<K, V>> proxy;
 
     private final Map<String, ICorfuSMRUpcallTarget<ImmutableCorfuTable<K, V>>> upcallTargetMap
         = ImmutableMap.<String, ICorfuSMRUpcallTarget<ImmutableCorfuTable<K, V>>>builder()
@@ -28,14 +28,19 @@ public class PersistentCorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR 
         return new TypeToken<PersistentCorfuTable<K, V>>() {};
     }
 
-    @Override
-    public void setCorfuSMRProxy(MVOCorfuCompileProxy<?> proxy) {
-        this.proxy = (MVOCorfuCompileProxy<ImmutableCorfuTable<K, V>>) proxy;
+    public PersistentCorfuTable() {}
+
+    public PersistentCorfuTable(ICorfuSMRProxy<ImmutableCorfuTable<K, V>> proxy) {
+        this.proxy = proxy;
     }
 
     @Override
-    // TODO: use proper return type
-    public MVOCorfuCompileProxy<?> getCorfuSMRProxy() {
+    public void setCorfuSMRProxy(ICorfuSMRProxy<ImmutableCorfuTable<K, V>> proxy) {
+        this.proxy = (ICorfuSMRProxy<ImmutableCorfuTable<K, V>>) proxy;
+    }
+
+    @Override
+    public ICorfuSMRProxy<?> getCorfuSMRProxy() {
         return proxy;
     }
 

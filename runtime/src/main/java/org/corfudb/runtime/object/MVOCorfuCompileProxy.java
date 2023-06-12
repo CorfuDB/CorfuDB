@@ -190,6 +190,7 @@ public class MVOCorfuCompileProxy<
         throw tae;
     }
 
+    @Override
     public boolean isObjectCached() {
         return objectOpenOption.equals(ObjectOpenOption.CACHE);
     }

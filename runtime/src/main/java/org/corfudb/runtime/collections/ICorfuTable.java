@@ -1,6 +1,8 @@
 package org.corfudb.runtime.collections;
 
+import org.corfudb.runtime.object.ConsistencyView;
 import org.corfudb.runtime.object.ICorfuSMR;
+import org.corfudb.runtime.object.SnapshotGenerator;
 
 import javax.annotation.Nonnull;
 import java.util.Map;
@@ -8,7 +10,7 @@ import java.util.Map.Entry;
 import java.util.Set;
 import java.util.stream.Stream;
 
-public interface ICorfuTable<K, V> extends ICorfuSMR {
+public interface ICorfuTable<K, V> {
 
     /** Insert a key-value pair into a map, overwriting any previous mapping.
      *

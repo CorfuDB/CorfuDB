@@ -4,18 +4,20 @@ import java.util.Map;
 
 /** The interface for an object interfaced with SMR.
  */
-public interface ICorfuSMR extends AutoCloseable {
+public interface ICorfuSMR<S extends
+        SnapshotGenerator<S> &
+        ConsistencyView> extends AutoCloseable {
 
     /** Get the proxy for this wrapper, to manage the state of the object.
      * @return The proxy for this wrapper. */
-    MVOCorfuCompileProxy<?> getCorfuSMRProxy();
+    ICorfuSMRProxy<?> getCorfuSMRProxy();
 
     /**
      * Set the proxy for this wrapper, to manage the state of the object.
      * @param proxy The proxy to set for this wrapper.
-     * @param <R> The type used for managing underlying versions.
+     * @param <S> The type used for managing underlying versions.
      */
-    void setCorfuSMRProxy(MVOCorfuCompileProxy<?> proxy);
+    void setCorfuSMRProxy(ICorfuSMRProxy<S> proxy);
 
     /**
      * Get a map from strings (function names) to SMR upcalls.

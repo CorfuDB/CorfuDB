@@ -230,15 +230,10 @@ public class Table<K extends Message, V extends Message, M extends Message> impl
     }
 
     private void initializeCorfuTable(CorfuRuntime runtime) {
-        // Default in-memory implementation.
-        final SMRObject.Builder<ICorfuTable<K, CorfuRecord<V, M>>> builder =
-                runtime.getObjectsView().<ICorfuTable<K, CorfuRecord<V, M>>>build()
-                        .setStreamName(fullyQualifiedTableName)
-                        .setStreamTags(streamTags)
-                        .setSerializer(serializer);
         final ProtobufIndexer protobufIndexer = new ProtobufIndexer(
                 tableParameters.getValueSchema(),
                 tableParameters.getSchemaOptions());
+        // Default in-memory implementation.
 
         // Check to see if we should be used a disk backed table.
         if (tableParameters.getPersistenceOptions().hasDataPath()) {
@@ -248,16 +243,24 @@ public class Table<K extends Message, V extends Message, M extends Message> impl
                 persistenceOptions.consistencyModel(tableParameters.getPersistenceOptions().getConsistencyModel());
             }
 
-            builder.setTypeToken(PersistedCorfuTable.getTypeToken());
-            builder.setArguments(
-                    persistenceOptions.build(), getDiskBackedCorfuTableOptions(),
-                    new SafeProtobufSerializer(serializer), protobufIndexer);
+            this.corfuTable = runtime.getObjectsView().<PersistedCorfuTable<K, CorfuRecord<V, M>>>build()
+                    .setStreamName(fullyQualifiedTableName)
+                    .setStreamTags(streamTags)
+                    .setSerializer(serializer)
+                    .setTypeToken(PersistedCorfuTable.<K, CorfuRecord<V, M>>getTypeToken())
+                    .setArguments(
+                            persistenceOptions.build(), getDiskBackedCorfuTableOptions(),
+                            new SafeProtobufSerializer(serializer), protobufIndexer)
+                    .open();
         } else {
-            builder.setArguments(protobufIndexer);
-            builder.setTypeToken(PersistentCorfuTable.getTypeToken());
+            this.corfuTable = runtime.getObjectsView().<PersistentCorfuTable<K, CorfuRecord<V, M>>>build()
+                    .setStreamName(fullyQualifiedTableName)
+                    .setStreamTags(streamTags)
+                    .setSerializer(serializer)
+                    .setArguments(protobufIndexer)
+                    .setTypeToken(PersistentCorfuTable.<K, CorfuRecord<V, M>>getTypeToken())
+                    .open();
         }
-
-        this.corfuTable = builder.open();
     }
 
     /**

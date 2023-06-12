@@ -1,13 +1,10 @@
 package org.corfudb.runtime;
 
-import com.google.common.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.wireprotocol.TokenType;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.collections.*;
 import org.corfudb.runtime.object.PersistenceOptions;
 import org.corfudb.runtime.view.ObjectOpenOption;
-import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.KeyDynamicProtobufSerializer;
@@ -66,11 +63,6 @@ public class ServerTriggeredCheckpointer extends DistributedCheckpointer {
                                                                             ISerializer serializer,
                                                                             CorfuRuntime rt) {
         log.info("Opening table {} in namespace {}", tableName.getTableName(), tableName.getNamespace());
-        SMRObject.Builder<? extends ICorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord>> corfuTableBuilder =
-                rt.getObjectsView().<ICorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord>>build()
-                        .setStreamName(TableRegistry.getFullyQualifiedTableName(tableName.getNamespace(), tableName.getTableName()))
-                        .setSerializer(serializer)
-                        .addOpenOption(ObjectOpenOption.NO_CACHE);
 
         if (this.checkpointerBuilder.persistedCacheRoot.isPresent()) {
             log.info("Opening table in disk mode");
@@ -83,14 +75,22 @@ public class ServerTriggeredCheckpointer extends DistributedCheckpointer {
                     .dataPath(persistedCacheLocation)
                     .build();
 
-            corfuTableBuilder
-                    .setTypeToken(PersistedCorfuTable.getTypeToken())
-                    .setArguments(persistenceOptions, serializer);
+            return rt.getObjectsView().<PersistedCorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord>>build()
+                    .setStreamName(TableRegistry.getFullyQualifiedTableName(tableName.getNamespace(), tableName.getTableName()))
+                    .setSerializer(serializer)
+                    .addOpenOption(ObjectOpenOption.NO_CACHE)
+                    .setTypeToken(PersistedCorfuTable.<CorfuDynamicKey, OpaqueCorfuDynamicRecord>getTypeToken())
+                    .setArguments(persistenceOptions, serializer)
+                    .open();
         } else {
-            corfuTableBuilder
-                    .setTypeToken(PersistentCorfuTable.getTypeToken());
+            return rt.getObjectsView()
+                            .<PersistentCorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord>>build()
+                            .setStreamName(TableRegistry.getFullyQualifiedTableName(tableName.getNamespace(), tableName.getTableName()))
+                            .setSerializer(serializer)
+                            .addOpenOption(ObjectOpenOption.NO_CACHE)
+                            .setTypeToken(PersistentCorfuTable.<CorfuDynamicKey, OpaqueCorfuDynamicRecord>getTypeToken())
+                            .open();
         }
-        return corfuTableBuilder.open();
     }
 
     private List<TableName> getAllTablesToCheckpoint() {
