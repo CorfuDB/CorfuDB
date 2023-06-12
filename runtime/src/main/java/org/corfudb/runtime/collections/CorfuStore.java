@@ -18,15 +18,11 @@ import org.corfudb.runtime.LiteRoutingQueueListener;
 import org.corfudb.runtime.LogReplicationListener;
 import org.corfudb.runtime.LogReplicationUtils;
 import org.corfudb.runtime.Queue;
-import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.CorfuGuidGenerator;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.Utils;
-import org.corfudb.util.retry.IRetry;
-import org.corfudb.util.retry.IntervalRetry;
-import org.corfudb.util.retry.RetryNeededException;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -42,6 +38,7 @@ import java.util.TreeSet;
 import java.util.UUID;
 
 import static org.corfudb.runtime.LogReplicationUtils.REPLICATED_QUEUE_TAG;
+import static org.corfudb.runtime.collections.ScopedTransaction.newScopedTransaction;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 /**
@@ -93,23 +90,53 @@ public class CorfuStore {
     }
 
     /**
-     * Creates and registers a table.
-     * A table needs to be registered before it is used.
-     *
-     * @param namespace    Namespace of the table.
-     * @param tableName    Table name.
-     * @param kClass       Class of the Key Model.
-     * @param vClass       Class of the Value Model.
-     * @param mClass       Class of the Metadata Model.
-     * @param tableOptions Table options.
-     * @param <K>          Key type.
-     * @param <V>          Value type.
-     * @param <M>          Type of Metadata.
-     * @return Table instance.
-     * @throws NoSuchMethodException     Thrown if key/value class are not protobuf classes.
-     * @throws InvocationTargetException Thrown if key/value class are not protobuf classes.
-     * @throws IllegalAccessException    Thrown if key/value class are not protobuf classes.
+     * Subscribe to the routing queue notifications arriving from a remote cluster.
      */
+    public void subscribeRoutingQListener(@Nonnull LiteRoutingQueueListener routingQueueListener) {
+        Timestamp ts = routingQueueListener.performFullSync();
+        this.subscribeListener(routingQueueListener, CORFU_SYSTEM_NAMESPACE, REPLICATED_QUEUE_TAG,
+                Arrays.asList(LogReplicationUtils.REPLICATED_RECV_Q_PREFIX + routingQueueListener.getSourceSiteId() +
+                    "_" + routingQueueListener.getClientName()), ts);
+    }
+
+    public static <K extends Message, V extends Message, M extends Message>
+    ScopedTransaction snapshotFederatedTables(String namespace, CorfuRuntime runtime) {
+        ArrayList<Table> federatedTables = new ArrayList<>();
+        runtime.getTableRegistry().getAllOpenTables().forEach(t -> {
+            String tableNameWithoutNs = StringUtils.substringAfter(t.getFullyQualifiedTableName(),
+                    t.getNamespace() + "$");
+            CorfuStoreMetadata.TableName tableName = CorfuStoreMetadata.TableName.newBuilder()
+                    .setNamespace(t.getNamespace())
+                    .setTableName(tableNameWithoutNs).build();
+            CorfuRecord<CorfuStoreMetadata.TableDescriptors, CorfuStoreMetadata.TableMetadata> tableRecord =
+                    runtime.getTableRegistry().getRegistryTable().get(tableName);
+            if (tableRecord.getMetadata().getTableOptions().getIsFederated()) {
+                federatedTables.add(t);
+            }
+        });
+        return newScopedTransaction(runtime, namespace,
+                IsolationLevel.snapshot(), federatedTables.toArray(new Table[federatedTables.size()]));
+    }
+
+
+        /**
+         * Creates and registers a table.
+         * A table needs to be registered before it is used.
+         *
+         * @param namespace    Namespace of the table.
+         * @param tableName    Table name.
+         * @param kClass       Class of the Key Model.
+         * @param vClass       Class of the Value Model.
+         * @param mClass       Class of the Metadata Model.
+         * @param tableOptions Table options.
+         * @param <K>          Key type.
+         * @param <V>          Value type.
+         * @param <M>          Type of Metadata.
+         * @return Table instance.
+         * @throws NoSuchMethodException     Thrown if key/value class are not protobuf classes.
+         * @throws InvocationTargetException Thrown if key/value class are not protobuf classes.
+         * @throws IllegalAccessException    Thrown if key/value class are not protobuf classes.
+         */
     @Nonnull
     public <K extends Message, V extends Message, M extends Message>
     Table<K, V, M> openTable(@Nonnull final String namespace,
@@ -239,41 +266,11 @@ public class CorfuStore {
     public ScopedTransaction scopedTxn(
             @Nonnull final String namespace, IsolationLevel isolationLevel,
             Table<?, ?, ?>... tables) {
-        try {
-            return IRetry.build(IntervalRetry.class, () -> {
-                try {
-                    return new ScopedTransaction(
-                            this.runtime,
-                            namespace,
-                            isolationLevel,
-                            tables);
-                } catch (TrimmedException e) {
-                    log.error("Error while attempting to snapshot tables {}.", tables, e);
-                    throw new RetryNeededException();
-                }
-            }).run();
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
-        }
-    }
-
-    public static <K extends Message, V extends Message, M extends Message>
-    ScopedTransaction snapshotFederatedTables(String namespace, CorfuRuntime runtime) {
-        ArrayList<Table> federatedTables = new ArrayList<>();
-        runtime.getTableRegistry().getAllOpenTables().forEach(t -> {
-            String tableNameWithoutNs = StringUtils.substringAfter(t.getFullyQualifiedTableName(),
-                t.getNamespace()+"$");
-            CorfuStoreMetadata.TableName tableName = CorfuStoreMetadata.TableName.newBuilder()
-                .setNamespace(t.getNamespace())
-                .setTableName(tableNameWithoutNs).build();
-            CorfuRecord<CorfuStoreMetadata.TableDescriptors, CorfuStoreMetadata.TableMetadata> tableRecord =
-                runtime.getTableRegistry().getRegistryTable().get(tableName);
-            if (tableRecord.getMetadata().getTableOptions().getIsFederated()) {
-                federatedTables.add(t);
-            }
-        });
-        return new ScopedTransaction(runtime, namespace,
-            IsolationLevel.snapshot(), federatedTables.toArray(new Table[federatedTables.size()]));
+        return newScopedTransaction(
+                this.runtime,
+                namespace,
+                isolationLevel,
+                tables);
     }
 
     /**
@@ -434,16 +431,6 @@ public class CorfuStore {
     }
 
     /**
-     * Subscribe to the routing queue notifications arriving from a remote cluster.
-     */
-    public void subscribeRoutingQListener(@Nonnull LiteRoutingQueueListener routingQueueListener) {
-        Timestamp ts = routingQueueListener.performFullSync();
-        this.subscribeListener(routingQueueListener, CORFU_SYSTEM_NAMESPACE, REPLICATED_QUEUE_TAG,
-                Arrays.asList(LogReplicationUtils.REPLICATED_RECV_Q_PREFIX + routingQueueListener.getSourceSiteId() +
-                    "_" + routingQueueListener.getClientName()), ts);
-    }
-
-    /**
      * Subscribe to transaction updates on all tables with the specified streamTag and namespace.
      * Objects returned will honor transactional boundaries.
      * <p>
@@ -478,9 +465,9 @@ public class CorfuStore {
      * Note: If memory is a consideration, consider using the other version of this API which takes a custom buffer
      * size for updates.
      *
-     * @param streamListener  log replication client listener
-     * @param namespace       namespace of the replicated tables
-     * @param streamTag       stream tag of the replicated tables
+     * @param streamListener log replication client listener
+     * @param namespace      namespace of the replicated tables
+     * @param streamTag      stream tag of the replicated tables
      */
     public void subscribeLogReplicationListener(@Nonnull LogReplicationListener streamListener,
                                                 @Nonnull String namespace, @Nonnull String streamTag) {
@@ -517,7 +504,7 @@ public class CorfuStore {
      * @param streamTag
      * @return table names (without namespace prefix)
      */
-    public List<String> getTablesOfInterest(@Nonnull String namespace, @Nonnull String streamTag) {
+    private List<String> getTablesOfInterest(@Nonnull String namespace, @Nonnull String streamTag) {
         List<String> tablesOfInterest = runtime.getTableRegistry().listTables(namespace, streamTag);
         log.info("Tag[{}${}] :: Subscribing to {} tables - {}", namespace, streamTag, tablesOfInterest.size(), tablesOfInterest);
         return tablesOfInterest;

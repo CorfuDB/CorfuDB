@@ -7,7 +7,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
+import org.corfudb.runtime.Queue;
 import org.corfudb.runtime.exceptions.TransactionAlreadyStartedException;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.object.transactions.Transaction;
@@ -25,12 +27,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.function.BiFunction;
-import java.util.function.BiPredicate;
-import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 /**
  * TxnContext is the access layer for binding all the CorfuStore CRUD operations.
@@ -42,22 +40,20 @@ import java.util.stream.Stream;
  */
 @Slf4j
 public class TxnContext
-        implements StoreTransaction<TxnContext>,
-        TableStringApi, AutoCloseable, CommitApi {
-
-    private final TransactionCrud<TxnContext> crud;
+        extends ReadTransaction
+        implements TableStringApi, CommitApi, AutoCloseable {
     private final ObjectsView objectsView;
     private final TableRegistry tableRegistry;
-    private final Token txnSnapshot;
-    private final List<CommitCallback> commitCallbacks;
-    private boolean iDidNotStartCorfuTxn;
-
     @Getter
     private final String namespace;
+    private final Token txnSnapshot;
 
-    /**
-     * A transaction id to be embedded into Queue's id for parallel unique id generation.
-     */
+    private final List<CommitCallback> commitCallbacks;
+
+    private boolean iDidNotStartCorfuTxn;
+
+    private final Map<UUID, Table> tablesUpdated;
+
     @Getter
     @Setter
     private long txnIdForQueues = 0;
@@ -71,16 +67,17 @@ public class TxnContext
      * @param isolationLevel          How should this transaction be applied/evaluated.
      * @param allowNestedTransactions Is it ok to re-use another transaction context.
      */
+    @Nonnull
     public TxnContext(@Nonnull final ObjectsView objectsView,
                       @Nonnull final TableRegistry tableRegistry,
                       @Nonnull final String namespace,
                       @Nonnull final IsolationLevel isolationLevel,
                       boolean allowNestedTransactions) {
-        this.crud = new TransactionCrud<>(namespace, this::txAbort);
         this.objectsView = objectsView;
         this.tableRegistry = tableRegistry;
         this.namespace = namespace;
         this.commitCallbacks = new ArrayList<>();
+        this.tablesUpdated = new HashMap<>();
         this.txnSnapshot = txBeginInternal( // May throw exception if transaction was already started
                 allowNestedTransactions,
                 isolationLevel);
@@ -134,9 +131,95 @@ public class TxnContext
         return this.tableRegistry.getTable(this.namespace, tableName);
     }
 
-    /*
+    /**
      *************************** WRITE APIs *****************************************
      */
+
+    /**
+     * All write api must be validate to ensure that the table belongs to the namespace.
+     *
+     * @param table       - table being written to
+     * @param key         - key used in the transaction to check for null.
+     * @param validateKey - should key be validated for null.
+     * @param <K>         - type of the key
+     * @param <V>         - type of the payload/value
+     * @param <M>         - type of the metadata
+     */
+    private <K extends Message, V extends Message, M extends Message>
+    void validateWrite(@Nonnull Table<K, V, M> table, K key, boolean validateKey) {
+        baseValidateWrite(table, key, validateKey);
+    }
+
+    /**
+     * All write api must be validate to ensure that the table belongs to the namespace.
+     *
+     * @param table       - table being written to
+     * @param key         - key used in the transaction to check for null.
+     * @param validateKey - should key be validated for null.
+     * @param <K>         - type of the key
+     * @param <V>         - type of the payload/value
+     * @param <M>         - type of the metadata
+     */
+    private <K extends Message, V extends Message, M extends Message>
+    void validateWrite(@Nonnull Table<K, V, M> table, K key, M metadata, boolean validateKey) {
+        baseValidateWrite(table, key, validateKey);
+        if (table.getMetadataClass() == null && metadata != null) {
+            throw new IllegalArgumentException("Metadata schema for table " + table.getFullyQualifiedTableName() + " is defined as NULL, non-null metadata is not allowed.");
+        }
+    }
+
+    private <K extends Message, V extends Message, M extends Message>
+    void baseValidateWrite(@Nonnull Table<K, V, M> table, K key, boolean validateKey) {
+        if (!table.getNamespace().equals(namespace)) {
+            throw new IllegalArgumentException("TxnContext can't apply table from namespace "
+                    + table.getNamespace() + " to transaction on namespace " + namespace);
+        }
+        if (!TransactionalContext.isInTransaction()) {
+            throw new IllegalStateException( // Do not allow transactions after commit() or abort()
+                    "TxnContext cannot be used after a transaction has ended on " +
+                            table.getFullyQualifiedTableName());
+        }
+        if (validateKey && key == null) {
+            throw new IllegalArgumentException("Key cannot be null on "
+                    + table.getFullyQualifiedTableName() + " in transaction on namespace " + namespace);
+        }
+    }
+
+    private <K extends Message, V extends Message, M extends Message>
+    void validateWrite(@Nonnull Table<K, V, M> table) {
+        validateWrite(table, null, false);
+    }
+
+    private <K extends Message, V extends Message, M extends Message>
+    void validateWrite(@Nonnull Table<K, V, M> table, K key) {
+        validateWrite(table, key, true);
+    }
+
+    private <K extends Message, V extends Message, M extends Message>
+    void validateWrite(@Nonnull Table<K, V, M> table, K key, M metadata) {
+        validateWrite(table, key, metadata, true);
+    }
+
+    /**
+     * put the value on the specified key create record if it does not exist.
+     *
+     * @param table    Table object to perform the create/update on.
+     * @param key      Key of the record.
+     * @param value    Value or payload of the record.
+     * @param metadata Metadata associated with the record.
+     * @param <K>      Type of Key.
+     * @param <V>      Type of Value.
+     * @param <M>      Type of Metadata.
+     */
+    public <K extends Message, V extends Message, M extends Message>
+    void putRecord(@Nonnull Table<K, V, M> table,
+                   @Nonnull final K key,
+                   @Nonnull final V value,
+                   @Nullable final M metadata) {
+        validateWrite(table, key, metadata);
+        table.put(key, value, metadata);
+        tablesUpdated.putIfAbsent(table.getStreamUUID(), table);
+    }
 
     public long getEpoch() {
         return txnSnapshot.getEpoch();
@@ -147,6 +230,91 @@ public class TxnContext
     }
 
     /**
+     * A user callback that will take previous value of the record along with its new value
+     * and return the merged record which is to be inserted into the table.
+     */
+    public interface MergeCallback {
+        /**
+         * @param table     table the merge is being done one that will be returned.
+         * @param key       key of the record on which merge is being done.
+         * @param oldRecord previous record extracted from the table for the same key.
+         * @param newRecord new record that user is currently inserting into table.
+         * @param <K>       type of the key
+         * @param <V>       type of value or payload
+         * @param <M>       type of metadata
+         * @return
+         */
+        <K extends Message, V extends Message, M extends Message>
+        CorfuRecord<V, M> doMerge(Table<K, V, M> table,
+                                  K key,
+                                  CorfuRecord<V, M> oldRecord,
+                                  CorfuRecord<V, M> newRecord);
+    }
+
+    /**
+     * Merges the delta value with the old value by applying a caller specified BiFunction and writes
+     * the final value.
+     *
+     * @param table         Table object to perform the merge operation on.
+     * @param key           Key
+     * @param mergeCallback Function to apply to get the new value
+     * @param recordDelta   Argument to pass to the mutation function
+     * @param <K>           Type of Key.
+     * @param <V>           Type of Value.
+     * @param <M>           Type of Metadata.
+     */
+    public <K extends Message, V extends Message, M extends Message>
+    void merge(@Nonnull Table<K, V, M> table,
+               @Nonnull final K key,
+               @Nonnull MergeCallback mergeCallback,
+               @Nonnull final CorfuRecord<V, M> recordDelta) {
+        validateWrite(table, key);
+        CorfuRecord<V, M> oldRecord = table.get(key);
+        CorfuRecord<V, M> mergedRecord;
+        try {
+            mergedRecord = mergeCallback.doMerge(table, key, oldRecord, recordDelta);
+        } catch (Exception ex) {
+            txAbort(); // explicitly abort this transaction and then throw the abort manually
+            log.error("TX Abort merge: {}", table.getFullyQualifiedTableName(), ex);
+            throw ex;
+        }
+        if (mergedRecord == null) {
+            table.deleteRecord(key);
+        } else {
+            table.put(key, mergedRecord.getPayload(), mergedRecord.getMetadata());
+        }
+
+        tablesUpdated.putIfAbsent(table.getStreamUUID(), table);
+
+    }
+
+    /**
+     * touch() is a call to create a conflict on a read in a write-only transaction
+     *
+     * @param table Table object to perform the create/update on.
+     * @param key   Key of the record to touch.
+     * @param <K>   Type of Key.
+     * @param <V>   Type of Value.
+     * @param <M>   Type of Metadata.
+     */
+    public <K extends Message, V extends Message, M extends Message>
+    void touch(@Nonnull Table<K, V, M> table,
+               @Nonnull final K key) {
+        validateWrite(table, key);
+        CorfuRecord<V, M> touchedObject = table.get(key);
+        if (touchedObject != null) {
+            table.put(key, touchedObject.getPayload(), touchedObject.getMetadata());
+            tablesUpdated.putIfAbsent(table.getStreamUUID(), table);
+        } else { // TODO: add support for touch()ing an object that hasn't been created.
+            txAbort(); // explicitly abort this transaction and then throw the abort manually
+            log.error("TX Abort touch on non-existing object: in " + table.getFullyQualifiedTableName());
+            throw new UnsupportedOperationException(
+                    "Attempt to touch() a non-existing object in "
+                            + table.getFullyQualifiedTableName());
+        }
+    }
+
+    /**
      * touch() a key to generate a conflict on it given tableName.
      *
      * @param tableName Table object to perform the touch() in.
@@ -154,17 +322,10 @@ public class TxnContext
      * @param <K>       Type of Key.
      * @throws UnsupportedOperationException if attempted on a non-existing object.
      */
-    @Override
     public <K extends Message, V extends Message, M extends Message>
     void touch(@Nonnull String tableName,
                @Nonnull final K key) {
         this.touch(getTable(tableName), key);
-    }
-
-    @Override
-    public <K extends Message, V extends Message, M extends Message>
-    void touch(@Nonnull Table<K, V, M> table, @Nonnull K key) {
-        crud.touch(table, key);
     }
 
     /**
@@ -209,6 +370,21 @@ public class TxnContext
     }
 
     /**
+     * Clears the entire table.
+     *
+     * @param table Table object to perform the clear on.
+     * @param <K>   Type of Key.
+     * @param <V>   Type of Value.
+     * @param <M>   Type of Metadata.
+     */
+    public <K extends Message, V extends Message, M extends Message>
+    void clear(@Nonnull Table<K, V, M> table) {
+        validateWrite(table);
+        table.clearAll();
+        tablesUpdated.putIfAbsent(table.getStreamUUID(), table);
+    }
+
+    /**
      * Clears the entire table given the table name.
      *
      * @param tableName Full table name of table to be cleared.
@@ -216,16 +392,29 @@ public class TxnContext
      * @param <V>       Type of Value.
      * @param <M>       Type of Metadata.
      */
-    @Override
     public <K extends Message, V extends Message, M extends Message>
     void clear(@Nonnull String tableName) {
         this.clear(getTable(tableName));
     }
 
-    @Override
+    /**
+     * Deletes the specified key.
+     *
+     * @param table Table object to perform the delete on.
+     * @param key   Key of the record to be deleted.
+     * @param <K>   Type of Key.
+     * @param <V>   Type of Value.
+     * @param <M>   Type of Metadata.
+     * @return TxnContext instance.
+     */
+    @Nonnull
     public <K extends Message, V extends Message, M extends Message>
-    void clear(@Nonnull Table<K, V, M> table) {
-        crud.clear(table);
+    TxnContext delete(@Nonnull Table<K, V, M> table,
+                      @Nonnull final K key) {
+        validateWrite(table);
+        table.deleteRecord(key);
+        tablesUpdated.putIfAbsent(table.getStreamUUID(), table);
+        return this;
     }
 
     /**
@@ -237,30 +426,64 @@ public class TxnContext
      * @param <V>       Type of Value.
      * @param <M>       Type of Metadata.
      */
-    @Override
     public <K extends Message, V extends Message, M extends Message>
     void delete(@Nonnull String tableName,
                 @Nonnull final K key) {
         this.delete(getTable(tableName), key);
     }
 
-    @Nonnull
-    @Override
-    public <K extends Message, V extends Message, M extends Message>
-    TxnContext delete(@Nonnull Table<K, V, M> table, @Nonnull K key) {
-        crud.delete(table, key);
-        return this;
-    }
-
     // ************************** Queue API ***************************************/
 
+    class QueueEntryAddressGetter<V extends Message, M extends Message>
+            implements TransactionalContext.PreCommitListener {
+        final int smrIndexOfValue = 1;
+        public QueueEntryAddressGetter() {}
+        /**
+         * If we are in a transaction, determine the commit address and fix it up in
+         * the queue entry's metadata.
+         * @param tokenResponse - the sequencer's token response returned.
+         */
+        @Override
+        public void preCommitCallback(TokenResponse tokenResponse) {
+            tablesUpdated.entrySet().forEach(e -> {
+                if (e.getValue() != null && e.getValue().getGuidGenerator() == null) {
+                    return; // Transaction has an update to a table which is not a Queue, so ignore.
+                }
+                TransactionalContext.getRootContext().getWriteSetInfo().getWriteSet().getSMRUpdates(e.getKey())
+                        .forEach(smrEntry -> {
+                            if (smrEntry.getSMRArguments().length > smrIndexOfValue) {
+                                CorfuRecord<V, M> queueRecord =
+                                        (CorfuRecord<V, M>) smrEntry.getSMRArguments()[smrIndexOfValue];
+                                queueRecord.setMetadata((M)
+                                        Queue.CorfuQueueMetadataMsg
+                                                .newBuilder().setTxSequence(tokenResponse.getSequence())
+                                                .build());
+                            }
+                        });
+            });
+        }
+    }
+
+    public <K extends Message, V extends Message, M extends Message>
+    K logUpdateEnqueue(@Nonnull UUID queueUUID,
+                       @Nonnull final V value, List<UUID> streamTags, CorfuStore corfuStore) {
+        if (TransactionalContext.getRootContext().getPreCommitListeners().isEmpty()) {
+            TransactionalContext.getCurrentContext().addPreCommitListener(new QueueEntryAddressGetter<>());
+        }
+
+        K ret = Table.logUpdateEnqueue(queueUUID, value, streamTags, corfuStore);
+        // Table object is not instantiated in this path. The precommit-listener will know to run for updates where
+        // table object is null or when the table object has a guid generator.
+        tablesUpdated.put(queueUUID, null);
+        return ret;
+    }
+
+
     /**
-     * This API is used to add an entry to the CorfuQueue without materializing the queue in memory.
+     * Enqueue a message object into the CorfuQueue.
      *
-     * @param queueUUID  Corfu Stream ID of the Queue
-     * @param value Record to be added.
-     * @param streamTags  - stream tags associated to the given stream id
-     * @param corfuStore CorfuStore that gets the runtime for the serializer.
+     * @param table  Table object to perform the delete on.
+     * @param record Record to be inserted into the Queue.
      * @param <K>    Type of Key.
      * @param <V>    Type of Value.
      * @param <M>    Type of Metadata.
@@ -268,27 +491,17 @@ public class TxnContext
      */
     @Nonnull
     public <K extends Message, V extends Message, M extends Message>
-    K logUpdateEnqueue(@Nonnull UUID queueUUID,
-                       @Nonnull final V value, List<UUID> streamTags, CorfuStore corfuStore) {
-        return crud.logUpdateEnqueue(queueUUID, value, streamTags, corfuStore);
-    }
+    K enqueue(@Nonnull Table<K, V, M> table,
+              @Nonnull final V record) {
+        validateWrite(table);
+        if (TransactionalContext.getRootContext().getPreCommitListeners().isEmpty()) {
+            TransactionalContext.getCurrentContext().addPreCommitListener(new QueueEntryAddressGetter());
+        }
 
-    /**
-     * This API is used to delete a record without materializing in-memory
-     *
-     * @param table  Table object to operate on the queue.
-     * @param key - key of the record to be deleted
-     * @param streamTags  - stream tags associated to the given stream id
-     * @param corfuStore CorfuStore that gets the runtime for the serializer.
-     * @param <K>    Type of Key.
-     * @param <V>    Type of Value.
-     * @param <M>    Type of Metadata.
-     */
-    public <K extends Message, V extends Message, M extends Message>
-    void logUpdateDelete(@Nonnull Table<K, V, M> table,
-                         @Nonnull final K key, List<UUID> streamTags, CorfuStore corfuStore) {
-
-        crud.logUpdateDelete(table, key, streamTags, corfuStore);
+        validateWrite(table);
+        K ret = table.enqueue(record);
+        tablesUpdated.putIfAbsent(table.getStreamUUID(), table);
+        return ret;
     }
 
     // *************************** READ API *****************************************
@@ -302,19 +515,11 @@ public class TxnContext
      * @param key       Key of the record.
      * @return CorfuStoreEntry<Key, Value, Metadata> instance.
      */
-    @Override
     @Nonnull
     public <K extends Message, V extends Message, M extends Message>
     CorfuStoreEntry getRecord(@Nonnull final String tableName,
                               @Nonnull final K key) {
         return this.getRecord(getTable(tableName), key);
-    }
-
-    @Nonnull
-    @Override
-    public <K extends Message, V extends Message, M extends Message> CorfuStoreEntry<K, V, M>
-    getRecord(@Nonnull Table<K, V, M> table, @Nonnull K key) {
-        return crud.getRecord(table, key);
     }
 
     /**
@@ -328,7 +533,6 @@ public class TxnContext
      * @param <I>       Type of index/secondary key.
      * @return Result of the query.
      */
-    @Override
     @Nonnull
     public <K extends Message, V extends Message, M extends Message, I>
     List<CorfuStoreEntry<K, V, M>> getByIndex(@Nonnull String tableName,
@@ -337,28 +541,14 @@ public class TxnContext
         return this.getByIndex(this.getTable(tableName), indexName, indexKey);
     }
 
-    @Nonnull
-    @Override
-    public <K extends Message, V extends Message, M extends Message, I> List<CorfuStoreEntry<K, V, M>>
-    getByIndex(@Nonnull Table<K, V, M> table, @Nonnull String indexName, @Nonnull I indexKey) {
-        return crud.getByIndex(table, indexName, indexKey);
-    }
-
     /**
      * Gets the count of records in the table at a particular timestamp.
      *
      * @param tableName - the namespace+table name of the table.
      * @return Count of records.
      */
-    @Override
     public int count(@Nonnull final String tableName) {
         return this.count(this.getTable(tableName));
-    }
-
-    @Override
-    public <K extends Message, V extends Message, M extends Message>
-    int count(@Nonnull Table<K, V, M> table) {
-        return crud.count(table);
     }
 
     /**
@@ -367,28 +557,9 @@ public class TxnContext
      * @param tableName fullyQualifiedTableName whose keys are requested.
      * @return keyset of the table
      */
-    @Override
     public <K extends Message, V extends Message, M extends Message>
     Set<K> keySet(@Nonnull final String tableName) {
         return this.keySet(this.getTable(tableName));
-    }
-
-    @Override
-    public <K extends Message, V extends Message, M extends Message> Set<K>
-    keySet(@Nonnull Table<K, V, M> table) {
-        return crud.keySet(table);
-    }
-
-    @Override
-    public <K extends Message, V extends Message, M extends Message>
-    boolean isExists(@Nonnull String tableName, @Nonnull final K key) {
-        return this.isExists(getTable(tableName), key);
-    }
-
-    @Override
-    public <K extends Message, V extends Message, M extends Message>
-    boolean isExists(@Nonnull Table<K, V, M> table, @Nonnull K key) {
-        return crud.isExists(table, key);
     }
 
     /**
@@ -398,29 +569,67 @@ public class TxnContext
      * @param entryPredicate Predicate to filter the entries.
      * @return Collection of filtered entries.
      */
-    @Override
     public <K extends Message, V extends Message, M extends Message>
     List<CorfuStoreEntry<K, V, M>> executeQuery(@Nonnull final String tableName,
                                                 @Nonnull final Predicate<CorfuStoreEntry<K, V, M>> entryPredicate) {
         return this.executeQuery(this.getTable(tableName), entryPredicate);
     }
 
-    @Override
-    public <K extends Message, V extends Message, M extends Message> List<CorfuStoreEntry<K, V, M>>
-    executeQuery(@Nonnull Table<K, V, M> table,
-                 @Nonnull Predicate<CorfuStoreEntry<K, V, M>> corfuStoreEntryPredicate) {
-        return crud.executeQuery(table, corfuStoreEntryPredicate);
+
+    /**
+     * Variant of isExists that works on tableName instead of the table object.
+     *
+     * @param tableName - namespace + tablename of table being tested
+     * @param key       - key to check for existence
+     * @param <K>       - type of the key
+     * @param <V>       - type of payload or value
+     * @param <M>       - type of metadata
+     * @return - true if record exists and false if record does not exist.
+     */
+    public <K extends Message, V extends Message, M extends Message>
+    boolean isExists(@Nonnull String tableName, @Nonnull final K key) {
+        return this.isExists(getTable(tableName), key);
+    }
+
+    /**
+     * @return The the thread local's TxnContext, null if not in a transaction.
+     */
+    public static TxnContext getMyTxnContext() {
+        if (!TransactionalContext.isInTransaction()) {
+            return null;
+        }
+        return TransactionalContext.getRootContext().getTxnContext();
     }
 
     /**
      * @return true if the transaction was started by this layer, false otherwise
      */
     public boolean isInMyTransaction() {
-        TxnContext txnContext = StoreTransaction.getMyTxnContext();
+        TxnContext txnContext = getMyTxnContext();
         return txnContext == this;
     }
 
     /** -------------------------- internal private methods ------------------------------*/
+
+    /**
+     * Protobuf objects are immutable. So any metadata modifications made by any merge() callback
+     * won't be reflected back into the caller's in-memory object directly.
+     * The caller is only really interested in the modified values of those transactions
+     * that successfully commit.
+     * To reflect metadata changes made here, we modify commit() to accept a callback
+     * that carries all the final values of the changes made by this transaction.
+     */
+    public interface CommitCallback {
+        /**
+         * This callback returns a list of stream entries as opposed to CorfuStoreEntries
+         * because if this transaction had operations like clear() then the CorfuStoreEntry
+         * would just be empty.
+         *
+         * @param mutations - A group of all tables touched by this transaction along with
+         *                  the updates made in each table.
+         */
+        void onCommit(Map<String, List<CorfuStreamEntry>> mutations);
+    }
 
     /**
      * Commit the transaction.
@@ -435,7 +644,6 @@ public class TxnContext
      *
      * @return - address at which the commit of this transaction occurred.
      */
-    @Override
     public Timestamp commit() {
         if (!isInMyTransaction()) {
             throw new IllegalStateException("commit() called without a transaction!");
@@ -457,8 +665,8 @@ public class TxnContext
         log.trace("Txn committed on namespace {}", namespace);
 
         MultiObjectSMREntry writeSet = rootContext.getWriteSetInfo().getWriteSet();
-        final Map<String, List<CorfuStreamEntry>> mutations = new HashMap<>(crud.tablesUpdated.size());
-        crud.tablesUpdated.forEach((uuid, table) -> {
+        final Map<String, List<CorfuStreamEntry>> mutations = new HashMap<>(tablesUpdated.size());
+        tablesUpdated.forEach((uuid, table) -> {
             // logUpdateEnqueue method doesn't need a table instance and hence 'table' can be null. The API is used only by
             // LR for the ROUTING_QUEUE model.
             if (table == null) {
@@ -478,7 +686,11 @@ public class TxnContext
     }
 
 
-
+    /**
+     * To allow nested transactions, we need to track all commit callbacks
+     *
+     * @param commitCallback
+     */
     public void addCommitCallback(@Nonnull CommitCallback commitCallback) {
         log.trace("TxnContext:addCommitCallback in transaction on namespace {}", namespace);
         this.commitCallbacks.add(commitCallback);
@@ -487,7 +699,6 @@ public class TxnContext
     /**
      * Explicitly abort a transaction in case of an external failure
      */
-    @Override
     public void txAbort() {
         if (TransactionalContext.isInTransaction()) {
             // Regardless of transaction outcome remove any TxnContext association from ThreadLocal.
@@ -513,76 +724,5 @@ public class TxnContext
                 this.objectsView.TXAbort();
             }
         }
-    }
-
-    @Override
-    public <K extends Message, V extends Message, M extends Message>
-    void putRecord(@Nonnull Table<K, V, M> table,
-                   @Nonnull K key,
-                   @Nonnull V value,
-                   @Nullable M metadata) {
-        crud.putRecord(table, key, value, metadata);
-    }
-
-    @Override
-    public <K extends Message, V extends Message, M extends Message>
-    void merge(@Nonnull Table<K, V, M> table,
-               @Nonnull K key,
-               @Nonnull MergeCallback mergeCallback,
-               @Nonnull CorfuRecord<V, M> recordDelta) {
-        crud.merge(table, key, mergeCallback, recordDelta);
-    }
-
-    @Nonnull
-    @Override
-    public <K extends Message, V extends Message, M extends Message>
-    K enqueue(@Nonnull Table<K, V, M> table, @Nonnull V value) {
-        return crud.enqueue(table, value);
-    }
-
-    @Override
-    public <K extends Message, V extends Message, M extends Message> Stream<CorfuStoreEntry<K, V, M>>
-    entryStream(@Nonnull Table<K, V, M> table) {
-        return crud.entryStream(table);
-    }
-
-    @Nonnull
-    @Override
-    public <K1 extends Message, K2 extends Message,
-            V1 extends Message, V2 extends Message,
-            M1 extends Message, M2 extends Message, T, U> QueryResult<U>
-    executeJoinQuery(@Nonnull Table<K1, V1, M1> table1,
-                     @Nonnull Table<K2, V2, M2> table2,
-                     @Nonnull Predicate<CorfuStoreEntry<K1, V1, M1>> query1,
-                     @Nonnull Predicate<CorfuStoreEntry<K2, V2, M2>> query2,
-                     @Nonnull BiPredicate<V1, V2> joinPredicate,
-                     @Nonnull BiFunction<V1, V2, T> joinFunction,
-                     Function<T, U> joinProjection) {
-        return crud.executeJoinQuery(table1, table2, query1, query2, joinPredicate, joinFunction, joinProjection);
-    }
-
-    @Nonnull
-    @Override
-    public <K1 extends Message, K2 extends Message,
-            V1 extends Message, V2 extends Message,
-            M1 extends Message, M2 extends Message, R, S, T, U>
-    QueryResult<U> executeJoinQuery(@Nonnull Table<K1, V1, M1> table1,
-                                    @Nonnull Table<K2, V2, M2> table2,
-                                    @Nonnull Predicate<CorfuStoreEntry<K1, V1, M1>> query1,
-                                    @Nonnull Predicate<CorfuStoreEntry<K2, V2, M2>> query2,
-                                    @Nonnull QueryOptions<K1, V1, M1, R> queryOptions1,
-                                    @Nonnull QueryOptions<K2, V2, M2, S> queryOptions2,
-                                    @Nonnull BiPredicate<R, S> joinPredicate,
-                                    @Nonnull BiFunction<R, S, T> joinFunction,
-                                    Function<T, U> joinProjection) {
-        return crud.executeJoinQuery(
-                table1, table2, query1, query2, queryOptions1, queryOptions2,
-                joinPredicate, joinFunction, joinProjection);
-    }
-
-    @Override
-    public <K extends Message, V extends Message, M extends Message> List<Table.CorfuQueueRecord>
-    entryList(@Nonnull Table<K, V, M> table) {
-        return crud.entryList(table);
     }
 }

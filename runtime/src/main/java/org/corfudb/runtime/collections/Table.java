@@ -311,7 +311,7 @@ public class Table<K extends Message, V extends Message, M extends Message> impl
      */
     public static <K extends Message, V extends Message>
     K logUpdateEnqueue(UUID streamUUID, V e, List<UUID> streamTags, CorfuStore corfuStore) {
-        /**
+        /*
          * This is a callback that is placed into the root transaction's context on
          * the thread local stack which will be invoked right after this transaction
          * is deemed successful and has obtained a final sequence number to write.
@@ -381,7 +381,7 @@ public class Table<K extends Message, V extends Message, M extends Message> impl
     }
 
     @Override
-    public void close() throws Exception {
+    public void close() {
         corfuTable.close();
     }
 
