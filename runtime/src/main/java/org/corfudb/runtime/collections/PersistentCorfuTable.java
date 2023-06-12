@@ -3,6 +3,7 @@ package org.corfudb.runtime.collections;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.reflect.TypeToken;
 import org.corfudb.runtime.object.ICorfuSMR;
+import org.corfudb.runtime.object.ICorfuSMRProxyMetadata;
 import org.corfudb.runtime.object.ICorfuSMRProxy;
 import org.corfudb.runtime.object.ICorfuSMRUpcallTarget;
 
@@ -16,6 +17,7 @@ public class PersistentCorfuTable<K, V> implements
         ICorfuSMR<ImmutableCorfuTable<K, V>> {
 
     private ICorfuSMRProxy<ImmutableCorfuTable<K, V>> proxy;
+    private ICorfuSMRProxyMetadata proxyMetadata;
 
     private final Map<String, ICorfuSMRUpcallTarget<ImmutableCorfuTable<K, V>>> upcallTargetMap
         = ImmutableMap.<String, ICorfuSMRUpcallTarget<ImmutableCorfuTable<K, V>>>builder()
@@ -30,18 +32,22 @@ public class PersistentCorfuTable<K, V> implements
 
     public PersistentCorfuTable() {}
 
-    public PersistentCorfuTable(ICorfuSMRProxy<ImmutableCorfuTable<K, V>> proxy) {
+    public PersistentCorfuTable(ICorfuSMRProxy<ImmutableCorfuTable<K, V>> proxy,
+                                ICorfuSMRProxyMetadata proxyMetadata) {
         this.proxy = proxy;
+        this.proxyMetadata = proxyMetadata;
     }
 
     @Override
-    public void setCorfuSMRProxy(ICorfuSMRProxy<ImmutableCorfuTable<K, V>> proxy) {
-        this.proxy = (ICorfuSMRProxy<ImmutableCorfuTable<K, V>>) proxy;
+    public <P extends ICorfuSMRProxyMetadata & ICorfuSMRProxy<ImmutableCorfuTable<K, V>>>
+    void setCorfuSMRProxy(P proxy) {
+        this.proxy = proxy;
+        this.proxyMetadata = proxy;
     }
 
     @Override
-    public ICorfuSMRProxy<?> getCorfuSMRProxy() {
-        return proxy;
+    public ICorfuSMRProxyMetadata getCorfuSMRProxy() {
+        return proxyMetadata;
     }
 
     @Override
@@ -68,8 +74,16 @@ public class PersistentCorfuTable<K, V> implements
 
     @Override
     public boolean isTableCached() {
-        return proxy.isObjectCached();
+        return proxyMetadata.isObjectCached();
     }
+
+    @Override
+    public ICorfuTable<K, V> generateImmutableView(long sequence) {
+        ICorfuSMRProxy<ImmutableCorfuTable<K, V>> snapshotProxy =
+                this.proxy.getUnderlyingMVO().getSnapshotProxy(sequence);
+        return new PersistentCorfuTable<>(snapshotProxy, this.proxyMetadata);
+    }
+
 
     @Override
     public V get(@Nonnull Object key) {

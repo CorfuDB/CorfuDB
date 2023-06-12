@@ -27,7 +27,7 @@ import java.util.UUID;
 @Slf4j
 public class MVOCorfuCompileProxy<
         S extends SnapshotGenerator<S> & ConsistencyView>
-        implements ICorfuSMRProxy<S> {
+        implements ICorfuSMRProxyMetadata, ICorfuSMRProxy<S> {
 
     @Getter
     private final MultiVersionObject<S> underlyingMVO;
@@ -49,7 +49,7 @@ public class MVOCorfuCompileProxy<
     private final ObjectOpenOption objectOpenOption;
 
     public MVOCorfuCompileProxy(CorfuRuntime rt, UUID streamID, Class<S> type, Object[] args,
-                                ISerializer serializer, Set<UUID> streamTags, ICorfuSMR wrapperObject,
+                                ISerializer serializer, Set<UUID> streamTags, ICorfuSMR<?> wrapperObject,
                                 ObjectOpenOption objectOpenOption, MVOCache<S> mvoCache) {
         this.rt = rt;
         this.streamID = streamID;
@@ -91,8 +91,8 @@ public class MVOCorfuCompileProxy<
         log.trace("Access[{}] conflictObj={} version={}", this, conflictObject, timestamp);
 
         // Perform underlying access
-        ICorfuSMRSnapshotProxy<S> snapshotProxy = underlyingMVO.getSnapshotProxy(timestamp);
-        final R result = snapshotProxy.access(accessMethod, v -> {});
+        SnapshotProxy<S> snapshotProxy = underlyingMVO.getSnapshotProxy(timestamp);
+        final R result = snapshotProxy.access(accessMethod, null);
         snapshotProxy.releaseView();
         return result;
     }
