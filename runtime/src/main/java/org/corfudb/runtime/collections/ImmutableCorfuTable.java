@@ -69,12 +69,16 @@ public class ImmutableCorfuTable<K, V> implements
         return new InMemorySMRSnapshot<>(this);
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public Optional<SMRSnapshot<ImmutableCorfuTable<K, V>>> generateTargetSnapshot(
             VersionedObjectIdentifier version,
             ObjectOpenOption objectOpenOption,
             SMRSnapshot<ImmutableCorfuTable<K, V>> previousSnapshot) {
         if (objectOpenOption == ObjectOpenOption.NO_CACHE) {
+            // Always release the previous target version.
             previousSnapshot.release();
             return Optional.of(new InMemorySMRSnapshot<>(this));
         }
@@ -82,11 +86,15 @@ public class ImmutableCorfuTable<K, V> implements
         return Optional.empty();
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public Optional<SMRSnapshot<ImmutableCorfuTable<K, V>>> generateIntermediarySnapshot(
             VersionedObjectIdentifier version,
             ObjectOpenOption objectOpenOption) {
         if (objectOpenOption == ObjectOpenOption.NO_CACHE) {
+            // We never generate an intermediary version.
             return Optional.empty();
         }
 

@@ -49,6 +49,14 @@ public interface RocksDbApi {
 
     RocksIterator getRawIterator(ReadOptions readOptions, ColumnFamilyHandle columnFamilyHandle);
 
+    /**
+     * Given a secondary key, return all primary keys that map to it.
+     * @param secondaryIndexesHandle table family where secondary indexes reside     * @param serializer
+     * @param indexId a static numerical representation of the index name
+     * @param secondaryKey secondary key that we are searching for
+     * @param keys the result of this API
+     * @param values the result of this API
+     */
     void prefixScan(
             ColumnFamilyHandle secondaryIndexesHandle,
             byte indexId, Object secondaryKey,
@@ -59,12 +67,13 @@ public interface RocksDbApi {
     /**
      * Given a secondary key, return all primary keys that map to it.
      *
-     * @param secondaryKey secondary key we are searching for
+     * @param secondaryKey secondary key that we are searching for
      * @param secondaryIndexesHandle table family where secondary indexes reside
-     * @param indexId a static numerical representation of the index name
      * @param serializer serializer used for (de)serializing keys/values
-     * @return A set of serialized primary keys associated with
-     *         the specified secondary key.
+     * @param originalReadOptions {@link ReadOptions} used when performing prefix scan
+     * @param keys the result of this API
+     * @param values the result of this API
+     * @param allocateDirectBuffer whether to allocate a direct buffer for results
      */
     default void prefixScan(
             Object secondaryKey, ColumnFamilyHandle secondaryIndexesHandle, byte indexId,

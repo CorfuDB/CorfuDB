@@ -34,8 +34,7 @@ public class PersistedCorfuTable<K, V> implements
         return new TypeToken<PersistedCorfuTable<K, V>>() {};
     }
 
-    public PersistedCorfuTable() {
-    }
+    public PersistedCorfuTable() {}
 
     public PersistedCorfuTable(ICorfuSMRProxy<DiskBackedCorfuTable<K, V>> proxy) {
         this.proxy = proxy;

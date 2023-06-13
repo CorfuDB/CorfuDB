@@ -49,9 +49,25 @@ public interface ICorfuSMRProxy<S extends SnapshotGenerator<S> & ConsistencyView
      */
     Set<UUID> getStreamTags();
 
+    /**
+     * Is object cached? The definition of cached depends on the
+     * underlying implementation.
+     *
+     * @return true if object is cached
+     */
     boolean isObjectCached();
 
+    /**
+     * Return the MultiVersionObject associated with this SMR object.
+     *
+     * @return the MultiVersionObject associated with this SMR object.
+     */
     MultiVersionObject<S> getUnderlyingMVO();
 
+    /**
+     * Return the serializer associated with this SMR object.
+     *
+     * @return the serializer associated with this SMR object.
+     */
     ISerializer getSerializer();
 }

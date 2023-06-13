@@ -202,8 +202,7 @@ public class RocksDbStore<S extends SnapshotGenerator<S>> implements
 
     @Override
     public SMRSnapshot<S> getImplicitSnapshot(
-            @NonNull ViewGenerator<S> viewGenerator,
-            @NonNull VersionedObjectIdentifier version) {
+            @NonNull ViewGenerator<S> viewGenerator) {
         return new AlwaysLatestSnapshot<>(rocksDb, viewGenerator);
     }
 }

@@ -234,7 +234,7 @@ public class MultiVersionObject<S extends SnapshotGenerator<S>> {
 
     private SMRSnapshot<S> removeAndGetPreviousSnapshot() {
         if (snapshotFifo.size() < snapshotFifoSize) {
-            throw new IllegalStateException("Number of snapshots always needs to be constant.");
+            throw new IllegalStateException("Number of snapshots must always be constant.");
         }
         return snapshotFifo.remove();
     }

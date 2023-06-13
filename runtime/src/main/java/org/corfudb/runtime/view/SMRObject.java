@@ -73,7 +73,7 @@ public class SMRObject<T extends ICorfuSMR> {
         }
 
         @SuppressWarnings("unchecked")
-        public <R extends ICorfuSMR> SMRObject.Builder<R>  setType(Class<R> type) {
+        public <R extends ICorfuSMR> SMRObject.Builder<R> setType(Class<R> type) {
             this.type = (Class<T>) type;
             return (SMRObject.Builder<R>) this;
         }

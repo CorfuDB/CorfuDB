@@ -23,6 +23,8 @@ public interface SnapshotGenerator<T> extends AutoCloseable {
 
     /**
      * Create a target snapshot associated with the provided version.
+     * If a client is at version N, and it wants to access version M,
+     * then the target snapshot is M.
      *
      * @param version version associated with the intermediary snapshot
      * @param objectOpenOption how this object was opened
@@ -36,6 +38,8 @@ public interface SnapshotGenerator<T> extends AutoCloseable {
 
     /**
      * Create an intermediary snapshot associated with the provided version.
+     * If a client is at version N, and it wants to access version M,
+     * then the intermediary snapshots are the ones between N and M (exclusive).
      *
      * @param version version associated with the intermediary snapshot
      * @param objectOpenOption how this object was opened

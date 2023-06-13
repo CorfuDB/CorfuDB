@@ -27,7 +27,6 @@ import java.util.function.Supplier;
 public class MeterRegistryProvider {
     @Getter
     private static CompositeMeterRegistry meterRegistry;
-    @Getter
     private static Optional<String> id = Optional.empty();
     private static Optional<MetricType> metricType = Optional.empty();
     private static Optional<RegistryProvider> provider = Optional.empty();

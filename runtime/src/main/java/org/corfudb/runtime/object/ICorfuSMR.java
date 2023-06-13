@@ -2,7 +2,8 @@ package org.corfudb.runtime.object;
 
 import java.util.Map;
 
-/** The interface for an object interfaced with SMR.
+/**
+ * The interface for an object interfaced with SMR.
  */
 public interface ICorfuSMR<S extends
         SnapshotGenerator<S> &

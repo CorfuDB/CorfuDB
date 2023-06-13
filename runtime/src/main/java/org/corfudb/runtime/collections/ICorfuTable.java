@@ -1,11 +1,6 @@
 package org.corfudb.runtime.collections;
 
-import org.corfudb.runtime.object.ConsistencyView;
-import org.corfudb.runtime.object.ICorfuSMR;
-import org.corfudb.runtime.object.SnapshotGenerator;
-
 import javax.annotation.Nonnull;
-import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 import java.util.stream.Stream;

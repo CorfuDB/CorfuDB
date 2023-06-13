@@ -12,7 +12,7 @@ package org.corfudb.runtime.object;
 public interface SMRSnapshot<T> {
 
     /**
-     * Consume this snapshot and produce a view. In some cases, the
+     * Consume this snapshot and produce a new view. In some cases, the
      * implementation might want to transform or do additional processing
      * when a snapshot is consumed.
      *

@@ -90,7 +90,7 @@ public class AddressSpaceView extends AbstractView implements AutoCloseable {
         sizeOf = SizeOf.newInstance();
         CacheBuilder<Object, Object> cacheBuilder = CacheBuilder.newBuilder();
 
-        final boolean cacheDisabled = true;
+        final boolean cacheDisabled = runtime.getParameters().isCacheDisabled();
         // If not explicitly set by user, it takes default value in CorfuRuntimeParameters
         long maxCacheEntries = runtime.getParameters().getMaxCacheEntries();
         final long maxCacheWeight = runtime.getParameters().getMaxCacheWeight();

@@ -5,12 +5,17 @@ import io.netty.buffer.ByteBufUtil;
 import lombok.NonNull;
 import org.corfudb.runtime.collections.RocksDbEntryIterator;
 import org.corfudb.util.serializer.ISerializer;
-import org.rocksdb.*;
+import org.rocksdb.ColumnFamilyHandle;
+import org.rocksdb.OptimisticTransactionDB;
+import org.rocksdb.ReadOptions;
+import org.rocksdb.RocksDBException;
+import org.rocksdb.RocksIterator;
+import org.rocksdb.Transaction;
 
 import java.nio.ByteBuffer;
-import java.util.*;
+import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.locks.StampedLock;
-import java.util.stream.Collectors;
 
 /**
  * A concrete class that implements {@link RocksDbApi} using
@@ -21,7 +26,7 @@ import java.util.stream.Collectors;
  *
  * @param <S> extends SnapshotGenerator
  */
-public class RocksDbReadCommittedTx<S extends SnapshotGenerator<S>> implements RocksDbApi {
+public class RocksDbReadCommittedTx implements RocksDbApi {
     private final OptimisticTransactionDB rocksDb;
     private final ReadOptions readOptions;
 

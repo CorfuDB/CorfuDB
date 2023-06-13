@@ -109,15 +109,21 @@ public class DiskBackedCorfuTable<K, V> implements
         return options;
     }
 
-    private final PersistenceOptions persistenceOptions;
-    private final ISerializer serializer;
     private final RocksDbApi rocksApi;
     private final RocksDbSnapshotGenerator<DiskBackedCorfuTable<K, V>> rocksDbSnapshotGenerator;
     private final ColumnFamilyRegistry columnFamilyRegistry;
-    private final String metricsId;
+    private final ISerializer serializer;
+
+    // Index.
     private final Map<String, String> secondaryIndexesAliasToPath;
     private final Map<String, Byte> indexToId;
     private final Set<Index.Spec<K, V, ?>> indexSpec;
+
+    // Metrics.
+    private final String metricsId;
+
+    // Options.
+    private final PersistenceOptions persistenceOptions;
 
     @Getter
     private final Statistics statistics;
@@ -291,7 +297,7 @@ public class DiskBackedCorfuTable<K, V> implements
         serializer.serialize(primaryKey, compositeKey);
         final int end = compositeKey.writerIndex();
 
-        // Move the pointer to the hash offset.
+        // Move the pointer to the hash offset and write the hash.
         compositeKey.writerIndex(hashStart);
         compositeKey.writeInt(hashBytes(compositeKey.array(), secondaryStart, secondaryLength));
 
@@ -350,10 +356,14 @@ public class DiskBackedCorfuTable<K, V> implements
                         continue;
                     }
 
-                    final ByteBuf serializedIndexValue = Unpooled.buffer();
-                    serializedIndexValue.writeInt(valueSize);
                     final ByteBuf serializedCompoundKey = getCompoundKey(
                             indexToId.get(index.getName().get()), secondaryKey, primaryKey);
+
+                    // We need to persist the actual value size, since multi-get API
+                    // requires an allocation of a direct buffer.
+                    final ByteBuf serializedIndexValue = Unpooled.buffer();
+                    serializedIndexValue.writeInt(valueSize);
+
                     try {
                         rocksApi.insert(columnFamilyRegistry.getSecondaryIndexColumnFamily(),
                                 serializedCompoundKey, serializedIndexValue);
@@ -420,7 +430,7 @@ public class DiskBackedCorfuTable<K, V> implements
             rocksApi.multiGet(columnFamilyRegistry.getDefaultColumnFamily(), duplicateKeys, values);
 
             return Streams.zip(keys.stream(), values.stream(), (key, value) ->
-                    new AbstractMap.SimpleEntry<K, V>(
+                    new AbstractMap.SimpleEntry<>(
                             (K) serializer.deserialize(Unpooled.wrappedBuffer(key), null),
                             (V) serializer.deserialize(Unpooled.wrappedBuffer(value), null)
                     )).collect(Collectors.toList());
@@ -445,7 +455,7 @@ public class DiskBackedCorfuTable<K, V> implements
     @Override
     public SMRSnapshot<DiskBackedCorfuTable<K, V>> generateSnapshot(VersionedObjectIdentifier version) {
         if (getConsistencyModel() == READ_COMMITTED) {
-            return rocksDbSnapshotGenerator.getImplicitSnapshot(this, version);
+            return rocksDbSnapshotGenerator.getImplicitSnapshot(this);
         }
         return rocksDbSnapshotGenerator.getSnapshot(this, version);
     }

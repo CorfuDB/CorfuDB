@@ -546,9 +546,9 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
 
         try (DiskBackedCorfuTable<String, String> table = new DiskBackedCorfuTable<>(
                 persistenceOptions.build(), defaultOptions, defaultSerializer)) {
-            DiskBackedCorfuTable<String, String> newView = table.newView(new RocksDbReadCommittedTx<>(rocksDb));
+            DiskBackedCorfuTable<String, String> newView = table.newView(new RocksDbReadCommittedTx(rocksDb));
             assertThat(newView).isNotNull();
-            assertThatThrownBy(() -> newView.newView(new RocksDbReadCommittedTx<>(rocksDb)))
+            assertThatThrownBy(() -> newView.newView(new RocksDbReadCommittedTx(rocksDb)))
                     .isInstanceOf(IllegalStateException.class);
         }
     }

@@ -38,6 +38,7 @@ public class LoggingMeterRegistryWithHistogramSupport extends StepMeterRegistry 
                                                     Consumer<String> loggingSink) {
         this(config, loggingSink, new ConcurrentHashMap<>());
     }
+
     public LoggingMeterRegistryWithHistogramSupport(
             LoggingRegistryConfig config,
             Consumer<String> loggingSink,
