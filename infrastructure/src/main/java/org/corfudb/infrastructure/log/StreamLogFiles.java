@@ -370,6 +370,7 @@ public class StreamLogFiles implements StreamLog {
      * Write a range of log data entries. This range write is used by state transfer. Three constraints
      * are checked, the range doesn't span to segments, the entries are sorted and "dense" (no holes) and
      * that non of the entries have been trimmed.
+     *
      * @param range to write
      * @return pruned list of entries that doesn't contain any locally trimmed entries
      */
@@ -611,18 +612,6 @@ public class StreamLogFiles implements StreamLog {
      */
     @Override
     public void reset() {
-        final Layout currentLayout = sc.getCurrentLayout();
-        final List<String> logServers = currentLayout
-                .getFirstSegment()
-                .getFirstStripe()
-                .getLogServers();
-
-        log.info("Current layout before reset: {}", JsonUtils.toJson(currentLayout));
-        boolean fullReset = !logServers.contains(sc.getLocalEndpoint());
-        reset(fullReset);
-    }
-
-    public void reset(boolean fullReset) {
         // Trim all segments
         log.warn("Reset. Global Tail:{}", logMetadata.getGlobalTail());
 
@@ -630,43 +619,30 @@ public class StreamLogFiles implements StreamLog {
         lock.lock();
 
         try {
-            if (fullReset) {
-                closeAllSegmentHandlers();
-                Preconditions.checkState(openSegments.isEmpty());
-                deleteFilesMatchingFilter(file -> true);
-
-                dataStore.resetStartingAddress(StreamLogDataStore.ZERO_ADDRESS);
-                dataStore.resetTailSegment(StreamLogDataStore.ZERO_ADDRESS);
-                logMetadata = new LogMetadata(dataStore);
-                // would this lose the gauges pre-reset?
-                removeLocalGauges();
-                logSizeQuota.reset();
-            } else {
-                long committedTail = getCommittedTail();
-                long latestSegment = getSegmentId(getLogTail());
-                long committedTailSegment = getSegmentId(committedTail);
-                for (long currSegmentId = committedTailSegment; currSegmentId <= latestSegment; currSegmentId++) {
-                    // Close segments before deleting their corresponding log files
-                    String segmentFilePath;
-                    try(Segment sh = getSegmentHandleForSegment(currSegmentId)) {
-                        openSegments.remove(sh.id);
-                        segmentFilePath = sh.segmentFilePath;
-                    }
-
-                    deleteFilesMatchingFilter(file -> file.getAbsolutePath().equals(segmentFilePath));
+            long committedTail = getCommittedTail();
+            long latestSegment = getSegmentId(getLogTail());
+            long committedTailSegment = getSegmentId(committedTail);
+            for (long currSegmentId = committedTailSegment; currSegmentId <= latestSegment; currSegmentId++) {
+                // Close segments before deleting their corresponding log files
+                String segmentFilePath;
+                try (Segment sh = getSegmentHandleForSegment(currSegmentId)) {
+                    openSegments.remove(sh.id);
+                    segmentFilePath = sh.segmentFilePath;
                 }
 
-                long newTailAddress = StreamLogDataStore.ZERO_ADDRESS;
-                if (committedTailSegment > 0) {
-                    newTailAddress = committedTailSegment * RECORDS_PER_LOG_FILE + 1;
-                }
-
-                logMetadata = new LogMetadata(dataStore);
-                logMetadata.syncTailSegment(newTailAddress);
-                initializeLogMetadata();
-                // would this lose the gauges pre-reset?
-                removeLocalGauges();
+                deleteFilesMatchingFilter(file -> file.getAbsolutePath().equals(segmentFilePath));
             }
+
+            long newTailAddress = StreamLogDataStore.ZERO_ADDRESS;
+            if (committedTailSegment > 0) {
+                newTailAddress = committedTailSegment * RECORDS_PER_LOG_FILE + 1;
+            }
+
+            logMetadata = new LogMetadata(dataStore);
+            logMetadata.syncTailSegment(newTailAddress);
+            initializeLogMetadata();
+            // would this lose the gauges pre-reset?
+            removeLocalGauges();
         } finally {
             log.info("reset: Finished");
             lock.unlock();
