@@ -1,6 +1,6 @@
 package org.corfudb.universe.scenario;
 
-import org.corfudb.runtime.collections.PersistentCorfuTable;
+import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.view.ClusterStatusReport;
 import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatusReliability;
 import org.corfudb.runtime.view.ClusterStatusReport.ConnectivityStatus;
@@ -44,7 +44,7 @@ public class TwoNodesDownIT extends GenericIntegrationTest {
 
             CorfuClient corfuClient = corfuCluster.getLocalCorfuClient();
 
-           PersistentCorfuTable<String, String> table = corfuClient
+            ICorfuTable<String, String> table = corfuClient
                     .createDefaultCorfuTable(DEFAULT_STREAM_NAME);
 
             for (int i = 0; i < DEFAULT_TABLE_ITER; i++) {

@@ -6,7 +6,7 @@ import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DE
 import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_TABLE_ITER;
 import static org.junit.jupiter.api.Assertions.fail;
 
-import org.corfudb.runtime.collections.PersistentCorfuTable;
+import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.view.ClusterStatusReport;
 import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
 import org.corfudb.runtime.view.ClusterStatusReport.NodeStatus;
@@ -55,7 +55,7 @@ public class OneNodeDownIT extends GenericIntegrationTest {
 
         CorfuClient corfuClient = corfuCluster.getLocalCorfuClient();
 
-       PersistentCorfuTable<String, String> table = corfuClient
+        ICorfuTable<String, String> table = corfuClient
                 .createDefaultCorfuTable(DEFAULT_STREAM_NAME);
 
         for (int i = 0; i < DEFAULT_TABLE_ITER; i++) {

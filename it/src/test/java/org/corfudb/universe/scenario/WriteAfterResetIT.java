@@ -6,7 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
-import org.corfudb.runtime.collections.PersistentCorfuTable;
+import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.exceptions.NoBootstrapException;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.universe.GenericIntegrationTest;
@@ -83,7 +83,7 @@ public class WriteAfterResetIT extends GenericIntegrationTest {
         assertThat(layout.getFirstSegment().getAllLogServers().size()).isEqualTo(1);
 
         // Start writing to some stream.
-       PersistentCorfuTable<String, String> table =
+        ICorfuTable<String, String> table =
                 corfuClient.createDefaultCorfuTable(Fixtures.TestFixtureConst.DEFAULT_STREAM_NAME);
         for (int i = 0; i < Fixtures.TestFixtureConst.DEFAULT_TABLE_ITER; i++) {
             table.insert(String.valueOf(i), String.valueOf(i));

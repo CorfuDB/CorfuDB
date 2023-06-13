@@ -1,7 +1,7 @@
 package org.corfudb.universe.scenario;
 
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.collections.PersistentCorfuTable;
+import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.view.ClusterStatusReport;
 import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
 import org.corfudb.universe.GenericIntegrationTest;
@@ -55,7 +55,7 @@ public class NodeUpAndPartitionedIT extends GenericIntegrationTest {
 
             CorfuClient corfuClient = corfuCluster.getLocalCorfuClient();
 
-           PersistentCorfuTable<String, String> table = corfuClient
+            ICorfuTable<String, String> table = corfuClient
                     .createDefaultCorfuTable(DEFAULT_STREAM_NAME);
             for (int i = 0; i < DEFAULT_TABLE_ITER; i++) {
                 table.insert(String.valueOf(i), String.valueOf(i));

@@ -7,7 +7,8 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters.CorfuRuntimeParametersBuilder;
-import org.corfudb.runtime.collections.PersistentCorfuTable;
+import org.corfudb.runtime.collections.ICorfuTable;
+import org.corfudb.runtime.collections.PersistedCorfuTable;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.ManagementView;
 import org.corfudb.runtime.view.ObjectsView;
@@ -91,10 +92,10 @@ public class LocalCorfuClient implements CorfuClient {
     }
 
     @Override
-    public <K, V> PersistentCorfuTable<K, V> createDefaultCorfuTable(String streamName) {
+    public <K, V> ICorfuTable<K, V> createDefaultCorfuTable(String streamName) {
         return runtime.getObjectsView()
                 .build()
-                .setTypeToken(new TypeToken<PersistentCorfuTable<K, V>>() {
+                .setTypeToken(new TypeToken<PersistedCorfuTable<K, V>>() {
                 })
                 .setStreamName(streamName)
                 .open();

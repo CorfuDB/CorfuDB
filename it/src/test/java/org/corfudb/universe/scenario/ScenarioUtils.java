@@ -5,8 +5,7 @@ import static org.assertj.core.api.Assertions.fail;
 import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_WAIT_TIME;
 
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.collections.PersistentCorfuTable;
-import org.corfudb.runtime.collections.PersistentCorfuTable;
+import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.exceptions.UnreachableClusterException;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.universe.node.client.CorfuClient;
@@ -120,7 +119,7 @@ public class ScenarioUtils {
      * @param table CorfuTable to generate write request
      */
     @SuppressWarnings("unchecked")
-    static void waitForClusterDown(PersistentCorfuTable table) {
+    static void waitForClusterDown(ICorfuTable table) {
         try {
             table.insert(new Object(), new Object());
             fail("Cluster should already be down");
@@ -129,7 +128,7 @@ public class ScenarioUtils {
         }
     }
 
-    static void waitForClusterUp(PersistentCorfuTable table, String value) {
+    static void waitForClusterUp(ICorfuTable table, String value) {
         for (int i = 0; i < 3; i++) {
             try {
                 table.get(value);

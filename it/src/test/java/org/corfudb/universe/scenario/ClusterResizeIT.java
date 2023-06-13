@@ -1,6 +1,6 @@
 package org.corfudb.universe.scenario;
 
-import org.corfudb.runtime.collections.PersistentCorfuTable;
+import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.universe.GenericIntegrationTest;
 import org.corfudb.universe.group.cluster.CorfuCluster;
 import org.corfudb.universe.node.client.ClientParams;
@@ -41,7 +41,7 @@ public class ClusterResizeIT extends GenericIntegrationTest {
 
             CorfuClient corfuClient = corfuCluster.getLocalCorfuClient();
 
-           PersistentCorfuTable<String, String> table =
+            ICorfuTable<String, String> table =
                     corfuClient.createDefaultCorfuTable(TestFixtureConst.DEFAULT_STREAM_NAME);
 
             for (int i = 0; i < TestFixtureConst.DEFAULT_TABLE_ITER; i++) {
