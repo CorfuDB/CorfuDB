@@ -51,6 +51,29 @@ public final class LogReplicationUtils {
     // Retain the old name from LR v1 to avoid polluting the registry table with stale entries.
     public static final String REPLICATION_STATUS_TABLE_NAME = "LogReplicationStatus";
 
+    // /-------Constants specific to the RoutingQueue Model --------/
+
+    // Name of shared queue on the sender where log entry sync updates are placed transactionally
+    public static final String LOG_ENTRY_SYNC_QUEUE_NAME_SENDER = "LRQ_Send_LogEntries";
+
+    // Prefix of destination specific stream tag applied to entries on LOG_ENTRY_SYNC_QUEUE_NAME_SENDER
+    public static final String LOG_ENTRY_SYNC_QUEUE_TAG_SENDER_PREFIX = "lrq_logentry_";
+
+    // Name of shared queue on the sender where snapshot sync updates are placed
+    public static final String SNAPSHOT_SYNC_QUEUE_NAME_SENDER = "LRQ_Send_SnapSync";
+
+    // Prefix of destination specific stream tag applied to entries on SNAPSHOT_SYNC_QUEUE_NAME_SENDER
+    public static final String SNAPSHOT_SYNC_QUEUE_TAG_SENDER_PREFIX = "lrq_snapsync_";
+
+    // Prefix of the name of queue as it will appear on the receiver after replicated.  The suffix will be the Sender
+    // (Source) cluster id
+    public static final String REPLICATED_QUEUE_NAME_PREFIX = "LRQ_Recv_";
+
+    // Stream tag applied to the replicated queue on the receiver
+    public static final String REPLICATED_QUEUE_TAG = "lrq_recv";
+
+    // ---- End RoutingQueue Model constants -------/
+
     private LogReplicationUtils() { }
 
     public static void subscribe(@Nonnull LogReplicationListener listener, @Nonnull String namespace,
