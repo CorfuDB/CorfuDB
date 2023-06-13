@@ -206,7 +206,7 @@ public class CorfuLogReplicationRuntime {
             communicationFSMWorkers, router));
         states.put(LogReplicationRuntimeStateType.NEGOTIATING, new NegotiatingState(this, communicationFSMWorkers,
                 router, metadataManager));
-        states.put(LogReplicationRuntimeStateType.REPLICATING, new ReplicatingState(this, sourceManager));
+        states.put(LogReplicationRuntimeStateType.REPLICATING, new ReplicatingState(this, sourceManager, router));
         states.put(LogReplicationRuntimeStateType.STOPPED, new StoppedState(sourceManager));
         states.put(LogReplicationRuntimeStateType.UNRECOVERABLE, new UnrecoverableState());
     }
@@ -309,9 +309,31 @@ public class CorfuLogReplicationRuntime {
     }
 
     /**
+     * stopReplication and stopping FSM are asynchronous events. For scenarios where the source is the connection endpoint,
+     * the 2 events should be synchronized so the in-memory objects, that is holding a ref to futures and LR objects, are
+     * not cleared before receiving an ACK from remote.
+     */
+    private void awaitTransitionToStopWhenConnectionEndpoint() {
+        if (router.isConnectionStarterForSession(session)) {
+            return;
+        }
+        while(!state.getType().equals(LogReplicationRuntimeStateType.STOPPED)) {
+            try {
+                TimeUnit.MILLISECONDS.sleep(CorfuLogReplicationRuntime.DEFAULT_TIMEOUT);
+            } catch (InterruptedException e) {
+                log.debug("Sleep was interrupted. Checking if FSM has successfully transitioned to STOPPED state. {}", e);
+                continue;
+            }
+        }
+        log.debug("FSM has successfully transitioned to STOPPED state");
+    }
+
+    /**
      * Stop Log Replication, regardless of current state.
      */
     public void stop() {
-        input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.LOCAL_LEADER_LOSS));
+        input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.LOCAL_LEADER_LOSS,
+                router.isConnectionStarterForSession(session)));
+        awaitTransitionToStopWhenConnectionEndpoint();
     }
 }

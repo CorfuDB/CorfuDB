@@ -6,6 +6,7 @@ import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientSer
 
 import java.util.concurrent.ThreadPoolExecutor;
 
+import static org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationFsmUtil.canEnqueueStopRuntimeFsmEvent;
 import static org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationFsmUtil.verifyRemoteLeader;
 
 /**
@@ -60,7 +61,10 @@ public class VerifyingRemoteSinkLeaderState implements LogReplicationRuntimeStat
                 fsm.updateConnectedNodes(event.getNodeId());
                 return this;
             case LOCAL_LEADER_LOSS:
-                return fsm.getStates().get(LogReplicationRuntimeStateType.STOPPED);
+                if (canEnqueueStopRuntimeFsmEvent(router, fsm, event.isConnectionStarter)) {
+                    return fsm.getStates().get(LogReplicationRuntimeStateType.STOPPED);
+                }
+                return this;
             default: {
                 log.warn("Unexpected communication event {} when in init state.", event.getType());
                 throw new IllegalTransitionException(event.getType(), getType());

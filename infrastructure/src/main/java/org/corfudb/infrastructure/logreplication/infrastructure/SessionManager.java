@@ -220,9 +220,8 @@ public class SessionManager {
                 } catch (TransactionAbortedException e) {
                     throw new RetryNeededException();
                 }
-
-                updateTopology(newTopology);
                 stopReplication(sessionsToRemove);
+                updateTopology(newTopology);
                 updateReplicationParameters(Sets.intersection(sessionsUnchanged, outgoingSessions));
                 createSessions();
                 return null;
