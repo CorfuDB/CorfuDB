@@ -581,8 +581,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
 
         log.updateCommittedTail(22000);
 
-        boolean fullReset = false;
-        log.reset(fullReset);
+        log.reset();
         assertThat(log.getOpenSegments()).hasSize(0);
 
         final int expectedFilesAfterReset = 2;
