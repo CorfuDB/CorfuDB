@@ -8,6 +8,7 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.corfudb.infrastructure.logreplication.LogReplicationGrpc;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientServerRouter;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
+import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.proto.service.CorfuMessage;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
@@ -208,7 +209,9 @@ public class GRPCLogReplicationServerHandler extends LogReplicationGrpc.LogRepli
                 if (!reverseReplicationStreamObserverMap.containsKey(session)) {
                     log.warn("Corfu Message {} has no pending observer. Message {} will not be sent.",
                             msg.getHeader().getRequestId(), msg.getPayload().getPayloadCase().name());
-
+                    router.completeExceptionally(session, msg.getHeader().getRequestId(),
+                            new NetworkException(String.format("No pending observer for session %s", session),
+                                    session.getSinkClusterId()));
                     return;
                 }
 

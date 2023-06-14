@@ -34,6 +34,7 @@ import java.io.File;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.time.Duration;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -320,6 +321,7 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
             // Get the next request ID.
             requestId = sessionToRequestIdCounter.getOrDefault(session, new AtomicLong(0)).getAndIncrement();
 
+            sessionToOutstandingRequests.putIfAbsent(session, new HashMap<>());
             sessionToOutstandingRequests.get(session).put(requestId, cf);
 
             header.setRequestId(requestId);

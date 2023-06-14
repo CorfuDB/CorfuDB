@@ -374,7 +374,7 @@ public class SessionManager {
 
     private void updateRouterWithNewSessions() {
         newSessionsDiscovered.forEach(session -> {
-            router.getSessionToRequestIdCounter().put(session, new AtomicLong(0));
+            router.getSessionToRequestIdCounter().putIfAbsent(session, new AtomicLong(0));
             if(incomingSessions.contains(session)) {
                 router.getSessionToRemoteClusterDescriptor()
                         .put(session, topology.getRemoteSourceClusters().get(session.getSourceClusterId()));
@@ -383,12 +383,10 @@ public class SessionManager {
             } else {
                 router.getSessionToRemoteClusterDescriptor()
                         .put(session, topology.getRemoteSinkClusters().get(session.getSinkClusterId()));
-                router.getSessionToOutstandingRequests().put(session, new HashMap<>());
             }
 
             if(router.isConnectionStarterForSession(session)) {
-                router.getSessionToLeaderConnectionFuture().put(session, new CompletableFuture<>());
-                router.getSessionToOutstandingRequests().putIfAbsent(session, new HashMap<>());
+                router.getSessionToLeaderConnectionFuture().putIfAbsent(session, new CompletableFuture<>());
                 if (incomingSessions.contains(session)) {
                     router.getSessionToRemoteSourceLeaderManager().put(session,
                             new RemoteSourceLeadershipManager(session, router,
