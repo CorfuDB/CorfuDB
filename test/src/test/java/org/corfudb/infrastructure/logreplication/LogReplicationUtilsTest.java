@@ -2,10 +2,7 @@ package org.corfudb.infrastructure.logreplication;
 
 import com.google.protobuf.Message;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.LogReplication;
-import org.corfudb.runtime.LogReplicationListener;
-import org.corfudb.runtime.LogReplicationUtils;
+import org.corfudb.runtime.*;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
 import org.corfudb.runtime.collections.Table;
@@ -28,6 +25,7 @@ public class LogReplicationUtilsTest extends AbstractViewTest {
     private CorfuRuntime corfuRuntime;
     private CorfuStore corfuStore;
     private LogReplicationListener lrListener;
+    private LogReplicationRoutingQueueListener lrRqListener;
     private Table<LogReplication.LogReplicationSession, LogReplication.ReplicationStatus, Message> replicationStatusTable;
     private String namespace = "test_namespace";
     private String client = "test_client";
@@ -37,6 +35,7 @@ public class LogReplicationUtilsTest extends AbstractViewTest {
         corfuRuntime = getDefaultRuntime();
         corfuStore = new CorfuStore(corfuRuntime);
         lrListener = new LogReplicationTestListener(corfuStore, namespace, client);
+        lrRqListener = new LogReplicationTestRoutingQueueListener(corfuStore, namespace, client);
         replicationStatusTable = TestUtils.openReplicationStatusTable(corfuStore);
     }
 
@@ -85,6 +84,11 @@ public class LogReplicationUtilsTest extends AbstractViewTest {
         testSubscribe(true, true);
     }
 
+    @Test
+    public void testRoutingQueueSubscribeSnapshotSyncOngoing() {
+        testRoutingQueueSubscribe(true, true);
+    }
+
     /**
      * Test the behavior of subscribe() when LR Snapshot sync is complete.  The flags and variables on the listener
      * must be updated correctly.
@@ -112,6 +116,16 @@ public class LogReplicationUtilsTest extends AbstractViewTest {
         String streamTag = "test_tag";
         LogReplicationUtils.subscribe(lrListener, namespace, streamTag, new ArrayList<>(), 5, corfuStore);
         verifyListenerFlags((LogReplicationTestListener)lrListener, ongoing);
+    }
+
+    private void testRoutingQueueSubscribe(boolean initializeTable, boolean ongoing) {
+        if (initializeTable) {
+            TestUtils.setSnapshotSyncOngoing(corfuStore, replicationStatusTable, client, ongoing);
+        }
+
+        String streamTag = "test_tag";
+        LogReplicationUtils.subscribeRqListener(lrRqListener, namespace, 5, corfuStore);
+        verifyRoutingQueueListenerFlags((LogReplicationTestRoutingQueueListener)lrRqListener, ongoing);
     }
 
     @Test
@@ -172,6 +186,19 @@ public class LogReplicationUtilsTest extends AbstractViewTest {
         }
     }
 
+    private void verifyRoutingQueueListenerFlags(LogReplicationTestRoutingQueueListener listener, boolean snapshotSyncOngoing) {
+        if (snapshotSyncOngoing) {
+            Assert.assertTrue(listener.getClientFullSyncPending().get());
+            Assert.assertTrue(listener.getSnapshotSyncInProgress().get());
+            Assert.assertEquals(Address.NON_ADDRESS, listener.getClientFullSyncTimestamp().get());
+            Assert.assertFalse(listener.performFullSyncInvoked);
+        } else {
+            Assert.assertFalse(listener.getClientFullSyncPending().get());
+            Assert.assertFalse(listener.getSnapshotSyncInProgress().get());
+            Assert.assertNotEquals(Address.NON_ADDRESS, listener.getClientFullSyncTimestamp().get());
+            Assert.assertTrue(listener.performFullSyncInvoked);
+        }
+    }
     @After
     public void cleanUp() {
         corfuRuntime.shutdown();
@@ -184,6 +211,45 @@ public class LogReplicationUtilsTest extends AbstractViewTest {
         private String clientName;
 
         LogReplicationTestListener(CorfuStore corfuStore, String namespace, String clientName) {
+            super(corfuStore, namespace);
+            this.clientName = clientName;
+        }
+
+        @Override
+        protected void onSnapshotSyncStart() {}
+
+        @Override
+        protected void onSnapshotSyncComplete() {}
+
+        @Override
+        protected void processUpdatesInSnapshotSync(CorfuStreamEntries results) {}
+
+        @Override
+        protected void processUpdatesInLogEntrySync(CorfuStreamEntries results) {}
+
+        @Override
+        protected void performFullSyncAndMerge(TxnContext txnContext) {
+            performFullSyncInvoked = true;
+        }
+
+        @Override
+        protected String getClientName() {
+            return clientName;
+        }
+
+        @Override
+        public void onError(Throwable throwable) {
+            log.error("Error in Test Listener", throwable);
+        }
+    }
+
+    private class LogReplicationTestRoutingQueueListener extends LogReplicationRoutingQueueListener {
+
+        private boolean performFullSyncInvoked = false;
+
+        private String clientName;
+
+        LogReplicationTestRoutingQueueListener(CorfuStore corfuStore, String namespace, String clientName) {
             super(corfuStore, namespace);
             this.clientName = clientName;
         }

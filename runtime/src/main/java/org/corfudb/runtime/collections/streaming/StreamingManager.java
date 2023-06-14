@@ -5,8 +5,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplicationListener;
+import org.corfudb.runtime.LogReplicationRoutingQueueListener;
 import org.corfudb.runtime.collections.StreamListener;
-
 import org.corfudb.runtime.exceptions.StreamingException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.Address;
@@ -15,11 +15,7 @@ import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.Utils;
 
 import javax.annotation.Nonnull;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -118,6 +114,19 @@ public class StreamingManager {
         Map<String, String> nsToStreamTags = new HashMap<>();
         nsToStreamTags.put(namespace, streamTag);
         nsToStreamTags.put(CORFU_SYSTEM_NAMESPACE, LR_STATUS_STREAM_TAG);
+        this.scheduler.addLRTask(streamListener, nsToStreamTags, nsToTableName, lastAddress,
+                bufferSize == 0 ? defaultBufferSize : bufferSize);
+    }
+
+    public void subscribeLogReplicationRoutingQueueListener(@Nonnull LogReplicationRoutingQueueListener streamListener,
+                                                long lastAddress, int bufferSize) {
+        Map<String, List<String>> nsToTableName = new HashMap<>();
+        nsToTableName.put(CORFU_SYSTEM_NAMESPACE, Arrays.asList(REPLICATION_STATUS_TABLE_NAME));
+        // TODO: Add Routing Queue.
+
+        Map<String, String> nsToStreamTags = new HashMap<>();
+        nsToStreamTags.put(CORFU_SYSTEM_NAMESPACE, LR_STATUS_STREAM_TAG);
+        // TODO: Add RQ tags
         this.scheduler.addLRTask(streamListener, nsToStreamTags, nsToTableName, lastAddress,
                 bufferSize == 0 ? defaultBufferSize : bufferSize);
     }
