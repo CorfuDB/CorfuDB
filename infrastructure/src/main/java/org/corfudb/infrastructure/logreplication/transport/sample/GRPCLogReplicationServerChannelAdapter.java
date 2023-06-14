@@ -43,7 +43,17 @@ public class GRPCLogReplicationServerChannelAdapter extends IServerChannelAdapte
         // The executor of GRPCLogReplicationServerHandler needs to be single-threaded, otherwise the ordering of
         // requests and their acks cannot be guaranteed. By default, grpc utilizes thread-pool, so we need to provide
         // a single-threaded executor here.
-        this.server = ServerBuilder.forPort(port).addService(service)
+        this.server = createGRPCServerInstance();
+    }
+
+    /**
+     * If a gRPC server has started or shutdown, the same instance cannot be used for starting a gRPC server again,
+     * and a new instance has to be created. This is a limitation introduced by gRPC.
+     *
+     * @return A newly instantiated gRPC server instance
+     */
+    private Server createGRPCServerInstance() {
+        return ServerBuilder.forPort(port).addService(service)
                 .executor(Executors.newSingleThreadScheduledExecutor()).build();
     }
 
@@ -69,12 +79,8 @@ public class GRPCLogReplicationServerChannelAdapter extends IServerChannelAdapte
                     serverCompletable.complete(true);
                     log.info("Server started, listening on {}", port);
                 } catch (IllegalStateException ise) {
-                    // If a gRPC server has started or shutdown, the same instance cannot be used for
-                    // starting a gRPC server again, and a new instance has to be created. This is a
-                    // limitation introduced by gRPC.
                     log.warn("gRPC server already started or shutdown, instantiating a new one.", ise);
-                    this.server = ServerBuilder.forPort(port).addService(service)
-                            .executor(Executors.newSingleThreadScheduledExecutor()).build();
+                    this.server = createGRPCServerInstance();
                     throw new RetryNeededException();
                 } catch (Exception e) {
                     log.error("Caught exception while starting server on port {}", port, e);
