@@ -93,7 +93,7 @@ public class NegotiatingState implements LogReplicationRuntimeState {
                 if (canEnqueueStopRuntimeFsmEvent(router, fsm, event.isConnectionStarter)) {
                     return fsm.getStates().get(LogReplicationRuntimeStateType.STOPPED);
                 }
-                return this;
+                return null;
             case ERROR:
                 ((UnrecoverableState)fsm.getStates().get(LogReplicationRuntimeStateType.UNRECOVERABLE)).setThrowableCause(event.getT().getCause());
                 return fsm.getStates().get(LogReplicationRuntimeStateType.UNRECOVERABLE);

@@ -74,7 +74,7 @@ public class ReplicatingState implements LogReplicationRuntimeState {
                 if (canEnqueueStopRuntimeFsmEvent(router, fsm, event.isConnectionStarter)) {
                     return fsm.getStates().get(LogReplicationRuntimeStateType.STOPPED);
                 }
-                return this;
+                return null;
             default: {
                 log.warn("Unexpected communication event {} when in init state.", event.getType());
                 throw new IllegalTransitionException(event.getType(), getType());
