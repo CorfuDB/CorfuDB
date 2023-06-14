@@ -248,8 +248,25 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
         }
     }
 
+    /**
+     * Start server channel adapter with retry.
+     *
+     * @return Completable Future on connection start
+     */
     public CompletableFuture<Boolean> startServerChannelAdapter() {
-        return this.serverChannelAdapter.start();
+        try {
+            return IRetry.build(IntervalRetry.class, () -> {
+                try {
+                    return this.serverChannelAdapter.start();
+                } catch (Exception e) {
+                    log.warn("Exception caught while starting server adapter, retrying", e);
+                    throw new RetryNeededException();
+                }
+            }).run();
+        } catch (InterruptedException e) {
+            log.error("Unrecoverable exception when starting server adapter.", e);
+            throw new UnrecoverableCorfuInterruptedError(e);
+        }
     }
 
 
