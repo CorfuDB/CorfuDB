@@ -69,6 +69,9 @@ public class GRPCLogReplicationServerChannelAdapter extends IServerChannelAdapte
                     serverCompletable.complete(true);
                     log.info("Server started, listening on {}", port);
                 } catch (IllegalStateException ise) {
+                    // If a gRPC server has started or shutdown, the same instance cannot be used for
+                    // starting a gRPC server again, and a new instance has to be created. This is a
+                    // limitation introduced by gRPC.
                     log.warn("gRPC server already started or shutdown, instantiating a new one.", ise);
                     this.server = ServerBuilder.forPort(port).addService(service)
                             .executor(Executors.newSingleThreadScheduledExecutor()).build();
