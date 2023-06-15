@@ -107,11 +107,6 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
     private final Map<LogReplicationSession, ClusterDescriptor> sessionToRemoteClusterDescriptor;
 
     /**
-     * The replicationManager
-     */
-    private final CorfuReplicationManager replicationManager;
-
-    /**
      * local cluster ID
      */
     private final String localClusterId;
@@ -174,25 +169,24 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
     /**
      * Log Replication Router Constructor
      *
-     * @param responseTimeout timeout for requests
      * @param replicationManager replicationManager to start FSM
      * @param localClusterId local cluster ID
      * @param localNodeId  local node ID
      * @param incomingSession sessions where the local cluster is SINK
-     * @param outgoingSession sesssions where the local cluster is SOURCE
+     * @param outgoingSession sessions where the local cluster is SOURCE
      * @param msgHandler LogReplicationServer instance, used to handle the incoming messages.
-     * @param sessionToRuntime Map of outgoing session and corresponding runtimeFSM objects
      */
-    public LogReplicationClientServerRouter(long responseTimeout,
-                                            CorfuReplicationManager replicationManager, String localClusterId,
-                                            String localNodeId, Set<LogReplicationSession> incomingSession,
-                                            Set<LogReplicationSession> outgoingSession, LogReplicationServer msgHandler,
-                                            Map<LogReplicationSession, CorfuLogReplicationRuntime> sessionToRuntime) {
-        this.timeoutResponse = responseTimeout;
+    public LogReplicationClientServerRouter(CorfuReplicationManager replicationManager,
+                                            String localClusterId, String localNodeId,
+                                            Set<LogReplicationSession> incomingSession,
+                                            Set<LogReplicationSession> outgoingSession,
+                                            LogReplicationServer msgHandler,
+                                            ServerContext serverContext,
+                                            LogReplicationPluginConfig pluginConfig) {
+        this.timeoutResponse = replicationManager.getCorfuRuntime().getParameters().getRequestTimeout().toMillis();
         this.localClusterId = localClusterId;
         this.localNodeId = localNodeId;
-        this.replicationManager = replicationManager;
-        this.sessionToRuntimeFSM = sessionToRuntime;
+        this.sessionToRuntimeFSM = replicationManager.getSessionRuntimeMap();
         this.incomingSession = incomingSession;
         this.outgoingSession = outgoingSession;
         this.msgHandler = msgHandler;
@@ -203,8 +197,8 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
         this.sessionToLeaderConnectionFuture = new ConcurrentHashMap<>();
         this.sessionToRemoteSourceLeaderManager = new ConcurrentHashMap<>();
         this.reverseReplicateInitMsgBuffer = new ConcurrentHashMap<>();
-        this.clientChannelAdapter = null;
-        this.serverChannelAdapter = null;
+        createTransportServerAdapter(serverContext, pluginConfig);
+        createTransportClientAdapter(pluginConfig);
     }
 
     /**
@@ -214,8 +208,7 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
      * @param pluginConfig
      * @return
      */
-    public CompletableFuture<Boolean> createTransportServerAdapter(ServerContext serverContext,
-                                                                   LogReplicationPluginConfig pluginConfig) {
+    public void createTransportServerAdapter(ServerContext serverContext, LogReplicationPluginConfig pluginConfig) {
         File jar = new File(pluginConfig.getTransportAdapterJARPath());
 
         try (URLClassLoader child = new URLClassLoader(new URL[]{jar.toURI().toURL()}, this.getClass().getClassLoader())) {
@@ -223,7 +216,6 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
             this.serverChannelAdapter = (IServerChannelAdapter) adapter
                     .getDeclaredConstructor(ServerContext.class, LogReplicationClientServerRouter.class)
                     .newInstance(serverContext, this);
-            return this.serverChannelAdapter.start();
         } catch (Exception e) {
             log.error("Fatal error: Failed to create serverAdapter", e);
             throw new UnrecoverableCorfuError(e);
@@ -248,10 +240,32 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
             this.clientChannelAdapter = (IClientChannelAdapter) adapterType
                     .getDeclaredConstructor(String.class, LogReplicationClientServerRouter.class)
                     .newInstance(this.localClusterId, this);
+            this.clientChannelAdapter.setChannelContext(this.serverChannelAdapter.getChannelContext());
         } catch (Exception e) {
             log.error("Fatal error: Failed to initialize transport adapter {}",
                     pluginConfig.getTransportClientClassCanonicalName(), e);
             throw new UnrecoverableCorfuError(e);
+        }
+    }
+
+    /**
+     * Start server channel adapter with retry.
+     *
+     * @return Completable Future on connection start
+     */
+    public CompletableFuture<Boolean> startServerChannelAdapter() {
+        try {
+            return IRetry.build(IntervalRetry.class, () -> {
+                try {
+                    return this.serverChannelAdapter.start();
+                } catch (Exception e) {
+                    log.warn("Exception caught while starting server adapter, retrying", e);
+                    throw new RetryNeededException();
+                }
+            }).run();
+        } catch (InterruptedException e) {
+            log.error("Unrecoverable exception when starting server adapter.", e);
+            throw new UnrecoverableCorfuInterruptedError(e);
         }
     }
 
