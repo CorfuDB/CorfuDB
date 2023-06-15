@@ -75,6 +75,15 @@ public final class LogReplicationUtils {
 
     // ---- End RoutingQueue Model constants -------/
 
+    public static final UUID lrLogEntrySendQId = CorfuRuntime.getStreamID(TableRegistry
+            .getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, LOG_ENTRY_SYNC_QUEUE_NAME_SENDER));
+    public static final UUID lrFullSyncSendQId = CorfuRuntime.getStreamID(TableRegistry
+            .getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, SNAPSHOT_SYNC_QUEUE_NAME_SENDER));
+
+    public static boolean skipCheckpointFor(UUID streamId) {
+        return streamId.equals(lrLogEntrySendQId) || streamId.equals(lrFullSyncSendQId);
+    }
+
     private LogReplicationUtils() { }
 
     public static void subscribe(@Nonnull LogReplicationListener listener, @Nonnull String namespace,
