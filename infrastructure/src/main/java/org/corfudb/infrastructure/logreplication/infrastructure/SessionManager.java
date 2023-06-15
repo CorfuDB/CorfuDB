@@ -58,7 +58,7 @@ public class SessionManager {
 
     private final String localCorfuEndpoint;
 
-    private CorfuReplicationManager replicationManager;
+    private final CorfuReplicationManager replicationManager;
 
     private final LogReplicationConfigManager configManager;
 
@@ -83,9 +83,9 @@ public class SessionManager {
     private final LogReplicationContext replicationContext;
 
     @Getter
-    private LogReplicationClientServerRouter router;
+    private final LogReplicationClientServerRouter router;
 
-    private LogReplicationServer incomingMsgHandler;
+    private final LogReplicationServer incomingMsgHandler;
 
     /**
      * Constructor
@@ -118,10 +118,9 @@ public class SessionManager {
                 topology.getLocalNodeDescriptor().getNodeId(), topology.getLocalNodeDescriptor().getClusterId(),
                 replicationContext);
 
-        this.router = new LogReplicationClientServerRouter(
-                runtime.getParameters().getRequestTimeout().toMillis(), replicationManager,
+        this.router = new LogReplicationClientServerRouter(replicationManager,
                 topology.getLocalNodeDescriptor().getClusterId(), topology.getLocalNodeDescriptor().getNodeId(),
-                incomingSessions, outgoingSessions, incomingMsgHandler, replicationManager.getSessionRuntimeMap());
+                incomingSessions, outgoingSessions, incomingMsgHandler, serverContext, pluginConfig);
     }
 
     /**
@@ -515,8 +514,6 @@ public class SessionManager {
         if (topology.getRemoteClusterEndpoints().isEmpty()) {
             return;
         }
-
-        router.createTransportClientAdapter(replicationContext.getPluginConfig());
 
         newSessionsDiscovered.stream()
                 .filter(session -> topology.getRemoteClusterEndpoints().containsKey(session.getSourceClusterId()) ||
