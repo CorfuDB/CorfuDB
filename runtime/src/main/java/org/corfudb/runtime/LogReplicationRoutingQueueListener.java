@@ -93,6 +93,9 @@ public abstract class LogReplicationRoutingQueueListener implements StreamListen
             processUpdatesInSnapshotSync(results);
         } else {
             processUpdatesInLogEntrySync(results);
+
+            // based on return true
+            // delete the entties
         }
     }
 
@@ -186,6 +189,10 @@ public abstract class LogReplicationRoutingQueueListener implements StreamListen
      * To be implemented on the client/application
      * @param throwable
      */
+
+
+    // On error, they have to re-subscribe. In the subscribe methods, we do the processing
+    // Or, Processing the queue
     public abstract void onError(Throwable throwable);
 }
 

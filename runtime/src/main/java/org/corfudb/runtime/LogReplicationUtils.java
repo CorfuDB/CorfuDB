@@ -90,6 +90,7 @@ public final class LogReplicationUtils {
                                            int bufferSize, CorfuStore corfuStore) {
 
         long subscriptionTimestamp = getRoutingQueueSubscriptionTimestamp(corfuStore, namespace, clientListener);
+        // Open the queue from corfu store and pass it down.
         corfuStore.getRuntime().getTableRegistry().getStreamingManager().subscribeLogReplicationRoutingQueueListener(
                 clientListener, subscriptionTimestamp, bufferSize);
         log.info("Client subscription at timestamp {} successful.", subscriptionTimestamp);
@@ -218,7 +219,7 @@ public final class LogReplicationUtils {
                     List<CorfuStoreEntry<LogReplicationSession, ReplicationStatus, Message>> entries =
                             txnContext.executeQuery(replicationStatusTable,
                                     entry -> entry.getKey().getSubscriber().getModel()
-                                            .equals(LogReplication.ReplicationModel.LOGICAL_GROUPS) &&
+                                            .equals(LogReplication.ReplicationModel.ROUTING_QUEUES) &&
                                             Objects.equals(entry.getKey().getSubscriber().getClientName(),
                                                     clientListener.getClientName()));
 
@@ -273,7 +274,7 @@ public final class LogReplicationUtils {
                     // Update the flags and variables on the listener based on whether snapshot sync was in progress.
                     // This must be done only after the transaction commits.
                     // TODO: Handle setListenerParamsForSnapshotSync
-                    // setListenerParamsForSnapshotSync(clientListener, subscriptionTimestamp, snapshotSyncInProgress);
+                    setRoutingQueueListenerParamsForSnapshotSync(clientListener, subscriptionTimestamp, snapshotSyncInProgress);
 
                     return subscriptionTimestamp;
                 } catch (TransactionAbortedException tae) {
@@ -325,8 +326,25 @@ public final class LogReplicationUtils {
         }
     }
 
+    private static void setRoutingQueueListenerParamsForSnapshotSync(LogReplicationRoutingQueueListener listener,
+                                                                     long subscriptionTimestamp,
+                                                                     boolean snapshotSyncInProgress) {
+        updateRoutingQueueListenerFlagsForSnapshotSync(listener, snapshotSyncInProgress);
+
+        // If client full sync was done, set its timestamp
+        if (!snapshotSyncInProgress) {
+            listener.getClientFullSyncTimestamp().set(subscriptionTimestamp);
+        }
+    }
+
     private static void updateListenerFlagsForSnapshotSync(LogReplicationListener clientListener,
                                                            boolean snapshotSyncInProgress) {
+        clientListener.getClientFullSyncPending().set(snapshotSyncInProgress);
+        clientListener.getSnapshotSyncInProgress().set(snapshotSyncInProgress);
+    }
+
+    private static void updateRoutingQueueListenerFlagsForSnapshotSync(LogReplicationRoutingQueueListener clientListener,
+                                                                       boolean snapshotSyncInProgress) {
         clientListener.getClientFullSyncPending().set(snapshotSyncInProgress);
         clientListener.getSnapshotSyncInProgress().set(snapshotSyncInProgress);
     }

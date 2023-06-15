@@ -86,7 +86,7 @@ public class LogReplicationUtilsTest extends AbstractViewTest {
 
     @Test
     public void testRoutingQueueSubscribeSnapshotSyncOngoing() {
-        testRoutingQueueSubscribe(true, true);
+        testRoutingQueueSubscribe(true, false);
     }
 
     /**
