@@ -17,6 +17,7 @@ import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.LogReplication.ReplicationStatus;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalRetry;
 import org.corfudb.util.retry.RetryNeededException;
@@ -25,6 +26,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.UUID;
 
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
@@ -62,6 +64,15 @@ public final class LogReplicationUtils {
     public static final String REPLICATED_QUEUE_TAG = "lrq_recv";
 
     // ---- End RoutingQueue Model constants -------/
+
+    public static final UUID lrLogEntrySendQId = CorfuRuntime.getStreamID(TableRegistry
+            .getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, LOG_ENTRY_SYNC_QUEUE_NAME_SENDER));
+    public static final UUID lrFullSyncSendQId = CorfuRuntime.getStreamID(TableRegistry
+            .getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, SNAPSHOT_SYNC_QUEUE_NAME_SENDER));
+
+    public static boolean skipCheckpointFor(UUID streamId) {
+        return streamId.equals(lrLogEntrySendQId) || streamId.equals(lrFullSyncSendQId);
+    }
 
     private LogReplicationUtils() { }
 
