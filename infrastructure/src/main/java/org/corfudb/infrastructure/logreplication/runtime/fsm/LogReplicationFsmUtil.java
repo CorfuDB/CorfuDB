@@ -154,6 +154,11 @@ public class LogReplicationFsmUtil {
      * @param fsm  runtime fsm
      */
     private static boolean sendLeadershipLossRequestMsg(LogReplicationClientServerRouter router, CorfuLogReplicationRuntime fsm) {
+        if(fsm.getReplicationContext().getIsLeader().get()) {
+            log.debug("the local node acquired the leadership. Stop sending Leadership_loss msg");
+            // do not transition to another state
+            return false;
+        }
         try {
             log.debug("Sending LEADERSHIP_LOSS msg for session {}", fsm.getSession());
             CompletableFuture<LogReplication.LogReplicationMetadataResponseMsg> cf = router

@@ -155,6 +155,9 @@ public class CorfuLogReplicationRuntime {
     @Getter
     public final LogReplicationSession session;
 
+    @Getter
+    private final LogReplicationContext replicationContext;
+
     /**
      * Default Constructor
      */
@@ -167,6 +170,7 @@ public class CorfuLogReplicationRuntime {
         this.sourceManager = new LogReplicationSourceManager(parameters,router, metadataManager,
                 session, replicationContext);
         this.connectedNodes = new HashSet<>();
+        this.replicationContext = replicationContext;
 
         ThreadFactory threadFactory = new ThreadFactoryBuilder().setNameFormat("runtime-fsm-worker-"+session.hashCode())
             .build();
