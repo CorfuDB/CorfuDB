@@ -4,7 +4,6 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.ServerContext;
-import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientServerRouter;
 
 import javax.annotation.Nonnull;
@@ -35,7 +34,6 @@ public class CorfuInterClusterReplicationServerNode {
 
     private final LogReplicationClientServerRouter router;
 
-    private final LogReplicationPluginConfig pluginConfig;
 
     /**
      * Log Replication Server initialization.
@@ -45,13 +43,11 @@ public class CorfuInterClusterReplicationServerNode {
      */
     // TODO v2: the serverContext will need to evaluated to use corfu's construct vs create a new context for LR
     public CorfuInterClusterReplicationServerNode(@Nonnull ServerContext serverContext,
-                                                  LogReplicationClientServerRouter router,
-                                                  LogReplicationContext replicationContext) {
+                                                  LogReplicationClientServerRouter router) {
 
         this.serverContext = serverContext;
         this.router = router;
         this.serverStarted = false;
-        this.pluginConfig = replicationContext.getPluginConfig();
         startServer();
     }
 
@@ -61,16 +57,16 @@ public class CorfuInterClusterReplicationServerNode {
                     .setNameFormat("replication-server-runner").build());
         }
         // Start and listen to the server
-        logReplicationServerRunner.submit(() -> this.startAndListen());
+        logReplicationServerRunner.submit(this::startAndListen);
     }
 
     /**
-     * Wait on the transport frameworks's server until it is shutdown.
+     * Wait on the transport framework's server until it is shutdown.
      */
     private void startAndListen() {
         if (!serverStarted) {
             log.info("Starting server transport adapter ...");
-            CompletableFuture<Boolean> cf = this.router.createTransportServerAdapter(serverContext, pluginConfig);
+            CompletableFuture<Boolean> cf = this.router.startServerChannelAdapter();
             try {
                 serverStarted = cf.get();
             } catch (ExecutionException th) {
