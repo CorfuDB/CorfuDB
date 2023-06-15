@@ -451,6 +451,30 @@ public class TxnContext implements AutoCloseable {
         return ret;
     }
 
+    /**
+     * Apply a list of Corfu SMREntries directly to a stream. This can be used for replaying the mutations
+     * directly into the underlying stream bypassing the object layer entirely.
+     *
+     * This logUpdate method is used for LR Routing Queue model.
+     *
+     * @param table  Table object to access the UUID.
+     * @param record Record to be updated.
+     * @param corfuStore CorfuStore that gets the runtime for the serializer.
+     * @param <K>    Type of Key.
+     * @param <V>    Type of Value.
+     * @param <M>    Type of Metadata.
+     * @return K the type of key this queue table was created with.
+     */
+    @Nonnull
+    public <K extends Message, V extends Message, M extends Message>
+    K logUpdateThatLooksLikeEnqueue(@Nonnull Table<K, V, M> table,
+                                    @Nonnull final V record, CorfuStore corfuStore) {
+        validateWrite(table);
+        K ret = table.logUpdateEnqueue(record,this, corfuStore);
+        tablesUpdated.putIfAbsent(table.getStreamUUID(), table);
+        return ret;
+    }
+
     // *************************** READ API *****************************************
 
     /**

@@ -302,8 +302,8 @@ public class CorfuQueueTest extends AbstractViewTest {
         }
         final Table<Queue.CorfuGuidMsg, RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg> finalQ = q;
         final byte[] foo = {'a', 'b', 'c'};
-        executeTxn(corfuStore, namespace, (TxnContext tx) -> tx.enqueue(finalQ,
-                RoutingTableEntryMsg.newBuilder().setOpaquePayload(ByteString.copyFrom(foo)).build()));
+        executeTxn(corfuStore, namespace, (TxnContext tx) -> tx.logUpdateThatLooksLikeEnqueue(finalQ,
+                RoutingTableEntryMsg.newBuilder().setOpaquePayload(ByteString.copyFrom(foo)).build(), corfuStore));
 
         Object[] smrArgs = new Object[2];
         smrArgs[0] = Queue.CorfuGuidMsg.newBuilder().setInstanceId(1).build();
@@ -314,10 +314,10 @@ public class CorfuQueueTest extends AbstractViewTest {
 
         // TransactionalContext.getRootContext().addPreCommitListener(callback);
 
-        // validate if logUpdate and enqueu produces same result
+        // validate if logUpdate and enqueue produces same result
         executeTxn(corfuStore, namespace, (TxnContext tx) -> {
             //RoutingTableEntryMsg entry = tx.entryList(finalQ).get(0).getEntry();
-            assertThat(tx.entryList(finalQ).get(0).getEntry()).isEqualTo(foo);
+            assertThat(tx.entryList(finalQ).get(0).getEntry()).isEqualTo(tx.entryList(finalQ).get(1).getEntry());
         });
     }
 
