@@ -1,11 +1,9 @@
-package org.corfudb.infrastructure.batchprocessor;
+package org.corfudb.infrastructure;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.BatchProcessor;
 import org.corfudb.infrastructure.BatchProcessor.BatchProcessorContext;
-import org.corfudb.infrastructure.BatchWriterOperation;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
 import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
@@ -29,9 +27,8 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
-import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletionException;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -50,13 +47,17 @@ import static org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
 import static org.corfudb.runtime.proto.service.CorfuMessage.PriorityLevel;
 import static org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import static org.junit.Assert.assertEquals;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @Slf4j
 public class BatchProcessorTest {
-    private  static final BatchProcessorStatus BP_STATUS_OK = BatchProcessorStatus.BP_STATUS_OK;
+    private static final BatchProcessorStatus BP_STATUS_OK = BatchProcessorStatus.BP_STATUS_OK;
     private static final BatchProcessorStatus BP_STATUS_ERROR = BatchProcessorStatus.BP_STATUS_ERROR;
 
     @Rule
@@ -129,7 +130,7 @@ public class BatchProcessorTest {
     @Before
     public void setup() {
         mockStreamLog = mock(StreamLog.class);
-        bpContext = new BatchProcessorContext();
+        bpContext = spy(new BatchProcessorContext());
         batchProcessor = new BatchProcessor(mockStreamLog, bpContext, DEFAULT_SEAL_EPOCH, true);
     }
 
@@ -196,17 +197,33 @@ public class BatchProcessorTest {
 
     @Test
     public void testRestart() throws Exception {
-        BlockingQueue<BatchWriterOperation<?>> queue = mock(BlockingQueue.class);
-        String errMsg = "Dummy IO exception";
-        when(queue.take()).thenThrow(new IllegalStateException(errMsg));
-        when(queue.poll()).thenThrow(new IllegalStateException(errMsg));
+        assertEquals(BP_STATUS_OK, bpContext.getStatus());
 
-        try(BatchProcessor bp = new BatchProcessor(queue, mockStreamLog, bpContext, DEFAULT_SEAL_EPOCH, true)) {
-            TimeUnit.SECONDS.sleep(1);
-            assertEquals(BP_STATUS_ERROR, bpContext.getStatus());
-            bp.restart();
-            assertEquals(BP_STATUS_OK, bpContext.getStatus());
-        }
+        final CountDownLatch errorLatch = new CountDownLatch(1);
+        final CountDownLatch okLatch = new CountDownLatch(1);
+
+        doAnswer(invocationOnMock -> {
+            final Object ret = invocationOnMock.callRealMethod();
+            errorLatch.countDown();
+            return ret;
+        }).when(bpContext).setErrorStatus();
+
+        doAnswer(invocationOnMock -> {
+            final Object ret = invocationOnMock.callRealMethod();
+            okLatch.countDown();
+            return ret;
+        }).when(bpContext).setOkStatus();
+
+        doThrow(new IOException()).when(mockStreamLog).sync(anyBoolean());
+
+        batchProcessor.addTask(BatchWriterOperation.Type.SHUTDOWN, RequestMsg.getDefaultInstance());
+        errorLatch.await();
+        assertEquals(BP_STATUS_ERROR, bpContext.getStatus());
+
+        batchProcessor.restart();
+
+        okLatch.await();
+        assertEquals(BP_STATUS_OK, bpContext.getStatus());
     }
 
     /**
