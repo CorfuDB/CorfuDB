@@ -178,8 +178,10 @@ public class LogEntryWriterTest extends AbstractViewTest {
         updateMetadataManagerMap(metadataMap, false);
 
         // Throw an exception when sequence number = 3 is being applied.  This will simulate a partial apply.
-        Mockito.doThrow(InterruptedException.class).when(metadataManager).appendUpdate(txnContext,
-            LogReplicationMetadataType.LAST_LOG_ENTRY_BATCH_PROCESSED, numOpaqueEntries);
+        Mockito.doAnswer(invocation -> {
+            throw new InterruptedException();
+        }).when(metadataManager).appendUpdate(txnContext,
+                LogReplicationMetadataType.LAST_LOG_ENTRY_BATCH_PROCESSED, numOpaqueEntries);
 
         // Verify that the message containing the list of opaque entries was not applied
         Assert.assertFalse(logEntryWriter.apply(lrEntryMsg));
