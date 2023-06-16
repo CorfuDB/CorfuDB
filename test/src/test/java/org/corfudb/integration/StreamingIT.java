@@ -23,10 +23,14 @@ import org.corfudb.runtime.exceptions.StreamingException;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.test.SampleSchema;
+import org.corfudb.test.SampleSchema.EventInfo;
+import org.corfudb.test.SampleSchema.ManagedResources;
 import org.corfudb.test.SampleSchema.SampleTableAMsg;
 import org.corfudb.test.SampleSchema.SampleTableBMsg;
 import org.corfudb.test.SampleSchema.SampleTableCMsg;
 import org.corfudb.test.SampleSchema.Uuid;
+import org.corfudb.util.serializer.ISerializer;
+import org.corfudb.util.serializer.ProtobufSerializer;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -87,7 +91,7 @@ public class StreamingIT extends AbstractIT {
     @Before
     public void loadProperties() {
         corfuSingleNodeHost = PROPERTIES.getProperty("corfuSingleNodeHost");
-        corfuStringNodePort = Integer.valueOf(PROPERTIES.getProperty("corfuSingleNodePort"));
+        corfuStringNodePort = Integer.parseInt(PROPERTIES.getProperty("corfuSingleNodePort"));
         singleNodeEndpoint = String.format("%s:%d",
                 corfuSingleNodeHost,
                 corfuStringNodePort);
@@ -111,7 +115,7 @@ public class StreamingIT extends AbstractIT {
      * This listener can throw an exception on 'n' number of updates, in order to
      * trigger the onError(Throwable t) and consequently, automatically unsubscribe.
      */
-    private class StreamListenerImpl implements StreamListener {
+    private static class StreamListenerImpl implements StreamListener {
 
         @Getter
         private final String name;
@@ -181,7 +185,7 @@ public class StreamingIT extends AbstractIT {
      * A StreamListener implementation to be used in the tests.
      * This listener blocks on a latch when executing onNext()
      */
-    private class BlockingStreamListener extends StreamListenerImpl {
+    private static class BlockingStreamListener extends StreamListenerImpl {
 
         private final CountDownLatch latch;
 
@@ -813,7 +817,7 @@ public class StreamingIT extends AbstractIT {
         // and testing the last provided timestamp truly tracks the last received update and can resume from that point
         // onwards (no data loss or need to sync a full snapshot)
         CountDownLatch latch = new CountDownLatch(1);
-        StreamListenerImpl listener1 = new StreamListenerImpl("stream_listener_1", numUpdates/2, latch);
+        StreamListenerImpl listener1 = new StreamListenerImpl("stream_listener_1", numUpdates / 2, latch);
         store.subscribeListener(listener1, namespace, defaultTag,
                 Collections.singletonList(tableNameA), ts1);
 
@@ -1039,7 +1043,8 @@ public class StreamingIT extends AbstractIT {
 
         // Run X number of checkpoint/trim (on each run, trigger runtimeGC)
         for (int i = 0; i < numCheckpointTrimCycles; i++) {
-            checkpointAndTrim(runtime, namespace, Arrays.asList(defaultTableName, randomTableName), false);
+            List<String> tables = Arrays.asList(defaultTableName, randomTableName);
+            checkpointAndTrim(runtime, namespace, tables, false);
             runtime.getGarbageCollector().runRuntimeGC();
             long seqNumberAfterTrim = store.getHighestSequence(namespace, defaultTableName);
             assertThat(seqNumberAfterTrim).isEqualTo(seqNumBeforeTrim);
@@ -1078,7 +1083,7 @@ public class StreamingIT extends AbstractIT {
                 .setSequence(-1L)
                 .build();
         CountDownLatch onErrorLatch = new CountDownLatch(1);
-        StreamListenerImpl listener = new StreamListenerImpl("listener_client_failure", numUpdates/2, onErrorLatch);
+        StreamListenerImpl listener = new StreamListenerImpl("listener_client_failure", numUpdates / 2, onErrorLatch);
         store.subscribeListener(listener, namespace, defaultTag, Arrays.asList(defaultTableName), startTimestamp);
 
         // Block until Client Exception has been received and onError has been triggered.
@@ -1437,34 +1442,5 @@ public class StreamingIT extends AbstractIT {
         store = new CorfuStore(runtime);
 
         return runtime;
-    }
-
-    public static Token checkpointAndTrim(CorfuRuntime runtime, String namespace, List<String> tablesToCheckpoint, boolean partialTrim) {
-        MultiCheckpointWriter<PersistentCorfuTable<?, ?>> mcw = new MultiCheckpointWriter<>();
-        tablesToCheckpoint.forEach(tableName -> {
-            PersistentCorfuTable<Uuid, CorfuRecord<SampleSchema.EventInfo, SampleSchema.ManagedResources>> corfuTable =
-                    createCorfuTable(runtime, TableRegistry.getFullyQualifiedTableName(namespace, tableName));
-
-            mcw.addMap(corfuTable);
-        });
-
-        //CorfuRuntime rt = createRuntime(runtime.getLayoutServers().get(0));
-
-        // Add Registry Table
-        mcw.addMap(runtime.getTableRegistry().getRegistryTable());
-        mcw.addMap(runtime.getTableRegistry().getProtobufDescriptorTable());
-        // Checkpoint & Trim
-        Token trimPoint = mcw.appendCheckpoints(runtime, "StreamingIT");
-        if (partialTrim) {
-            final int trimOffset = 5;
-            long sequenceModified = trimPoint.getSequence() - trimOffset;
-            Token partialTrimMark = Token.of(trimPoint.getEpoch(), sequenceModified);
-            runtime.getAddressSpaceView().prefixTrim(partialTrimMark);
-        } else {
-            runtime.getAddressSpaceView().prefixTrim(trimPoint);
-        }
-        runtime.getAddressSpaceView().gc();
-        runtime.getObjectsView().getObjectCache().clear();
-        return trimPoint;
     }
 }

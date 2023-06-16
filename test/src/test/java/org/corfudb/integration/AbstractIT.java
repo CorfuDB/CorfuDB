@@ -8,12 +8,15 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.common.util.URLUtils.NetworkInterfaceVersion;
+import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters.CorfuRuntimeParametersBuilder;
+import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.RuntimeLayout;
+import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.util.serializer.ISerializer;
 import org.junit.After;
 import org.junit.Before;
@@ -480,6 +483,37 @@ public class AbstractIT extends AbstractCorfuTest {
                 .setSerializer(serializer)
                 .setTypeToken(PersistentCorfuTable.<K, V>getTableType())
                 .open();
+    }
+
+    public Token checkpointAndTrim(
+            CorfuRuntime runtime, String namespace, List<String> tablesToCheckpoint, boolean partialTrim) {
+
+        MultiCheckpointWriter<PersistentCorfuTable<?, ?>> mcw = new MultiCheckpointWriter<>();
+        tablesToCheckpoint.forEach(tableName -> {
+            String fqTableName = TableRegistry.getFullyQualifiedTableName(namespace, tableName);
+            mcw.addMap(
+                    createCorfuTable(runtime, fqTableName)
+            );
+        });
+
+        CorfuRuntime rt = createRuntime(runtime.getLayoutServers().get(0));
+
+        // Add Registry Table
+        mcw.addMap(rt.getTableRegistry().getRegistryTable());
+        mcw.addMap(rt.getTableRegistry().getProtobufDescriptorTable());
+        // Checkpoint & Trim
+        Token trimPoint = mcw.appendCheckpoints(rt, "StreamingIT");
+        if (partialTrim) {
+            final int trimOffset = 5;
+            long sequenceModified = trimPoint.getSequence() - trimOffset;
+            Token partialTrimMark = Token.of(trimPoint.getEpoch(), sequenceModified);
+            rt.getAddressSpaceView().prefixTrim(partialTrimMark);
+        } else {
+            rt.getAddressSpaceView().prefixTrim(trimPoint);
+        }
+        rt.getAddressSpaceView().gc();
+        rt.getObjectsView().getObjectCache().clear();
+        return trimPoint;
     }
 
     public static class StreamGobbler implements Runnable {
