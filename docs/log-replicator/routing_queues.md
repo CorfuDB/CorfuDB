@@ -33,13 +33,14 @@ Data from the clients will be written into the following well known Routing Queu
    1. Entries here are not checkpointed and are lost after a trim cycle.
 2. `LRQ_Send_SnapSync`: This is the one shared queue on the sender where full snapshot sync updates are placed.
    1. Entries in this queue are not checkpointed and data loss occurs after a trim cycle.
-3. `LRQ_Recv_<remote_id>`: This is the queue where the LR on Sink places the updates arriving from the remote source.
+3. `LRQ_Recv_<client_name>_<remote_id>`: This is the queue where the LR on Sink places the updates arriving from the remote source. Please note that the receiving queues are per client_name (ex. policy, inventory etc)
    1. Entries in this queue are checkpointed normally.
+   2. Every client_name would have its separate receiver side queue.
 
 Each update made carries destinations and is also tagged with a destination specific stream tag with the following convention:
 1. `lrq_logentry_<remote_id>`: Destination specific stream tag applied when entries are placed into `LRQ_Send_LogEntries`
 2. `lrq_snapsync_<remote_id>`: Destination specific stream tag applied when entries are placed into `LRQ_Send_SnapSync`
-3. `lrq_recv`: This is the tag applied on the sink by LR server to all updates be it full sync or log entry sync.
+3. `lrq_recv_<client_name>`: This is the tag applied on the sink by LR server to all updates be it full sync or log entry sync. Please note that the lrq_recv_<client_name> tags are per client_name.
 
 ### Client on sender
 The main api intercepting the transaction is something like 
@@ -122,3 +123,17 @@ Similar to the ReplicationGroup routing model, listens to both the ReplicationSt
 Identifies when a full sync as started and delivers full sync messages.
 If there are log entry message, these are also delivered subsequently.
 It is up to the client to read the envelope information and apply its contents to the respective tables.
+
+## LR routing queues (receiver) discovery at sink side
+The receiver side routing queue (LRQ_Recv_<client_name>_<remote_id>) needs to be registered at sink side before the stream listener subscribe to routing queue updates. Here are the steps to achieve the routing queue discovery.
+1. Register receiver routing queue during the first snapshot sync (at snapshot writer or logUpdate time). Snapshot writer/logUpdate have the session object to fetch the remote_id and client_name.
+   1. Assumption here is that the snapshot sync would proceed first in the normal cases
+   2. During failure cases (service reboot etc), where log entry sync can come first, would be handled in the steps below.
+2. Routing queue subscriber needs to discover the queue from table registry and open the queue before subscribing the queue. One of tha approach is below
+   1. In the beginning, routing queue subscriber polls on registry table to check if the queue with prefix (LRQ_Recv_<client_name>_) exists. If yes, then do subscribe to it and completes the subscription
+   2. if the routing queue does not exist, then the subscriber register to LR status table only. Then, on_next() iterator would poll on registry table and re-subscribe to LR status table and LRQ_Recv_<client_name>_ queue in the same manner as above.
+3. Subscriber interface would expect the client_name parameter from the client. remote_id (source_cluster_id) is not available at the subscription time, hence we're going with the polling approach on the table registry.
+4. Handle trim exception on the receiver routing queue
+5. On_error callback implementation
+6. Routing queue listener interface would delete the queue entries based on the success/failure case. The client interface would reflect the success/failure case returning boolean
+7. Listener interface would provide RoutingTableEntryMsg message type to client and client would further extract out its payload
