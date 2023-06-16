@@ -3,16 +3,15 @@ package org.corfudb.infrastructure.logreplication;
 import com.google.protobuf.Message;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.*;
-import org.corfudb.runtime.collections.CorfuStore;
-import org.corfudb.runtime.collections.CorfuStreamEntries;
-import org.corfudb.runtime.collections.Table;
-import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.runtime.collections.*;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.Address;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+
+import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 
 /**
@@ -85,7 +84,7 @@ public class LogReplicationUtilsTest extends AbstractViewTest {
     }
 
     @Test
-    public void testRoutingQueueSubscribeSnapshotSyncOngoing() {
+    public void testRoutingQueueSubscribeSnapshotSyncComplete() {
         testRoutingQueueSubscribe(true, false);
     }
 
@@ -123,7 +122,20 @@ public class LogReplicationUtilsTest extends AbstractViewTest {
             TestUtils.setSnapshotSyncOngoing(corfuStore, replicationStatusTable, client, ongoing);
         }
 
-        String streamTag = "test_tag";
+        String recvQueueName = LogReplicationUtils.REPLICATED_QUEUE_NAME_PREFIX;
+        try {
+            Table<Queue.CorfuGuidMsg, Queue.RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg> routingQueue =
+                    corfuStore.openQueue(namespace, recvQueueName,
+                            Queue.RoutingTableEntryMsg.class,
+                            TableOptions.fromProtoSchema(Queue.RoutingTableEntryMsg.class));
+        } catch (NoSuchMethodException e) {
+            throw new RuntimeException(e);
+        } catch (InvocationTargetException e) {
+            throw new RuntimeException(e);
+        } catch (IllegalAccessException e) {
+            throw new RuntimeException(e);
+        }
+
         LogReplicationUtils.subscribeRqListener(lrRqListener, namespace, 5, corfuStore);
         verifyRoutingQueueListenerFlags((LogReplicationTestRoutingQueueListener)lrRqListener, ongoing);
     }

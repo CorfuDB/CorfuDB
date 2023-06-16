@@ -20,8 +20,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 
-import static org.corfudb.runtime.LogReplicationUtils.LR_STATUS_STREAM_TAG;
-import static org.corfudb.runtime.LogReplicationUtils.REPLICATION_STATUS_TABLE_NAME;
+import static org.corfudb.runtime.LogReplicationUtils.*;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 /**
@@ -119,14 +118,15 @@ public class StreamingManager {
     }
 
     public void subscribeLogReplicationRoutingQueueListener(@Nonnull LogReplicationRoutingQueueListener streamListener,
-                                                long lastAddress, int bufferSize) {
+                                                            @Nonnull String namespace,long lastAddress, int bufferSize) {
         Map<String, List<String>> nsToTableName = new HashMap<>();
         nsToTableName.put(CORFU_SYSTEM_NAMESPACE, Arrays.asList(REPLICATION_STATUS_TABLE_NAME));
-        // TODO: Add Routing Queue.
+        // Queue is already opened. Add Routing Queue.
+        nsToTableName.put(namespace, Arrays.asList(REPLICATED_QUEUE_NAME_PREFIX));
 
         Map<String, String> nsToStreamTags = new HashMap<>();
         nsToStreamTags.put(CORFU_SYSTEM_NAMESPACE, LR_STATUS_STREAM_TAG);
-        // TODO: Add RQ tags
+        nsToStreamTags.put(namespace, REPLICATED_QUEUE_TAG);
         this.scheduler.addLRTask(streamListener, nsToStreamTags, nsToTableName, lastAddress,
                 bufferSize == 0 ? defaultBufferSize : bufferSize);
     }

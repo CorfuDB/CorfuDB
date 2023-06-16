@@ -6,21 +6,18 @@ import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
-import org.corfudb.runtime.collections.CorfuStore;
-import org.corfudb.runtime.collections.CorfuStoreEntry;
-import org.corfudb.runtime.collections.Table;
-import org.corfudb.runtime.collections.TableOptions;
-import org.corfudb.runtime.collections.TxnContext;
-import org.corfudb.runtime.exceptions.AbortCause;
-import org.corfudb.runtime.exceptions.StreamingException;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.LogReplication.ReplicationStatus;
+import org.corfudb.runtime.collections.*;
+import org.corfudb.runtime.exceptions.AbortCause;
+import org.corfudb.runtime.exceptions.StreamingException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalRetry;
 import org.corfudb.util.retry.RetryNeededException;
+
 import javax.annotation.Nonnull;
 import java.lang.reflect.InvocationTargetException;
 import java.util.List;
@@ -58,7 +55,8 @@ public final class LogReplicationUtils {
 
     // Prefix of the name of queue as it will appear on the receiver after replicated.  The suffix will be the Sender
     // (Source) cluster id
-    public static final String REPLICATED_QUEUE_NAME_PREFIX = "LRQ_Recv_";
+    // Receiving queues per client name
+    public static final String REPLICATED_QUEUE_NAME_PREFIX = "LRQ_Recv_<client_name>_<source_id>_";
 
     // Stream tag applied to the replicated queue on the receiver
     public static final String REPLICATED_QUEUE_TAG_PREFIX = "lrq_recv_";
@@ -90,9 +88,9 @@ public final class LogReplicationUtils {
                                            int bufferSize, CorfuStore corfuStore) {
 
         long subscriptionTimestamp = getRoutingQueueSubscriptionTimestamp(corfuStore, namespace, clientListener);
-        // Open the queue from corfu store and pass it down.
+        // Open the routing queue from corfu store and pass it down.
         corfuStore.getRuntime().getTableRegistry().getStreamingManager().subscribeLogReplicationRoutingQueueListener(
-                clientListener, subscriptionTimestamp, bufferSize);
+                clientListener, namespace, subscriptionTimestamp, bufferSize);
         log.info("Client subscription at timestamp {} successful.", subscriptionTimestamp);
     }
 
