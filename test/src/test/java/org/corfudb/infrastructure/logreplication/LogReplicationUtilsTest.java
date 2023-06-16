@@ -127,7 +127,11 @@ public class LogReplicationUtilsTest extends AbstractViewTest {
             Table<Queue.CorfuGuidMsg, Queue.RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg> routingQueue =
                     corfuStore.openQueue(namespace, recvQueueName,
                             Queue.RoutingTableEntryMsg.class,
-                            TableOptions.fromProtoSchema(Queue.RoutingTableEntryMsg.class));
+                            TableOptions.builder().schemaOptions(
+                                            CorfuOptions.SchemaOptions.newBuilder()
+                                                    .addStreamTag(LogReplicationUtils.REPLICATED_QUEUE_TAG)
+                                                    .build())
+                                    .build());
         } catch (NoSuchMethodException e) {
             throw new RuntimeException(e);
         } catch (InvocationTargetException e) {

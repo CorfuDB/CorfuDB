@@ -139,8 +139,10 @@ The receiver side routing queue (LRQ_Recv_<client_name>_<remote_id>) needs to be
    1. In the beginning, routing queue subscriber polls on registry table to check if the queue with prefix (LRQ_Recv_<client_name>_) exists. If yes, then do subscribe to it and completes the subscription
    2. if the routing queue does not exist, then the subscriber register to LR status table only. Then, on_next() iterator would poll on registry table and re-subscribe to LR status table and LRQ_Recv_<client_name>_ queue in the same manner as above.
 3. Subscriber interface would expect the client_name parameter from the client. remote_id (source_cluster_id) is not available at the subscription time, hence we're going with the polling approach on the table registry.
-4. Handle trim exception on the receiver routing queue
-5. On_error callback implementation
-6. Routing queue listener interface would delete the queue entries based on the success/failure case. The client interface would reflect the success/failure case returning boolean
-7. Listener interface would provide RoutingTableEntryMsg message type to client and client would further extract out its payload
-8. It is up to the client to read the envelope information and apply its contents to the respective tables.
+
+## Stream listener for routing queue at sink side
+1. Subscribe to routing queue
+2. Handle trim exception on the receiver routing queue
+3. On_error callback implementation
+4. Routing queue listener interface would delete the queue entries based on the success/failure case. The client interface would reflect the success/failure case returning boolean
+5. Listener interface would provide RoutingTableEntryMsg message type to client and client would further extract out its payload
