@@ -732,7 +732,7 @@ public class CheckpointTest extends AbstractObjectTest {
         try (PersistedCorfuTable<String, String> table = rt.getObjectsView()
                 .build()
                 .setTypeToken(PersistedCorfuTable.<String, String>getTypeToken())
-                .streamID(tableId)
+                .setStreamID(tableId)
                 .setSerializer(Serializers.JSON)
                 .setArguments(persistenceOptions.build(), Serializers.JSON)
                 .open()) {
@@ -754,7 +754,7 @@ public class CheckpointTest extends AbstractObjectTest {
         persistenceOptions.dataPath(Paths.get(path + tableId + "reader"));
         try (PersistedCorfuTable<String, String> table = newRt.getObjectsView().build()
                 .setTypeToken(PersistedCorfuTable.<String, String>getTypeToken())
-                .streamID(tableId)
+                .setStreamID(tableId)
                 .setSerializer(Serializers.JSON)
                 .setArguments(persistenceOptions.build(), Serializers.JSON)
                 .open()) {

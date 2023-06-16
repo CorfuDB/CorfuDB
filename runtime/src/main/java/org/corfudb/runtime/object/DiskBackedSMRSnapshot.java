@@ -79,6 +79,9 @@ public class DiskBackedSMRSnapshot<S extends SnapshotGenerator<S>> implements SM
     public void release() {
         long stamp = lock.writeLock();
         try {
+            if (!this.readOptions.isOwningHandle()) {
+                return; // The snapshot has already been released.
+            }
             rocksDb.releaseSnapshot(snapshot);
             set.forEach(RocksDbEntryIterator::invalidateIterator);
             readOptions.close();

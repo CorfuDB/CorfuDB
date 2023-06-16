@@ -2,7 +2,6 @@ package org.corfudb.runtime.view;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
-import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NonNull;
@@ -21,7 +20,6 @@ import org.corfudb.runtime.exceptions.WriteSizeException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.MVOCache;
-import org.corfudb.runtime.object.MVOCorfuCompileProxy;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.object.transactions.Transaction;
 import org.corfudb.runtime.object.transactions.Transaction.TransactionBuilder;
@@ -72,7 +70,7 @@ public class ObjectsView extends AbstractView {
      * @return An object builder to open an object with.
      */
     public <T extends ICorfuSMR<?>> SMRObject.Builder<T> build() {
-        return new SMRObject.Builder<T>().runtime(runtime);
+        return new SMRObject.Builder<T>().setCorfuRuntime(runtime);
     }
 
     /**

@@ -1537,11 +1537,6 @@ public class CorfuStoreShimTest extends AbstractViewTest {
             // Make sure the entries were actually removed.
             assertThat(txnContext.count(table)).isEqualTo(numEntries/2);
 
-            // keySet API is not supported.
-            assertThatThrownBy(() -> txnContext.keySet(table))
-                    .isInstanceOf(UnsupportedOperationException.class);
-
-
             CorfuStoreMetadata.Timestamp ts = txnContext.commit();
             assertThat(ts.getSequence()).isPositive();
         }

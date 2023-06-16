@@ -176,7 +176,7 @@ public class MVOCorfuCompileProxy<
             snapshotTimestamp = context.getSnapshotTimestamp();
             abortCause = AbortCause.TRIM;
         } else {
-            log.error("abortTransaction[{}] Abort Transaction with Exception {}", this, e);
+            log.error("abortTransaction[{}] Abort Transaction with Exception", this, e);
             snapshotTimestamp = context.getSnapshotTimestamp();
         }
 

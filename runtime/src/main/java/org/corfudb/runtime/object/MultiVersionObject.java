@@ -172,7 +172,7 @@ public class MultiVersionObject<S extends SnapshotGenerator<S>> {
                         try {
                             // Apply all updates in a MultiSMREntry, which is treated as one version.
                             final long globalAddress = addressUpdates.getGlobalAddress();
-
+                            
                             // The globalAddress can be equal to materializedUpTo when processing checkpoint
                             // entries that consist of multiple continuation entries. These will all share the
                             // globalAddress of the no-op operation. There is no correctness issue by prematurely
@@ -191,11 +191,17 @@ public class MultiVersionObject<S extends SnapshotGenerator<S>> {
                             addressUpdates.getSmrEntryList().forEach(this::applyUpdateUnsafe);
 
                             // If we observe a new version, place the previous one into the MVOCache.
-                            if (globalAddress > materializedUpTo) {
+                            if (globalAddress >= materializedUpTo) {
                                 final VersionedObjectIdentifier voId = new VersionedObjectIdentifier(getID(), materializedUpTo);
                                 currentObject.generateIntermediarySnapshot(voId, objectOpenOption)
                                         .ifPresent(newSnapshot -> {
                                             final SMRSnapshot<S> previousSnapshot = setCurrentSnapshot(newSnapshot);
+                                            if (globalAddress == materializedUpTo) {
+                                                // The checkpoint sync will contain multiple SMR
+                                                // entries with the same address. Only cache the
+                                                // latest one, and release all the previous ones.
+                                                previousSnapshot.release();
+;                                            }
                                             mvoCache.put(voId, previousSnapshot);
                                         });
                             }

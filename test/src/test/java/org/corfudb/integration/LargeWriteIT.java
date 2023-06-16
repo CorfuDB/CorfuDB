@@ -79,7 +79,7 @@ public class LargeWriteIT extends AbstractIT {
                 .build()
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, byte[]>>() {})
                 .setStreamName(tableName)
-                .serializer(Serializers.JAVA)
+                .setSerializer(Serializers.JAVA)
                 .open();
 
         runtime.getObjectsView().TXBegin();

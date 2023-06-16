@@ -52,7 +52,7 @@ public class ObjectBuilderTest {
         CorfuRuntime rt = new CorfuRuntime();
         assertThatThrownBy(() -> {
             SMRObject.builder()
-                    .runtime(rt)
+                    .setCorfuRuntime(rt)
                     .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
                     .open();
         }).isInstanceOf(NullPointerException.class)

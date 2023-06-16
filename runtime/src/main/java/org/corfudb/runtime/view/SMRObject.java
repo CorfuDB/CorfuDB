@@ -2,7 +2,6 @@ package org.corfudb.runtime.view;
 
 import com.google.common.reflect.TypeToken;
 import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -28,9 +27,11 @@ import java.util.UUID;
  */
 @Slf4j
 @Getter
-@Builder(builderClassName = "Builder")
 @AllArgsConstructor
-public class SMRObject<T extends ICorfuSMR> {
+public class SMRObject<T extends ICorfuSMR<?>> {
+    public static <T extends ICorfuSMR<?>> Builder<T> builder() {
+        return new Builder<>();
+    }
 
     @NonNull
     private final CorfuRuntime runtime;
@@ -47,7 +48,8 @@ public class SMRObject<T extends ICorfuSMR> {
     @NonNull
     private final ISerializer serializer;
 
-    private final ObjectOpenOption openOption;
+    @NonNull
+    private ObjectOpenOption openOption;
 
     @NonNull
     private final Object[] arguments;
@@ -55,10 +57,14 @@ public class SMRObject<T extends ICorfuSMR> {
     @NonNull
     private final Set<UUID> streamTags;
 
-    public static class Builder<T extends ICorfuSMR> {
+    public static class Builder<T extends ICorfuSMR<?>> {
 
+        private String streamName;
         private ISerializer serializer = Serializers.getDefaultSerializer();
         private Object[] arguments = new Object[0];
+        private ObjectOpenOption openOption = ObjectOpenOption.CACHE;
+        private CorfuRuntime corfuRuntime;
+
         @Getter
         private Class<T> type;
         @Getter
@@ -67,19 +73,23 @@ public class SMRObject<T extends ICorfuSMR> {
         private Set<UUID> streamTags = new HashSet<>();
 
         private void verify() {
-            if (streamName != null && !UUID.nameUUIDFromBytes(streamName.getBytes()).equals(streamID)) {
+            if (this.streamName != null && !UUID.nameUUIDFromBytes(streamName.getBytes()).equals(streamID)) {
                 throw new IllegalArgumentException("Stream id must be derived from stream name");
             }
         }
+        public <R extends ICorfuSMR<?>> SMRObject.Builder<R> setCorfuRuntime(CorfuRuntime corfuRuntime) {
+            this.corfuRuntime = corfuRuntime;
+            return (SMRObject.Builder<R>) this;
+        }
 
         @SuppressWarnings("unchecked")
-        public <R extends ICorfuSMR> SMRObject.Builder<R> setType(Class<R> type) {
+        public <R extends ICorfuSMR<?>> SMRObject.Builder<R> setType(Class<R> type) {
             this.type = (Class<T>) type;
             return (SMRObject.Builder<R>) this;
         }
 
         @SuppressWarnings("unchecked")
-        public <R extends ICorfuSMR> SMRObject.Builder<R> setTypeToken(TypeToken<R> typeToken) {
+        public <R extends ICorfuSMR<?>> SMRObject.Builder<R> setTypeToken(TypeToken<R> typeToken) {
             this.type = (Class<T>) typeToken.getRawType();
             return (SMRObject.Builder<R>) this;
         }
@@ -124,7 +134,7 @@ public class SMRObject<T extends ICorfuSMR> {
                 streamID = UUID.nameUUIDFromBytes(streamName.getBytes());
             }
             verify();
-            return new SMRObject<>(runtime, type, streamID, streamName,
+            return new SMRObject<>(corfuRuntime, type, streamID, streamName,
                 serializer, openOption, arguments, streamTags);
         }
 

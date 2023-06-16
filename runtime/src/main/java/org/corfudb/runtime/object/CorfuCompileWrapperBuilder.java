@@ -84,7 +84,7 @@ public class CorfuCompileWrapperBuilder {
         throw new UnsupportedOperationException(type.getName() + " not supported.");
     }
 
-    public static <T extends ICorfuSMR> T getWrapper(SMRObject<T> smrObject) throws Exception {
+    public static <T extends ICorfuSMR<?>> T getWrapper(SMRObject<T> smrObject) throws Exception {
         return getWrapper(smrObject.getType(),
                 smrObject.getRuntime(),
                 smrObject.getStreamID(),
