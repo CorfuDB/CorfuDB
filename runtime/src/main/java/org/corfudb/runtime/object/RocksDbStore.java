@@ -24,6 +24,7 @@ import org.rocksdb.WriteOptions;
 import java.nio.ByteBuffer;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.concurrent.locks.StampedLock;
 import java.util.stream.Collectors;
 
 /**
@@ -126,7 +127,7 @@ public class RocksDbStore<S extends SnapshotGenerator<S>> implements
 
     @Override
     public <K, V> RocksDbEntryIterator<K, V> getIterator(@NonNull ISerializer serializer) {
-        return new RocksDbEntryIterator<>(rocksDb, serializer);
+        return new RocksDbEntryIterator<>(rocksDb.newIterator(), serializer, new ReadOptions(), new StampedLock(), true);
     }
 
     @Override

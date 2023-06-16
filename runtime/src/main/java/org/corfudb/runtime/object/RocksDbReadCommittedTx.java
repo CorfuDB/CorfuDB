@@ -17,6 +17,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.locks.StampedLock;
 
+import static org.corfudb.runtime.collections.RocksDbEntryIterator.LOAD_VALUES;
+
 /**
  * A concrete class that implements {@link RocksDbApi} using
  * {@link Transaction}. Unlike its cousin {@link RocksDbTx},
@@ -86,7 +88,8 @@ public class RocksDbReadCommittedTx implements RocksDbApi {
 
     @Override
     public <K, V> RocksDbEntryIterator<K,V> getIterator(@NonNull ISerializer serializer) {
-        return new RocksDbEntryIterator<>(rocksDb.newIterator(), serializer, readOptions, new StampedLock());
+        return new RocksDbEntryIterator<>(rocksDb.newIterator(), serializer,
+                readOptions, new StampedLock(), LOAD_VALUES);
     }
 
     @Override

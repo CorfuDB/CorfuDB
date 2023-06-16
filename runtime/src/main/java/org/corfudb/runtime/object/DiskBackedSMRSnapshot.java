@@ -17,6 +17,8 @@ import java.util.concurrent.locks.StampedLock;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
+import static org.corfudb.runtime.collections.RocksDbEntryIterator.LOAD_VALUES;
+
 public class DiskBackedSMRSnapshot<S extends SnapshotGenerator<S>> implements SMRSnapshot<S> {
 
     private final VersionedObjectIdentifier version;
@@ -94,7 +96,7 @@ public class DiskBackedSMRSnapshot<S extends SnapshotGenerator<S>> implements SM
         return executeInSnapshot(readOptions -> {
             RocksDbEntryIterator<K, V> iterator = new RocksDbEntryIterator<>(
                     transaction.getIterator(readOptions),
-                    serializer, readOptions, lock);
+                    serializer, readOptions, lock, LOAD_VALUES);
             set.add(iterator);
             return iterator;
         });

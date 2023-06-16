@@ -727,6 +727,7 @@ public class CheckpointTest extends AbstractObjectTest {
         final UUID tableId = UUID.randomUUID();
         final PersistenceOptionsBuilder persistenceOptions = PersistenceOptions.builder()
                 .dataPath(Paths.get(path + tableId + "writer"));
+        final int numKeys = 303;
 
         try (PersistedCorfuTable<String, String> table = rt.getObjectsView()
                 .build()
@@ -736,10 +737,10 @@ public class CheckpointTest extends AbstractObjectTest {
                 .setArguments(persistenceOptions.build(), Serializers.JSON)
                 .open()) {
 
-            final int numKeys = 303;
             for (int x = 0; x < numKeys; x++) {
                 table.insert(String.valueOf(x), "payload" + x);
             }
+            assertThat(table.size()).isEqualTo(numKeys);
 
             MultiCheckpointWriter mcw = new MultiCheckpointWriter();
             mcw.addMap(table);
@@ -760,6 +761,8 @@ public class CheckpointTest extends AbstractObjectTest {
 
             assertThat(Iterators.elementsEqual(table.entryStream().iterator(),
                     table.entryStream().iterator())).isTrue();
+            assertThat(table.size()).isEqualTo(numKeys);
+
         }
     }
 }

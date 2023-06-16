@@ -22,6 +22,8 @@ import java.util.concurrent.locks.StampedLock;
 @NotThreadSafe
 public class RocksDbEntryIterator<K, V> implements Iterator<Map.Entry<K, V>>, AutoCloseable {
 
+    public static boolean LOAD_VALUES = true;
+
     /**
      * A reference to the underlying RocksDb iterator
      */
@@ -42,24 +44,12 @@ public class RocksDbEntryIterator<K, V> implements Iterator<Map.Entry<K, V>>, Au
      */
     private final boolean loadValues;
 
-    public RocksDbEntryIterator(RocksDB rocksDB, ISerializer serializer, boolean loadValues) {
-        this(rocksDB, serializer, new ReadOptions(), loadValues);
-    }
-
-    public RocksDbEntryIterator(RocksDB rocksDB, ISerializer serializer) {
-        this(rocksDB, serializer, true);
-    }
-
-    public RocksDbEntryIterator(RocksDB rocksDB, ISerializer serializer, ReadOptions readOptions, boolean loadValues) {
-        throw new UnsupportedOperationException();
-    }
-
     public RocksDbEntryIterator(RocksIterator rocksIterator, ISerializer serializer,
-                                ReadOptions readOptions, StampedLock lock) {
+                                ReadOptions readOptions, StampedLock lock, boolean loadValues) {
         rocksIterator.seekToFirst();
         this.wrappedRocksIterator = new CheckedRocksIterator(rocksIterator, lock, readOptions);
         this.serializer = serializer;
-        this.loadValues = true;
+        this.loadValues = loadValues;
     }
 
     /**
