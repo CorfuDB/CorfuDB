@@ -122,9 +122,11 @@ public class LogReplicationUtilsTest extends AbstractViewTest {
             TestUtils.setSnapshotSyncOngoing(corfuStore, replicationStatusTable, client, ongoing);
         }
 
+        // Open routing queue before the subscribe call at the receiver.
         String recvQueueName = LogReplicationUtils.REPLICATED_QUEUE_NAME_PREFIX;
+        Table<Queue.CorfuGuidMsg, Queue.RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg> routingQueue;
         try {
-            Table<Queue.CorfuGuidMsg, Queue.RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg> routingQueue =
+            routingQueue =
                     corfuStore.openQueue(namespace, recvQueueName,
                             Queue.RoutingTableEntryMsg.class,
                             TableOptions.builder().schemaOptions(
@@ -140,7 +142,19 @@ public class LogReplicationUtilsTest extends AbstractViewTest {
             throw new RuntimeException(e);
         }
 
+        // Subscribe to the routing queue.
         LogReplicationUtils.subscribeRqListener(lrRqListener, namespace, 5, corfuStore);
+
+        // Update the queue to verify the listener works
+        final int numEntries = 5;
+        for (int i = 0; i < numEntries; i++) {
+            try (TxnContext tx = corfuStore.txn(namespace)) {
+                Queue.RoutingTableEntryMsg entry = Queue.RoutingTableEntryMsg.newBuilder()
+                        .addDestinations(tx.getNamespace()).build();
+                tx.enqueue(routingQueue, entry);
+                tx.commit();
+            }
+        }
         verifyRoutingQueueListenerFlags((LogReplicationTestRoutingQueueListener)lrRqListener, ongoing);
     }
 
