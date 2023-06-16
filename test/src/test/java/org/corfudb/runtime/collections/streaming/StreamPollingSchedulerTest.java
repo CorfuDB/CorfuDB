@@ -19,7 +19,9 @@ import org.corfudb.runtime.view.SequencerView;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.junit.Test;
+import org.mockito.Answers;
 import org.mockito.ArgumentCaptor;
+import org.mockito.MockSettings;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -390,7 +392,7 @@ public class StreamPollingSchedulerTest {
 
         // Verify that the scheduler re-scheduled itself
         streamPoller.schedule();
-        verify(scheduler, times(2)).schedule(any(StreamPollingScheduler.Tick.class),
+        verify(scheduler, times(2)).schedule(any(Runnable.class),
                 any(Long.class),
                 eq(TimeUnit.NANOSECONDS));
         // Verify that while the task is syncing, it hasn't been polled (because its backed up, that is
