@@ -1642,11 +1642,11 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
                 .setLockGroup(lockGroup)
                 .setLockName(lockName)
                 .build();
-        CorfuStoreEntry record;
+        CorfuStoreEntry lockTableRecord;
 
         // Release Source's lock by deleting the lock table
         try (TxnContext txnContext = sourceCorfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            record = txnContext.getRecord(sourceLockTable, lockId);
+            lockTableRecord = txnContext.getRecord(sourceLockTable, lockId);
             txnContext.clear(sourceLockTable);
             txnContext.commit();
         }
@@ -1678,7 +1678,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         // replicate data. Otherwise, the SINK will send queryLeadership after getting a leadershipLoss msg from SOURCE.
         // The SOURCE will then replicate via the reverseReplicate rpc.
         try (TxnContext txnContext = sourceCorfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            LockDataTypes.LockData oldLockData = LockDataTypes.LockData.newBuilder().mergeFrom(record.getPayload()).build();
+            LockDataTypes.LockData oldLockData = LockDataTypes.LockData.newBuilder().mergeFrom(lockTableRecord.getPayload()).build();
             txnContext.putRecord(sourceLockTable, lockId,
                     LockDataTypes.LockData.newBuilder().mergeFrom(oldLockData)
                             .setLeaseAcquisitionNumber(oldLockData.getLeaseAcquisitionNumber() + 1)

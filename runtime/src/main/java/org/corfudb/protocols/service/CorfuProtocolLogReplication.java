@@ -9,7 +9,6 @@ import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMetadataMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
-import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
@@ -18,7 +17,6 @@ import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg;
 import java.util.ArrayList;
 import java.util.List;
 
-import static org.corfudb.protocols.service.CorfuProtocolMessage.getRequestMsg;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getResponseMsg;
 
 /**

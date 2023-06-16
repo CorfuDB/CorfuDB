@@ -90,7 +90,7 @@ public class NegotiatingState implements LogReplicationRuntimeState {
                 }
                 return null;
             case LOCAL_LEADER_LOSS:
-                if (canEnqueueStopRuntimeFsmEvent(router, fsm, event.isConnectionStarter)) {
+                if (canEnqueueStopRuntimeFsmEvent(router, fsm, event.isConnectionStarter())) {
                     return fsm.getStates().get(LogReplicationRuntimeStateType.STOPPED);
                 }
                 return null;

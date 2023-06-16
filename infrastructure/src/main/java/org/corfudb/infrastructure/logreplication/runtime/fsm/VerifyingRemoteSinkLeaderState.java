@@ -61,7 +61,7 @@ public class VerifyingRemoteSinkLeaderState implements LogReplicationRuntimeStat
                 fsm.updateConnectedNodes(event.getNodeId());
                 return this;
             case LOCAL_LEADER_LOSS:
-                if (canEnqueueStopRuntimeFsmEvent(router, fsm, event.isConnectionStarter)) {
+                if (canEnqueueStopRuntimeFsmEvent(router, fsm, event.isConnectionStarter())) {
                     return fsm.getStates().get(LogReplicationRuntimeStateType.STOPPED);
                 }
                 return null;
