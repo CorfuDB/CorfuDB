@@ -184,6 +184,7 @@ public class StreamingTaskTest {
         when(addressSpaceView.read(3L, options)).thenThrow(new TrimmedException());
 
         // Verify that trimmed exceptions are discovered and propagated correctly
+        task.move(StreamStatus.RUNNABLE, StreamStatus.SYNCING);
         task.run();
         assertThat(task.getStatus()).isEqualTo(StreamStatus.ERROR);
         task.propagateError();
