@@ -2,15 +2,19 @@ package org.corfudb.runtime.collections;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.corfudb.runtime.LogReplicationUtils.LR_STATUS_STREAM_TAG;
 
 import com.google.common.primitives.UnsignedBytes;
 
 import java.lang.reflect.InvocationTargetException;
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.TreeMap;
+
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.checkerframework.checker.units.qual.C;
@@ -30,6 +34,7 @@ import org.corfudb.runtime.collections.CorfuQueue.CorfuQueueRecord;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.SMRObject;
+import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.util.serializer.ProtobufSerializer;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
@@ -302,8 +307,11 @@ public class CorfuQueueTest extends AbstractViewTest {
         }
         final Table<Queue.CorfuGuidMsg, RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg> finalQ = q;
         final byte[] foo = {'a', 'b', 'c'};
-        executeTxn(corfuStore, namespace, (TxnContext tx) -> tx.logUpdateThatLooksLikeEnqueue(finalQ,
-                RoutingTableEntryMsg.newBuilder().setOpaquePayload(ByteString.copyFrom(foo)).build(), corfuStore));
+        executeTxn(corfuStore, namespace, (TxnContext tx) -> tx.logUpdateEnqueue(finalQ,
+                RoutingTableEntryMsg.newBuilder().setOpaquePayload(ByteString.copyFrom(foo)).build(),
+                new ArrayList<>(Collections.singletonList(TableRegistry.getStreamIdForStreamTag(
+                        TableRegistry.CORFU_SYSTEM_NAMESPACE, LR_STATUS_STREAM_TAG))), corfuStore
+                ));
 
         Object[] smrArgs = new Object[2];
         smrArgs[0] = Queue.CorfuGuidMsg.newBuilder().setInstanceId(1).build();

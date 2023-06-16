@@ -1,7 +1,6 @@
 package org.corfudb.runtime.collections;
 
 import com.google.common.reflect.TypeToken;
-import com.google.protobuf.ByteString;
 import com.google.protobuf.Message;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -326,12 +325,16 @@ public class Table<K extends Message, V extends Message, M extends Message> {
     }
 
     /**
-     * Helper function for logUpdateThatLooksLikeEnqueue() in TxnContext.java
+     * Apply a Corfu SMREntry directly to a stream. This can be used for replaying the mutations
+     * directly into the underlying stream bypassing the object layer entirely.
+     *
      * @param e the element to update
+     * @param streamTags  - stream tags associated to the given stream id
+     * @param corfuStore CorfuStore that gets the runtime for the serializer.
      * @throws IllegalArgumentException if some property of the specified
      *                                  element prevents it from being updated
      */
-    public K logUpdateEnqueue(V e, TxnContext txn, CorfuStore corfuStore) {
+    public K logUpdateEnqueue(V e, List<UUID> streamTags, CorfuStore corfuStore) {
         /**
          * This is a callback that is placed into the root transaction's context on
          * the thread local stack which will be invoked right after this transaction
@@ -371,8 +374,9 @@ public class Table<K extends Message, V extends Message, M extends Message> {
         Object[] smrArgs = new Object[2];
         smrArgs[0] = keyOfQueueEntry;
         smrArgs[1] = queueEntry;
-        txn.logUpdate(this.getStreamUUID(), new SMREntry("put", smrArgs,
-                corfuStore.getRuntime().getSerializers().getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE)));
+        TransactionalContext.getCurrentContext().logUpdate(this.getStreamUUID(), new SMREntry("put", smrArgs,
+                corfuStore.getRuntime().getSerializers().getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE)),
+                streamTags);
         return keyOfQueueEntry;
     }
 
