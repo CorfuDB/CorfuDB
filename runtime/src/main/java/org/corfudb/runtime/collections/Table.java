@@ -325,14 +325,13 @@ public class Table<K extends Message, V extends Message, M extends Message> {
     }
 
     /**
-     * Apply a Corfu SMREntry directly to a stream. This can be used for replaying the mutations
-     * directly into the underlying stream bypassing the object layer entirely.
+     * Appends the specified element to the end of this unbounded queue, without materializing the queue in memory.
      *
-     * @param e the element to update
+     * @param e the element to add
      * @param streamTags  - stream tags associated to the given stream id
      * @param corfuStore CorfuStore that gets the runtime for the serializer.
      * @throws IllegalArgumentException if some property of the specified
-     *                                  element prevents it from being updated
+     *                                  element prevents it from being added to the queue.
      */
     public K logUpdateEnqueue(V e, List<UUID> streamTags, CorfuStore corfuStore) {
         /**

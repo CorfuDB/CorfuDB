@@ -6,7 +6,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.Token;
-import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
 import org.corfudb.runtime.exceptions.TransactionAlreadyStartedException;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
@@ -453,14 +452,10 @@ public class TxnContext implements AutoCloseable {
     }
 
     /**
-     * This API is used for LR Routing Queue model.
+     * This API is used to add an entry to the CorfuQueue without materializing the queue in memory.
      *
-     * This API is needed because the queue's id captures the sequencer's address which
-     * can later be used for negotiation, and tools like browser can be used to debug and display outstanding entries.
-     * Also, this method avoids materializing the queue in memory.
-     *
-     * @param table  Table object to access the UUID.
-     * @param record Record to be updated.
+     * @param table  Table object to operate on the queue.
+     * @param record Record to be added.
      * @param streamTags  - stream tags associated to the given stream id
      * @param corfuStore CorfuStore that gets the runtime for the serializer.
      * @param <K>    Type of Key.
