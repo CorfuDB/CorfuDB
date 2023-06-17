@@ -89,9 +89,19 @@ public final class LogReplicationUtils {
 
         long subscriptionTimestamp = getRoutingQueueSubscriptionTimestamp(corfuStore, namespace, clientListener);
         // Open the routing queue from corfu store and pass it down.
-        corfuStore.getRuntime().getTableRegistry().getStreamingManager().subscribeLogReplicationRoutingQueueListener(
-                clientListener, namespace, subscriptionTimestamp, bufferSize);
-        log.info("Client subscription at timestamp {} successful.", subscriptionTimestamp);
+        // TODO: Get client name as input params. For now, hard coding the stream tag.
+        if (CheckIfRoutingQueueExists(corfuStore, namespace, REPLICATED_QUEUE_TAG)) {
+            // Table registry contains the routing queue already.
+            corfuStore.getRuntime().getTableRegistry().getStreamingManager().subscribeLogReplicationRoutingQueueListener(
+                    clientListener, namespace, subscriptionTimestamp, bufferSize);
+            log.info("Routing queue client subscription at timestamp {} successful.", subscriptionTimestamp);
+        } else {
+            // Routing queue is not registered at the sink (receiver side) yet.
+            // Subscribe to LR status table and poll for routing queue registry
+            corfuStore.getRuntime().getTableRegistry().getStreamingManager().subscribeLogReplicationLrStatusTableListener(
+                    clientListener, subscriptionTimestamp, bufferSize);
+            log.info("Subscribed to LR status table at timestamp {}.", subscriptionTimestamp);
+        }
     }
 
 
@@ -312,6 +322,14 @@ public final class LogReplicationUtils {
             log.error("Failed to open the Replication Status table", e);
             throw new StreamingException(e, StreamingException.ExceptionCause.SUBSCRIBE_ERROR);
         }
+    }
+
+    public static boolean CheckIfRoutingQueueExists(CorfuStore corfuStore, String namespace, String streamTag) {
+        List<String> tablesOfInterest = corfuStore.getTablesOfInterest(namespace, streamTag);
+        if (tablesOfInterest.size() != 0) {
+            return true;
+        }
+        return false;
     }
 
     private static void setListenerParamsForSnapshotSync(LogReplicationListener listener, long subscriptionTimestamp,

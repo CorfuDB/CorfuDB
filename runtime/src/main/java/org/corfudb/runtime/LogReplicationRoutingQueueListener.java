@@ -75,6 +75,7 @@ public abstract class LogReplicationRoutingQueueListener implements StreamListen
         Set<String> tableNames =
                 results.getEntries().keySet().stream().map(schema -> schema.getTableName()).collect(Collectors.toSet());
 
+
         if (tableNames.contains(REPLICATION_STATUS_TABLE_NAME)) {
             Preconditions.checkState(results.getEntries().keySet().size() == 1,
                     "Replication Status Table Update received with other tables");
@@ -107,6 +108,16 @@ public abstract class LogReplicationRoutingQueueListener implements StreamListen
                         .map(Map.Entry::getValue)
                         .findFirst()
                         .get();
+
+        // Check if receiver routing queue is registered now.
+        if (LogReplicationUtils.CheckIfRoutingQueueExists(corfuStore, namespace, LogReplicationUtils.REPLICATED_QUEUE_TAG)) {
+            // Unsubscribe the LR status table
+            corfuStore.unsubscribeListener(this);
+            // Re-subscribe the LR status table && Subscribe the routing queue.
+            // TODO: Add the buffer size.
+            LogReplicationUtils.subscribeRqListener(this, namespace, 5, corfuStore);
+            return;
+        }
 
         for (CorfuStreamEntry entry : replicationStatusTableEntries) {
 

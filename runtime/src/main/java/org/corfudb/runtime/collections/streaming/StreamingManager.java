@@ -124,9 +124,21 @@ public class StreamingManager {
         // Queue is already opened. Add Routing Queue.
         nsToTableName.put(namespace, Arrays.asList(REPLICATED_QUEUE_NAME_PREFIX));
 
+        // TODO: Form the routing queue tag from the client_name input parameter.
         Map<String, String> nsToStreamTags = new HashMap<>();
         nsToStreamTags.put(CORFU_SYSTEM_NAMESPACE, LR_STATUS_STREAM_TAG);
         nsToStreamTags.put(namespace, REPLICATED_QUEUE_TAG);
+        this.scheduler.addLRTask(streamListener, nsToStreamTags, nsToTableName, lastAddress,
+                bufferSize == 0 ? defaultBufferSize : bufferSize);
+    }
+
+    public void subscribeLogReplicationLrStatusTableListener(@Nonnull LogReplicationRoutingQueueListener streamListener,
+                                                            long lastAddress, int bufferSize) {
+        Map<String, List<String>> nsToTableName = new HashMap<>();
+        nsToTableName.put(CORFU_SYSTEM_NAMESPACE, Arrays.asList(REPLICATION_STATUS_TABLE_NAME));
+
+        Map<String, String> nsToStreamTags = new HashMap<>();
+        nsToStreamTags.put(CORFU_SYSTEM_NAMESPACE, LR_STATUS_STREAM_TAG);
         this.scheduler.addLRTask(streamListener, nsToStreamTags, nsToTableName, lastAddress,
                 bufferSize == 0 ? defaultBufferSize : bufferSize);
     }
