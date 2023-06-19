@@ -13,6 +13,9 @@ import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationCo
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.ISnapshotSyncPlugin;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationMetadata;
+import org.corfudb.runtime.LogReplication;
+import org.corfudb.runtime.Queue;
+import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.proto.RpcCommon.UuidMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.CorfuRuntime;
@@ -23,6 +26,7 @@ import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalRetry;
 import org.corfudb.util.retry.RetryNeededException;
@@ -31,8 +35,12 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
 import java.net.URL;
 import java.net.URLClassLoader;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
 import java.util.UUID;
@@ -42,6 +50,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
 import static org.corfudb.protocols.service.CorfuProtocolLogReplication.getLrEntryAckMsg;
+import static org.corfudb.runtime.LogReplicationUtils.REPLICATED_QUEUE_NAME_PREFIX;
+import static org.corfudb.runtime.LogReplicationUtils.REPLICATED_QUEUE_TAG;
+import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 /**
  * This class represents the Log Replication Manager at the destination.
@@ -182,6 +193,7 @@ public class LogReplicationSinkManager implements DataReceiver {
                         .setNameFormat("snapshotSyncApplyExecutor-" + session.hashCode())
                         .build());
 
+        specialInitForRoutingQModel();
         initWriterAndBufferMgr();
     }
 
@@ -220,6 +232,38 @@ public class LogReplicationSinkManager implements DataReceiver {
 
         logEntrySinkBufferManager = new LogEntrySinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,
                 metadataManager.getReplicationMetadata(session).getLastLogEntryBatchProcessed(), this);
+    }
+
+    private void specialInitForRoutingQModel() {
+        if (!session.getSubscriber().getModel().equals(LogReplication.ReplicationModel.ROUTING_QUEUES)) {
+            return;
+        }
+        insertQInRegistryTable();
+        insertTagForReplicatedQ();
+    }
+
+    private void insertQInRegistryTable() {
+        TableRegistry tableRegistry = runtime.getTableRegistry();
+        String replicatedQName = REPLICATED_QUEUE_NAME_PREFIX + session.getSourceClusterId();
+        if (!tableRegistry.getRegistryTable().containsKey(replicatedQName)) {
+            try {
+                tableRegistry.registerTable(CORFU_SYSTEM_NAMESPACE, replicatedQName, Queue.CorfuGuidMsg.class,
+                        Queue.RoutingTableEntryMsg.class, Queue.CorfuQueueMetadataMsg.class,
+                        TableOptions.fromProtoSchema(Queue.RoutingTableEntryMsg.class));
+            } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
+                throw new RuntimeException(e);
+            }
+        }
+
+    }
+
+    private void insertTagForReplicatedQ() {
+        UUID replicatedQUUID = CorfuRuntime.getStreamID(TableRegistry
+                .getFullyQualifiedTableName(
+                        CORFU_SYSTEM_NAMESPACE, REPLICATED_QUEUE_NAME_PREFIX + session.getSourceClusterId()));
+        UUID replicatedQTagUUID = TableRegistry.getStreamIdForStreamTag(CORFU_SYSTEM_NAMESPACE, REPLICATED_QUEUE_TAG);
+        replicationContext.getConfig(session).getDataStreamToTagsMap()
+                .put(replicatedQUUID, Collections.singletonList(replicatedQTagUUID));
     }
 
     private ISnapshotSyncPlugin getOnSnapshotSyncPlugin() {
