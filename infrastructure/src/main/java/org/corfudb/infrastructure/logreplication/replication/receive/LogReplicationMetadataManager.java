@@ -170,6 +170,11 @@ public class LogReplicationMetadataManager {
         txnContext.clear(txnContext.getTable(REPLICATION_EVENT_TABLE_NAME));
     }
 
+    /**
+     * Initialize LogReplicationStatus table. Note that it is required to initialize those fields explicitly instead
+     * of relying on the default value, as some clients of log replicator v1 consume the status table with hasField
+     * check.
+     */
     private void initializeMetadata(TxnContext txn, LogReplicationSession session, boolean incomingSession,
                                     long topologyConfigId) {
         if (incomingSession) {
