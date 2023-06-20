@@ -193,7 +193,9 @@ public class LogReplicationSinkManager implements DataReceiver {
                         .setNameFormat("snapshotSyncApplyExecutor-" + session.hashCode())
                         .build());
 
-        specialInitForRoutingQModel();
+        if (session.getSubscriber().getModel().equals(LogReplication.ReplicationModel.ROUTING_QUEUES)) {
+            insertQInRegistryTable();
+        }
         initWriterAndBufferMgr();
     }
 
@@ -234,14 +236,6 @@ public class LogReplicationSinkManager implements DataReceiver {
                 metadataManager.getReplicationMetadata(session).getLastLogEntryBatchProcessed(), this);
     }
 
-    private void specialInitForRoutingQModel() {
-        if (!session.getSubscriber().getModel().equals(LogReplication.ReplicationModel.ROUTING_QUEUES)) {
-            return;
-        }
-        insertQInRegistryTable();
-        insertTagForReplicatedQ();
-    }
-
     private void insertQInRegistryTable() {
         TableRegistry tableRegistry = runtime.getTableRegistry();
         String replicatedQName = REPLICATED_QUEUE_NAME_PREFIX + session.getSourceClusterId();
@@ -255,15 +249,6 @@ public class LogReplicationSinkManager implements DataReceiver {
             }
         }
 
-    }
-
-    private void insertTagForReplicatedQ() {
-        UUID replicatedQUUID = CorfuRuntime.getStreamID(TableRegistry
-                .getFullyQualifiedTableName(
-                        CORFU_SYSTEM_NAMESPACE, REPLICATED_QUEUE_NAME_PREFIX + session.getSourceClusterId()));
-        UUID replicatedQTagUUID = TableRegistry.getStreamIdForStreamTag(CORFU_SYSTEM_NAMESPACE, REPLICATED_QUEUE_TAG);
-        replicationContext.getConfig(session).getDataStreamToTagsMap()
-                .put(replicatedQUUID, Collections.singletonList(replicatedQTagUUID));
     }
 
     private ISnapshotSyncPlugin getOnSnapshotSyncPlugin() {
