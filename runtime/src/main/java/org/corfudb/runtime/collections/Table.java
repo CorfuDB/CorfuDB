@@ -27,8 +27,10 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.nio.file.Paths;
 import java.time.Duration;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.Deque;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -44,6 +46,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
+import static org.corfudb.runtime.collections.DiskBackedCorfuTable.builder;
 import static org.corfudb.runtime.collections.DiskBackedCorfuTable.getDiskBackedCorfuTableOptions;
 
 /**
@@ -230,9 +233,9 @@ public class Table<K extends Message, V extends Message, M extends Message> impl
     }
 
     private void initializeCorfuTable(CorfuRuntime runtime) {
-        final ProtobufIndexer protobufIndexer = new ProtobufIndexer(
-                tableParameters.getValueSchema(),
-                tableParameters.getSchemaOptions());
+        final SMRObject.Builder<? extends ICorfuTable<K, CorfuRecord<V, M>>> builder;
+        final Deque<Object> arguments = new ArrayDeque<>();
+
         // Default in-memory implementation.
 
         // Check to see if we should be used a disk backed table.
@@ -243,24 +246,30 @@ public class Table<K extends Message, V extends Message, M extends Message> impl
                 persistenceOptions.consistencyModel(tableParameters.getPersistenceOptions().getConsistencyModel());
             }
 
-            this.corfuTable = runtime.getObjectsView().<PersistedCorfuTable<K, CorfuRecord<V, M>>>build()
+            builder = runtime.getObjectsView().<PersistedCorfuTable<K, CorfuRecord<V, M>>>build()
                     .setStreamName(fullyQualifiedTableName)
                     .setStreamTags(streamTags)
                     .setSerializer(serializer)
-                    .setTypeToken(PersistedCorfuTable.<K, CorfuRecord<V, M>>getTypeToken())
-                    .setArguments(
-                            persistenceOptions.build(), getDiskBackedCorfuTableOptions(),
-                            new SafeProtobufSerializer(serializer), protobufIndexer)
-                    .open();
+                    .setTypeToken(PersistedCorfuTable.<K, CorfuRecord<V, M>>getTypeToken());
+
+            arguments.add(persistenceOptions.build());
+            arguments.add(getDiskBackedCorfuTableOptions());
         } else {
-            this.corfuTable = runtime.getObjectsView().<PersistentCorfuTable<K, CorfuRecord<V, M>>>build()
+            builder = runtime.getObjectsView().<PersistentCorfuTable<K, CorfuRecord<V, M>>>build()
                     .setStreamName(fullyQualifiedTableName)
                     .setStreamTags(streamTags)
                     .setSerializer(serializer)
-                    .setArguments(protobufIndexer)
-                    .setTypeToken(PersistentCorfuTable.<K, CorfuRecord<V, M>>getTypeToken())
-                    .open();
+                    .setTypeToken(PersistentCorfuTable.<K, CorfuRecord<V, M>>getTypeToken());
         }
+
+        if (!tableParameters.isSecondaryIndexesDisabled()) {
+            arguments.add(new ProtobufIndexer(
+                    tableParameters.getValueSchema(),
+                    tableParameters.getSchemaOptions()));
+        }
+
+        builder.setArguments(arguments.toArray());
+        this.corfuTable = builder.open();
     }
 
     /**

@@ -525,8 +525,9 @@ public class CorfuStoreIT extends AbstractIT {
                 .ContactBookId.class.getMethod("getDefaultInstance").invoke(null);
         ManagedResources defaultMetadataMessage = (ManagedResources) ManagedResources
                 .class.getMethod("getDefaultInstance").invoke(null);
+        CorfuOptions.PersistenceOptions persistenceOptions = CorfuOptions.PersistenceOptions.newBuilder().build();
 
-        Table<Uuid, ExampleSchemas.ContactBookId, ManagedResources> badTable = new Table<Uuid, ExampleSchemas.ContactBookId, ManagedResources>(
+        Table<Uuid, ExampleSchemas.ContactBookId, ManagedResources> badTable = new Table<>(
                 TableParameters.<Uuid, ExampleSchemas.ContactBookId, ManagedResources>builder()
                         .namespace(someNamespace)
                         .fullyQualifiedTableName(getFullyQualifiedTableName(someNamespace, tableName))
@@ -537,6 +538,7 @@ public class CorfuStoreIT extends AbstractIT {
                         .metadataSchema(defaultMetadataMessage)
                         .schemaOptions(CorfuOptions.SchemaOptions.getDefaultInstance())
                         .secondaryIndexesDisabled(true)
+                        .persistenceOptions(persistenceOptions)
                         .build(),
                 runtime,
                 runtime.getSerializers().getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE),
