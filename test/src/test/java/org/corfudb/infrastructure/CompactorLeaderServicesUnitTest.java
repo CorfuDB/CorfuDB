@@ -26,6 +26,7 @@ import java.util.HashSet;
 import java.util.Set;
 
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
+import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.anyString;
 import static org.mockito.Mockito.doNothing;
@@ -93,7 +94,7 @@ public class CompactorLeaderServicesUnitTest {
         //When there's some checkpoint activity going on
         Set<CorfuStoreMetadata.TableName> set = new HashSet<>();
         set.add(tableName);
-        when(txn.keySet(any(Table.class))).thenReturn(set);
+        when(txn.keySet(nullable(Table.class))).thenReturn(set);
         when(livenessValidator.isTableCheckpointActive(any(CorfuStoreMetadata.TableName.class), any(Duration.class))).thenReturn(false);
         when(corfuStoreEntry.getPayload())
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED).build())
@@ -112,7 +113,7 @@ public class CompactorLeaderServicesUnitTest {
     @Test
     public void finishCompactionCycleTest() {
         Set<CorfuStoreMetadata.TableName> set = new HashSet<>(Arrays.asList(tableName, tableName2));
-        when(txn.keySet(any(Table.class))).thenReturn(set);
+        when(txn.keySet(nullable(Table.class))).thenReturn(set);
 
         when(corfuStoreEntry.getPayload())
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED).build())
