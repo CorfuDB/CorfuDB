@@ -314,7 +314,7 @@ public abstract class BaseLogEntryReader extends LogEntryReader {
         public ModelBasedOpaqueStream(CorfuRuntime rt) {
             this.rt = rt;
             opaqueStream = new OpaqueStream(rt.getStreamsView().get(replicationContext.getConfigManager()
-                    .getOpaqueStreamToTrack(session.getSubscriber())));
+                    .getLogEntrySyncOpaqueStream(session)));
             streamUpTo();
         }
 
