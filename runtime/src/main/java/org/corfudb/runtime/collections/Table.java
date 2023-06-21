@@ -12,16 +12,13 @@ import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CheckpointWriter;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.Queue;
-import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.PersistenceOptions;
 import org.corfudb.runtime.object.PersistenceOptions.PersistenceOptionsBuilder;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.CorfuGuidGenerator;
-import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.ObjectsView.ObjectID;
 import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.util.serializer.ISerializer;
-import org.corfudb.util.serializer.SafeProtobufSerializer;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -32,7 +29,6 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Deque;
 import java.util.List;
-import java.util.Map;
 import java.util.Map.Entry;
 import java.util.NoSuchElementException;
 import java.util.Optional;
@@ -41,12 +37,10 @@ import java.util.UUID;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.ForkJoinWorkerThread;
 import java.util.function.Predicate;
-import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
-import static org.corfudb.runtime.collections.DiskBackedCorfuTable.builder;
 import static org.corfudb.runtime.collections.DiskBackedCorfuTable.getDiskBackedCorfuTableOptions;
 
 /**
