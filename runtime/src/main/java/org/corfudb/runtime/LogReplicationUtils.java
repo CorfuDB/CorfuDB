@@ -234,7 +234,7 @@ public final class LogReplicationUtils {
 
                     CorfuStoreEntry<LogReplicationSession, ReplicationStatus, Message> entry = null;
 
-                    // It is possible that there is no entry for the Logical Group Model in the status table in
+                    // It is possible that there is no entry for the routing queue Model in the status table in
                     // the following scenarios:
                     // 1. Request to subscribe is received before the Log Replication JVM or pod starts and
                     // initializes the table
@@ -282,7 +282,6 @@ public final class LogReplicationUtils {
 
                     // Update the flags and variables on the listener based on whether snapshot sync was in progress.
                     // This must be done only after the transaction commits.
-                    // TODO: Handle setListenerParamsForSnapshotSync
                     setRoutingQueueListenerParamsForSnapshotSync(clientListener, subscriptionTimestamp, snapshotSyncInProgress);
 
                     return subscriptionTimestamp;
@@ -311,7 +310,6 @@ public final class LogReplicationUtils {
             MicroMeterUtils.time(subscribeTimer, "logreplication.subscribe.duration");
         }
     }
-
 
 
     private static Table<LogReplicationSession, ReplicationStatus, Message> openReplicationStatusTable(CorfuStore corfuStore) {

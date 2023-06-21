@@ -23,11 +23,6 @@ import static org.corfudb.runtime.LogReplicationUtils.REPLICATION_STATUS_TABLE_N
  * This is the interface that a client must subscribe to if it needs to observe and bifurcate the data updates received
  * on Log Entry and Snapshot Sync.
  *
- *
- * This interface sees ordered updates from :
- * 1. client-streams from client-Namespace, and,
- * 2. LrStatusTable from corfuSystem-Namespace.
- *
  * The client implementing this interface will only observe the data updates from client streams
  */
 @Slf4j
@@ -42,6 +37,7 @@ public abstract class LogReplicationRoutingQueueListener implements StreamListen
     @Getter
     private final AtomicBoolean snapshotSyncInProgress = new AtomicBoolean(false);
 
+    // This variable tracks if the receiver side routing queue is registered with table registry.
     @Getter
     private final AtomicBoolean routingQRegistered = new AtomicBoolean(false);;
 
@@ -101,9 +97,9 @@ public abstract class LogReplicationRoutingQueueListener implements StreamListen
         } else {
             callbackResult = processUpdatesInLogEntrySync(results);
         }
-        // TODO: based on return true, delete the entries from the queue.
         if (callbackResult) {
-            // Delete the entry from the queue.
+            // When the client processed the entry successfully, delete the entry from the routing queue.
+            // TODO: Update the last processed key.
             deleteEntryFromQueue(results);
         }
     }
@@ -111,7 +107,8 @@ public abstract class LogReplicationRoutingQueueListener implements StreamListen
     private void deleteEntryFromQueue(CorfuStreamEntries results) {
         Map<TableSchema, List<CorfuStreamEntry>> entries = results.getEntries();
         List<CorfuStreamEntry> routingQueueTableEntries =
-                entries.entrySet().stream().filter(e -> e.getKey().getTableName().equals(LogReplicationUtils.REPLICATED_QUEUE_NAME_PREFIX))
+                entries.entrySet().stream().filter(
+                            e -> e.getKey().getTableName().equals(LogReplicationUtils.REPLICATED_QUEUE_NAME_PREFIX))
                         .map(Map.Entry::getValue)
                         .findFirst()
                         .get();
@@ -120,10 +117,11 @@ public abstract class LogReplicationRoutingQueueListener implements StreamListen
             Queue.CorfuGuidMsg key = (Queue.CorfuGuidMsg)entry.getKey();
             // Only process updates where operation type == UPDATE.
             if (entry.getOperation() == CorfuStreamEntry.OperationType.UPDATE) {
-                Queue.RoutingTableEntryMsg payload = (Queue.RoutingTableEntryMsg)entry.getPayload();
+                // TODO: Check payload type??
+                //  Queue.RoutingTableEntryMsg payload = (Queue.RoutingTableEntryMsg)entry.getPayload();
                 try (TxnContext tx = corfuStore.txn(namespace)) {
                     Table<Queue.CorfuGuidMsg, Queue.RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg> routingQueue;
-                    // TODO: Get table from CorfuStreamEntries schema
+                    // TODO: Get the table from CorfuStreamEntries schema or registry table?
                     routingQueue =
                             corfuStore.openQueue(namespace, LogReplicationUtils.REPLICATED_QUEUE_NAME_PREFIX,
                                     Queue.RoutingTableEntryMsg.class,
