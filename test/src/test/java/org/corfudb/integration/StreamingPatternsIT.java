@@ -4,6 +4,7 @@ import com.google.common.collect.Iterables;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.CorfuRecord;
@@ -269,7 +270,7 @@ public class StreamingPatternsIT extends AbstractIT {
     @Test
     public void testDefaultPortionOfResumeOrDefaultPolicy() throws Exception {
         // Run a corfu server & initialize CorfuStore
-        initializeCorfu();
+        CorfuRuntime runtime = initializeCorfu();
 
         // Record initial timestamp, to subscribe from the start of the log
         Timestamp startLog = Timestamp.newBuilder().setEpoch(0L).setSequence(-1L).build();
@@ -291,6 +292,7 @@ public class StreamingPatternsIT extends AbstractIT {
 
         do {
             // Wait until latch has decreased by '1' (error is triggered)
+            TimeUnit.MILLISECONDS.sleep(100);
         } while (errorLatch.getCount() != 1);
 
         assertThat(defaultStreamListener.getUpdates()).hasSize(numUpdates - deltaToError);
@@ -404,7 +406,7 @@ public class StreamingPatternsIT extends AbstractIT {
     @SuppressWarnings("checkstyle:magicnumber")
     public void testFullSyncPortionOfResumeOrFullSyncPolicy() throws Exception {
         // Run a corfu server & initialize CorfuStore
-        initializeCorfu();
+        CorfuRuntime runtime = initializeCorfu();
 
         // Record initial timestamp, to subscribe from the start of the log
         Timestamp startLog = Timestamp.newBuilder().setEpoch(0L).setSequence(-1L).build();
@@ -484,7 +486,7 @@ public class StreamingPatternsIT extends AbstractIT {
     @Test
     public void testFullSyncFailureOfResumeOrFullSyncPolicy() throws Exception {
         // Run a corfu server & initialize CorfuStore
-        initializeCorfu();
+        CorfuRuntime runtime = initializeCorfu();
 
         // Record initial timestamp, to subscribe from the start of the log
         Timestamp startLog = Timestamp.newBuilder().setEpoch(0L).setSequence(-1L).build();
@@ -582,12 +584,15 @@ public class StreamingPatternsIT extends AbstractIT {
     /**
      * A helper method to initialize a Corfu Server, Corfu Runtime and Corfu Store instance.
      *
-     * @throws Exception
+     * @return corfu runtime
+     * @throws Exception error
      */
-    private void initializeCorfu() throws Exception {
+    private CorfuRuntime initializeCorfu() throws Exception {
         corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
         store = new CorfuStore(runtime);
+
+        return runtime;
     }
 
     /**

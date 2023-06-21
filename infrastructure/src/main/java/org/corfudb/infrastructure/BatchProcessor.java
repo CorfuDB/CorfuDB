@@ -185,8 +185,12 @@ public class BatchProcessor implements AutoCloseable {
                                         "logunit.write.timer", "type", "single");
                                 break;
                             case RANGE_WRITE:
-                                List<LogData> range = payload.getRangeWriteLogRequest().getLogDataList()
-                                        .stream().map(CorfuProtocolLogData::getLogData).collect(Collectors.toList());
+                                List<LogData> range = payload.getRangeWriteLogRequest()
+                                        .getLogDataList()
+                                        .stream()
+                                        .map(CorfuProtocolLogData::getLogData)
+                                        .collect(Collectors.toList());
+
                                 MicroMeterUtils.time(() -> streamLog.append(range),
                                         "logunit.write.timer", "type", "range");
                                 break;

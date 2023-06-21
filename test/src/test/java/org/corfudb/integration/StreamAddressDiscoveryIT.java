@@ -29,7 +29,7 @@ import java.util.Optional;
 
 /**
  * This class provides a set of tests to:
- *
+ * <p>
  * 1. Validate functional behaviour of stream's address discovery mechanisms, under certain scenarios.
  *    These mechanisms are:
  *       (a) follow backpointers &
@@ -67,17 +67,17 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
      * This test aims to validate a stream rebuilt when holes are present. At the same time it is a very
      * small scale test for benchmarking stream rebuilt in the presence of holes when using backpointers
      * vs. using stream maps.
-     *
+     * <p>
      * Steps to reproduce this test:
      * - Write 10000 entries to S1.
      * - Write 10000 entries to S2.
      * - Insert a hole for S1.
      * - Write 100 entries to S1.
-     *
+     * <p>
      * - From a new (fresh) runtime access S1:
      *      - First, using followBackpointers as the address discovery mechanism.
      *      - Second, using streamMaps as the address discovery mechanism.
-     *
+     * <p>
      * Compare times for both mechanisms, ensure stream maps is faster than following backpointers
      * (which will single step through 10.000 entries)
      *
@@ -91,7 +91,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
         // Create Server & Runtime
         Process server = runDefaultServer();
         // Runtime writers
-        runtime = createRuntimeWithCache();
+        CorfuRuntime runtime = createRuntimeWithCache();
 
         try {
             // Write 10K entries on S1 & S2
@@ -129,12 +129,12 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
      *  This test checkpoints two streams separately and trims on the lower checkpoint boundary.
      *  The objective is to test that a stream is rebuilt from a checkpoint with updates to the
      *  regular stream still present in the log (addresses 10 and 11)
-     *
+     * <p>
      *         S1  S2  S1  S2  S2  S1 cp1 cp1 cp1 s1   s2   s2   cp2  cp2  cp2   s2
      *       +---------------------------------------------------------------------+
      *       | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 |
      *       +---------------------------------------------------------------------+
-     *
+     * <p>
      *  S1: Stream 1
      *  S2: Stream 2
      *  CP1: Checkpoint S1
@@ -212,7 +212,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
      *    This test validates that a snapshot transaction can be completed
      *    between two checkpoints, whenever part of the address space below the
      *    first checkpoint has been trimmed.
-     *
+     * <p>
      *
      *         S1  S1  S1  S1  S1  No [   CP1   ]  S1  S1  S1   S1   S1  No-Op [     CP2      ]
      *                             Op
@@ -221,7 +221,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
      *       +-------------------------------------------------------------------------------+
      *                     ^                       ^
      *                    TRIM                  SNAPSHOT
-     *
+     * <p>
      *  S1: Stream 1
      *  CP1: Checkpoint 1 to S1
      *  CP2: Checkpoint 2 to S1
@@ -288,9 +288,9 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
      *
      * In this test we want to verify stream's address space rebuilt from log unit given that a valid checkpoint
      * appears after entries to the regular stream. We aim to validate trim mark is properly set despite ordering.
-     *
+     * <p>
      * Test Case 0:
-     *
+     * <p>
      *         S1  S1  S1      S1  S2  S2        S1  S1  S1  S1    S1    S1   S1   S1  CP-S1 snapshot @7 (tail)
      *       +---------------------------    +-----------------------------------------------+-------+
      *       | 0 | 1 | 2 | ..| 7 | 8 | 9 |    | 10 | 6 | 7 | 8 | ..... | 11 | 19 | 20 | 21 | 22 | 23 | ...
@@ -313,7 +313,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
         Process server = runDefaultServer();
 
         try {
-            runtime = createDefaultRuntime();
+            CorfuRuntime runtime = createDefaultRuntime();
             runtimes.add(runtime);
 
             // Open tableA (S1) and tableB (S2)
@@ -399,9 +399,9 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
      *
      *  In this test we want to verify stream's address space rebuilt from log unit given that a hole is the first
      *  valid address for a stream after a trim (i.e., backpointer is lost) and a checkpoint is present.
-     *
+     * <p>
      * Test Case 1:
-     *
+     * <p>
      *         S1  S1  S1   S1   S1  S2        S1       S1  S1  S1    S1    S1   S1   S1     CP-S1
      *       +-------------------------    +-----------------------------------------------+--------------+
      *       | 0 | 1 | 2 | ... | 8 | 9 |    | 10 (hole) | 6 | 7 | 8 | ..... | 11 | 19 | 20 | 21 | 22 | 23 |
@@ -426,7 +426,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
         Process server = runDefaultServer();
 
         try {
-            runtime = createDefaultRuntime();
+            CorfuRuntime runtime = createDefaultRuntime();
             runtimes.add(runtime);
 
             // Open tableA and tableB
@@ -507,9 +507,9 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
      *   In this test we want to verify stream's address space rebuilt from log unit given that a hole is the first
      *   valid address for a stream after a trim (i.e., backpointer is lost) and no checkpoint is present, i.e.,
      *   S2 was never written to before the checkpoint.
-     *
+     * <p>
      * Test Case 2:
-     *
+     * <p>
      *         S1  S1  S1   S1   S1  S1        S2       S2   S2  S2    S2    S2   S2
      *       +-------------------------     +---------------------------------------+
      *       | 0 | 1 | 2 | ... | 8 | 9 |    | 10 (hole) | 11 | 12 | 13 | ..... | 19 |
@@ -533,7 +533,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
         Process server = runDefaultServer();
 
         try {
-            runtime = createDefaultRuntime();
+            CorfuRuntime runtime = createDefaultRuntime();
             runtimes.add(runtime);
 
             // Open tableA and tableB
@@ -625,7 +625,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
     /**
      * Test rebuilding a stream from a new runtime, whenever the last address before the checkpoint
      * was a hole.
-     *
+     * <p>
      * This case is interesting to test as addresses that become holes are discarded by the streamView,
      * while sequencer's are agnostic of this info, hence, take it into account for trim mark computation.
      */
@@ -638,7 +638,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
 
         try {
             // Create Runtime
-            runtime = createDefaultRuntime();
+            CorfuRuntime runtime = createDefaultRuntime();
 
             // Instantiate streamA and streamB as maps
             final String streamA = "streamA";
@@ -730,7 +730,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
         Process server = runDefaultServer();
 
         // Create Runtime
-        runtime = createDefaultRuntime();
+        CorfuRuntime runtime = createDefaultRuntime();
 
         // Runtime After Restart
         CorfuRuntime rtRestart = null;
@@ -833,7 +833,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
         Process server_2 = runServer(n1Port, false);
         Process server_3 = runServer(n2Port, false);
 
-        runtime = createRuntimeWithCache();
+        CorfuRuntime runtime = createRuntimeWithCache();
 
         runtime.getManagementView().addNode(getConnectionString(n1Port), workflowNumRetry, timeout, pollPeriod);
         runtime.invalidateLayout();

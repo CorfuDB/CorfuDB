@@ -190,7 +190,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
     }
 
     @After
-    public void tearDown() throws IOException, InterruptedException {
+    public void tearDown() throws Exception {
         if (activeRuntime != null) {
             activeRuntime.shutdown();
         }

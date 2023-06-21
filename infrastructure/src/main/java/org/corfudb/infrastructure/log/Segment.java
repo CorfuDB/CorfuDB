@@ -4,6 +4,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.protobuf.InvalidProtocolBufferException;
 import lombok.NonNull;
+import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
@@ -11,6 +12,7 @@ import org.corfudb.infrastructure.ResourceQuota;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 
+import java.io.Closeable;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -50,7 +52,8 @@ import static org.corfudb.infrastructure.utils.Persistence.syncDirectory;
  * @author Maithem
  */
 @Slf4j
-public class Segment {
+@ToString
+public class Segment implements Closeable {
     public static final int METADATA_SIZE = LogFormat.Metadata.newBuilder()
             .setLengthChecksum(-1)
             .setPayloadChecksum(-1)
@@ -66,9 +69,11 @@ public class Segment {
 
     final long id;
 
+    @ToString.Exclude
     @NonNull
     private FileChannel writeChannel;
 
+    @ToString.Exclude
     @NonNull
     private FileChannel readChannel;
 
@@ -77,10 +82,12 @@ public class Segment {
 
     private boolean isDirty;
 
+    @ToString.Exclude
     private final Index index;
 
     private int refCount = 0;
 
+    @ToString.Exclude
     private final ResourceQuota logSize;
 
     public Segment(long segmentId, int segmentSize, Path segmentsDir, ResourceQuota logSize) {
@@ -533,6 +540,7 @@ public class Segment {
         refCount--;
     }
 
+    @Override
     public void close() {
 
         Set<FileChannel> channels = new HashSet<>(

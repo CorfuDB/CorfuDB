@@ -3,6 +3,10 @@ package org.corfudb.integration;
 import com.google.common.collect.ContiguousSet;
 import com.google.common.collect.DiscreteDomain;
 import com.google.common.collect.Range;
+import lombok.AllArgsConstructor;
+import lombok.ToString;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
@@ -23,12 +27,19 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.fail;
+import static org.junit.Assert.assertEquals;
 
+@Slf4j
 public class StateTransferIT extends AbstractIT {
+
+    public static final int FIRST_NODE_ID = 0;
+    public static final int SECOND_NODE_ID = 1;
 
     private static String corfuSingleNodeHost;
     private final int basePort = 9000;
@@ -79,27 +90,23 @@ public class StateTransferIT extends AbstractIT {
     }
 
     @Test
-    @SuppressWarnings("checkstyle:magicnumber")
     public void verifyStateTransferWithChainHeadFailure() throws Exception {
-        verifyStateTransferWithNodeFailure(0);
+        verifyStateTransferWithNodeFailure(FIRST_NODE_ID);
     }
 
     @Test
-    @SuppressWarnings("checkstyle:magicnumber")
     public void verifyStateTransferWithChainTailFailure() throws Exception {
-        verifyStateTransferWithNodeFailure(1);
+        verifyStateTransferWithNodeFailure(SECOND_NODE_ID);
     }
 
     @Test
-    @SuppressWarnings("checkstyle:magicnumber")
     public void verifyStateTransferWithChainHeadRestart() throws Exception {
-        verifyStateTransferWithNodeRestart(0);
+        verifyStateTransferWithNodeRestart(FIRST_NODE_ID);
     }
 
     @Test
-    @SuppressWarnings("checkstyle:magicnumber")
     public void verifyStateTransferWithChainTailRestart() throws Exception {
-        verifyStateTransferWithNodeRestart(1);
+        verifyStateTransferWithNodeRestart(SECOND_NODE_ID);
     }
 
 
@@ -108,9 +115,9 @@ public class StateTransferIT extends AbstractIT {
      * Then a block of data entries is written to the cluster.
      * 1 node - 9002 is added to the cluster, and triggers parallel transfer from two nodes.
      * Fail a node during transfer to verify it does not fail the transfer process.
-     * Finally the addition of node 9002 in the layout is verified.
+     * Finally, the addition of node 9002 in the layout is verified.
      *
-     * @throws Exception
+     * @throws Exception error
      */
     private void verifyStateTransferWithNodeFailure(int killNode) throws Exception {
         final int PORT_0 = 9000;
@@ -125,7 +132,6 @@ public class StateTransferIT extends AbstractIT {
         Process corfuServer_2 = runPersistentServer(corfuSingleNodeHost, PORT_1, false);
         Process corfuServer_3 = runPersistentServer(corfuSingleNodeHost, PORT_2, false);
 
-
         List<Process> corfuServers = Arrays.asList(corfuServer_1, corfuServer_2, corfuServer_3);
 
         // bootstrap cluster with 2 nodes
@@ -138,10 +144,14 @@ public class StateTransferIT extends AbstractIT {
 
         secondRuntime = createDefaultRuntime();
 
-        waitForLayoutChange(layout -> layout.getAllServers().size() == 2
-                        && layout.getSegments().size() == 1,
-                firstRuntime);
+        Predicate<Layout> twoNodeCheck = layout -> {
+            boolean twoNodeCluster = layout.getAllServers().size() == 2;
+            boolean oneSegment = layout.getSegments().size() == 1;
 
+            return twoNodeCluster && oneSegment;
+        };
+        Layout currLayout = waitForLayoutChange(twoNodeCheck, firstRuntime);
+        log.info("Two node cluster: {}", currLayout);
 
         // write records to the 2 node cluster
         final String data = createStringOfSize(100);
@@ -150,7 +160,9 @@ public class StateTransferIT extends AbstractIT {
             writerRuntime.getAddressSpaceView().write(token, data.getBytes());
         }
 
-        firstRuntime.getAddressSpaceView().commit(0, PARAMETERS.NUM_ITERATIONS_MODERATE - 1);
+        firstRuntime
+                .getAddressSpaceView()
+                .commit(0, PARAMETERS.NUM_ITERATIONS_MODERATE - 1);
 
         // start a writer future
         final AtomicBoolean moreDataToBeWritten = new AtomicBoolean(true);
@@ -168,22 +180,36 @@ public class StateTransferIT extends AbstractIT {
         });
 
         // add node 9002
-        firstRuntime.getManagementView().addNode("localhost:9002", workflowNumRetry,
-                timeout, pollPeriod);
+        firstRuntime
+                .getManagementView()
+                .addNode("localhost:9002", workflowNumRetry, timeout, pollPeriod);
 
         assertThatCode(killerFuture::join).doesNotThrowAnyException();
 
         // wait for killed node becomes unresponsive and state transfer completes
-        String killedNode = getServerEndpoint(basePort + killNode);
-        waitForLayoutChange(layout -> layout.getAllServers().size() == nodesCount
-                && layout.getUnresponsiveServers().contains(killedNode)
-                && layout.getSegments().size() == 1, firstRuntime);
+        Predicate<Layout> unresponsiveNodeCheck = layout -> {
+            String killedNode = getServerEndpoint(basePort + killNode);
+
+            boolean threeNodeCluster = layout.getAllServers().size() == nodesCount;
+            boolean oneNodeUnresponsive = layout.getUnresponsiveServers().contains(killedNode);
+            boolean oneSegment = layout.getSegments().size() == 1;
+
+            return threeNodeCluster && oneNodeUnresponsive && oneSegment;
+        };
+        currLayout = waitForLayoutChange(unresponsiveNodeCheck, firstRuntime);
+        log.info("Three node cluster with unresponsive layout: {}", currLayout);
 
         // bring killed node back and verify data
         Process resumedServer = runPersistentServer(corfuSingleNodeHost, basePort + killNode, false);
-        waitForLayoutChange(layout -> layout.getAllActiveServers().size() == nodesCount
-                && layout.getUnresponsiveServers().isEmpty()
-                && layout.getSegments().size() == 1, firstRuntime);
+        Predicate<Layout> recoveredClusterCheck = layout -> {
+            boolean threeNodeCluster = layout.getAllActiveServers().size() == nodesCount;
+            boolean allNodesHealthy = layout.getUnresponsiveServers().isEmpty();
+            boolean oneSegment = layout.getSegments().size() == 1;
+
+            return threeNodeCluster && allNodesHealthy && oneSegment;
+        };
+        currLayout = waitForLayoutChange(recoveredClusterCheck, firstRuntime);
+        log.info("Healthy cluster: {}", currLayout);
 
         moreDataToBeWritten.set(false);
 
@@ -205,7 +231,7 @@ public class StateTransferIT extends AbstractIT {
      * Restart a node during transfer to verify it does not fail the transfer process.
      * Finally verify two rounds of transfer completes.
      *
-     * @throws Exception
+     * @throws Exception error
      */
     private void verifyStateTransferWithNodeRestart(int restartNode) throws Exception {
         final int PORT_0 = 9000;
@@ -293,19 +319,50 @@ public class StateTransferIT extends AbstractIT {
      * cluster.
      *
      * @param corfuRuntime Connected instance of the runtime.
-     * @throws Exception
+     * @throws Exception error
      */
     private void verifyData(CorfuRuntime corfuRuntime) throws Exception {
-
-
         long lastAddress = corfuRuntime.getSequencerView().query().getSequence();
 
-        Map<Long, LogData> map_0 = getAllNonEmptyData(corfuRuntime, "localhost:9000", lastAddress);
-        Map<Long, LogData> map_1 = getAllNonEmptyData(corfuRuntime, "localhost:9001", lastAddress);
-        Map<Long, LogData> map_2 = getAllNonEmptyData(corfuRuntime, "localhost:9002", lastAddress);
+        Map<Long, LogData> map0 = getAllNonEmptyData(corfuRuntime, "localhost:9000", lastAddress);
+        Map<Long, LogData> map1 = getAllNonEmptyData(corfuRuntime, "localhost:9001", lastAddress);
+        Map<Long, LogData> map2 = getAllNonEmptyData(corfuRuntime, "localhost:9002", lastAddress);
 
-        assertThat(map_1.entrySet()).containsExactlyElementsOf(map_0.entrySet());
-        assertThat(map_2.entrySet()).containsExactlyElementsOf(map_0.entrySet());
+        List<Long> addresses = new ArrayList<>(map0.keySet());
+        Collections.sort(addresses);
+
+        for (Long addr : addresses) {
+            if (!map1.containsKey(addr)) {
+                fail("localhost:9001, missing address: " + addr);
+            }
+
+            if (!map2.containsKey(addr)) {
+                fail("localhost:9002, missing address: " + addr);
+            }
+
+            LogData map0Data = map0.get(addr);
+            LogData map1Data = map1.get(addr);
+            LogData map2Data = map2.get(addr);
+
+            String map1ErrMsg = "map0 != map1 log entry. map0: " + LogDataInfo.from(map0Data) +
+                    ", map1: " + LogDataInfo.from(map1Data);
+            assertEquals(map1ErrMsg, map0Data, map1Data);
+
+            String map2ErrMsg = "map0 != map2 log entry. map0: " + LogDataInfo.from(map0Data) +
+                    ", map2: " + LogDataInfo.from(map2Data);
+            assertEquals(map2ErrMsg, map0Data, map2Data);
+        }
+    }
+
+    @AllArgsConstructor
+    @ToString
+    private static class LogDataInfo {
+        private final long globalAddress;
+        private final DataType dataType;
+
+        public static LogDataInfo from(LogData logData) {
+            return new LogDataInfo(logData.getGlobalAddress(), logData.getType());
+        }
     }
 
     /**
@@ -315,7 +372,7 @@ public class StateTransferIT extends AbstractIT {
      * @param endpoint     Endpoint of query for all the data.
      * @param end          End address up to which data needs to be fetched.
      * @return Map of all the addresses contained by the node corresponding to the data stored.
-     * @throws Exception
+     * @throws Exception error
      */
     private Map<Long, LogData> getAllNonEmptyData(CorfuRuntime corfuRuntime,
                                                   String endpoint, long end) throws Exception {

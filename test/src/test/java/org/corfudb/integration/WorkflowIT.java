@@ -60,7 +60,7 @@ public class WorkflowIT extends AbstractIT {
         final int n3Port = 9002;
         Process server_3 = runServer(n3Port, false);
 
-        runtime = createRuntime(getConnectionString(n1Port));
+        CorfuRuntime runtime = createRuntime(getConnectionString(n1Port));
         PersistentCorfuTable<String, String> table = createCorfuTable(runtime, streamName);
 
         for (int x = 0; x < numIter; x++) {
@@ -156,7 +156,7 @@ public class WorkflowIT extends AbstractIT {
         Process p1 = runServer(n1Port, false);
         Process p2 = runServer(n2Port, false);
 
-        runtime = createRuntimeWithCache(getConnectionString(n0Port));
+        CorfuRuntime runtime = createRuntimeWithCache(getConnectionString(n0Port));
         PersistentCorfuTable<String, String> table = createCorfuTable(runtime, "table1");
 
         final int iter = 1000;
@@ -214,7 +214,7 @@ public class WorkflowIT extends AbstractIT {
         Process p1 = runServer(n1Port, false);
         Process p2 = runServer(n2Port, false);
 
-        runtime = createRuntimeWithCache(getConnectionString(n0Port));
+        CorfuRuntime runtime = createRuntimeWithCache(getConnectionString(n0Port));
         PersistentCorfuTable<String, String> table = createCorfuTable(runtime, "table1");
 
         final int iter = 100;
@@ -271,7 +271,7 @@ public class WorkflowIT extends AbstractIT {
         Node n1 = harness.deployUnbootstrappedNode(PORT_1);
         Node n2 = harness.deployUnbootstrappedNode(PORT_2);
 
-        runtime = harness.createRuntimeForNode(n0);
+        CorfuRuntime runtime = harness.createRuntimeForNode(n0);
         runtime.getParameters().setMaxMvoCacheEntries(DEFAULT_MVO_CACHE_SIZE);
 
         final String streamName = "test";
@@ -387,7 +387,7 @@ public class WorkflowIT extends AbstractIT {
     public void testRuntimeGCForActiveTransactionsInTrimRangeSingleThread() throws Exception {
         // Run single node server and create runtime
         runDefaultServer();
-        runtime = createRuntimeWithCache();
+        CorfuRuntime runtime = createRuntimeWithCache();
 
         final int numDataEntries = 10;
 
@@ -511,7 +511,7 @@ public class WorkflowIT extends AbstractIT {
     public void testRuntimeGCForActiveTransactionsInTrimRangeMultiThread() throws Exception {
         // Run single node server and create runtime
         runDefaultServer();
-        runtime = createDefaultRuntime();
+        CorfuRuntime runtime = createDefaultRuntime();
 
         int initKey = 0;
         final int numDataEntries = 10;
@@ -643,7 +643,7 @@ public class WorkflowIT extends AbstractIT {
     public void testRuntimeGCWithStreamWithNoUpdatesAfterCheckpoint() throws Exception {
         // Run single node server and create runtime
         runDefaultServer();
-        runtime = createRuntimeWithCache();
+        CorfuRuntime runtime = createRuntimeWithCache();
 
         final int numDataEntries = 5;
 

@@ -447,7 +447,7 @@ public class ServerRestartIT extends AbstractIT {
         UUID streamNameA = CorfuRuntime.getStreamID("mapA");
         UUID streamNameB = CorfuRuntime.getStreamID("mapB");
 
-        runtime = createDefaultRuntime();
+        CorfuRuntime runtime = createDefaultRuntime();
         PersistentCorfuTable<String, Integer> mapA = createCorfuTable(runtime, "mapA");
         PersistentCorfuTable<String, Integer> mapB = createCorfuTable(runtime, "mapB");
 
@@ -491,7 +491,7 @@ public class ServerRestartIT extends AbstractIT {
         final int timeToWaitInSeconds = 3;
 
         Process corfuServerProcess = runCorfuServer();
-        runtime = createDefaultRuntime();
+        CorfuRuntime runtime = createDefaultRuntime();
 
         // wait for this server long enough to start (by requesting token service)
         TokenResponse firsttr = runtime.getSequencerView().next();

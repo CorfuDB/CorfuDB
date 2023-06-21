@@ -51,6 +51,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.LongStream;
 
@@ -60,9 +61,6 @@ import static org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus.STABLE;
 import static org.corfudb.test.TestUtils.setAggressiveTimeouts;
 import static org.corfudb.test.TestUtils.waitForLayoutChange;
 
-/**
- * Created by zlokhandwala on 2019-06-06.
- */
 public class StateTransferTest extends AbstractViewTest {
 
     @Getter
@@ -92,12 +90,11 @@ public class StateTransferTest extends AbstractViewTest {
                 .collect(Collectors.toMap(Entry::getKey, Entry::getValue));
     }
 
-
-    @Test
     /**
      * 1. Segment 1: 0 -> -1: Node 0, Node 1
      * 2. Add node Node 2
      */
+    @Test
     public void verifyAddNode() throws Exception {
         addServer(SERVERS.PORT_0);
         addServer(SERVERS.PORT_1);
@@ -162,12 +159,12 @@ public class StateTransferTest extends AbstractViewTest {
         assertThat(map_2.entrySet()).containsExactlyElementsOf(map_0.entrySet());
     }
 
-    @Test
     /**
      * 1. Segment 1: 0 -> 3: Node 0, Node 1
      * 2. Segment 2: 3 -> infinity: Node 0, Node 1, Node 2
      * 2. Node 2 eventually restores itself to the layout and merges segments
      */
+    @Test
     public void verifyRedundancyRestoration() throws Exception {
         addServer(SERVERS.PORT_0);
         addServer(SERVERS.PORT_1);
@@ -1335,13 +1332,18 @@ public class StateTransferTest extends AbstractViewTest {
 
             // Allow node 2 to be healed.
             clearServerRules(SERVERS.PORT_2);
+            Predicate<Layout> unhealthyServer2 = layout -> !layout.getUnresponsiveServers().isEmpty();
+            waitForLayoutChange(unhealthyServer2, rt);
 
             rt.invalidateLayout();
 
             // Wait until all the nodes are restored.
-            waitForLayoutChange(layout -> layout.getUnresponsiveServers().isEmpty() &&
-                            layout.segments.size() == 1,
-                    rt);
+            Predicate<Layout> expectedLayout = layout -> {
+                boolean healthyLayout = layout.getUnresponsiveServers().isEmpty();
+                boolean oneSegment = layout.segments.size() == 1;
+                return healthyLayout && oneSegment;
+            };
+            waitForLayoutChange(expectedLayout, rt);
 
             // Verify CT and data
             long committedTail = rt.getAddressSpaceView().getCommittedTail();
