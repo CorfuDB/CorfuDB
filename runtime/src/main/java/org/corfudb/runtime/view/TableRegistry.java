@@ -298,7 +298,7 @@ public class TableRegistry {
                 break;
             } catch (TransactionAbortedException txAbort) {
                 if (txAbort.getAbortCause() == AbortCause.CONFLICT &&
-                        txAbort.getConflictStream().equals(protobufDescriptorTable.getCorfuStreamID())) {
+                        txAbort.getConflictStream().equals(protobufDescriptorTable.getCorfuSMRProxy().getStreamID())) {
                     // Updates to protobuf descriptor tables are internal so conflicts hit here
                     // should not count towards the normal retry count.
                     log.info("registerTable {}${} failed due to conflict in protobuf descriptors. Retrying",
