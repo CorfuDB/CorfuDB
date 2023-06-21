@@ -1,15 +1,15 @@
 package org.corfudb.runtime.object.transactions;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import com.google.common.reflect.TypeToken;
+import org.corfudb.runtime.collections.ICorfuTable;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
+import org.junit.Test;
 
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import org.corfudb.runtime.collections.ICorfuTable;
-import org.corfudb.runtime.collections.PersistentCorfuTable;
-import org.junit.Test;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Created by dmalkhi on 12/13/16.

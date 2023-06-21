@@ -1,11 +1,5 @@
 package org.corfudb.runtime.clients;
 
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeoutException;
-import javax.annotation.Nonnull;
-
 import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
 import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
 import org.corfudb.protocols.wireprotocol.NodeState;
@@ -14,6 +8,12 @@ import org.corfudb.protocols.wireprotocol.orchestrator.QueryResponse;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.CFUtils;
+
+import javax.annotation.Nonnull;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeoutException;
 
 import static org.corfudb.protocols.service.CorfuProtocolManagement.getAddNodeRequestMsg;
 import static org.corfudb.protocols.service.CorfuProtocolManagement.getBootstrapManagementRequestMsg;

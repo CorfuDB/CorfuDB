@@ -1,8 +1,8 @@
 package org.corfudb.runtime.exceptions;
 
-import java.util.Optional;
-
 import org.corfudb.protocols.logprotocol.SMREntry;
+
+import java.util.Optional;
 
 /**
  * Created by mwei on 11/21/16.

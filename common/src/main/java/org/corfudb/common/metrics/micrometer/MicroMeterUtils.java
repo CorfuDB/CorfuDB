@@ -8,9 +8,7 @@ import io.micrometer.core.instrument.Meter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Tags;
 import io.micrometer.core.instrument.Timer;
-import io.micrometer.core.instrument.composite.CompositeMeterRegistry;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider.MetricType;
-import org.corfudb.common.metrics.micrometer.registries.LoggingMeterRegistryWithHistogramSupport;
 import org.corfudb.common.util.Tuple;
 
 import java.time.Duration;

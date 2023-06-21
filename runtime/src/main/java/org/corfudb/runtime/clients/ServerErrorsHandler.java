@@ -1,12 +1,12 @@
 package org.corfudb.runtime.clients;
 
+import org.corfudb.runtime.proto.ServerErrors.ServerErrorMsg.ErrorCase;
+
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Inherited;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
-
-import org.corfudb.runtime.proto.ServerErrors.ServerErrorMsg.ErrorCase;
 
 /**
  * Registers the method with the annotation as a server error

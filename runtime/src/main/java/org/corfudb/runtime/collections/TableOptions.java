@@ -19,6 +19,7 @@ import java.util.Optional;
 public class TableOptions {
 
     /**
+     * @deprecated Please use {@link PersistenceOptions}.
      * If this path is set, {@link CorfuStore} will utilize disk-backed {@link ICorfuTable}.
      */
     @Deprecated

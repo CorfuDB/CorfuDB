@@ -1,7 +1,5 @@
 package org.corfudb.runtime.view;
 
-import java.util.UUID;
-
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.TestLayoutBuilder;
 import org.corfudb.runtime.CorfuRuntime;
@@ -9,6 +7,8 @@ import org.corfudb.runtime.clients.TestRule;
 import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.exceptions.WrongClusterException;
+import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.junit.Test;
 
@@ -17,10 +17,15 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.*;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg;
-import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;

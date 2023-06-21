@@ -1,8 +1,6 @@
 package org.corfudb.runtime.clients;
 
 import io.netty.channel.ChannelHandlerContext;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
 import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
@@ -20,14 +18,17 @@ import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.junit.MockitoJUnitRunner;
 
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
+
 import static org.corfudb.protocols.CorfuProtocolCommon.DEFAULT_UUID;
 import static org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg;
 import static org.corfudb.protocols.CorfuProtocolServerErrors.getBootstrappedErrorMsg;
 import static org.corfudb.protocols.CorfuProtocolServerErrors.getNotBootstrappedErrorMsg;
 import static org.corfudb.protocols.CorfuProtocolServerErrors.getNotReadyErrorMsg;
+import static org.corfudb.protocols.CorfuProtocolServerErrors.getUnknownErrorMsg;
 import static org.corfudb.protocols.CorfuProtocolServerErrors.getWrongClusterErrorMsg;
 import static org.corfudb.protocols.CorfuProtocolServerErrors.getWrongEpochErrorMsg;
-import static org.corfudb.protocols.CorfuProtocolServerErrors.getUnknownErrorMsg;
 import static org.corfudb.protocols.service.CorfuProtocolBase.getPingResponseMsg;
 import static org.corfudb.protocols.service.CorfuProtocolBase.getResetResponseMsg;
 import static org.corfudb.protocols.service.CorfuProtocolBase.getRestartResponseMsg;

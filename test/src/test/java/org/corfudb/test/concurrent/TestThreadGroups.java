@@ -3,9 +3,9 @@ package org.corfudb.test.concurrent;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.channel.DefaultEventLoopGroup;
 import io.netty.channel.EventLoopGroup;
-import javax.annotation.Nonnull;
 import org.corfudb.util.concurrent.SingletonResource;
 
+import javax.annotation.Nonnull;
 import java.util.concurrent.TimeUnit;
 
 public class TestThreadGroups {

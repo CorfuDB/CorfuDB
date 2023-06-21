@@ -1,16 +1,14 @@
 package org.corfudb.runtime.object;
 
 import com.google.common.reflect.TypeToken;
+import org.corfudb.CustomSerializer;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.view.ObjectsView;
-import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
-
-import org.corfudb.CustomSerializer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

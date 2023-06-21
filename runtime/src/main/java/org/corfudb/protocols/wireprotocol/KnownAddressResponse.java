@@ -1,8 +1,9 @@
 package org.corfudb.protocols.wireprotocol;
 
-import java.util.Set;
 import lombok.AllArgsConstructor;
 import lombok.Data;
+
+import java.util.Set;
 
 /**
  * Response for known addresses in the log unit server for a specified range.

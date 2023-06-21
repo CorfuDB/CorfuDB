@@ -1,13 +1,13 @@
 package org.corfudb.runtime.exceptions;
 
-import java.util.UUID;
-
 import lombok.Getter;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.util.Utils;
+
+import java.util.UUID;
 
 /**
  * Created by mwei on 1/11/16.

@@ -6,6 +6,7 @@ import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.util.ReflectionUtils;
 import org.junit.Test;
+
 import java.lang.reflect.InvocationTargetException;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;

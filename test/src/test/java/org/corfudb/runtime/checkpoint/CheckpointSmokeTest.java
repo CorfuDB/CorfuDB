@@ -1,22 +1,6 @@
 package org.corfudb.runtime.checkpoint;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.corfudb.runtime.view.TableRegistry.getFullyQualifiedTableName;
-import static org.junit.Assert.fail;
 import com.google.common.collect.ImmutableMap;
-
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.ThreadLocalRandom;
-import java.util.function.BiConsumer;
-import java.util.function.Consumer;
-import java.util.function.Function;
-
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import org.corfudb.common.compression.Codec;
@@ -55,6 +39,22 @@ import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.KeyDynamicProtobufSerializer;
 import org.junit.Before;
 import org.junit.Test;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.function.BiConsumer;
+import java.util.function.Consumer;
+import java.util.function.Function;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.runtime.view.TableRegistry.getFullyQualifiedTableName;
+import static org.junit.Assert.fail;
 
 /**
  * Basic smoke tests for checkpoint-in-stream PoC.

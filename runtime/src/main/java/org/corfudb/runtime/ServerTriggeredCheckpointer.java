@@ -2,7 +2,13 @@ package org.corfudb.runtime;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
-import org.corfudb.runtime.collections.*;
+import org.corfudb.runtime.collections.CorfuDynamicKey;
+import org.corfudb.runtime.collections.CorfuStore;
+import org.corfudb.runtime.collections.ICorfuTable;
+import org.corfudb.runtime.collections.OpaqueCorfuDynamicRecord;
+import org.corfudb.runtime.collections.PersistedCorfuTable;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
+import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.object.PersistenceOptions;
 import org.corfudb.runtime.view.ObjectOpenOption;
 import org.corfudb.runtime.view.TableRegistry;

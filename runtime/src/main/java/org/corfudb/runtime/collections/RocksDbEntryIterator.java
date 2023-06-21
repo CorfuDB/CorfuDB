@@ -3,7 +3,6 @@ package org.corfudb.runtime.collections;
 import io.netty.buffer.Unpooled;
 import org.corfudb.util.serializer.ISerializer;
 import org.rocksdb.ReadOptions;
-import org.rocksdb.RocksDB;
 import org.rocksdb.RocksIterator;
 
 import javax.annotation.concurrent.NotThreadSafe;
@@ -22,7 +21,7 @@ import java.util.concurrent.locks.StampedLock;
 @NotThreadSafe
 public class RocksDbEntryIterator<K, V> implements Iterator<Map.Entry<K, V>>, AutoCloseable {
 
-    public static boolean LOAD_VALUES = true;
+    public static final boolean LOAD_VALUES = true;
 
     /**
      * A reference to the underlying RocksDb iterator

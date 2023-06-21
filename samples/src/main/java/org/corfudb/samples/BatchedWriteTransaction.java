@@ -1,14 +1,11 @@
 package org.corfudb.samples;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-
 import com.google.common.reflect.TypeToken;
-import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
-import org.corfudb.runtime.view.SMRObject;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Sometimes developers may group mutator operations into transactions for performance reasons.

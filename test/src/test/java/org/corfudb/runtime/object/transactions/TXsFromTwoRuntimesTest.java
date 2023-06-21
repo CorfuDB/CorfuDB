@@ -1,17 +1,16 @@
 package org.corfudb.runtime.object.transactions;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import com.google.common.reflect.TypeToken;
-
-import java.util.concurrent.Semaphore;
-
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.view.SMRObject;
 import org.junit.Test;
+
+import java.util.concurrent.Semaphore;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Created by dalia on 1/6/17.

@@ -1,7 +1,7 @@
 package org.corfudb.integration;
 
-import org.corfudb.runtime.CompactorMetadataTables;
 import org.corfudb.runtime.CheckpointLivenessUpdater;
+import org.corfudb.runtime.CompactorMetadataTables;
 import org.corfudb.runtime.CorfuCompactorManagement;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;

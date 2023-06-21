@@ -1,10 +1,8 @@
 package org.corfudb.runtime.collections;
 
-import com.google.common.reflect.TypeToken;
 import lombok.Getter;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.object.transactions.AbstractTransactionsTest;
-import org.corfudb.runtime.view.SMRObject;
 import org.junit.Before;
 import org.junit.Test;
 

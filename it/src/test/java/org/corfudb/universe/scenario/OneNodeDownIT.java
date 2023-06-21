@@ -1,11 +1,5 @@
 package org.corfudb.universe.scenario;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.corfudb.universe.scenario.ScenarioUtils.waitForUnresponsiveServersChange;
-import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_STREAM_NAME;
-import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_TABLE_ITER;
-import static org.junit.jupiter.api.Assertions.fail;
-
 import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.view.ClusterStatusReport;
 import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
@@ -23,6 +17,12 @@ import org.junit.Test;
 import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.universe.scenario.ScenarioUtils.waitForUnresponsiveServersChange;
+import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_STREAM_NAME;
+import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_TABLE_ITER;
+import static org.junit.jupiter.api.Assertions.fail;
 
 public class OneNodeDownIT extends GenericIntegrationTest {
 

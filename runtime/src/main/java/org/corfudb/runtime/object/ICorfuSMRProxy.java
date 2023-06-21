@@ -9,8 +9,8 @@ import java.util.UUID;
  * An interface for accessing a proxy, which
  * manages an SMR object.
  *
- * @param <T> The type of the SMR object.
- * Created by mwei on 11/10/16.
+ * @param <S> The type of the SMR object which must extend
+ *            {@link SnapshotGenerator} and {@link ConsistencyView}
  */
 public interface ICorfuSMRProxy<S extends SnapshotGenerator<S> & ConsistencyView> {
 

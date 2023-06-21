@@ -5,7 +5,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.StreamListener;
-
 import org.corfudb.runtime.exceptions.StreamingException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.Address;

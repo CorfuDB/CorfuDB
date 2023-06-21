@@ -1,17 +1,6 @@
 package org.corfudb.runtime.view;
 
-import static java.util.Arrays.stream;
-
-import java.util.Arrays;
-import java.util.List;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeoutException;
-import java.util.stream.Collectors;
-
-import javax.annotation.Nonnull;
-
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.protocols.wireprotocol.LayoutPrepareResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
@@ -22,6 +11,15 @@ import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.exceptions.WrongClusterException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.util.CFUtils;
+
+import javax.annotation.Nonnull;
+import java.util.Arrays;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeoutException;
+import java.util.stream.Collectors;
+
+import static java.util.Arrays.stream;
 
 /**
  * Created by mwei on 12/10/15.

@@ -1,8 +1,13 @@
 package org.corfudb.runtime.view.stream;
 
-import static org.assertj.core.api.Java6Assertions.assertThat;
-import static org.junit.jupiter.api.Assertions.assertNotSame;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import com.google.common.collect.ImmutableSet;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufInputStream;
+import io.netty.buffer.ByteBufOutputStream;
+import io.netty.buffer.Unpooled;
+import org.corfudb.protocols.wireprotocol.StreamAddressRange;
+import org.corfudb.runtime.view.Address;
+import org.junit.Test;
 
 import java.io.DataInputStream;
 import java.io.DataOutput;
@@ -14,14 +19,9 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.LongStream;
 
-import com.google.common.collect.ImmutableSet;
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufInputStream;
-import io.netty.buffer.ByteBufOutputStream;
-import io.netty.buffer.Unpooled;
-import org.corfudb.protocols.wireprotocol.StreamAddressRange;
-import org.corfudb.runtime.view.Address;
-import org.junit.Test;
+import static org.assertj.core.api.Java6Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 @SuppressWarnings("checkstyle:magicnumber")
 public class StreamAddressSpaceTest {

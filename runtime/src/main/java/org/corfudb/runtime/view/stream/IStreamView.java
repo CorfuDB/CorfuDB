@@ -1,5 +1,11 @@
 package org.corfudb.runtime.view.stream;
 
+import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
+import org.corfudb.runtime.view.Address;
+
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Spliterator;
@@ -7,13 +13,6 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
-
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
-
-import org.corfudb.protocols.wireprotocol.ILogData;
-import org.corfudb.protocols.wireprotocol.TokenResponse;
-import org.corfudb.runtime.view.Address;
 
 
 /** This interface represents a view on a stream. A stream is an ordered

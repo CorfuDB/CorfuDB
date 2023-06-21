@@ -1,12 +1,12 @@
 package org.corfudb.runtime.view.stream;
 
-import java.util.UUID;
-
 import lombok.Getter;
 import lombok.Setter;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.util.Utils;
+
+import java.util.UUID;
 
 
 /** A data class which keeps data for each stream context.

@@ -2,7 +2,6 @@ package org.corfudb.infrastructure;
 
 import com.google.common.util.concurrent.MoreExecutors;
 import io.netty.channel.ChannelHandlerContext;
-import java.util.concurrent.atomic.AtomicInteger;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
 import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
@@ -19,6 +18,8 @@ import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
+
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.corfudb.protocols.CorfuProtocolCommon.DEFAULT_UUID;
 import static org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg;

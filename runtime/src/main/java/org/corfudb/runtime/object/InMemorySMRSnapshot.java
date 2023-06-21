@@ -15,6 +15,7 @@ public class InMemorySMRSnapshot<T> implements SMRSnapshot<T> {
     /**
      * {@inheritDoc}
      */
+    @Override
     public T consume() {
         return snapshot;
     }
@@ -22,6 +23,7 @@ public class InMemorySMRSnapshot<T> implements SMRSnapshot<T> {
     /**
      * {@inheritDoc}
      */
+    @Override
     public void release() {
         // No-Op.
     }

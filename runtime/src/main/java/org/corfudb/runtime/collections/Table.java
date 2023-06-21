@@ -1,7 +1,5 @@
 package org.corfudb.runtime.collections;
 
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.reflect.TypeToken;
 import com.google.protobuf.Message;
 import lombok.AllArgsConstructor;
 import lombok.Getter;

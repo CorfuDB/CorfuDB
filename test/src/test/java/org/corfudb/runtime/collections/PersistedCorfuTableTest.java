@@ -21,6 +21,7 @@ import net.jqwik.api.constraints.UniqueElements;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.function.Failable;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuOptions.ConsistencyModel;
@@ -51,7 +52,6 @@ import org.rocksdb.OptimisticTransactionDB;
 import org.rocksdb.Options;
 import org.rocksdb.RocksDB;
 import org.rocksdb.RocksDBException;
-import org.apache.commons.lang3.function.Failable;
 import org.rocksdb.SstFileManager;
 import org.slf4j.Logger;
 
@@ -74,11 +74,11 @@ import java.util.stream.LongStream;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.times;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy;
 import static org.corfudb.common.metrics.micrometer.MeterRegistryProvider.MeterRegistryInitializer.initClientMetrics;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.times;
 
 @Slf4j
 @RunWith(MockitoJUnitRunner.class)
@@ -98,6 +98,8 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
     private static final String nonExistingKey = "nonExistingKey";
     private static final String defaultNewMapEntry = "newEntry";
     private static final boolean ENABLE_READ_YOUR_WRITES = true;
+    @Captor
+    private ArgumentCaptor<String> logCaptor;
 
     public PersistedCorfuTableTest() {
         AbstractViewTest.initEventGroup();
@@ -108,43 +110,6 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
     public void close() {
         super.cleanupBuffers();
         AbstractViewTest.cleanEventGroup();
-    }
-
-    /**
-     * Single type POJO serializer.
-     */
-    public static class PojoSerializer implements ISerializer {
-        private final Gson gson = new Gson();
-        private final Class<?> clazz;
-        private final int SERIALIZER_OFFSET = 29;  // Random number.
-
-        PojoSerializer(Class<?> clazz) {
-            this.clazz = clazz;
-        }
-
-        @Override
-        public byte getType() {
-            return SERIALIZER_OFFSET;
-        }
-
-        @Override
-        public Object deserialize(ByteBuf b, CorfuRuntime rt) {
-            return gson.fromJson(new String(ByteBufUtil.getBytes(b)), clazz);
-        }
-
-        @Override
-        public void serialize(Object o, ByteBuf b) {
-            b.writeBytes(gson.toJson(o).getBytes());
-        }
-    }
-
-    /**
-     * Sample POJO class.
-     */
-    @Data
-    @Builder
-    public static class Pojo {
-        public final String payload;
     }
 
     private PersistedCorfuTable<String, String> setupTable(
@@ -206,6 +171,7 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
 
     /**
      * Executed the specified function in a transaction.
+     *
      * @param functor function which will be executed within a transaction
      * @return the address of the commit
      */
@@ -249,13 +215,13 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
         try (final PersistedCorfuTable<String, String> table =
                      setupTable(defaultTableName, ENABLE_READ_YOUR_WRITES, options, defaultSerializer)) {
 
-            final long ITERATION_COUNT = 100000;
-            final int ENTITY_CHAR_SIZE = 1000;
+            final long iterationCount = 100000;
+            final int entityCharSize = 1000;
 
             assertThatThrownBy(() ->
-                    LongStream.rangeClosed(1, ITERATION_COUNT).forEach(idx -> {
-                        String key = RandomStringUtils.random(ENTITY_CHAR_SIZE, true, true);
-                        String value = RandomStringUtils.random(ENTITY_CHAR_SIZE, true, true);
+                    LongStream.rangeClosed(1, iterationCount).forEach(idx -> {
+                        String key = RandomStringUtils.random(entityCharSize, true, true);
+                        String value = RandomStringUtils.random(entityCharSize, true, true);
                         table.insert(key, value);
                         String persistedValue = table.get(key);
                         Assertions.assertEquals(value, persistedValue);
@@ -263,7 +229,6 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
                     .hasCauseInstanceOf(RocksDBException.class);
         }
     }
-
 
     /**
      * Ensure disk-backed table serialization and deserialization works as expected.
@@ -307,7 +272,6 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
             });
         }
     }
-
 
     /**
      * Non-transactional property based test that does puts followed by scan and filter.
@@ -437,7 +401,6 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
         }
     }
 
-
     /**
      * Test the snapshot isolation property of disk-backed Corfu tables.
      */
@@ -460,7 +423,7 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
                 executeTx(() -> {
                     try {
                         log.info("Checking data before thread two performs updates.");
-                        for (int i = 0; i < 2*numUpdates; i++) {
+                        for (int i = 0; i < 2 * numUpdates; i++) {
                             if (i < numUpdates) {
                                 assertThat(table.get(defaultNewMapEntry + i)).isEqualTo(defaultNewMapEntry + i);
                                 log.info("key={} has value={}.", defaultNewMapEntry + i, defaultNewMapEntry + i);
@@ -476,7 +439,7 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
                         log.info("Waited for thread two. Checking data again.");
 
                         // Validate that the same snapshot is observed after thread two finishes.
-                        for (int i = 0; i < 2*numUpdates; i++) {
+                        for (int i = 0; i < 2 * numUpdates; i++) {
                             if (i < numUpdates) {
                                 assertThat(table.get(defaultNewMapEntry + i)).isEqualTo(defaultNewMapEntry + i);
                                 log.info("key={} has value={}.", defaultNewMapEntry + i, defaultNewMapEntry + i);
@@ -501,7 +464,7 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
                     log.info("Waited for thread one. Populating new data.");
 
                     // Populate additional entries [numUpdates, 2*numUpdates).
-                    for (int i = numUpdates; i < 2*numUpdates; i++) {
+                    for (int i = numUpdates; i < 2 * numUpdates; i++) {
                         final int ind = i;
                         executeTx(() -> table.insert(defaultNewMapEntry + ind, defaultNewMapEntry + ind));
                     }
@@ -552,6 +515,7 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
                     .isInstanceOf(IllegalStateException.class);
         }
     }
+
     @Property(tries = NUM_OF_TRIES)
     void snapshotExpiredCrud(@ForAll @Size(SAMPLE_SIZE) Set<String> intended) {
         resetTests(CorfuRuntimeParameters.builder().mvoCacheExpiry(Duration.ofNanos(0)).build());
@@ -582,37 +546,37 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
         }
     }
 
-        @Property(tries = NUM_OF_TRIES)
-        void snapshotExpiredIterator(@ForAll @Size(SAMPLE_SIZE) Set<String> intended) {
-            resetTests(CorfuRuntimeParameters.builder().mvoCacheExpiry(Duration.ofNanos(0)).build());
-            try (final PersistedCorfuTable<String, String> table = setupTable()) {
+    @Property(tries = NUM_OF_TRIES)
+    void snapshotExpiredIterator(@ForAll @Size(SAMPLE_SIZE) Set<String> intended) {
+        resetTests(CorfuRuntimeParameters.builder().mvoCacheExpiry(Duration.ofNanos(0)).build());
+        try (final PersistedCorfuTable<String, String> table = setupTable()) {
 
-                executeTx(() -> {
-                    intended.forEach(entry -> table.insert(entry, entry));
-                    intended.forEach(entry -> assertThat(table.get(entry)).isEqualTo(entry));
+            executeTx(() -> {
+                intended.forEach(entry -> table.insert(entry, entry));
+                intended.forEach(entry -> assertThat(table.get(entry)).isEqualTo(entry));
+            });
+
+            executeTx(() -> {
+                assertThat(table.entryStream().count()).isEqualTo(intended.size());
+
+                Stream<Map.Entry<String, String>> stream = table.entryStream();
+                Iterator<Map.Entry<String, String>> iterator = stream.iterator();
+                assertThat(iterator.next()).isNotNull();
+                assertThat(iterator.next()).isNotNull();
+
+                Thread thread = new Thread(() -> {
+                    intended.forEach(entry -> table.insert(entry, StringUtils.reverse(entry)));
+                    intended.forEach(entry -> assertThat(table.get(entry)).isEqualTo(StringUtils.reverse(entry)));
                 });
 
-                executeTx(() -> {
-                    assertThat(table.entryStream().count()).isEqualTo(intended.size());
+                thread.start();
+                Failable.run(thread::join);
 
-                    Stream<Map.Entry<String, String>> stream = table.entryStream();
-                    Iterator<Map.Entry<String, String>> iterator = stream.iterator();
-                    assertThat(iterator.next()).isNotNull();
-                    assertThat(iterator.next()).isNotNull();
-
-                    Thread thread = new Thread(() -> {
-                        intended.forEach(entry -> table.insert(entry, StringUtils.reverse(entry)));
-                        intended.forEach(entry -> assertThat(table.get(entry)).isEqualTo(StringUtils.reverse(entry)));
-                    });
-
-                    thread.start();
-                    Failable.run(thread::join);
-
-                    table.getCorfuSMRProxy().getUnderlyingMVO()
-                            .getMvoCache().getObjectCache().cleanUp();
-                    assertThatThrownBy(iterator::next)
-                            .isInstanceOf(TrimmedException.class);
-                });
+                table.getCorfuSMRProxy().getUnderlyingMVO()
+                        .getMvoCache().getObjectCache().cleanUp();
+                assertThatThrownBy(iterator::next)
+                        .isInstanceOf(TrimmedException.class);
+            });
         }
     }
 
@@ -679,10 +643,10 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
             assertThat(table.entryStream().count()).isEqualTo(0);
 
             executeTx(() -> groups.forEach(((character, strings) -> assertThat(StreamSupport.stream(
-                                table.getByIndex(StringIndexer.BY_FIRST_LETTER, character).spliterator(), false)
-                        .map(Map.Entry::getValue)
-                        .collect(Collectors.toSet()))
-                        .isEmpty())));
+                            table.getByIndex(StringIndexer.BY_FIRST_LETTER, character).spliterator(), false)
+                    .map(Map.Entry::getValue)
+                    .collect(Collectors.toSet()))
+                    .isEmpty())));
             groups.forEach(((character, strings) -> assertThat(StreamSupport.stream(
                             table.getByIndex(StringIndexer.BY_FIRST_LETTER, character).spliterator(), false)
                     .map(Map.Entry::getValue)
@@ -830,107 +794,103 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
             @ForAll @StringLength(min = STRING_MIN, max = STRING_MAX) @AlphaChars String namespace,
             @ForAll @StringLength(min = STRING_MIN, max = STRING_MAX) @AlphaChars String tableName,
             @ForAll("uuidSet") @Size(SAMPLE_SIZE + 1) Set<Uuid> ids,
-            @ForAll("eventInfoSet") @Size(SAMPLE_SIZE + 1) Set<EventInfo> events)
-            throws Exception {
-            resetTests();
+            @ForAll("eventInfoSet") @Size(SAMPLE_SIZE + 1) Set<EventInfo> events) {
+        resetTests();
 
-            final Uuid firstId = ids.stream().findFirst().orElseThrow(IllegalStateException::new);
-            final EventInfo firstEvent = events.stream().findAny().orElseThrow(IllegalStateException::new);
-            assertThat(ids.remove(firstId)).isTrue();
-            assertThat(events.remove(firstEvent)).isTrue();
+        final Uuid firstId = ids.stream().findFirst().orElseThrow(IllegalStateException::new);
+        final EventInfo firstEvent = events.stream().findAny().orElseThrow(IllegalStateException::new);
+        assertThat(ids.remove(firstId)).isTrue();
+        assertThat(events.remove(firstEvent)).isTrue();
 
-            assertThat(ids.size()).isEqualTo(SAMPLE_SIZE);
-            assertThat(events.size()).isEqualTo(SAMPLE_SIZE);
+        assertThat(ids.size()).isEqualTo(SAMPLE_SIZE);
+        assertThat(events.size()).isEqualTo(SAMPLE_SIZE);
 
-            // Creating Corfu Store using a connected corfu client.
-            CorfuStore corfuStore = new CorfuStore(getDefaultRuntime());
+        // Creating Corfu Store using a connected corfu client.
+        CorfuStore corfuStore = new CorfuStore(getDefaultRuntime());
 
-            // Create & Register the table.
-            // This is required to initialize the table for the current corfu client.
-            final Path persistedCacheLocation = Paths.get(diskBackedDirectory, defaultTableName);
-            try (Table<Uuid, EventInfo, SampleSchema.ManagedResources> table =
-                         corfuStore.openTable(namespace, tableName,
-                                 Uuid.class, EventInfo.class,
-                                 SampleSchema.ManagedResources.class,
-                                 // TableOptions includes option to choose - Memory/Disk based corfu table.
-                                 TableOptions.fromProtoSchema(EventInfo.class).toBuilder()
-                                         .persistentDataPath(persistedCacheLocation)
-                                         .build())) {
+        // Create & Register the table.
+        // This is required to initialize the table for the current corfu client.
+        final Path persistedCacheLocation = Paths.get(diskBackedDirectory, defaultTableName);
+        try (Table<Uuid, EventInfo, SampleSchema.ManagedResources> table =
+                     corfuStore.openTable(namespace, tableName,
+                             Uuid.class, EventInfo.class,
+                             SampleSchema.ManagedResources.class,
+                             // TableOptions includes option to choose - Memory/Disk based corfu table.
+                             TableOptions.fromProtoSchema(EventInfo.class).toBuilder()
+                                     .persistentDataPath(persistedCacheLocation)
+                                     .build())) {
 
-                SampleSchema.ManagedResources metadata = SampleSchema.ManagedResources.newBuilder()
-                        .setCreateUser("MrProto").build();
+            SampleSchema.ManagedResources metadata = SampleSchema.ManagedResources.newBuilder()
+                    .setCreateUser("MrProto").build();
 
-                // Simple CRUD using the table instance.
-                // These are wrapped as transactional operations.
-                table.put(firstId, firstEvent, metadata);
+            // Simple CRUD using the table instance.
+            // These are wrapped as transactional operations.
+            table.put(firstId, firstEvent, metadata);
 
-                // Fetch timestamp to perform snapshot queries or transactions at a particular timestamp.
-                Token token = getDefaultRuntime().getSequencerView().query().getToken();
-                CorfuStoreMetadata.Timestamp timestamp = CorfuStoreMetadata.Timestamp.newBuilder()
-                        .setEpoch(token.getEpoch())
-                        .setSequence(token.getSequence())
-                        .build();
+            // Fetch timestamp to perform snapshot queries or transactions at a particular timestamp.
+            Token token = getDefaultRuntime().getSequencerView().query().getToken();
+            CorfuStoreMetadata.Timestamp timestamp = CorfuStoreMetadata.Timestamp.newBuilder()
+                    .setEpoch(token.getEpoch())
+                    .setSequence(token.getSequence())
+                    .build();
 
-                try (TxnContext tx = corfuStore.txn(namespace)) {
-                    assertThat(events.size()).isEqualTo(ids.size());
+            try (TxnContext tx = corfuStore.txn(namespace)) {
+                assertThat(events.size()).isEqualTo(ids.size());
 
-                    Streams.zip(ids.stream(), events.stream(), SimpleEntry::new)
-                            .forEach(pair -> tx.putRecord(table, pair.getKey(), pair.getValue(), metadata));
-                    CorfuStoreMetadata.Timestamp t = tx.commit();
-                }
-
-                final SimpleEntry<Uuid, EventInfo> sample = Streams
-                        .zip(ids.stream(), events.stream(), SimpleEntry::new)
-                        .findAny().orElseThrow(() -> new InvalidObjectException("Invalid state."));
-
-                try (TxnContext tx = corfuStore.txn(namespace)) {
-                    assertThat(tx.getRecord(tableName, sample.getKey()).getPayload())
-                            .isEqualTo(sample.getValue());
-
-                    final Collection<Message> secondaryIndex = tx
-                            .getByIndex(tableName, "event_time", sample.getValue().getEventTime())
-                            .stream().map(CorfuStoreEntry::getPayload).collect(Collectors.toList());
-
-                    assertThat(secondaryIndex).containsExactly(sample.getValue());
-
-                    long medianEventTime = (long) Quantiles.median().compute(events.stream()
-                            .map(EventInfo::getEventTime)
-                            .collect(Collectors.toList()));
-
-                    events.add(firstEvent);
-                    final Set<EventInfo> filteredEvents = events.stream().filter(
-                                    event -> event.getEventTime() > medianEventTime)
-                            .collect(Collectors.toSet());
-                    final List<CorfuStoreEntry<Uuid, EventInfo, SampleSchema.ManagedResources>> queryResult =
-                            tx.executeQuery(tableName,
-                                    record -> record.getPayload().getEventTime() > medianEventTime);
-                    final Set<EventInfo> scannedValues = queryResult.stream()
-                            .map(CorfuStoreEntry::getPayload).collect(Collectors.toSet());
-
-                    assertThat(filteredEvents.size()).isGreaterThan(0).isLessThan(SAMPLE_SIZE);
-                    assertThat(scannedValues.size()).isEqualTo(filteredEvents.size());
-                    assertThat(tx.count(tableName)).isEqualTo(SAMPLE_SIZE + 1);
-                    tx.commit();
-                }
-
-                try (TxnContext tx = corfuStore.txn(namespace, IsolationLevel.snapshot(timestamp))) {
-                    assertThat(tx.count(tableName)).isEqualTo(1);
-                    tx.commit();
-                }
-
-                assertThat(corfuStore.listTables(namespace))
-                        .containsExactly(CorfuStoreMetadata.TableName.newBuilder()
-                                .setNamespace(namespace)
-                                .setTableName(tableName)
-                                .build());
-            }catch (Exception e) {
-                System.out.println(e);
+                Streams.zip(ids.stream(), events.stream(), SimpleEntry::new)
+                        .forEach(pair -> tx.putRecord(table, pair.getKey(), pair.getValue(), metadata));
+                tx.commit();
             }
 
-    }
+            final SimpleEntry<Uuid, EventInfo> sample = Streams
+                    .zip(ids.stream(), events.stream(), SimpleEntry::new)
+                    .findAny().orElseThrow(() -> new InvalidObjectException("Invalid state."));
 
-    @Captor
-    private ArgumentCaptor<String> logCaptor;
+            try (TxnContext tx = corfuStore.txn(namespace)) {
+                assertThat(tx.getRecord(tableName, sample.getKey()).getPayload())
+                        .isEqualTo(sample.getValue());
+
+                final Collection<Message> secondaryIndex = tx
+                        .getByIndex(tableName, "event_time", sample.getValue().getEventTime())
+                        .stream().map(CorfuStoreEntry::getPayload).collect(Collectors.toList());
+
+                assertThat(secondaryIndex).containsExactly(sample.getValue());
+
+                long medianEventTime = (long) Quantiles.median().compute(events.stream()
+                        .map(EventInfo::getEventTime)
+                        .collect(Collectors.toList()));
+
+                events.add(firstEvent);
+                final Set<EventInfo> filteredEvents = events.stream().filter(
+                                event -> event.getEventTime() > medianEventTime)
+                        .collect(Collectors.toSet());
+                final List<CorfuStoreEntry<Uuid, EventInfo, SampleSchema.ManagedResources>> queryResult =
+                        tx.executeQuery(tableName,
+                                record -> record.getPayload().getEventTime() > medianEventTime);
+                final Set<EventInfo> scannedValues = queryResult.stream()
+                        .map(CorfuStoreEntry::getPayload).collect(Collectors.toSet());
+
+                assertThat(filteredEvents.size()).isGreaterThan(0).isLessThan(SAMPLE_SIZE);
+                assertThat(scannedValues.size()).isEqualTo(filteredEvents.size());
+                assertThat(tx.count(tableName)).isEqualTo(SAMPLE_SIZE + 1);
+                tx.commit();
+            }
+
+            try (TxnContext tx = corfuStore.txn(namespace, IsolationLevel.snapshot(timestamp))) {
+                assertThat(tx.count(tableName)).isEqualTo(1);
+                tx.commit();
+            }
+
+            assertThat(corfuStore.listTables(namespace))
+                    .containsExactly(CorfuStoreMetadata.TableName.newBuilder()
+                            .setNamespace(namespace)
+                            .setTableName(tableName)
+                            .build());
+        } catch (Exception e) {
+            System.out.println(e);
+        }
+
+    }
 
     @Test
     public void testExternalProvider() throws InterruptedException, IOException {
@@ -962,9 +922,46 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
         }
 
         try (MockedStatic<MeterRegistryProvider> myClassMock =
-                    Mockito.mockStatic(MeterRegistryProvider.class)) {
+                     Mockito.mockStatic(MeterRegistryProvider.class)) {
             table.close();
             myClassMock.verify(() -> MeterRegistryProvider.unregisterExternalSupplier(any()), times(1));
         }
+    }
+
+    /**
+     * Single type POJO serializer.
+     */
+    public static class PojoSerializer implements ISerializer {
+        private final Gson gson = new Gson();
+        private final Class<?> clazz;
+        private final int SERIALIZER_OFFSET = 29;  // Random number.
+
+        PojoSerializer(Class<?> clazz) {
+            this.clazz = clazz;
+        }
+
+        @Override
+        public byte getType() {
+            return SERIALIZER_OFFSET;
+        }
+
+        @Override
+        public Object deserialize(ByteBuf b, CorfuRuntime rt) {
+            return gson.fromJson(new String(ByteBufUtil.getBytes(b)), clazz);
+        }
+
+        @Override
+        public void serialize(Object o, ByteBuf b) {
+            b.writeBytes(gson.toJson(o).getBytes());
+        }
+    }
+
+    /**
+     * Sample POJO class.
+     */
+    @Data
+    @Builder
+    public static class Pojo {
+        public final String payload;
     }
 }

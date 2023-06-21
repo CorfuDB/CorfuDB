@@ -3,7 +3,6 @@ package org.corfudb.common.metrics.micrometer;
 import io.micrometer.core.instrument.Meter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Tag;
-
 import io.micrometer.core.instrument.composite.CompositeMeterRegistry;
 import io.micrometer.core.instrument.logging.LoggingRegistryConfig;
 import lombok.Getter;

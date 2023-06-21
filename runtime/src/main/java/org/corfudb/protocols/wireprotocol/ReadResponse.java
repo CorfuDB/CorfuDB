@@ -1,10 +1,11 @@
 package org.corfudb.protocols.wireprotocol;
 
-import java.util.HashMap;
-import java.util.Map;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.Getter;
+
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Created by mwei on 8/15/16.

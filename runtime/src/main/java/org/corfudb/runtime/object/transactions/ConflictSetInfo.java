@@ -1,5 +1,8 @@
 package org.corfudb.runtime.object.transactions;
 
+import lombok.Getter;
+import org.corfudb.runtime.object.MVOCorfuCompileProxy;
+
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -7,9 +10,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
-
-import lombok.Getter;
-import org.corfudb.runtime.object.MVOCorfuCompileProxy;
 
 /**
  * This class captures information about objects accessed (read) during speculative

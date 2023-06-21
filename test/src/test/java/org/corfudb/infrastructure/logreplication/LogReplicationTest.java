@@ -1,15 +1,15 @@
 package org.corfudb.infrastructure.logreplication;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
-
 import com.google.common.reflect.TypeToken;
-import java.io.IOException;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.util.serializer.Serializers;
+
+import java.io.IOException;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 @Slf4j
 public class LogReplicationTest {

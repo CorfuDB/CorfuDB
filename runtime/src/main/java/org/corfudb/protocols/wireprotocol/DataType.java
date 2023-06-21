@@ -1,11 +1,11 @@
 package org.corfudb.protocols.wireprotocol;
 
+import lombok.AllArgsConstructor;
+
 import java.util.Arrays;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-
-import lombok.AllArgsConstructor;
 
 /**
  * Created by mwei on 8/16/16.

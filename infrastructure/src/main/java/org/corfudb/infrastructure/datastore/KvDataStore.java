@@ -3,8 +3,6 @@ package org.corfudb.infrastructure.datastore;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
-import org.corfudb.common.result.Result;
-import org.corfudb.runtime.exceptions.DataCorruptionException;
 
 import java.util.Optional;
 

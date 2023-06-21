@@ -1,17 +1,8 @@
 package org.corfudb.infrastructure.logreplication;
 
-import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
-
-
-import java.lang.reflect.InvocationTargetException;
-import java.util.Iterator;
-import java.util.Set;
-import java.util.UUID;
-import java.util.stream.Stream;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
-import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
@@ -21,12 +12,18 @@ import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.view.AbstractViewTest;
-import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.StreamOptions;
-import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.runtime.view.stream.OpaqueStream;
 import org.corfudb.test.SampleSchema.Uuid;
 import org.junit.Test;
+
+import java.lang.reflect.InvocationTargetException;
+import java.util.Iterator;
+import java.util.Set;
+import java.util.UUID;
+import java.util.stream.Stream;
+
+import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 
 @Slf4j
 public class LogUpdateAPITest extends AbstractViewTest {

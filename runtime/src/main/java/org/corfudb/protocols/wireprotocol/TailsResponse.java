@@ -1,13 +1,13 @@
 package org.corfudb.protocols.wireprotocol;
 
-import java.util.Collections;
-import java.util.Map;
-import java.util.UUID;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
-
 import org.corfudb.runtime.view.Layout;
+
+import java.util.Collections;
+import java.util.Map;
+import java.util.UUID;
 
 /**
  *

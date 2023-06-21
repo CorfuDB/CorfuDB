@@ -17,6 +17,7 @@ import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.CorfuStoreMetadata.ProtobufFileDescriptor;
 import org.corfudb.runtime.CorfuStoreMetadata.ProtobufFileName;
 import org.corfudb.runtime.ExampleSchemas;
+import org.corfudb.runtime.ExampleSchemas.ManagedMetadata;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMetadataMsg;
 import org.corfudb.runtime.Queue;
 import org.corfudb.runtime.exceptions.StaleRevisionUpdateException;
@@ -27,7 +28,6 @@ import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.proto.RpcCommon;
 import org.corfudb.runtime.proto.RpcCommon.UuidMsg;
 import org.corfudb.runtime.view.AbstractViewTest;
-import org.corfudb.runtime.ExampleSchemas.ManagedMetadata;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.TableRegistry;
@@ -56,18 +56,17 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-
 import static com.google.protobuf.DescriptorProtos.DescriptorProto;
 import static com.google.protobuf.DescriptorProtos.FileDescriptorProto;
 import static com.google.protobuf.DescriptorProtos.FileDescriptorSet;
 import static com.google.protobuf.Descriptors.DescriptorValidationException;
 import static com.google.protobuf.Descriptors.FileDescriptor;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.corfudb.test.SampleAppliance.Appliance;
 import static org.corfudb.test.SampleSchema.FirewallRule;
 import static org.corfudb.test.SampleSchema.ManagedResources;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**

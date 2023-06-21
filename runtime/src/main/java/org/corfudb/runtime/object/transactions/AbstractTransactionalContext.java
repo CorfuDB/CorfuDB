@@ -1,12 +1,5 @@
 package org.corfudb.runtime.object.transactions;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-
 import com.google.common.base.Preconditions;
 import lombok.Getter;
 import lombok.NonNull;
@@ -25,6 +18,13 @@ import org.corfudb.runtime.object.SnapshotGenerator;
 import org.corfudb.runtime.object.transactions.TransactionalContext.PreCommitListener;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.util.Utils;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 import static org.corfudb.runtime.CorfuOptions.ConsistencyModel.READ_COMMITTED;
 

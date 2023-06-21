@@ -1,7 +1,5 @@
 package org.corfudb.runtime.view.stream;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
@@ -14,6 +12,8 @@ import org.junit.Test;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Tests the BackpointerStreamView

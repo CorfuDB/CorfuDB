@@ -1,16 +1,15 @@
 package org.corfudb.samples;
 
-import java.util.ArrayList;
-import java.util.Random;
-import java.util.concurrent.atomic.AtomicInteger;
-
 import com.google.common.reflect.TypeToken;
 import org.corfudb.runtime.collections.ICorfuTable;
-import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.object.transactions.TransactionType;
+
+import java.util.ArrayList;
+import java.util.Random;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * This class demonstrates transactions with write-write isolation level.

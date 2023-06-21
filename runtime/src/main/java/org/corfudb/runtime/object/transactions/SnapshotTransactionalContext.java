@@ -1,14 +1,14 @@
 package org.corfudb.runtime.object.transactions;
 
-import java.util.List;
-import java.util.UUID;
-
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.ConsistencyView;
 import org.corfudb.runtime.object.ICorfuSMRAccess;
 import org.corfudb.runtime.object.MVOCorfuCompileProxy;
 import org.corfudb.runtime.object.SnapshotGenerator;
+
+import java.util.List;
+import java.util.UUID;
 
 /**
  * A snapshot transactional context.

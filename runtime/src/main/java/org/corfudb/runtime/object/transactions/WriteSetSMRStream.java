@@ -1,19 +1,18 @@
 package org.corfudb.runtime.object.transactions;
 
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
+import org.corfudb.runtime.object.ISMRStream;
+import org.corfudb.runtime.view.Address;
+import org.corfudb.util.Utils;
+
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Stream;
-
-import lombok.extern.slf4j.Slf4j;
-
-import org.corfudb.protocols.logprotocol.SMREntry;
-import org.corfudb.protocols.wireprotocol.TokenResponse;
-import org.corfudb.runtime.object.ISMRStream;
-import org.corfudb.runtime.view.Address;
-import org.corfudb.util.Utils;
 
 /**
  * Created by mwei on 3/13/17.

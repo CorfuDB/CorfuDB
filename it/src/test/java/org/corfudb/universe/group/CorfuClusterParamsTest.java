@@ -1,7 +1,5 @@
 package org.corfudb.universe.group;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
 import org.corfudb.universe.group.cluster.CorfuClusterParams;
 import org.corfudb.universe.node.server.CorfuServerParams;
 import org.corfudb.universe.node.server.CorfuServerParams.ContainerResources;
@@ -11,6 +9,8 @@ import org.junit.Test;
 import java.util.Collections;
 import java.util.SortedSet;
 import java.util.TreeSet;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 public class CorfuClusterParamsTest {
 

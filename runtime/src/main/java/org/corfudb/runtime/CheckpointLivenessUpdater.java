@@ -3,14 +3,13 @@ package org.corfudb.runtime;
 import com.google.protobuf.Message;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuCompactorManagement.ActiveCPStreamMsg;
+import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
-import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.util.LambdaUtils;
 
 import java.lang.reflect.InvocationTargetException;
 import java.time.Duration;

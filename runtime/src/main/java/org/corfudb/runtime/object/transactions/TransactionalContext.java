@@ -1,13 +1,13 @@
 package org.corfudb.runtime.object.transactions;
 
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
+
 import java.util.Collections;
 import java.util.Deque;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.stream.Collectors;
-
-import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.wireprotocol.TokenResponse;
 
 /** A class which allows access to transactional contexts, which manage
  * transactions. The static methods of this class provide access to the

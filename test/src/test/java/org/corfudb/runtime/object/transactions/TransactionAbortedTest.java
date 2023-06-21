@@ -1,10 +1,5 @@
 package org.corfudb.runtime.object.transactions;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
-import java.util.Arrays;
-import java.util.concurrent.atomic.AtomicLong;
-
 import com.google.common.reflect.TypeToken;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.ICorfuTable;
@@ -12,6 +7,11 @@ import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.MVOCorfuCompileProxy;
 import org.junit.Test;
+
+import java.util.Arrays;
+import java.util.concurrent.atomic.AtomicLong;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Ensure that the aborted transaction reporting adheres to the contract.

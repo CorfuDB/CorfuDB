@@ -14,7 +14,6 @@ import org.junit.Before;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
 
-
 import java.lang.reflect.InvocationTargetException;
 import java.time.Duration;
 import java.util.concurrent.TimeUnit;

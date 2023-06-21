@@ -2,7 +2,6 @@ package org.corfudb.runtime.collections;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.reflect.TypeToken;
-import lombok.Builder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.object.ICorfuSMR;

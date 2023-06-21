@@ -2,14 +2,13 @@ package org.corfudb.infrastructure.redundancy;
 
 import com.google.common.collect.ImmutableList;
 import org.corfudb.infrastructure.LayoutBasedTestHelper;
-import org.corfudb.infrastructure.NodeNames;
+import org.corfudb.infrastructure.log.statetransfer.TransferSegmentCreator;
 import org.corfudb.infrastructure.log.statetransfer.segment.StateTransferType;
 import org.corfudb.infrastructure.log.statetransfer.segment.TransferSegment;
 import org.corfudb.infrastructure.log.statetransfer.segment.TransferSegmentRange;
 import org.corfudb.infrastructure.log.statetransfer.segment.TransferSegmentRangeSingle;
 import org.corfudb.infrastructure.log.statetransfer.segment.TransferSegmentRangeSplit;
 import org.corfudb.infrastructure.log.statetransfer.segment.TransferSegmentStatus;
-import org.corfudb.infrastructure.log.statetransfer.TransferSegmentCreator;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.Layout.LayoutSegment;
 import org.junit.Assert;

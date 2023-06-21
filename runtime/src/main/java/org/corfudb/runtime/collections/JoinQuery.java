@@ -1,16 +1,15 @@
 package org.corfudb.runtime.collections;
 
-import static org.corfudb.runtime.collections.QueryOptions.DEFAULT_OPTIONS;
-
 import com.google.protobuf.Message;
+import org.corfudb.runtime.view.ObjectsView;
+import org.corfudb.runtime.view.TableRegistry;
 
+import javax.annotation.Nonnull;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map.Entry;
 import java.util.Optional;
-import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.BiFunction;
 import java.util.function.BiPredicate;
@@ -18,15 +17,7 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
-
-import org.corfudb.protocols.wireprotocol.Token;
-import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
-import org.corfudb.runtime.object.transactions.Transaction.TransactionBuilder;
-import org.corfudb.runtime.object.transactions.TransactionType;
-import org.corfudb.runtime.view.ObjectsView;
-import org.corfudb.runtime.view.TableRegistry;
+import static org.corfudb.runtime.collections.QueryOptions.DEFAULT_OPTIONS;
 
 /**
  * JoinQuery class provides methods to query multiple tables in the CorfuStore tables.

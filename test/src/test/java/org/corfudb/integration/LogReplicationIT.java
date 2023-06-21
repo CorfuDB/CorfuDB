@@ -30,7 +30,6 @@ import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.proto.service.CorfuMessage;
-
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.util.Utils;
 import org.junit.Test;
@@ -53,8 +52,8 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import static java.lang.Thread.sleep;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_CACHE_NUM_ENTRIES;
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED;
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_CACHE_NUM_ENTRIES;
 import static org.corfudb.integration.LogReplicationAbstractIT.checkpointAndTrimCorfuStore;
 import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
 

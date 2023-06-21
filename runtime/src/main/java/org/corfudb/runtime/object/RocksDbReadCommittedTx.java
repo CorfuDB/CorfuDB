@@ -83,7 +83,8 @@ public class RocksDbReadCommittedTx implements RocksDbApi {
     }
 
     @Override
-    public void close() throws RocksDBException {
+    public void close() {
+        // No-op.
     }
 
     @Override

@@ -1,13 +1,13 @@
 package org.corfudb.runtime.object;
 
-import java.util.Set;
-import java.util.UUID;
-
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.ObjectOpenOption;
 import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.util.ReflectionUtils;
 import org.corfudb.util.serializer.ISerializer;
+
+import java.util.Set;
+import java.util.UUID;
 
 /**
  * Builds a wrapper for the underlying SMR Object.

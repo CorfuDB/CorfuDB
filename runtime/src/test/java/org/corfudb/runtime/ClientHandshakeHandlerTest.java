@@ -26,9 +26,9 @@ import static org.corfudb.protocols.service.CorfuProtocolBase.getHandshakeRespon
 import static org.corfudb.protocols.service.CorfuProtocolBase.getPingResponseMsg;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getHeaderMsg;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getResponseMsg;
-import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;

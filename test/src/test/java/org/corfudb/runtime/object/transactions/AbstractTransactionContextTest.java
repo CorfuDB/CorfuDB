@@ -1,12 +1,6 @@
 package org.corfudb.runtime.object.transactions;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import com.google.common.reflect.TypeToken;
-
-import java.util.ArrayList;
-import java.util.concurrent.atomic.AtomicIntegerArray;
-import java.util.concurrent.atomic.AtomicLong;
-
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
@@ -15,6 +9,11 @@ import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.view.Address;
 import org.junit.Before;
 import org.junit.Test;
+
+import java.util.concurrent.atomic.AtomicIntegerArray;
+import java.util.concurrent.atomic.AtomicLong;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Created by mwei on 11/21/16.

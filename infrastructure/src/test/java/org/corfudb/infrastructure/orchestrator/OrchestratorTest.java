@@ -2,9 +2,6 @@ package org.corfudb.infrastructure.orchestrator;
 
 import com.google.common.util.concurrent.MoreExecutors;
 import io.netty.channel.ChannelHandlerContext;
-import java.util.UUID;
-import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.atomic.AtomicInteger;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.IServerRouter;
 import org.corfudb.infrastructure.ServerContext;
@@ -34,18 +31,21 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
+import java.util.UUID;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.atomic.AtomicInteger;
+
 import static org.corfudb.protocols.CorfuProtocolCommon.DEFAULT_UUID;
 import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
 import static org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg;
 import static org.corfudb.protocols.service.CorfuProtocolManagement.getAddNodeRequestMsg;
 import static org.corfudb.protocols.service.CorfuProtocolManagement.getForceRemoveNodeRequestMsg;
 import static org.corfudb.protocols.service.CorfuProtocolManagement.getHealNodeRequestMsg;
+import static org.corfudb.protocols.service.CorfuProtocolManagement.getQueryWorkflowRequestMsg;
 import static org.corfudb.protocols.service.CorfuProtocolManagement.getRemoveNodeRequestMsg;
 import static org.corfudb.protocols.service.CorfuProtocolManagement.getRestoreRedundancyMergeSegmentsRequestMsg;
-import static org.corfudb.protocols.service.CorfuProtocolManagement.getQueryWorkflowRequestMsg;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getHeaderMsg;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getRequestMsg;
-
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;

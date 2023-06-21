@@ -1,15 +1,14 @@
 package org.corfudb.runtime.object.transactions;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import com.google.common.reflect.TypeToken;
-
-import java.util.ArrayList;
-
-import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.junit.Test;
+
+import java.util.ArrayList;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Created by dalia on 3/6/17.
@@ -17,7 +16,6 @@ import org.junit.Test;
 public class UndoTest extends AbstractTransactionsTest {
     @Override
     public void TXBegin() { WWTXBegin(); }
-
 
     @Test
     public void ckCorrectUndo()

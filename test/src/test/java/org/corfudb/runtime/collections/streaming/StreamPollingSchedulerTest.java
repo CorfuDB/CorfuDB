@@ -19,9 +19,7 @@ import org.corfudb.runtime.view.SequencerView;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.junit.Test;
-import org.mockito.Answers;
 import org.mockito.ArgumentCaptor;
-import org.mockito.MockSettings;
 
 import java.time.Duration;
 import java.util.ArrayList;

@@ -1,10 +1,5 @@
 package org.corfudb.runtime.object.transactions;
 
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
-import java.util.UUID;
-
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
@@ -15,6 +10,11 @@ import org.corfudb.runtime.object.ConsistencyView;
 import org.corfudb.runtime.object.ICorfuSMRAccess;
 import org.corfudb.runtime.object.MVOCorfuCompileProxy;
 import org.corfudb.runtime.object.SnapshotGenerator;
+
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.UUID;
 
 
 /** A Corfu optimistic transaction context.

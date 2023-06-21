@@ -1,15 +1,14 @@
 package org.corfudb.runtime.object.transactions;
 
+import lombok.Getter;
+import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
+import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.runtime.object.MVOCorfuCompileProxy;
+
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
-
-import lombok.Getter;
-
-import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
-import org.corfudb.protocols.logprotocol.SMREntry;
-import org.corfudb.runtime.object.MVOCorfuCompileProxy;
 
 import static org.corfudb.runtime.object.transactions.TransactionalContext.getRootContext;
 

@@ -1,9 +1,9 @@
 package org.corfudb.runtime.collections;
 
-import java.util.Collection;
-
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
+
+import java.util.Collection;
 
 /**
  * Created by zlokhandwala on 2019-08-10.

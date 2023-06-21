@@ -29,28 +29,26 @@ import java.io.UncheckedIOException;
 import java.nio.channels.FileChannel;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.EnumMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.stream.Collectors;
-import java.util.UUID;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Collection;
-import java.util.EnumMap;
-import java.util.Set;
-import java.util.Arrays;
 
-import static org.corfudb.infrastructure.log.Segment.parseHeader;
-import static org.corfudb.infrastructure.log.Segment.parseMetadata;
-import static org.corfudb.infrastructure.log.Segment.parseEntry;
-import static org.corfudb.infrastructure.log.SegmentUtils.getLogData;
-
-import static org.corfudb.browser.CorfuStoreBrowserEditor.printTableRegistry;
 import static org.corfudb.browser.CorfuStoreBrowserEditor.printKey;
 import static org.corfudb.browser.CorfuStoreBrowserEditor.printMetadata;
 import static org.corfudb.browser.CorfuStoreBrowserEditor.printPayload;
+import static org.corfudb.browser.CorfuStoreBrowserEditor.printTableRegistry;
+import static org.corfudb.infrastructure.log.Segment.parseEntry;
+import static org.corfudb.infrastructure.log.Segment.parseHeader;
+import static org.corfudb.infrastructure.log.Segment.parseMetadata;
+import static org.corfudb.infrastructure.log.SegmentUtils.getLogData;
 
 @SuppressWarnings("checkstyle:printLine")
 public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {

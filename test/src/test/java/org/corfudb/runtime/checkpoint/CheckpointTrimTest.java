@@ -1,14 +1,6 @@
 package org.corfudb.runtime.checkpoint;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
 import com.google.common.reflect.TypeToken;
-
-import java.util.List;
-import java.util.Map;
-import java.util.stream.IntStream;
-import java.util.stream.Stream;
-
 import org.assertj.core.api.Assertions;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.Token;
@@ -22,9 +14,15 @@ import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.ObjectOpenOption;
-import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.junit.Test;
+
+import java.util.List;
+import java.util.Map;
+import java.util.stream.IntStream;
+import java.util.stream.Stream;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Created by mwei on 5/25/17.

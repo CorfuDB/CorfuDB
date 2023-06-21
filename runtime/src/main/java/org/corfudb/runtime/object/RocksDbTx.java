@@ -1,23 +1,22 @@
 package org.corfudb.runtime.object;
 
-import com.google.common.primitives.Bytes;
-import com.google.common.primitives.Ints;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
-import io.netty.buffer.Unpooled;
 import lombok.NonNull;
-import org.apache.commons.codec.binary.Hex;
-import org.apache.commons.lang3.ArrayUtils;
 import org.corfudb.runtime.collections.RocksDbEntryIterator;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.serializer.ISerializer;
-import org.rocksdb.*;
+import org.rocksdb.ColumnFamilyHandle;
+import org.rocksdb.OptimisticTransactionDB;
+import org.rocksdb.ReadOptions;
+import org.rocksdb.RocksDBException;
+import org.rocksdb.RocksIterator;
+import org.rocksdb.Transaction;
+import org.rocksdb.WriteOptions;
 
 import java.nio.ByteBuffer;
-import java.util.*;
+import java.util.List;
 import java.util.stream.Collectors;
-
-import static org.corfudb.util.Utils.startsWith;
 
 /**
  * A concrete class that implements {@link RocksDbApi} using

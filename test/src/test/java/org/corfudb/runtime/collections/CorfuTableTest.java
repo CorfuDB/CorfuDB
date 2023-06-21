@@ -1,9 +1,17 @@
 package org.corfudb.runtime.collections;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.Assert.assertNotSame;
-
 import com.google.common.reflect.TypeToken;
+import org.assertj.core.api.Assertions;
+import org.assertj.core.data.MapEntry;
+import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.runtime.object.ICorfuSMR;
+import org.corfudb.runtime.object.transactions.TransactionType;
+import org.corfudb.runtime.view.AbstractViewTest;
+import org.junit.Ignore;
+import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -15,21 +23,8 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
-import org.assertj.core.api.Assertions;
-import org.assertj.core.data.MapEntry;
-import org.corfudb.protocols.wireprotocol.LogData;
-import org.corfudb.protocols.wireprotocol.Token;
-import org.corfudb.protocols.wireprotocol.TokenResponse;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
-import org.corfudb.runtime.object.ICorfuSMR;
-import org.corfudb.runtime.object.MVOCorfuCompileProxy;
-import org.corfudb.runtime.object.transactions.TransactionType;
-import org.corfudb.runtime.view.AbstractViewTest;
-import org.corfudb.runtime.view.SMRObject;
-import org.junit.Ignore;
-import org.junit.Test;
-
-import javax.annotation.Nonnull;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.Assert.assertNotSame;
 
 public class CorfuTableTest extends AbstractViewTest {
 

@@ -1,9 +1,9 @@
 package org.corfudb.infrastructure;
 
 import com.google.protobuf.Message;
+import org.corfudb.runtime.CorfuCompactorManagement.ActiveCPStreamMsg;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus.StatusType;
-import org.corfudb.runtime.CorfuCompactorManagement.ActiveCPStreamMsg;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;

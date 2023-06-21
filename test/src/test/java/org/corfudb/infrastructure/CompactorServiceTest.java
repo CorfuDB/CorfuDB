@@ -3,15 +3,15 @@ package org.corfudb.infrastructure;
 import com.google.protobuf.Message;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CheckpointerBuilder;
-import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CompactorMetadataTables;
-import org.corfudb.runtime.DistributedCheckpointer;
-import org.corfudb.runtime.ServerTriggeredCheckpointer;
 import org.corfudb.runtime.CorfuCompactorManagement.ActiveCPStreamMsg;
-import org.corfudb.runtime.CorfuCompactorManagement.StringKey;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus.StatusType;
+import org.corfudb.runtime.CorfuCompactorManagement.StringKey;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
+import org.corfudb.runtime.DistributedCheckpointer;
+import org.corfudb.runtime.ServerTriggeredCheckpointer;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
@@ -44,8 +44,8 @@ import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
-import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @Slf4j
 public class CompactorServiceTest extends AbstractViewTest {

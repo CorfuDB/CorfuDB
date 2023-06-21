@@ -1,12 +1,6 @@
 package org.corfudb.runtime.view;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.google.common.reflect.TypeToken;
-
-import java.util.List;
-import java.util.concurrent.Semaphore;
-
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.MultiSMREntry;
@@ -19,6 +13,12 @@ import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
+
+import java.util.List;
+import java.util.concurrent.Semaphore;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Created by mwei on 2/18/16.

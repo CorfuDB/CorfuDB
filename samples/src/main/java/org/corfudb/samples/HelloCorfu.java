@@ -1,15 +1,13 @@
 package org.corfudb.samples;
 
-import java.util.Map;
-
 import com.google.common.reflect.TypeToken;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
-import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.util.GitRepositoryState;
 import org.docopt.Docopt;
+
+import java.util.Map;
 
 /**
  * This tutorial demonstrates a simple Corfu application.

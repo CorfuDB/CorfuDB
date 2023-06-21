@@ -22,7 +22,6 @@ import org.corfudb.util.serializer.Serializers;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;

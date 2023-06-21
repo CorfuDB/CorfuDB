@@ -1,9 +1,9 @@
 package org.corfudb.security.sasl.plaintext;
 
+import org.corfudb.security.sasl.plaintext.PlainTextSaslServer.PlainTextSaslServerFactory;
+
 import java.security.Provider;
 import java.security.Security;
-
-import org.corfudb.security.sasl.plaintext.PlainTextSaslServer.PlainTextSaslServerFactory;
 
 /**
  * Created by sneginhal on 01/27/2017.

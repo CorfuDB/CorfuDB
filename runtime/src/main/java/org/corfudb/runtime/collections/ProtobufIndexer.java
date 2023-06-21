@@ -1,9 +1,8 @@
 package org.corfudb.runtime.collections;
 
-import com.google.protobuf.Descriptors.OneofDescriptor;
 import com.google.protobuf.Descriptors.FieldDescriptor;
+import com.google.protobuf.Descriptors.OneofDescriptor;
 import com.google.protobuf.Message;
-
 import org.corfudb.common.util.ClassUtils;
 import org.corfudb.runtime.CorfuOptions;
 

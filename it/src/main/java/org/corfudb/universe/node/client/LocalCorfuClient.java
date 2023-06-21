@@ -1,14 +1,12 @@
 package org.corfudb.universe.node.client;
 
 import com.google.common.collect.ImmutableSortedSet;
-import com.google.common.reflect.TypeToken;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters.CorfuRuntimeParametersBuilder;
 import org.corfudb.runtime.collections.ICorfuTable;
-import org.corfudb.runtime.collections.PersistedCorfuTable;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.ManagementView;

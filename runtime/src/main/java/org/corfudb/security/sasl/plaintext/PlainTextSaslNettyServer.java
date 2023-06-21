@@ -3,12 +3,11 @@ package org.corfudb.security.sasl.plaintext;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
+import lombok.extern.slf4j.Slf4j;
 
 import javax.security.sasl.Sasl;
 import javax.security.sasl.SaslException;
 import javax.security.sasl.SaslServer;
-
-import lombok.extern.slf4j.Slf4j;
 
 /**
  * Created by sneginhal on 01/31/2017.

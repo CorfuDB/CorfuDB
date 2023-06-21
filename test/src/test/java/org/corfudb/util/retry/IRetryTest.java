@@ -4,13 +4,13 @@
  */
 package org.corfudb.util.retry;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import org.corfudb.AbstractCorfuTest;
+import org.junit.Test;
 
 import java.sql.SQLException;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import org.corfudb.AbstractCorfuTest;
-import org.junit.Test;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Created by Konstantin Spirov on 4/6/2017.

@@ -1,6 +1,5 @@
 package org.corfudb.integration;
 
-import java.util.UUID;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
@@ -14,6 +13,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStreamReader;
 import java.util.Collections;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

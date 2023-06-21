@@ -1,12 +1,13 @@
 package org.corfudb.runtime.view.stream;
 
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.runtime.view.Address;
+
 import java.util.Comparator;
 import java.util.Spliterator;
 import java.util.Spliterators;
 import java.util.function.Consumer;
-import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.wireprotocol.ILogData;
-import org.corfudb.runtime.view.Address;
 
 
 /** A spliterator for streams, which supports limiting the

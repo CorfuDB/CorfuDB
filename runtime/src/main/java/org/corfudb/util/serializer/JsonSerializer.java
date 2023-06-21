@@ -2,19 +2,17 @@ package org.corfudb.util.serializer;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufInputStream;
 import io.netty.buffer.ByteBufOutputStream;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.object.ICorfuSMR;
 
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.util.UUID;
-
-import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.object.ICorfuSMR;
 
 /**
  * Created by mwei on 2/10/16.
