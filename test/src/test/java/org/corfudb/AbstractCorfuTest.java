@@ -57,11 +57,9 @@ public class AbstractCorfuTest {
      */
     public ArrayList<IntConsumer> testSM = null;
 
-    public static final CorfuTestParameters PARAMETERS =
-            new CorfuTestParameters();
+    public static final CorfuTestParameters PARAMETERS = new CorfuTestParameters();
 
-    public static final CorfuTestServers SERVERS =
-            new CorfuTestServers();
+    public static final CorfuTestServers SERVERS = new CorfuTestServers();
 
     @AfterClass
     public static void shutdownNettyGroups() {
@@ -346,8 +344,7 @@ public class AbstractCorfuTest {
      */
     @After
     public void cleanPerTestTempDir() {
-        deleteFolder(new File(PARAMETERS.TEST_TEMP_DIR),
-                false);
+        deleteFolder(new File(PARAMETERS.TEST_TEMP_DIR), false);
     }
 
 

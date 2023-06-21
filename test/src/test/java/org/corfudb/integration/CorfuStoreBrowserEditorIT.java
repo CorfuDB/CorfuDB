@@ -34,6 +34,10 @@ import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.collections.CorfuDynamicRecord;
 import org.corfudb.runtime.view.TableRegistry;
+import org.corfudb.test.SampleSchema.SampleTableAMsg;
+import org.corfudb.test.SampleSchema.SampleTableBMsg;
+import org.corfudb.test.SampleSchema.SampleTableCMsg;
+import org.corfudb.test.SampleSchema.SampleTableDMsg;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -78,7 +82,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
     @Before
     public void loadProperties() {
         corfuSingleNodeHost = PROPERTIES.getProperty("corfuSingleNodeHost");
-        corfuStringNodePort = Integer.valueOf(PROPERTIES.getProperty("corfuSingleNodePort"));
+        corfuStringNodePort = Integer.parseInt(PROPERTIES.getProperty("corfuSingleNodePort"));
         singleNodeEndpoint = String.format(
             "%s:%d",
             corfuSingleNodeHost,
@@ -89,7 +93,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
     /**
      * Test print metadata map functionality of Browser
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void testPrintMetadataMap() throws Exception {
@@ -97,24 +101,24 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         try {
             corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
             final int totalUpdates = 5;
-            List<CorfuStoreMetadata.Timestamp> committedTimestamps = new ArrayList();
+            List<CorfuStoreMetadata.Timestamp> committedTimestamps = new ArrayList<>();
 
             // Start a Corfu runtime & Corfu Store
-            runtime = createRuntime(singleNodeEndpoint);
+            CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
             CorfuStore store = new CorfuStore(runtime);
 
-            // Open one table and write couple of updates
-            final Table<SampleSchema.Uuid, SampleSchema.SampleTableAMsg, SampleSchema.ManagedMetadata> tableA = store.openTable(
+            // Open one table and write a couple of updates
+            final Table<SampleSchema.Uuid, SampleTableAMsg, SampleSchema.ManagedMetadata> tableA = store.openTable(
                     NAMESPACE,
                     TABLE_NAME,
                     SampleSchema.Uuid.class,
-                    SampleSchema.SampleTableAMsg.class,
+                    SampleTableAMsg.class,
                     SampleSchema.ManagedMetadata.class,
                     TableOptions.builder().build());
 
             for(int i = 0; i < totalUpdates; i++) {
                 SampleSchema.Uuid key = SampleSchema.Uuid.newBuilder().setLsb(i).setMsb(i).build();
-                SampleSchema.SampleTableAMsg value = SampleSchema.SampleTableAMsg.newBuilder().setPayload(Integer.toString(i)).build();
+                SampleTableAMsg value = SampleTableAMsg.newBuilder().setPayload(Integer.toString(i)).build();
                 SampleSchema.ManagedMetadata metadata = SampleSchema.ManagedMetadata.newBuilder().setCreateTime(System.currentTimeMillis())
                         .setCreateUser("User_" + i).build();
                 try (TxnContext tx = store.txn(NAMESPACE)) {
@@ -144,22 +148,15 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
     /**
      * Create a table and add data to it.  Verify that the browser tool is able
      * to read its contents accurately.
-     * @throws IOException
-     * @throws NoSuchMethodException
-     * @throws IllegalAccessException
-     * @throws InvocationTargetException
+     * @throws Exception error
      */
     @Test
-    public void browserTest() throws
-        IOException,
-        NoSuchMethodException,
-        IllegalAccessException,
-        InvocationTargetException {
+    public void browserTest() throws Exception {
         Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost,
             corfuStringNodePort);
 
         // Start a Corfu runtime
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
 
         CorfuStore store = new CorfuStore(runtime);
 
@@ -218,17 +215,16 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
 
     /**
      * Create a table and add data to it using the loadTable command.
-     * @throws IOException
+     * @throws IOException error
      */
     @Test
-    public void loaderTest() throws IOException, InvocationTargetException, NoSuchMethodException, IllegalAccessException {
-        runSinglePersistentServer(corfuSingleNodeHost,
-                corfuStringNodePort);
+    public void loaderTest() throws Exception {
+        runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
         final long keyUuid = 10L;
         final long ruleIdVal = 50L;
         final long metaUuid = 100L;
 
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
         CorfuStore store = new CorfuStore(runtime);
         final Table<SampleSchema.Uuid, SampleSchema.FirewallRule, SampleSchema.Uuid> table = store.openTable(
                 NAMESPACE,
@@ -268,7 +264,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
     /**
      * Test Corfu Browser stream tags APIs (tag list & tags to table names mapping)
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void testBrowserTagsOperations() throws Exception {
@@ -292,7 +288,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
             });
         });
 
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
         CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime);
 
         // (1) List Stream Tags
@@ -325,7 +321,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
 
     private Map<String, List<String>> populateRegistryTable(String namespace, String tableBaseName) throws Exception {
         // Start a Corfu runtime & CorfuStore
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
         CorfuStore store = new CorfuStore(runtime);
 
         Map<String, List<String>> tableNameToTags = new HashMap<>();
@@ -334,13 +330,18 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         // Tags are determined by the value types (refer to sample_schema.proto for defined tags of each type)
         final int totalTables = 12;
         // Refer to sample_schema.proto
-        List<Class> valueTypes = Arrays.asList(SampleSchema.SampleTableAMsg.class, SampleSchema.SampleTableBMsg.class,
-                SampleSchema.SampleTableCMsg.class, SampleSchema.SampleTableDMsg.class);
-        Map<Class, List<String>> expectedTagsPerValues =  new HashMap<>();
-        expectedTagsPerValues.put(SampleSchema.SampleTableAMsg.class, Arrays.asList("sample_streamer_1", "sample_streamer_2"));
-        expectedTagsPerValues.put(SampleSchema.SampleTableBMsg.class, Arrays.asList("sample_streamer_2", "sample_streamer_3"));
-        expectedTagsPerValues.put(SampleSchema.SampleTableCMsg.class, Collections.EMPTY_LIST);
-        expectedTagsPerValues.put(SampleSchema.SampleTableDMsg.class, Arrays.asList("sample_streamer_4"));
+        List<Class<? extends com.google.protobuf.Message>> valueTypes = Arrays.asList(
+                SampleTableAMsg.class,
+                SampleTableBMsg.class,
+                SampleTableCMsg.class,
+                SampleTableDMsg.class
+        );
+
+        Map<Class<? extends com.google.protobuf.Message>, List<String>> expectedTagsPerValues =  new HashMap<>();
+        expectedTagsPerValues.put(SampleTableAMsg.class, Arrays.asList("sample_streamer_1", "sample_streamer_2"));
+        expectedTagsPerValues.put(SampleTableBMsg.class, Arrays.asList("sample_streamer_2", "sample_streamer_3"));
+        expectedTagsPerValues.put(SampleTableCMsg.class, Collections.emptyList());
+        expectedTagsPerValues.put(SampleTableDMsg.class, Arrays.asList("sample_streamer_4"));
 
         for (int index = 0; index < totalTables; index++) {
             store.openTable(namespace, tableBaseName + index,
@@ -356,7 +357,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
     /**
      * Test Corfu Browser protobuf descriptor table
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void testListAllProtos() throws Exception {
@@ -366,7 +367,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         final int expectedFiles = 5;
         populateRegistryTable(NAMESPACE, TABLE_NAME);
 
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
         CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime);
         assertThat(browser.printAllProtoDescriptors()).isEqualTo(expectedFiles);
 
@@ -378,7 +379,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
     /**
      * Test Corfu Offline Browser protobuf descriptor table
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void testListAllProtoOffline() throws Exception {
@@ -388,7 +389,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         final int expectedFiles = 6;
         populateRegistryTable(NAMESPACE, TABLE_NAME);
 
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
         CorfuOfflineBrowserEditor browser = new CorfuOfflineBrowserEditor(logPath);
         assertThat(browser.printAllProtoDescriptors()).isEqualTo(expectedFiles);
 
@@ -400,21 +401,14 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
     /**
      * Create a table and add nested protobufs as data to it.  Verify that the
      * browser tool is able to read the contents accurately.
-     * @throws IOException
-     * @throws NoSuchMethodException
-     * @throws IllegalAccessException
-     * @throws InvocationTargetException
+     * @throws Exception error
      */
     @Test
-    public void nestedProtoTest() throws
-        IOException,
-        NoSuchMethodException,
-        IllegalAccessException,
-        InvocationTargetException {
+    public void nestedProtoTest() throws Exception {
         runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
         // Start a Corfu runtime
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
 
         CorfuStore store = new CorfuStore(runtime);
 
@@ -464,21 +458,14 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
     /**
      * Create a table and add nested protobufs as data to it. Verify that the
      * offline browser tool is able to read the contents accurately.
-     * @throws IOException
-     * @throws NoSuchMethodException
-     * @throws IllegalAccessException
-     * @throws InvocationTargetException
+     * @throws Exception error
      */
     @Test
-    public void nestedProtoTestOfflineBrowser() throws
-            IOException,
-            NoSuchMethodException,
-            IllegalAccessException,
-            InvocationTargetException {
+    public void nestedProtoTestOfflineBrowser() throws Exception {
 
         runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
         CorfuStore store = new CorfuStore(runtime);
 
         final long keyUuid = 10L;
@@ -524,21 +511,14 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
     /**
      * Create a table and add data to it.  Verify that the browser tool is able
      * to read the system TableRegistry contents accurately.
-     * @throws IOException
-     * @throws NoSuchMethodException
-     * @throws IllegalAccessException
-     * @throws InvocationTargetException
+     * @throws Exception error
      */
     @Test
-    public void browserRegistryTableTest() throws
-            IOException,
-            NoSuchMethodException,
-            IllegalAccessException,
-            InvocationTargetException {
+    public void browserRegistryTableTest() throws Exception{
         runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
         // Start a Corfu runtime
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
 
         CorfuStore store = new CorfuStore(runtime);
 
@@ -580,22 +560,15 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
     /**
      * Create a table and add data to it.  Verify that the offline browser is able
      * to read the system TableRegistry contents accurately.
-     * @throws IOException
-     * @throws NoSuchMethodException
-     * @throws IllegalAccessException
-     * @throws InvocationTargetException
+     * @throws Exception error
      */
     @Test
-    public void browserRegistryTableTestOffline() throws
-            IOException,
-            NoSuchMethodException,
-            IllegalAccessException,
-            InvocationTargetException {
+    public void browserRegistryTableTestOffline() throws Exception {
 
         runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
         // Start a Corfu runtime
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
 
         CorfuStore store = new CorfuStore(runtime);
 
@@ -635,21 +608,14 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
     /**
      * Create a table and add data to it.  Verify that the browser tool is able
      * to read disk based tables in disk based mode.
-     * @throws IOException
-     * @throws NoSuchMethodException
-     * @throws IllegalAccessException
-     * @throws InvocationTargetException
+     * @throws Exception error
      */
     @Test
-    public void browserDiskBasedTableTest() throws
-            IOException,
-            NoSuchMethodException,
-            IllegalAccessException,
-            InvocationTargetException {
+    public void browserDiskBasedTableTest() throws Exception {
         runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
         // Start a Corfu runtime
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
 
         CorfuStore store = new CorfuStore(runtime);
 
@@ -697,13 +663,13 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
 
         runtime.shutdown();
     }
+
     @Test
-    public void editorTest() throws IOException, NoSuchMethodException,
-        IllegalAccessException, InvocationTargetException {
+    public void editorTest() throws Exception {
         runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
         // Start a Corfu runtime
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
 
         CorfuStore store = new CorfuStore(runtime);
 
@@ -779,18 +745,14 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
     /**
      * Put all the records to be deleted in a file and test the batched deletion capability
      *
-     * @throws IOException
-     * @throws NoSuchMethodException
-     * @throws IllegalAccessException
-     * @throws InvocationTargetException
+     * @throws Exception error
      */
     @Test
-    public void batchedDeletionTest() throws IOException, NoSuchMethodException,
-            IllegalAccessException, InvocationTargetException {
+    public void batchedDeletionTest() throws Exception {
         runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
         // Start a Corfu runtime
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
 
         CorfuStore store = new CorfuStore(runtime);
 
@@ -839,12 +801,11 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
     }
 
     @Test
-    public void addRecordTest() throws IOException, InvocationTargetException,
-        NoSuchMethodException, IllegalAccessException {
+    public void addRecordTest() throws Exception {
         runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
         // Start a Corfu runtime
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
 
         CorfuStore store = new CorfuStore(runtime);
 
@@ -926,7 +887,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
         // Start a Corfu runtime
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
 
         CorfuStore store = new CorfuStore(runtime);
 
@@ -1027,7 +988,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
         // Start a Corfu runtime
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
 
         CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime);
 
@@ -1047,16 +1008,13 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
 
     /**
      * Open an offlineBrowser and test for adding an entry.
-     * @throws IOException
-     * @throws NoSuchMethodException
-     * @throws IllegalAccessException
-     * @throws InvocationTargetException
+     * @throws Exception error
      */
     @Test
-    public void addRecordOfflineBrowserTest() throws IOException {
+    public void addRecordOfflineBrowserTest() throws Exception {
 
         runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
         runtime.shutdown();
 
         CorfuOfflineBrowserEditor browser = new CorfuOfflineBrowserEditor(logPath);
@@ -1075,21 +1033,14 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
     /**
      * Create a table and add data to it.  Verify that the browser tool is able
      * to read its contents accurately.
-     * @throws IOException
-     * @throws NoSuchMethodException
-     * @throws IllegalAccessException
-     * @throws InvocationTargetException
+     * @throws Exception error
      */
     @Test
-    public void offlineBrowserTest() throws
-            IOException,
-            NoSuchMethodException,
-            IllegalAccessException,
-            InvocationTargetException {
+    public void offlineBrowserTest() throws Exception {
         runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
         // Start a Corfu runtime
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
 
         CorfuStore store = new CorfuStore(runtime);
 
@@ -1144,21 +1095,14 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
     /**
      * Create a table and add data to it.  Verify that the browser tool is able
      * to read its contents accurately. Then delete the data and verify read again.
-     * @throws IOException
-     * @throws NoSuchMethodException
-     * @throws IllegalAccessException
-     * @throws InvocationTargetException
+     * @throws Exception error
      */
     @Test
-    public void writeDeleteTxnOfflineBrowser() throws
-            IOException,
-            NoSuchMethodException,
-            IllegalAccessException,
-            InvocationTargetException {
+    public void writeDeleteTxnOfflineBrowser() throws Exception {
         runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
         // Start a Corfu runtime
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
 
         CorfuStore store = new CorfuStore(runtime);
 
@@ -1207,21 +1151,14 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
     /**
      * Create a table and add data to it.  Verify that the browser tool is able
      * to read its contents accurately. Then clear the table and verify read again.
-     * @throws IOException
-     * @throws NoSuchMethodException
-     * @throws IllegalAccessException
-     * @throws InvocationTargetException
+     * @throws Exception error
      */
     @Test
-    public void clearTableTxnOfflineBrowser() throws
-            IOException,
-            NoSuchMethodException,
-            IllegalAccessException,
-            InvocationTargetException {
+    public void clearTableTxnOfflineBrowser() throws Exception {
         runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
         // Start a Corfu runtime
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
 
         CorfuStore store = new CorfuStore(runtime);
 
@@ -1290,7 +1227,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
 
         runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
         CorfuStore store = new CorfuStore(runtime);
 
         final long keyUuid = 10L;
@@ -1335,21 +1272,14 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
      * Create a table and add data to it and update it.
      * Trim the table and verify that the offline browser
      * is able to read its contents accurately.
-     * @throws IOException
-     * @throws NoSuchMethodException
-     * @throws IllegalAccessException
-     * @throws InvocationTargetException
+     * @throws Exception err
      */
     @Test
-    public void readUpdatedTxnWithTrimOfflineBrowser() throws
-            IOException,
-            NoSuchMethodException,
-            IllegalAccessException,
-            InvocationTargetException {
+    public void readUpdatedTxnWithTrimOfflineBrowser() throws Exception {
 
         runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
         CorfuStore store = new CorfuStore(runtime);
 
         final long keyUuid = 10L;
@@ -1370,7 +1300,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         TxnContext tx = store.txn(NAMESPACE);
         tx.putRecord(table, uuidKey, uuidVal, uuidMeta);
         tx.commit();
-        StreamingIT.checkpointAndTrim(runtime, NAMESPACE, Arrays.asList(TABLE_NAME), false);
+        checkpointAndTrim(runtime, NAMESPACE, Arrays.asList(TABLE_NAME), false);
 
         final long updatedUuid = 50L;
         SampleSchema.Uuid uuidUpdated = SampleSchema.Uuid.newBuilder().setLsb(updatedUuid).setMsb(updatedUuid).build();
@@ -1395,21 +1325,14 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
      * Create a table and add data to it.
      * Trim the table and verify that the offline browser
      * is able to read its contents accurately.
-     * @throws IOException
-     * @throws NoSuchMethodException
-     * @throws IllegalAccessException
-     * @throws InvocationTargetException
+     * @throws Exception err
      */
     @Test
-    public void trimStreamTestOffline() throws
-            IOException,
-            NoSuchMethodException,
-            IllegalAccessException,
-            InvocationTargetException {
+    public void trimStreamTestOffline() throws Exception {
 
         runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
         CorfuStore store = new CorfuStore(runtime);
 
         final long keyUuid = 10L;
@@ -1435,7 +1358,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         tx.putRecord(table, uuidKey, firewallRuleVal, uuidMeta);
         tx.commit();
 
-        StreamingIT.checkpointAndTrim(runtime, NAMESPACE, Arrays.asList(TABLE_NAME), false);
+        checkpointAndTrim(runtime, NAMESPACE, Arrays.asList(TABLE_NAME), false);
         runtime.shutdown();
 
         final int one = 1;
@@ -1454,21 +1377,14 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
      * Create a table and add multiple entries to it.
      * Verify that the offline browser
      * is able to read its contents accurately.
-     * @throws IOException
-     * @throws NoSuchMethodException
-     * @throws IllegalAccessException
-     * @throws InvocationTargetException
+     * @throws Exception err
      */
     @Test
-    public void createMultipleEntriesOfflineBrowser() throws
-            IOException,
-            NoSuchMethodException,
-            IllegalAccessException,
-            InvocationTargetException {
+    public void createMultipleEntriesOfflineBrowser() throws Exception {
 
         runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
         CorfuStore store = new CorfuStore(runtime);
 
         final Table<SampleSchema.Uuid, SampleSchema.Uuid, SampleSchema.Uuid> table = store.openTable(
@@ -1502,23 +1418,16 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
      * Create a multiple tables and add multiple
      * entries to them. Verify that the offline browser
      * is able to read its contents accurately.
-     * @throws IOException
-     * @throws NoSuchMethodException
-     * @throws IllegalAccessException
-     * @throws InvocationTargetException
+     * @throws Exception err
      */
     @Test
-    public void createMultipleStreamAndEntriesOfflineBrowser() throws
-            IOException,
-            NoSuchMethodException,
-            IllegalAccessException,
-            InvocationTargetException {
+    public void createMultipleStreamAndEntriesOfflineBrowser() throws Exception {
 
         runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
         final int numRecords = PARAMETERS.NUM_ITERATIONS_VERY_LOW;
         final int numTable = 8;
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
         CorfuStore store = new CorfuStore(runtime);
 
         for (int i = 0; i < numTable; i++) {

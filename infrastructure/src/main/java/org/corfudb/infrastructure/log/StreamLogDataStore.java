@@ -37,7 +37,7 @@ public class StreamLogDataStore {
             COMMITTED_TAIL_PREFIX, COMMITTED_TAIL_KEY, Long.class
     );
 
-    private static final long ZERO_ADDRESS = 0L;
+    public static final long ZERO_ADDRESS = 0L;
 
     @NonNull
     private final KvDataStore dataStore;
@@ -90,6 +90,15 @@ public class StreamLogDataStore {
         log.debug("Update tail segment to: {}", newTailSegment);
         dataStore.put(TAIL_SEGMENT_RECORD, newTailSegment);
         tailSegment.set(newTailSegment);
+    }
+
+    /**
+     * Reset starting address.
+     */
+    public void resetStartingAddress(long newAddress) {
+        log.info("Reset starting address. Current address: {}", startingAddress.get());
+        dataStore.put(STARTING_ADDRESS_RECORD, newAddress);
+        startingAddress.set(newAddress);
     }
 
     /**
@@ -152,19 +161,10 @@ public class StreamLogDataStore {
     /**
      * Reset tail segment.
      */
-    public void resetTailSegment() {
+    public void resetTailSegment(long latestAddress) {
         log.info("Reset tail segment. Current segment: {}", tailSegment.get());
-        dataStore.put(TAIL_SEGMENT_RECORD, ZERO_ADDRESS);
-        tailSegment.set(ZERO_ADDRESS);
-    }
-
-    /**
-     * Reset starting address.
-     */
-    public void resetStartingAddress() {
-        log.info("Reset starting address. Current address: {}", startingAddress.get());
-        dataStore.put(STARTING_ADDRESS_RECORD, ZERO_ADDRESS);
-        startingAddress.set(ZERO_ADDRESS);
+        dataStore.put(TAIL_SEGMENT_RECORD, latestAddress);
+        tailSegment.set(latestAddress);
     }
 
     /**

@@ -50,7 +50,7 @@ public class ImmutableCorfuTable<K, V> implements
      * @param <V> The value type.
      * @return A type token to pass to the builder.
      */
-    public static <K, V> TypeToken<ImmutableCorfuTable<K, V>> getTableType() {
+    public static <K, V> TypeToken<ImmutableCorfuTable<K, V>> getTypeToken() {
         return new TypeToken<ImmutableCorfuTable<K, V>>() {};
     }
 

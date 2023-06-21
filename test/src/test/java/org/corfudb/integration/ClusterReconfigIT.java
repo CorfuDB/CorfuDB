@@ -52,7 +52,6 @@ import org.corfudb.util.CFUtils;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Sleep;
 import org.corfudb.util.Utils;
-import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -66,13 +65,6 @@ public class ClusterReconfigIT extends AbstractIT {
     @Before
     public void loadProperties() {
         corfuSingleNodeHost = (String) PROPERTIES.get("corfuSingleNodeHost");
-    }
-
-    @After
-    public void tearDown() {
-        if (runtime != null) {
-            runtime.shutdown();
-        }
     }
 
     private String getServerEndpoint(int port) {
@@ -175,7 +167,7 @@ public class ClusterReconfigIT extends AbstractIT {
         Process corfuServer_2 = runPersistentServer(corfuSingleNodeHost, PORT_1, false);
         Process corfuServer_3 = runPersistentServer(corfuSingleNodeHost, PORT_2, false);
 
-        runtime = createDefaultRuntime();
+        CorfuRuntime runtime = createDefaultRuntime();
 
         PersistentCorfuTable<String, String> table = createCorfuTable(runtime, testStream);
         final String data = createStringOfSize(1_000);
@@ -286,7 +278,7 @@ public class ClusterReconfigIT extends AbstractIT {
 
         Process corfuServer = runPersistentServer(corfuSingleNodeHost, PORT_0, true);
 
-        runtime = createDefaultRuntime();
+        CorfuRuntime runtime = createDefaultRuntime();
         incrementClusterEpoch(runtime);
         runtime.getLayoutView().getRuntimeLayout().getBaseClient("localhost:9000")
                 .reset().get();
@@ -321,7 +313,7 @@ public class ClusterReconfigIT extends AbstractIT {
 
         Process corfuServer = runPersistentServer(corfuSingleNodeHost, PORT_0, true);
 
-        runtime = createDefaultRuntime();
+        CorfuRuntime runtime = createDefaultRuntime();
         Layout l = incrementClusterEpoch(runtime);
         runtime.getLayoutView().getRuntimeLayout(l).getBaseClient("localhost:9000")
                 .restart().get();
@@ -343,7 +335,7 @@ public class ClusterReconfigIT extends AbstractIT {
         // Start testing restart utility
         Process corfuServer = runPersistentServer(corfuSingleNodeHost, PORT_0, true);
 
-        runtime = createDefaultRuntime();
+        CorfuRuntime runtime = createDefaultRuntime();
         Layout layout = incrementClusterEpoch(runtime);
         RebootUtil.restart(SERVER_0, runtime.getParameters(), retries, PARAMETERS.TIMEOUT_LONG, Optional.of(layout.getClusterId()));
         waitForEpochChange(epoch -> epoch >= layout.getEpoch() + 1, runtime);
@@ -382,7 +374,7 @@ public class ClusterReconfigIT extends AbstractIT {
         BootstrapUtil.bootstrap(layout, retries, PARAMETERS.TIMEOUT_SHORT);
 
         // Create table and set up daemon writer thread.
-        runtime = createDefaultRuntime();
+        CorfuRuntime runtime = createDefaultRuntime();
         PersistentCorfuTable<String, String> table = createCorfuTable(runtime, testStream);
         final String data = createStringOfSize(1_000);
         Random r = getRandomNumberGenerator();
@@ -475,7 +467,7 @@ public class ClusterReconfigIT extends AbstractIT {
 
         BootstrapUtil.bootstrap(layout, retries, PARAMETERS.TIMEOUT_SHORT);
 
-        runtime = createDefaultRuntime();
+        CorfuRuntime runtime = createDefaultRuntime();
         assertThat(runtime.getLayoutView().getLayout().equals(layout)).isTrue();
 
         shutdownCorfuServer(corfuServer_1);
@@ -520,7 +512,7 @@ public class ClusterReconfigIT extends AbstractIT {
 
         BootstrapUtil.bootstrap(layout, retries, PARAMETERS.TIMEOUT_SHORT);
 
-        runtime = createDefaultRuntime();
+        CorfuRuntime runtime = createDefaultRuntime();
         assertThat(runtime.getLayoutView().getLayout().equals(layout)).isTrue();
 
         shutdownCorfuServer(corfuServer_1);
@@ -615,7 +607,7 @@ public class ClusterReconfigIT extends AbstractIT {
         BootstrapUtil.bootstrap(layout, retries, PARAMETERS.TIMEOUT_SHORT);
 
         // Create map and set up daemon writer thread.
-        runtime = createDefaultRuntime();
+        CorfuRuntime runtime = createDefaultRuntime();
         PersistentCorfuTable<String, String> table = createCorfuTable(runtime, testStream);
         final String data = createStringOfSize(1_000);
         Random r = getRandomNumberGenerator();
@@ -700,7 +692,7 @@ public class ClusterReconfigIT extends AbstractIT {
                         assertThatCode(semaphore::release).doesNotThrowAnyException())
                 .build();
 
-        runtime = CorfuRuntime.fromParameters(corfuRuntimeParameters).connect();
+        CorfuRuntime runtime = CorfuRuntime.fromParameters(corfuRuntimeParameters).connect();
         PersistentCorfuTable<String, String> table = createCorfuTable(runtime, "test");
         final String data = createStringOfSize(1_000);
         Random r = getRandomNumberGenerator();
@@ -754,7 +746,7 @@ public class ClusterReconfigIT extends AbstractIT {
 
         BootstrapUtil.bootstrap(layout, retries, PARAMETERS.TIMEOUT_SHORT);
 
-        runtime = createDefaultRuntime();
+        CorfuRuntime runtime = createDefaultRuntime();
         UUID streamId = CorfuRuntime.getStreamID("testStream");
         IStreamView stream = runtime.getStreamsView().get(streamId);
         int counter = 0;
@@ -823,7 +815,7 @@ public class ClusterReconfigIT extends AbstractIT {
 
         BootstrapUtil.bootstrap(layout, retries, PARAMETERS.TIMEOUT_SHORT);
 
-        runtime = createDefaultRuntime();
+        CorfuRuntime runtime = createDefaultRuntime();
         UUID streamId = CorfuRuntime.getStreamID("testStream");
         IStreamView stream = runtime.getStreamsView().get(streamId);
 
@@ -901,7 +893,7 @@ public class ClusterReconfigIT extends AbstractIT {
         BootstrapUtil.bootstrap(layout, retries, PARAMETERS.TIMEOUT_SHORT);
 
         final int systemDownHandlerLimit = 10;
-        runtime = CorfuRuntime.fromParameters(CorfuRuntimeParameters.builder()
+        CorfuRuntime runtime = CorfuRuntime.fromParameters(CorfuRuntimeParameters.builder()
                 .layoutServers(Arrays.asList(NodeLocator.parseString(DEFAULT_ENDPOINT)))
                 .systemDownHandlerTriggerLimit(systemDownHandlerLimit)
                 // Register the system down handler to throw a RuntimeException.
@@ -995,13 +987,13 @@ public class ClusterReconfigIT extends AbstractIT {
         BootstrapUtil.bootstrap(layout, retries, PARAMETERS.TIMEOUT_SHORT);
 
         final int systemDownHandlerLimit = 10;
-        runtime = CorfuRuntime.fromParameters(CorfuRuntimeParameters.builder()
-                .layoutServers(Arrays.asList(NodeLocator.parseString(DEFAULT_ENDPOINT)))
-                .systemDownHandler(() -> {
-                    throw new RuntimeException();
-                })
-                .systemDownHandlerTriggerLimit(systemDownHandlerLimit)
-                .build())
+        CorfuRuntime runtime = CorfuRuntime.fromParameters(CorfuRuntimeParameters.builder()
+                        .layoutServers(Arrays.asList(NodeLocator.parseString(DEFAULT_ENDPOINT)))
+                        .systemDownHandler(() -> {
+                            throw new RuntimeException();
+                        })
+                        .systemDownHandlerTriggerLimit(systemDownHandlerLimit)
+                        .build())
                 .connect();
         IStreamView stream = runtime.getStreamsView().get(CorfuRuntime.getStreamID("testStream"));
 
@@ -1089,7 +1081,7 @@ public class ClusterReconfigIT extends AbstractIT {
         final int numCheckpointRecordsDefault = 3;
 
         Process server0 = runPersistentServer(corfuSingleNodeHost, PORT_0, true);
-        runtime = createDefaultRuntime();
+        CorfuRuntime runtime = createDefaultRuntime();
 
         PersistentCorfuTable<String, String> table = createCorfuTable(runtime, streamName);
 

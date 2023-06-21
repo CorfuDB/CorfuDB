@@ -136,7 +136,7 @@ public class CorfuStoreIT extends AbstractIT {
 
         // PHASE 1
         // Start a Corfu runtime
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
 
         CorfuStore store = new CorfuStore(runtime);
 
@@ -204,16 +204,14 @@ public class CorfuStoreIT extends AbstractIT {
         MultiCheckpointWriter<PersistentCorfuTable<CorfuDynamicKey, CorfuDynamicRecord>> mcw = new MultiCheckpointWriter<>();
 
         PersistentCorfuTable<CorfuDynamicKey, CorfuDynamicRecord> tableRegistry = runtime.getObjectsView().build()
-                .setTypeToken(new TypeToken<PersistentCorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>() {
-                })
+                .setTypeToken(PersistentCorfuTable.<CorfuDynamicKey, CorfuDynamicRecord>getTypeToken())
                 .setStreamName(getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE,
                         TableRegistry.REGISTRY_TABLE_NAME))
                 .setSerializer(dynamicProtobufSerializer)
                 .addOpenOption(ObjectOpenOption.NO_CACHE)
                 .open();
         PersistentCorfuTable<CorfuDynamicKey, CorfuDynamicRecord> descriptorTable = runtime.getObjectsView().build()
-                .setTypeToken(new TypeToken<PersistentCorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>() {
-                })
+                .setTypeToken(PersistentCorfuTable.<CorfuDynamicKey, CorfuDynamicRecord>getTypeToken())
                 .setStreamName(getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE,
                         TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME))
                 .setSerializer(dynamicProtobufSerializer)
@@ -347,7 +345,7 @@ public class CorfuStoreIT extends AbstractIT {
         Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
         // PHASE 1 - Start a Corfu runtime & a CorfuStore instance
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
         CorfuStore store = new CorfuStore(runtime);
 
         String tempDiskPath = com.google.common.io.Files.createTempDir()
@@ -408,7 +406,7 @@ public class CorfuStoreIT extends AbstractIT {
         Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
         // PHASE 1 - Start a Corfu runtime & a CorfuStore instance
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
 
         // Creating Corfu Store using a connected corfu client.
         CorfuStore corfuStore = new CorfuStore(runtime);
@@ -492,7 +490,7 @@ public class CorfuStoreIT extends AbstractIT {
         Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
         // PHASE 1 - Start a Corfu runtime & a CorfuStore instance
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
 
         // Creating Corfu Store using a connected corfu client.
         CorfuStore corfuStore = new CorfuStore(runtime);
@@ -771,7 +769,7 @@ public class CorfuStoreIT extends AbstractIT {
 
     private Process startCorfu() throws Exception {
         Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
         corfuStore = new CorfuStore(runtime);
 
         return corfuServer;
@@ -794,7 +792,7 @@ public class CorfuStoreIT extends AbstractIT {
             Timestamp commitTimestamp;
 
             // Start a Corfu runtime & Corfu Store
-            runtime = createRuntime(singleNodeEndpoint);
+            CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
             CorfuStore store = new CorfuStore(runtime);
 
             // Open one table and write one update
@@ -947,7 +945,7 @@ public class CorfuStoreIT extends AbstractIT {
     @Test
     public void resetTrimmedTableTest() throws Exception {
         final Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort, true);
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
         CorfuStore corfuStore = new CorfuStore(runtime);
 
         final String namespace = "test-namespace";
@@ -983,7 +981,7 @@ public class CorfuStoreIT extends AbstractIT {
         tx.commit();
 
         // Unregister table B and invoke checkpointer
-        unregisterTable(namespace, tableNameB);
+        unregisterTable(runtime, namespace, tableNameB);
         MultiCheckpointWriter<PersistentCorfuTable<?, ?>> mcw = new MultiCheckpointWriter<>();
         PersistentCorfuTable<Uuid, CorfuRecord<Uuid, Uuid>> corfuTableA =
                 createCorfuTable(runtime, tableA.getFullyQualifiedTableName());
@@ -1013,7 +1011,7 @@ public class CorfuStoreIT extends AbstractIT {
     @Test
     public void resetTrimmedTableInParallelTest() throws Exception {
         final Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort, true);
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
         CorfuStore corfuStore = new CorfuStore(runtime);
 
         final String namespace = "test-namespace";
@@ -1049,7 +1047,7 @@ public class CorfuStoreIT extends AbstractIT {
         tx.commit();
 
         // Unregister table B and invoke checkpointer
-        unregisterTable(namespace, tableNameB);
+        unregisterTable(runtime, namespace, tableNameB);
         MultiCheckpointWriter<PersistentCorfuTable<?, ?>> mcw = new MultiCheckpointWriter<>();
         PersistentCorfuTable<Uuid, CorfuRecord<Uuid, Uuid>> corfuTableA =
                 createCorfuTable(runtime, tableA.getFullyQualifiedTableName());
@@ -1109,8 +1107,8 @@ public class CorfuStoreIT extends AbstractIT {
         shutdownCorfuServer(corfuServer);
     }
 
-    private void unregisterTable(String namespace, String tableName) {
-        this.runtime.getObjectsView().TXBuild()
+    private void unregisterTable(CorfuRuntime runtime, String namespace, String tableName) {
+        runtime.getObjectsView().TXBuild()
                 .type(TransactionType.WRITE_AFTER_WRITE)
                 .build()
                 .begin();
@@ -1121,6 +1119,6 @@ public class CorfuStoreIT extends AbstractIT {
                 .build();
         runtime.getTableRegistry().getRegistryTable().delete(tableNameKey);
 
-        this.runtime.getObjectsView().TXEnd();
+        runtime.getObjectsView().TXEnd();
     }
 }

@@ -73,10 +73,10 @@ public class DataStore implements KvDataStore {
      * @param opts        map of option strings
      * @param cleanupTask method to cleanup DataStore files
      */
-    public DataStore(@Nonnull Map<String, Object> opts,
-                     @Nonnull Consumer<String> cleanupTask) {
+    public DataStore(@Nonnull Map<String, Object> opts, @Nonnull Consumer<String> cleanupTask) {
 
-        if ((opts.containsKey("--memory") && (Boolean) opts.get("--memory")) || !opts.containsKey("--log-path")) {
+        boolean isInMem = opts.containsKey("--memory") && (Boolean) opts.get("--memory");
+        if (isInMem || !opts.containsKey("--log-path")) {
             this.logDirPath = null;
             this.cleanupTask = fileName -> {};
             cache = buildMemoryDs();

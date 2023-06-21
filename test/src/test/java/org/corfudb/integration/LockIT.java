@@ -62,11 +62,11 @@ public class LockIT extends AbstractIT implements Observer {
      */
     @Test
     public void testSingleLockClient() throws Exception {
-
+        CorfuRuntime rt = null;
         try {
            // Start Single Corfu Node Cluster
            corfuServer = runServer(activeSiteCorfuPort, true);
-           initialize();
+           rt = initialize();
 
            // Initial acquisition of the semaphore so we can later block until execution conditions are met
            blockUntilWaitCondition.acquire();
@@ -112,7 +112,7 @@ public class LockIT extends AbstractIT implements Observer {
            log.debug("Unexpected exception: " + e);
            throw e;
        } finally {
-           shutdown();
+           shutdown(rt);
        }
     }
 
@@ -125,10 +125,11 @@ public class LockIT extends AbstractIT implements Observer {
 
         final int numLocks = 10;
 
+        CorfuRuntime rt = null;
         try {
             // Start Single Corfu Node Cluster
             corfuServer = runServer(activeSiteCorfuPort, true);
-            initialize();
+            rt = initialize();
 
             // Initial acquisition of the semaphore so we can later block until execution conditions are met
             blockUntilWaitCondition.acquire();
@@ -168,7 +169,7 @@ public class LockIT extends AbstractIT implements Observer {
             log.debug("Unexpected exception: " + e);
             throw e;
         } finally {
-            shutdown();
+            shutdown(rt);
         }
     }
 
@@ -185,9 +186,10 @@ public class LockIT extends AbstractIT implements Observer {
         Map<UUID, LockClient> clientIdToLockClient = new HashMap<>();
         Map<UUID, LockListener> clientIdToLockListener = new HashMap<>();
 
+        CorfuRuntime rt = null;
         try {
             corfuServer = runServer(activeSiteCorfuPort, true);
-            initialize();
+            rt = initialize();
 
             LockDataTypes.LockId lockId = LockDataTypes.LockId.newBuilder()
                     .setLockGroup(LOCK_GROUP)
@@ -267,7 +269,7 @@ public class LockIT extends AbstractIT implements Observer {
             log.debug("Caught Exception: " + e);
             throw e;
         } finally {
-            shutdown();
+            shutdown(rt);
         }
     }
 
@@ -275,7 +277,7 @@ public class LockIT extends AbstractIT implements Observer {
      * Verify that multiple clients can register interest for the same lock,
      * and that the lock is acquired by a new client whenever the owner is down.
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void testMultipleLockClientsSameLockFailure() throws Exception {
@@ -284,9 +286,10 @@ public class LockIT extends AbstractIT implements Observer {
         Map<UUID, LockClient> clientIdToLockClient = new HashMap<>();
         Map<UUID, LockListener> clientIdToLockListener = new HashMap<>();
 
+        CorfuRuntime rt = null;
         try {
             corfuServer = runServer(activeSiteCorfuPort, true);
-            initialize();
+            rt = initialize();
 
             LockDataTypes.LockId lockId =  LockDataTypes.LockId.newBuilder()
                     .setLockGroup(LOCK_GROUP)
@@ -372,7 +375,7 @@ public class LockIT extends AbstractIT implements Observer {
             log.debug("Caught Exception: " + e);
             throw e;
         } finally {
-            shutdown();
+            shutdown(rt);
         }
     }
 
@@ -410,20 +413,22 @@ public class LockIT extends AbstractIT implements Observer {
         return listener;
     }
 
-    private void initialize() {
+    private CorfuRuntime initialize() {
         CorfuRuntime.CorfuRuntimeParameters params = CorfuRuntime.CorfuRuntimeParameters
                 .builder()
                 .build();
-        runtime = CorfuRuntime.fromParameters(params).parseConfigurationString(corfuEndpoint).connect();
+        CorfuRuntime runtime = CorfuRuntime.fromParameters(params).parseConfigurationString(corfuEndpoint).connect();
 
         LockState.setDurationBetweenLeaseRenewals(LOCK_TIME_CONSTANT);
         LockState.setMaxTimeForNotificationListenerProcessing(LOCK_TIME_CONSTANT);
         LockClient.setDurationBetweenLockMonitorRuns(MONITOR_LOCK_TIME_CONSTANT);
         HasLeaseState.setDurationBetweenLeaseChecks(MONITOR_LOCK_TIME_CONSTANT);
         Lock.setLeaseDuration(LOCK_LEASE_DURATION);
+
+        return runtime;
     }
 
-    private void shutdown() {
+    private void shutdown(CorfuRuntime runtime) {
         if (runtime != null) {
             runtime.shutdown();
         }

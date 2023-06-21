@@ -153,7 +153,7 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
         table.setCorfuSMRProxy(new MVOCorfuCompileProxy(
                 runtime,
                 UUID.nameUUIDFromBytes(fullyQualifiedTableName.getBytes()),
-                ImmutableCorfuTable.<K, CorfuRecord<V, M>>getTableType().getRawType(),
+                ImmutableCorfuTable.<K, CorfuRecord<V, M>>getTypeToken().getRawType(),
                 args,
                 runtime.getSerializers().getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE),
                 new HashSet<UUID>(),

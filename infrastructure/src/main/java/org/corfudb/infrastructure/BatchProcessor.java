@@ -1,8 +1,8 @@
 package org.corfudb.infrastructure;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.google.protobuf.TextFormat;
-import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.infrastructure.BatchWriterOperation.Type;
@@ -23,10 +23,8 @@ import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
 import org.corfudb.runtime.view.Layout;
 
 import javax.annotation.Nonnull;
-import java.lang.Thread.UncaughtExceptionHandler;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -71,18 +69,13 @@ public class BatchProcessor implements AutoCloseable {
      * @param sync      If true, the batch writer will sync writes to secondary storage
      */
     public BatchProcessor(StreamLog streamLog, BatchProcessorContext context, long sealEpoch, boolean sync) {
-        this(new LinkedBlockingQueue<>(), streamLog, context, sealEpoch, sync);
-    }
-
-    public BatchProcessor(BlockingQueue<BatchWriterOperation<?>> operationsQueue, StreamLog streamLog,
-                          BatchProcessorContext context, long sealEpoch, boolean sync) {
         this.sealEpoch = sealEpoch;
         this.sync = sync;
         this.streamLog = streamLog;
         this.context = context;
 
         BATCH_SIZE = 50;
-        this.operationsQueue = operationsQueue;
+        this.operationsQueue = new LinkedBlockingQueue<>();
 
         processorService = newExecutorService();
         processorService.submit(this::process);
@@ -99,14 +92,6 @@ public class BatchProcessor implements AutoCloseable {
                 .build();
 
         return Executors.newSingleThreadExecutor(threadFactory);
-    }
-
-    private void recordRunnable(Runnable runnable, Optional<Timer> timer) {
-        if (timer.isPresent()) {
-            timer.get().record(runnable);
-        } else {
-            runnable.run();
-        }
     }
 
     /**
@@ -200,8 +185,12 @@ public class BatchProcessor implements AutoCloseable {
                                         "logunit.write.timer", "type", "single");
                                 break;
                             case RANGE_WRITE:
-                                List<LogData> range = payload.getRangeWriteLogRequest().getLogDataList()
-                                        .stream().map(CorfuProtocolLogData::getLogData).collect(Collectors.toList());
+                                List<LogData> range = payload.getRangeWriteLogRequest()
+                                        .getLogDataList()
+                                        .stream()
+                                        .map(CorfuProtocolLogData::getLogData)
+                                        .collect(Collectors.toList());
+
                                 MicroMeterUtils.time(() -> streamLog.append(range),
                                         "logunit.write.timer", "type", "range");
                                 break;
@@ -276,11 +265,13 @@ public class BatchProcessor implements AutoCloseable {
     public static class BatchProcessorContext {
         private final AtomicReference<BatchProcessorStatus> status = new AtomicReference<>(BatchProcessorStatus.BP_STATUS_OK);
 
-        private void setErrorStatus() {
+        @VisibleForTesting
+        void setErrorStatus() {
             status.set(BatchProcessorStatus.BP_STATUS_ERROR);
         }
 
-        public void setOkStatus() {
+        @VisibleForTesting
+        void setOkStatus() {
             status.set(BatchProcessorStatus.BP_STATUS_OK);
         }
 

@@ -107,7 +107,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
     }
     
     @Test
-    public void testWriteReadWithChecksum() {
+    public void testWriteReadWithChecksum() throws Exception {
         // Enable checksum, then append and read the same entry
         StreamLog log = new StreamLogFiles(getContext(), new BatchProcessorContext());
         ByteBuf b = Unpooled.buffer();
@@ -558,8 +558,9 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
      */
     @Test
     public void testResetStreamLog() {
-        String logDir = getContext().getServerConfig().get("--log-path") + File.separator + "log";
-        StreamLogFiles log = new StreamLogFiles(getContext(), new BatchProcessorContext());
+        ServerContext sc = getContext();
+        String logDir = sc.getServerConfig().get("--log-path") + File.separator + "log";
+        StreamLogFiles log = new StreamLogFiles(sc, new BatchProcessorContext());
 
         final long numSegments = 3;
         for (long x = 0; x < RECORDS_PER_LOG_FILE * numSegments; x++) {
@@ -578,14 +579,18 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         assertThat(log.getLogTail()).isEqualTo(globalTailBeforeReset);
         assertThat(log.getTrimMark()).isEqualTo(trimMarkBeforeReset);
 
-        log.reset();
-        assertThat(log.getOpenSegments()).isEmpty();
+        log.updateCommittedTail(22000);
 
-        final int expectedFilesAfterReset = 0;
-        final long globalTailAfterReset = Address.NON_ADDRESS;
-        final long trimMarkAfterReset = 0L;
+        log.reset();
+        assertThat(log.getOpenSegments()).hasSize(0);
+
+        final int expectedFilesAfterReset = 2;
         assertThat(logsDir.list()).hasSize(expectedFilesAfterReset);
+
+        final long globalTailAfterReset = 20000 + 1;
         assertThat(log.getLogTail()).isEqualTo(globalTailAfterReset);
+
+        final long trimMarkAfterReset = trimMarkBeforeReset;
         assertThat(log.getTrimMark()).isEqualTo(trimMarkAfterReset);
     }
 

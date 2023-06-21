@@ -50,14 +50,14 @@ public class CompactorServiceIT extends AbstractIT {
     @Before
     public void loadProperties() {
         corfuSingleNodeHost = PROPERTIES.getProperty("corfuSingleNodeHost");
-        corfuStringNodePort = Integer.valueOf(PROPERTIES.getProperty("corfuSingleNodePort"));
+        corfuStringNodePort = Integer.parseInt(PROPERTIES.getProperty("corfuSingleNodePort"));
         singleNodeEndpoint = String.format("%s:%d",
                 corfuSingleNodeHost,
                 corfuStringNodePort);
     }
 
     @After
-    public void cleanUp() throws IOException, InterruptedException {
+    public void cleanUp() throws Exception {
         shutdownCorfuServer(corfuServer);
     }
 
@@ -71,7 +71,7 @@ public class CompactorServiceIT extends AbstractIT {
                 .runServer();
     }
 
-    private void createCompactorService() throws Exception {
+    private CorfuRuntime createCompactorService() throws Exception {
         // Start Corfu Server
         corfuServer = runServer(DEFAULT_PORT, true);
         corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort, true);
@@ -88,18 +88,20 @@ public class CompactorServiceIT extends AbstractIT {
                 .checkpointTriggerFreqMillis(1);
         doReturn(paramsBuilder.build()).when(sc).getManagementRuntimeParameters();
         compactorServiceSpy = spy(new CompactorService(sc, SCHEDULER_INTERVAL, invokeCheckpointing, new DynamicTriggerPolicy()));
-        runtime = spy(createRuntime(singleNodeEndpoint, paramsBuilder));
+        CorfuRuntime runtime = spy(createRuntime(singleNodeEndpoint, paramsBuilder));
         runtime.getParameters().setSystemDownHandler(compactorServiceSpy.getSystemDownHandlerForCompactor(runtime));
         doReturn(runtime).when(compactorServiceSpy).getNewCorfuRuntime();
 
 
         runtime2 = spy(createRuntime(singleNodeEndpoint, paramsBuilder));
         runtime2.getParameters().setSystemDownHandler(compactorServiceSpy.getSystemDownHandlerForCompactor(runtime2));
+
+        return runtime;
     }
 
     @Test
     public void throwUnrecoverableCorfuErrorTest() throws Exception {
-        createCompactorService();
+        CorfuRuntime runtime = createCompactorService();
         AddressSpaceView mockAddressSpaceView = spy(new AddressSpaceView(runtime));
         final Long address = 1L;
         doReturn(mockAddressSpaceView).when(runtime).getAddressSpaceView();
@@ -111,7 +113,7 @@ public class CompactorServiceIT extends AbstractIT {
 
     @Test
     public void invokeSystemDownHandlerOnExceptionTest() throws Exception {
-        createCompactorService();
+        CorfuRuntime runtime = createCompactorService();
         doCallRealMethod().doCallRealMethod().doCallRealMethod()
                 .doThrow(new WrongClusterException(UUID.randomUUID(), UUID.randomUUID()))
                 .doCallRealMethod().when(runtime).checkClusterId(any());
@@ -123,7 +125,7 @@ public class CompactorServiceIT extends AbstractIT {
 
     @Test
     public void invokeConcurrentSystemDownHandlerTest() throws Exception {
-        createCompactorService();
+        CorfuRuntime runtime = createCompactorService();
 
         CorfuStore corfuStore = mock(CorfuStore.class);
         TxnContext txn = mock(TxnContext.class);

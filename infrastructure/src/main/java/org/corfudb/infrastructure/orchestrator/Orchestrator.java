@@ -148,7 +148,8 @@ public class Orchestrator {
 
             case RESTORE_REDUNDANCY_MERGE_SEGMENTS:
                 workflow = workflowFactory.getRestoreRedundancy(
-                        getRestoreRedundancyMergeSegmentsRequest(msg.getRestoreRedundancyMergeSegments()));
+                        getRestoreRedundancyMergeSegmentsRequest(msg.getRestoreRedundancyMergeSegments())
+                );
                 dispatch(workflow, req, ctx, r, msg.getRestoreRedundancyMergeSegments().getEndpoint());
                 break;
 

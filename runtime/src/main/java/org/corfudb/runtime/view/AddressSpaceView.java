@@ -180,7 +180,7 @@ public class AddressSpaceView extends AbstractView implements AutoCloseable {
      * know if the write went through or not. For sanity, we throw an OverwriteException
      * and let the above layer retry.
      *
-     * @param address
+     * @param address global address
      */
     private void validateStateOfWrittenEntry(long address, @Nonnull ILogData ld) {
         ILogData logData;

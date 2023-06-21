@@ -137,7 +137,7 @@ public class HealthMonitorIT extends AbstractIT {
 
     @Test
     @SuppressWarnings("checkstyle:magicnumber")
-    void testInitComponentsHealth() throws IOException, InterruptedException {
+    void testInitComponentsHealth() throws Exception {
         Process corfuServer = runCorfuServerWithHealthMonitor(CORFU_PORT_1, HEALTH_PORT_1);
         // Give it some time to start
         Thread.sleep(WAIT_TIME_MILLIS * 5);
@@ -177,7 +177,7 @@ public class HealthMonitorIT extends AbstractIT {
 
     @Test
     @SuppressWarnings("checkstyle:magicnumber")
-    void testQuotaExceededReport() throws IOException, InterruptedException {
+    void testQuotaExceededReport() throws Exception {
         final Process process = runCorfuServerWithHealthMonitorAndExceededQuota(CORFU_PORT_2, HEALTH_PORT_2);
         BootstrapUtil.bootstrap(getLayout(CORFU_PORT_2), RETRIES, PARAMETERS.TIMEOUT_SHORT);
         final String localhost = "localhost:";
