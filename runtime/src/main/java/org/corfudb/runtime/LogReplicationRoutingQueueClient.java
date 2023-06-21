@@ -5,6 +5,10 @@ import org.corfudb.runtime.collections.LRMessageWithDestinations;
 import java.util.List;
 
 public interface LogReplicationRoutingQueueClient {
+
+    // TODO (V2): This field should be removed after the rpc stream is added for Sink side session creation.
+    String DEFAULT_ROUTING_QUEUE_CLIENT = "00000000-0000-0000-0000-0000000000002";
+
     /**
      * Transmits Delta Messages.
      * Must be invoked with the same transaction builder that was used for as actual data modification.
