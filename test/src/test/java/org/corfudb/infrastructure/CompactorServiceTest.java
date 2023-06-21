@@ -381,7 +381,7 @@ public class CompactorServiceTest extends AbstractViewTest {
         testSetup(logSizeLimitPercentageFull);
         CompactorService compactorService0 = spy(new CompactorService(sc0, Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL), mockInvokeJvm0, dynamicTriggerPolicy0));
         doReturn(runtime0).when(compactorService0).getNewCorfuRuntime();
-        when(dynamicTriggerPolicy0.shouldTrigger(anyLong(), any())).thenReturn(true).thenReturn(false);
+        when(dynamicTriggerPolicy0.shouldTrigger(anyLong(), any(), any())).thenReturn(true).thenReturn(false);
         compactorService0.start(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
 
         try {
@@ -403,13 +403,13 @@ public class CompactorServiceTest extends AbstractViewTest {
 
         CompactorService compactorService0 = spy(new CompactorService(sc0, Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL), mockInvokeJvm0, dynamicTriggerPolicy0));
         doReturn(runtime0).when(compactorService0).getNewCorfuRuntime();
-        when(dynamicTriggerPolicy0.shouldTrigger(anyLong(), any())).thenReturn(true).thenReturn(false);
+        when(dynamicTriggerPolicy0.shouldTrigger(anyLong(), any(), any())).thenReturn(true).thenReturn(false);
         compactorService0.start(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
 
         DynamicTriggerPolicy dynamicTriggerPolicy1 = mock(DynamicTriggerPolicy.class);
         CompactorService compactorService1 = spy(new CompactorService(sc1, Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL), mockInvokeJvm1, dynamicTriggerPolicy1));
         doReturn(runtime1).when(compactorService1).getNewCorfuRuntime();
-        when(dynamicTriggerPolicy1.shouldTrigger(anyLong(), any())).thenReturn(false);
+        when(dynamicTriggerPolicy1.shouldTrigger(anyLong(), any(), any())).thenReturn(false);
         compactorService1.start(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
 
         try {
@@ -440,13 +440,14 @@ public class CompactorServiceTest extends AbstractViewTest {
         CompactorService compactorService2 = spy(new CompactorService(sc2, Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL), mockInvokeJvm2, dynamicTriggerPolicy2));
         doReturn(runtime2).when(compactorService2).getNewCorfuRuntime();
 
-        when(dynamicTriggerPolicy0.shouldTrigger(anyLong(), any())).thenReturn(true).thenReturn(false);
+        when(dynamicTriggerPolicy0.shouldTrigger(anyLong(), any(), any())).thenReturn(true).thenReturn(false);
         compactorService0.start(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
 
-        when(dynamicTriggerPolicy1.shouldTrigger(anyLong(), any())).thenReturn(false);
+        when(dynamicTriggerPolicy1.shouldTrigger(anyLong(), any(), any())).thenReturn(false);
         compactorService1.start(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
 
-        when(dynamicTriggerPolicy2.shouldTrigger(anyLong(), any())).thenReturn(false);
+        when(dynamicTriggerPolicy2.shouldTrigger(anyLong(), any(), any())).thenReturn(false);
+
         compactorService2.start(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
 
         try {
@@ -480,13 +481,13 @@ public class CompactorServiceTest extends AbstractViewTest {
         CompactorService compactorService2 = spy(new CompactorService(sc2, Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL), mockInvokeJvm2, dynamicTriggerPolicy2));
         doReturn(runtime2).when(compactorService2).getNewCorfuRuntime();
 
-        when(dynamicTriggerPolicy0.shouldTrigger(anyLong(), any())).thenReturn(true).thenReturn(false);
+        when(dynamicTriggerPolicy0.shouldTrigger(anyLong(), any(), any())).thenReturn(true).thenReturn(false);
         compactorService0.start(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
 
-        when(dynamicTriggerPolicy1.shouldTrigger(anyLong(), any())).thenReturn(false);
+        when(dynamicTriggerPolicy1.shouldTrigger(anyLong(), any(), any())).thenReturn(false);
         compactorService1.start(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
 
-        when(dynamicTriggerPolicy2.shouldTrigger(anyLong(), any())).thenReturn(false);
+        when(dynamicTriggerPolicy2.shouldTrigger(anyLong(), any(), any())).thenReturn(false);
         compactorService2.start(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
 
         try {
@@ -512,7 +513,7 @@ public class CompactorServiceTest extends AbstractViewTest {
 
         CompactorService compactorService0 = spy(new CompactorService(sc0, Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL), mockInvokeJvm0, dynamicTriggerPolicy0));
         doReturn(runtime0).when(compactorService0).getNewCorfuRuntime();
-        when(dynamicTriggerPolicy0.shouldTrigger(anyLong(), any())).thenReturn(true).thenReturn(false);
+        when(dynamicTriggerPolicy0.shouldTrigger(anyLong(), any(), any())).thenReturn(true).thenReturn(false);
         compactorService0.start(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
 
         Table<StringKey, RpcCommon.TokenMsg, Message> checkpointTable = openCompactionControlsTable();
@@ -558,7 +559,7 @@ public class CompactorServiceTest extends AbstractViewTest {
         testSetup(logSizeLimitPercentageFull);
         CompactorService compactorService0 = spy(new CompactorService(sc0, Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL), mockInvokeJvm0, new DynamicTriggerPolicy()));
         doReturn(runtime0).when(compactorService0).getNewCorfuRuntime();
-        when(dynamicTriggerPolicy0.shouldTrigger(anyLong(), any())).thenReturn(false);
+        when(dynamicTriggerPolicy0.shouldTrigger(anyLong(), any(), any())).thenReturn(false);
         compactorService0.start(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
 
         try {
@@ -591,7 +592,7 @@ public class CompactorServiceTest extends AbstractViewTest {
         testSetup(logSizeLimitPercentageLow);
         CompactorService compactorService0 = spy(new CompactorService(sc0, Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL), mockInvokeJvm0, dynamicTriggerPolicy0));
         doReturn(runtime0).when(compactorService0).getNewCorfuRuntime();
-        when(dynamicTriggerPolicy0.shouldTrigger(anyLong(), any())).thenReturn(true).thenReturn(false);
+        when(dynamicTriggerPolicy0.shouldTrigger(anyLong(), any(), any())).thenReturn(true).thenReturn(false);
         compactorService0.start(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
 
         // Write entries to the stream until the quota has been exhausted.

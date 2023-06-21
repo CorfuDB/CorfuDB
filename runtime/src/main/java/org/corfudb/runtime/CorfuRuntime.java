@@ -317,7 +317,7 @@ public class CorfuRuntime {
          * Checkpoint read Batch Size: number of checkpoint addresses to fetch in batch when stream
          * address discovery mechanism relies on address maps instead of follow backpointers;
          */
-        int checkpointReadBatchSize = 5;
+        int checkpointReadBatchSize = 1;
 
         /*
          * Cache Option for local writes.
@@ -443,7 +443,7 @@ public class CorfuRuntime {
             private int checkpointBatchSize = 50;
             private int restoreBatchSize = 50;
             private int streamBatchSize = 10;
-            private int checkpointReadBatchSize = 5;
+            private int checkpointReadBatchSize = 1;
             private Duration runtimeGCPeriod = Duration.ofMinutes(20);
             private UUID clusterId = null;
             private int systemDownHandlerTriggerLimit = 20;

@@ -41,7 +41,7 @@ public class ServerTriggeredCheckpointer extends DistributedCheckpointer {
         for (TableName tableName : tableNames) {
             boolean isSuccess = tryCheckpointTable(tableName, t -> getCheckpointWriter(t, keyDynamicProtobufSerializer));
             if (!isSuccess) {
-                log.warn("Stop checkpointing after failure in {}${}", tableName.getNamespace(), tableName.getTableName());
+                log.warn("Stop checkpointing after failure");
                 break;
             }
         }
