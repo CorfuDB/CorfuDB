@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure.logreplication.runtime.fsm;
 
 import lombok.Data;
+import lombok.Getter;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent;
 
 /**
@@ -36,6 +37,9 @@ public class LogReplicationRuntimeEvent {
     // Exception for ON_ERROR event
     private Throwable t;
 
+    @Getter
+    private boolean isConnectionStarter;
+
     /**
      * Constructor
      *
@@ -43,6 +47,16 @@ public class LogReplicationRuntimeEvent {
      */
     public LogReplicationRuntimeEvent(LogReplicationRuntimeEventType type) {
         this.type = type;
+    }
+
+    /**
+     * Constructor
+     *
+     * @param type runtime event type
+     */
+    public LogReplicationRuntimeEvent(LogReplicationRuntimeEventType type, boolean isConnectionStarter) {
+        this.type = type;
+        this.isConnectionStarter = isConnectionStarter;
     }
 
     /**

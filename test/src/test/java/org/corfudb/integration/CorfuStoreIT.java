@@ -79,6 +79,7 @@ import static org.mockito.Mockito.spy;
  * Simple test that inserts data into CorfuStore via a separate server process
  */
 @Slf4j
+@SuppressWarnings("checkstyle:magicnumber")
 public class CorfuStoreIT extends AbstractIT {
 
     private static String corfuSingleNodeHost;

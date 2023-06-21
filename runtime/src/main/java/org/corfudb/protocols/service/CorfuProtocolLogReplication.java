@@ -9,6 +9,7 @@ import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMetadataMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg;
@@ -173,13 +174,37 @@ public final class CorfuProtocolLogReplication {
         return getResponseMsg(header, payload);
     }
 
-    public static ResponseMsg getLeadershipLoss(HeaderMsg header, String nodeId) {
-        LogReplication.LogReplicationLeadershipLossResponseMsg response = LogReplication.LogReplicationLeadershipLossResponseMsg
+    /**
+     * construct a leadership loss msg embedded in a response msg. This is used by the SINK to notify the SOURCE when the
+     * latter is the connection starter
+     *
+     * @param header
+     * @param nodeId
+     * @return
+     */
+    public static ResponseMsg getLeadershipLossResponseMsg(HeaderMsg header, String nodeId) {
+        LogReplication.LogReplicationLeadershipLossMsg leadershipLossMsg = LogReplication.LogReplicationLeadershipLossMsg
                 .newBuilder()
                 .setNodeId(nodeId)
                 .build();
         ResponsePayloadMsg payload = ResponsePayloadMsg.newBuilder()
-                .setLrLeadershipLoss(response).build();
+                .setLrLeadershipLoss(leadershipLossMsg).build();
         return getResponseMsg(header, payload);
+    }
+
+    /**
+     * construct a leadership loss msg embedded in a request msg. This is used by the SOURCE to notify the SINK when the
+     * latter is the connection starter
+     *
+     * @param nodeId
+     * @return
+     */
+    public static RequestPayloadMsg getLeadershipLossRequestPayloadMsg(String nodeId) {
+        LogReplication.LogReplicationLeadershipLossMsg leadershipLossMsg = LogReplication.LogReplicationLeadershipLossMsg
+                .newBuilder()
+                .setNodeId(nodeId)
+                .build();
+        return RequestPayloadMsg.newBuilder()
+                .setLrLeadershipLoss(leadershipLossMsg).build();
     }
 }
