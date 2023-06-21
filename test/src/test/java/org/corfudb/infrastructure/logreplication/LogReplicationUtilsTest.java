@@ -291,10 +291,14 @@ public class LogReplicationUtilsTest extends AbstractViewTest {
         protected void onSnapshotSyncComplete() {}
 
         @Override
-        protected void processUpdatesInSnapshotSync(CorfuStreamEntries results) {}
+        protected boolean processUpdatesInSnapshotSync(CorfuStreamEntries results) {
+            return true;
+        }
 
         @Override
-        protected void processUpdatesInLogEntrySync(CorfuStreamEntries results) {}
+        protected boolean processUpdatesInLogEntrySync(CorfuStreamEntries results) {
+            return true;
+        }
 
         @Override
         protected void performFullSyncAndMerge(TxnContext txnContext) {

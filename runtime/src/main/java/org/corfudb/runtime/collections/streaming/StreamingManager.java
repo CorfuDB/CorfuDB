@@ -125,6 +125,7 @@ public class StreamingManager {
         nsToTableName.put(namespace, Arrays.asList(REPLICATED_QUEUE_NAME_PREFIX));
 
         // TODO: Form the routing queue tag from the client_name input parameter.
+        // TODO: Check if we need to modify the addLRTask for multiple tags per namespace
         Map<String, String> nsToStreamTags = new HashMap<>();
         nsToStreamTags.put(CORFU_SYSTEM_NAMESPACE, LR_STATUS_STREAM_TAG);
         nsToStreamTags.put(namespace, REPLICATED_QUEUE_TAG);

@@ -88,7 +88,8 @@ public final class LogReplicationUtils {
                                            int bufferSize, CorfuStore corfuStore) {
 
         long subscriptionTimestamp = getRoutingQueueSubscriptionTimestamp(corfuStore, namespace, clientListener);
-        // Open the routing queue from corfu store and pass it down.
+        // Open the routing queue from corfu store (Disk backed mode)
+        // since the subscribe API will run in policy jvm
         // TODO: Get client name as input params. For now, hard coding the stream tag.
         if (CheckIfRoutingQueueExists(corfuStore, namespace, REPLICATED_QUEUE_TAG)) {
             // Table registry contains the routing queue already.
