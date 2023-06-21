@@ -9,6 +9,7 @@ import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.logreplication.config.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.config.LogReplicationFullTableConfig;
 import org.corfudb.infrastructure.logreplication.config.LogReplicationLogicalGroupConfig;
+import org.corfudb.infrastructure.logreplication.config.LogReplicationRoutingQueueConfig;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
@@ -56,6 +57,7 @@ import static org.corfudb.infrastructure.logreplication.config.LogReplicationCon
 import static org.corfudb.runtime.LogReplicationLogicalGroupClient.DEFAULT_LOGICAL_GROUP_CLIENT;
 import static org.corfudb.runtime.LogReplicationLogicalGroupClient.LR_MODEL_METADATA_TABLE_NAME;
 import static org.corfudb.runtime.LogReplicationLogicalGroupClient.LR_REGISTRATION_TABLE_NAME;
+import static org.corfudb.runtime.LogReplicationRoutingQueueClient.DEFAULT_ROUTING_QUEUE_CLIENT;
 import static org.corfudb.runtime.view.ObjectsView.LOG_REPLICATOR_STREAM_INFO;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
@@ -131,6 +133,13 @@ public class LogReplicationConfigManager {
                 .build();
     }
 
+    public static ReplicationSubscriber getDefaultRoutingQueueSubscriber() {
+        return ReplicationSubscriber.newBuilder()
+                .setClientName(DEFAULT_ROUTING_QUEUE_CLIENT)
+                .setModel(ReplicationModel.ROUTING_QUEUES)
+                .build();
+    }
+
     public static ReplicationSubscriber getDefaultSubscriber() {
         return ReplicationSubscriber.newBuilder()
                 .setClientName(DEFAULT_CLIENT)
@@ -149,6 +158,7 @@ public class LogReplicationConfigManager {
         // TODO (V2): This builder should be removed after the rpc stream is added for Sink side session creation.
         //  and logical group subscribers should come from client registration.
         registeredSubscribers.add(getDefaultLogicalGroupSubscriber());
+        registeredSubscribers.add(getDefaultRoutingQueueSubscriber());
         openClientConfigTables();
         syncWithRegistryTable();
     }
@@ -199,9 +209,24 @@ public class LogReplicationConfigManager {
                                 TextFormat.shortDebugString(session));
                         generateLogicalGroupConfig(session);
                         break;
+                    case ROUTING_QUEUES:
+                        log.debug("Generating ROUTING_QUEUE config for session {}",
+                                TextFormat.shortDebugString(session));
+                        generateRoutingQueueConfig(session);
                     default: break;
                 }
         });
+    }
+
+    private void generateRoutingQueueConfig(LogReplicationSession session) {
+        if (!sessionToConfigMap.containsKey(session)) {
+            LogReplicationRoutingQueueConfig routingQueueConfig =
+                    new LogReplicationRoutingQueueConfig(session, serverContext);
+            sessionToConfigMap.put(session, routingQueueConfig);
+            log.info("Routing queue session {} config generated.", session);
+        } else {
+            log.warn("Routing queue config for session {} already exists!", session);
+        }
     }
 
     private void generateLogicalGroupConfig(LogReplicationSession session) {
@@ -459,14 +484,18 @@ public class LogReplicationConfigManager {
         return preprocessAndGetTail();
     }
 
-    public UUID getOpaqueStreamToTrack(ReplicationSubscriber subscriber) {
-        switch(subscriber.getModel()) {
+    public UUID getLogEntrySyncOpaqueStream(LogReplicationSession session) {
+        switch(session.getSubscriber().getModel()) {
             case FULL_TABLE:
                 return ObjectsView.getLogReplicatorStreamId();
             case LOGICAL_GROUPS:
-                return ObjectsView.getLogicalGroupStreamTagInfo(subscriber.getClientName()).getStreamId();
+                return ObjectsView.getLogicalGroupStreamTagInfo(session.getSubscriber().getClientName()).getStreamId();
+            case ROUTING_QUEUES:
+                String logEntrySyncStreamTag = ((LogReplicationRoutingQueueConfig) sessionToConfigMap.get(session))
+                        .getLogEntrySyncStreamTag();
+                return CorfuRuntime.getStreamID(logEntrySyncStreamTag);
             default:
-                log.error("Unsupported replication model received: {}", subscriber.getModel());
+                log.error("Unsupported replication model received: {}", session.getSubscriber().getModel());
                 return null;
         }
     }
