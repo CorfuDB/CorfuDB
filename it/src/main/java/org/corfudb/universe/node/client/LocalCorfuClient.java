@@ -9,6 +9,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters.CorfuRuntimeParametersBuilder;
 import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.collections.PersistedCorfuTable;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.ManagementView;
 import org.corfudb.runtime.view.ObjectsView;
@@ -95,8 +96,7 @@ public class LocalCorfuClient implements CorfuClient {
     public <K, V> ICorfuTable<K, V> createDefaultCorfuTable(String streamName) {
         return runtime.getObjectsView()
                 .build()
-                .setTypeToken(new TypeToken<PersistedCorfuTable<K, V>>() {
-                })
+                .setTypeToken(PersistentCorfuTable.<K, V>getTypeToken())
                 .setStreamName(streamName)
                 .open();
     }
