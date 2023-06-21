@@ -467,7 +467,6 @@ public class TxnContext implements AutoCloseable {
     public <K extends Message, V extends Message, M extends Message>
     K logUpdateEnqueue(@Nonnull Table<K, V, M> table,
                                     @Nonnull final V record, List<UUID> streamTags, CorfuStore corfuStore) {
-        validateWrite(table);
         K ret = table.logUpdateEnqueue(record, streamTags, corfuStore);
         tablesUpdated.putIfAbsent(table.getStreamUUID(), table);
         return ret;
