@@ -37,7 +37,7 @@ public class SMRMapEntrySetTest extends AbstractTransactionsTest {
                 .getObjectsView()
                 .build()
                 .setStreamName("mapsettest")
-                .setTypeToken(new TypeToken<PersistentCorfuTable<Long, Long>>() {})
+                .setTypeToken(PersistentCorfuTable.<Long, Long>getTypeToken())
                 .open();
 
         // populate the map
@@ -69,7 +69,7 @@ public class SMRMapEntrySetTest extends AbstractTransactionsTest {
                 .getObjectsView()
                 .build()
                 .setStreamName("mapsettest")
-                .setTypeToken(new TypeToken<PersistentCorfuTable<Long, Long>>() {})
+                .setTypeToken(PersistentCorfuTable.<Long, Long>getTypeToken())
                 .open();
 
         CountDownLatch l1 = new CountDownLatch(1);

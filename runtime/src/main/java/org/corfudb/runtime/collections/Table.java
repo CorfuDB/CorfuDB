@@ -19,6 +19,7 @@ import org.corfudb.runtime.view.CorfuGuidGenerator;
 import org.corfudb.runtime.view.ObjectsView.ObjectID;
 import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.util.serializer.ISerializer;
+import org.corfudb.util.serializer.SafeProtobufSerializer;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -230,8 +231,6 @@ public class Table<K extends Message, V extends Message, M extends Message> impl
         final SMRObject.Builder<? extends ICorfuTable<K, CorfuRecord<V, M>>> builder;
         final Deque<Object> arguments = new ArrayDeque<>();
 
-        // Default in-memory implementation.
-
         // Check to see if we should be used a disk backed table.
         if (tableParameters.getPersistenceOptions().hasDataPath()) {
             PersistenceOptionsBuilder persistenceOptions = PersistenceOptions.builder();
@@ -240,20 +239,23 @@ public class Table<K extends Message, V extends Message, M extends Message> impl
                 persistenceOptions.consistencyModel(tableParameters.getPersistenceOptions().getConsistencyModel());
             }
 
+            ISerializer safeSerializer = new SafeProtobufSerializer(serializer);
             builder = runtime.getObjectsView().<PersistedCorfuTable<K, CorfuRecord<V, M>>>build()
                     .setStreamName(fullyQualifiedTableName)
                     .setStreamTags(streamTags)
-                    .setSerializer(serializer)
-                    .setTypeToken(PersistedCorfuTable.<K, CorfuRecord<V, M>>getTypeToken());
+                    .setSerializer(safeSerializer)
+                    .setTypeToken(PersistedCorfuTable.getTypeToken());
 
             arguments.add(persistenceOptions.build());
             arguments.add(getDiskBackedCorfuTableOptions());
+            arguments.add(safeSerializer);
         } else {
+            // Default in-memory implementation.
             builder = runtime.getObjectsView().<PersistentCorfuTable<K, CorfuRecord<V, M>>>build()
                     .setStreamName(fullyQualifiedTableName)
                     .setStreamTags(streamTags)
                     .setSerializer(serializer)
-                    .setTypeToken(PersistentCorfuTable.<K, CorfuRecord<V, M>>getTypeToken());
+                    .setTypeToken(PersistentCorfuTable.getTypeToken());
         }
 
         if (!tableParameters.isSecondaryIndexesDisabled()) {
