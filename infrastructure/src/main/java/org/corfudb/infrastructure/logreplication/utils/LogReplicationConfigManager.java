@@ -9,6 +9,7 @@ import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.logreplication.config.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.config.LogReplicationFullTableConfig;
 import org.corfudb.infrastructure.logreplication.config.LogReplicationLogicalGroupConfig;
+import org.corfudb.infrastructure.logreplication.config.LogReplicationRoutingQueueConfig;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
@@ -56,6 +57,7 @@ import static org.corfudb.infrastructure.logreplication.replication.send.logread
 import static org.corfudb.runtime.LogReplicationLogicalGroupClient.DEFAULT_LOGICAL_GROUP_CLIENT;
 import static org.corfudb.runtime.LogReplicationLogicalGroupClient.LR_MODEL_METADATA_TABLE_NAME;
 import static org.corfudb.runtime.LogReplicationLogicalGroupClient.LR_REGISTRATION_TABLE_NAME;
+import static org.corfudb.runtime.LogReplicationRoutingQueueClient.DEFAULT_ROUTING_QUEUE_CLIENT;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 /**
@@ -132,6 +134,13 @@ public class LogReplicationConfigManager {
                 .build();
     }
 
+    public static ReplicationSubscriber getDefaultRoutingQueueSubscriber() {
+        return ReplicationSubscriber.newBuilder()
+                .setClientName(DEFAULT_ROUTING_QUEUE_CLIENT)
+                .setModel(ReplicationModel.ROUTING_QUEUES)
+                .build();
+    }
+
     public static ReplicationSubscriber getDefaultSubscriber() {
         return ReplicationSubscriber.newBuilder()
                 .setClientName(DEFAULT_CLIENT)
@@ -150,6 +159,7 @@ public class LogReplicationConfigManager {
         // TODO (V2): This builder should be removed after the rpc stream is added for Sink side session creation.
         //  and logical group subscribers should come from client registration.
         registeredSubscribers.add(getDefaultLogicalGroupSubscriber());
+        registeredSubscribers.add(getDefaultRoutingQueueSubscriber());
         openClientConfigTables();
         syncWithRegistryTable();
         syncWithClientConfigTable();
@@ -202,11 +212,26 @@ public class LogReplicationConfigManager {
                                 TextFormat.shortDebugString(session));
                         generateLogicalGroupConfig(session, updateGroupDestinationConfig);
                         break;
+                    case ROUTING_QUEUES:
+                        log.debug("Generating ROUTING_QUEUE config for session {}",
+                                TextFormat.shortDebugString(session));
+                        generateRoutingQueueConfig(session);
                     default:
                         throw new IllegalArgumentException("Invalid replication model: " +
                                 session.getSubscriber().getModel());
                 }
         });
+    }
+
+    private void generateRoutingQueueConfig(LogReplicationSession session) {
+        if (!sessionToConfigMap.containsKey(session)) {
+            LogReplicationRoutingQueueConfig routingQueueConfig =
+                    new LogReplicationRoutingQueueConfig(session, serverContext);
+            sessionToConfigMap.put(session, routingQueueConfig);
+            log.info("Routing queue session {} config generated.", session);
+        } else {
+            log.warn("Routing queue config for session {} already exists!", session);
+        }
     }
 
     private void generateLogicalGroupConfig(LogReplicationSession session, boolean updateGroupDestinationConfig) {
@@ -238,7 +263,7 @@ public class LogReplicationConfigManager {
             if (MERGE_ONLY_STREAMS.contains(streamId)) {
                 streamsToReplicate.add(tableName);
                 // Collect tags for merge-only stream
-                streamToTagsMap.put(streamId, Collections.singletonList(getOpaqueStreamToTrack(session.getSubscriber())));
+                streamToTagsMap.put(streamId, Collections.singletonList(getLogEntrySyncOpaqueStream(session)));
             } else if (entry.getValue().getMetadata().getTableOptions().hasReplicationGroup() &&
                     !entry.getValue().getMetadata().getTableOptions().getReplicationGroup().getLogicalGroup().isEmpty()) {
                 // Find streams to replicate for every logical group for this session
@@ -292,7 +317,7 @@ public class LogReplicationConfigManager {
                 streamsToReplicate.add(tableName);
                 if (MERGE_ONLY_STREAMS.contains(streamId)) {
                     // Collect tags for merge-only stream
-                    streamToTagsMap.put(streamId, Collections.singletonList(getOpaqueStreamToTrack(session.getSubscriber())));
+                    streamToTagsMap.put(streamId, Collections.singletonList(getLogEntrySyncOpaqueStream(session)));
                 } else {
                     // Collect tags for normal stream
                     List<UUID> tags = streamToTagsMap.getOrDefault(streamId, new ArrayList<>());
@@ -479,17 +504,22 @@ public class LogReplicationConfigManager {
      * Log entry readers will be tracking different opaque streams to get entries for log entry sync, based on the
      * log replication subscriber's model and client name.
      *
-     * @param subscriber Replication subscriber based on which the opaque stream id will be determined
+     * @param session Replication session based on which the opaque stream id will be determined
      * @return Stream id of the opaque stream to track for a session's log entry reader.
      */
-    public UUID getOpaqueStreamToTrack(ReplicationSubscriber subscriber) {
-        switch(subscriber.getModel()) {
+    public UUID getLogEntrySyncOpaqueStream(LogReplicationSession session) {
+        switch(session.getSubscriber().getModel()) {
             case FULL_TABLE:
                 return ObjectsView.getLogReplicatorStreamId();
             case LOGICAL_GROUPS:
-                return ObjectsView.getLogicalGroupStreamTagInfo(subscriber.getClientName()).getStreamId();
+                return ObjectsView.getLogicalGroupStreamTagInfo(session.getSubscriber().getClientName()).getStreamId();
+            case ROUTING_QUEUES:
+                String logEntrySyncStreamTag = ((LogReplicationRoutingQueueConfig) sessionToConfigMap.get(session))
+                        .getLogEntrySyncStreamTag();
+                return CorfuRuntime.getStreamID(logEntrySyncStreamTag);
             default:
-                throw new IllegalArgumentException("Subscriber with invalid replication model: " + subscriber.getModel());
+                throw new IllegalArgumentException("Subscriber with invalid replication model: " +
+                        session.getSubscriber().getModel());
         }
     }
 }
