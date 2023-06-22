@@ -258,6 +258,7 @@ public abstract class BaseSnapshotReader extends SnapshotReader {
     }
 
     protected boolean currentStreamHasNext() {
+        log.info("Iterator hasNext = {}", currentStreamInfo.iterator.hasNext());
         return currentStreamInfo.iterator.hasNext() || lastEntry != null;
     }
 

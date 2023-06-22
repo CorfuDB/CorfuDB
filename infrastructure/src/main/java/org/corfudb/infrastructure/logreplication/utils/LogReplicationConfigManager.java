@@ -103,8 +103,6 @@ public class LogReplicationConfigManager {
     private List<Map.Entry<TableName, CorfuRecord<TableDescriptors, TableMetadata>>> registryTableEntries =
             new ArrayList<>();
 
-
-
     /**
      * Used for non-upgrade testing purpose only. Note that this constructor will keep the version table in
      * uninitialized state, in which case LR will be constantly considered to be not upgraded.
