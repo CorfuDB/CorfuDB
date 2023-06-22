@@ -2,6 +2,7 @@ package org.corfudb.integration;
 
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.CorfuTestParameters;
 import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
@@ -35,6 +36,7 @@ import org.corfudb.util.Utils;
 import org.junit.Test;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
@@ -48,6 +50,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static java.lang.Thread.sleep;
@@ -188,6 +191,10 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     private final String t2NameUFO = TEST_NAMESPACE + "$" + t2Name;
 
     private final CountDownLatch blockUntilFSMTransition = new CountDownLatch(1);
+
+    public LogReplicationIT() {
+        PARAMETERS = new CorfuTestParameters(Duration.ofMinutes(5));
+    }
 
     /**
      * Setup Test Environment
