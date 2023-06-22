@@ -176,4 +176,8 @@ public class SMRObject<T extends ICorfuSMR<?>> {
             }
         }
     }
+
+    public static <T extends ICorfuSMR<?>> Builder<T> builder() {
+        return new Builder<>();
+    }
 }

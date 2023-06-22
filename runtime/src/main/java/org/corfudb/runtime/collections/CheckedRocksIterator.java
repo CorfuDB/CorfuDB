@@ -1,5 +1,6 @@
 package org.corfudb.runtime.collections;
 
+import com.google.common.base.Preconditions;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.rocksdb.ReadOptions;
@@ -164,14 +165,13 @@ public class CheckedRocksIterator implements RocksIteratorInterface, AutoCloseab
      */
     @Override
     public void status() {
-        if (!lock.isWriteLocked() && !lock.isReadLocked()) {
-            throw new IllegalStateException();
-        }
+        Preconditions.checkState(lock.isWriteLocked() || lock.isReadLocked(),
+                "The iterator needs to be accessed under a read or a write lock.");
 
         try {
             rocksIterator.status();
         } catch (RocksDBException e) {
-            throw new UnrecoverableCorfuError("Iterator is in an invalid state", e);
+            throw new UnrecoverableCorfuError("The iterator is in an invalid state", e);
         }
     }
 

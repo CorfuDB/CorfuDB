@@ -631,22 +631,22 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
                 assertThat(table.entryStream().count()).isEqualTo(0);
                 intended.forEach(key -> assertThat(table.get(key)).isNull());
 
-                groups.forEach(((character, strings) -> assertThat(StreamSupport.stream(
+                groups.forEach((character, strings) -> assertThat(StreamSupport.stream(
                                 table.getByIndex(StringIndexer.BY_FIRST_LETTER, character).spliterator(), false)
                         .map(Map.Entry::getValue)
                         .collect(Collectors.toSet()))
-                        .isEmpty()));
+                        .isEmpty());
             });
 
             // Ensure correctness from global perspective.
             executeTx(() -> assertThat(table.entryStream().count()).isEqualTo(0));
             assertThat(table.entryStream().count()).isEqualTo(0);
 
-            executeTx(() -> groups.forEach(((character, strings) -> assertThat(StreamSupport.stream(
+            executeTx(() -> groups.forEach((character, strings) -> assertThat(StreamSupport.stream(
                             table.getByIndex(StringIndexer.BY_FIRST_LETTER, character).spliterator(), false)
                     .map(Map.Entry::getValue)
                     .collect(Collectors.toSet()))
-                    .isEmpty())));
+                    .isEmpty()));
             groups.forEach((character, strings) -> assertThat(StreamSupport.stream(
                             table.getByIndex(StringIndexer.BY_FIRST_LETTER, character).spliterator(), false)
                     .map(Map.Entry::getValue)

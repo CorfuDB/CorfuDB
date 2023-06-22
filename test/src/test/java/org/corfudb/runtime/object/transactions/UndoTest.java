@@ -18,7 +18,16 @@ public class UndoTest extends AbstractTransactionsTest {
     private static final String Z = "z";
     private static final String A = "a";
     private static final String Y = "y";
-    
+    private static final String X = "x";
+
+    final int specialKey = 10;
+    final String normalValue = Z;
+    final String specialValue = Y;
+    final String specialValue2 = X;
+    final int t1 = 1;
+    final int t2 = 2;
+    final int t3 = 3;
+
     @Override
     public void TXBegin() { WWTXBegin(); }
 
@@ -135,7 +144,8 @@ public class UndoTest extends AbstractTransactionsTest {
                 })
                 .open();
         final int specialKey = 10;
-        final String normalValue = Z, specialValue = Y;
+        final String normalValue = Z;
+        final String specialValue = Y;
         final int mapSize = 10 * PARAMETERS.NUM_ITERATIONS_LARGE;
 
         // populate the map with many elements
@@ -253,10 +263,6 @@ public class UndoTest extends AbstractTransactionsTest {
         });
     }
 
-    final int specialKey = 10;
-    final String normalValue = Z, specialValue = Y, specialValue2 = "x";
-    final int t1 = 1, t2 = 2, t3 = 3;
-
     /**
      * In this test, transactions are started on two threads, 1, 2.
      * Then two things happen:
@@ -269,13 +275,12 @@ public class UndoTest extends AbstractTransactionsTest {
      * @throws Exception
      */
     @Test
-    public void ckMultiStreamRollback()
-            throws Exception {
+    public void ckMultiStreamRollback() {
         ArrayList<PersistentCorfuTable> maps = new ArrayList<>();
 
         final int nmaps = 3;
         for (int i = 0; i < nmaps; i++)
-            maps.add( (PersistentCorfuTable<Integer, String>) instantiateCorfuObject(
+            maps.add((PersistentCorfuTable<Integer, String>) instantiateCorfuObject(
                 new TypeToken<PersistentCorfuTable<Integer, String>>() {}, "test stream" + i)
             );
 
@@ -317,9 +322,9 @@ public class UndoTest extends AbstractTransactionsTest {
         // now, t2 optimistically modifying everything, but
         // not yet committing
         t(t2, () -> {
-                    for (PersistentCorfuTable m : maps)
+                    for (PersistentCorfuTable m : maps) {
                         m.insert(specialKey, specialValue2);
-                } );
+                    }});
 
         // main thread, t2's work should be committed
         for (PersistentCorfuTable m : maps) {
@@ -364,12 +369,9 @@ public class UndoTest extends AbstractTransactionsTest {
      *
      * then t1 resumes and should roll back both the optimistic updates
      * adn these commits.
-     *
-     * @throws Exception
      */
     @Test
-    public void ckMultiStreamRollback2()
-            throws Exception {
+    public void ckMultiStreamRollback2() {
         ArrayList<PersistentCorfuTable> maps = new ArrayList<>();
 
         final int nmaps = 3;
@@ -440,5 +442,4 @@ public class UndoTest extends AbstractTransactionsTest {
         for (PersistentCorfuTable m : maps)
             m.insert(specialKey + 1, value);
     }
-
 }

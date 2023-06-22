@@ -161,7 +161,7 @@ public class MultiVersionObject<S extends SnapshotGenerator<S>> {
                         voId.getVersion(), addressSpace.toString())));
     }
 
-    private void applyUpdate(SingleAddressUpdates addressUpdates) {
+    private void applySingleAddressUpdates(SingleAddressUpdates addressUpdates) {
         try {
             // Apply all updates in a MultiSMREntry, which is treated as one version.
             final long globalAddress = addressUpdates.getGlobalAddress();
@@ -214,13 +214,6 @@ public class MultiVersionObject<S extends SnapshotGenerator<S>> {
         }
     }
 
-    private void syncStreamRunnable(long timestamp) {
-        smrStream.streamUpToInList(timestamp).forEachOrdered(this::applyUpdate);
-        final VersionedObjectIdentifier voId = new VersionedObjectIdentifier(getID(), materializedUpTo);
-        currentObject.generateTargetSnapshot(voId, objectOpenOption, getCurrentSnapshot())
-                .ifPresent(this::setCurrentSnapshot);
-    };
-
     /**
      * Sync the SMR stream by playing updates forward in the stream until the given timestamp.
      *
@@ -231,7 +224,14 @@ public class MultiVersionObject<S extends SnapshotGenerator<S>> {
             log.trace("Sync[{}] to {}", Utils.toReadableId(getID()), timestamp);
         }
 
+        Runnable syncStreamRunnable = () -> {
+            smrStream.streamUpToInList(timestamp)
+                    .forEachOrdered(this::applySingleAddressUpdates);
 
+            final VersionedObjectIdentifier voId = new VersionedObjectIdentifier(getID(), materializedUpTo);
+            currentObject.generateTargetSnapshot(voId, objectOpenOption, getCurrentSnapshot())
+                    .ifPresent(this::setCurrentSnapshot);
+        };
 
         MicroMeterUtils.time(syncStreamRunnable, "mvo.sync.timer", STREAM_ID_TAG_NAME, getID().toString());
     }
