@@ -205,7 +205,7 @@ public class MultiVersionObject<S extends SnapshotGenerator<S>> {
                                                 // entries with the same address. Only cache the
                                                 // latest one, and release all the previous ones.
                                                 previousSnapshot.release();
-;                                            }
+                                            }
                                             mvoCache.put(voId, previousSnapshot);
                                         });
                             }

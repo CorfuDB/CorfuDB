@@ -26,12 +26,12 @@ public class RocksDbEntryIterator<K, V> implements Iterator<Map.Entry<K, V>>, Au
     /**
      * A reference to the underlying RocksDb iterator
      */
-    final private CheckedRocksIterator wrappedRocksIterator;
+    private final CheckedRocksIterator wrappedRocksIterator;
 
     /**
      * Serializer to serialize/deserialize the key/values
      */
-    final private ISerializer serializer;
+    private final ISerializer serializer;
 
     /**
      * place holder for the current value

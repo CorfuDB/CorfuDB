@@ -4,6 +4,8 @@ import java.util.Map;
 
 /**
  * The interface for an object interfaced with SMR.
+ *
+ * @param <S> that extends {@link SnapshotGenerator} and {@link ConsistencyView}
  */
 public interface ICorfuSMR<S extends
         SnapshotGenerator<S> &

@@ -20,7 +20,7 @@ public class SafeProtobufSerializer implements ISerializer {
 
     @Override
     public byte getType() {
-        return 0; // No-op.
+        return ProtobufSerializer.PROTOBUF_SERIALIZER_CODE;
     }
 
     @Override

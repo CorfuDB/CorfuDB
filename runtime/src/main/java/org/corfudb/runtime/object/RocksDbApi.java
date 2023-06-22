@@ -51,6 +51,7 @@ public interface RocksDbApi {
 
     /**
      * Given a secondary key, return all primary keys that map to it.
+     *
      * @param secondaryIndexesHandle table family where secondary indexes reside     * @param serializer
      * @param indexId a static numerical representation of the index name
      * @param secondaryKey secondary key that we are searching for

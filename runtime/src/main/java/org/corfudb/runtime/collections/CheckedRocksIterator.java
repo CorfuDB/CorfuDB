@@ -199,11 +199,15 @@ public class CheckedRocksIterator implements RocksIteratorInterface, AutoCloseab
         underWriteLock(rocksIterator::close);
     }
 
+    private void thrownInvalidIterator() {
+        throw new TrimmedException("The iterator is no longer valid.");
+    }
+
     private void underWriteLock(Runnable runnable) {
         long stamp = lock.writeLock();
         try {
             if (!isValid.get()) {
-                throw new TrimmedException("The iterator is no longer valid.");
+                thrownInvalidIterator();
             }
             runnable.run();
         } finally {
@@ -215,7 +219,7 @@ public class CheckedRocksIterator implements RocksIteratorInterface, AutoCloseab
         long stamp = lock.readLock();
         try {
             if (!isValid.get()) {
-                throw new TrimmedException("The iterator is no longer valid.");
+                thrownInvalidIterator();
             }
             runnable.run();
         } finally {
@@ -227,7 +231,7 @@ public class CheckedRocksIterator implements RocksIteratorInterface, AutoCloseab
         long stamp = lock.readLock();
         try {
             if (!isValid.get()) {
-                throw new TrimmedException("The iterator is no longer valid.");
+                thrownInvalidIterator();
             }
             return supplier.get();
         } finally {
