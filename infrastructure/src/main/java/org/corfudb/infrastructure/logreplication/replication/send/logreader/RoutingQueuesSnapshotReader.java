@@ -69,7 +69,7 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
         lastReadTimestamp = snapshotTimestamp;
 
         String replicatedQueueName = TableRegistry.getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE,
-                LogReplicationUtils.REPLICATED_QUEUE_NAME_PREFIX);
+                LogReplicationUtils.REPLICATED_QUEUE_NAME_PREFIX + session.getSourceClusterId());
         replicatedQueueId = CorfuRuntime.getStreamID(replicatedQueueName);
 
         buildOpaqueStreamIterator();
