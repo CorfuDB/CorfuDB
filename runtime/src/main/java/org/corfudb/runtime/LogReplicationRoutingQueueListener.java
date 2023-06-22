@@ -4,15 +4,18 @@ import com.google.common.base.Preconditions;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.collections.*;
+import org.corfudb.runtime.exceptions.StreamingException;
 import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.runtime.exceptions.UnreachableClusterException;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.Address;
+import org.corfudb.util.retry.IRetry;
+import org.corfudb.util.retry.IntervalRetry;
+import org.corfudb.util.retry.RetryNeededException;
 
 import javax.annotation.Nonnull;
 import java.lang.reflect.InvocationTargetException;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
@@ -50,6 +53,8 @@ public abstract class LogReplicationRoutingQueueListener implements StreamListen
 
     private final CorfuStore corfuStore;
     private final String namespace;
+
+    private CorfuStoreMetadata.Timestamp lastProcessedEntryTs;
 
     /**
      * Special LogReplication listener which a client creates to receive ordered updates for replicated data.
@@ -92,16 +97,20 @@ public abstract class LogReplicationRoutingQueueListener implements StreamListen
         }
 
         boolean callbackResult = false;
+        List<Queue.RoutingTableEntryMsg> entries =
+                results.getEntries().entrySet().stream().map(CSEntry ->
+                        (Queue.RoutingTableEntryMsg)CSEntry.getValue().get(0).getPayload()).collect(Collectors.toList());
         if (snapshotSyncInProgress.get()) {
-            callbackResult = processUpdatesInSnapshotSync(results);
+            // For routing queue listener, we have only 1 entry inside corfuStreamEntries.
+            callbackResult = processUpdatesInSnapshotSync(entries);
         } else {
-            callbackResult = processUpdatesInLogEntrySync(results);
+            callbackResult = processUpdatesInLogEntrySync(entries);
         }
         if (callbackResult) {
             // When the client processed the entry successfully, delete the entry from the routing queue.
-            // TODO: Update the last processed key.
             deleteEntryFromQueue(results);
         }
+        this.lastProcessedEntryTs = results.getTimestamp();
     }
 
     private void deleteEntryFromQueue(CorfuStreamEntries results) {
@@ -202,6 +211,25 @@ public abstract class LogReplicationRoutingQueueListener implements StreamListen
         }
     }
 
+    public void resumeSubscription() {
+        if (lastProcessedEntryTs == null) {
+            log.warn("Last processed entry timestamp has not been set, failed to resume RQ subscription." +
+                    " Default to fallback subscription.");
+            return;
+        }
+
+        try {
+            log.info("Resume RQ subscription on [tag:{}] {} from {}", LogReplicationUtils.REPLICATED_QUEUE_TAG,
+                    namespace, lastProcessedEntryTs);
+
+            LogReplicationUtils.subscribeRqListenerWithTs(this, namespace, 5, corfuStore,
+                    lastProcessedEntryTs.getSequence());
+        } catch (StreamingException e) {
+            log.error("Failed to resume subscription [tag:{}] from last processed entry {}. Re-subscribe based on " +
+                    "implemented fallback.", LogReplicationUtils.REPLICATED_QUEUE_TAG, lastProcessedEntryTs, e);
+        }
+    }
+
     //      -------- Methods to be implemented on the client/application  ---------------
 
     /**
@@ -221,7 +249,7 @@ public abstract class LogReplicationRoutingQueueListener implements StreamListen
      */
 
     // TODO: Change the param type from CorfuStreamEntries to RoutingTableEntryMsg
-    protected abstract boolean processUpdatesInSnapshotSync(CorfuStreamEntries results);
+    protected abstract boolean processUpdatesInSnapshotSync(List<Queue.RoutingTableEntryMsg> results);
 
     /**
      * Corresponds to void receiveDeltaMessages(List<ReceivedDeltaMessage> messages);
@@ -230,7 +258,7 @@ public abstract class LogReplicationRoutingQueueListener implements StreamListen
      * @param results Entries received in a single transaction as part of a log entry sync
      */
     // TODO: Change the param type from CorfuStreamEntries to RoutingTableEntryMsg
-    protected abstract boolean processUpdatesInLogEntrySync(CorfuStreamEntries results);
+    protected abstract boolean processUpdatesInLogEntrySync(List<Queue.RoutingTableEntryMsg> results);
 
     /**
      * Invoked by the Corfu runtime when this listener is being subscribed.  This method should
@@ -253,17 +281,77 @@ public abstract class LogReplicationRoutingQueueListener implements StreamListen
      * @param throwable
      */
 
-
     // On error, they have to re-subscribe. In the subscribe methods, we do the processing
     // Or, Processing the queue
     public void onError(Throwable throwable) {
-        if (throwable instanceof TrimmedException) {
-            //TODO: Load CP stream from queue in-memory
-            // Rocksdb use-case to sort the keys
-            // Ref: https://confluence.eng.vmware.com/pages/viewpage.action?spaceKey=NSBU&title=Log+Replicator+Design+for+SaaS#LogReplicatorDesignforSaaS-SlowListener
-        }
+        // Handle Trim exception
+        // Ref: https://confluence.eng.vmware.com/pages/viewpage.action?spaceKey=NSBU&title=Log+Replicator+Design+for+SaaS#LogReplicatorDesignforSaaS-SlowListener
 
-        // TODO: Handle any other errors
+        // 1. Create a txn. TODO: Change it to scoped txn
+        // 2. Read all entries
+        // 3. subscribe listener with the scoped txn timestamp
+
+        log.error("Exception caught during routing queue streaming processing. Re-subscribe this listener to latest timestamp. " +
+                "Error=", throwable);
+
+        if (throwable instanceof TrimmedException) {
+            corfuStore.unsubscribeListener(this);
+            try (TxnContext tx = corfuStore.txn(namespace)) {
+                Table<Queue.CorfuGuidMsg, Queue.RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg> routingQueue;
+                routingQueue =
+                        corfuStore.openQueue(namespace, LogReplicationUtils.REPLICATED_QUEUE_NAME_PREFIX,
+                                Queue.RoutingTableEntryMsg.class,
+                                TableOptions.builder().schemaOptions(
+                                                CorfuOptions.SchemaOptions.newBuilder()
+                                                        .addStreamTag(LogReplicationUtils.REPLICATED_QUEUE_TAG)
+                                                        .build())
+                                        .build());
+
+                List<Table.CorfuQueueRecord> records = routingQueue.entryList();
+                for (int i = 0; i < records.size(); i++) {
+                    log.debug("Entry:" + records.get(i).getRecordId());
+                    Queue.CorfuGuidMsg recordId = records.get(i).getRecordId();
+                    Queue.RoutingTableEntryMsg entry = tx.getRecord(routingQueue, recordId).getPayload();
+                    boolean callbackResult = false;
+                    if (entry.getType() == Queue.ReplicationType.FULL_SYNC) {
+                        if (snapshotSyncInProgress.get()) {
+                            callbackResult = processUpdatesInSnapshotSync(Collections.singletonList(entry));
+                        } else {
+                            callbackResult = processUpdatesInLogEntrySync(Collections.singletonList(entry));
+                        }
+                    } else if (entry.getType() == Queue.ReplicationType.LOG_ENTRY) {
+                        callbackResult = processUpdatesInLogEntrySync(Collections.singletonList(entry));
+                    }
+                    if (callbackResult) {
+                        // When the client processed the entry successfully, delete the entry from the routing queue.
+                        tx.delete(routingQueue, recordId);
+                    }
+                }
+                this.lastProcessedEntryTs = tx.commit();
+
+                IRetry.build(IntervalRetry.class, () -> {
+                    try {
+                        log.info("Routing queue Subscribe onError");
+                        resumeSubscription();
+                    } catch (UnreachableClusterException e) {
+                        log.error("Error while attempting to re-subscribe routing queue listener after onError.", e);
+                        throw new RetryNeededException();
+                    }
+                    return null;
+                }).run();
+            } catch (InterruptedException e) {
+                log.error("Unrecoverable exception when attempting to re-subscribe listener.", e);
+                throw new UnrecoverableCorfuInterruptedError(e);
+            } catch (InvocationTargetException e) {
+                throw new RuntimeException(e);
+            } catch (NoSuchMethodException e) {
+                throw new RuntimeException(e);
+            } catch (IllegalAccessException e) {
+                throw new RuntimeException(e);
+            }
+        } else {
+            resumeSubscription();
+        }
     }
 }
 

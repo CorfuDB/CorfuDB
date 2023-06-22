@@ -13,6 +13,7 @@ import org.junit.Test;
 
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Tests the apis in LogReplicationUtils.
@@ -225,6 +226,7 @@ public class LogReplicationUtilsTest extends AbstractViewTest {
         } else {
             Assert.assertFalse(listener.getClientFullSyncPending().get());
             Assert.assertFalse(listener.getSnapshotSyncInProgress().get());
+            Assert.assertFalse(listener.getRoutingQRegistered().get());
             Assert.assertNotEquals(Address.NON_ADDRESS, listener.getClientFullSyncTimestamp().get());
             Assert.assertTrue(listener.performFullSyncInvoked);
         }
@@ -291,12 +293,12 @@ public class LogReplicationUtilsTest extends AbstractViewTest {
         protected void onSnapshotSyncComplete() {}
 
         @Override
-        protected boolean processUpdatesInSnapshotSync(CorfuStreamEntries results) {
+        protected boolean processUpdatesInSnapshotSync(List<Queue.RoutingTableEntryMsg> results) {
             return true;
         }
 
         @Override
-        protected boolean processUpdatesInLogEntrySync(CorfuStreamEntries results) {
+        protected boolean processUpdatesInLogEntrySync(List<Queue.RoutingTableEntryMsg> results) {
             return true;
         }
 

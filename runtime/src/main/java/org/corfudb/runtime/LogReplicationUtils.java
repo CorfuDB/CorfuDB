@@ -105,6 +105,27 @@ public final class LogReplicationUtils {
         }
     }
 
+    public static void subscribeRqListenerWithTs(@Nonnull LogReplicationRoutingQueueListener clientListener,
+                                                 @Nonnull String namespace, int bufferSize, CorfuStore corfuStore,
+                                                 long subscriptionTimestamp) {
+
+        // Open the routing queue from corfu store (Disk backed mode)
+        // since the subscribe API will run in policy jvm
+        // TODO: Get client name as input params. For now, hard coding the stream tag.
+        if (CheckIfRoutingQueueExists(corfuStore, namespace, REPLICATED_QUEUE_TAG)) {
+            // Table registry contains the routing queue already.
+            corfuStore.getRuntime().getTableRegistry().getStreamingManager().subscribeLogReplicationRoutingQueueListener(
+                    clientListener, namespace, subscriptionTimestamp, bufferSize);
+            log.info("Routing queue client subscription at timestamp {} successful.", subscriptionTimestamp);
+        } else {
+            // Routing queue is not registered at the sink (receiver side) yet.
+            // Subscribe to LR status table and poll for routing queue registry
+            corfuStore.getRuntime().getTableRegistry().getStreamingManager().subscribeLogReplicationLrStatusTableListener(
+                    clientListener, subscriptionTimestamp, bufferSize);
+            log.info("Subscribed to LR status table at timestamp {}.", subscriptionTimestamp);
+        }
+    }
+
 
     private static long getSubscriptionTimestamp(CorfuStore corfuStore, String namespace,
                                                  LogReplicationListener clientListener) {
