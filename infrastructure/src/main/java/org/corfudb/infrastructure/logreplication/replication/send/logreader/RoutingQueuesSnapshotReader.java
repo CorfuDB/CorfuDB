@@ -14,6 +14,7 @@ import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.LogReplicationUtils;
 import org.corfudb.runtime.Queue.RoutingTableEntryMsg;
 import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.runtime.view.stream.OpaqueStream;
 import org.corfudb.util.retry.ExponentialBackoffRetry;
 import org.corfudb.util.retry.IRetry;
@@ -30,6 +31,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
+import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 import static org.corfudb.infrastructure.logreplication.config.LogReplicationConfig.DEFAULT_MAX_DATA_MSG_SIZE;
 
 /**
@@ -40,22 +42,49 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
 
     private static final long DATA_WAIT_TIMEOUT_MS = 120000;
 
-    private String streamToReplicate;
-
+    // UUID of the global queue which contains snapshot sync data
     private UUID snapshotSyncQueueId;
+
+    // Stream tag which will be followed to fetch any writes to the snapshot sync queue for this destination
+    private String streamTagFollowed;
 
     private ExecutorService executorService = Executors.newSingleThreadExecutor();
 
     private boolean endMarkerReached = false;
 
+    // Timestamp of the last read entry in the queue.  Every subsequent batch read will continue from this timestamp
     private long lastReadTimestamp;
+
+    // UUID of the replicated queue on the receiver(Sink)
+    private UUID replicatedQueueId;
 
     public RoutingQueuesSnapshotReader(CorfuRuntime corfuRuntime, LogReplicationSession session,
                                        LogReplicationContext replicationContext) {
         super(corfuRuntime, session, replicationContext);
-        streamToReplicate = LogReplicationUtils.SNAPSHOT_SYNC_QUEUE_TAG_SENDER_PREFIX + session.getSinkClusterId();
-        snapshotSyncQueueId = CorfuRuntime.getStreamID(LogReplicationUtils.SNAPSHOT_SYNC_QUEUE_NAME_SENDER);
+        streamTagFollowed = LogReplicationUtils.SNAPSHOT_SYNC_QUEUE_TAG_SENDER_PREFIX + session.getSinkClusterId();
+
+        String snapshotSyncQueueFullyQualifiedName = TableRegistry.getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE,
+                LogReplicationUtils.SNAPSHOT_SYNC_QUEUE_NAME_SENDER);
+        snapshotSyncQueueId = CorfuRuntime.getStreamID(snapshotSyncQueueFullyQualifiedName);
         lastReadTimestamp = snapshotTimestamp;
+
+        String replicatedQueueName = TableRegistry.getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE,
+                LogReplicationUtils.REPLICATED_QUEUE_NAME_PREFIX);
+        replicatedQueueId = CorfuRuntime.getStreamID(replicatedQueueName);
+
+        buildOpaqueStreamIterator();
+    }
+
+    // Create an opaque stream and iterator for the stream of interest, starting from lastReadTimestamp+1 to the global
+    // log tail
+    private void buildOpaqueStreamIterator() {
+        OpaqueStream opaqueStream =
+                new OpaqueStream(rt.getStreamsView().get(CorfuRuntime.getStreamID(streamTagFollowed)));
+
+        // Seek till the last read timestamp so that duplicate entries are eliminated
+        opaqueStream.seek(lastReadTimestamp + 1);
+        currentStreamInfo = new OpaqueStreamIterator(opaqueStream, streamTagFollowed,
+                rt.getAddressSpaceView().getLogTail());
     }
 
     @Override
@@ -76,8 +105,8 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
 
         LogReplication.LogReplicationEntryMsg msg;
 
-        log.info("Start Snapshot Sync replication for stream name={}, id={}", streamToReplicate,
-            CorfuRuntime.getStreamID(streamToReplicate));
+        log.info("Start Snapshot Sync replication for stream name={}, id={}", streamTagFollowed,
+                CorfuRuntime.getStreamID(streamTagFollowed));
 
         // If the current opaque stream has data, read and send it
         if (currentStreamHasNext()) {
@@ -96,15 +125,12 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
         return new SnapshotReadMessage(messages, endMarkerReached);
     }
 
+    // Waits for a default timeout period for data to get written for this destination on the Snapshot Sync queue
     private void waitForData() {
-        // Create an opaque stream on snapshot sync stream for this destination and seek upto the timestamp at which
-        // snapshot was taken + 1
-        OpaqueStream opaqueStream =
-            new OpaqueStream(rt.getStreamsView().get(CorfuRuntime.getStreamID(streamToReplicate)));
-        opaqueStream.seek(lastReadTimestamp + 1);
+        buildOpaqueStreamIterator();
 
         // Create a task to wait for more data until DATA_WAIT_TIMEOUT_MS
-        StreamQueryTask streamQueryTask = new StreamQueryTask(opaqueStream);
+        StreamQueryTask streamQueryTask = new StreamQueryTask();
         Future<Void> queryFuture = executorService.submit(streamQueryTask);
 
         try {
@@ -117,7 +143,7 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
     }
 
     private boolean isEndMarker(OpaqueEntry opaqueEntry) {
-
+        // All SMR updates on the snapshot sync queue should be for this queue only
         Preconditions.checkState(opaqueEntry.getEntries().get(snapshotSyncQueueId).size() == 1);
         SMREntry smrEntry = opaqueEntry.getEntries().get(snapshotSyncQueueId).get(0);
 
@@ -198,27 +224,17 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
     @Override
     protected OpaqueEntry generateOpaqueEntry(long version, UUID streamID, SMREntryList entryList) {
         Map<UUID, List<SMREntry>> map = new HashMap<>();
-        UUID streamId = UUID.fromString(LogReplicationUtils.REPLICATED_QUEUE_NAME_PREFIX);
-        map.put(streamId, entryList.getSmrEntries());
+        map.put(replicatedQueueId, entryList.getSmrEntries());
         return new OpaqueEntry(version, map);
     }
 
     private class StreamQueryTask implements Callable<Void> {
-
-        OpaqueStream opaqueStream;
-
-        StreamQueryTask(OpaqueStream opaqueStream) {
-            this.opaqueStream = opaqueStream;
-        }
 
         @Override
         public Void call() {
             try {
                 IRetry.build(ExponentialBackoffRetry.class, () -> {
                     try {
-                        currentStreamInfo = new OpaqueStreamIterator(opaqueStream, streamToReplicate,
-                            rt.getAddressSpaceView().getLogTail());
-
                         if (!currentStreamHasNext()) {
                             throw new RuntimeException("Retry");
                         }
