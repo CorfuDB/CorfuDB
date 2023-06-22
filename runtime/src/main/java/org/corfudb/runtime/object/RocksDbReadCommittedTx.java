@@ -25,8 +25,6 @@ import static org.corfudb.runtime.collections.RocksDbEntryIterator.LOAD_VALUES;
  *   1) All mutators are no-ops.
  *   2) All accessors operate directly on {@link OptimisticTransactionDB}.
  * This will effectively provide read-committed consistency.
- *
- * @param <S> extends SnapshotGenerator
  */
 public class RocksDbReadCommittedTx implements RocksDbApi {
     private final OptimisticTransactionDB rocksDb;

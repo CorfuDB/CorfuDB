@@ -14,6 +14,11 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Created by dalia on 3/6/17.
  */
 public class UndoTest extends AbstractTransactionsTest {
+
+    private static final String Z = "z";
+    private static final String A = "a";
+    private static final String Y = "y";
+    
     @Override
     public void TXBegin() { WWTXBegin(); }
 
@@ -27,34 +32,35 @@ public class UndoTest extends AbstractTransactionsTest {
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {
                 })
                 .open();
+        
 
         // populate the map with an element
-        t(0, () -> testMap.insert("z", "z"));
+        t(0, () -> testMap.insert(Z, Z));
 
         // start a transaction whose snapshot of the map
-        // should contain precisely one element, ("z", "z")
+        // should contain precisely one element, (z, z)
         //
         t(0, () -> getRuntime().getObjectsView().TXBegin());
         t(0, () -> {
-            assertThat(testMap.get("z"))
-                    .isEqualTo("z");
-            testMap.insert("a", "a");
+            assertThat(testMap.get(Z))
+                    .isEqualTo(Z);
+            testMap.insert(A, A);
         });
 
         // in another thread, do something to be undone
         t(1, () -> {
-            assertThat(testMap.get("z"))
-                    .isEqualTo("z");
-            testMap.insert("y", "y");
+            assertThat(testMap.get(Z))
+                    .isEqualTo(Z);
+            testMap.insert(Y, Y);
         });
 
         // now check the map inside the transaction
-        // it should contain two elements, ("z", "z") and ("a", "a")
-        // it should not contain ("y", "y")
+        // it should contain two elements, (z, z) and (a, a)
+        // it should not contain (y, y)
         t(0, () -> {
-            assertThat(testMap.get("z"))
-                    .isEqualTo("z");
-            assertThat(testMap.get("y"))
+            assertThat(testMap.get(Z))
+                    .isEqualTo(Z);
+            assertThat(testMap.get(Y))
                     .isEqualTo(null);
             assertThat(testMap.size())
                     .isEqualTo(2);
@@ -73,38 +79,38 @@ public class UndoTest extends AbstractTransactionsTest {
                 .open();
 
         // populate the map with an element
-        t(0, () -> testMap.insert("z", "z"));
+        t(0, () -> testMap.insert(Z, Z));
 
         // start a transaction whose snapshot of the map
-        // should contain precisely one element, ("z", "z")
+        // should contain precisely one element, (z, z)
         //
         t(0, () -> getRuntime().getObjectsView().TXBegin());
         t(0, () -> {
-            assertThat(testMap.get("z"))
-                    .isEqualTo("z");
-            testMap.insert("a", "a");
+            assertThat(testMap.get(Z))
+                    .isEqualTo(Z);
+            testMap.insert(A, A);
         });
 
         // in another thread, do something to the map that cannot be undone
         t(1, () -> {
-            assertThat(testMap.get("z"))
-                    .isEqualTo("z");
-            testMap.insert("y", "y");
+            assertThat(testMap.get(Z))
+                    .isEqualTo(Z);
+            testMap.insert(Y, Y);
             testMap.clear();
             assertThat(testMap.size())
                     .isEqualTo(0);
-            assertThat(testMap.get("z"))
+            assertThat(testMap.get(Z))
                     .isEqualTo(null);
         });
 
         // now check the map inside the transaction
-        // it should contain two elements, ("z", "z") and ("a", "a")
-        // it should not contain ("y", "y")
+        // it should contain two elements, (z, z) and (a, a)
+        // it should not contain (y, y)
         // it should not be clear
         t(0, () -> {
-            assertThat(testMap.get("z"))
-                    .isEqualTo("z");
-            assertThat(testMap.get("y"))
+            assertThat(testMap.get(Z))
+                    .isEqualTo(Z);
+            assertThat(testMap.get(Y))
                     .isEqualTo(null);
             assertThat(testMap.size())
                     .isEqualTo(2);
@@ -118,12 +124,9 @@ public class UndoTest extends AbstractTransactionsTest {
      * <p>
      * This test verifies that after one transaction with undoable operation is rolled- back,
      * the performance of further transactions is not hurt.
-     *
-     * @throws Exception
      */
     @Test
-    public void canUndoAfterNoUndo()
-            throws Exception {
+    public void canUndoAfterNoUndo() {
         PersistentCorfuTable<Integer, String> testMap = getRuntime()
                 .getObjectsView()
                 .build()
@@ -132,7 +135,7 @@ public class UndoTest extends AbstractTransactionsTest {
                 })
                 .open();
         final int specialKey = 10;
-        final String normalValue = "z", specialValue = "y";
+        final String normalValue = Z, specialValue = Y;
         final int mapSize = 10 * PARAMETERS.NUM_ITERATIONS_LARGE;
 
         // populate the map with many elements
@@ -215,7 +218,7 @@ public class UndoTest extends AbstractTransactionsTest {
                 .open();
 
         final int specialKey = 10;
-        final String normalValue = "z", specialValue = "y";
+        final String normalValue = Z, specialValue = Y;
         final int mapSize = 10 * PARAMETERS.NUM_ITERATIONS_LARGE;
 
         // put something in map before t1 starts
@@ -251,7 +254,7 @@ public class UndoTest extends AbstractTransactionsTest {
     }
 
     final int specialKey = 10;
-    final String normalValue = "z", specialValue = "y", specialValue2 = "x";
+    final String normalValue = Z, specialValue = Y, specialValue2 = "x";
     final int t1 = 1, t2 = 2, t3 = 3;
 
     /**

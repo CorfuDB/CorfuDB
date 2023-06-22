@@ -718,7 +718,7 @@ public class CheckpointTest extends AbstractObjectTest {
      */
 
     @Test
-    public void PersistedCorfuTableCheckpointTest() {
+    public void persistedCorfuTableCheckpointTest() {
         String path = PARAMETERS.TEST_TEMP_DIR;
 
         CorfuRuntime rt = getDefaultRuntime();

@@ -9,6 +9,7 @@ import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.runtime.object.ISMRStream.SingleAddressUpdates;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.ObjectOpenOption;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
@@ -160,6 +161,66 @@ public class MultiVersionObject<S extends SnapshotGenerator<S>> {
                         voId.getVersion(), addressSpace.toString())));
     }
 
+    private void applyUpdate(SingleAddressUpdates addressUpdates) {
+        try {
+            // Apply all updates in a MultiSMREntry, which is treated as one version.
+            final long globalAddress = addressUpdates.getGlobalAddress();
+
+            // The globalAddress can be equal to materializedUpTo when processing checkpoint
+            // entries that consist of multiple continuation entries. These will all share the
+            // globalAddress of the no-op operation. There is no correctness issue by prematurely
+            // updating version information, as optimistic reads will be invalid.
+            Preconditions.checkState(globalAddress >= materializedUpTo,
+                    "globalAddress %s not >= materialized %s", globalAddress, materializedUpTo);
+
+            // Perform similar validation for resolvedUpTo.
+            if (globalAddress < resolvedUpTo) {
+                log.warn("Sync[{}]: globalAddress {} not >= resolved {}",
+                        Utils.toReadableId(getID()), globalAddress, resolvedUpTo);
+                throw new TrimmedException();
+            }
+
+            // Update the current object.
+            addressUpdates.getSmrEntryList().forEach(this::applyUpdateUnsafe);
+
+            // If we observe a new version, place the previous one into the MVOCache.
+            if (globalAddress >= materializedUpTo) {
+                final VersionedObjectIdentifier voId = new VersionedObjectIdentifier(getID(), materializedUpTo);
+                currentObject.generateIntermediarySnapshot(voId, objectOpenOption)
+                        .ifPresent(newSnapshot -> {
+                            final SMRSnapshot<S> previousSnapshot = setCurrentSnapshot(newSnapshot);
+                            if (globalAddress == materializedUpTo) {
+                                // The checkpoint sync will contain multiple SMR
+                                // entries with the same address. Only cache the
+                                // latest one, and release all the previous ones.
+                                previousSnapshot.release();
+                            }
+                            mvoCache.put(voId, previousSnapshot);
+                        });
+            }
+
+            // In the case where addressUpdates corresponds to a HOLE, getSmrEntryList() will
+            // produce an empty list and the below will be a no-op. This means that there can
+            // be multiple versions that correspond to the same exact object.
+            addressSpace.addAddress(globalAddress);
+            materializedUpTo = globalAddress;
+            resolvedUpTo = globalAddress;
+        } catch (TrimmedException e) {
+            // The caller catches this TrimmedException and resets the object before retrying.
+            throw e;
+        } catch (Exception e) {
+            log.error("Sync[{}] couldn't execute upcall due to:", Utils.toReadableId(getID()), e);
+            throw new UnrecoverableCorfuError(e);
+        }
+    }
+
+    private void syncStreamRunnable(long timestamp) {
+        smrStream.streamUpToInList(timestamp).forEachOrdered(this::applyUpdate);
+        final VersionedObjectIdentifier voId = new VersionedObjectIdentifier(getID(), materializedUpTo);
+        currentObject.generateTargetSnapshot(voId, objectOpenOption, getCurrentSnapshot())
+                .ifPresent(this::setCurrentSnapshot);
+    };
+
     /**
      * Sync the SMR stream by playing updates forward in the stream until the given timestamp.
      *
@@ -170,65 +231,7 @@ public class MultiVersionObject<S extends SnapshotGenerator<S>> {
             log.trace("Sync[{}] to {}", Utils.toReadableId(getID()), timestamp);
         }
 
-        Runnable syncStreamRunnable = () -> {
-            smrStream.streamUpToInList(timestamp)
-                    .forEachOrdered(addressUpdates -> {
-                        try {
-                            // Apply all updates in a MultiSMREntry, which is treated as one version.
-                            final long globalAddress = addressUpdates.getGlobalAddress();
-                            
-                            // The globalAddress can be equal to materializedUpTo when processing checkpoint
-                            // entries that consist of multiple continuation entries. These will all share the
-                            // globalAddress of the no-op operation. There is no correctness issue by prematurely
-                            // updating version information, as optimistic reads will be invalid.
-                            Preconditions.checkState(globalAddress >= materializedUpTo,
-                                    "globalAddress %s not >= materialized %s", globalAddress, materializedUpTo);
 
-                            // Perform similar validation for resolvedUpTo.
-                            if (globalAddress < resolvedUpTo) {
-                                log.warn("Sync[{}]: globalAddress {} not >= resolved {}",
-                                        Utils.toReadableId(getID()), globalAddress, resolvedUpTo);
-                                throw new TrimmedException();
-                            }
-
-                            // Update the current object.
-                            addressUpdates.getSmrEntryList().forEach(this::applyUpdateUnsafe);
-
-                            // If we observe a new version, place the previous one into the MVOCache.
-                            if (globalAddress >= materializedUpTo) {
-                                final VersionedObjectIdentifier voId = new VersionedObjectIdentifier(getID(), materializedUpTo);
-                                currentObject.generateIntermediarySnapshot(voId, objectOpenOption)
-                                        .ifPresent(newSnapshot -> {
-                                            final SMRSnapshot<S> previousSnapshot = setCurrentSnapshot(newSnapshot);
-                                            if (globalAddress == materializedUpTo) {
-                                                // The checkpoint sync will contain multiple SMR
-                                                // entries with the same address. Only cache the
-                                                // latest one, and release all the previous ones.
-                                                previousSnapshot.release();
-                                            }
-                                            mvoCache.put(voId, previousSnapshot);
-                                        });
-                            }
-
-                            // In the case where addressUpdates corresponds to a HOLE, getSmrEntryList() will
-                            // produce an empty list and the below will be a no-op. This means that there can
-                            // be multiple versions that correspond to the same exact object.
-                            addressSpace.addAddress(globalAddress);
-                            materializedUpTo = globalAddress;
-                            resolvedUpTo = globalAddress;
-                        } catch (TrimmedException e) {
-                            // The caller catches this TrimmedException and resets the object before retrying.
-                            throw e;
-                        } catch (Exception e) {
-                            log.error("Sync[{}] couldn't execute upcall due to:", Utils.toReadableId(getID()), e);
-                            throw new UnrecoverableCorfuError(e);
-                        }
-                    });
-
-            final VersionedObjectIdentifier voId = new VersionedObjectIdentifier(getID(), materializedUpTo);
-            currentObject.generateTargetSnapshot(voId, objectOpenOption, getCurrentSnapshot())
-                    .ifPresent(this::setCurrentSnapshot);
-        };
 
         MicroMeterUtils.time(syncStreamRunnable, "mvo.sync.timer", STREAM_ID_TAG_NAME, getID().toString());
     }

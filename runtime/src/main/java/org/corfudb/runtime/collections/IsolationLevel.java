@@ -17,7 +17,7 @@ import org.corfudb.runtime.CorfuStoreMetadata;
  */
 public class IsolationLevel {
     @Getter
-    final private Token timestamp;
+    private final Token timestamp;
     // Initialize this class using one of the following Isolation types
     private IsolationLevel(Token timestamp) {
         this.timestamp = timestamp;

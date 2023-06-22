@@ -240,13 +240,13 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
         try (final PersistedCorfuTable<String, Pojo> table = setupTable(
                 defaultTableName, ENABLE_READ_YOUR_WRITES, defaultOptions, new PojoSerializer(Pojo.class))) {
 
-            final long ITERATION_COUNT = 100;
-            final int ENTITY_CHAR_SIZE = 100;
+            final long iterationCount = 100;
+            final int entityCharSize = 100;
 
-            LongStream.rangeClosed(1, ITERATION_COUNT).forEach(idx -> {
-                String key = RandomStringUtils.random(ENTITY_CHAR_SIZE, true, true);
+            LongStream.rangeClosed(1, iterationCount).forEach(idx -> {
+                String key = RandomStringUtils.random(entityCharSize, true, true);
                 Pojo value = Pojo.builder()
-                        .payload(RandomStringUtils.random(ENTITY_CHAR_SIZE, true, true))
+                        .payload(RandomStringUtils.random(entityCharSize, true, true))
                         .build();
                 table.insert(key, value);
                 Pojo persistedValue = table.get(key);
@@ -618,11 +618,11 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
             Map<Character, Set<String>> groups = intended.stream()
                     .collect(Collectors.groupingBy(s -> s.charAt(0), Collectors.toSet()));
 
-            groups.forEach(((character, strings) -> assertThat(StreamSupport.stream(
+            groups.forEach((character, strings) -> assertThat(StreamSupport.stream(
                             table.getByIndex(StringIndexer.BY_FIRST_LETTER, character).spliterator(), false)
                     .map(Map.Entry::getValue)
                     .collect(Collectors.toSet()))
-                    .isEqualTo(strings)));
+                    .isEqualTo(strings));
 
             executeTx(() -> {
                 table.clear();
@@ -647,11 +647,11 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
                     .map(Map.Entry::getValue)
                     .collect(Collectors.toSet()))
                     .isEmpty())));
-            groups.forEach(((character, strings) -> assertThat(StreamSupport.stream(
+            groups.forEach((character, strings) -> assertThat(StreamSupport.stream(
                             table.getByIndex(StringIndexer.BY_FIRST_LETTER, character).spliterator(), false)
                     .map(Map.Entry::getValue)
                     .collect(Collectors.toSet()))
-                    .isEmpty()));
+                    .isEmpty());
         }
     }
 
@@ -866,7 +866,7 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
                         .collect(Collectors.toSet());
                 final List<CorfuStoreEntry<Uuid, EventInfo, SampleSchema.ManagedResources>> queryResult =
                         tx.executeQuery(tableName,
-                                record -> record.getPayload().getEventTime() > medianEventTime);
+                                entry -> entry.getPayload().getEventTime() > medianEventTime);
                 final Set<EventInfo> scannedValues = queryResult.stream()
                         .map(CorfuStoreEntry::getPayload).collect(Collectors.toSet());
 
@@ -932,9 +932,10 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
      * Single type POJO serializer.
      */
     public static class PojoSerializer implements ISerializer {
+
+        private static final int SERIALIZER_OFFSET = 29;  // Random number.
         private final Gson gson = new Gson();
         private final Class<?> clazz;
-        private final int SERIALIZER_OFFSET = 29;  // Random number.
 
         PojoSerializer(Class<?> clazz) {
             this.clazz = clazz;

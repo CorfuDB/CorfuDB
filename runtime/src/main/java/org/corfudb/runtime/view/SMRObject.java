@@ -29,9 +29,6 @@ import java.util.UUID;
 @Getter
 @AllArgsConstructor
 public class SMRObject<T extends ICorfuSMR<?>> {
-    public static <T extends ICorfuSMR<?>> Builder<T> builder() {
-        return new Builder<>();
-    }
 
     @NonNull
     private final CorfuRuntime runtime;
