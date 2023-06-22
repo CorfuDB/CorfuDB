@@ -23,6 +23,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import com.google.common.reflect.TypeToken;
 import com.google.protobuf.ByteString;
 import java.util.Set;
+import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -306,27 +307,18 @@ public class CorfuQueueTest extends AbstractViewTest {
             throw new RuntimeException(e);
         }
         final Table<Queue.CorfuGuidMsg, RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg> finalQ = q;
-        final byte[] foo = {'a', 'b', 'c'};
+        final byte[] payload = {'a', 'b', 'c'};
+        executeTxn(corfuStore, namespace, (TxnContext tx) -> tx.enqueue(finalQ,
+                RoutingTableEntryMsg.newBuilder().setOpaquePayload(ByteString.copyFrom(payload)).build()));
+        List<UUID> tags = new ArrayList<>();
+        tags.add(CorfuRuntime.getStreamID(LR_STATUS_STREAM_TAG));
         executeTxn(corfuStore, namespace, (TxnContext tx) -> tx.logUpdateEnqueue(finalQ,
-                RoutingTableEntryMsg.newBuilder().setOpaquePayload(ByteString.copyFrom(foo)).build(),
-                new ArrayList<>(Collections.singletonList(TableRegistry.getStreamIdForStreamTag(
-                        TableRegistry.CORFU_SYSTEM_NAMESPACE, LR_STATUS_STREAM_TAG))), corfuStore
-                ));
-
-        Object[] smrArgs = new Object[2];
-        smrArgs[0] = Queue.CorfuGuidMsg.newBuilder().setInstanceId(1).build();
-        smrArgs[1] = new CorfuRecord(RoutingTableEntryMsg.newBuilder().setOpaquePayload(ByteString.copyFrom(foo)).build(), Queue.CorfuQueueMetadataMsg.getDefaultInstance());
-        executeTxn(corfuStore, namespace, (TxnContext tx) -> tx.logUpdate(finalQ.getStreamUUID(),
-                new SMREntry("put", smrArgs, corfuStore.getRuntime().getSerializers().getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE))
-        ));
-
-        // TransactionalContext.getRootContext().addPreCommitListener(callback);
+                RoutingTableEntryMsg.newBuilder().setOpaquePayload(ByteString.copyFrom(payload)).build(),
+                tags, corfuStore));
 
         // validate if logUpdate and enqueue produces same result
         executeTxn(corfuStore, namespace, (TxnContext tx) -> {
-            //RoutingTableEntryMsg entry = tx.entryList(finalQ).get(0).getEntry();
             assertThat(tx.entryList(finalQ).get(0).getEntry()).isEqualTo(tx.entryList(finalQ).get(1).getEntry());
         });
     }
-
 }
