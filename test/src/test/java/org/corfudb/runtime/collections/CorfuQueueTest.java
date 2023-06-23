@@ -8,21 +8,28 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
+import org.corfudb.runtime.Queue;
+import org.corfudb.runtime.Queue.RoutingTableEntryMsg;
 import org.corfudb.runtime.collections.CorfuQueue.CorfuQueueRecord;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
 
+import java.lang.reflect.InvocationTargetException;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.UUID;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.corfudb.runtime.LogReplicationUtils.LR_STATUS_STREAM_TAG;
 
 /**
  * Created by Sundar Sridharan on May 22, 2019
@@ -58,6 +65,12 @@ public class CorfuQueueTest extends AbstractViewTest {
         rt.getObjectsView().TXBegin();
         runnable.run();
         rt.getObjectsView().TXEnd();
+    }
+    private void executeTxn(CorfuStore store, String namespace, Consumer<TxnContext> mutation) {
+        try (TxnContext tx = store.txn(namespace)) {
+            mutation.accept(tx);
+            tx.commit();
+        }
     }
 
     @Test
@@ -268,6 +281,35 @@ public class CorfuQueueTest extends AbstractViewTest {
                     .isEqualTo(String.valueOf(itemIdx));
             assertThat(instance2Reader.entryList().get(itemIdx).getEntry().toStringUtf8())
                     .isEqualTo(String.valueOf(itemIdx));
+        });
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void logUpdateThatLooksLikeEnqueue() {
+        final CorfuStore corfuStore = new CorfuStore(createDefaultRuntime());
+        final String namespace = "some_ns";
+        final String tableName = "some_table";
+        Table<Queue.CorfuGuidMsg, RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg> q = null;
+        try {
+            q = corfuStore.openQueue(namespace, tableName, RoutingTableEntryMsg.class,
+                    TableOptions.fromProtoSchema(RoutingTableEntryMsg.class));
+        } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
+            throw new RuntimeException(e);
+        }
+        final Table<Queue.CorfuGuidMsg, RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg> finalQ = q;
+        final byte[] payload = {'a', 'b', 'c'};
+        executeTxn(corfuStore, namespace, (TxnContext tx) -> tx.enqueue(finalQ,
+                RoutingTableEntryMsg.newBuilder().setOpaquePayload(ByteString.copyFrom(payload)).build()));
+        List<UUID> tags = new ArrayList<>();
+        tags.add(CorfuRuntime.getStreamID(LR_STATUS_STREAM_TAG));
+        executeTxn(corfuStore, namespace, (TxnContext tx) -> tx.logUpdateEnqueue(finalQ,
+                RoutingTableEntryMsg.newBuilder().setOpaquePayload(ByteString.copyFrom(payload)).build(),
+                tags, corfuStore));
+
+        // validate if logUpdate and enqueue produces same result
+        executeTxn(corfuStore, namespace, (TxnContext tx) -> {
+            assertThat(tx.entryList(finalQ).get(0).getEntry()).isEqualTo(tx.entryList(finalQ).get(1).getEntry());
         });
     }
 }
