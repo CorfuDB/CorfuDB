@@ -452,6 +452,27 @@ public class TxnContext implements AutoCloseable {
         return ret;
     }
 
+    /**
+     * This API is used to add an entry to the CorfuQueue without materializing the queue in memory.
+     *
+     * @param table  Table object to operate on the queue.
+     * @param record Record to be added.
+     * @param streamTags  - stream tags associated to the given stream id
+     * @param corfuStore CorfuStore that gets the runtime for the serializer.
+     * @param <K>    Type of Key.
+     * @param <V>    Type of Value.
+     * @param <M>    Type of Metadata.
+     * @return K the type of key this queue table was created with.
+     */
+    @Nonnull
+    public <K extends Message, V extends Message, M extends Message>
+    K logUpdateEnqueue(@Nonnull Table<K, V, M> table,
+                                    @Nonnull final V record, List<UUID> streamTags, CorfuStore corfuStore) {
+        K ret = table.logUpdateEnqueue(record, streamTags, corfuStore);
+        tablesUpdated.putIfAbsent(table.getStreamUUID(), table);
+        return ret;
+    }
+
     // *************************** READ API *****************************************
 
     /**

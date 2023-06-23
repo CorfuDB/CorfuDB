@@ -43,7 +43,7 @@ Each update made carries destinations and is also tagged with a destination spec
 3. `lrq_recv_<client_name>`: This is the tag applied on the sink by LR server to all updates be it full sync or log entry sync. Please note that the lrq_recv_<client_name> tags are per client_name.
 
 ### Client on sender
-The main api intercepting the transaction is something like 
+The main api intercepting the transaction is something like
 ```java
 class LRoutingQueueClient {
     public boolean transmitLogEntryMessage(byte[] payload, List<String> destinations);
@@ -62,10 +62,16 @@ Under the hood this api translates to a single `logUpdate(UUID streamId, SMREntr
 to the new shared `LRQ_Send_LogEntries` as follows
 
 ```protobuf
+enum ReplicationType {
+  LOG_ENTRY = 0; // Default value indicating absence of any full sync.
+  FULL_SYNC = 1; // This entry was made during a full sync
+  LAST_FULL_SYNC_ENTRY = 2; // Last entry denoting the end marker of a full sync
+}
+
 // prepare this to look like a CorfuQueue update
 message RoutingTableEntryMsg {
   repeated string destinations = 1;
-  required bool is_snapshot_end = 2;
+  required ReplicationType type = 2;
   required bytes opaque_payload = 3;
 }
 ```
@@ -102,16 +108,16 @@ tag_for_destination1, tag_for_destination2...
 ```
 
 ## Full Sync Sender
-`LRQ_Send_SnapSync` is the shared stream to which the full sync data is written to as queue.
-LR Server requests a full sync and puts a record in its internal metadata table.
-LR Client listens to this and requests a full sync via callback.
-The supplied data is placed in the above queue.
-LR Server which is listening for updates to this `LRQ_Send_SnapSync` wakes up and starts transmitting.
-Before transmitting the stream is changed to `LRQ_Recv_<my_cluster_id>` so it can be applied to one single queue on receiver.
-Also the stream tags are stripped and only one tag is applied - `lrq_recv`
-LR Client places an end marker `is_snapshot_end`.
-LR Server observes this end marker and concludes the snapshot sync and transitions state machine to log entry sync.
-We only need 1 queue for the receiver/Sink.
+1. `LRQ_Send_SnapSync` is the shared stream to which the full sync data is written to as queue.
+2. LR Server requests a full sync and puts a record in its internal metadata table.
+3. LR Client listens to this and requests a full sync via callback.
+4. The supplied data is placed in the above queue.
+5. LR Server which is listening for updates to this `LRQ_Send_SnapSync` wakes up and starts transmitting.
+6. Before transmitting the stream is changed to `LRQ_Recv_<my_cluster_id>` so it can be applied to one single queue on receiver.
+7. Also the stream tags are stripped and only one tag is applied - `lrq_recv`
+8. LR Client places an end marker `is_snapshot_end`.
+9. LR Server observes this end marker and concludes the snapshot sync and transitions state machine to log entry sync.
+10. We only need 1 queue for the receiver/Sink.
 
 ## LR Server on Sink
 Minimal to no changes here - incoming Queue data is simply applied into the `LRQ_Recv_<remote_source_id>`.
@@ -137,3 +143,4 @@ The receiver side routing queue (LRQ_Recv_<client_name>_<remote_id>) needs to be
 5. On_error callback implementation
 6. Routing queue listener interface would delete the queue entries based on the success/failure case. The client interface would reflect the success/failure case returning boolean
 7. Listener interface would provide RoutingTableEntryMsg message type to client and client would further extract out its payload
+8. It is up to the client to read the envelope information and apply its contents to the respective tables.
