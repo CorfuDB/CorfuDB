@@ -54,6 +54,8 @@ public abstract class LogReplicationRoutingQueueListener implements StreamListen
     private final CorfuStore corfuStore;
     private final String namespace;
 
+    private final Table<Queue.CorfuGuidMsg, Queue.RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg> routingQueue;
+
     private CorfuStoreMetadata.Timestamp lastProcessedEntryTs;
 
     /**
@@ -61,9 +63,19 @@ public abstract class LogReplicationRoutingQueueListener implements StreamListen
      * @param corfuStore Corfu Store used on the client
      * @param namespace Namespace of the client's tables
      */
-    public LogReplicationRoutingQueueListener(CorfuStore corfuStore, @Nonnull String namespace) {
+    public LogReplicationRoutingQueueListener(CorfuStore corfuStore, @Nonnull String namespace) throws
+            InvocationTargetException, NoSuchMethodException, IllegalAccessException {
         this.corfuStore = corfuStore;
         this.namespace = namespace;
+        // TODO: Discover the queue from table registry and open it.
+        this.routingQueue =
+                corfuStore.openQueue(namespace, LogReplicationUtils.REPLICATED_QUEUE_NAME_PREFIX,
+                        Queue.RoutingTableEntryMsg.class,
+                        TableOptions.builder().schemaOptions(
+                                        CorfuOptions.SchemaOptions.newBuilder()
+                                                .addStreamTag(LogReplicationUtils.REPLICATED_QUEUE_TAG_PREFIX)
+                                                .build())
+                                .build());
     }
 
     /**
@@ -96,15 +108,19 @@ public abstract class LogReplicationRoutingQueueListener implements StreamListen
             return;
         }
 
+        // Delete the corfu stream entries from the queue when it is processed by the client.
         boolean callbackResult = false;
-        List<Queue.RoutingTableEntryMsg> entries =
-                results.getEntries().entrySet().stream().map(CSEntry ->
-                        (Queue.RoutingTableEntryMsg)CSEntry.getValue().get(0).getPayload()).collect(Collectors.toList());
+        List<Queue.RoutingTableEntryMsg> rqEntries = null;
+        Map<TableSchema, List<CorfuStreamEntry>> entries = results.getEntries();
+        List<CorfuStreamEntry> csEntries = entries.entrySet().stream().map(Map.Entry::getValue).findFirst().get();
+        for (CorfuStreamEntry entry : csEntries) {
+            rqEntries.add((Queue.RoutingTableEntryMsg) entry.getPayload());
+        }
         if (snapshotSyncInProgress.get()) {
             // For routing queue listener, we have only 1 entry inside corfuStreamEntries.
-            callbackResult = processUpdatesInSnapshotSync(entries);
+            callbackResult = processUpdatesInSnapshotSync(rqEntries);
         } else {
-            callbackResult = processUpdatesInLogEntrySync(entries);
+            callbackResult = processUpdatesInLogEntrySync(rqEntries);
         }
         if (callbackResult) {
             // When the client processed the entry successfully, delete the entry from the routing queue.
@@ -115,38 +131,15 @@ public abstract class LogReplicationRoutingQueueListener implements StreamListen
 
     private void deleteEntryFromQueue(CorfuStreamEntries results) {
         Map<TableSchema, List<CorfuStreamEntry>> entries = results.getEntries();
-        List<CorfuStreamEntry> routingQueueTableEntries =
-                entries.entrySet().stream().filter(
-                            e -> e.getKey().getTableName().equals(LogReplicationUtils.REPLICATED_QUEUE_NAME_PREFIX))
-                        .map(Map.Entry::getValue)
-                        .findFirst()
-                        .get();
+        List<CorfuStreamEntry> routingQueueTableEntries = entries.entrySet().stream().map(Map.Entry::getValue).findFirst().get();
 
         for (CorfuStreamEntry entry : routingQueueTableEntries) {
             Queue.CorfuGuidMsg key = (Queue.CorfuGuidMsg)entry.getKey();
             // Only process updates where operation type == UPDATE.
             if (entry.getOperation() == CorfuStreamEntry.OperationType.UPDATE) {
-                // TODO: Check payload type??
-                //  Queue.RoutingTableEntryMsg payload = (Queue.RoutingTableEntryMsg)entry.getPayload();
                 try (TxnContext tx = corfuStore.txn(namespace)) {
-                    Table<Queue.CorfuGuidMsg, Queue.RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg> routingQueue;
-                    // TODO: Get the table from CorfuStreamEntries schema or registry table?
-                    routingQueue =
-                            corfuStore.openQueue(namespace, LogReplicationUtils.REPLICATED_QUEUE_NAME_PREFIX,
-                                    Queue.RoutingTableEntryMsg.class,
-                                    TableOptions.builder().schemaOptions(
-                                                    CorfuOptions.SchemaOptions.newBuilder()
-                                                            .addStreamTag(LogReplicationUtils.REPLICATED_QUEUE_TAG)
-                                                            .build())
-                                            .build());
                     tx.delete(routingQueue, key);
                     tx.commit();
-                } catch (InvocationTargetException e) {
-                    throw new RuntimeException(e);
-                } catch (NoSuchMethodException e) {
-                    throw new RuntimeException(e);
-                } catch (IllegalAccessException e) {
-                    throw new RuntimeException(e);
                 }
             }
         }
@@ -166,8 +159,8 @@ public abstract class LogReplicationRoutingQueueListener implements StreamListen
         // queue is registered by the sink manager. Before first update, sink manager should have registered the
         // routing queue with table registry.
 
-        if (!routingQRegistered.get() && LogReplicationUtils.CheckIfRoutingQueueExists(corfuStore, namespace,
-                LogReplicationUtils.REPLICATED_QUEUE_TAG)) {
+        if (!routingQRegistered.get() && LogReplicationUtils.checkIfRoutingQueueExists(corfuStore, namespace,
+                LogReplicationUtils.REPLICATED_QUEUE_TAG_PREFIX)) {
             // Unsubscribe the LR status table
             corfuStore.unsubscribeListener(this);
             // Re-subscribe the LR status table && Subscribe the routing queue.
@@ -219,14 +212,14 @@ public abstract class LogReplicationRoutingQueueListener implements StreamListen
         }
 
         try {
-            log.info("Resume RQ subscription on [tag:{}] {} from {}", LogReplicationUtils.REPLICATED_QUEUE_TAG,
+            log.info("Resume RQ subscription on [tag:{}] {} from {}", LogReplicationUtils.REPLICATED_QUEUE_TAG_PREFIX,
                     namespace, lastProcessedEntryTs);
 
             LogReplicationUtils.subscribeRqListenerWithTs(this, namespace, 5, corfuStore,
                     lastProcessedEntryTs.getSequence());
         } catch (StreamingException e) {
             log.error("Failed to resume subscription [tag:{}] from last processed entry {}. Re-subscribe based on " +
-                    "implemented fallback.", LogReplicationUtils.REPLICATED_QUEUE_TAG, lastProcessedEntryTs, e);
+                    "implemented fallback.", LogReplicationUtils.REPLICATED_QUEUE_TAG_PREFIX, lastProcessedEntryTs, e);
         }
     }
 
@@ -285,8 +278,6 @@ public abstract class LogReplicationRoutingQueueListener implements StreamListen
     // Or, Processing the queue
     public void onError(Throwable throwable) {
         // Handle Trim exception
-        // Ref: https://confluence.eng.vmware.com/pages/viewpage.action?spaceKey=NSBU&title=Log+Replicator+Design+for+SaaS#LogReplicatorDesignforSaaS-SlowListener
-
         // 1. Create a txn. TODO: Change it to scoped txn
         // 2. Read all entries
         // 3. subscribe listener with the scoped txn timestamp
@@ -297,16 +288,6 @@ public abstract class LogReplicationRoutingQueueListener implements StreamListen
         if (throwable instanceof TrimmedException) {
             corfuStore.unsubscribeListener(this);
             try (TxnContext tx = corfuStore.txn(namespace)) {
-                Table<Queue.CorfuGuidMsg, Queue.RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg> routingQueue;
-                routingQueue =
-                        corfuStore.openQueue(namespace, LogReplicationUtils.REPLICATED_QUEUE_NAME_PREFIX,
-                                Queue.RoutingTableEntryMsg.class,
-                                TableOptions.builder().schemaOptions(
-                                                CorfuOptions.SchemaOptions.newBuilder()
-                                                        .addStreamTag(LogReplicationUtils.REPLICATED_QUEUE_TAG)
-                                                        .build())
-                                        .build());
-
                 List<Table.CorfuQueueRecord> records = routingQueue.entryList();
                 for (int i = 0; i < records.size(); i++) {
                     log.debug("Entry:" + records.get(i).getRecordId());
@@ -342,12 +323,6 @@ public abstract class LogReplicationRoutingQueueListener implements StreamListen
             } catch (InterruptedException e) {
                 log.error("Unrecoverable exception when attempting to re-subscribe listener.", e);
                 throw new UnrecoverableCorfuInterruptedError(e);
-            } catch (InvocationTargetException e) {
-                throw new RuntimeException(e);
-            } catch (NoSuchMethodException e) {
-                throw new RuntimeException(e);
-            } catch (IllegalAccessException e) {
-                throw new RuntimeException(e);
             }
         } else {
             resumeSubscription();

@@ -54,9 +54,9 @@ public final class LogReplicationUtils {
     public static final String SNAPSHOT_SYNC_QUEUE_TAG_SENDER_PREFIX = "lrq_snapsync_";
 
     // Prefix of the name of queue as it will appear on the receiver after replicated.  The suffix will be the Sender
-    // (Source) cluster id
-    // Receiving queues per client name
-    public static final String REPLICATED_QUEUE_NAME_PREFIX = "LRQ_Recv_<client_name>_<source_id>_";
+    // (Source) cluster id Receiving queues per client name.
+    // Example: LRQ_Recv_<client_name>_<source_id>
+    public static final String REPLICATED_QUEUE_NAME_PREFIX = "LRQ_Recv_";
 
     // Stream tag applied to the replicated queue on the receiver
     public static final String REPLICATED_QUEUE_TAG_PREFIX = "lrq_recv_";
@@ -91,10 +91,11 @@ public final class LogReplicationUtils {
         // Open the routing queue from corfu store (Disk backed mode)
         // since the subscribe API will run in policy jvm
         // TODO: Get client name as input params. For now, hard coding the stream tag.
-        if (CheckIfRoutingQueueExists(corfuStore, namespace, REPLICATED_QUEUE_TAG)) {
+        if (checkIfRoutingQueueExists(corfuStore, namespace, REPLICATED_QUEUE_TAG_PREFIX)) {
             // Table registry contains the routing queue already.
             corfuStore.getRuntime().getTableRegistry().getStreamingManager().subscribeLogReplicationRoutingQueueListener(
-                    clientListener, namespace, subscriptionTimestamp, bufferSize);
+                    clientListener, namespace, subscriptionTimestamp, bufferSize,
+                    getRoutingQueue(corfuStore, namespace, REPLICATED_QUEUE_TAG_PREFIX));
             log.info("Routing queue client subscription at timestamp {} successful.", subscriptionTimestamp);
         } else {
             // Routing queue is not registered at the sink (receiver side) yet.
@@ -112,10 +113,11 @@ public final class LogReplicationUtils {
         // Open the routing queue from corfu store (Disk backed mode)
         // since the subscribe API will run in policy jvm
         // TODO: Get client name as input params. For now, hard coding the stream tag.
-        if (CheckIfRoutingQueueExists(corfuStore, namespace, REPLICATED_QUEUE_TAG)) {
+        if (checkIfRoutingQueueExists(corfuStore, namespace, REPLICATED_QUEUE_TAG_PREFIX)) {
             // Table registry contains the routing queue already.
+            String routingQueueName = getRoutingQueue(corfuStore, namespace, REPLICATED_QUEUE_TAG_PREFIX);
             corfuStore.getRuntime().getTableRegistry().getStreamingManager().subscribeLogReplicationRoutingQueueListener(
-                    clientListener, namespace, subscriptionTimestamp, bufferSize);
+                    clientListener, namespace, subscriptionTimestamp, bufferSize, routingQueueName);
             log.info("Routing queue client subscription at timestamp {} successful.", subscriptionTimestamp);
         } else {
             // Routing queue is not registered at the sink (receiver side) yet.
@@ -344,12 +346,19 @@ public final class LogReplicationUtils {
         }
     }
 
-    public static boolean CheckIfRoutingQueueExists(CorfuStore corfuStore, String namespace, String streamTag) {
+    public static boolean checkIfRoutingQueueExists(CorfuStore corfuStore, String namespace, String streamTag) {
+        List<String> tablesOfInterest = corfuStore.getTablesOfInterest(namespace, streamTag);
+        return tablesOfInterest.size() != 0;
+    }
+    
+    public static String getRoutingQueue(CorfuStore corfuStore, String namespace, String streamTag) {
+        String routingQueueName = null;
         List<String> tablesOfInterest = corfuStore.getTablesOfInterest(namespace, streamTag);
         if (tablesOfInterest.size() != 0) {
-            return true;
+            // Currently, we have only 1 routing queue at sink side. So, return the first table.
+            routingQueueName = tablesOfInterest.get(0);
         }
-        return false;
+        return routingQueueName;
     }
 
     private static void setListenerParamsForSnapshotSync(LogReplicationListener listener, long subscriptionTimestamp,

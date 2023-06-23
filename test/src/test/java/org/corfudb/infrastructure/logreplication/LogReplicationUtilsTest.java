@@ -132,7 +132,7 @@ public class LogReplicationUtilsTest extends AbstractViewTest {
                             Queue.RoutingTableEntryMsg.class,
                             TableOptions.builder().schemaOptions(
                                             CorfuOptions.SchemaOptions.newBuilder()
-                                                    .addStreamTag(LogReplicationUtils.REPLICATED_QUEUE_TAG)
+                                                    .addStreamTag(LogReplicationUtils.REPLICATED_QUEUE_TAG_PREFIX)
                                                     .build())
                                     .build());
         } catch (NoSuchMethodException e) {
@@ -281,7 +281,8 @@ public class LogReplicationUtilsTest extends AbstractViewTest {
 
         private String clientName;
 
-        LogReplicationTestRoutingQueueListener(CorfuStore corfuStore, String namespace, String clientName) {
+        LogReplicationTestRoutingQueueListener(CorfuStore corfuStore, String namespace, String clientName) throws
+                InvocationTargetException, NoSuchMethodException, IllegalAccessException {
             super(corfuStore, namespace);
             this.clientName = clientName;
         }
