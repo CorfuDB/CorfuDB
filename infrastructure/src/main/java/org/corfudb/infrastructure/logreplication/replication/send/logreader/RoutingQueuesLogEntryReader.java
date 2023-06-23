@@ -6,10 +6,10 @@ import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationCo
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.Queue.RoutingTableEntryMsg;
-import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.runtime.view.TableRegistry;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -17,6 +17,7 @@ import java.util.UUID;
 
 import static org.corfudb.runtime.LogReplicationUtils.LOG_ENTRY_SYNC_QUEUE_NAME_SENDER;
 import static org.corfudb.runtime.LogReplicationUtils.REPLICATED_QUEUE_NAME_PREFIX;
+import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 
 /**
@@ -34,14 +35,10 @@ public class RoutingQueuesLogEntryReader extends BaseLogEntryReader {
     }
 
     @Override
-    public LogReplicationEntryMsg read(UUID logEntryRequestId) throws TrimmedException {
-        return null;
-    }
-
-    @Override
     protected OpaqueEntry filterTransactionEntry(OpaqueEntry opaqueEntry) {
         List<SMREntry> routingTableEntryMsgs = opaqueEntry.getEntries()
-            .get(CorfuRuntime.getStreamID(LOG_ENTRY_SYNC_QUEUE_NAME_SENDER));
+            .get(CorfuRuntime.getStreamID(TableRegistry.getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE,
+                    LOG_ENTRY_SYNC_QUEUE_NAME_SENDER)));
 
         List<SMREntry> filteredMsgs = new ArrayList<>();
 
