@@ -679,11 +679,11 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
 
                 intended.forEach(value -> table.delete(StringUtils.reverse(value)));
 
-                groups.forEach(((character, strings) -> assertThat(StreamSupport.stream(
+                groups.forEach((character, strings) -> assertThat(StreamSupport.stream(
                                 table.getByIndex(StringIndexer.BY_FIRST_LETTER, character).spliterator(), false)
                         .map(Map.Entry::getValue)
                         .collect(Collectors.toSet()))
-                        .isEmpty()));
+                        .isEmpty());
 
                 getDefaultRuntime().getObjectsView().TXAbort();
             });

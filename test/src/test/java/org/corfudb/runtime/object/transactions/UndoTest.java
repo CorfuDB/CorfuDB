@@ -434,8 +434,9 @@ public class UndoTest extends AbstractTransactionsTest {
     protected void crossStream(ArrayList<PersistentCorfuTable> maps, String value) {
         // put a transaction across all streams
         WWTXBegin();
-        for (PersistentCorfuTable m : maps)
+        for (PersistentCorfuTable m : maps) {
             m.insert(specialKey, value);
+        }
         TXEnd();
 
         // put separate updates on all streams before t1 starts

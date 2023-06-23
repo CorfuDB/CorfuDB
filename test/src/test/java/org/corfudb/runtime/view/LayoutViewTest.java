@@ -26,6 +26,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -253,6 +254,16 @@ public class LayoutViewTest extends AbstractViewTest {
         layoutReconfiguredLatch.await();
         assertThat(sv.next().getPayload(corfuRuntime)).isEqualTo("hello world".getBytes());
         assertThat(sv.next()).isEqualTo(null);
+    }
+
+    private Layout tryPrepare(Supplier<Layout> supplier) {
+        while (true) {
+            try {
+                return supplier.get();
+            } catch (QuorumUnreachableException ignore) {
+                // Retry.
+            }
+        }
     }
 
     /**
@@ -487,7 +498,7 @@ public class LayoutViewTest extends AbstractViewTest {
         // STEP 1
         final long rank1 = 1L;
         addClientRule(corfuRuntime, SERVERS.ENDPOINT_2, new TestRule().drop().always());
-        Layout alreadyProposedLayout1 = corfuRuntime.getLayoutView().prepare(l1.getEpoch(), rank1);
+        Layout alreadyProposedLayout1 = tryPrepare(() -> corfuRuntime.getLayoutView().prepare(l1.getEpoch(), rank1));
         assertThat(alreadyProposedLayout1).isNull();
         addClientRule(corfuRuntime, SERVERS.ENDPOINT_1, new TestRule().drop().always());
         try {
@@ -613,7 +624,7 @@ public class LayoutViewTest extends AbstractViewTest {
 
         // STEP 1: Send prepare to all 3 nodes with rank 1.
         final long rank1 = 1L;
-        Layout alreadyProposedLayout1 = corfuRuntime1.getLayoutView().prepare(l1.getEpoch(), rank1);
+        Layout alreadyProposedLayout1 = tryPrepare(() -> corfuRuntime1.getLayoutView().prepare(l1.getEpoch(), rank1));
         assertThat(alreadyProposedLayout1).isNull();
 
         // PORT_2 drops the oncoming propose message.
