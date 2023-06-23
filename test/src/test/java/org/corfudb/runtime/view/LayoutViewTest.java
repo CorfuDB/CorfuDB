@@ -54,8 +54,7 @@ public class LayoutViewTest extends AbstractViewTest {
     }
 
     @Test
-    public void canSetLayout()
-            throws Exception {
+    public void canSetLayout() {
         CorfuRuntime r = getDefaultRuntime().connect();
         Layout l = new TestLayoutBuilder()
                 .setEpoch(1)

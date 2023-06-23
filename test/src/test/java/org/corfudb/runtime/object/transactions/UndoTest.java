@@ -228,7 +228,8 @@ public class UndoTest extends AbstractTransactionsTest {
                 .open();
 
         final int specialKey = 10;
-        final String normalValue = Z, specialValue = Y;
+        final String normalValue = Z;
+        final String specialValue = Y;
         final int mapSize = 10 * PARAMETERS.NUM_ITERATIONS_LARGE;
 
         // put something in map before t1 starts
@@ -376,9 +377,8 @@ public class UndoTest extends AbstractTransactionsTest {
 
         final int nmaps = 3;
         for (int i = 0; i < nmaps; i++)
-            maps.add( (PersistentCorfuTable<Integer, String>) instantiateCorfuObject(
-                    new TypeToken<PersistentCorfuTable<Integer, String>>() {}, "test stream" + i)
-            );
+            maps.add((PersistentCorfuTable<Integer, String>) instantiateCorfuObject(
+                    new TypeToken<PersistentCorfuTable<Integer, String>>() {}, "test stream" + i));
 
         // before t1 starts
         crossStream(maps, normalValue);
@@ -407,9 +407,9 @@ public class UndoTest extends AbstractTransactionsTest {
         // now, t2 optimistically modifying everything, but
         // not yet committing
         t(t2, () -> {
-            for (PersistentCorfuTable m : maps)
+            for (PersistentCorfuTable m : maps) {
                 m.insert(specialKey, specialValue2);
-        } );
+            }});
 
         // t1 should undo everything by t2 and by t3
         t(t1, () -> {
