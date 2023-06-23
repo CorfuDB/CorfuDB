@@ -61,7 +61,7 @@ public final class LogReplicationUtils {
     public static final String REPLICATED_QUEUE_NAME_PREFIX = "LRQ_Recv_";
 
     // Stream tag applied to the replicated queue on the receiver
-    public static final String REPLICATED_QUEUE_TAG = "lrq_recv";
+    public static final String REPLICATED_QUEUE_TAG = "lrq_recv_";
 
     // ---- End RoutingQueue Model constants -------/
 
