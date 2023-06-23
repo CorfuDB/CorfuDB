@@ -148,4 +148,6 @@ public abstract class IClientChannelAdapter {
     }
 
     public abstract void resetRemoteLeader();
+
+    public void processLeadershipLoss(LogReplicationSession session) { }
 }
