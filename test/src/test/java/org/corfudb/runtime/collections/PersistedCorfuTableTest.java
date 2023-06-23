@@ -25,6 +25,7 @@ import org.apache.commons.lang3.function.Failable;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuOptions.ConsistencyModel;
+import org.corfudb.runtime.CorfuOptions.SizeComputationModel;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.CorfuStoreMetadata;
@@ -75,6 +76,7 @@ import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.in;
 import static org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy;
 import static org.corfudb.common.metrics.micrometer.MeterRegistryProvider.MeterRegistryInitializer.initClientMetrics;
 import static org.mockito.ArgumentMatchers.any;
@@ -98,6 +100,8 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
     private static final String nonExistingKey = "nonExistingKey";
     private static final String defaultNewMapEntry = "newEntry";
     private static final boolean ENABLE_READ_YOUR_WRITES = true;
+    private static final boolean EXACT_SIZE = true;
+
     @Captor
     private ArgumentCaptor<String> logCaptor;
 
@@ -134,13 +138,19 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
     }
 
     private <V> PersistedCorfuTable<String, V> setupTable(
-            String streamName, boolean readYourWrites,
+            String streamName, boolean readYourWrites, boolean exact_size,
             Options options, ISerializer serializer) {
 
         PersistenceOptionsBuilder persistenceOptions = PersistenceOptions.builder()
                 .dataPath(Paths.get(diskBackedDirectory, streamName));
         if (!readYourWrites) {
             persistenceOptions.consistencyModel(ConsistencyModel.READ_COMMITTED);
+        }
+
+        if (exact_size) {
+            persistenceOptions.sizeComputationModel(SizeComputationModel.EXACT_SIZE);
+        } else {
+            persistenceOptions.sizeComputationModel(SizeComputationModel.ESTIMATE_NUM_KEYS);
         }
 
         getDefaultRuntime().getSerializers().registerSerializer(serializer);
@@ -154,11 +164,16 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
     }
 
     private PersistedCorfuTable<String, String> setupTable(String streamName, boolean readYourWrites) {
-        return setupTable(streamName, readYourWrites, defaultOptions, defaultSerializer);
+        return setupTable(streamName, readYourWrites, EXACT_SIZE, defaultOptions, defaultSerializer);
     }
 
     private PersistedCorfuTable<String, String> setupTable(boolean readYourWrites) {
         return setupTable(defaultTableName, readYourWrites);
+    }
+
+    private PersistedCorfuTable<String, String> setupTable(
+            String streamName, boolean readYourWrites, boolean exactSize) {
+        return setupTable(streamName, readYourWrites, exactSize, defaultOptions, defaultSerializer);
     }
 
     private PersistedCorfuTable<String, String> setupTable() {
@@ -212,8 +227,8 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
                         // The size is checked either during flush or compaction.
                         .setWriteBufferSize(FileUtils.ONE_KB);
 
-        try (final PersistedCorfuTable<String, String> table =
-                     setupTable(defaultTableName, ENABLE_READ_YOUR_WRITES, options, defaultSerializer)) {
+        try (final PersistedCorfuTable<String, String> table = setupTable(
+                defaultTableName, ENABLE_READ_YOUR_WRITES, EXACT_SIZE, options, defaultSerializer)) {
 
             final long iterationCount = 100000;
             final int entityCharSize = 1000;
@@ -237,8 +252,8 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
     void customSerializer() {
         resetTests();
 
-        try (final PersistedCorfuTable<String, Pojo> table = setupTable(
-                defaultTableName, ENABLE_READ_YOUR_WRITES, defaultOptions, new PojoSerializer(Pojo.class))) {
+        try (final PersistedCorfuTable<String, Pojo> table = setupTable(defaultTableName, ENABLE_READ_YOUR_WRITES,
+                EXACT_SIZE, defaultOptions, new PojoSerializer(Pojo.class))) {
 
             final long iterationCount = 100;
             final int entityCharSize = 100;
@@ -604,6 +619,30 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
         }
 
         assertThat(persistedCacheLocation).doesNotExist();
+    }
+
+    @Property(tries = NUM_OF_TRIES)
+    void testEstimateSize(@ForAll @UniqueElements @Size(SAMPLE_SIZE)
+                   Set<@AlphaChars @StringLength(min = 1) String> intended) {
+        resetTests();
+        try (final PersistedCorfuTable<String, String> table =
+                     setupTable(defaultTableName, ENABLE_READ_YOUR_WRITES, !EXACT_SIZE)) {
+            executeTx(() -> {
+                intended.forEach(entry -> table.insert(entry, entry));
+                // estimateSize() only consults SST.
+                assertThat(table.size()).isZero();
+            });
+            // Now that the data is persisted, it should be reflected.
+            executeTx(() -> assertThat(table.size()).isEqualTo(intended.size()));
+
+            executeTx(() -> {
+                intended.forEach(entry -> table.insert(entry, StringUtils.reverse(entry)));
+                assertThat(table.size()).isEqualTo(intended.size());
+            });
+
+            // The database has not been compacted yet.
+            executeTx(() -> assertThat(table.size()).isEqualTo(intended.size() * 2));
+        }
     }
 
     @Property(tries = NUM_OF_TRIES)

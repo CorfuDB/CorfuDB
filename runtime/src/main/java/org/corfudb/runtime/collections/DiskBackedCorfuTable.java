@@ -57,6 +57,7 @@ import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
 import static org.corfudb.runtime.CorfuOptions.ConsistencyModel.READ_COMMITTED;
+import static org.corfudb.runtime.CorfuOptions.SizeComputationModel.EXACT_SIZE;
 
 @Slf4j
 @AllArgsConstructor
@@ -401,7 +402,11 @@ public class DiskBackedCorfuTable<K, V> implements
     }
 
     public long size() {
-        return rocksApi.exactSize();
+        if (persistenceOptions.getSizeComputationModel() == EXACT_SIZE) {
+            return rocksApi.exactSize();
+        }
+
+        return rocksApi.estimateSize();
     }
 
     public <I> Iterable<Map.Entry<K, V>> getByIndex(@NonNull final Index.Name indexName,

@@ -68,6 +68,7 @@ public class RocksDbReadCommittedTx implements RocksDbApi {
         // No-op
     }
 
+    @Override
     public long exactSize() {
         long count = 0;
         try (RocksIterator entryIterator = rocksDb.newIterator()) {
@@ -78,6 +79,11 @@ public class RocksDbReadCommittedTx implements RocksDbApi {
             }
         }
         return count;
+    }
+
+    @Override
+    public OptimisticTransactionDB getRocksDb() {
+        return this.rocksDb;
     }
 
     @Override

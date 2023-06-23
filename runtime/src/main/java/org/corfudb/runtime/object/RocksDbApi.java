@@ -10,6 +10,7 @@ import org.corfudb.runtime.collections.RocksDbEntryIterator;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.serializer.ISerializer;
 import org.rocksdb.ColumnFamilyHandle;
+import org.rocksdb.OptimisticTransactionDB;
 import org.rocksdb.ReadOptions;
 import org.rocksdb.RocksDB;
 import org.rocksdb.RocksDBException;
@@ -27,6 +28,7 @@ import static org.corfudb.util.Utils.startsWith;
  */
 public interface RocksDbApi {
 
+    String ESTIMATE_SIZE = "rocksdb.estimate-num-keys";
     boolean ALLOCATE_DIRECT_BUFFERS = true;
 
     byte[] get(@NonNull ColumnFamilyHandle columnHandle,
@@ -132,6 +134,16 @@ public interface RocksDbApi {
     void clear() throws RocksDBException;
 
     long exactSize();
+
+    OptimisticTransactionDB getRocksDb();
+
+    default long estimateSize() {
+        try {
+            return getRocksDb().getLongProperty(ESTIMATE_SIZE);
+        } catch (RocksDBException e) {
+            throw new UnrecoverableCorfuError(e);
+        }
+    }
 
     void close() throws RocksDBException;
 }

@@ -28,9 +28,15 @@ enum ConsistencyModel {
     READ_COMMITTED = 1;
 }
 
+enum SizeComputationModel {
+    ESTIMATE_NUM_KEYS = 0;
+    EXACT_SIZE = 1;
+}
+
 message PersistenceOptions {
     optional string dataPath = 1;
     optional ConsistencyModel consistencyModel = 2;
+    optional SizeComputationModel sizeComputationModel = 3;
 }
 
 message ReplicationLogicalGroup {

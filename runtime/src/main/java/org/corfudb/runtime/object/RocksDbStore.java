@@ -180,6 +180,11 @@ public class RocksDbStore<S extends SnapshotGenerator<S>> implements
     }
 
     @Override
+    public OptimisticTransactionDB getRocksDb() {
+        return this.rocksDb;
+    }
+
+    @Override
     public void close() throws RocksDBException {
         rocksDb.close();
         RocksDB.destroyDB(absolutePathString, rocksDbOptions);

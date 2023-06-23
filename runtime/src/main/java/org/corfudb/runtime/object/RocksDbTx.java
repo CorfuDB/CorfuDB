@@ -26,6 +26,7 @@ import java.util.stream.Collectors;
  */
 public class RocksDbTx<S extends SnapshotGenerator<S>> implements RocksDbApi {
 
+    private final OptimisticTransactionDB rocksDb;
     private final DiskBackedSMRSnapshot<S> snapshot;
     private final Transaction txn;
     private final ColumnFamilyRegistry columnFamilyRegistry;
@@ -34,6 +35,7 @@ public class RocksDbTx<S extends SnapshotGenerator<S>> implements RocksDbApi {
                      @NonNull WriteOptions writeOptions,
                      @NonNull DiskBackedSMRSnapshot<S> snapshot,
                      @NonNull ColumnFamilyRegistry columnFamilyRegistry) {
+        this.rocksDb = rocksDb;
         this.snapshot = snapshot;
         this.columnFamilyRegistry = columnFamilyRegistry;
         this.txn = rocksDb.beginTransaction(writeOptions);
@@ -157,6 +159,11 @@ public class RocksDbTx<S extends SnapshotGenerator<S>> implements RocksDbApi {
             }
             return count;
         });
+    }
+
+    @Override
+    public OptimisticTransactionDB getRocksDb() {
+        return this.rocksDb;
     }
 
     @Override

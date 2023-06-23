@@ -236,6 +236,9 @@ public class Table<K extends Message, V extends Message, M extends Message> impl
             if (tableParameters.getPersistenceOptions().hasConsistencyModel()) {
                 persistenceOptions.consistencyModel(tableParameters.getPersistenceOptions().getConsistencyModel());
             }
+            if (tableParameters.getPersistenceOptions().hasSizeComputationModel()) {
+                persistenceOptions.sizeComputationModel(tableParameters.getPersistenceOptions().getSizeComputationModel());
+            }
 
             ISerializer safeSerializer = new SafeProtobufSerializer(serializer);
             builder = runtime.getObjectsView().<PersistedCorfuTable<K, CorfuRecord<V, M>>>build()

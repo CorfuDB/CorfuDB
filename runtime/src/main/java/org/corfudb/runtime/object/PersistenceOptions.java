@@ -3,6 +3,7 @@ package org.corfudb.runtime.object;
 import lombok.Builder;
 import lombok.Getter;
 import org.corfudb.runtime.CorfuOptions.ConsistencyModel;
+import org.corfudb.runtime.CorfuOptions.SizeComputationModel;
 
 import java.nio.file.Path;
 
@@ -19,4 +20,8 @@ public class PersistenceOptions {
     @Getter
     @Builder.Default
     ConsistencyModel consistencyModel = ConsistencyModel.READ_YOUR_WRITES;
+
+    @Getter
+    @Builder.Default
+    SizeComputationModel sizeComputationModel = SizeComputationModel.EXACT_SIZE;
 }
