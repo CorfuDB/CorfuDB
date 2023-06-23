@@ -3,6 +3,7 @@ package org.corfudb.runtime.checkpoint;
 import com.google.common.collect.ImmutableMap;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import org.corfudb.CorfuTestParameters;
 import org.corfudb.common.compression.Codec;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.LogEntry;
@@ -40,6 +41,7 @@ import org.corfudb.util.serializer.KeyDynamicProtobufSerializer;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -64,6 +66,10 @@ public class CheckpointSmokeTest extends AbstractViewTest {
     private final byte serilizerByte = (byte) 20;
     private final ISerializer serializer = new CPSerializer(serilizerByte);
     private CorfuRuntime r;
+
+    public CheckpointSmokeTest() {
+        PARAMETERS = new CorfuTestParameters(Duration.ofMinutes(5));
+    }
 
     @Before
     public void setRuntime() {
