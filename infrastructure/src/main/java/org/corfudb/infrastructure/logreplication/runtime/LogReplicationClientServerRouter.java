@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure.logreplication.runtime;
 
 
+import com.google.common.base.Preconditions;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
@@ -372,6 +373,9 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
                         payload.getPayloadCase(), session);
                 clientChannelAdapter.send(nodeId, getRequestMsg(header.build(), payload));
             } else {
+                // connection endpoints do not send leadership_query msgs.
+                Preconditions.checkArgument(!payload.getPayloadCase().equals(
+                        CorfuMessage.RequestPayloadMsg.PayloadCase.LR_LEADERSHIP_QUERY));
                 log.info("Send requestID/payload {}/{} via serverChannelAdapter for session {}", header.getRequestId(),
                         payload.getPayloadCase(), session);
                 serverChannelAdapter.send(getRequestMsg(header.build(), payload));
@@ -557,6 +561,7 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
         log.debug("Received request message {}", message.getPayload().getPayloadCase());
         try {
             if (message.getPayload().getPayloadCase().equals(CorfuMessage.RequestPayloadMsg.PayloadCase.LR_LEADERSHIP_LOSS)) {
+                this.clientChannelAdapter.processLeadershipLoss(message.getHeader().getSession());
                 sessionToRemoteSourceLeaderManager.get(message.getHeader().getSession()).input(new LogReplicationSinkEvent(
                         LogReplicationSinkEvent.LogReplicationSinkEventType.REMOTE_LEADER_LOSS,
                         message.getPayload().getLrLeadershipLoss().getNodeId()));
