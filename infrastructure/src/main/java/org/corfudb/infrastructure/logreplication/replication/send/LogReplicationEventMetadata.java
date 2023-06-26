@@ -33,12 +33,12 @@ public class LogReplicationEventMetadata {
     private boolean forceSnapshotSync = false;
 
     /**
-     * Empty Metadata
+     * Constructor
      *
-     * @return an empty instance of log replication event metadata
+     * @param requestId identifier of the request that preceded this event.
      */
-    public static LogReplicationEventMetadata empty() {
-        return new LogReplicationEventMetadata(NIL_UUID, -1L);
+    public LogReplicationEventMetadata(UUID requestId) {
+        this.requestId = requestId;
     }
 
     /**
@@ -46,8 +46,9 @@ public class LogReplicationEventMetadata {
      *
      * @param requestId identifier of the request that preceded this event.
      */
-    public LogReplicationEventMetadata(UUID requestId) {
+    public LogReplicationEventMetadata(UUID requestId, boolean forceSnapshotSync) {
         this.requestId = requestId;
+        this.forceSnapshotSync = forceSnapshotSync;
     }
 
     /**
