@@ -2,6 +2,7 @@ package org.corfudb.integration;
 
 import com.google.protobuf.Any;
 import com.google.protobuf.DynamicMessage;
+import com.google.protobuf.Message;
 import com.google.protobuf.UnknownFieldSet;
 
 import java.io.File;
@@ -22,9 +23,11 @@ import java.util.concurrent.ConcurrentMap;
 
 import org.corfudb.browser.CorfuOfflineBrowserEditor;
 import org.corfudb.browser.CorfuStoreBrowserEditor;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
+import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.collections.CorfuDynamicKey;
 import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.collections.Table;
@@ -41,6 +44,10 @@ import org.corfudb.test.SampleAppliance;
 import org.corfudb.test.SampleSchema;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.METADATA_TABLE_NAME;
+import static org.corfudb.runtime.LogReplicationLogicalGroupClient.LR_MODEL_METADATA_TABLE_NAME;
+import static org.corfudb.runtime.LogReplicationUtils.REPLICATION_STATUS_TABLE_NAME;
+import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 @SuppressWarnings("checkstyle:magicnumber")
 public class CorfuStoreBrowserEditorIT extends AbstractIT {
@@ -124,7 +131,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
 
             // Create CorfuStoreBrowser on its own dedicated runtime
             CorfuRuntime browserRuntime = createRuntime(singleNodeEndpoint);
-            CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(browserRuntime);
+            CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(browserRuntime, null);
 
             committedTimestamps.forEach(ts -> {
                 EnumMap<IMetadata.LogUnitMetadataType, Object> metadataMap = browser.printMetadataMap(ts.getSequence());
@@ -193,7 +200,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
 
         final int one = 1;
         runtime = createRuntime(singleNodeEndpoint);
-        CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime);
+        CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime, null);
         // Invoke listTables and verify table count
         Assert.assertEquals(browser.listTables(NAMESPACE), one);
 
@@ -259,7 +266,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         final int batchSize = 10;
         final int itemSize = 100;
 
-        CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime);
+        CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime, null);
         Assert.assertEquals(browser.loadTable(NAMESPACE, TABLE_NAME, numItems, batchSize, itemSize), batchSize);
         runtime.shutdown();
     }
@@ -292,7 +299,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         });
 
         runtime = createRuntime(singleNodeEndpoint);
-        CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime);
+        CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime, null);
 
         // (1) List Stream Tags
         Set<String> tagsInRegistry = browser.listStreamTags();
@@ -366,7 +373,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         populateRegistryTable(NAMESPACE, TABLE_NAME);
 
         runtime = createRuntime(singleNodeEndpoint);
-        CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime);
+        CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime, null);
         assertThat(browser.printAllProtoDescriptors()).isEqualTo(expectedFiles);
 
         runtime.shutdown();
@@ -446,7 +453,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         runtime.shutdown();
 
         runtime = createRuntime(singleNodeEndpoint);
-        CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime);
+        CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime, null);
         ICorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table2 = browser.getTable(NAMESPACE, TABLE_NAME);
         browser.printTable(NAMESPACE, TABLE_NAME);
         Assert.assertEquals(1, table2.size());
@@ -567,11 +574,11 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         runtime.shutdown();
 
         runtime = createRuntime(singleNodeEndpoint);
-        CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime);
+        CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime, null);
         // Invoke listTables and verify table count
         final int three = 3;
         Assert.assertEquals(three,
-            browser.printTableInfo(TableRegistry.CORFU_SYSTEM_NAMESPACE,
+            browser.printTableInfo(CORFU_SYSTEM_NAMESPACE,
         TableRegistry.REGISTRY_TABLE_NAME));
         Assert.assertEquals(1, browser.printTableInfo(NAMESPACE, TABLE_NAME));
     }
@@ -627,7 +634,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         // Invoke listTables and verify table count
         final int three = 3;
         final int one = 1;
-        Assert.assertEquals(browser.printTableInfo(TableRegistry.CORFU_SYSTEM_NAMESPACE, TableRegistry.REGISTRY_TABLE_NAME), three);
+        Assert.assertEquals(browser.printTableInfo(CORFU_SYSTEM_NAMESPACE, TableRegistry.REGISTRY_TABLE_NAME), three);
         Assert.assertEquals(browser.printTableInfo(NAMESPACE, TABLE_NAME), one);
     }
 
@@ -731,10 +738,49 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         TxnContext tx = store.txn(NAMESPACE);
         tx.putRecord(table1, uuidKey, uuidVal, metadata);
         tx.commit();
+
+        // Add records to LR Status table
+        final Table<LogReplication.LogReplicationSession,
+                LogReplicationMetadata.ReplicationStatusVal, Message> replicationStatusTable = store.openTable(
+                        CORFU_SYSTEM_NAMESPACE,
+                        REPLICATION_STATUS_TABLE_NAME,
+                        LogReplication.LogReplicationSession.class,
+                        LogReplicationMetadata.ReplicationStatusVal.class,
+                        null,
+                        TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
+
+        final String sink = "sink";
+        final String source = "source";
+        final String model = "model";
+        final String client = "client";
+        LogReplication.LogReplicationSession session = LogReplication.LogReplicationSession.newBuilder()
+                .setSourceClusterId(source)
+                .setSinkClusterId(sink)
+                .setSubscriber(LogReplication.ReplicationSubscriber.newBuilder().setClientName(client).build())
+                .build();
+        LogReplicationMetadata.ReplicationStatusVal valMsg = LogReplicationMetadata.ReplicationStatusVal.newBuilder()
+                .build();
+        TxnContext LrTx = store.txn(CORFU_SYSTEM_NAMESPACE);
+        LrTx.putRecord(replicationStatusTable, session, valMsg, null);
+        LrTx.commit();
+
+        // Add records to LR METADATA table
+        final Table<LogReplication.LogReplicationSession, LogReplicationMetadata.ReplicationMetadata, Message> metadataTable =
+                store.openTable(CORFU_SYSTEM_NAMESPACE,
+                        METADATA_TABLE_NAME,
+                        LogReplication.LogReplicationSession.class,
+                        LogReplicationMetadata.ReplicationMetadata.class,
+                        null,
+                        TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationMetadata.class));
+        LogReplicationMetadata.ReplicationMetadata val2 = LogReplicationMetadata.ReplicationMetadata.newBuilder().build();
+        TxnContext LrMetadataTx = store.txn(CORFU_SYSTEM_NAMESPACE);
+        LrMetadataTx.putRecord(metadataTable, session, val2, null);
+        LrMetadataTx.commit();
+
         runtime.shutdown();
 
         runtime = createRuntime(singleNodeEndpoint);
-        CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime);
+        CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime, null);
         // Invoke listTables and verify table count
         Assert.assertEquals(browser.listTables(NAMESPACE), 1);
 
@@ -770,6 +816,34 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
             newValString));
         // Try to delete a deleted key and verify it is a no-op
         assertThat(browser.deleteRecords(NAMESPACE, TABLE_NAME, Arrays.asList(keyString), batchSize)).isZero();
+
+        // Try to delete an existing key from LR STATUS table
+        assertThat(browser.deleteRecords(CORFU_SYSTEM_NAMESPACE, REPLICATION_STATUS_TABLE_NAME, Arrays.asList(session.toString()), 1)).isEqualTo(1);
+        // Try to delete a non-existing key from LR STATUS table
+        assertThat(browser.deleteRecords(CORFU_SYSTEM_NAMESPACE, REPLICATION_STATUS_TABLE_NAME, Arrays.asList(session.toString()), 1)).isZero();
+        // Try to delete an existing key from LR METADATA table
+        assertThat(browser.deleteRecords(CORFU_SYSTEM_NAMESPACE, METADATA_TABLE_NAME, Arrays.asList(session.toString()), 1)).isEqualTo(1);
+        // Try to delete a non-existing key from LR METADATA table
+        assertThat(browser.deleteRecords(CORFU_SYSTEM_NAMESPACE, METADATA_TABLE_NAME, Arrays.asList(session.toString()), 1)).isZero();
+
+        runtime.shutdown();
+
+        // create a browser with default serializer in the runtime.
+        runtime = createRuntime(singleNodeEndpoint);
+        browser = new CorfuStoreBrowserEditor(runtime);
+        // Try insert/delete from LR_MODEL_METADATA_TABLE_NAME table. Note:this table has not been opened in the test suit.
+        String clientName = "sampleClient";
+        String logicalGroup = "group1";
+        List<String> destinations = new ArrayList<>();
+        destinations.add("dest1");
+        destinations.add("dest2");
+        //Try to insert into LR_MODEL_METADATA_TABLE_NAME table
+        assertThat(browser.updateOrAddReplicationGroup(clientName, logicalGroup, destinations)).isOne();
+        // Try to delete a Group which is present in the table.
+        assertThat(browser.deleteReplicationGroup(clientName, logicalGroup)).isOne();
+        // Try to delete a Group which is not present.
+        assertThat(browser.deleteReplicationGroup(clientName, logicalGroup)).isZero();
+
         runtime.shutdown();
     }
 
@@ -827,7 +901,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         runtime.shutdown();
 
         runtime = createRuntime(singleNodeEndpoint);
-        CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime);
+        CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime, null);
 
         int deletedRecordCount = browser.deleteRecordsFromFile(NAMESPACE, TABLE_NAME,
                 pathToRecordsToDelete, numRecords / 10);
@@ -875,7 +949,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         runtime.shutdown();
 
         runtime = createRuntime(singleNodeEndpoint);
-        CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime);
+        CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime, null);
         // Invoke listTables and verify table count
         Assert.assertEquals(1, browser.printTable(NAMESPACE, TABLE_NAME));
 
@@ -957,7 +1031,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         runtime.shutdown();
 
         runtime = createRuntime(singleNodeEndpoint);
-        CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime);
+        CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime, null);
 
         // Invoke printTable and verify table count
         Assert.assertEquals(1, browser.printTable(NAMESPACE, TABLE_NAME));
@@ -1026,7 +1100,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         // Start a Corfu runtime
         runtime = createRuntime(singleNodeEndpoint);
 
-        CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime);
+        CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime, null);
 
         // Invoke printTable and verify table count
         Assert.assertEquals(0, browser.listTables(NAMESPACE));

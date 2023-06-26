@@ -173,4 +173,24 @@ public interface CorfuBrowserEditorCommands {
      * @return table names with given 'streamTag'
      */
     List<CorfuStoreMetadata.TableName> listTablesForTag(@Nonnull String streamTag);
+
+    /**
+     * If provided logicalGroup is present in LogReplicationModelMetadataTable, update with the provdided remoteDestinations,
+     * else add the logical group.
+     *
+     * @param clientName client name
+     * @param logicalGroup logical group for the client
+     * @param remoteDestinations list of destinations corresponding to logical group
+     * @return
+     */
+    int updateOrAddReplicationGroup(String clientName, String logicalGroup, List<String> remoteDestinations);
+
+    /**
+     * Delete replication group for a given client
+     *
+     * @param clientName client name
+     * @param logicalGroup logical group for the client
+     * @return
+     */
+    int deleteReplicationGroup(String clientName, String logicalGroup);
 }

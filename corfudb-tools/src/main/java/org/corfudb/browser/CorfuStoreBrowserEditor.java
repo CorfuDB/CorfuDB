@@ -4,6 +4,7 @@ import com.google.common.collect.Iterables;
 import com.google.common.reflect.TypeToken;
 
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
@@ -15,8 +16,10 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
@@ -26,8 +29,10 @@ import java.util.stream.Stream;
 import com.google.protobuf.Any;
 import com.google.protobuf.DynamicMessage;
 import com.google.protobuf.InvalidProtocolBufferException;
+import com.google.protobuf.Message;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.runtime.CorfuOptions;
@@ -38,13 +43,17 @@ import org.corfudb.runtime.CorfuStoreMetadata.TableMetadata;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.ExampleSchemas.ExampleTableName;
 import org.corfudb.runtime.ExampleSchemas.ManagedMetadata;
+import org.corfudb.runtime.LogReplication;
+import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.collections.CorfuRecord;
+import org.corfudb.runtime.collections.CorfuStoreEntry;
 import org.corfudb.runtime.collections.CorfuStoreShim;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.CorfuDynamicKey;
 import org.corfudb.runtime.collections.CorfuDynamicRecord;
 import org.corfudb.runtime.collections.ICorfuTable;
+import org.corfudb.runtime.collections.ManagedTxnContext;
 import org.corfudb.runtime.collections.PersistedStreamingMap;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.collections.StreamListener;
@@ -56,12 +65,22 @@ import org.corfudb.runtime.object.ICorfuVersionPolicy;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.runtime.view.TableRegistry;
+import org.corfudb.util.retry.ExponentialBackoffRetry;
+import org.corfudb.util.retry.IRetry;
+import org.corfudb.util.retry.RetryNeededException;
 import org.corfudb.util.serializer.DynamicProtobufSerializer;
+import org.corfudb.util.serializer.ProtobufSerializer;
 import org.rocksdb.Options;
 
 import com.google.protobuf.util.JsonFormat;
 
 import javax.annotation.Nonnull;
+
+import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.METADATA_TABLE_NAME;
+import static org.corfudb.runtime.LogReplicationLogicalGroupClient.LR_MODEL_METADATA_TABLE_NAME;
+import static org.corfudb.runtime.LogReplicationUtils.REPLICATION_STATUS_TABLE_NAME;
+import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
+
 
 /**
  * This is the CorfuStore Browser/Editor Tool which prints data in a given
@@ -81,7 +100,9 @@ public class CorfuStoreBrowserEditor implements CorfuBrowserEditorCommands {
      * @param runtime CorfuRuntime which has connected to the server
      */
     public CorfuStoreBrowserEditor(CorfuRuntime runtime) {
-        this(runtime, null);
+        this.runtime = runtime;
+        this.diskPath = null;
+        this.dynamicProtobufSerializer = null;
     }
 
     /**
@@ -580,6 +601,12 @@ public class CorfuStoreBrowserEditor implements CorfuBrowserEditorCommands {
                 " in table " + tableName + " and namespace " + namespace +
                 ".  Stream Id " + streamUUID);
 
+        if (tableName.equals(REPLICATION_STATUS_TABLE_NAME)) {
+            return deleteBypassingSerializerForLrStatusTable(namespace, tableName, keysToDelete, streamUUID);
+        } else if (tableName.equals(METADATA_TABLE_NAME)) {
+            return deleteBypassingSerializerForLrMetadataTable(namespace, tableName, keysToDelete, streamUUID);
+        }
+
         ICorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table =
                 getTable(namespace, tableName);
 
@@ -860,6 +887,124 @@ public class CorfuStoreBrowserEditor implements CorfuBrowserEditorCommands {
         return streamTagToTableNames.get(streamTag);
     }
 
+    @Override
+    public int updateOrAddReplicationGroup(String clientName, String logicalGroup, List<String> remoteDestinations) {
+        System.out.println("\n======================\n");
+        System.out.println("Inserting a record to " + LR_MODEL_METADATA_TABLE_NAME);
+        System.out.println("\n======================\n");
+
+        CorfuStoreShim store = new CorfuStoreShim(runtime);
+        AtomicInteger numGroupInserted = new AtomicInteger();
+
+        // open table if not opened already
+        try {
+            store.getTable(CORFU_SYSTEM_NAMESPACE, LR_MODEL_METADATA_TABLE_NAME);
+        } catch (NoSuchElementException | IllegalArgumentException e) {
+            log.warn("Failed getTable operation, opening table.", e);
+            try {
+                store.openTable(CORFU_SYSTEM_NAMESPACE,
+                        LR_MODEL_METADATA_TABLE_NAME,
+                        LogReplication.ClientDestinationInfoKey.class,
+                        LogReplication.DestinationInfoVal.class,
+                        null,
+                        TableOptions.fromProtoSchema(LogReplication.DestinationInfoVal.class));
+            } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException exe) {
+                log.error("Error seen while trying to open table ", exe);
+            }
+        }
+
+        LogReplication.ClientDestinationInfoKey key = LogReplication.ClientDestinationInfoKey.newBuilder()
+                .setClientName(clientName)
+                .setModel(LogReplication.ReplicationModel.LOGICAL_GROUPS)
+                .setGroupName(logicalGroup)
+                .build();
+        LogReplication.DestinationInfoVal val = LogReplication.DestinationInfoVal.newBuilder()
+                .addAllDestinationIds(remoteDestinations)
+                .build();
+
+        try {
+            IRetry.build(ExponentialBackoffRetry.class, () -> {
+                try(ManagedTxnContext txn = store.tx(CORFU_SYSTEM_NAMESPACE)) {
+                    txn.putRecord(LR_MODEL_METADATA_TABLE_NAME, key, val);
+                    txn.commit();
+                    numGroupInserted.incrementAndGet();
+                    System.out.println("Successfully inserted logical group -> destination for client " + clientName);
+                    return numGroupInserted.get();
+                } catch (TransactionAbortedException tae) {
+                    log.error("Unable to insert group->destination for {}. Failed with ", clientName, tae);
+                    throw new RetryNeededException();
+                }
+            }).run();
+        } catch (InterruptedException e) {
+            log.error("Unable to insert group->destination for {}. Failed with ", clientName, e);
+            throw new RuntimeException(e);
+        }
+
+        return numGroupInserted.get();
+    }
+
+    @Override
+    public int deleteReplicationGroup(String clientName, String logicalGroup) {
+        System.out.println("\n======================\n");
+        System.out.println("Deleting logical group " + logicalGroup + " from " + LR_MODEL_METADATA_TABLE_NAME);
+        System.out.println("\n======================\n");
+
+        CorfuStoreShim store = new CorfuStoreShim(runtime);
+        AtomicInteger numGroupsDeleted = new AtomicInteger();
+
+        // open table if not opened already
+        try {
+            store.getTable(CORFU_SYSTEM_NAMESPACE, LR_MODEL_METADATA_TABLE_NAME);
+        } catch (NoSuchElementException | IllegalArgumentException e) {
+            log.warn("Failed getTable operation, opening table.", e);
+            try {
+                store.openTable(CORFU_SYSTEM_NAMESPACE,
+                        LR_MODEL_METADATA_TABLE_NAME,
+                        LogReplication.ClientDestinationInfoKey.class,
+                        LogReplication.DestinationInfoVal.class,
+                        null,
+                        TableOptions.fromProtoSchema(LogReplication.DestinationInfoVal.class));
+            } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException exe) {
+                log.error("Error occurred while trying to open table ", exe);
+            }
+        }
+
+        LogReplication.ClientDestinationInfoKey key = LogReplication.ClientDestinationInfoKey.newBuilder()
+                .setClientName(clientName)
+                .setModel(LogReplication.ReplicationModel.LOGICAL_GROUPS)
+                .setGroupName(logicalGroup)
+                .build();
+
+        try {
+            IRetry.build(ExponentialBackoffRetry.class, () -> {
+                try(ManagedTxnContext txn = store.tx(CORFU_SYSTEM_NAMESPACE)) {
+                    CorfuStoreEntry<LogReplication.ClientDestinationInfoKey, LogReplication.DestinationInfoVal, Message>
+                            entry = txn.getRecord(LR_MODEL_METADATA_TABLE_NAME, key);
+                    if (entry.getPayload() == null) {
+                        System.out.println("Record for key " + key + "is not found in " + CORFU_SYSTEM_NAMESPACE +"$" +
+                                LR_MODEL_METADATA_TABLE_NAME);
+                        txn.commit();
+                        return null;
+                    }
+
+                    txn.delete(LR_MODEL_METADATA_TABLE_NAME, key);
+                    txn.commit();
+                    numGroupsDeleted.incrementAndGet();
+                    System.out.println("Successfully deleted logical group " + logicalGroup + " for client " + clientName);
+                    return numGroupsDeleted.get();
+                } catch (TransactionAbortedException tae) {
+                    log.error("Unable to delete group {} for client {}. Failed with ", logicalGroup, clientName, tae);
+                    throw new RetryNeededException();
+                }
+            }).run();
+        } catch (InterruptedException e) {
+            log.error("Unable to delete group {} for client {}. Failed with ", logicalGroup, clientName, e);
+            throw new RuntimeException(e);
+        }
+        return numGroupsDeleted.get();
+    }
+
+
     private Map<String, List<TableName>> getTagToTableNamesMap() {
         Map<String, List<TableName>> streamTagToTableNames = new HashMap<>();
 
@@ -886,5 +1031,143 @@ public class CorfuStoreBrowserEditor implements CorfuBrowserEditorCommands {
         formatMapping = formatMapping.substring(0, formatMapping.length() - 2);
         System.out.println("Tag: " + tag + " --- Total Tables: " + tables.size()
             + " TableNames: " + formatMapping);
+    }
+
+    private int deleteBypassingSerializerForLrStatusTable(String namespace, String tableName, List<String> keysToDelete,
+                                                          UUID streamUUID ) {
+        runtime.getSerializers().removeSerializer(dynamicProtobufSerializer);
+        ProtobufSerializer protoSerializer = new ProtobufSerializer(new ConcurrentHashMap<>());
+        runtime.getSerializers().registerSerializer(protoSerializer);
+
+        CorfuStoreShim store = new CorfuStoreShim(runtime);
+        int numKeysDeleted = 0;
+
+        // open table if not opened already
+        try {
+            store.getTable(namespace, tableName);
+        } catch (NoSuchElementException | IllegalArgumentException e) {
+            log.warn("Failed getTable operation, opening table.", e);
+            try {
+                store.openTable(namespace,
+                        tableName,
+                        LogReplication.LogReplicationSession.class,
+                        LogReplicationMetadata.ReplicationStatusVal.class,
+                        null,
+                        TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
+            } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException exe) {
+                log.error("Error seen while trying to open table ", exe);
+            }
+        }
+
+        try (ManagedTxnContext txn = store.tx(namespace)) {
+            for (String keyToDelete : keysToDelete) {
+                LogReplicationSession sessionKey = convertSessionStringToSessionMsg(keyToDelete);
+                CorfuStoreEntry record = txn.getRecord(tableName, sessionKey);
+
+                if (record.getPayload() != null) {
+                    System.out.println("Bypassing the DynamicSerializer and Deleting record with Key " + keyToDelete +
+                            " in table " + tableName + " and namespace " + namespace +
+                            ".  Stream Id " + streamUUID);
+                    txn.delete(tableName, sessionKey);
+                    numKeysDeleted++;
+                } else {
+                    System.out.println("Key: " + sessionKey + " is not found in table " + tableName);
+                }
+                System.out.println("\n======================\n");
+            }
+            txn.commit();
+        } catch (TransactionAbortedException tae) {
+            log.error("Transaction to delete records {} aborted.", keysToDelete, tae);
+        }
+
+        return numKeysDeleted;
+    }
+
+    private int deleteBypassingSerializerForLrMetadataTable(String namespace, String tableName, List<String> keysToDelete,
+                                                            UUID streamUUID ) {
+        runtime.getSerializers().removeSerializer(dynamicProtobufSerializer);
+        ProtobufSerializer protoSerializer = new ProtobufSerializer(new ConcurrentHashMap<>());
+        runtime.getSerializers().registerSerializer(protoSerializer);
+
+        CorfuStoreShim store = new CorfuStoreShim(runtime);
+        int numKeysDeleted = 0;
+
+        // open table if not opened already
+        try {
+            store.getTable(namespace, tableName);
+        } catch (NoSuchElementException | IllegalArgumentException e) {
+            log.warn("Failed getTable operation, opening table.", e);
+            try {
+                store.openTable(namespace,
+                        tableName,
+                        LogReplicationSession.class,
+                        LogReplicationMetadata.ReplicationMetadata.class,
+                        null,
+                        TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationMetadata.class));
+            } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException exe) {
+                log.error("Error seen while trying to open table ", exe);
+            }
+        }
+
+        try (ManagedTxnContext txn = store.tx(namespace)) {
+            for (String keyToDelete : keysToDelete) {
+                LogReplicationSession sessionKey = convertSessionStringToSessionMsg(keyToDelete);
+                CorfuStoreEntry record = txn.getRecord(tableName, sessionKey);
+
+                if (record.getPayload() != null) {
+                    System.out.println("Bypassing the DynamicSerializer and Deleting record with Key " + keyToDelete +
+                            " in table " + tableName + " and namespace " + namespace +
+                            ".  Stream Id " + streamUUID);
+                    txn.delete(tableName, sessionKey);
+                    numKeysDeleted++;
+                } else {
+                    System.out.println("Key: " + sessionKey + " is not found in table " + tableName);
+                }
+                System.out.println("\n======================\n");
+            }
+            txn.commit();
+        } catch (TransactionAbortedException tae) {
+            log.error("Transaction to delete records {} aborted.", keysToDelete, tae);
+        }
+
+        return numKeysDeleted;
+    }
+
+    private LogReplicationSession convertSessionStringToSessionMsg(String sessionString) {
+        Map<String, String> sessionKeyToVal = new HashMap<>();
+        // Example of session:
+        //sink_cluster_id: "f1b192dc-8b93-4345-8aca-baea955f8c94" source_cluster_id: "7e9a7425-5a76-4ef1-a21d-fdea8b117e82" subscriber { model: LOGICAL_GROUPS client_name: "00000000-0000-0000-0000-0000000000001" }
+        String[] splitTokens = sessionString.split("\\s+");
+
+        // the fields in the input sessions string can be in any format. Hence use the keywords to lookup the value
+        // from the input string
+        final String sink = "sink";
+        final String source = "source";
+        final String model = "model";
+        final String client = "client";
+
+        for(int idx = 0; idx < splitTokens.length - 1; idx += 2) {
+            String key = splitTokens[idx].trim().replaceAll(":", "").toLowerCase();
+            String value = splitTokens[idx + 1].trim().replaceAll("\"", "");
+            if(key.contains(sink)) {
+                sessionKeyToVal.put(sink, value);
+            } else if(key.contains(source)) {
+                sessionKeyToVal.put(source, value);
+            } else if(key.contains(model)) {
+                sessionKeyToVal.put(model, value);
+            } else if(key.contains(client)) {
+                sessionKeyToVal.put(client, value);
+            }
+        }
+
+        return LogReplicationSession.newBuilder()
+                .setSinkClusterId(sessionKeyToVal.get(sink))
+                .setSourceClusterId(sessionKeyToVal.get(source))
+                .setSubscriber(LogReplication.ReplicationSubscriber.newBuilder()
+                        .setModel(LogReplication.ReplicationModel.valueOf(sessionKeyToVal.get(model) == null ? "NONE" : sessionKeyToVal.get(model)))
+                        .setClientName(sessionKeyToVal.get(client))
+                        .build())
+                .build();
+
     }
 }
