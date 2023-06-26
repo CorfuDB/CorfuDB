@@ -84,10 +84,10 @@ public class DiskBackedSMRSnapshot<S extends SnapshotGenerator<S>> implements SM
             }
             rocksDb.releaseSnapshot(snapshot);
             set.forEach(RocksDbEntryIterator::invalidateIterator);
+            set.clear();
             readOptions.close();
         } finally {
             lock.unlockWrite(stamp);
-
         }
     }
 

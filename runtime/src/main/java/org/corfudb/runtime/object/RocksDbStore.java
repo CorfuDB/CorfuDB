@@ -206,6 +206,14 @@ public class RocksDbStore<S extends SnapshotGenerator<S>> implements
         return new DiskBackedSMRSnapshot<>(rocksDb, writeOptions, version, viewGenerator, this);
     }
 
+    /**
+     * Generate a new snapshot that will follow read-committed
+     * view of the {@link OptimisticTransactionDB} instance.
+     *
+     * @param viewGenerator an instance that will be responsible for
+     *                      generating new views based on this snapshot
+     * @return a new snapshot
+     */
     @Override
     public SMRSnapshot<S> getImplicitSnapshot(
             @NonNull ViewGenerator<S> viewGenerator) {

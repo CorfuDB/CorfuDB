@@ -43,7 +43,7 @@ public class RocksDbTx<S extends SnapshotGenerator<S>> implements RocksDbApi {
 
     @Override
     public byte[] get(@NonNull ColumnFamilyHandle columnFamilyHandle,
-                      @NonNull ByteBuf keyPayload) throws RocksDBException {
+                      @NonNull ByteBuf keyPayload) {
         return snapshot.executeInSnapshot(readOptions -> {
             try {
                 return txn.get(columnFamilyHandle, readOptions, ByteBufUtil.getBytes(

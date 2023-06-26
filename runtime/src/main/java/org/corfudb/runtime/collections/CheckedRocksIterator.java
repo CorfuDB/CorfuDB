@@ -35,6 +35,8 @@ public class CheckedRocksIterator implements RocksIteratorInterface, AutoCloseab
         this.isValid = new AtomicBoolean(true);
         this.rocksIterator = rocksIterator;
         this.lock = lock;
+
+        underReadLock(rocksIterator::seekToFirst);
     }
 
     /**

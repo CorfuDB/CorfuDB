@@ -45,7 +45,6 @@ public class RocksDbEntryIterator<K, V> implements Iterator<Map.Entry<K, V>>, Au
 
     public RocksDbEntryIterator(RocksIterator rocksIterator, ISerializer serializer,
                                 ReadOptions readOptions, StampedLock lock, boolean loadValues) {
-        rocksIterator.seekToFirst();
         this.wrappedRocksIterator = new CheckedRocksIterator(rocksIterator, lock, readOptions);
         this.serializer = serializer;
         this.loadValues = loadValues;
