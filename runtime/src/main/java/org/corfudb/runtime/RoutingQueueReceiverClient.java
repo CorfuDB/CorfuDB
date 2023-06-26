@@ -1,7 +1,7 @@
 package org.corfudb.runtime;
 
+import org.corfudb.runtime.Queue.RoutingTableEntryMsg;
 import org.corfudb.runtime.collections.FullStateMessage;
-import org.corfudb.runtime.collections.ReceivedDeltaMessage;
 
 import java.util.List;
 
@@ -12,7 +12,7 @@ public class RoutingQueueReceiverClient {
      *
      * @param messages list of transactional delta messages
      */
-    void receiveDeltaMessages(List<ReceivedDeltaMessage> messages) {}
+    void receiveDeltaMessages(List<RoutingTableEntryMsg> messages) {}
 
     /**
      * Asks application to receive new full state in synchronous mode.

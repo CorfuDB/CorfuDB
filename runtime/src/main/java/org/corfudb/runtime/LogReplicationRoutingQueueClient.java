@@ -1,7 +1,7 @@
 package org.corfudb.runtime;
 
-import org.corfudb.runtime.collections.DeltaMessage;
-import org.corfudb.runtime.object.transactions.TransactionalContext;
+import org.corfudb.runtime.Queue.RoutingTableEntryMsg;
+import org.corfudb.runtime.collections.TxnContext;
 
 import java.util.List;
 
@@ -12,7 +12,7 @@ public interface LogReplicationRoutingQueueClient {
      * This method must be used if transaction has multiple messages. Repetitive calls in the same transaction to the
      * transmitDeltaMessages/transmitDeltaMessage won't be supported
      */
-    void transmitDeltaMessage(TransactionalContext txn, DeltaMessage message);
+    void transmitDeltaMessage(TxnContext txn, RoutingTableEntryMsg message);
 
-    void transmitDeltaMessages(TransactionalContext txn, List<DeltaMessage> messages);
+    void transmitDeltaMessages(TxnContext txn, List<RoutingTableEntryMsg> messages);
 }

@@ -4,9 +4,9 @@ import com.google.common.base.Preconditions;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
 import org.corfudb.runtime.LogReplication.ReplicationModel;
+import org.corfudb.runtime.Queue.RoutingTableEntryMsg;
 import org.corfudb.runtime.collections.CorfuStore;
-import org.corfudb.runtime.collections.DeltaMessage;
-import org.corfudb.runtime.object.transactions.TransactionalContext;
+import org.corfudb.runtime.collections.TxnContext;
 
 import java.lang.reflect.InvocationTargetException;
 import java.util.List;
@@ -38,12 +38,10 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
         register(corfuStore, clientName, model);
     }
 
-    public void transmitDeltaMessage(TransactionalContext txn, DeltaMessage message) {
-
+    public void transmitDeltaMessage(TxnContext txn, RoutingTableEntryMsg message) {
     }
 
-    public void transmitDeltaMessages(TransactionalContext txn, List<DeltaMessage> messages) {
-
+    public void transmitDeltaMessages(TxnContext txn, List<RoutingTableEntryMsg> messages) {
     }
 
     public void requestSnapshotSync(Timestamp timestamp) {

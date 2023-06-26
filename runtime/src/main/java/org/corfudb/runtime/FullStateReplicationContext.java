@@ -3,7 +3,7 @@ package org.corfudb.runtime;
 import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
 import org.corfudb.runtime.LogReplication.ReplicationEvent.ReplicationEventType;
 import org.corfudb.runtime.collections.FullStateMessage;
-import org.corfudb.runtime.object.transactions.TransactionalContext;
+import org.corfudb.runtime.collections.TxnContext;
 
 import javax.annotation.Nullable;
 import java.util.UUID;
@@ -14,7 +14,7 @@ public interface FullStateReplicationContext {
      * LR starts this transaction and the callback must use the same to do its full table scans
      *
      */
-     TransactionalContext getTxn();
+     TxnContext getTxn();
 
      /**
       * Returns destination site ID.
