@@ -57,6 +57,7 @@ public class AbstractIT extends AbstractCorfuTest {
 
     static final String CORFU_PROJECT_DIR = new File("..").getAbsolutePath() + File.separator;
 
+    // test dir
     public static final String CORFU_LOG_PATH = PARAMETERS.TEST_TEMP_DIR;
 
     static final long DEFAULT_MVO_CACHE_SIZE = 100;
