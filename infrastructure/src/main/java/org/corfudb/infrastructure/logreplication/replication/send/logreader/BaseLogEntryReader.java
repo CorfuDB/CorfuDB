@@ -249,7 +249,7 @@ public abstract class BaseLogEntryReader extends LogEntryReader {
      * @param opaqueEntry opaque entry to parse.
      * @return filtered opaque entry
      */
-    private OpaqueEntry filterTransactionEntry(OpaqueEntry opaqueEntry) {
+    protected OpaqueEntry filterTransactionEntry(OpaqueEntry opaqueEntry) {
         Map<UUID, List<SMREntry>> filteredTxEntryMap = opaqueEntry.getEntries().entrySet().stream()
             .filter(entry -> getStreamUUIDs().contains(entry.getKey()))
             .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
