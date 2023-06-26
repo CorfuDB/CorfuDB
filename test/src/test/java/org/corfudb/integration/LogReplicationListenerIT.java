@@ -6,6 +6,7 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.LogReplication.ReplicationModel;
 import org.corfudb.runtime.LogReplication.ReplicationStatus;
@@ -76,7 +77,8 @@ public class LogReplicationListenerIT extends AbstractIT {
             .setLogPath(getCorfuServerLogPath(corfuSingleNodeHost, corfuStringNodePort))
             .setSingle(true)
             .runServer();
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
+        managed(runtime);
         store = new CorfuStore(runtime);
     }
 
