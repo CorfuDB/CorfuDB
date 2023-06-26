@@ -2,8 +2,8 @@ package org.corfudb.infrastructure.logreplication.replication.send.logreader;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-import com.google.common.base.Preconditions;
 import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
@@ -29,6 +29,7 @@ import static org.corfudb.runtime.LogReplicationUtils.REPLICATED_QUEUE_NAME_PREF
  * the data to be replicated.
  *
  */
+@Slf4j
 public class RoutingQueuesLogEntryReader extends BaseLogEntryReader {
 
     public RoutingQueuesLogEntryReader(CorfuRuntime runtime, LogReplicationSession session,
@@ -37,7 +38,7 @@ public class RoutingQueuesLogEntryReader extends BaseLogEntryReader {
     }
 
     @Override
-    OpaqueEntry filterTransactionEntry(OpaqueEntry opaqueEntry) {
+    protected OpaqueEntry filterTransactionEntry(OpaqueEntry opaqueEntry) {
         List<SMREntry> routingTableEntryMsgs = opaqueEntry.getEntries().get(LogReplicationUtils.lrLogEntrySendQId);
 
         List<SMREntry> filteredMsgs = new ArrayList<>();
@@ -59,10 +60,13 @@ public class RoutingQueuesLogEntryReader extends BaseLogEntryReader {
     }
 
     @Override
-    boolean isValidTransactionEntry(@NonNull OpaqueEntry entry) {
+    protected boolean isValidTransactionEntry(@NonNull OpaqueEntry entry) {
         Set<UUID> txEntryStreamIds = new HashSet<>(entry.getEntries().keySet());
-        Preconditions.checkState(txEntryStreamIds.size() == 1, "Routing queue session's log" +
-                " entries should only come from the shared data queue for log entry sync");
+        if (txEntryStreamIds.size() != 1) {
+            log.warn("Routing queue session's log entries should only come from the shared data queue " +
+                    "for log entry sync");
+            return false;
+        }
 
         return txEntryStreamIds.contains(LogReplicationUtils.lrLogEntrySendQId);
     }
