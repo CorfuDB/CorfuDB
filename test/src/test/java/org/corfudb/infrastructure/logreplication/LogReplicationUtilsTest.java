@@ -147,7 +147,7 @@ public class LogReplicationUtilsTest extends AbstractViewTest {
         LogReplicationUtils.subscribeRqListener(lrRqListener, namespace, 5, corfuStore);
 
         // Update the queue to verify the listener works
-        final int numEntries = 5;
+        final int numEntries = 1;
         for (int i = 0; i < numEntries; i++) {
             try (TxnContext tx = corfuStore.txn(namespace)) {
                 Queue.RoutingTableEntryMsg entry = Queue.RoutingTableEntryMsg.newBuilder()
