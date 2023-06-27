@@ -12,9 +12,6 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/**
- * Created by mwei on 12/23/15.
- */
 public class SequencerViewTest extends AbstractViewTest {
 
     @Getter
@@ -53,14 +50,14 @@ public class SequencerViewTest extends AbstractViewTest {
         UUID stream3 = UUID.randomUUID();
 
         assertThat(r.getSequencerView().next(stream1).getToken())
-                .isEqualTo(new Token(0l, 0l));
+                .isEqualTo(new Token(0L, 0L));
         assertThat(r.getSequencerView().next(stream2).getToken())
-                .isEqualTo(new Token( 0l, 1l));
+                .isEqualTo(new Token(0L, 1L));
 
         TokenResponse response = r.getSequencerView().query(stream1, stream2, stream3);
         assertThat(response.getStreamTailsCount()).isEqualTo(totalStreams);
-        assertThat(response.getStreamTail(stream1)).isEqualTo(0l);
-        assertThat(response.getStreamTail(stream2)).isEqualTo(1l);
+        assertThat(response.getStreamTail(stream1)).isEqualTo(0L);
+        assertThat(response.getStreamTail(stream2)).isEqualTo(1L);
         assertThat(response.getStreamTail(stream3)).isEqualTo(Address.NON_EXIST);
     }
 

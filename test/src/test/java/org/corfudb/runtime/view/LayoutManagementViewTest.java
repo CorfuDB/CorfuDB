@@ -22,7 +22,7 @@ public class LayoutManagementViewTest extends AbstractViewTest {
      * elected in the new layout is not any server in the unresponsive set.
      */
     @Test
-    public void testRemoveNodeReassignsResponsiveSequencer() throws Exception {
+    public void testRemoveNodeReassignsResponsiveSequencer() {
         // Set up a 3 node cluster, where one server is marked unresponsive.
         addServer(SERVERS.PORT_0);
         addServer(SERVERS.PORT_1);

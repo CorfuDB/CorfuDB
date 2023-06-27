@@ -20,15 +20,10 @@ import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
 
-/**
- * Created by mwei on 2/18/16.
- */
 public class ObjectsViewTest extends AbstractViewTest {
 
     @Test
-    @SuppressWarnings("unchecked")
-    public void canAbortNoTransaction()
-            throws Exception {
+    public void canAbortNoTransaction() {
         //begin tests
         CorfuRuntime r = getDefaultRuntime();
         r.getObjectsView().TXAbort();
@@ -36,8 +31,7 @@ public class ObjectsViewTest extends AbstractViewTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    public void abortedTransactionDoesNotConflict()
-            throws Exception {
+    public void abortedTransactionDoesNotConflict() throws Exception {
         final String mapA = "map a";
         final String streamA = "streamA";
         CorfuRuntime r = getDefaultRuntime();
@@ -46,7 +40,7 @@ public class ObjectsViewTest extends AbstractViewTest {
                 .build()
                 .setStreamName(mapA)
                 .setStreamTags(CorfuRuntime.getStreamID(streamA))
-                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setTypeToken(PersistentCorfuTable.<String, String>getTableType())
                 .open();
 
         // TODO: fix so this does not require mapCopy.
@@ -56,7 +50,7 @@ public class ObjectsViewTest extends AbstractViewTest {
                 .build()
                 .setStreamName(mapA)
                 .setStreamTags(CorfuRuntime.getStreamID(streamA))
-                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setTypeToken(PersistentCorfuTable.<String, String>getTableType())
                 .open();
 
         map.insert("initial", "value");
@@ -124,7 +118,7 @@ public class ObjectsViewTest extends AbstractViewTest {
         ICorfuTable<String, String> map = getDefaultRuntime().getObjectsView()
                 .build()
                 .setStreamName("mapa")
-                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setTypeToken(PersistentCorfuTable.<String, String>getTableType())
                 .open();
 
         r1.getObjectsView().TXBegin();
@@ -143,7 +137,7 @@ public class ObjectsViewTest extends AbstractViewTest {
 
         ICorfuTable<String, String> smrMap = r.getObjectsView().build()
                 .setStreamName("map a")
-                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setTypeToken(PersistentCorfuTable.<String, String>getTableType())
                 .open();
 
         IStreamView streamB = r.getStreamsView().get(CorfuRuntime.getStreamID("b"));
@@ -170,12 +164,12 @@ public class ObjectsViewTest extends AbstractViewTest {
 
         ICorfuTable<String, String> smrMap = r.getObjectsView().build()
                 .setStreamName("map a")
-                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setTypeToken(PersistentCorfuTable.<String, String>getTableType())
                 .open();
 
         ICorfuTable<String, String> smrMapB = r.getObjectsView().build()
                 .setStreamName("map b")
-                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setTypeToken(PersistentCorfuTable.<String, String>getTableType())
                 .open();
 
         smrMap.insert("a", "b");

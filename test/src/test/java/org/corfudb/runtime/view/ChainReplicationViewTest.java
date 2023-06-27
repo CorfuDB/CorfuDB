@@ -13,16 +13,12 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.infrastructure.LogUnitServerAssertions.assertThat;
 
-/**
- * Created by mwei on 12/25/15.
- */
 public class ChainReplicationViewTest extends AbstractViewTest {
 
 
     @Test
     @SuppressWarnings("unchecked")
-    public void canReadWriteToSingle()
-            throws Exception {
+    public void canReadWriteToSingle() {
         CorfuRuntime r = getDefaultRuntime();
         UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
         byte[] testPayload = "hello world".getBytes();
@@ -41,8 +37,7 @@ public class ChainReplicationViewTest extends AbstractViewTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    public void canReadWriteToSingleConcurrent()
-            throws Exception {
+    public void canReadWriteToSingleConcurrent() throws Exception {
         CorfuRuntime r = getDefaultRuntime();
 
         final int numberThreads = 5;
@@ -71,8 +66,7 @@ public class ChainReplicationViewTest extends AbstractViewTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    public void canReadWriteToMultiple()
-            throws Exception {
+    public void canReadWriteToMultiple() {
 
         addServer(SERVERS.PORT_0);
         addServer(SERVERS.PORT_1);
@@ -113,8 +107,7 @@ public class ChainReplicationViewTest extends AbstractViewTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    public void ensureAllUnitsContainData()
-            throws Exception {
+    public void ensureAllUnitsContainData() {
 
         addServer(SERVERS.PORT_0);
         addServer(SERVERS.PORT_1);

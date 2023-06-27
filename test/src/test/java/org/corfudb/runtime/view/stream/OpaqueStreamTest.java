@@ -44,7 +44,7 @@ public class OpaqueStreamTest extends AbstractViewTest {
         PersistentCorfuTable<Integer, Integer> table = rt.getObjectsView()
                 .build()
                 .setStreamID(streamId)
-                .setTypeToken(new TypeToken<PersistentCorfuTable<Integer, Integer>>() {})
+                .setTypeToken(PersistentCorfuTable.<Integer, Integer>getTableType())
                 .setSerializer(customSerializer)
                 .open() ;
 
@@ -89,7 +89,7 @@ public class OpaqueStreamTest extends AbstractViewTest {
         PersistentCorfuTable<Integer, Integer> table = runtime.getObjectsView()
                 .build()
                 .setStreamID(streamId)
-                .setTypeToken(new TypeToken<PersistentCorfuTable<Integer, Integer>>() {})
+                .setTypeToken(PersistentCorfuTable.<Integer, Integer>getTableType())
                 .setSerializer(customSerializer)
                 .open() ;
 
@@ -123,7 +123,7 @@ public class OpaqueStreamTest extends AbstractViewTest {
         PersistentCorfuTable<Integer, Integer> table = rt.getObjectsView()
                 .build()
                 .setStreamID(streamId)
-                .setTypeToken(new TypeToken<PersistentCorfuTable<Integer, Integer>>() {})
+                .setTypeToken(PersistentCorfuTable.<Integer, Integer>getTableType())
                 .setSerializer(customSerializer)
                 .open();
 
@@ -158,9 +158,9 @@ public class OpaqueStreamTest extends AbstractViewTest {
         PersistentCorfuTable<Integer, Integer> table2 = rt3.getObjectsView()
                 .build()
                 .setStreamID(streamId)
-                .setTypeToken(new TypeToken<PersistentCorfuTable<Integer, Integer>>() {})
+                .setTypeToken(PersistentCorfuTable.<Integer, Integer>getTableType())
                 .open() ;
 
-        assertThatThrownBy(() -> table2.size()).isInstanceOf(SerializerException.class);
+        assertThatThrownBy(table2::size).isInstanceOf(SerializerException.class);
     }
 }

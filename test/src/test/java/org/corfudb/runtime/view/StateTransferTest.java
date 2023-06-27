@@ -63,21 +63,6 @@ import static org.corfudb.test.TestUtils.waitForLayoutChange;
 
 public class StateTransferTest extends AbstractViewTest {
 
-    @Getter
-    protected CorfuRuntime corfuRuntime = null;
-
-    @Before
-    public void clearRuntime() {
-        corfuRuntime = null;
-    }
-
-    @After
-    public void shutdownRuntime() {
-        if (corfuRuntime != null && !corfuRuntime.isShutdown()) {
-            corfuRuntime.shutdown();
-        }
-    }
-
     private Map<Long, LogData> getAllNonEmptyData(CorfuRuntime corfuRuntime,
                                                   String endpoint, long end) throws Exception {
         ReadResponse readResponse = corfuRuntime.getLayoutView().getRuntimeLayout()
@@ -883,7 +868,7 @@ public class StateTransferTest extends AbstractViewTest {
 
         // Instantiate 2 different codecs, one for each none default codec type (state transfer will run with the
         // default runtime)
-        corfuRuntime = getNewRuntime(getDefaultNode()).connect();
+        CorfuRuntime corfuRuntime = getNewRuntime(getDefaultNode()).connect();
         corfuRuntime.getParameters().setCodecType(Codec.Type.LZ4);
 
         CorfuRuntime rtNoCodec = getNewRuntime(getDefaultNode()).connect();
@@ -960,7 +945,7 @@ public class StateTransferTest extends AbstractViewTest {
 
     }
 
-    class AutoClosableTempDirs implements AutoCloseable {
+    static class AutoClosableTempDirs implements AutoCloseable {
 
         @Getter
         private final List<File> tempDirs;

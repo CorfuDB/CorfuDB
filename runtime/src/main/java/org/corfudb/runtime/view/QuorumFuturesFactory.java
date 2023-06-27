@@ -48,7 +48,7 @@ public class QuorumFuturesFactory {
      */
     static <R> CompositeFuture<R> getQuorumFuture(Comparator<R> comparator,
                                                   CompletableFuture<R>... futures) {
-        return new CompositeFuture<R>(comparator, (futures.length / 2) + 1, futures);
+        return new CompositeFuture<>(comparator, (futures.length / 2) + 1, futures);
     }
 
 

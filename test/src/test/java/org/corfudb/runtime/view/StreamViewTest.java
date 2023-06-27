@@ -25,15 +25,12 @@ import java.util.stream.IntStream;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-/**
- * Created by mwei on 1/8/16.
- */
 public class StreamViewTest extends AbstractViewTest {
 
     public CorfuRuntime r;
 
     @Before
-    public void setRuntime() throws Exception {
+    public void setRuntime() {
         r = getDefaultRuntime().connect();
     }
 
@@ -105,8 +102,7 @@ public class StreamViewTest extends AbstractViewTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    public void canReadWriteFromStream()
-            throws Exception {
+    public void canReadWriteFromStream() {
         UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
         byte[] testPayload = "hello world".getBytes();
 
@@ -160,7 +156,7 @@ public class StreamViewTest extends AbstractViewTest {
                                         .connect();
         IStreamView txStream2 = rt2.getStreamsView()
                  .get(streamTagId, options);
-        assertThatThrownBy(() -> txStream2.remaining())
+        assertThatThrownBy(txStream2::remaining)
                 .isInstanceOf(TrimmedException.class);
 
         txStream2.seek(firstIter / 2);
@@ -210,9 +206,7 @@ public class StreamViewTest extends AbstractViewTest {
     }
 
     @Test
-    public void canSeekOnStream()
-        throws Exception
-    {
+    public void canSeekOnStream() {
         CorfuRuntime r = getDefaultRuntime().connect();
         IStreamView sv = r.getStreamsView().get(
                 CorfuRuntime.getStreamID("stream  A"));
@@ -245,9 +239,7 @@ public class StreamViewTest extends AbstractViewTest {
     }
 
     @Test
-    public void canDoPreviousOnStream()
-            throws Exception
-    {
+    public void canDoPreviousOnStream() {
         CorfuRuntime r = getDefaultRuntime().connect();
         IStreamView sv = r.getStreamsView().get(
                 CorfuRuntime.getStreamID("stream  A"));
@@ -283,8 +275,7 @@ public class StreamViewTest extends AbstractViewTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    public void streamCanSurviveOverwriteException()
-            throws Exception {
+    public void streamCanSurviveOverwriteException() {
         UUID streamA = CorfuRuntime.getStreamID("stream A");
         byte[] testPayload = "hello world".getBytes();
 
@@ -305,8 +296,7 @@ public class StreamViewTest extends AbstractViewTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    public void streamWillHoleFill()
-            throws Exception {
+    public void streamWillHoleFill() {
         //begin tests
         UUID streamA = CorfuRuntime.getStreamID("stream A");
         byte[] testPayload = "hello world".getBytes();
@@ -328,8 +318,7 @@ public class StreamViewTest extends AbstractViewTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    public void streamWithHoleFill()
-            throws Exception {
+    public void streamWithHoleFill() {
         UUID streamA = CorfuRuntime.getStreamID("stream A");
 
         byte[] testPayload = "hello world".getBytes();
@@ -366,8 +355,7 @@ public class StreamViewTest extends AbstractViewTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    public void prefixTrimThrowsException()
-            throws Exception {
+    public void prefixTrimThrowsException() {
         //begin tests
         UUID streamA = CorfuRuntime.getStreamID("stream A");
         byte[] testPayload = "hello world".getBytes();
@@ -414,7 +402,7 @@ public class StreamViewTest extends AbstractViewTest {
         PersistentCorfuTable<String, String> table = r.getObjectsView()
                 .build()
                 .setStreamName(stream)
-                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setTypeToken(PersistentCorfuTable.<String, String>getTableType())
                 .open();
 
         table.insert("k1", "k1");
@@ -433,7 +421,7 @@ public class StreamViewTest extends AbstractViewTest {
         PersistentCorfuTable<String, String> tableCopy = r.getObjectsView()
                 .build()
                 .setStreamName(stream)
-                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setTypeToken(PersistentCorfuTable.<String, String>getTableType())
                 .option(ObjectOpenOption.NO_CACHE)
                 .open();
 
@@ -454,7 +442,7 @@ public class StreamViewTest extends AbstractViewTest {
         assertThat(sv.getCurrentGlobalPosition()).isEqualTo(baseVersion + 1);
         // Calling previous on a stream when the pointer points to a a base checkpoint
         // should throw a TrimmedException
-        assertThatThrownBy(() -> sv.previous()).isInstanceOf(TrimmedException.class);
+        assertThatThrownBy(sv::previous).isInstanceOf(TrimmedException.class);
         assertThat(sv.getCurrentGlobalPosition()).isEqualTo(baseVersion + 1);
     }
 
@@ -476,7 +464,6 @@ public class StreamViewTest extends AbstractViewTest {
      * Ensure that transaction stream semantics are correct with respect to different
      * combinations of trim points and seek positions.
      *
-     * @throws InterruptedException
      */
     @Test
     public void txLogTrim() {
@@ -491,7 +478,7 @@ public class StreamViewTest extends AbstractViewTest {
                 .connect();
         final PersistentCorfuTable<String, String> instance1 = localRuntime.getObjectsView()
                 .build()
-                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setTypeToken(PersistentCorfuTable.<String, String>getTableType())
                 .setStreamName("txTestMap")
                 .setStreamTags(tagId)
                 .open();
@@ -514,7 +501,7 @@ public class StreamViewTest extends AbstractViewTest {
         IStreamView txStream = localRuntime.getStreamsView().get(tagId);
 
         // If the current pointer is below the trim point, we should see the TrimmedException.
-        assertThatThrownBy(() -> txStream.remaining()).isInstanceOf(TrimmedException.class);
+        assertThatThrownBy(txStream::remaining).isInstanceOf(TrimmedException.class);
 
         // Seek the transaction stream beyond the trim point. We should not see any issues.
         txStream.seek(PARAMETERS.NUM_ITERATIONS_LOW/2);
@@ -532,7 +519,7 @@ public class StreamViewTest extends AbstractViewTest {
                 PARAMETERS.NUM_ITERATIONS_LOW + PARAMETERS.NUM_ITERATIONS_LOW/2);
 
         // Wait until log is trimmed.
-        assertThatThrownBy(() -> txStream.remaining()).isInstanceOf(TrimmedException.class);
+        assertThatThrownBy(txStream::remaining).isInstanceOf(TrimmedException.class);
 
         // Ensure that we can recover.
         txStream.seek(localRuntime.getSequencerView().query().getSequence());
@@ -554,7 +541,7 @@ public class StreamViewTest extends AbstractViewTest {
         PersistentCorfuTable<String, String> table = r.getObjectsView()
                 .build()
                 .setStreamName(stream)
-                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setTypeToken(PersistentCorfuTable.<String, String>getTableType())
                 .open();
 
         CorfuRuntime producer = getNewRuntime(getDefaultNode()).connect();
@@ -666,7 +653,7 @@ public class StreamViewTest extends AbstractViewTest {
         ICorfuTable<String, String> map = r.getObjectsView()
                 .build()
                 .setStreamName(streamName)
-                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setTypeToken(PersistentCorfuTable.<String, String>getTableType())
                 .open();
 
         // Insert NUM_UPDATES to stream

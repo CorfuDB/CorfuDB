@@ -405,9 +405,9 @@ public class LockIT extends AbstractIT implements Observer {
     }
 
     private LockListener createLockClientListener(UUID clientId) {
-        LockListener listener = new TestLockListener();
-        lockAcquiredObservables.put(clientId, ((TestLockListener) listener).getLockAcquired());
-        lockRevokedObservables.put(clientId, ((TestLockListener) listener).getLockRevoked());
+        TestLockListener listener = new TestLockListener();
+        lockAcquiredObservables.put(clientId, listener.getLockAcquired());
+        lockRevokedObservables.put(clientId, listener.getLockRevoked());
         lockAcquiredObservables.forEach((id, o) -> o.addObserver(this));
         lockRevokedObservables.forEach((id, o) -> o.addObserver(this));
         return listener;

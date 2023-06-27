@@ -17,8 +17,6 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * Tests the BackpointerStreamView
- * <p>
- * Created by zlokhandwala on 5/24/17.
  */
 public class AbstractStreamViewTest extends AbstractViewTest {
 
@@ -40,7 +38,7 @@ public class AbstractStreamViewTest extends AbstractViewTest {
     /**
      * tests navigating forward/backward on a stream,
      * with intermittent appends to the stream.
-     *
+     * <p>
      * in addition to correctness assertions, this test can be used for
      * single-stepping with a debugger and observing stream behavior.
      */
@@ -147,8 +145,7 @@ public class AbstractStreamViewTest extends AbstractViewTest {
 
     /**
      *  test proper backpointer termination at the head of a stream
-     *
-     * */
+     */
     @Test
     public void headOfStreamBackpointerTermination() {
 
@@ -171,7 +168,7 @@ public class AbstractStreamViewTest extends AbstractViewTest {
     }
 
     @Test
-    public void testStreamGC() throws Exception {
+    public void testStreamGC() {
         CorfuRuntime runtime = getDefaultRuntime();
 
         IStreamView svA = runtime.getStreamsView().get(CorfuRuntime.getStreamID("streamA"));
@@ -214,12 +211,12 @@ public class AbstractStreamViewTest extends AbstractViewTest {
 
     /**
      * This test verifies that we cannot traverse a trimmed stream. Steps to reproduce this test are:
-     *
+     * <p>
      * (1) Append 100 entries to stream.
      * (2) Traverse stream to a given point (up to address 24 using the 'next' api)
      * (3) Trim the stream at prefix 50.
      * (4) Traverse the remaining of the stream (up to 99)
-     *
+     * <p>
      * TrimmedException should be thrown.
      */
     @Test

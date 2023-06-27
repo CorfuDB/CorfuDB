@@ -17,7 +17,6 @@ import org.junit.Test;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -35,8 +34,8 @@ public class LockStoreTest extends AbstractViewTest {
     private boolean acquired2 = false;
     private boolean renewed1 = false;
     private boolean renewed2 = false;
-    private List<LockDataTypes.LockId> expiredLockIds1 = new ArrayList<>();
-    private List<LockDataTypes.LockId> expiredLockIds2 = new ArrayList<>();
+    private final List<LockDataTypes.LockId> expiredLockIds1 = new ArrayList<>();
+    private final List<LockDataTypes.LockId> expiredLockIds2 = new ArrayList<>();
     private CorfuRuntime runtime1;
     private CorfuRuntime runtime2;
     private final LockDataTypes.LockId lockId = LockDataTypes.LockId.newBuilder()
@@ -167,9 +166,11 @@ public class LockStoreTest extends AbstractViewTest {
                 txn.commit();
             }
 
-            Assert.assertEquals(currentLockData.getLeaseOwnerId(),
-                existingLockData.getLeaseOwnerId());
-            Assert.assertTrue(Objects.equals(currentLockData, existingLockData));
+            Assert.assertEquals(
+                    currentLockData.getLeaseOwnerId(),
+                    existingLockData.getLeaseOwnerId()
+            );
+            Assert.assertEquals(currentLockData, existingLockData);
         }
     }
 
@@ -209,12 +210,14 @@ public class LockStoreTest extends AbstractViewTest {
                 txn.commit();
             }
 
-            Assert.assertTrue(Objects.equals(
-                dataBeforeRenewal.getLeaseOwnerId(),
-                dataAfterRenewal.getLeaseOwnerId()));
             Assert.assertEquals(
-                dataBeforeRenewal.getLeaseRenewalNumber()+1,
-                dataAfterRenewal.getLeaseRenewalNumber());
+                    dataBeforeRenewal.getLeaseOwnerId(),
+                    dataAfterRenewal.getLeaseOwnerId()
+            );
+            Assert.assertEquals(
+                    dataBeforeRenewal.getLeaseRenewalNumber() + 1,
+                    dataAfterRenewal.getLeaseRenewalNumber()
+            );
 
             cleanupAfterIteration();
         }
@@ -280,8 +283,7 @@ public class LockStoreTest extends AbstractViewTest {
 
             Assert.assertEquals(1, expiredLockIds1.size());
             Assert.assertEquals(1, expiredLockIds2.size());
-            Assert.assertTrue(Objects.equals(expiredLockIds1.get(0),
-                expiredLockIds2.get(0)));
+            Assert.assertEquals(expiredLockIds1.get(0), expiredLockIds2.get(0));
 
             cleanupAfterIteration();
         }

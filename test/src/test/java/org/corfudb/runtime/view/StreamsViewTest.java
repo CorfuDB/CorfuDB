@@ -8,9 +8,6 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/**
- * Created by Maithem on 12/18/19.
- */
 public class StreamsViewTest extends AbstractViewTest {
 
     @Before

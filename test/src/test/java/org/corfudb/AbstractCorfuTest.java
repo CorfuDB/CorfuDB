@@ -32,7 +32,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.Semaphore;
-import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -153,7 +152,7 @@ public class AbstractCorfuTest {
 
         /** Run when the test successfully completes.
          */
-        protected void succeeded() {
+        private void succeeded() {
             if (!testStatus.equals("")) {
                 testStatus = " [" + testStatus + "]";
             }
@@ -165,7 +164,7 @@ public class AbstractCorfuTest {
         /** Print a list of the active threads.
          *
          */
-        protected void printThreads() {
+        private void printThreads() {
             System.out.println(ansi().fgCyan().bold().a("Active Threads At Test Failure")
                 .reset());
             System.out.println(ansi().format("%-40s %s",
@@ -192,7 +191,7 @@ public class AbstractCorfuTest {
          * @param e             The exception which caused the error.
          * @param description   A description of the method run.
          */
-        protected void failed(Throwable e, Description description) {
+        private void failed(Throwable e, Description description) {
             final int lineNumber = getLineNumber(e, description);
             String lineOut = lineNumber == -1 ? "" : ":L" + lineNumber;
             System.out.print(ansi().a("[")
@@ -207,7 +206,7 @@ public class AbstractCorfuTest {
 
         /** Run when the test fails to complete in time.
          */
-        protected void timedOut() {
+        private void timedOut() {
             System.out.print(ansi().a("[")
                 .fg(Ansi.Color.RED)
                 .a("TIMED OUT").reset()
@@ -239,9 +238,11 @@ public class AbstractCorfuTest {
         /** Get the line number of the test which caused the exception.
          * @param e             The exception which caused the error.
          * @param description   A description of the method run.
-         * @return
+         * @return error code
          */
         private int getLineNumber(Throwable e, Description description) {
+            final int errorCode = -1;
+
             try {
                 StackTraceElement testElement = Arrays.stream(e.getStackTrace())
                         .filter(element -> classInheritsFromNamedClass(
@@ -249,33 +250,21 @@ public class AbstractCorfuTest {
                         .reduce((first, second) -> second)
                         .get();
                 return testElement.getLineNumber();
-            } catch (NoSuchElementException nse)
-            {
-                return -1;
+            } catch (NoSuchElementException nse) {
+                return errorCode;
             }
         }
 
         /** Run when the test is finished.
          */
-        protected void finished() {
-        }
-
-        /** Run when a test is skipped due to being disabled on Travis-CI.
-         * This method doesn't provide an exception, unlike skipped().
-         */
-        protected void travisSkipped() {
-            System.out.print(ansi().a("[")
-                    .fg(Ansi.Color.YELLOW)
-                    .a("SKIPPED").reset()
-                    .a("]").newline());
-            System.out.flush();
+        private void finished() {
         }
 
         /** Run when a test is skipped due to not meeting prereqs.
          * @param e             The exception that was thrown.
          *
          */
-        protected void skipped(Throwable e) {
+        private void skipped(Throwable e) {
             System.out.print(ansi().a("[")
                     .fg(Ansi.Color.YELLOW)
                     .a("SKIPPED -").reset()
@@ -287,9 +276,8 @@ public class AbstractCorfuTest {
         /** Run before a test starts.
          * @param description   A description of the method run.
          */
-        protected void starting(Description description) {
-            System.out.print(String.format("%-60s", description
-                    .getMethodName()));
+        private void starting(Description description) {
+            System.out.printf("%-60s", description.getMethodName());
             System.out.flush();
         }
 
@@ -419,18 +407,15 @@ public class AbstractCorfuTest {
      * @param maxConcurrency The maximum amount of concurrency to allow when running the threads
      * @param timeout        The timeout, in timeunits to wait.
      * @param timeUnit       The timeunit to wait.
-     * @throws Exception
+     * @throws Exception error
      */
     public void executeScheduled(int maxConcurrency, long timeout, TimeUnit timeUnit)
             throws Exception {
         AtomicLong threadNum = new AtomicLong();
-        ExecutorService service = Executors.newFixedThreadPool(maxConcurrency, new ThreadFactory() {
-            @Override
-            public Thread newThread(Runnable r) {
-                Thread t = new Thread(r);
-                t.setName("test-" + threadNum.getAndIncrement());
-                return t;
-            }
+        ExecutorService service = Executors.newFixedThreadPool(maxConcurrency, r -> {
+            Thread t = new Thread(r);
+            t.setName("test-" + threadNum.getAndIncrement());
+            return t;
         });
         List<Future<Object>> finishedSet = service.invokeAll(scheduledThreads, timeout, timeUnit);
         scheduledThreads.clear();
@@ -443,7 +428,7 @@ public class AbstractCorfuTest {
         }
 
         try {
-            for (Future f : finishedSet) {
+            for (Future<?> f : finishedSet) {
                 assertThat(f.isDone()).
                     as("Ensure that all scheduled threads are completed")
                         .isTrue();
@@ -470,11 +455,11 @@ public class AbstractCorfuTest {
         void run() throws Exception;
     }
 
-    class TestThread {
+    static class TestThread {
 
         Thread t;
         Semaphore s = new Semaphore(0);
-        volatile ExceptionFunction runFunction;
+        volatile ExceptionFunction<?> runFunction;
         volatile CompletableFuture<Object> result;
         volatile boolean running = true;
 
@@ -498,9 +483,7 @@ public class AbstractCorfuTest {
             t.start();
         }
 
-        public Object run(ExceptionFunction function)
-        throws Exception
-        {
+        public Object run(ExceptionFunction<?> function) throws Exception {
             runFunction = function;
             result = new CompletableFuture<>();
             s.release();
@@ -532,12 +515,8 @@ public class AbstractCorfuTest {
     }
 
     @After
-    public void shutdownThreadingTest()
-    throws Exception
-    {
-        threadsMap.entrySet().forEach(x -> {
-            x.getValue().shutdown();
-        });
+    public void shutdownThreadingTest() throws Exception {
+        threadsMap.forEach((key, value) -> value.shutdown());
 
         if (lastException != null) {
             throw new Exception("Uncaught exception at end of test", lastException);
@@ -545,9 +524,7 @@ public class AbstractCorfuTest {
     }
 
     @SuppressWarnings("unchecked")
-    private  <T> T runThread(int threadNum, ExceptionFunction<T> e)
-    throws Exception
-    {
+    private  <T> T runThread(int threadNum, ExceptionFunction<T> e) throws Exception {
         // do not invoke putIfAbsent without checking first
         // the second to putIfAbsent gets evaluated, causing a thread to be created and be left orphan.
         if (! threadsMap.containsKey(threadNum)) {
@@ -561,7 +538,6 @@ public class AbstractCorfuTest {
     private volatile Exception lastException;
 
     public class AssertableObject<T> {
-
         T obj;
         Exception ex;
 
@@ -574,8 +550,7 @@ public class AbstractCorfuTest {
             }
         }
 
-        public AbstractObjectAssert<?, T> assertResult()
-        throws RuntimeException {
+        public AbstractObjectAssert<?, T> assertResult() throws RuntimeException {
             if (ex != null) {
                 throw new RuntimeException(ex);
             }
@@ -612,8 +587,10 @@ public class AbstractCorfuTest {
      * @param <T>   The return type.
      * @return      An assertable object the function returns.
      */
-    @SuppressWarnings("checkstyle:magicnumber")
-    public <T> AssertableObject<T> t1(ExceptionFunction<T> toRun) {return t(1, toRun);}
+    public <T> AssertableObject<T> t1(ExceptionFunction<T> toRun) {
+        final int threadNum = 1;
+        return t(threadNum, toRun);
+    }
 
     /** Launch a thread on test thread 2.
      *
@@ -621,26 +598,10 @@ public class AbstractCorfuTest {
      * @param <T>   The return type.
      * @return      An assertable object the function returns.
      */
-    @SuppressWarnings("checkstyle:magicnumber")
-    public <T> AssertableObject<T> t2(ExceptionFunction<T> toRun) {return t(2, toRun);}
-
-    /** Launch a thread on test thread 3.
-     *
-     * @param toRun The function to run.
-     * @param <T>   The return type.
-     * @return      An assertable object the function returns.
-     */
-    @SuppressWarnings("checkstyle:magicnumber")
-    public <T> AssertableObject<T> t3(ExceptionFunction<T> toRun) {return t(3, toRun);}
-
-    /** Launch a thread on test thread 4.
-     *
-     * @param toRun The function to run.
-     * @param <T>   The return type.
-     * @return      An assertable object the function returns.
-     */
-    @SuppressWarnings("checkstyle:magicnumber")
-    public <T> AssertableObject<T> t4(ExceptionFunction<T> toRun) {return t(4, toRun);}
+    public <T> AssertableObject<T> t2(ExceptionFunction<T> toRun) {
+        final int threadNum = 2;
+        return t(threadNum, toRun);
+    }
 
     /** Launch a thread on test thread 1.
      *
@@ -648,8 +609,10 @@ public class AbstractCorfuTest {
      * @param <T>   The return type.
      * @return      An assertable object the function returns.
      */
-    @SuppressWarnings("checkstyle:magicnumber")
-    public <T> AssertableObject<T> t1(VoidExceptionFunction toRun) {return t(1, toRun);}
+    public <T> AssertableObject<T> t1(VoidExceptionFunction toRun) {
+        final int threadNum = 1;
+        return t(threadNum, toRun);
+    }
 
     /** Launch a thread on test thread 3.
      *
@@ -657,8 +620,10 @@ public class AbstractCorfuTest {
      * @param <T>   The return type.
      * @return      An assertable object the function returns.
      */
-    @SuppressWarnings("checkstyle:magicnumber")
-    public <T> AssertableObject<T> t3(VoidExceptionFunction toRun) {return t(3, toRun);}
+    public <T> AssertableObject<T> t3(VoidExceptionFunction toRun) {
+        final int threadNum = 3;
+        return t(threadNum, toRun);
+    }
 
     /** Launch a thread on test thread 4.
      *
@@ -666,8 +631,10 @@ public class AbstractCorfuTest {
      * @param <T>   The return type.
      * @return      An assertable object the function returns.
      */
-    @SuppressWarnings("checkstyle:magicnumber")
-    public <T> AssertableObject<T> t4(VoidExceptionFunction toRun) {return t(4, toRun);}
+    public <T> AssertableObject<T> t4(VoidExceptionFunction toRun) {
+        final int threadNum = 4;
+        return t(threadNum, toRun);
+    }
 
     /** Launch a thread on test thread 2.
      *
@@ -675,15 +642,17 @@ public class AbstractCorfuTest {
      * @param <T>   The return type.
      * @return      An assertable object the function returns.
      */
-    @SuppressWarnings("checkstyle:magicnumber")
-    public <T> AssertableObject<T> t2(VoidExceptionFunction toRun) {return t(2, toRun);}
+    public <T> AssertableObject<T> t2(VoidExceptionFunction toRun) {
+        final int threadNum = 2;
+        return t(threadNum, toRun);
+    }
 
     public <T> AssertableObject<T> t(int threadNum, ExceptionFunction<T> toRun)
     throws RuntimeException {
         if (lastException != null) {
             throw new RuntimeException("Uncaught exception from previous statement", lastException);
         }
-        return new AssertableObject<T>(() -> runThread(threadNum, toRun));
+        return new AssertableObject<>(() -> runThread(threadNum, toRun));
     }
 
     public <T> AssertableObject<T> t(int threadNum, VoidExceptionFunction toRun)
@@ -696,10 +665,10 @@ public class AbstractCorfuTest {
 
     /**
      * This is an engine for interleaving test state-machines, step by step.
-     *
+     * <p>
      * A state-machine {@link AbstractCorfuTest#testSM} is provided as an array of lambdas to invoke at each state.
      * The state-machine will be instantiated numTasks times, once per task.
-     *
+     * <p>
      * The engine will interleave the execution of numThreads concurrent instances of the state machine.
      * It starts numThreads threads. Each thread goes through the states of the state machine, randomly interleaving.
      * The last state of a state-machine is special, it finishes the task and makes the thread ready for a new task.
@@ -707,14 +676,14 @@ public class AbstractCorfuTest {
      * @param numTasks total number of tasks to execute
      */
     public void scheduleInterleaved(int numThreads, int numTasks) {
-        final int NOTASK = -1;
+        final int noTask = -1;
 
         int numStates = testSM.size();
         Random r = new Random(PARAMETERS.SEED);
         AtomicInteger nDone = new AtomicInteger(0);
 
         int[] onTask = new int[numThreads];
-        Arrays.fill(onTask, NOTASK);
+        Arrays.fill(onTask, noTask);
 
         int[] onState = new int[numThreads];
         AtomicInteger highTask = new AtomicInteger(0);
@@ -722,7 +691,7 @@ public class AbstractCorfuTest {
         while (nDone.get() < numTasks) {
             final int nextt = r.nextInt(numThreads);
 
-            if (onTask[nextt] == NOTASK) {
+            if (onTask[nextt] == noTask) {
                 int t = highTask.getAndIncrement();
                 if (t < numTasks) {
                     onTask[nextt] = t;
@@ -730,11 +699,11 @@ public class AbstractCorfuTest {
                 }
             }
 
-            if (onTask[nextt] != NOTASK) {
+            if (onTask[nextt] != noTask) {
                 t(nextt, () -> {
                     testSM.get(onState[nextt]).accept(onTask[nextt]); // invoke the next state-machine step of thread 'nextt'
                     if (++onState[nextt] >= numStates) {
-                        onTask[nextt] = NOTASK;
+                        onTask[nextt] = noTask;
                         nDone.getAndIncrement();
                     }
                 });
@@ -749,9 +718,7 @@ public class AbstractCorfuTest {
      * @param numThreads specifies desired concurrency level
      * @param numTasks specifies the desired number of state machine instances
      */
-    public void scheduleThreaded(int numThreads, int numTasks)
-            throws Exception
-    {
+    public void scheduleThreaded(int numThreads, int numTasks) throws Exception {
         scheduleConcurrently(numTasks, (numTask) -> {
             for (IntConsumer step : testSM) step.accept(numTask);
         });
@@ -764,10 +731,12 @@ public class AbstractCorfuTest {
      */
     @Before
     public void InitSM() {
-        if (testSM != null)
+        if (testSM != null) {
             testSM.clear();
-        else
+        }
+        else {
             testSM = new ArrayList<>();
+        }
     }
 
     public void addTestStep(IntConsumer stepFunction) {

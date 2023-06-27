@@ -10,7 +10,6 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Validate that Corfu token based Guid Generator satisfies the following two criteria:
  * 1. The guids are unique.
  * 2. The guids are monotonically increasing.
- * Created by Sundar Sridharan on May 23, 2019.
  */
 public class CorfuGuidGeneratorTest extends AbstractViewTest {
 

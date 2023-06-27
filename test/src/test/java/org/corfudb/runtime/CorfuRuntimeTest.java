@@ -92,7 +92,7 @@ public class CorfuRuntimeTest extends AbstractViewTest {
      * Shuts down the management servers of the 3 nodes.
      *
      * @return The generated layout.
-     * @throws Exception
+     * @throws Exception error
      */
     private Layout get3NodeLayout() throws Exception {
         addServer(SERVERS.PORT_0);
@@ -127,14 +127,14 @@ public class CorfuRuntimeTest extends AbstractViewTest {
 
     /**
      * Ensures that we will not accept a Layout that is obsolete.
-     *
+     * <p>
      * Test storyline:
      * 1. Seal the cluster with min server set
      * 2. Install a new Layout only on 2 of them
      * 3. Force the client to receive the Layout only from the staled Layout server.
      * 4. Ensure that we will never accept it.
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void doesNotUpdateToLayoutWithSmallerEpoch() throws Exception {
@@ -180,10 +180,12 @@ public class CorfuRuntimeTest extends AbstractViewTest {
         rt.invalidateLayout();
 
         // Ensure that we never (never is time_to_wait seconds here) get a new layout.
-        CompletableFuture cf = CFUtils.within(rt.layout, Duration.ofSeconds(TIME_TO_WAIT_FOR_LAYOUT_IN_SEC));
+        CompletableFuture<?> cf = CFUtils.within(rt.layout, Duration.ofSeconds(TIME_TO_WAIT_FOR_LAYOUT_IN_SEC));
         CompletableFuture.supplyAsync(() -> cf);
 
-        assertThatThrownBy(() -> cf.get()).isInstanceOf(ExecutionException.class).hasRootCauseInstanceOf(TimeoutException.class);
+        assertThatThrownBy(cf::get)
+                .isInstanceOf(ExecutionException.class)
+                .hasRootCauseInstanceOf(TimeoutException.class);
     }
 
 
@@ -214,18 +216,17 @@ public class CorfuRuntimeTest extends AbstractViewTest {
 
     /**
      * Implement a SystemUnavailable systemDownHandler that stops the runtime after a certain timeout.
-     *
+     * <p>
      * The correct behaviour for this systemDownHandler is that, once the router is disconnected during the whole timeout,
      * a SystemUnavailableError is thrown and the runtime is shutdown.
      *
-     * @throws Exception
      */
     @Test
-    public void customNetworkExceptionHandler() throws Exception {
+    public void customNetworkExceptionHandler() {
         class TimeoutHandler {
-            CorfuRuntime rt;
-            long maxTimeout;
-            ThreadLocal<Long> localTimeStart = new ThreadLocal<>();
+            final CorfuRuntime rt;
+            final long maxTimeout;
+            final ThreadLocal<Long> localTimeStart = new ThreadLocal<>();
 
             TimeoutHandler(CorfuRuntime rt, long maxTimeout) {
                 this.rt = rt;

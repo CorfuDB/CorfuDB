@@ -17,8 +17,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Tests log unit server sealing behavior
- *
- * Created by WenbinZhu on 11/8/18.
  */
 public class LogUnitSealTest extends AbstractViewTest {
 

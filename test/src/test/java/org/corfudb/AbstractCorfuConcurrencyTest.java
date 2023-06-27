@@ -27,8 +27,7 @@ public class AbstractCorfuConcurrencyTest extends AbstractCorfuTest {
     }
 
     @Test
-    public void concurrentTestsThrowExceptions()
-            throws Exception {
+    public void concurrentTestsThrowExceptions() {
         scheduleConcurrently(PARAMETERS.CONCURRENCY_SOME, t -> {
             throw new IOException("hi");
         });
@@ -38,8 +37,7 @@ public class AbstractCorfuConcurrencyTest extends AbstractCorfuTest {
     }
 
     @Test
-    public void concurrentTestsTimeout()
-            throws Exception {
+    public void concurrentTestsTimeout() {
         scheduleConcurrently(PARAMETERS.CONCURRENCY_SOME,
                 t -> Thread.sleep(PARAMETERS.TIMEOUT_LONG.toMillis()));
         assertThatThrownBy(() -> executeScheduled(PARAMETERS.CONCURRENCY_SOME,

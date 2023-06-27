@@ -16,8 +16,6 @@ import org.junit.Test;
 
 /**
  * Tests sealing scenarios.
- *
- * Created by zlokhandwala on 3/7/17.
  */
 public class LayoutSealTest extends AbstractViewTest {
 
@@ -96,8 +94,8 @@ public class LayoutSealTest extends AbstractViewTest {
 
     public Map<Long, Integer> collectServerEpochs(int ... ports) {
         Map<Long, Integer> res = new HashMap<>();
-        for (int x = 0; x < ports.length; x++) {
-            long epoch = getLayoutServer(ports[x]).getServerContext().getServerEpoch();
+        for (int port : ports) {
+            long epoch = getLayoutServer(port).getServerContext().getServerEpoch();
             int count = res.getOrDefault(epoch, 0);
             res.put(epoch, count + 1);
         }
