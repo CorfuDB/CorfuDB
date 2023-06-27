@@ -23,7 +23,7 @@ import java.util.stream.Stream;
 @RunWith(Parameterized.class)
 public class CompressionTest extends AbstractViewTest {
 
-    private Codec.Type codec;
+    private final Codec.Type codec;
     private final byte[] DEFAULT_PAYLOAD = "payload".getBytes();
 
     public CompressionTest(Codec.Type codecType) {
@@ -76,7 +76,7 @@ public class CompressionTest extends AbstractViewTest {
 
     /**
      * This test evaluates writing and reading to a stream log with different available codecs.
-     * For this test, we setup a single node Corfu, and write/read a single entry with the same runtime.
+     * For this test, we set up a single node Corfu, and write/read a single entry with the same runtime.
      */
     @Test
     public void testEndToEndCompression() {
@@ -116,7 +116,7 @@ public class CompressionTest extends AbstractViewTest {
     public void testInterleavedCompressedEntries() {
         List<Long> addresses = new ArrayList<>();
 
-        input().stream().forEach(codecType -> {
+        input().forEach(codecType -> {
             CorfuRuntime rt = getRuntimeWithCodec(codecType);
             addresses.add(writeDefaultPayload(rt));
         });

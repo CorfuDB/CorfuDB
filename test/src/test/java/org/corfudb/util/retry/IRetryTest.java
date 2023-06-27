@@ -18,7 +18,7 @@ import org.junit.Test;
 public class IRetryTest extends AbstractCorfuTest {
 
     @Test
-    public void testIRetryReturnsValueAfterLotsOfRetries() throws SQLException, InterruptedException {
+    public void testIRetryReturnsValueAfterLotsOfRetries() throws Exception {
         AtomicInteger retries = new AtomicInteger(0);
         String e = IRetry.build(ExponentialBackoffRetry.class, SQLException.class, () -> {
             if (retries.getAndIncrement()< PARAMETERS.NUM_ITERATIONS_MODERATE) {
@@ -32,8 +32,7 @@ public class IRetryTest extends AbstractCorfuTest {
     }
 
     @Test(expected = SQLException.class)
-    public void testIRetryIsAbleToThrowCaughtExceptions()
-            throws SQLException, InterruptedException {
+    public void testIRetryIsAbleToThrowCaughtExceptions() throws Exception {
         IRetry.build(ExponentialBackoffRetry.class, SQLException.class, () -> {
             throw new SQLException();
         }).run();

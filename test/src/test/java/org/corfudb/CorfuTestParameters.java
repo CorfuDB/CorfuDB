@@ -112,15 +112,21 @@ public class CorfuTestParameters {
         printParameters();
     }
 
-    /** Print the parameters, using reflection magic
-     * (prints all public fields)*/
+    /**
+     * Print the parameters, using reflection magic
+     * (prints all public fields)
+     */
     private void printParameters() {
         System.out.println("Test Configuration:");
         Arrays.stream(this.getClass().getDeclaredFields())
-            .sorted(Comparator.comparing(Field::getName))
-            .filter(f -> (f.getModifiers() & Modifier.PUBLIC) > 0)
-            .forEachOrdered(f -> { try {System.out.println(f.getName() + ":"
-                                      + f.get(this).toString());}
-            catch (Exception ignored) {}});
+                .sorted(Comparator.comparing(Field::getName))
+                .filter(f -> (f.getModifiers() & Modifier.PUBLIC) > 0)
+                .forEachOrdered(f -> {
+                    try {
+                        System.out.println(f.getName() + ":" + f.get(this).toString());
+                    } catch (Exception ignored) {
+                        //ignore
+                    }
+                });
     }
 }

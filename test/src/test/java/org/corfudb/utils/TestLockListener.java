@@ -17,10 +17,10 @@ public class TestLockListener implements LockListener {
     private int lockRevokedCount = 0;
 
     @Getter
-    private ObservableValue lockAcquired = new ObservableValue(lockAcquiredCount);
+    private final ObservableValue<Integer> lockAcquired = new ObservableValue<>(lockAcquiredCount);
 
     @Getter
-    private ObservableValue lockRevoked = new ObservableValue(lockRevokedCount);
+    private final ObservableValue<Integer> lockRevoked = new ObservableValue<>(lockRevokedCount);
 
     @Override
     public void lockAcquired(LockDataTypes.LockId lockId) {

@@ -67,7 +67,7 @@ public class BackupRestoreIT extends AbstractIT {
     // Connect to sourceServer to generate data
     private CorfuRuntime srcDataRuntime = null;
 
-    // Connect to sourceServer to backup data
+    // Connect to sourceServer to back up data
     private CorfuRuntime backupRuntime = null;
 
     // Connect to destinationServer to restore data
@@ -80,7 +80,7 @@ public class BackupRestoreIT extends AbstractIT {
 
     /**
      * Setup Test Environment
-     *
+     * <p>
      * - Two independent Corfu Servers (source and destination)
      * - Four Corfu Runtimes connected to Corfu Servers
      */
@@ -178,8 +178,8 @@ public class BackupRestoreIT extends AbstractIT {
      * @param corfuStore    the Corfu Store at which new table is opened
      * @param tableName     the name of table to open
      */
-    private Table<Uuid, SampleSchema.EventInfo, Uuid>
-    openTableWithoutBackupTag(CorfuStore corfuStore, String tableName) throws NoSuchMethodException, IllegalAccessException, InvocationTargetException {
+    private Table<Uuid, SampleSchema.EventInfo, Uuid> openTableWithoutBackupTag(CorfuStore corfuStore, String tableName)
+            throws Exception {
         return corfuStore.openTable(NAMESPACE,
                 tableName,
                 SampleSchema.Uuid.class,
@@ -214,7 +214,7 @@ public class BackupRestoreIT extends AbstractIT {
      * @param dataStore     the data store used
      * @param tableName     the table which generated entries are added to
      * */
-    private void generateData(CorfuStore dataStore, String tableName, boolean hasBackupTag) throws NoSuchMethodException, IllegalAccessException, InvocationTargetException {
+    private void generateData(CorfuStore dataStore, String tableName, boolean hasBackupTag) throws Exception {
         Table table = hasBackupTag ? openTableWithBackupTag(dataStore, tableName) :
                 openTableWithoutBackupTag(dataStore, tableName);
 
@@ -301,7 +301,7 @@ public class BackupRestoreIT extends AbstractIT {
      * 4. Compare the table contents before and after the backup/restore.
      */
     @Test
-    public void backupRestoreMultipleTablesTest() throws IOException, NoSuchMethodException, IllegalAccessException, InvocationTargetException {
+    public void backupRestoreMultipleTablesTest() throws Exception {
 
         // Set up the test environment
         setupEnv();
@@ -361,7 +361,7 @@ public class BackupRestoreIT extends AbstractIT {
      * An end-to-end Backup and Restore test for multiple tables which have requires_backup_support tag
      */
     @Test
-    public void backupRestoreTaggedTablesTest() throws IOException, NoSuchMethodException, IllegalAccessException, InvocationTargetException {
+    public void backupRestoreTaggedTablesTest() throws Exception {
 
         // Set up the test environment
         setupEnv();
@@ -403,7 +403,7 @@ public class BackupRestoreIT extends AbstractIT {
      * Test if only user-specified tables are backed up
      */
     @Test
-    public void backupTablesSelectedByStreamIdsTest() throws IOException, NoSuchMethodException, IllegalAccessException, InvocationTargetException {
+    public void backupTablesSelectedByStreamIdsTest() throws Exception{
 
         // Set up the test environment
         setupEnv();
@@ -450,7 +450,7 @@ public class BackupRestoreIT extends AbstractIT {
      * Test if only tables with requires_backup_support tag are backed up
      */
     @Test
-    public void backupTablesSelectedByTagsTest() throws IOException, NoSuchMethodException, IllegalAccessException, InvocationTargetException {
+    public void backupTablesSelectedByTagsTest() throws Exception{
 
         // Set up the test environment
         setupEnv();
@@ -506,7 +506,7 @@ public class BackupRestoreIT extends AbstractIT {
      * Test backing up a non-existent table
      */
     @Test
-    public void backupNonExistentTableTest() throws IOException, NoSuchMethodException, IllegalAccessException, InvocationTargetException {
+    public void backupNonExistentTableTest() throws Exception{
 
         // Set up the test environment
         setupEnv();
@@ -543,7 +543,7 @@ public class BackupRestoreIT extends AbstractIT {
      * Test backing up an existent but empty table
      */
     @Test
-    public void backupRestoreEmptyTableTest() throws IOException, NoSuchMethodException, IllegalAccessException, InvocationTargetException {
+    public void backupRestoreEmptyTableTest() throws Exception{
 
         // Set up the test environment
         setupEnv();
@@ -598,7 +598,7 @@ public class BackupRestoreIT extends AbstractIT {
      * Test FileNotFoundException is thrown when backup TAR file is removed before restore
      */
     @Test
-    public void backupTarFileNotFoundTest() throws IOException, NoSuchMethodException, IllegalAccessException, InvocationTargetException {
+    public void backupTarFileNotFoundTest() throws Exception{
 
         // Set up the test environment
         setupEnv();
@@ -647,7 +647,7 @@ public class BackupRestoreIT extends AbstractIT {
      * Test trimming log before backup starts
      */
     @Test
-    public void backupAfterTrimTest() throws IOException, NoSuchMethodException, IllegalAccessException, InvocationTargetException {
+    public void backupAfterTrimTest() throws Exception{
 
         // Set up the test environment
         setupEnv();
@@ -697,7 +697,7 @@ public class BackupRestoreIT extends AbstractIT {
      */
     @Test
     public void backupRestoreAllTablesTest() throws
-            IOException, NoSuchMethodException, IllegalAccessException, InvocationTargetException {
+            Exception{
         // Set up the test environment
         setupEnv();
 
@@ -786,7 +786,7 @@ public class BackupRestoreIT extends AbstractIT {
      * Back up all tables and test restoring tagged tables from it
      */
     @Test
-    public void restoreTaggedTablesFromFullBackupTest() throws IOException, NoSuchMethodException, IllegalAccessException, InvocationTargetException {
+    public void restoreTaggedTablesFromFullBackupTest() throws Exception{
 
         // Set up the test environment
         setupEnv();

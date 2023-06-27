@@ -16,7 +16,7 @@ public class SerializersTest extends AbstractViewTest {
     public CorfuRuntime corfuRuntime;
 
     @Before
-    public void setRuntime() throws Exception {
+    public void setRuntime() {
         corfuRuntime = getDefaultRuntime().connect();
     }
 

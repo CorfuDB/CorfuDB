@@ -20,6 +20,7 @@ import java.time.Duration;
 import java.util.concurrent.TimeUnit;
 
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
+import static org.mockito.Matchers.any;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -33,17 +34,23 @@ public class CheckpointLivenessUpdaterUnitTest {
             (CorfuStoreEntry<? extends Message, ? extends Message, ? extends Message>) mock(CorfuStoreEntry.class);
 
     private static final Duration INTERVAL = Duration.ofSeconds(15);
-    private static final TableName tableName = TableName.newBuilder().setNamespace("TestNamespace").setTableName("TestTableName").build();
+    private static final TableName tableName = TableName.newBuilder()
+            .setNamespace("TestNamespace")
+            .setTableName("TestTableName")
+            .build();
 
     private CheckpointLivenessUpdater livenessUpdater;
 
     @Before
     public void setup() throws InvocationTargetException, NoSuchMethodException, IllegalAccessException {
-        when(corfuStore.openTable(Matchers.any(), Matchers.any(), Matchers.any(), Matchers.any(), Matchers.any(), Matchers.any())).thenReturn(mock(Table.class));
+        Table<Message, Message, Message> methodCall = corfuStore.openTable(
+                any(), any(), any(), any(), any(), any()
+        );
+        when(methodCall).thenReturn(mock(Table.class));
 
         when(corfuStore.txn(CORFU_SYSTEM_NAMESPACE)).thenReturn(txn);
-        when(txn.getRecord(Matchers.anyString(), Matchers.any(Message.class))).thenReturn(corfuStoreEntry);
-        doNothing().when(txn).putRecord(Matchers.any(), Matchers.any(), Matchers.any(), Matchers.any());
+        when(txn.getRecord(Matchers.anyString(), any(Message.class))).thenReturn(corfuStoreEntry);
+        doNothing().when(txn).putRecord(any(), any(), any(), any());
         when(txn.commit()).thenReturn(Timestamp.getDefaultInstance());
         livenessUpdater = new CheckpointLivenessUpdater(corfuStore);
     }
@@ -63,7 +70,7 @@ public class CheckpointLivenessUpdaterUnitTest {
         livenessUpdater.notifyOnSyncComplete();
 
         ArgumentCaptor<ActiveCPStreamMsg> captor = ArgumentCaptor.forClass(ActiveCPStreamMsg.class);
-        verify(txn).putRecord(Matchers.any(), Matchers.any(), captor.capture(), Matchers.any());
+        verify(txn).putRecord(any(), any(), captor.capture(), any());
         Assert.assertEquals(1, captor.getValue().getSyncHeartbeat());
     }
 
@@ -79,7 +86,7 @@ public class CheckpointLivenessUpdaterUnitTest {
         livenessUpdater.updateHeartbeat();
 
         ArgumentCaptor<ActiveCPStreamMsg> captor = ArgumentCaptor.forClass(ActiveCPStreamMsg.class);
-        verify(txn).putRecord(Matchers.any(), Matchers.any(), captor.capture(), Matchers.any());
+        verify(txn).putRecord(any(), any(), captor.capture(), any());
         Assert.assertEquals(1, captor.getValue().getSyncHeartbeat());
     }
 
@@ -100,7 +107,7 @@ public class CheckpointLivenessUpdaterUnitTest {
         livenessUpdater.notifyOnSyncComplete();
 
         ArgumentCaptor<ActiveCPStreamMsg> captor = ArgumentCaptor.forClass(ActiveCPStreamMsg.class);
-        verify(txn).putRecord(Matchers.any(), Matchers.any(), captor.capture(), Matchers.any());
+        verify(txn).putRecord(any(), any(), captor.capture(), any());
         Assert.assertEquals(1, captor.getValue().getSyncHeartbeat());
     }
 }
