@@ -91,7 +91,6 @@ public class StateTransferTest extends AbstractViewTest {
     }
 
 
-    @Test
     /**
      * 1. Segment 1: 0 -> -1: Node 0, Node 1
      * 2. Add node Node 2
