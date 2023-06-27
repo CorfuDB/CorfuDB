@@ -73,11 +73,10 @@ public class CorfuServerEndpointIT extends AbstractIT {
      * Test that Corfu Server runs when only endpoint address is configured.
      * (No network interface)
      *
-     * @throws IOException IOException
-     * @throws InterruptedException InterruptedException
+     * @throws Exception error
      */
     @Test
-    public void testEndpointOnly() throws IOException, InterruptedException {
+    public void testEndpointOnly() throws Exception {
         testEndpointOnlyHelper(NetworkInterfaceVersion.IPV4);
         testEndpointOnlyHelper(NetworkInterfaceVersion.IPV6);
     }
@@ -86,7 +85,7 @@ public class CorfuServerEndpointIT extends AbstractIT {
      * Helper method to test that Corfu Server runs when only endpoint address is configured.
      * (No network interface)
      */
-    private void testEndpointOnlyHelper(NetworkInterfaceVersion networkInterfaceVersion) throws IOException, InterruptedException {
+    private void testEndpointOnlyHelper(NetworkInterfaceVersion networkInterfaceVersion) throws Exception {
         String address = getVersionSpecificNetworkAddress(networkInterfaceVersion);
         if (address != null) {
             Process corfuServerProcess = runCorfuServerWithAddress(address, networkInterfaceVersion);
@@ -99,11 +98,10 @@ public class CorfuServerEndpointIT extends AbstractIT {
     /**
      * Test that Corfu Server runs when localhost endpoint is used.
      *
-     * @throws IOException IOException
-     * @throws InterruptedException InterruptedException
+     * @throws Exception Exception
      */
     @Test
-    public void testLocalHostEndpoint() throws IOException, InterruptedException {
+    public void testLocalHostEndpoint() throws Exception {
         Process corfuServerProcess = runPersistentServer("localhost", PORT_INT_9000, true);
         CorfuRuntime corfuRuntime = createRuntime(LOCALHOST_ENDPOINT_URL);
         assertThat(shutdownCorfuServer(corfuServerProcess)).isTrue();
@@ -114,11 +112,10 @@ public class CorfuServerEndpointIT extends AbstractIT {
      * Test that Corfu Server runs when only network interface is configured.
      * (No endpoint (host+port))
      *
-     * @throws IOException IOException
-     * @throws InterruptedException InterruptedException
+     * @throws Exception Exception
      */
     @Test
-    public void testValidNetworkInterfaces() throws IOException, InterruptedException {
+    public void testValidNetworkInterfaces() throws Exception {
         testValidNetworkInterfacesHelper(NetworkInterfaceVersion.IPV4);
         testValidNetworkInterfacesHelper(NetworkInterfaceVersion.IPV6);
     }
@@ -127,7 +124,7 @@ public class CorfuServerEndpointIT extends AbstractIT {
      * Helper method to test that Corfu Server runs when only network interface is configured.
      * (No endpoint (host+port))
      */
-    public void testValidNetworkInterfacesHelper(NetworkInterfaceVersion networkInterfaceVersion) throws IOException, InterruptedException {
+    public void testValidNetworkInterfacesHelper(NetworkInterfaceVersion networkInterfaceVersion) throws Exception {
         String networkInterfaceName = getLocalNetworkInterface();
         log.info("testValidNetworkInterfacesHelper: Interface from getLocalNetworkInterface {}", networkInterfaceName);
 
@@ -146,17 +143,16 @@ public class CorfuServerEndpointIT extends AbstractIT {
      * when INVALID network interface is used.
      * Server picks up any known of the interfaces (eth0,en0,etc.) and connects to them.
      *
-     * @throws IOException IOException
-     * @throws InterruptedException InterruptedException
+     * @throws Exception Exception
      */
     @Test
-    public void testInvalidNetworkInterface() throws IOException, InterruptedException {
+    public void testInvalidNetworkInterface() throws Exception {
         testInvalidNetworkInterfaceHelper(NetworkInterfaceVersion.IPV4);
         testInvalidNetworkInterfaceHelper(NetworkInterfaceVersion.IPV6);
 
     }
 
-    public void testInvalidNetworkInterfaceHelper(NetworkInterfaceVersion networkInterfaceVersion) throws IOException, InterruptedException {
+    public void testInvalidNetworkInterfaceHelper(NetworkInterfaceVersion networkInterfaceVersion) throws Exception {
         Process corfuServerProcess = runCorfuServerWithNetworkInterface("INVALID", networkInterfaceVersion);
 
         // get an address from the underlying interfaces
@@ -172,11 +168,10 @@ public class CorfuServerEndpointIT extends AbstractIT {
      * Helper method to test that Corfu Server runs when only port is configured.
      * (No host address, no network interface)
      *
-     * @throws IOException IOException
-     * @throws InterruptedException InterruptedException
+     * @throws Exception Exception
      */
     @Test
-    public void testPortOnlyMode() throws IOException, InterruptedException {
+    public void testPortOnlyMode() throws Exception {
         Process corfuServerProcess = new CorfuServerRunner()
                 .setPort(PORT_INT_9000)
                 .setDisableHost(true)

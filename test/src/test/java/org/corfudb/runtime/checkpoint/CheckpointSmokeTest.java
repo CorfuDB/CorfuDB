@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.runtime.view.TableRegistry.getFullyQualifiedTableName;
 import static org.junit.Assert.fail;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.reflect.TypeToken;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -40,7 +39,6 @@ import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.exceptions.WriteSizeException;
 import org.corfudb.runtime.object.VersionedObjectIdentifier;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
@@ -63,9 +61,9 @@ import org.junit.Test;
  */
 
 public class CheckpointSmokeTest extends AbstractViewTest {
-    final byte serilizerByte = (byte) 20;
-    ISerializer serializer = new CPSerializer(serilizerByte);
-    public CorfuRuntime r;
+    private final byte serilizerByte = (byte) 20;
+    private final ISerializer serializer = new CPSerializer(serilizerByte);
+    private CorfuRuntime r;
 
     @Before
     public void setRuntime() {
@@ -125,7 +123,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
     public void testEmptyMapCP() throws Exception {
         PersistentCorfuTable<String, String> table = r.getObjectsView()
                 .build()
-                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setTypeToken(PersistentCorfuTable.<String, String>getTableType())
                 .setStreamName("Map1")
                 .open();
 
@@ -152,7 +150,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
     }
 
     /** First smoke test, steps:
-     *
+     * <p>
      * 1. Put a couple of keys into an CorfuTable "m"
      * 2. Write a checkpoint (3 records total) into "m"'s stream.
      *    The SMREntry records in the checkpoint will *not* match
@@ -164,14 +162,14 @@ public class CheckpointSmokeTest extends AbstractViewTest {
      *    Verify via get() that we cannot see the first two keys,
      *    we see the snapshot's keys 7 & 8, and we can also see
      *    key 3.
-     *
+     * <p>
      * This is not correct map behavior: keys shouldn't be lost like
      * this.  But that's the point: the checkpoint *writer* is guilty
      * of the bad behavior, and the unit test is looking exactly for
      * bad behavior to confirm that the checkpoint mechanism is doing
      * something extremely out-of-the-ordinary.
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
 	public void smoke1Test() throws Exception {
@@ -221,7 +219,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
     }
 
     /** Second smoke test, steps:
-     *
+     * <p>
      * 1. Put a few keys into an CorfuTable "m" with prefix keyPrefixFirst.
      * 2. Write a checkpoint (3 records total) into "m"'s stream.
      *    The SMREntry records in the checkpoint will *not* match
@@ -233,16 +231,16 @@ public class CheckpointSmokeTest extends AbstractViewTest {
      * 3. Put a few keys into an CorfuTable "m" with prefix keyPrefixLast
      * 4. Write an incomplete checkpoint (START and CONTINUATION but
      *    no END).
-     *
+     * <p>
      * When a new map is instantiated, the keyPrefixFirst keys should
      * _not_ visible, the fake checkpoint keys should be visible, and
      * all middle* and last keys should be visible.
-     *
+     * <p>
      * Again, this is not correct map behavior, same as the first
      * smoke test.  We don't have code yet to generate "real"
      * checkpoint data; still PoC stage.
      *
-     * @throws Exception
+     * @throws Exception error
      */
 
     @Test
@@ -365,19 +363,19 @@ public class CheckpointSmokeTest extends AbstractViewTest {
     /** Test the CheckpointWriter class, part 2.  We write data to a
      *  map before, during/interleaved with, and after a checkpoint
      *  has been successfully completed.
-     *
+     * <p>
      *  Our sanity criteria: no matter where in the log, we use a
      *  snapshot transaction to look at the map at that log
      *  address ... a new map's contents should match exactly the
      *  'snapshot' maps inside the 'history' that we created while
      *  we updated the map.
-     *
+     * <p>
      *  The one exception is for snapshot TXN with an address prior
      *  to the 'startAddress' of the checkpoint; stream history is
      *  destroyed (logically, not physically) by the CP, so we have
      *  to use a different position 'history' for our assertion
      *  check.
-     *
+     * <p>
      * +-----------------------------------------------------------------+
      * | 0  | 1  | 2  | 3 | 4 | 5  | 6 | 7  | 8 | 9  | 10 | 11 | 12 | 13 |
      * +-----------------------------------------------------------------+
@@ -530,7 +528,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
     }
 
     /** Test the CheckpointWriter write size limit.
-     *
+     * <p>
      * CheckpointWriter aggregates a batch of SMREntries into one
      * CheckpointEntry. This test uses large-sized SMREntries to verify
      * that batching will not violate the maxWriteSize limit.
@@ -750,7 +748,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
     }
 
     /** Test the CheckpointWriter batch size.
-     *
+     * <p>
      * CheckpointWriter aggregates a batch of SMREntries into one
      * CheckpointEntry. This test verifies that only given number
      * of SMR entries (batchSize) will be grouped in one checkpoint
@@ -816,7 +814,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
     private Token checkpointUfoSystemTables(CorfuRuntime runtime, ISerializer serializer) {
         PersistentCorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord> tableRegistry = runtime.getObjectsView()
                 .build()
-                .setTypeToken(new TypeToken<PersistentCorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord>>() {})
+                .setTypeToken(PersistentCorfuTable.<CorfuDynamicKey, OpaqueCorfuDynamicRecord>getTableType())
                 .setStreamName(TableRegistry.getFullyQualifiedTableName(TableRegistry.CORFU_SYSTEM_NAMESPACE,
                         TableRegistry.REGISTRY_TABLE_NAME))
                 .setSerializer(serializer)
@@ -825,7 +823,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
 
         PersistentCorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord> descriptorTable = runtime.getObjectsView()
                 .build()
-                .setTypeToken(new TypeToken<PersistentCorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord>>() {})
+                .setTypeToken(PersistentCorfuTable.<CorfuDynamicKey, OpaqueCorfuDynamicRecord>getTableType())
                 .setStreamName(TableRegistry.getFullyQualifiedTableName(TableRegistry.CORFU_SYSTEM_NAMESPACE,
                         TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME))
                 .setSerializer(serializer)
@@ -875,7 +873,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         r.getSerializers().registerSerializer(serializer);
         PersistentCorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord> corfuTable = r.getObjectsView()
                 .build()
-                .setTypeToken(new TypeToken<PersistentCorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord>>() {})
+                .setTypeToken(PersistentCorfuTable.<CorfuDynamicKey, OpaqueCorfuDynamicRecord>getTableType())
                 .setStreamName(getFullyQualifiedTableName(namespace, streamName))
                 .setSerializer(serializer)
                 .addOpenOption(ObjectOpenOption.NO_CACHE)
@@ -942,7 +940,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         return r.getObjectsView()
                 .build()
                 .setStreamName(streamName)
-                .setTypeToken(new TypeToken<PersistentCorfuTable<String, Long>>() {})
+                .setTypeToken(PersistentCorfuTable.<String, Long>getTableType())
                 .setSerializer(serializer)
                 .open();
     }
@@ -952,7 +950,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         return rt.getObjectsView()
                 .build()
                 .setStreamName(streamName)
-                .setTypeToken(new TypeToken<PersistentCorfuTable<String, Long>>() {})
+                .setTypeToken(PersistentCorfuTable.<String, Long>getTableType())
                 .setSerializer(serializer)
                 .open();
     }
@@ -962,7 +960,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         return r.getObjectsView()
                 .build()
                 .setStreamName(streamName)
-                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setTypeToken(PersistentCorfuTable.<String, String>getTableType())
                 .setSerializer(serializer)
                 .open();
     }
@@ -1229,7 +1227,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         PersistentCorfuTable<String, Long> mA2 = rt2.getObjectsView()
                 .build()
                 .setStreamName(streamA)
-                .setTypeToken(new TypeToken<PersistentCorfuTable<String, Long>>() {})
+                .setTypeToken(PersistentCorfuTable.<String, Long>getTableType())
                 .setSerializer(serializer)
                 .open();
 
@@ -1244,7 +1242,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
      * This test verifies that a stream is rebuilt from a checkpoint, whenever two valid checkpoints exist, but the
      * latest checkpoint is performed on an earlier snapshot, while the log is trimmed on the snapshot of the earliest
      * checkpoint.
-     *
+     * <p>
      * 1. Write 25 entries to stream A.
      * 2. Start a checkpoint (CP2) at snapshot 15, complete it.
      * 3. Start a checkpoint (CP1) at snapshot 10, complete it.
@@ -1287,7 +1285,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         PersistentCorfuTable<String, Long> mA2 = rt2.getObjectsView()
                 .build()
                 .setStreamName(streamA)
-                .setTypeToken(new TypeToken<PersistentCorfuTable<String, Long>>() {})
+                .setTypeToken(PersistentCorfuTable.<String, Long>getTableType())
                 .setSerializer(serializer)
                 .open();
 
@@ -1306,7 +1304,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
      * has not been updated for some time. This will guarantee that trim will continue progressing
      * even in scenarios where some streams are not constantly updated.
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void testCheckpointTokenProgressesForNonWrittenStreams() throws Exception {

@@ -3,6 +3,7 @@ package org.corfudb.integration;
 import org.corfudb.runtime.CompactorMetadataTables;
 import org.corfudb.runtime.CheckpointLivenessUpdater;
 import org.corfudb.runtime.CorfuCompactorManagement;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.TableOptions;
@@ -60,7 +61,7 @@ public class LivenessUpdaterIT extends AbstractIT {
         final String namespace = "namespace";
         final String tableName = "table";
         runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
         CorfuStore store = new CorfuStore(runtime);
 
         store.openTable(

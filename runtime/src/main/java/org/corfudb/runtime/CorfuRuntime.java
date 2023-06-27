@@ -1,5 +1,6 @@
 package org.corfudb.runtime;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.micrometer.core.instrument.Timer;
 import io.netty.channel.ChannelOption;
@@ -314,7 +315,7 @@ public class CorfuRuntime {
          * Checkpoint read Batch Size: number of checkpoint addresses to fetch in batch when stream
          * address discovery mechanism relies on address maps instead of follow backpointers;
          */
-        int checkpointReadBatchSize = 5;
+        int checkpointReadBatchSize = 1;
 
         /*
          * Cache Option for local writes.
@@ -439,7 +440,7 @@ public class CorfuRuntime {
             private int checkpointBatchSize = 50;
             private int restoreBatchSize = 50;
             private int streamBatchSize = 10;
-            private int checkpointReadBatchSize = 5;
+            private int checkpointReadBatchSize = 1;
             private Duration runtimeGCPeriod = Duration.ofMinutes(20);
             private UUID clusterId = null;
             private int systemDownHandlerTriggerLimit = 20;
@@ -1139,7 +1140,8 @@ public class CorfuRuntime {
      * @param layout The layout to check.
      * @throws WrongClusterException If the layout belongs to the wrong cluster.
      */
-    private void checkClusterId(@Nonnull Layout layout) {
+    @VisibleForTesting
+    public void checkClusterId(@Nonnull Layout layout) {
         // We haven't adopted a clusterId yet.
         if (clusterId == null) {
             clusterId = layout.getClusterId();

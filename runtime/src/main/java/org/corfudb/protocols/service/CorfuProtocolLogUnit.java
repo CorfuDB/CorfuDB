@@ -487,10 +487,12 @@ public final class CorfuProtocolLogUnit {
      * @return       a RequestPayloadMsg containing the RESET_LOG_UNIT request
      */
     public static RequestPayloadMsg getResetLogUnitRequestMsg(long epoch) {
+        ResetLogUnitRequestMsg requestMsg = ResetLogUnitRequestMsg.newBuilder()
+                .setEpoch(epoch)
+                .build();
+
         return RequestPayloadMsg.newBuilder()
-                .setResetLogUnitRequest(ResetLogUnitRequestMsg.newBuilder()
-                        .setEpoch(epoch)
-                        .build())
+                .setResetLogUnitRequest(requestMsg)
                 .build();
     }
 

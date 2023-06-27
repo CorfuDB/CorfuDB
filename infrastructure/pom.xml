@@ -32,7 +32,7 @@
                             <goal>run</goal>
                         </goals>
                         <configuration>
-                            <protocVersion>3.6.1</protocVersion>
+                            <protocVersion>${protobuf.version}</protocVersion>
                             <includeStdTypes>true</includeStdTypes>
                             <addProtoSources>inputs</addProtoSources>
                             <includeMavenTypes>direct</includeMavenTypes>
@@ -167,6 +167,13 @@
             <artifactId>utils</artifactId>
             <version>${project.version}</version>
         </dependency>
+
+        <dependency>
+            <groupId>io.prometheus</groupId>
+            <artifactId>simpleclient_httpserver</artifactId>
+            <version>0.16.0</version>
+        </dependency>
+
         <!-- External Dependencies-->
         <dependency>
             <groupId>javax.annotation</groupId>

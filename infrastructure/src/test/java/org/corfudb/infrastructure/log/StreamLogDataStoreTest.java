@@ -55,12 +55,14 @@ public class StreamLogDataStoreTest {
 
     @Test
     public void testReset() {
-        StreamLogDataStore streamLogDs = getStreamLogDataStore();
-        streamLogDs.resetStartingAddress();
-        assertEquals(ZERO_ADDRESS, streamLogDs.getStartingAddress());
+        final int latestAddress = 3;
 
-        streamLogDs.resetTailSegment();
-        assertEquals(ZERO_ADDRESS, streamLogDs.getTailSegment());
+        StreamLogDataStore streamLogDs = getStreamLogDataStore();
+        streamLogDs.updateStartingAddress(latestAddress);
+        assertEquals(latestAddress, streamLogDs.getStartingAddress());
+
+        streamLogDs.resetTailSegment(latestAddress);
+        assertEquals(latestAddress, streamLogDs.getTailSegment());
 
         streamLogDs.resetCommittedTail();
         assertEquals(NON_ADDRESS, streamLogDs.getCommittedTail());

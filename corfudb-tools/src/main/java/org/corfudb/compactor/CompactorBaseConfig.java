@@ -25,11 +25,13 @@ public class CompactorBaseConfig {
     public static final int DEFAULT_CP_MAX_WRITE_SIZE = 25 << 20;
     public static final int SYSTEM_DOWN_HANDLER_TRIGGER_LIMIT = 100;  // Corfu default is 20
     public static final int CORFU_LOG_CHECKPOINT_ERROR = 3;
+    private static final int SYSTEM_EXIT_ERROR_CODE = -3;
     public static final String USAGE = "Usage: compactor-runner";
     public static final String OPTIONS = "Options:\n";
 
     private final Runnable defaultSystemDownHandler = () -> {
-        throw new UnreachableClusterException("Cluster is unavailable");
+        log.error("Exiting since the SystemDownHandler is invoked after " + SYSTEM_DOWN_HANDLER_TRIGGER_LIMIT + " retries.");
+        System.exit(SYSTEM_EXIT_ERROR_CODE);
     };
 
     private Map<String, Object> opts;
@@ -89,13 +91,18 @@ public class CompactorBaseConfig {
             builder.bulkReadSize(Integer.parseInt(bulkReadSizeStr));
         });
 
+        getOpt("--maxCacheEntries").ifPresent(maxCacheEntries -> {
+            builder.maxCacheEntries(Integer.parseInt(maxCacheEntries));
+        });
+
+        builder.maxMvoCacheEntries(0);
+
         builder.clientName(host);
         builder.systemDownHandlerTriggerLimit(SYSTEM_DOWN_HANDLER_TRIGGER_LIMIT)
                 .systemDownHandler(defaultSystemDownHandler);
 
         params = builder
                 .priorityLevel(PriorityLevel.HIGH)
-                .cacheDisabled(true)
                 .build();
     }
 
@@ -126,6 +133,7 @@ public class CompactorBaseConfig {
                 "[--persistedCacheRoot=<pathToTempDirForLargeTables>] " +
                 "[--maxWriteSize=<maxWriteSizeLimit>] " +
                 "[--bulkReadSize=<bulkReadSize>] " +
+                "[--maxCacheEntries=<maxCacheEntries>] " +
                 "[--tlsEnabled=<tls_enabled>]";
 
         public static final String OPTIONS_PARAMS =
@@ -137,7 +145,8 @@ public class CompactorBaseConfig {
                 + "--truststore_password=<truststore_password> Truststore Password\n"
                 + "--persistedCacheRoot=<pathToTempDirForLargeTables> Path to Temp Dir\n"
                 + "--maxWriteSize=<maxWriteSize> Max write size smaller than 2GB\n"
-                + "--bulkReadSize=<bulkReadSize> Read size for chain replication\n"
+                + "--bulkReadSize=<bulkReadSize> Number of log entries read in one batch\n"
+                + "--maxCacheEntries=<maxCacheEntries> AddressSpaceView read cache size\n"
                 + "--tlsEnabled=<tls_enabled>";
     }
 }

@@ -4,6 +4,9 @@ import org.corfudb.common.config.ConfigParamsHelper;
 
 public class CorfuServerCmdLine {
 
+    public static final String METRICS_PORT_PARAM = "--metrics-port";
+    public static final String HEALTH_PORT_PARAM = "--health-port";
+
     private CorfuServerCmdLine() {
         // prevent class initialization
     }
@@ -26,6 +29,7 @@ public class CorfuServerCmdLine {
                     + "\tcorfu_server (-l <path>|-m) [-nsNA] [-a <address>|-q <interface-name>] "
                     + "[--network-interface-version=<interface-version>] "
                     + "[--max-replication-data-message-size=<msg-size>] "
+                    + "[--max-replication-write-size=<max-replication-write-size>] "
                     + "[-c <ratio>] [-d <level>] [-p <seconds>] "
                     + "[--lrCacheSize=<cache-num-entries>]"
                     + "[--plugin=<plugin-config-file-path>]"
@@ -39,7 +43,8 @@ public class CorfuServerCmdLine {
                     + "[-H <seconds>] [-I <cluster-id>] [-x <ciphers>] [-z <tls-protocols>]] "
                     + "[--disable-cert-expiry-check-file=<file_path>]"
                     + "[--metrics]"
-                    + "[--health-port=<health_port>]"
+                    + "[" + METRICS_PORT_PARAM + "=<metrics_port>]"
+                    + "[" + HEALTH_PORT_PARAM + "=<health_port>]"
                     + "[--snapshot-batch=<batch-size>] [--lock-lease=<lease-duration>]"
                     + "[--max-snapshot-entries-applied=<max-snapshot-entries-applied>]"
                     + "[-P <prefix>] [-R <retention>] <port>"
@@ -172,14 +177,19 @@ public class CorfuServerCmdLine {
                     + "              Number of threads dedicated for the logunit server [default: 4].\n"
                     + " --metrics                                                                "
                     + "              Enable metrics provider.\n                                  "
-                    + " --health-port=<health_port>                                              "
+                    + " " + HEALTH_PORT_PARAM + "=<health_port>                                              "
                     + "              Enable health api and bind to this port.\n                  "
+                    + " " + METRICS_PORT_PARAM + "=<metrics_port>                                              "
+                    + "              Enable metrics api and bind to this port.\n                  "
                     + " --snapshot-batch=<batch-size>                                            "
                     + "              Snapshot (Full) Sync batch size (number of entries)\n       "
                     + " --lrCacheSize=<cache-num-entries>"
                     + "              LR's cache max number of entries.\n                              "
                     + " --max-replication-data-message-size=<msg-size>                                       "
                     + "              The max size of replication data message in bytes.\n   "
+                    + " --max-replication-write-size=<max-replication-write-size>"
+                    + "              Max size of replicated data written by the SINK in a single corfu transaction. "
+                    + "              Integer.MAX_VALUE by default\n "
                     + " --lock-lease=<lease-duration>                                            "
                     + "              Lock lease duration in seconds\n                            "
                     + " --max-snapshot-entries-applied=<max-snapshot-entries-applied>            "

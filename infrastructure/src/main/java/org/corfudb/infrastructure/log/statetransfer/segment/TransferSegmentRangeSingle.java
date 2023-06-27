@@ -78,22 +78,15 @@ public class TransferSegmentRangeSingle implements TransferSegmentRange {
 
         public void verify() {
             if (startAddress < 0L || endAddress < 0L) {
-                throw new IllegalStateException(
-                        String.format("Start: %s or end: %s " +
-                                "can not be negative.", startAddress, endAddress));
+                String errMsg = "Start: %s or end: %s can not be negative.";
+                String err = String.format(errMsg, startAddress, endAddress);
+                throw new IllegalStateException(err);
             }
+
             if (startAddress > endAddress) {
-                throw new IllegalStateException(
-                        String.format("Start: %s can not be " +
-                                "greater than end: %s.", startAddress, endAddress));
-            }
-
-            if (status == null || typeOfTransfer == null || availableServers == null) {
-                throw new IllegalStateException("All non null arguments should be defined.");
-            }
-
-            if (unknownAddressesInRange == null) {
-                throw new IllegalStateException("Unknown addresses in range should be defined");
+                String errMsg = "Start: %s can not be greater than end: %s.";
+                String err = String.format(errMsg, startAddress, endAddress);
+                throw new IllegalStateException(err);
             }
         }
 

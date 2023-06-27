@@ -2,6 +2,7 @@ package org.corfudb.infrastructure.redundancy;
 
 import com.google.common.collect.ImmutableList;
 import org.corfudb.infrastructure.LayoutBasedTestHelper;
+import org.corfudb.infrastructure.NodeNames;
 import org.corfudb.infrastructure.log.statetransfer.segment.StateTransferType;
 import org.corfudb.infrastructure.log.statetransfer.segment.TransferSegment;
 import org.corfudb.infrastructure.log.statetransfer.segment.TransferSegmentRange;
@@ -23,6 +24,14 @@ import java.util.function.Predicate;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.corfudb.infrastructure.NodeNames.A;
+import static org.corfudb.infrastructure.NodeNames.B;
+import static org.corfudb.infrastructure.NodeNames.C;
+import static org.corfudb.infrastructure.NodeNames.D;
+import static org.corfudb.infrastructure.NodeNames.E;
+import static org.corfudb.infrastructure.NodeNames.F;
+import static org.corfudb.infrastructure.NodeNames.G;
+import static org.corfudb.infrastructure.NodeNames.H;
 import static org.corfudb.infrastructure.log.statetransfer.segment.TransferSegmentStatus.SegmentState.NOT_TRANSFERRED;
 import static org.corfudb.infrastructure.log.statetransfer.segment.TransferSegmentStatus.SegmentState.RESTORED;
 import static org.corfudb.infrastructure.log.statetransfer.segment.TransferSegmentStatus.SegmentState.TRANSFERRED;
@@ -32,10 +41,12 @@ import static org.corfudb.runtime.view.Layout.ReplicationMode.CHAIN_REPLICATION;
 
 public class RedundancyCalculatorTest extends LayoutBasedTestHelper implements TransferSegmentCreator {
 
+    private static final String LOCALHOST = "localhost";
+
     @Test
     public void testCreateStateListTrimMarkNotMoved() {
         RedundancyCalculator redundancyCalculator =
-                new RedundancyCalculator("localhost");
+                new RedundancyCalculator(LOCALHOST);
 
         Layout layout = createNonPresentLayout();
 
@@ -46,7 +57,7 @@ public class RedundancyCalculatorTest extends LayoutBasedTestHelper implements T
                         createStatus(NOT_TRANSFERRED, Optional.empty())));
 
         ImmutableList<TransferSegment> result = redundancyCalculator
-                .createStateList(layout, -1L);
+                .createStateList(layout, NON_ADDRESS);
 
         assertThat(transformListToMock(result)).isEqualTo(expected);
 
@@ -58,7 +69,7 @@ public class RedundancyCalculatorTest extends LayoutBasedTestHelper implements T
                 new MockedSegment(2L, 3L,
                         createStatus(RESTORED, Optional.empty())));
 
-        result = redundancyCalculator.createStateList(layout, -1L);
+        result = redundancyCalculator.createStateList(layout, NON_ADDRESS);
 
         assertThat(transformListToMock(result))
                 .isEqualTo(expected);
@@ -67,7 +78,7 @@ public class RedundancyCalculatorTest extends LayoutBasedTestHelper implements T
     @Test
     public void testCreateStateListTrimMarkIntersectsSegment() {
         RedundancyCalculator redundancyCalculator =
-                new RedundancyCalculator("localhost");
+                new RedundancyCalculator(LOCALHOST);
 
         Layout layout = createNonPresentLayout();
 
@@ -99,28 +110,28 @@ public class RedundancyCalculatorTest extends LayoutBasedTestHelper implements T
     public void testSegmentContainsServer() {
 
 
-        LayoutStripe stripe1 = new LayoutStripe(Arrays.asList("localhost", "A", "B"));
-        LayoutStripe stripe2 = new LayoutStripe(Collections.singletonList("C"));
-        LayoutStripe stripe3 = new LayoutStripe(Collections.singletonList("D"));
+        LayoutStripe stripe1 = new LayoutStripe(Arrays.asList(LOCALHOST, A, B));
+        LayoutStripe stripe2 = new LayoutStripe(Collections.singletonList(C));
+        LayoutStripe stripe3 = new LayoutStripe(Collections.singletonList(D));
 
         LayoutSegment segment = new LayoutSegment(CHAIN_REPLICATION, 0L, 1L,
                 Arrays.asList(stripe1, stripe2, stripe3));
 
-        RedundancyCalculator calculator = new RedundancyCalculator("localhost");
+        RedundancyCalculator calculator = new RedundancyCalculator(LOCALHOST);
 
-        Assert.assertTrue(calculator.segmentContainsServer(segment, "localhost"));
+        Assert.assertTrue(calculator.segmentContainsServer(segment, LOCALHOST));
 
-        stripe1 = new LayoutStripe(Arrays.asList("A", "B"));
+        stripe1 = new LayoutStripe(Arrays.asList(A, B));
         segment = new LayoutSegment(CHAIN_REPLICATION, 0L, 1L,
                 Arrays.asList(stripe1, stripe2, stripe3));
-        Assert.assertFalse(calculator.segmentContainsServer(segment, "localhost"));
+        Assert.assertFalse(calculator.segmentContainsServer(segment, LOCALHOST));
     }
 
     @Test
     public void testRequiresRedundancyRestoration() {
-        LayoutStripe stripe0 = new LayoutStripe(Collections.singletonList("A"));
-        LayoutStripe stripe1 = new LayoutStripe(Arrays.asList("A", "B"));
-        LayoutStripe stripe2 = new LayoutStripe(Arrays.asList("A", "B", "localhost"));
+        LayoutStripe stripe0 = new LayoutStripe(Collections.singletonList(A));
+        LayoutStripe stripe1 = new LayoutStripe(Arrays.asList(A, B));
+        LayoutStripe stripe2 = new LayoutStripe(Arrays.asList(A, B, LOCALHOST));
         LayoutSegment segment0 = new LayoutSegment(CHAIN_REPLICATION, 0L, 2L,
                 Collections.singletonList(stripe0));
         LayoutSegment segment1 = new LayoutSegment(CHAIN_REPLICATION, 3L, 6L,
@@ -130,36 +141,34 @@ public class RedundancyCalculatorTest extends LayoutBasedTestHelper implements T
 
         // Not required, since A is present
         Layout layout = createTestLayout(Arrays.asList(segment1, segment2));
-        assertThat(RedundancyCalculator.canRestoreRedundancy(layout, "A"))
+        assertThat(RedundancyCalculator.canRestoreRedundancy(layout, A))
                 .isFalse();
         // Not required, since the layout consists of only one segment
         layout = createTestLayout(Collections.singletonList(segment1));
-        assertThat(RedundancyCalculator.canRestoreRedundancy(layout, "A"))
+        assertThat(RedundancyCalculator.canRestoreRedundancy(layout, A))
                 .isFalse();
         // Required, since node B is not present at the beginning
         layout = createTestLayout(Arrays.asList(segment0, segment1, segment2));
-        assertThat(RedundancyCalculator.canRestoreRedundancy(layout, "B"))
+        assertThat(RedundancyCalculator.canRestoreRedundancy(layout, B))
                 .isTrue();
         // Required, since localhost is not present in the second last segment
         layout = createTestLayout(Arrays.asList(segment0, segment2));
-        assertThat(RedundancyCalculator.canRestoreRedundancy(layout, "localhost"))
+        assertThat(RedundancyCalculator.canRestoreRedundancy(layout, LOCALHOST))
                 .isTrue();
-
-
     }
 
     @Test
     public void testCreateStateListComplex() {
 
-        LayoutStripe stripe1 = new LayoutStripe(Arrays.asList("localhost", "A", "B"));
-        LayoutStripe stripe2 = new LayoutStripe(Collections.singletonList("C"));
-        LayoutStripe stripe3 = new LayoutStripe(Collections.singletonList("D"));
+        LayoutStripe stripe1 = new LayoutStripe(Arrays.asList(LOCALHOST, A, B));
+        LayoutStripe stripe2 = new LayoutStripe(Collections.singletonList(C));
+        LayoutStripe stripe3 = new LayoutStripe(Collections.singletonList(D));
         LayoutSegment segment1 = new LayoutSegment(CHAIN_REPLICATION, 0L, 21L,
                 Arrays.asList(stripe1, stripe2, stripe3));
 
-        LayoutStripe stripe11 = new LayoutStripe(Arrays.asList("C", "D"));
-        LayoutStripe stripe22 = new LayoutStripe(Collections.singletonList("C"));
-        LayoutStripe stripe33 = new LayoutStripe(Collections.singletonList("D"));
+        LayoutStripe stripe11 = new LayoutStripe(Arrays.asList(C, D));
+        LayoutStripe stripe22 = new LayoutStripe(Collections.singletonList(C));
+        LayoutStripe stripe33 = new LayoutStripe(Collections.singletonList(D));
         LayoutSegment segment2 = new LayoutSegment(CHAIN_REPLICATION, 21L, 51L,
                 Arrays.asList(stripe11, stripe22, stripe33));
 
@@ -167,10 +176,10 @@ public class RedundancyCalculatorTest extends LayoutBasedTestHelper implements T
 
         Layout testLayout = createTestLayout(layoutSegments);
 
-        RedundancyCalculator calculator = new RedundancyCalculator("localhost");
+        RedundancyCalculator calculator = new RedundancyCalculator(LOCALHOST);
 
         ImmutableList<TransferSegment> transferSegments =
-                calculator.createStateList(testLayout, -1L);
+                calculator.createStateList(testLayout, NON_ADDRESS);
 
         MockedSegment presentSegment = new MockedSegment(0L,
                 20L,
@@ -197,15 +206,15 @@ public class RedundancyCalculatorTest extends LayoutBasedTestHelper implements T
     public void testRestoreRedundancyForSegment() {
         TransferSegment segment = createTransferSegment(0L, 20L, RESTORED);
 
-        LayoutStripe stripe1 = new LayoutStripe(Collections.singletonList("A"));
-        LayoutStripe stripe2 = new LayoutStripe(Collections.singletonList("C"));
-        LayoutStripe stripe3 = new LayoutStripe(Collections.singletonList("D"));
+        LayoutStripe stripe1 = new LayoutStripe(Collections.singletonList(A));
+        LayoutStripe stripe2 = new LayoutStripe(Collections.singletonList(C));
+        LayoutStripe stripe3 = new LayoutStripe(Collections.singletonList(D));
         LayoutSegment segment1 = new LayoutSegment(CHAIN_REPLICATION, 0L, 21L,
                 Arrays.asList(stripe1, stripe2, stripe3));
 
-        LayoutStripe stripe11 = new LayoutStripe(Arrays.asList("C", "D"));
-        LayoutStripe stripe22 = new LayoutStripe(Collections.singletonList("C"));
-        LayoutStripe stripe33 = new LayoutStripe(Collections.singletonList("D"));
+        LayoutStripe stripe11 = new LayoutStripe(Arrays.asList(C, D));
+        LayoutStripe stripe22 = new LayoutStripe(Collections.singletonList(C));
+        LayoutStripe stripe33 = new LayoutStripe(Collections.singletonList(D));
         LayoutSegment segment2 = new LayoutSegment(CHAIN_REPLICATION, 21L, 51L,
                 Arrays.asList(stripe11, stripe22, stripe33));
 
@@ -213,32 +222,33 @@ public class RedundancyCalculatorTest extends LayoutBasedTestHelper implements T
 
         Layout testLayout = createTestLayout(layoutSegments);
 
-        RedundancyCalculator calculator = new RedundancyCalculator("localhost");
+        RedundancyCalculator calculator = new RedundancyCalculator(LOCALHOST);
         Layout layout = calculator.restoreRedundancyForSegment(segment, testLayout);
+        System.out.println(layout);
         assertThat(layout.getFirstSegment().getFirstStripe().getLogServers())
-                .contains("localhost");
+                .contains(LOCALHOST);
 
     }
 
     @Test
     public void testUpdateLayoutAfterRedundancyRestoration() {
 
-        LayoutStripe stripe1 = new LayoutStripe(Collections.singletonList("A"));
-        LayoutStripe stripe2 = new LayoutStripe(Collections.singletonList("C"));
-        LayoutStripe stripe3 = new LayoutStripe(Collections.singletonList("D"));
+        LayoutStripe stripe1 = new LayoutStripe(Collections.singletonList(A));
+        LayoutStripe stripe2 = new LayoutStripe(Collections.singletonList(C));
+        LayoutStripe stripe3 = new LayoutStripe(Collections.singletonList(D));
         LayoutSegment segment1 = new LayoutSegment(CHAIN_REPLICATION, 0L, 21L,
                 Arrays.asList(stripe1, stripe2, stripe3));
 
-        LayoutStripe stripe11 = new LayoutStripe(Arrays.asList("C", "D"));
-        LayoutStripe stripe22 = new LayoutStripe(Collections.singletonList("C"));
-        LayoutStripe stripe33 = new LayoutStripe(Collections.singletonList("D"));
+        LayoutStripe stripe11 = new LayoutStripe(Arrays.asList(C, D));
+        LayoutStripe stripe22 = new LayoutStripe(Collections.singletonList(C));
+        LayoutStripe stripe33 = new LayoutStripe(Collections.singletonList(D));
         LayoutSegment segment2 = new LayoutSegment(CHAIN_REPLICATION, 21L, 51L,
                 Arrays.asList(stripe11, stripe22, stripe33));
 
 
-        LayoutStripe stripe111 = new LayoutStripe(Arrays.asList("E", "F"));
-        LayoutStripe stripe222 = new LayoutStripe(Collections.singletonList("G"));
-        LayoutStripe stripe333 = new LayoutStripe(Collections.singletonList("H"));
+        LayoutStripe stripe111 = new LayoutStripe(Arrays.asList(E, F));
+        LayoutStripe stripe222 = new LayoutStripe(Collections.singletonList(G));
+        LayoutStripe stripe333 = new LayoutStripe(Collections.singletonList(H));
         LayoutSegment segment3 = new LayoutSegment(CHAIN_REPLICATION, 51L, 61L,
                 Arrays.asList(stripe111, stripe222, stripe333));
 
@@ -252,21 +262,21 @@ public class RedundancyCalculatorTest extends LayoutBasedTestHelper implements T
                         createTransferSegment(51L, 60L, RESTORED));
 
 
-        RedundancyCalculator calculator = new RedundancyCalculator("localhost");
+        RedundancyCalculator calculator = new RedundancyCalculator(LOCALHOST);
 
         Layout consolidatedLayout =
                 calculator.updateLayoutAfterRedundancyRestoration(transferSegments,
                         testLayout);
 
         assertThat(consolidatedLayout.getSegments().stream())
-                .allMatch(segment -> segment.getFirstStripe().getLogServers().contains("localhost"));
+                .allMatch(segment -> segment.getFirstStripe().getLogServers().contains(LOCALHOST));
 
     }
 
     @Test
     public void testCanMergeSegmentsOneSegment() {
         LayoutSegment segment = new LayoutSegment(CHAIN_REPLICATION, 0L, 1L,
-                Arrays.asList(new LayoutStripe(Arrays.asList("localhost"))));
+                Arrays.asList(new LayoutStripe(Arrays.asList(LOCALHOST))));
         assertThat(RedundancyCalculator
                 .canMergeSegments(createTestLayout(Arrays.asList(segment)))).isFalse();
     }
@@ -274,10 +284,10 @@ public class RedundancyCalculatorTest extends LayoutBasedTestHelper implements T
     @Test
     public void testCanMergeSegmentsServersNonPresent() {
         LayoutSegment segment1 = new LayoutSegment(CHAIN_REPLICATION, 0L, 1L,
-                Arrays.asList(new LayoutStripe(Arrays.asList("localhost", "B"))));
+                Arrays.asList(new LayoutStripe(Arrays.asList(LOCALHOST, B))));
 
         LayoutSegment segment2 = new LayoutSegment(CHAIN_REPLICATION, 0L, 1L,
-                Arrays.asList(new LayoutStripe(Arrays.asList("C", "A"))));
+                Arrays.asList(new LayoutStripe(Arrays.asList(C, A))));
         assertThat(RedundancyCalculator
                 .canMergeSegments(createTestLayout(Arrays.asList(segment1, segment2)))).isFalse();
     }
@@ -285,10 +295,10 @@ public class RedundancyCalculatorTest extends LayoutBasedTestHelper implements T
     @Test
     public void testCanMergeSegmentsServerNotPresent() {
         LayoutSegment segment1 = new LayoutSegment(CHAIN_REPLICATION, 0L, 1L,
-                Arrays.asList(new LayoutStripe(Arrays.asList("localhost", "B"))));
+                Arrays.asList(new LayoutStripe(Arrays.asList(LOCALHOST, B))));
 
         LayoutSegment segment2 = new LayoutSegment(CHAIN_REPLICATION, 0L, 1L,
-                Arrays.asList(new LayoutStripe(Arrays.asList("C", "B", "localhost"))));
+                Arrays.asList(new LayoutStripe(Arrays.asList(C, B, LOCALHOST))));
         assertThat(RedundancyCalculator
                 .canMergeSegments(createTestLayout(Arrays.asList(segment1, segment2)))).isFalse();
     }
@@ -296,10 +306,10 @@ public class RedundancyCalculatorTest extends LayoutBasedTestHelper implements T
     @Test
     public void testCanMergeSegmentsDoMerge() {
         LayoutSegment segment1 = new LayoutSegment(CHAIN_REPLICATION, 0L, 1L,
-                Arrays.asList(new LayoutStripe(Arrays.asList("localhost", "B"))));
+                Arrays.asList(new LayoutStripe(Arrays.asList(LOCALHOST, B))));
 
         LayoutSegment segment2 = new LayoutSegment(CHAIN_REPLICATION, 0L, 1L,
-                Arrays.asList(new LayoutStripe(Arrays.asList("B", "localhost"))));
+                Arrays.asList(new LayoutStripe(Arrays.asList(B, LOCALHOST))));
         assertThat(RedundancyCalculator
                 .canMergeSegments(createTestLayout(Arrays.asList(segment1, segment2)))).isTrue();
 
@@ -339,7 +349,7 @@ public class RedundancyCalculatorTest extends LayoutBasedTestHelper implements T
                         .startAddress(0L)
                         .endAddress(1L)
                         .status(null)
-                        .build()).isInstanceOf(IllegalStateException.class);
+                        .build()).isInstanceOf(NullPointerException.class);
 
 
     }
@@ -347,14 +357,14 @@ public class RedundancyCalculatorTest extends LayoutBasedTestHelper implements T
     private ImmutableList<TransferSegment> getTestSegments() {
         TransferSegment firstSegment = TransferSegment
                 .builder()
-                .logUnitServers(ImmutableList.of("A", "B", "C"))
+                .logUnitServers(ImmutableList.of(A, B, C))
                 .startAddress(150L)
                 .endAddress(300L)
                 .status(TransferSegmentStatus.builder().segmentState(RESTORED).build())
                 .build();
         TransferSegment secondSegment = TransferSegment
                 .builder()
-                .logUnitServers(ImmutableList.of("A", "C"))
+                .logUnitServers(ImmutableList.of(A, C))
                 .startAddress(301L)
                 .endAddress(500L)
                 .status(TransferSegmentStatus.builder().build())
@@ -410,6 +420,7 @@ public class RedundancyCalculatorTest extends LayoutBasedTestHelper implements T
         RedundancyCalculator calc = new RedundancyCalculator("test");
         ImmutableList<TransferSegmentRange> transferSegmentRanges =
                 calc.prepareTransferWorkload(testSegments, tail);
+
         for (int i = 0; i < transferSegmentRanges.size(); i++) {
             TransferSegmentRangeSingle transferSegmentRange = (TransferSegmentRangeSingle) transferSegmentRanges.get(i);
             final long startAddress = testSegments.get(i).getStartAddress();
@@ -561,30 +572,30 @@ public class RedundancyCalculatorTest extends LayoutBasedTestHelper implements T
     @Test
     public void testGetTrimmedNotRestoredSegments() {
         Layout.ReplicationMode replicationMode = CHAIN_REPLICATION;
-        LayoutStripe layoutStripe1 = new LayoutStripe(ImmutableList.of("A"));
+        LayoutStripe layoutStripe1 = new LayoutStripe(ImmutableList.of(A));
         LayoutSegment segment1 = new LayoutSegment(replicationMode, 0L, 100L,
                 ImmutableList.of(layoutStripe1));
-        LayoutStripe layoutStripe2 = new LayoutStripe(ImmutableList.of("B", "C"));
+        LayoutStripe layoutStripe2 = new LayoutStripe(ImmutableList.of(B, C));
         LayoutSegment segment2 = new LayoutSegment(replicationMode, 100L, 150L,
                 ImmutableList.of(layoutStripe2));
-        List<String> allServers = ImmutableList.of("A", "B", "C");
+        List<String> allServers = ImmutableList.of(A, B, C);
         Layout layout = new Layout(allServers, allServers,
                 ImmutableList.of(segment1, segment2), ImmutableList.of(), 1L,
                 UUID.randomUUID());
         long trimMark = 101L;
 
         ImmutableList<TransferSegment> trimmedNotRestoredSegmentsForA =
-                new RedundancyCalculator("A")
+                new RedundancyCalculator(A)
                         .getTrimmedNotRestoredSegments(layout, trimMark);
 
         assertThat(trimmedNotRestoredSegmentsForA).isEmpty();
 
         ImmutableList<TransferSegment> trimmedNotRestoredSegmentsForB =
-                new RedundancyCalculator("B")
+                new RedundancyCalculator(B)
                 .getTrimmedNotRestoredSegments(layout, trimMark);
 
         ImmutableList<TransferSegment> trimmedNotRestoredSegmentsForC =
-                new RedundancyCalculator("C")
+                new RedundancyCalculator(C)
                         .getTrimmedNotRestoredSegments(layout, trimMark);
 
         TransferSegmentStatus transferredStatus =
