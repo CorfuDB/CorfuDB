@@ -7,9 +7,6 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/**
- * Created by Sundar Sridharan on May 23, 2019.
- */
 public class SnowflakeGuidGeneratorTest {
 
     @Test

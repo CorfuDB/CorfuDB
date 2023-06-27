@@ -50,8 +50,6 @@ import static org.junit.Assert.fail;
 
 /**
  * Test to verify the Management Server functionalities.
- *
- * Created by zlokhandwala on 11/9/16.
  */
 @Slf4j
 public class ManagementViewTest extends AbstractViewTest {

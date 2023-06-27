@@ -1,6 +1,5 @@
 package org.corfudb.runtime.view;
 
-import com.google.common.reflect.TypeToken;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
@@ -13,10 +12,6 @@ import java.time.Duration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/**
- * Created by maithem on 11/16/18.
- */
-
 public class ViewsGarbageCollectorTest extends AbstractViewTest {
 
     @Test
@@ -27,7 +22,7 @@ public class ViewsGarbageCollectorTest extends AbstractViewTest {
 
         PersistentCorfuTable<String, String> table = rt.getObjectsView()
                 .build()
-                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setTypeToken(PersistentCorfuTable.<String, String>getTableType())
                 .setStreamName("table1")
                 .open();
 

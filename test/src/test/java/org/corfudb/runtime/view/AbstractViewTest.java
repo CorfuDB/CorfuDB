@@ -271,7 +271,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
     }
 
 
-    /** Get a instance of a test server, which provides access to the underlying components and server router.
+    /** Get an instance of a test server, which provides access to the underlying components and server router.
      *
      * @param port      The port of the test server to retrieve.
      * @return          A test server instance.
@@ -280,7 +280,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
         return testServerMap.get("test:" + port);
     }
 
-    /** Get a instance of a logging unit, given a port.
+    /** Get an instance of a logging unit, given a port.
      *
      * @param port      The port of the logging unit to retrieve.
      * @return          A logging unit instance.
@@ -289,7 +289,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
         return getServer(port).getLogUnitServer();
     }
 
-    /** Get a instance of a sequencer, given a port.
+    /** Get an instance of a sequencer, given a port.
      *
      * @param port      The port of the sequencer to retrieve.
      * @return          A sequencer instance.
@@ -298,7 +298,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
         return getServer(port).getSequencerServer();
     }
 
-    /** Get a instance of a layout server, given a port.
+    /** Get an instance of a layout server, given a port.
      *
      * @param port      The port of the layout server to retrieve.
      * @return          A layout server instance.
@@ -408,13 +408,11 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
                 new ThreadFactoryBuilder()
                     .setNameFormat("netty-%d")
                     .setDaemon(true)
-                    .setUncaughtExceptionHandler((thread, throwable) -> {
-                        assertThat(false)
-                            .as("Thread " + thread.getName()
-                                + " unexpectedly terminated with "
-                                + throwable.getClass().getSimpleName())
-                            .isTrue();
-                    })
+                    .setUncaughtExceptionHandler((thread, throwable) -> assertThat(false)
+                        .as("Thread " + thread.getName()
+                            + " unexpectedly terminated with "
+                            + throwable.getClass().getSimpleName())
+                        .isTrue())
                 .build());
     }
 
@@ -433,8 +431,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
             .nettyEventLoop(NETTY_EVENT_LOOP)
             .build();
         CorfuRuntime runtime = CorfuRuntime.fromParameters(parameters);
-        runtime.parseConfigurationString(l.layoutServers.stream()
-            .collect(Collectors.joining(",")));
+        runtime.parseConfigurationString(String.join(",", l.layoutServers));
         return runtime;
     }
 

@@ -26,9 +26,6 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.junit.Test;
 
-/**
- * Created by mwei on 2/1/16.
- */
 public class AddressSpaceViewTest extends AbstractViewTest {
 
     private void setupNodes() {
@@ -70,7 +67,7 @@ public class AddressSpaceViewTest extends AbstractViewTest {
                 .parseConfigurationString(getDefaultConfigurationString())
                 .connect();
 
-        assertThatThrownBy(() -> rt.getAddressSpaceView())
+        assertThatThrownBy(rt::getAddressSpaceView)
                 .isInstanceOf(UnsupportedOperationException.class);
     }
 
@@ -115,8 +112,7 @@ public class AddressSpaceViewTest extends AbstractViewTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
-    public void ensureStripingWorks() throws Exception {
+    public void ensureStripingWorks() {
         setupNodes();
         CorfuRuntime rt = getRuntime().connect();
         rt.getParameters().setCodecType(Codec.Type.NONE);
@@ -198,8 +194,7 @@ public class AddressSpaceViewTest extends AbstractViewTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
-    public void ensureStripingReadAllWorks() throws Exception {
+    public void ensureStripingReadAllWorks() {
         setupNodes();
         CorfuRuntime rt = getRuntime().connect();
 
@@ -238,7 +233,7 @@ public class AddressSpaceViewTest extends AbstractViewTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    public void readAllWithHoleFill() throws Exception {
+    public void readAllWithHoleFill() {
         setupNodes();
         CorfuRuntime rt = getRuntime().connect();
 
@@ -253,7 +248,7 @@ public class AddressSpaceViewTest extends AbstractViewTest {
         assertThat(rt.getAddressSpaceView().read(ADDRESS_0).getPayload(getRuntime()))
                 .isEqualTo("hello world".getBytes());
 
-        Range range = Range.closed(ADDRESS_0, ADDRESS_2);
+        Range<Long> range = Range.closed(ADDRESS_0, ADDRESS_2);
         ContiguousSet<Long> addresses = ContiguousSet.create(range, DiscreteDomain.longs());
 
         Map<Long, ILogData> m = rt.getAddressSpaceView().read(addresses);

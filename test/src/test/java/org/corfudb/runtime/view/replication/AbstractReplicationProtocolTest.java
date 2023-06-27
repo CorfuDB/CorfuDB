@@ -17,8 +17,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /** This test tests basic properties of the contract
  * which all replication protocols must meet.
- *
- * Created by mwei on 4/13/17.
  */
 public abstract class AbstractReplicationProtocolTest extends AbstractViewTest {
 
@@ -41,7 +39,6 @@ public abstract class AbstractReplicationProtocolTest extends AbstractViewTest {
      * that was written.
      */
     @Test
-    @SuppressWarnings("unchecked")
     public void canWriteRead()
             throws Exception {
         setupNodes();
@@ -67,9 +64,7 @@ public abstract class AbstractReplicationProtocolTest extends AbstractViewTest {
      * the case of an unwritten address.
      */
     @Test
-    @SuppressWarnings("unchecked")
-    public void readOnlyCommitted()
-            throws Exception {
+    public void readOnlyCommitted() {
         setupNodes();
 
         //begin tests
@@ -93,9 +88,7 @@ public abstract class AbstractReplicationProtocolTest extends AbstractViewTest {
      * written entry results in an OverwriteException.
      */
     @Test
-    @SuppressWarnings("unchecked")
-    public void overwriteThrowsException()
-            throws Exception {
+    public void overwriteThrowsException() {
         setupNodes();
 
         //begin tests

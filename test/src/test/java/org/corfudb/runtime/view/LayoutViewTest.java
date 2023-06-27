@@ -25,9 +25,6 @@ import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-/**
- * Created by mwei on 1/6/16.
- */
 @Slf4j
 public class LayoutViewTest extends AbstractViewTest {
 
@@ -49,8 +46,7 @@ public class LayoutViewTest extends AbstractViewTest {
     }
 
     @Test
-    public void canSetLayout()
-            throws Exception {
+    public void canSetLayout() {
         CorfuRuntime r = getDefaultRuntime().connect();
         Layout l = new TestLayoutBuilder()
                 .setEpoch(1)
@@ -74,8 +70,7 @@ public class LayoutViewTest extends AbstractViewTest {
      *  in a wrong epoch exception.
      */
     @Test
-    public void cannotSetLayoutWithWrongId()
-        throws Exception {
+    public void cannotSetLayoutWithWrongId() {
         CorfuRuntime r = getDefaultRuntime().connect();
         Layout l = new TestLayoutBuilder()
             .setEpoch(1)
@@ -114,8 +109,7 @@ public class LayoutViewTest extends AbstractViewTest {
     }
 
     @Test
-    public void canTolerateLayoutServerFailure()
-            throws Exception {
+    public void canTolerateLayoutServerFailure() {
         addServer(SERVERS.PORT_0);
         addServer(SERVERS.PORT_1);
 
@@ -155,13 +149,12 @@ public class LayoutViewTest extends AbstractViewTest {
      * Perform data operations. Fail SERVERS.PORT_1 and reconfigure to have only SERVERS.PORT_0 and SERVERS.PORT_2.
      * Perform data operations while the reconfiguration is going on. The operations should
      * be stuck till the new configuration is chosen and then complete after that.
-     * FIXME: We cannot failover the server with the primary sequencer yet.
+     * FIXME: We cannot fail over the server with the primary sequencer yet.
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
-    public void reconfigurationDuringDataOperations()
-            throws Exception {
+    public void reconfigurationDuringDataOperations() throws Exception {
         addServer(SERVERS.PORT_0);
         addServer(SERVERS.PORT_1);
         addServer(SERVERS.PORT_2);
@@ -234,7 +227,7 @@ public class LayoutViewTest extends AbstractViewTest {
 
         // verify writes and reads happen before and after the reconfiguration
         IStreamView sv = corfuRuntime.getStreamsView().get(CorfuRuntime.getStreamID("streamA"));
-        // This append will happen before the reconfiguration while the read for this append
+        // This appends will happen before the reconfiguration while the read for this append
         // will happen after reconfiguration
         writeAndReadStream(corfuRuntime, sv, startReconfigurationLatch, layoutReconfiguredLatch);
         // Write and read after reconfiguration.
@@ -256,10 +249,9 @@ public class LayoutViewTest extends AbstractViewTest {
      * If we take consensus on new layout, the test should fail as we would receive a
      * wrong epoch exception from SERVERS.PORT_0.
      *
-     * @throws Exception
      */
     @Test
-    public void getConsensusFromCurrentMembers1Node() throws Exception {
+    public void getConsensusFromCurrentMembers1Node() {
         addServer(SERVERS.PORT_0);
         addServer(SERVERS.PORT_1);
 
@@ -303,15 +295,14 @@ public class LayoutViewTest extends AbstractViewTest {
     /**
      * Moving from a cluster of 3 nodes {Node 0, Node 1, Node 2} -> {Node 1, Node 2, Node 3}
      * We add a rule to make Node 1 unresponsive.
-     * To move to the next epoch we would need a majority consensus from {0, 1, 2} and we receive
+     * To move to the next epoch we would need a majority of consensus from {0, 1, 2} and we receive
      * responses from {0, 2} and successfully update the layout.
      * NOTE: We DO NOT await consensus from {1, 2, 3}. If we do, Node 1 does not respond and
      * Node 3 should throw a WrongEpochException and our updateLayout should fail.
      *
-     * @throws Exception
      */
     @Test
-    public void getConsensusFromCurrentMembers3Nodes() throws Exception {
+    public void getConsensusFromCurrentMembers3Nodes() {
         addServer(SERVERS.PORT_0);
         addServer(SERVERS.PORT_1);
         addServer(SERVERS.PORT_2);
@@ -408,22 +399,21 @@ public class LayoutViewTest extends AbstractViewTest {
      * Prepare should return the layout with the highest proposed rank.
      * The scenario is tested in 3 steps as shown below.
      * PORT_0         PORT_1         PORT_2
-     *
+     * <p>
      * prepare(1)     prepare(1)     X
      * propose(1,L1)  X              X
-     *
+     * <p>
      * X              prepare(2)     prepare(2)
      * X              propose(2,L2)  X
-     *
+     * <p>
      * prepare(3)     prepare(3)     prepare(3)
      * [Returns L1]   [Returns L2]   null
-     *
+     * <p>
      * The final prepare attempt should return L2 as it has the highest rank of 2.
      *
-     * @throws Exception
      */
     @Test
-    public void prepareReturnLayoutWithHighestRank() throws Exception {
+    public void prepareReturnLayoutWithHighestRank() {
 
         addServer(SERVERS.PORT_0);
         addServer(SERVERS.PORT_1);
@@ -528,22 +518,22 @@ public class LayoutViewTest extends AbstractViewTest {
 
     /**
      * Propose messages should be rejected if a higher rank epoch has already been accepted.
-     *
+     * <p>
      * PORT_0             PORT_1                 PORT_2
-     *
+     * <p>
      * prepare(1)         prepare(1)             prepare(1)
      * propose(1,L1)      ? (delayed)            X
-     *
+     * <p>
      * X                  prepare(2)             prepare(2)
      * ---                propose(1,L1)(reject)  --
      * X                  propose(2,L2)          propose(2,L2)
-     *
+     * <p>
      * prepare(3)         prepare(3)             prepare(3)
      * [Returns L1]       [Returns L2]           [Returns L2]
-     *
+     * <p>
      * The final prepare attempt should return L2 as it has been accepted by the quorum.
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void delayedProposeTest() throws Exception {
@@ -615,7 +605,7 @@ public class LayoutViewTest extends AbstractViewTest {
         // PORT_2 drops the oncoming propose message.
         addClientRule(corfuRuntime1, SERVERS.ENDPOINT_2, new TestRule().drop().always());
 
-        // Add rule to hold the propose message sent to PORT_1.
+        // Add rule to hold the proposal message sent to PORT_1.
         addClientRule(corfuRuntime1, SERVERS.ENDPOINT_1, new TestRule().requestMatches(msg -> {
             if (msg.getPayload().getPayloadCase().equals(RequestPayloadMsg.PayloadCase.PROPOSE_LAYOUT_REQUEST)) {
                 proposeLock.release();
@@ -624,7 +614,7 @@ public class LayoutViewTest extends AbstractViewTest {
         }));
         holdMessage(corfuRuntime1, SERVERS.ENDPOINT_1, RequestPayloadMsg.PayloadCase.PROPOSE_LAYOUT_REQUEST);
 
-        // Asynchronously send a propose message to PORT_0 and PORT_1 (PORT_2 is disabled)
+        // Asynchronously send a proposal message to PORT_0 and PORT_1 (PORT_2 is disabled)
         Future<Boolean> future = executorService.submit(() -> {
             try {
                 corfuRuntime1.getLayoutView().propose(l1.getEpoch(), rank1, l1);
@@ -646,7 +636,7 @@ public class LayoutViewTest extends AbstractViewTest {
         }));
 
         proposeLock.tryAcquire(PARAMETERS.TIMEOUT_NORMAL.toMillis(), TimeUnit.MILLISECONDS);
-        // After propose delayed, send a prepare to PORT_1 and PORT_2.
+        // After propose delayed, send a prepared to PORT_1 and PORT_2.
         final long rank2 = 2L;
         addClientRule(corfuRuntime2, SERVERS.ENDPOINT_0, new TestRule().drop().always());
         Layout alreadyProposedLayout2 = corfuRuntime2.getLayoutView().prepare(l2.getEpoch(), rank2);

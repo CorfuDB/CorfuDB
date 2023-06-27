@@ -65,7 +65,7 @@ public class StreamAddressSpaceTest {
         StreamAddressSpace streamA = new StreamAddressSpace();
         streamA.addAddress(1L);
         streamA.trim(1L);
-        StreamAddressSpace streamB = new StreamAddressSpace(6L, Collections.EMPTY_SET);
+        StreamAddressSpace streamB = new StreamAddressSpace(6L, Collections.emptySet());
 
         assertThat(streamA.size()).isEqualTo(0);
         assertThat(streamA.getTrimMark()).isEqualTo(1L);
@@ -226,7 +226,7 @@ public class StreamAddressSpaceTest {
                 .equals(new StreamAddressSpace(2L, Collections.emptySet()))).isTrue();
         // TODO(Maithem): Re-enable after this fix https://github.com/RoaringBitmap/RoaringBitmap/pull/451
         //assertThat(new StreamAddressSpace(2L, Collections.EMPTY_SET)
-          //      .equals(new StreamAddressSpace(2L, ImmutableSet.of(1L, 2L)))).isTrue();
+        //      .equals(new StreamAddressSpace(2L, ImmutableSet.of(1L, 2L)))).isTrue();
         assertThat(new StreamAddressSpace(ImmutableSet.of(1L, 2L))
                 .equals(new StreamAddressSpace(ImmutableSet.of(1L, 2L)))).isTrue();
     }

@@ -14,10 +14,6 @@ import static java.lang.reflect.Modifier.TRANSIENT;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-
-/**
- * Created by rmichoud on 4/17/17.
- */
 @Slf4j
 public class LayoutTest {
 
