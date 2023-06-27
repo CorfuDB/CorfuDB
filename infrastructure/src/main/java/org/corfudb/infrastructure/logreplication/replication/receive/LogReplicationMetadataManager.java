@@ -191,7 +191,7 @@ public class LogReplicationMetadataManager {
 
                 ReplicationStatus defaultSinkStatus = ReplicationStatus.newBuilder()
                         .setSinkStatus(SinkReplicationStatus.newBuilder()
-                                .setDataConsistent(false)
+                                .setDataConsistent(true)
                                 .setReplicationInfo(ReplicationInfo.newBuilder()
                                         .setStatus(SyncStatus.NOT_STARTED)
                                         .setSnapshotSyncInfo(SnapshotSyncInfo.newBuilder()
