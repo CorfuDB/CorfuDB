@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure.logreplication.infrastructure;
 
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.infrastructure.logreplication.utils.SnapshotSyncUtils;
 import org.corfudb.runtime.CorfuStoreMetadata;
@@ -159,7 +160,8 @@ public class LogReplicationClientRegisterListener extends StreamListenerResumeOr
     protected CorfuStoreMetadata.Timestamp performFullSync() {
         CorfuStoreMetadata.Timestamp timestamp = configManager.onClientListenerResume();
         sessionManager.getSessions().forEach(session -> {
-            SnapshotSyncUtils.enforceSnapshotSync(session, corfuStore);
+            SnapshotSyncUtils.enforceSnapshotSync(session, corfuStore,
+                    LogReplicationMetadata.ReplicationEvent.ReplicationEventType.FORCE_SNAPSHOT_SYNC);
         });
         return timestamp;
     }
