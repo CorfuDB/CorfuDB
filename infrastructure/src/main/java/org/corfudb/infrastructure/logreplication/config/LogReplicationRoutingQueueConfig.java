@@ -14,7 +14,7 @@ import java.util.UUID;
 import static org.corfudb.runtime.LogReplicationRoutingQueueClient.DEFAULT_ROUTING_QUEUE_CLIENT;
 import static org.corfudb.runtime.LogReplicationUtils.LOG_ENTRY_SYNC_QUEUE_TAG_SENDER_PREFIX;
 import static org.corfudb.runtime.LogReplicationUtils.REPLICATED_QUEUE_NAME_PREFIX;
-import static org.corfudb.runtime.LogReplicationUtils.REPLICATED_QUEUE_TAG;
+import static org.corfudb.runtime.LogReplicationUtils.REPLICATED_QUEUE_TAG_PREFIX;
 import static org.corfudb.runtime.LogReplicationUtils.SNAPSHOT_SYNC_QUEUE_TAG_SENDER_PREFIX;
 
 /**
@@ -60,7 +60,7 @@ public class LogReplicationRoutingQueueConfig extends LogReplicationConfig {
         this.logEntrySyncStreamTag = LOG_ENTRY_SYNC_QUEUE_TAG_SENDER_PREFIX + session.getSinkClusterId();
         this.sinkQueueName = REPLICATED_QUEUE_NAME_PREFIX + session.getSourceClusterId();
         this.sinkQueueStreamId = CorfuRuntime.getStreamID(this.sinkQueueName);
-        this.sinkQueueStreamTag = CorfuRuntime.getStreamID(REPLICATED_QUEUE_TAG + DEFAULT_ROUTING_QUEUE_CLIENT);
+        this.sinkQueueStreamTag = CorfuRuntime.getStreamID(REPLICATED_QUEUE_TAG_PREFIX + DEFAULT_ROUTING_QUEUE_CLIENT);
         getStreamsToReplicate().add(snapshotSyncStreamTag);
         getDataStreamToTagsMap().put(sinkQueueStreamId, Collections.singletonList(sinkQueueStreamTag));
     }
