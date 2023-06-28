@@ -13,16 +13,21 @@ import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationCo
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.ISnapshotSyncPlugin;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationMetadata;
-import org.corfudb.runtime.proto.RpcCommon.UuidMsg;
-import org.corfudb.runtime.LogReplication.LogReplicationSession;
+import org.corfudb.runtime.CorfuOptions;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
+import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMetadataMsg;
+import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
+import org.corfudb.runtime.LogReplication.LogReplicationSession;
+import org.corfudb.runtime.Queue;
+import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
+import org.corfudb.runtime.proto.RpcCommon.UuidMsg;
 import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalRetry;
 import org.corfudb.util.retry.RetryNeededException;
@@ -31,8 +36,10 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
 import java.net.URL;
 import java.net.URLClassLoader;
+import java.nio.file.Paths;
 import java.util.Objects;
 import java.util.Properties;
 import java.util.UUID;
@@ -42,6 +49,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
 import static org.corfudb.protocols.service.CorfuProtocolLogReplication.getLrEntryAckMsg;
+import static org.corfudb.runtime.LogReplicationRoutingQueueClient.DEFAULT_ROUTING_QUEUE_CLIENT;
+import static org.corfudb.runtime.LogReplicationUtils.REPLICATED_QUEUE_NAME_PREFIX;
+import static org.corfudb.runtime.LogReplicationUtils.REPLICATED_QUEUE_TAG_PREFIX;
+import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 /**
  * This class represents the Log Replication Manager at the destination.
@@ -182,6 +193,9 @@ public class LogReplicationSinkManager implements DataReceiver {
                         .setNameFormat("snapshotSyncApplyExecutor-" + session.hashCode())
                         .build());
 
+        if (session.getSubscriber().getModel().equals(LogReplication.ReplicationModel.ROUTING_QUEUES)) {
+            insertQInRegistryTable();
+        }
         initWriterAndBufferMgr();
     }
 
@@ -220,6 +234,32 @@ public class LogReplicationSinkManager implements DataReceiver {
 
         logEntrySinkBufferManager = new LogEntrySinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,
                 metadataManager.getReplicationMetadata(session).getLastLogEntryBatchProcessed(), this);
+    }
+
+    /**
+     * For routing table model, the replicated queue, which is present only on SINK side, may not be open by the time
+     * LR starts the replication. As we want the stream to be checkpointed, add an entry to the registry table.
+     * No need to open the queue.
+     */
+    private void insertQInRegistryTable() {
+        TableRegistry tableRegistry = runtime.getTableRegistry();
+        String replicatedQName = REPLICATED_QUEUE_NAME_PREFIX + session.getSourceClusterId();
+        if (!tableRegistry.getRegistryTable().containsKey(replicatedQName)) {
+            try {
+                TableOptions tableOptions = TableOptions.builder()
+                        .schemaOptions(CorfuOptions.SchemaOptions.newBuilder()
+                                .addStreamTag(REPLICATED_QUEUE_TAG_PREFIX + session.getSubscriber().getClientName())
+                                .build())
+                        .persistentDataPath(Paths.get("/nonconfig/logReplication/RoutingQModel/", replicatedQName))
+                        .build();
+                tableRegistry.registerTable(CORFU_SYSTEM_NAMESPACE, replicatedQName, Queue.CorfuGuidMsg.class,
+                        Queue.RoutingTableEntryMsg.class, Queue.CorfuQueueMetadataMsg.class,
+                        tableOptions);
+            } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
+                throw new RuntimeException(e);
+            }
+        }
+
     }
 
     private ISnapshotSyncPlugin getOnSnapshotSyncPlugin() {
