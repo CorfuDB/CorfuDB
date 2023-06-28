@@ -14,6 +14,7 @@ import org.junit.Test;
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import java.util.function.Consumer;
 
 /**
@@ -155,8 +156,11 @@ public class LogReplicationUtilsTest extends AbstractViewTest {
         LogReplicationUtils.subscribeRqListener(lrRqListener, namespace, 5, corfuStore);
 
         // Update the queue to verify the listener works
-        executeTxn(corfuStore, namespace, (TxnContext tx) -> tx.enqueue(routingQueue,
-                Queue.RoutingTableEntryMsg.newBuilder().addDestinations(tx.getNamespace()).build()));
+        List<UUID> tags = new ArrayList<>();
+        tags.add(CorfuRuntime.getStreamID(LogReplicationUtils.REPLICATED_QUEUE_TAG_PREFIX));
+        executeTxn(corfuStore, namespace, (TxnContext tx) -> tx.logUpdateEnqueue(routingQueue,
+                Queue.RoutingTableEntryMsg.newBuilder().addDestinations(tx.getNamespace()).build(),
+                tags, corfuStore));
         verifyRoutingQueueListenerFlags((LogReplicationTestRoutingQueueListener)lrRqListener, ongoing);
     }
 
