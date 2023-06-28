@@ -258,6 +258,24 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
             .addToTest(port, this);
     }
 
+    public void addServerWithTlsEnabled(int port) {
+        ServerContext sc = new ServerContextBuilder()
+                .setImplementation("auto")
+                .setTlsEnabled(true)
+                .setTlsCiphers("TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256")
+                .setTlsProtocols("TLSv1.2")
+                .setKeystore("src/test/resources/security/s1.jks")
+                .setKeystorePasswordFile("src/test/resources/security/storepass")
+                .setTruststore("src/test/resources/security/trust1.jks")
+                .setTruststorePasswordFile("src/test/resources/security/storepass")
+                .setSaslPlainTextAuth(true)
+                .setPort(port)
+                .setSingle(false)
+                .setServerRouter(new TestServerRouter(port))
+                .build();
+        new TestServer(sc).addToTest(port, this);
+    }
+
 
     /** Add a default, in-memory bootstrapped single node server at a specific port.
      *

@@ -19,6 +19,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Supplier;
+
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
 
@@ -673,5 +675,81 @@ public class LayoutViewTest extends AbstractViewTest {
         final long rank3 = 3L;
         Layout alreadyProposedLayout3 = corfuRuntime1.getLayoutView().prepare(l.getEpoch(), rank3);
         assertThat(alreadyProposedLayout3).isEqualTo(l2);
+    }
+
+    /**
+     * Layout queries call ReloadableTrustManger::getTrustManager which needs an
+     * available thread from ForkJoinPool.commonPool to run supplyAsync().join().
+     * Layout queries should not fail even when the pool is exhausted.
+     *
+     * @throws InterruptedException
+     */
+    @Test
+    public void deadlockTest() throws InterruptedException {
+        addServerWithTlsEnabled(SERVERS.PORT_0);
+
+        Layout l = new TestLayoutBuilder()
+                .setEpoch(1)
+                .addLayoutServer(SERVERS.PORT_0)
+                .addSequencer(SERVERS.PORT_0)
+                .buildSegment()
+                .setReplicationMode(Layout.ReplicationMode.CHAIN_REPLICATION)
+                .buildStripe()
+                .addLogUnit(SERVERS.PORT_0)
+                .addToSegment()
+                .buildStripe()
+                .addToSegment()
+                .addToLayout()
+                .build();
+        bootstrapAllServers(l);
+
+        CorfuRuntime.overrideGetRouterFunction = null;
+        CorfuRuntime.CorfuRuntimeParameters params = CorfuRuntime.CorfuRuntimeParameters.builder()
+                .tlsEnabled(true)
+                .keyStore("src/test/resources/security/r1.jks")
+                .ksPasswordFile("src/test/resources/security/storepass")
+                .trustStore("src/test/resources/security/trust1.jks")
+                .tsPasswordFile("src/test/resources/security/storepass")
+                .saslPlainTextEnabled(true)
+                .usernameFile("src/test/resources/security/username1")
+                .passwordFile("src/test/resources/security/userpass1")
+                .build();
+
+        CorfuRuntime corfuRuntime = CorfuRuntime.fromParameters(params)
+                .parseConfigurationString(String.join(",", l.layoutServers));
+
+        CountDownLatch latch = new CountDownLatch(1);
+
+        Supplier<String> waitForLatch = () -> {
+            try {
+                latch.await();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+            return null;
+        };
+
+        int poolSize = Runtime.getRuntime().availableProcessors() - 1;
+
+        // Exhaust the pool
+        List<Thread> threads = new ArrayList<>();
+        for (int i = 0; i < poolSize; i++) {
+            Thread t = new Thread(() ->  {
+                // Implicitly exhaust ForkJoinPool.commonPool
+                CompletableFuture.supplyAsync(waitForLatch).join();
+            });
+            t.start();
+            threads.add(t);
+        }
+
+        // SSL connection should be successful even when ForkJoinPool.commonPool is full
+        corfuRuntime.getLayoutView().getRuntimeLayout(l).getLogUnitClient(SERVERS.ENDPOINT_0);
+        latch.countDown();
+
+        for (Thread t : threads) {
+            t.join();
+        }
+
+        getManagementServer(SERVERS.PORT_0).shutdown();
     }
 }
