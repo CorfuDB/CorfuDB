@@ -84,6 +84,7 @@ public class MultiVersionObject<S extends SnapshotGenerator<S>> {
      * so that a version is always available to sync from, regardless of the underlying
      * caching strategy.
      */
+    @Getter
     protected volatile S currentObject;
 
     /**
@@ -498,10 +499,6 @@ public class MultiVersionObject<S extends SnapshotGenerator<S>> {
         } finally {
             lock.unlock(lockTs);
         }
-    }
-
-    public <R> R passThrough(Function<S, R> method) {
-        return method.apply(currentObject);
     }
 
     @VisibleForTesting

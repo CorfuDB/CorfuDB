@@ -118,8 +118,4 @@ public class PersistedCorfuTable<K, V> implements
     public Map<String, ICorfuSMRUpcallTarget<DiskBackedCorfuTable<K, V>>> getSMRUpcallMap() {
         return upcallTargetMap;
     }
-
-    void publishStats(Consumer<String> loggingSink) {
-        loggingSink.accept(proxy.getUnderlyingMVO().passThrough(DiskBackedCorfuTable::getStatistics).toString());
-    }
 }

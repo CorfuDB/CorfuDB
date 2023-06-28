@@ -445,7 +445,6 @@ public class DiskBackedCorfuTable<K, V> implements
 
     @Override
     public void close() {
-        this.statistics.close();
 
         // Do not call close on WriteOptions and Options, as they are
         // either statically defined or owned by the client.
@@ -457,6 +456,7 @@ public class DiskBackedCorfuTable<K, V> implements
         } finally {
             if (isRoot()) {
                 MeterRegistryProvider.unregisterExternalSupplier(metricsId);
+                this.statistics.close();
             }
         }
     }

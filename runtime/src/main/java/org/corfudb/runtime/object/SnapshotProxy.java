@@ -3,6 +3,7 @@ package org.corfudb.runtime.object;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 
 import javax.annotation.concurrent.NotThreadSafe;
 import java.util.Map;
@@ -10,7 +11,7 @@ import java.util.function.LongConsumer;
 
 @NotThreadSafe
 @Slf4j
-public class SnapshotProxy<T> implements ICorfuSMRSnapshotProxy<T> {
+public class SnapshotProxy<T extends AutoCloseable> implements ICorfuSMRSnapshotProxy<T> {
 
     private final SMRSnapshot<T> snapshot;
     private T snapshotView;
@@ -45,5 +46,13 @@ public class SnapshotProxy<T> implements ICorfuSMRSnapshotProxy<T> {
 
     public void release() {
         snapshot.release();
+    }
+
+    public void releaseView() {
+        try {
+            snapshotView.close();
+        } catch (Exception e) {
+            throw new UnrecoverableCorfuError(e);
+        }
     }
 }

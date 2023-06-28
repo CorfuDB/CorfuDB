@@ -55,7 +55,7 @@ import static org.corfudb.runtime.CorfuOptions.ConsistencyModel.READ_COMMITTED;
  */
 @Slf4j
 public abstract class AbstractTransactionalContext implements
-        Comparable<AbstractTransactionalContext> {
+        Comparable<AbstractTransactionalContext>, AutoCloseable {
 
     /**
      * Constant for the address of an uncommitted log entry.
@@ -177,7 +177,7 @@ public abstract class AbstractTransactionalContext implements
         }
 
 
-        if (proxy.getUnderlyingMVO().passThrough(ConsistencyView::getConsistencyModel) == READ_COMMITTED) {
+        if (proxy.getUnderlyingMVO().getCurrentObject().getConsistencyModel() == READ_COMMITTED) {
             accessedReadCommittedObject = true;
         }
         knownStreamsPosition.put(proxy.getStreamID(), position);
@@ -401,5 +401,11 @@ public abstract class AbstractTransactionalContext implements
     @Override
     public String toString() {
         return "TX[" + Utils.toReadableId(transactionID) + "]";
+    }
+
+    @Override
+    public void close() {
+        snapshotProxyMap.forEach((version, snapshot) -> snapshot.releaseView());
+        snapshotProxyMap.clear();
     }
 }
