@@ -14,6 +14,7 @@ import org.junit.Test;
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 
 /**
  * Tests the apis in LogReplicationUtils.
@@ -116,6 +117,13 @@ public class LogReplicationUtilsTest extends AbstractViewTest {
         String streamTag = "test_tag";
         LogReplicationUtils.subscribe(lrListener, namespace, streamTag, new ArrayList<>(), 5, corfuStore);
         verifyListenerFlags((LogReplicationTestListener)lrListener, ongoing);
+    }
+
+    private void executeTxn(CorfuStore store, String namespace, Consumer<TxnContext> mutation) {
+        try (TxnContext tx = store.txn(namespace)) {
+            mutation.accept(tx);
+            tx.commit();
+        }
     }
 
     private void testRoutingQueueSubscribe(boolean initializeTable, boolean ongoing) {
