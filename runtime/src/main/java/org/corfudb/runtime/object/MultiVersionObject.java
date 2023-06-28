@@ -184,8 +184,9 @@ public class MultiVersionObject<S extends SnapshotGenerator<S>> {
 
             // If we observe a new version, place the previous one into the MVOCache.
             if (globalAddress >= materializedUpTo) {
-                final VersionedObjectIdentifier voId = new VersionedObjectIdentifier(getID(), materializedUpTo);
-                currentObject.generateIntermediarySnapshot(voId, objectOpenOption)
+                final VersionedObjectIdentifier previousId = new VersionedObjectIdentifier(getID(), materializedUpTo);
+                final VersionedObjectIdentifier currentId = new VersionedObjectIdentifier(getID(), globalAddress);
+                currentObject.generateIntermediarySnapshot(currentId, objectOpenOption)
                         .ifPresent(newSnapshot -> {
                             final SMRSnapshot<S> previousSnapshot = setCurrentSnapshot(newSnapshot);
                             if (globalAddress == materializedUpTo) {
@@ -194,7 +195,7 @@ public class MultiVersionObject<S extends SnapshotGenerator<S>> {
                                 // latest one, and release all the previous ones.
                                 previousSnapshot.release();
                             }
-                            mvoCache.put(voId, previousSnapshot);
+                            mvoCache.put(previousId, previousSnapshot);
                         });
             }
 
