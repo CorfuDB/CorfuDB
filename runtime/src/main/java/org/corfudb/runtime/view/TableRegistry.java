@@ -197,7 +197,8 @@ public class TableRegistry {
      * @throws InvocationTargetException If this is not a protobuf message.
      * @throws IllegalAccessException    If this is not a protobuf message.
      */
-    private <K extends Message, V extends Message, M extends Message>
+    // Exposing for PoC
+    public <K extends Message, V extends Message, M extends Message>
     void registerTable(@Nonnull String namespace,
                        @Nonnull String tableName,
                        @Nonnull Class<K> keyClass,
