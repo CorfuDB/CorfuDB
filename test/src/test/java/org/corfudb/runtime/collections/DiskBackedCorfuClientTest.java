@@ -440,6 +440,7 @@ public class DiskBackedCorfuClientTest extends AbstractViewTest implements AutoC
         }
     }
 
+
     /**
      * Verify commit address of interleaving transactions on disk-backed tables.
      */
