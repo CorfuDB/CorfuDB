@@ -169,5 +169,10 @@ public class RocksDbTx<S extends SnapshotGenerator<S>> implements RocksDbApi {
     @Override
     public void close() throws RocksDBException {
         txn.rollback();
+        // This function should be called manually, or even better, called implicitly using a
+        // try-with-resources statement, when you are finished with the object. It is no longer
+        // called automatically during the regular Java GC process via
+        // {@link AbstractNativeReference#finalize()}.</p>
+        txn.close();
     }
 }

@@ -67,19 +67,25 @@ public class DiskBackedCorfuTable<K, V> implements
         ViewGenerator<DiskBackedCorfuTable<K, V>>,
         ConsistencyView {
 
+    public static final Options defaultOptions = getDiskBackedCorfuTableOptions();
     private static final HashFunction murmurHash3 = Hashing.murmur3_32();
     private static final String DISK_BACKED = "diskBacked";
     private static final String TRUE = "true";
     private static final int BOUND = 100;
     private static final int SAMPLING_RATE = 40;
 
+    // Optimization: We never perform crash-recovery, so we can disable
+    // Write Ahead Log and disable explicit calls to sync().
+    private static final WriteOptions writeOptions = new WriteOptions()
+                    .setDisableWAL(true)
+                    .setSync(false);
+
     static {
         RocksDB.loadLibrary();
     }
 
-    private final WriteOptions writeOptions = new WriteOptions()
-            .setDisableWAL(true)
-            .setSync(false);
+    @Getter
+    private final Statistics statistics;
     private final RocksDbApi rocksApi;
     private final RocksDbSnapshotGenerator<DiskBackedCorfuTable<K, V>> rocksDbSnapshotGenerator;
     private final ColumnFamilyRegistry columnFamilyRegistry;
@@ -92,8 +98,6 @@ public class DiskBackedCorfuTable<K, V> implements
     private final String metricsId;
     // Options.
     private final PersistenceOptions persistenceOptions;
-    @Getter
-    private final Statistics statistics;
 
     public DiskBackedCorfuTable(@NonNull PersistenceOptions persistenceOptions,
                                 @NonNull Options rocksDbOptions,
@@ -141,7 +145,7 @@ public class DiskBackedCorfuTable<K, V> implements
 
     public DiskBackedCorfuTable(@NonNull PersistenceOptions persistenceOptions,
                                 @NonNull ISerializer serializer) {
-        this(persistenceOptions, getDiskBackedCorfuTableOptions(), serializer);
+        this(persistenceOptions, defaultOptions, serializer);
     }
 
     /**
@@ -160,7 +164,7 @@ public class DiskBackedCorfuTable<K, V> implements
      * Write Buffer: Also known as memtable is defined by the ColumnFamilyOptions
      * option. The default is 64 MB.
      */
-    public static Options getDiskBackedCorfuTableOptions() {
+    private static Options getDiskBackedCorfuTableOptions() {
         final Options options = new Options();
 
         options.setCreateIfMissing(true);
@@ -441,8 +445,13 @@ public class DiskBackedCorfuTable<K, V> implements
 
     @Override
     public void close() {
+        this.statistics.close();
+
+        // Do not call close on WriteOptions and Options, as they are
+        // either statically defined or owned by the client.
+
         try {
-            rocksApi.close();
+            this.rocksApi.close();
         } catch (RocksDBException e) {
             throw new UnrecoverableCorfuError(e);
         } finally {

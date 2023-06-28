@@ -22,6 +22,8 @@ public interface SMRSnapshot<T> {
 
     /**
      * Release resources associated with this snapshot.
+     * <p>
+     * WARNING: This method needs to be idempotent.
      */
     void release();
 }

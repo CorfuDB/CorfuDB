@@ -88,7 +88,11 @@ public class RocksDbReadCommittedTx implements RocksDbApi {
 
     @Override
     public void close() {
-        // No-op.
+        // This function should be called manually, or even better, called implicitly using a
+        // try-with-resources statement, when you are finished with the object. It is no longer
+        // called automatically during the regular Java GC process via
+        // {@link AbstractNativeReference#finalize()}.</p>
+        readOptions.close();
     }
 
     @Override
@@ -106,6 +110,6 @@ public class RocksDbReadCommittedTx implements RocksDbApi {
     public void prefixScan(ColumnFamilyHandle secondaryIndexesHandle, byte indexId, Object secondaryKey, ISerializer serializer,
                            List<ByteBuffer> keys, List<ByteBuffer> values) {
         prefixScan(secondaryKey, secondaryIndexesHandle, indexId, serializer,
-                new ReadOptions(), keys, values, ALLOCATE_DIRECT_BUFFERS);
+                readOptions, keys, values, ALLOCATE_DIRECT_BUFFERS);
     }
 }

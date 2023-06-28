@@ -141,8 +141,10 @@ public class RocksDbStore<S extends SnapshotGenerator<S>> implements
             Object secondaryKey, ISerializer serializer,
             List<ByteBuffer> keys,
             List<ByteBuffer> values) {
+        final ReadOptions readOptions = new ReadOptions();
         prefixScan(secondaryKey, secondaryIndexesHandle, indexId, serializer,
-                new ReadOptions(), keys, values, ALLOCATE_DIRECT_BUFFERS);
+                readOptions, keys, values, ALLOCATE_DIRECT_BUFFERS);
+        readOptions.close();
     }
 
     @Override

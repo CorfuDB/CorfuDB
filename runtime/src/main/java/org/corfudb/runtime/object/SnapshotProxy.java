@@ -12,14 +12,16 @@ import java.util.function.LongConsumer;
 @Slf4j
 public class SnapshotProxy<T> implements ICorfuSMRSnapshotProxy<T> {
 
+    private final SMRSnapshot<T> snapshot;
     private T snapshotView;
     private final long baseSnapshotVersion;
 
     private final Map<String, ICorfuSMRUpcallTarget<T>> upcallTargetMap;
 
-    public SnapshotProxy(@NonNull final SMRSnapshot<T> snapshotView, final long baseSnapshotVersion,
+    public SnapshotProxy(@NonNull final SMRSnapshot<T> snapshot, final long baseSnapshotVersion,
                          @NonNull final Map<String, ICorfuSMRUpcallTarget<T>> upcallTargetMap) {
-        this.snapshotView = snapshotView.consume();
+        this.snapshot = snapshot;
+        this.snapshotView = snapshot.consume();
         this.baseSnapshotVersion = baseSnapshotVersion;
         this.upcallTargetMap = upcallTargetMap;
     }
@@ -42,6 +44,6 @@ public class SnapshotProxy<T> implements ICorfuSMRSnapshotProxy<T> {
     }
 
     public void release() {
-        // Future work.
+        snapshot.release();
     }
 }

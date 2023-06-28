@@ -119,8 +119,7 @@ public class PersistedCorfuTable<K, V> implements
         return upcallTargetMap;
     }
 
-
-    public void publishStats(Consumer<String> loggingSink) {
-        loggingSink.accept(proxy.getUnderlyingMVO().getCurrentObject().getStatistics().toString());
+    void publishStats(Consumer<String> loggingSink) {
+        loggingSink.accept(proxy.getUnderlyingMVO().passThrough(DiskBackedCorfuTable::getStatistics).toString());
     }
 }

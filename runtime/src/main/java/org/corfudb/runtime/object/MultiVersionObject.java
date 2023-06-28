@@ -25,6 +25,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.locks.StampedLock;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
@@ -83,7 +84,6 @@ public class MultiVersionObject<S extends SnapshotGenerator<S>> {
      * so that a version is always available to sync from, regardless of the underlying
      * caching strategy.
      */
-    @Getter
     protected volatile S currentObject;
 
     /**
@@ -137,8 +137,6 @@ public class MultiVersionObject<S extends SnapshotGenerator<S>> {
 
         this.lock = new StampedLock();
         this.addressSpace = new StreamAddressSpace();
-
-        // TODO(Zach): confirm -6 or -1 as "empty version"
         this.currentObject = newObjectFn.get();
         this.snapshotFifo.add(this.currentObject.generateSnapshot(
                 new VersionedObjectIdentifier(getID(), Address.NON_EXIST)));
@@ -382,7 +380,7 @@ public class MultiVersionObject<S extends SnapshotGenerator<S>> {
                 voId.setVersion(streamTs);
 
                 // The snapshot is acquired before validating the lock, as the state of the
-                // underlying object can change afterwards.
+                // underlying object can change afterward.
                 final SMRSnapshot<S> versionedObject = retrieveSnapshotUnsafe(voId);
                 snapshotProxy = new SnapshotProxy<>(versionedObject, streamTs, upcallTargetMap);
 
@@ -478,7 +476,7 @@ public class MultiVersionObject<S extends SnapshotGenerator<S>> {
         // It is safe to release the current snapshot here as it hasn't been
         // propagated into any caches yet.
         snapshotFifo.forEach(SMRSnapshot::release);
-        snapshotFifo = new ArrayDeque<>(2);
+        snapshotFifo = new ArrayDeque<>(snapshotFifoSize);
         currentObject.close();
         currentObject = newObjectFn.get();
 
@@ -500,6 +498,10 @@ public class MultiVersionObject<S extends SnapshotGenerator<S>> {
         } finally {
             lock.unlock(lockTs);
         }
+    }
+
+    public <R> R passThrough(Function<S, R> method) {
+        return method.apply(currentObject);
     }
 
     @VisibleForTesting

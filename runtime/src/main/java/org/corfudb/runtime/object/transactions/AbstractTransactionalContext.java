@@ -176,7 +176,8 @@ public abstract class AbstractTransactionalContext implements
                     "inconsistent stream positions %s and %s", val, position);
         }
 
-        if (proxy.getUnderlyingMVO().getCurrentObject().getConsistencyModel() == READ_COMMITTED) {
+
+        if (proxy.getUnderlyingMVO().passThrough(ConsistencyView::getConsistencyModel) == READ_COMMITTED) {
             accessedReadCommittedObject = true;
         }
         knownStreamsPosition.put(proxy.getStreamID(), position);

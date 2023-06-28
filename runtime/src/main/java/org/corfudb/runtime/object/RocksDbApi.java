@@ -129,6 +129,7 @@ public interface RocksDbApi {
         }
 
         keys.forEach(ByteBuffer::flip);
+        readOptions.close();
     }
 
     void clear() throws RocksDBException;
