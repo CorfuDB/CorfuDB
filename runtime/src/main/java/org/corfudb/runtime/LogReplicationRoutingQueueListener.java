@@ -6,20 +6,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.collections.*;
 import org.corfudb.runtime.exceptions.StreamingException;
 import org.corfudb.runtime.exceptions.TrimmedException;
-import org.corfudb.runtime.exceptions.UnreachableClusterException;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.Address;
-import org.corfudb.util.retry.IRetry;
-import org.corfudb.util.retry.IntervalRetry;
-import org.corfudb.util.retry.RetryNeededException;
 
 import javax.annotation.Nonnull;
 import java.lang.reflect.InvocationTargetException;
-import java.util.Set;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Collections;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
@@ -71,7 +62,6 @@ public abstract class LogReplicationRoutingQueueListener implements StreamListen
             InvocationTargetException, NoSuchMethodException, IllegalAccessException {
         this.corfuStore = corfuStore;
         this.namespace = namespace;
-        // TODO: Discover the queue from table registry and open it.
         this.routingQueue =
                 corfuStore.openQueue(namespace, LogReplicationUtils.REPLICATED_QUEUE_NAME_PREFIX,
                         Queue.RoutingTableEntryMsg.class,
@@ -298,9 +288,9 @@ public abstract class LogReplicationRoutingQueueListener implements StreamListen
                     Queue.CorfuGuidMsg recordId = records.get(i).getRecordId();
                     Queue.RoutingTableEntryMsg entry = tx.getRecord(routingQueue, recordId).getPayload();
                     boolean callbackResult = false;
-                    if (entry.getType() == Queue.ReplicationType.FULL_SYNC) {
+                    if (entry.getType() == Queue.ReplicationType.SNAPSHOT_SYNC) {
                         callbackResult = processUpdatesInSnapshotSync(Collections.singletonList(entry));
-                    } else if (entry.getType() == Queue.ReplicationType.LOG_ENTRY) {
+                    } else if (entry.getType() == Queue.ReplicationType.LOG_ENTRY_SYNC) {
                         callbackResult = processUpdatesInLogEntrySync(Collections.singletonList(entry));
                     }
                     if (callbackResult) {
@@ -309,20 +299,8 @@ public abstract class LogReplicationRoutingQueueListener implements StreamListen
                     }
                 }
                 this.lastProcessedEntryTs = tx.commit();
-
-                IRetry.build(IntervalRetry.class, () -> {
-                    try {
-                        log.info("Routing queue Subscribe onError");
-                        resumeSubscription();
-                    } catch (UnreachableClusterException e) {
-                        log.error("Error while attempting to re-subscribe routing queue listener after onError.", e);
-                        throw new RetryNeededException();
-                    }
-                    return null;
-                }).run();
-            } catch (InterruptedException e) {
-                log.error("Unrecoverable exception when attempting to re-subscribe listener.", e);
-                throw new UnrecoverableCorfuInterruptedError(e);
+                log.info("Resume routing queue subscribtion onError");
+                resumeSubscription();
             }
         } else {
             resumeSubscription();

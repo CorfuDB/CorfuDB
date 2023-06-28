@@ -63,9 +63,10 @@ to the new shared `LRQ_Send_LogEntries` as follows
 
 ```protobuf
 enum ReplicationType {
-  LOG_ENTRY = 0; // Default value indicating absence of any full sync.
-  FULL_SYNC = 1; // This entry was made during a full sync
-  LAST_FULL_SYNC_ENTRY = 2; // Last entry denoting the end marker of a full sync
+  NONE = 0;           // Default value
+  LOG_ENTRY_SYNC = 1; // This entry was made during a delta sync
+  SNAPSHOT_SYNC = 2;  // This entry was made during a full sync
+  LAST_FULL_SYNC_ENTRY = 3; // Last entry denoting the end marker of a full sync
 }
 
 // prepare this to look like a CorfuQueue update

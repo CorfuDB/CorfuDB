@@ -8,7 +8,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.LogReplication.ReplicationStatus;
-import org.corfudb.runtime.collections.*;
+import org.corfudb.runtime.collections.CorfuStore;
+import org.corfudb.runtime.collections.Table;
+import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.runtime.collections.CorfuStoreEntry;
+import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.StreamingException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
@@ -89,8 +93,8 @@ public final class LogReplicationUtils {
 
         long subscriptionTimestamp = getRoutingQueueSubscriptionTimestamp(corfuStore, namespace, clientListener);
         // Open the routing queue from corfu store (Disk backed mode)
-        // since the subscribe API will run in policy jvm
-        // TODO: Get client name as input params. For now, hard coding the stream tag.
+        // since the subscribe API will run in client jvm
+        // TODO: Get client name as input params. For now, hard coding the stream tag. and expose this API via corfuStore.
         if (checkIfRoutingQueueExists(corfuStore, namespace, REPLICATED_QUEUE_TAG_PREFIX)) {
             // Table registry contains the routing queue already.
             corfuStore.getRuntime().getTableRegistry().getStreamingManager().subscribeLogReplicationRoutingQueueListener(
@@ -122,6 +126,7 @@ public final class LogReplicationUtils {
         } else {
             // Routing queue is not registered at the sink (receiver side) yet.
             // Subscribe to LR status table and poll for routing queue registry
+            // TODO: Figure out the discovery way other than listening to status table.
             corfuStore.getRuntime().getTableRegistry().getStreamingManager().subscribeLogReplicationLrStatusTableListener(
                     clientListener, subscriptionTimestamp, bufferSize);
             log.info("Subscribed to LR status table at timestamp {}.", subscriptionTimestamp);

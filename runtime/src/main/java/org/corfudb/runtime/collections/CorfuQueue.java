@@ -18,12 +18,8 @@ import org.corfudb.runtime.view.CorfuGuidGenerator;
 import org.corfudb.util.serializer.ICorfuHashable;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
-import java.util.Comparator;
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
+
+import java.util.*;
 import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkState;
@@ -246,7 +242,7 @@ public class CorfuQueue {
      * on this Queue.
      *
      */
-    public static class  CorfuQueueRecord implements Comparable<CorfuQueueRecord> {
+    public static class CorfuQueueRecord implements Comparable<CorfuQueueRecord> {
         /**
          * This ID represents the entry and its order in the Queue.
          * This implies that it is unique and comparable with other IDs
