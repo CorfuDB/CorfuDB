@@ -51,7 +51,7 @@ import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
 import static org.corfudb.protocols.service.CorfuProtocolLogReplication.getLrEntryAckMsg;
 import static org.corfudb.runtime.LogReplicationRoutingQueueClient.DEFAULT_ROUTING_QUEUE_CLIENT;
 import static org.corfudb.runtime.LogReplicationUtils.REPLICATED_QUEUE_NAME_PREFIX;
-import static org.corfudb.runtime.LogReplicationUtils.REPLICATED_QUEUE_TAG;
+import static org.corfudb.runtime.LogReplicationUtils.REPLICATED_QUEUE_TAG_PREFIX;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 /**
@@ -236,6 +236,11 @@ public class LogReplicationSinkManager implements DataReceiver {
                 metadataManager.getReplicationMetadata(session).getLastLogEntryBatchProcessed(), this);
     }
 
+    /**
+     * For routing table model, the replicated queue, which is present only on SINK side, may not be open by the time
+     * LR starts the replication. As we want the stream to be checkpointed, add an entry to the registry table.
+     * No need to open the queue.
+     */
     private void insertQInRegistryTable() {
         TableRegistry tableRegistry = runtime.getTableRegistry();
         String replicatedQName = REPLICATED_QUEUE_NAME_PREFIX + session.getSourceClusterId();
@@ -243,7 +248,7 @@ public class LogReplicationSinkManager implements DataReceiver {
             try {
                 TableOptions tableOptions = TableOptions.builder()
                         .schemaOptions(CorfuOptions.SchemaOptions.newBuilder()
-                                .addStreamTag(REPLICATED_QUEUE_TAG + DEFAULT_ROUTING_QUEUE_CLIENT)
+                                .addStreamTag(REPLICATED_QUEUE_TAG_PREFIX + session.getSubscriber().getClientName())
                                 .build())
                         .persistentDataPath(Paths.get("/nonconfig/logReplication/RoutingQModel/", replicatedQName))
                         .build();
