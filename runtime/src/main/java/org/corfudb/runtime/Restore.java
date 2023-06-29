@@ -139,6 +139,7 @@ public class Restore {
         }
 
         long startTime = System.currentTimeMillis();
+        int restoredTableCount = 0;
         for (String tableBackup : tableBackups) {
             log.info("start restoring table {}", tableBackup);
             if (restoreMode == RestoreMode.PARTIAL_TAGGED && !isTableTagged(tableBackup)) {
@@ -154,10 +155,10 @@ public class Restore {
                 log.error("failed to restore table {} from temp file {}", streamId, tableBackup);
                 throw e;
             }
+            restoredTableCount++;
         }
         long elapsedTime = System.currentTimeMillis() - startTime;
-        log.info("successfully restored {} tables to, elapsed time {}ms",
-                tableBackups.size(), elapsedTime);
+        log.info("successfully restored {} tables, elapsed time {}ms", restoredTableCount, elapsedTime);
     }
 
     /**
@@ -193,7 +194,7 @@ public class Restore {
 
             long elapsedTime = System.currentTimeMillis() - startTime;
 
-            log.info("completed restore of table {} with {} numEntries, total size {} byte(s), elapsed time {}ms",
+            log.info("completed restore of table {} with {} SMREntry, total size {} byte(s), elapsed time {}ms",
                     streamId, sbw.getTotalNumSMREntries(), sbw.getTotalWriteSize(), elapsedTime);
         } catch (FileNotFoundException e) {
             log.error("restoreTable can not find file {}", filePath);

@@ -26,10 +26,8 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.lang.reflect.InvocationTargetException;
 import java.nio.file.Files;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
@@ -45,8 +43,10 @@ public class BackupRestoreIT extends AbstractIT {
 
     public static final int numEntries = 123;
     public static final int valSize = 2000;
-    public static final int numTables = 5;
+    public static final int numTables = 10;
     private static final String NAMESPACE = "test_namespace";
+    private static final String ANOTHER_NAMESPACE = "another_test_namespace";
+    private static final String EMPTY_NAMESPACE = "";
     private static final String backupTable = "test_table";
     private static final int longNameRepeat = 15;
 
@@ -179,8 +179,8 @@ public class BackupRestoreIT extends AbstractIT {
      * @param tableName     the name of table to open
      */
     private Table<Uuid, SampleSchema.EventInfo, Uuid>
-    openTableWithoutBackupTag(CorfuStore corfuStore, String tableName) throws NoSuchMethodException, IllegalAccessException, InvocationTargetException {
-        return corfuStore.openTable(NAMESPACE,
+    openTableWithoutBackupTag(CorfuStore corfuStore, String namespace, String tableName) throws Exception {
+        return corfuStore.openTable(namespace,
                 tableName,
                 SampleSchema.Uuid.class,
                 SampleSchema.EventInfo.class,
@@ -199,8 +199,8 @@ public class BackupRestoreIT extends AbstractIT {
      * @param tableName     the name of table to open
      */
     private Table<SampleSchema.Uuid, SampleSchema.SampleTableAMsg, SampleSchema.Uuid>
-    openTableWithBackupTag(CorfuStore corfuStore, String tableName) throws NoSuchMethodException, IllegalAccessException, InvocationTargetException {
-        return corfuStore.openTable(NAMESPACE,
+    openTableWithBackupTag(CorfuStore corfuStore, String namespace, String tableName) throws Exception {
+        return corfuStore.openTable(namespace,
                 tableName,
                 SampleSchema.Uuid.class,
                 SampleSchema.SampleTableAMsg.class,
@@ -214,11 +214,11 @@ public class BackupRestoreIT extends AbstractIT {
      * @param dataStore     the data store used
      * @param tableName     the table which generated entries are added to
      * */
-    private void generateData(CorfuStore dataStore, String tableName, boolean hasBackupTag) throws NoSuchMethodException, IllegalAccessException, InvocationTargetException {
-        Table table = hasBackupTag ? openTableWithBackupTag(dataStore, tableName) :
-                openTableWithoutBackupTag(dataStore, tableName);
+    private void generateData(CorfuStore dataStore, String namespace, String tableName, boolean hasBackupTag) throws Exception {
+        Table table = hasBackupTag ? openTableWithBackupTag(dataStore, namespace, tableName) :
+                openTableWithoutBackupTag(dataStore, namespace, tableName);
 
-        TxnContext txn = dataStore.txn(NAMESPACE);
+        TxnContext txn = dataStore.txn(namespace);
         for (int i = 0; i < numEntries; i++) {
             uuidKey = SampleSchema.Uuid.newBuilder()
                     .setMsb(i)
@@ -301,7 +301,7 @@ public class BackupRestoreIT extends AbstractIT {
      * 4. Compare the table contents before and after the backup/restore.
      */
     @Test
-    public void backupRestoreMultipleTablesTest() throws IOException, NoSuchMethodException, IllegalAccessException, InvocationTargetException {
+    public void backupRestoreMultipleTablesTest() throws Exception {
 
         // Set up the test environment
         setupEnv();
@@ -314,7 +314,7 @@ public class BackupRestoreIT extends AbstractIT {
 
         // Generate random entries and save into sourceServer
         for (String tableName : tableNames) {
-            generateData(srcDataCorfuStore, tableName, false);
+            generateData(srcDataCorfuStore, NAMESPACE, tableName, false);
         }
 
         // Obtain the corresponding streamIDs for the tables in sourceServer
@@ -324,7 +324,7 @@ public class BackupRestoreIT extends AbstractIT {
         }
 
         // Backup
-        Backup backup = new Backup(BACKUP_TAR_FILE_PATH, streamIDs, backupRuntime);
+        Backup backup = new Backup(BACKUP_TAR_FILE_PATH, backupRuntime, false, null);
         backup.start();
 
         // Verify that backup tar file exists
@@ -334,7 +334,7 @@ public class BackupRestoreIT extends AbstractIT {
         // Add pre-existing data into restore server
         // Restore should clean up the pre-existing data before actual restoring
         for (String tableName : tableNames) {
-            generateData(destDataCorfuStore, tableName, true);
+            generateData(destDataCorfuStore, NAMESPACE, tableName, true);
         }
         long preRestoreEntryCnt = destDataCorfuStore.getRuntime().getStreamsView().get(streamIDs.get(0)).stream().count();
 
@@ -344,7 +344,7 @@ public class BackupRestoreIT extends AbstractIT {
 
         // Compare data entries in CorfuStore before and after the Backup/Restore
         for (String tableName : tableNames) {
-            openTableWithoutBackupTag(destDataCorfuStore, tableName);
+            openTableWithoutBackupTag(destDataCorfuStore, NAMESPACE, tableName);
             compareCorfuStoreTables(srcDataCorfuStore, tableName, destDataCorfuStore, tableName);
         }
 
@@ -361,7 +361,7 @@ public class BackupRestoreIT extends AbstractIT {
      * An end-to-end Backup and Restore test for multiple tables which have requires_backup_support tag
      */
     @Test
-    public void backupRestoreTaggedTablesTest() throws IOException, NoSuchMethodException, IllegalAccessException, InvocationTargetException {
+    public void backupRestoreTaggedTablesTest() throws Exception {
 
         // Set up the test environment
         setupEnv();
@@ -374,11 +374,11 @@ public class BackupRestoreIT extends AbstractIT {
 
         // Generate random entries and save into sourceServer
         for (String tableName : tableNames) {
-            generateData(srcDataCorfuStore, tableName, true);
+            generateData(srcDataCorfuStore, NAMESPACE, tableName, true);
         }
 
         // Backup
-        Backup backup = new Backup(BACKUP_TAR_FILE_PATH, backupRuntime, true);
+        Backup backup = new Backup(BACKUP_TAR_FILE_PATH, backupRuntime, true, null);
         backup.start();
 
         // Verify that backup tar file exists
@@ -391,56 +391,9 @@ public class BackupRestoreIT extends AbstractIT {
 
         // Compare data entries in CorfuStore before and after the Backup/Restore
         for (String tableName : tableNames) {
-            openTableWithBackupTag(destDataCorfuStore, tableName);
+            openTableWithBackupTag(destDataCorfuStore, NAMESPACE, tableName);
             compareCorfuStoreTables(srcDataCorfuStore, tableName, destDataCorfuStore, tableName);
         }
-
-        // Close servers and runtime before exiting
-        cleanEnv();
-    }
-
-    /**
-     * Test if only user-specified tables are backed up
-     */
-    @Test
-    public void backupTablesSelectedByStreamIdsTest() throws IOException, NoSuchMethodException, IllegalAccessException, InvocationTargetException {
-
-        // Set up the test environment
-        setupEnv();
-
-        // Create Corfu Store to add entries into server
-        CorfuStore srcDataCorfuStore = new CorfuStore(srcDataRuntime);
-
-        List<String> tableNames = getTableNames(numTables);
-
-        // Generate random entries and save into sourceServer
-        for (String tableName : tableNames) {
-            // Tables without requires_backup_tag should be backed up if stream ids are provided in Backup constructor
-            generateData(srcDataCorfuStore, tableName, false);
-        }
-
-        // Obtain the corresponding streamIDs for the tables in sourceServer
-        List<UUID> streamIDs = new ArrayList<>();
-        int i = 0;
-        for (String tableName : tableNames) {
-            // Only back up a half of all tables
-            if (i++ % 2 == 0) {
-                streamIDs.add(CorfuRuntime.getStreamID(TableRegistry.getFullyQualifiedTableName(NAMESPACE, tableName)));
-            }
-        }
-
-        // Backup
-        Backup backup = new Backup(BACKUP_TAR_FILE_PATH, streamIDs, backupRuntime);
-        backup.start();
-
-        // Verify that backup tar file exists
-        File backupTarFile = new File(BACKUP_TAR_FILE_PATH);
-        assertThat(backupTarFile).exists();
-
-        // Verify that only a selective set of tables are backed up
-        List<UUID> backupStreamIDs = getStreamIdsFromTarFile(BACKUP_TAR_FILE_PATH);
-        assertThat(streamIDs.size()).isEqualTo(backupStreamIDs.size());
-        assertThat(streamIDs).containsAll(backupStreamIDs);
 
         // Close servers and runtime before exiting
         cleanEnv();
@@ -450,7 +403,7 @@ public class BackupRestoreIT extends AbstractIT {
      * Test if only tables with requires_backup_support tag are backed up
      */
     @Test
-    public void backupTablesSelectedByTagsTest() throws IOException, NoSuchMethodException, IllegalAccessException, InvocationTargetException {
+    public void backupTablesSelectedByTagsTest() throws Exception {
 
         // Set up the test environment
         setupEnv();
@@ -466,9 +419,9 @@ public class BackupRestoreIT extends AbstractIT {
         for (String tableName : tableNames) {
             if (i++ % 2 == 0) {
                 // set requires_backup_support
-                generateData(srcDataCorfuStore, tableName, true);
+                generateData(srcDataCorfuStore, NAMESPACE, tableName, true);
             } else {
-                generateData(srcDataCorfuStore, tableName, false);
+                generateData(srcDataCorfuStore, NAMESPACE, tableName, false);
             }
         }
 
@@ -479,7 +432,7 @@ public class BackupRestoreIT extends AbstractIT {
         }
 
         // Backup
-        Backup backup = new Backup(BACKUP_TAR_FILE_PATH, backupRuntime, true);
+        Backup backup = new Backup(BACKUP_TAR_FILE_PATH, backupRuntime, true, null);
         backup.start();
 
         // Verify that backup tar file exists
@@ -503,10 +456,10 @@ public class BackupRestoreIT extends AbstractIT {
     }
 
     /**
-     * Test backing up a non-existent table
+     * Test if only tables with correct namespace are backed up
      */
     @Test
-    public void backupNonExistentTableTest() throws IOException, NoSuchMethodException, IllegalAccessException, InvocationTargetException {
+    public void backupTablesSelectedByNamespaceTest() throws Exception {
 
         // Set up the test environment
         setupEnv();
@@ -515,25 +468,134 @@ public class BackupRestoreIT extends AbstractIT {
         CorfuStore srcDataCorfuStore = new CorfuStore(srcDataRuntime);
 
         List<String> tableNames = getTableNames(numTables);
+        List<UUID> streamIDs = new ArrayList<>();
 
-        // Generate random entries and save into sourceServer
+        // Generate random entries and save into sourceServer.
+        // 1/3 of the tables belong to NAMESPACE,
+        // another 1/3 belong to ANOTHER_NAMESPACE,
+        // and the last 1/3 belong to EMPTY_NAMESPACE.
+        int i = 0;
         for (String tableName : tableNames) {
-            generateData(srcDataCorfuStore, tableName, false);
+            String namespace;
+            if (i % 3 == 0) {
+                namespace = NAMESPACE;
+            } else if (i % 3 == 1) {
+                namespace = ANOTHER_NAMESPACE;
+            } else {
+                namespace = EMPTY_NAMESPACE;
+            }
+            i++;
+
+            generateData(srcDataCorfuStore, namespace, tableName, false);
+            streamIDs.add(CorfuRuntime.getStreamID(TableRegistry.getFullyQualifiedTableName(namespace, tableName)));
         }
 
-        String nonExistentTableName = "nonExistentTableName";
-        UUID nonExistentTableUuid = CorfuRuntime.getStreamID(TableRegistry.getFullyQualifiedTableName(NAMESPACE, nonExistentTableName));
-
-        // Backup
-        Backup backup = new Backup(BACKUP_TAR_FILE_PATH, Arrays.asList(nonExistentTableUuid), backupRuntime);
+        // Back up tables belonging to NAMESPACE, regardless of the tag
+        Backup backup = new Backup(BACKUP_TAR_FILE_PATH, backupRuntime, false, NAMESPACE);
         backup.start();
 
-        // Verify that backup tar file exists
-        File backupTarFile = new File(BACKUP_TAR_FILE_PATH);
-        assertThat(backupTarFile).exists();
+        // Verify that only NAMESPACE tables are backed up
+        List<UUID> backupStreamIDs = getStreamIdsFromTarFile(BACKUP_TAR_FILE_PATH);
+        for (i = 0; i < streamIDs.size(); i++) {
+            if (i % 3 == 0) {
+                // tables with requires_backup_support tag
+                assertThat(streamIDs.get(i)).isIn(backupStreamIDs);
+            } else {
+                // tables without requires_backup_support tag
+                assertThat(streamIDs.get(i)).isNotIn(backupStreamIDs);
+            }
+        }
 
-        List<UUID> backupStreamIds = getStreamIdsFromTarFile(BACKUP_TAR_FILE_PATH);
-        assertThat(backupStreamIds).isEmpty();
+        // Delete backup file
+        File backupTarFile = new File(BACKUP_TAR_FILE_PATH);
+        backupTarFile.delete();
+
+        // Back up tables belonging to EMPTY_NAMESPACE, regardless of the tag
+        backup = new Backup(BACKUP_TAR_FILE_PATH, backupRuntime, false, EMPTY_NAMESPACE);
+        backup.start();
+
+        // Verify that only EMPTY_NAMESPACE tables are backed up
+        backupStreamIDs = getStreamIdsFromTarFile(BACKUP_TAR_FILE_PATH);
+        for (i = 0; i < streamIDs.size(); i++) {
+            if (i % 3 == 2) {
+                // tables with requires_backup_support tag
+                assertThat(streamIDs.get(i)).isIn(backupStreamIDs);
+            } else {
+                // tables without requires_backup_support tag
+                assertThat(streamIDs.get(i)).isNotIn(backupStreamIDs);
+            }
+        }
+
+        // Close servers and runtime before exiting
+        cleanEnv();
+    }
+
+    /**
+     * Test if only tables with correct namespace and tag are backed up
+     */
+    @Test
+    public void backupTablesSelectedByBothNamespaceAndTagTest() throws Exception {
+
+        // Set up the test environment
+        setupEnv();
+
+        // Create Corfu Store to add entries into server
+        CorfuStore srcDataCorfuStore = new CorfuStore(srcDataRuntime);
+
+        List<String> tableNames = getTableNames(numTables);
+        List<UUID> streamIDs = new ArrayList<>();
+
+        // Generate random entries and save into sourceServer.
+        // 1/3 of the tables belong to NAMESPACE, without the tag,
+        // another 1/3 belong to ANOTHER_NAMESPACE, with the tag,
+        // and the last 1/3 belong to EMPTY_NAMESPACE, without the tag.
+        int i = 0;
+        for (String tableName : tableNames) {
+            String namespace;
+            boolean taggedTables;
+            if (i % 3 == 0) {
+                namespace = NAMESPACE;
+                taggedTables = false;
+            } else if (i % 3 == 1) {
+                namespace = ANOTHER_NAMESPACE;
+                taggedTables = true;
+            } else {
+                namespace = EMPTY_NAMESPACE;
+                taggedTables = false;
+            }
+            i++;
+
+            generateData(srcDataCorfuStore, namespace, tableName, taggedTables);
+            streamIDs.add(CorfuRuntime.getStreamID(TableRegistry.getFullyQualifiedTableName(namespace, tableName)));
+        }
+
+        // Back up tables belonging to ANOTHER_NAMESPACE and has the tag
+        Backup backup = new Backup(BACKUP_TAR_FILE_PATH, backupRuntime, true, ANOTHER_NAMESPACE);
+        backup.start();
+
+        // Verify that only NAMESPACE tables are backed up
+        List<UUID> backupStreamIDs = getStreamIdsFromTarFile(BACKUP_TAR_FILE_PATH);
+        for (i = 0; i < streamIDs.size(); i++) {
+            if (i % 3 == 1) {
+                // tables with requires_backup_support tag
+                assertThat(streamIDs.get(i)).isIn(backupStreamIDs);
+            } else {
+                // tables without requires_backup_support tag
+                assertThat(streamIDs.get(i)).isNotIn(backupStreamIDs);
+            }
+        }
+
+        // Delete backup file
+        File backupTarFile = new File(BACKUP_TAR_FILE_PATH);
+        backupTarFile.delete();
+
+        // Back up tables belonging to NAMESPACE, and has the tag
+        backup = new Backup(BACKUP_TAR_FILE_PATH, backupRuntime, true, NAMESPACE);
+        backup.start();
+
+        // Verify that only EMPTY_NAMESPACE tables are backed up
+        backupStreamIDs = getStreamIdsFromTarFile(BACKUP_TAR_FILE_PATH);
+        assertThat(backupStreamIDs).isEmpty();
 
         // Close servers and runtime before exiting
         cleanEnv();
@@ -543,7 +605,7 @@ public class BackupRestoreIT extends AbstractIT {
      * Test backing up an existent but empty table
      */
     @Test
-    public void backupRestoreEmptyTableTest() throws IOException, NoSuchMethodException, IllegalAccessException, InvocationTargetException {
+    public void backupRestoreEmptyTableTest() throws Exception {
 
         // Set up the test environment
         setupEnv();
@@ -556,7 +618,7 @@ public class BackupRestoreIT extends AbstractIT {
 
         // Generate random entries and save into sourceServer
         for (String tableName : tableNames) {
-            generateData(srcDataCorfuStore, tableName, false);
+            generateData(srcDataCorfuStore, NAMESPACE, tableName, false);
         }
 
         // Obtain the corresponding streamIDs for the tables in sourceServer
@@ -568,10 +630,16 @@ public class BackupRestoreIT extends AbstractIT {
         String emptyTableName = "emptyTableName";
         UUID emptyTableUuid = CorfuRuntime.getStreamID(TableRegistry.getFullyQualifiedTableName(NAMESPACE, emptyTableName));
         streamIDs.add(emptyTableUuid);
-        openTableWithoutBackupTag(srcDataCorfuStore, emptyTableName);
+        openTableWithoutBackupTag(srcDataCorfuStore, NAMESPACE, emptyTableName);
 
-        // Backup
-        Backup backup = new Backup(BACKUP_TAR_FILE_PATH, streamIDs, backupRuntime);
+        // Add two CorfuSystem tables
+        streamIDs.add(CorfuRuntime.getStreamID(TableRegistry.getFullyQualifiedTableName(
+                TableRegistry.CORFU_SYSTEM_NAMESPACE, TableRegistry.REGISTRY_TABLE_NAME)));
+        streamIDs.add(CorfuRuntime.getStreamID(TableRegistry.getFullyQualifiedTableName(
+                TableRegistry.CORFU_SYSTEM_NAMESPACE, TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME)));
+
+        // Backup all tables
+        Backup backup = new Backup(BACKUP_TAR_FILE_PATH, backupRuntime, false, null);
         backup.start();
 
         // Verify that backup tar file exists
@@ -587,7 +655,7 @@ public class BackupRestoreIT extends AbstractIT {
         restore.start();
 
         // Compare data entries in CorfuStore before and after the Backup/Restore
-        openTableWithoutBackupTag(destDataCorfuStore, emptyTableName);
+        openTableWithoutBackupTag(destDataCorfuStore, NAMESPACE, emptyTableName);
         compareCorfuStoreTables(srcDataCorfuStore, emptyTableName, destDataCorfuStore, emptyTableName);
 
         // Close servers and runtime before exiting
@@ -598,7 +666,7 @@ public class BackupRestoreIT extends AbstractIT {
      * Test FileNotFoundException is thrown when backup TAR file is removed before restore
      */
     @Test
-    public void backupTarFileNotFoundTest() throws IOException, NoSuchMethodException, IllegalAccessException, InvocationTargetException {
+    public void backupTarFileNotFoundTest() throws Exception {
 
         // Set up the test environment
         setupEnv();
@@ -613,18 +681,12 @@ public class BackupRestoreIT extends AbstractIT {
         for (String tableName : tableNames) {
             if (i++ % 2 == 0) {
                 // Only these tables are non-empty
-                generateData(srcDataCorfuStore, tableName, false);
+                generateData(srcDataCorfuStore, NAMESPACE, tableName, false);
             }
         }
 
-        // Obtain the corresponding streamIDs for the tables in sourceServer
-        List<UUID> streamIDs = new ArrayList<>();
-        for (String tableName : tableNames) {
-            streamIDs.add(CorfuRuntime.getStreamID(TableRegistry.getFullyQualifiedTableName(NAMESPACE, tableName)));
-        }
-
-        // Backup
-        Backup backup = new Backup(BACKUP_TAR_FILE_PATH, streamIDs, backupRuntime);
+        // Backup all tables
+        Backup backup = new Backup(BACKUP_TAR_FILE_PATH, backupRuntime, false, null);
         backup.start();
 
         // Verify that backup tar file exists
@@ -647,7 +709,7 @@ public class BackupRestoreIT extends AbstractIT {
      * Test trimming log before backup starts
      */
     @Test
-    public void backupAfterTrimTest() throws IOException, NoSuchMethodException, IllegalAccessException, InvocationTargetException {
+    public void backupAfterTrimTest() throws Exception {
 
         // Set up the test environment
         setupEnv();
@@ -662,26 +724,19 @@ public class BackupRestoreIT extends AbstractIT {
         for (String tableName : tableNames) {
             if (i++ % 2 == 0) {
                 // Only these tables are non-empty
-                generateData(srcDataCorfuStore, tableName, false);
+                generateData(srcDataCorfuStore, NAMESPACE, tableName, false);
             }
-        }
-
-        // Obtain the corresponding streamIDs for the tables in sourceServer
-        List<UUID> streamIDs = new ArrayList<>();
-        for (String tableName : tableNames) {
-            streamIDs.add(CorfuRuntime.getStreamID(TableRegistry.getFullyQualifiedTableName(NAMESPACE, tableName)));
         }
 
         // Trim the log
         Token token = new Token(0, srcDataRuntime.getAddressSpaceView().getLogTail());
         srcDataRuntime.getAddressSpaceView().prefixTrim(token);
 
-        // Backup
-        Backup backup = new Backup(BACKUP_TAR_FILE_PATH, streamIDs, backupRuntime);
+        // Backup all tables
+        Backup backup = new Backup(BACKUP_TAR_FILE_PATH, backupRuntime, false, null);
 
-        Exception ex = assertThrows(BackupRestoreException.class, backup::start);
-        assertThat(ex.getCause().getClass()).isEqualTo(TransactionAbortedException.class);
-        assertThat(ex.getCause().getCause().getClass()).isEqualTo(TrimmedException.class);
+        Exception ex = assertThrows(TransactionAbortedException.class, backup::start);
+        assertThat(ex.getCause().getClass()).isEqualTo(TrimmedException.class);
 
         // Verify that backup tar file does not exist
         File backupTarFile = new File(BACKUP_TAR_FILE_PATH);
@@ -696,8 +751,7 @@ public class BackupRestoreIT extends AbstractIT {
      * Test full backup and restore
      */
     @Test
-    public void backupRestoreAllTablesTest() throws
-            IOException, NoSuchMethodException, IllegalAccessException, InvocationTargetException {
+    public void backupRestoreAllTablesTest() throws Exception {
         // Set up the test environment
         setupEnv();
 
@@ -713,14 +767,14 @@ public class BackupRestoreIT extends AbstractIT {
         for (String tableName : tableNames) {
             if (i++ % 2 == 0) {
                 // set requires_backup_support
-                generateData(srcDataCorfuStore, tableName, true);
+                generateData(srcDataCorfuStore, NAMESPACE, tableName, true);
             } else {
-                generateData(srcDataCorfuStore, tableName, false);
+                generateData(srcDataCorfuStore, NAMESPACE, tableName, false);
             }
         }
 
-        // Backup
-        Backup backup = new Backup(BACKUP_TAR_FILE_PATH, backupRuntime, false);
+        // Backup all tables
+        Backup backup = new Backup(BACKUP_TAR_FILE_PATH, backupRuntime, false, null);
         backup.start();
 
         // Verify that backup tar file exists
@@ -729,7 +783,7 @@ public class BackupRestoreIT extends AbstractIT {
 
         // Generate pre-existing data and save into destServer
         for (String tableName : tableNames) {
-            generateData(destDataCorfuStore, tableName, true);
+            generateData(destDataCorfuStore, NAMESPACE, tableName, true);
         }
 
         // Restore using backup files
@@ -738,7 +792,7 @@ public class BackupRestoreIT extends AbstractIT {
 
         // Compare data entries in CorfuStore before and after the Backup/Restore
         for (String tableName : tableNames) {
-            openTableWithoutBackupTag(destDataCorfuStore, tableName);
+            openTableWithoutBackupTag(destDataCorfuStore, NAMESPACE, tableName);
             compareCorfuStoreTables(srcDataCorfuStore, tableName, destDataCorfuStore, tableName);
         }
 
@@ -763,8 +817,8 @@ public class BackupRestoreIT extends AbstractIT {
         File dir1 = Files.createTempDirectory(BACKUP_TEMP_DIR_PREFIX).toFile();
         File dir2 = Files.createTempDirectory(BACKUP_TEMP_DIR_PREFIX).toFile();
 
-        // Backup
-        Backup backup = new Backup(BACKUP_TAR_FILE_PATH, backupRuntime, false);
+        // Backup all tables
+        Backup backup = new Backup(BACKUP_TAR_FILE_PATH, backupRuntime, false, null);
         backup.start();
 
         assertThat(dir1).doesNotExist();
@@ -786,7 +840,7 @@ public class BackupRestoreIT extends AbstractIT {
      * Back up all tables and test restoring tagged tables from it
      */
     @Test
-    public void restoreTaggedTablesFromFullBackupTest() throws IOException, NoSuchMethodException, IllegalAccessException, InvocationTargetException {
+    public void restoreTaggedTablesFromFullBackupTest() throws Exception {
 
         // Set up the test environment
         setupEnv();
@@ -802,11 +856,11 @@ public class BackupRestoreIT extends AbstractIT {
         int i = 0;
         for (String tableName : tableNames) {
             // set requires_backup_support if 'i' is even
-            generateData(srcDataCorfuStore, tableName, i++ % 2 == 0);
+            generateData(srcDataCorfuStore, NAMESPACE, tableName, i++ % 2 == 0);
         }
 
         // Backup all tables
-        Backup backup = new Backup(BACKUP_TAR_FILE_PATH, backupRuntime, false);
+        Backup backup = new Backup(BACKUP_TAR_FILE_PATH, backupRuntime, false, null);
         backup.start();
 
         // Restore using backup files
@@ -818,11 +872,11 @@ public class BackupRestoreIT extends AbstractIT {
         for (String tableName : tableNames) {
             if (i++ % 2 == 0) {
                 // tables that have requires_backup_support tag
-                openTableWithBackupTag(destDataCorfuStore, tableName);
+                openTableWithBackupTag(destDataCorfuStore, NAMESPACE, tableName);
                 compareCorfuStoreTables(srcDataCorfuStore, tableName, destDataCorfuStore, tableName);
             } else {
                 // tables that don't have requires_backup_support tag are not restored and should remain empty
-                openTableWithoutBackupTag(destDataCorfuStore, tableName);
+                openTableWithoutBackupTag(destDataCorfuStore, NAMESPACE, tableName);
                 assertThat(destDataCorfuStore.getTable(NAMESPACE, tableName).count()).isZero();
             }
         }
