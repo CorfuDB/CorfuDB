@@ -26,7 +26,6 @@ import java.util.Set;
 import java.util.Spliterator;
 import java.util.Spliterators;
 import java.util.concurrent.ThreadLocalRandom;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
@@ -41,6 +40,7 @@ import java.util.stream.StreamSupport;
 @Slf4j
 public class PersistedStreamingMap<K, V> implements ContextAwareMap<K, V> {
 
+    public static final String ESTIMATE_SIZE = "rocksdb.estimate-num-keys";
     public static final String DISK_BACKED = "diskBacked";
     public static final String TRUE = "true";
     public static final int BOUND = 100;
@@ -86,7 +86,6 @@ public class PersistedStreamingMap<K, V> implements ContextAwareMap<K, V> {
     }
 
     private final ContextAwareMap<K, V> optimisticMap = new StreamingMapDecorator<>();
-    private final AtomicInteger dataSetSize = new AtomicInteger();
     private final CorfuRuntime corfuRuntime;
     private final ISerializer serializer;
     private final RocksDB rocksDb;
@@ -116,7 +115,11 @@ public class PersistedStreamingMap<K, V> implements ContextAwareMap<K, V> {
      */
     @Override
     public int size() {
-        return dataSetSize.get();
+        try {
+            return Math.toIntExact(rocksDb.getLongProperty(ESTIMATE_SIZE));
+        } catch (RocksDBException e) {
+            throw new UnrecoverableCorfuError(e);
+        }
     }
 
     /**
@@ -124,7 +127,7 @@ public class PersistedStreamingMap<K, V> implements ContextAwareMap<K, V> {
      */
     @Override
     public boolean isEmpty() {
-        return dataSetSize.get() == 0;
+        return size() == 0;
     }
 
     /**
@@ -192,14 +195,6 @@ public class PersistedStreamingMap<K, V> implements ContextAwareMap<K, V> {
         serializer.serialize(key, keyPayload);
         serializer.serialize(value, valuePayload);
 
-        // Only increment the count if the value is not present. In other words,
-        // increment the count if this is an update operation.
-        final boolean keyExists = rocksDb.keyMayExist(keyPayload.array(),
-                keyPayload.arrayOffset(), keyPayload.readableBytes(), null);
-        if (!keyExists) {
-            dataSetSize.incrementAndGet();
-        }
-
         try {
             rocksDb.put(writeOptions,
                     keyPayload.array(), keyPayload.arrayOffset(), keyPayload.readableBytes(),
@@ -227,7 +222,6 @@ public class PersistedStreamingMap<K, V> implements ContextAwareMap<K, V> {
             if (value != null) {
                 rocksDb.delete(writeOptions,
                         keyPayload.array(), keyPayload.arrayOffset(), keyPayload.readableBytes());
-                dataSetSize.decrementAndGet();
                 return value;
             } else {
                 return null;
@@ -253,7 +247,6 @@ public class PersistedStreamingMap<K, V> implements ContextAwareMap<K, V> {
     @Override
     public void clear() {
         entryStream().map(Entry::getKey).forEach(this::remove);
-        dataSetSize.set(0);
     }
 
     /**
