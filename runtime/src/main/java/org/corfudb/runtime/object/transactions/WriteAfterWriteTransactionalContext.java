@@ -31,12 +31,11 @@ public class WriteAfterWriteTransactionalContext
     @Override
     public long commitTransaction() throws TransactionAbortedException {
         log.trace("TX[{}] request write-write commit", this);
-
         return getConflictSetAndCommit(getWriteSetInfo());
     }
 
     @Override
-    /**
+    /*
      * Add the proxy and conflict-params information to our read set.
      * @param proxy             The proxy to add
      * @param conflictObjects    The fine-grained conflict information, if

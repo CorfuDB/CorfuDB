@@ -6,6 +6,7 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.runtime.CorfuOptions;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
@@ -25,8 +26,9 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.locks.StampedLock;
-import java.util.function.Function;
 import java.util.function.Supplier;
+
+import static org.corfudb.runtime.CorfuOptions.ConsistencyModel.READ_COMMITTED;
 
 /**
  * An implementation of a versioned SMR object that caches previously generated
@@ -37,7 +39,7 @@ import java.util.function.Supplier;
  *            Created by jielu, munshedm, and zfrenette.
  */
 @Slf4j
-public class MultiVersionObject<S extends SnapshotGenerator<S>> {
+public class MultiVersionObject<S extends SnapshotGenerator<S> & ConsistencyView> {
 
     private static final int snapshotFifoSize = 2;
     private static final String CORRECTNESS_LOG_MSG = "Version, {}";
@@ -335,7 +337,7 @@ public class MultiVersionObject<S extends SnapshotGenerator<S>> {
             }
 
             correctnessLogger.trace(CORRECTNESS_LOG_MSG, streamTs);
-            return new SnapshotProxy<>(getCurrentSnapshot(), streamTs, upcallTargetMap);
+            return new SnapshotProxy<>(getCurrentSnapshot(), getVersionSupplier(streamTs), upcallTargetMap);
         } finally {
             lock.unlock(lockTs);
         }
@@ -384,7 +386,7 @@ public class MultiVersionObject<S extends SnapshotGenerator<S>> {
                 // The snapshot is acquired before validating the lock, as the state of the
                 // underlying object can change afterward.
                 final SMRSnapshot<S> versionedObject = retrieveSnapshotUnsafe(voId);
-                snapshotProxy = new SnapshotProxy<>(versionedObject, streamTs, upcallTargetMap);
+                snapshotProxy = new SnapshotProxy<>(versionedObject, getVersionSupplier(streamTs), upcallTargetMap);
 
                 if (lock.validate(lockTs)) {
                     correctnessLogger.trace(CORRECTNESS_LOG_MSG, streamTs);
@@ -397,7 +399,10 @@ public class MultiVersionObject<S extends SnapshotGenerator<S>> {
         } finally {
             // If the lock stamp was not valid, release the consumed snapshot.
             if (!isLockStampValid && !Objects.isNull(snapshotProxy)) {
-                snapshotProxy.release();
+                // Do not release the snapshot itself since the snapshot is always
+                // going to be valid (albeit the wrong version potentially).
+                // Instead, just release the view.
+                snapshotProxy.releaseView();
             }
 
             MicroMeterUtils.time(Duration.ofNanos(System.nanoTime() - startTime), "mvo.snapshot.query");
@@ -432,6 +437,14 @@ public class MultiVersionObject<S extends SnapshotGenerator<S>> {
      */
     private UUID getID() {
         return smrStream.getID();
+    }
+
+    private Supplier<Long> getVersionSupplier(final long streamTs) {
+        if (currentObject.getConsistencyModel() == READ_COMMITTED) {
+            return () -> materializedUpTo;
+        }
+
+        return () -> streamTs;
     }
 
     /**

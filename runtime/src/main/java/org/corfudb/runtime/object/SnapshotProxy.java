@@ -8,6 +8,7 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import javax.annotation.concurrent.NotThreadSafe;
 import java.util.Map;
 import java.util.function.LongConsumer;
+import java.util.function.Supplier;
 
 @NotThreadSafe
 @Slf4j
@@ -15,22 +16,22 @@ public class SnapshotProxy<T extends AutoCloseable> implements ICorfuSMRSnapshot
 
     private final SMRSnapshot<T> snapshot;
     private T snapshotView;
-    private final long baseSnapshotVersion;
+    private final Supplier<Long> snapshotVersionSupplier;
 
     private final Map<String, ICorfuSMRUpcallTarget<T>> upcallTargetMap;
 
-    public SnapshotProxy(@NonNull final SMRSnapshot<T> snapshot, final long baseSnapshotVersion,
+    public SnapshotProxy(@NonNull final SMRSnapshot<T> snapshot, Supplier<Long> snapshotVersionSupplier,
                          @NonNull final Map<String, ICorfuSMRUpcallTarget<T>> upcallTargetMap) {
         this.snapshot = snapshot;
         this.snapshotView = snapshot.consume();
-        this.baseSnapshotVersion = baseSnapshotVersion;
+        this.snapshotVersionSupplier = snapshotVersionSupplier;
         this.upcallTargetMap = upcallTargetMap;
     }
 
     public <R> R access(@NonNull ICorfuSMRAccess<R, T> accessFunction,
                         @NonNull LongConsumer versionAccessed) {
         final R ret = accessFunction.access(snapshotView);
-        versionAccessed.accept(baseSnapshotVersion);
+        versionAccessed.accept(snapshotVersionSupplier.get());
         return ret;
     }
 

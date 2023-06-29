@@ -351,9 +351,29 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
      * Verify commit address of transactions for disk-backed tables.
      */
     @Property(tries = NUM_OF_TRIES)
-    void verifyCommitAddressMultiTable(@ForAll @Size(SAMPLE_SIZE) Set<String> intended) {
+    void verifyCommitAddressMultiTableReadCommitted(@ForAll @Size(SAMPLE_SIZE) Set<String> intended) {
         resetTests();
-        try (final PersistedCorfuTable<String, String> table1 = setupTable();
+        try (final PersistedCorfuTable<String, String> table1 = setupTable(!ENABLE_READ_YOUR_WRITES);
+             final PersistedCorfuTable<String, String> table2 = setupTable(alternateTableName)) {
+            table1.insert(defaultNewMapEntry, defaultNewMapEntry);
+
+            assertThat(executeTx(() -> {
+                table1.get(nonExistingKey);
+                table2.get(nonExistingKey);
+            })).isZero();
+
+            intended.forEach(value -> table2.insert(value, value));
+            assertThat(executeTx(() -> {
+                table1.get(nonExistingKey);
+                table2.get(nonExistingKey);
+            })).isZero();
+        }
+    }
+
+    @Property(tries = NUM_OF_TRIES)
+    void verifyCommitAddressMultiTableReadYourWrites(@ForAll @Size(SAMPLE_SIZE) Set<String> intended) {
+        resetTests();
+        try (final PersistedCorfuTable<String, String> table1 = setupTable(ENABLE_READ_YOUR_WRITES);
              final PersistedCorfuTable<String, String> table2 = setupTable(alternateTableName)) {
             table1.insert(defaultNewMapEntry, defaultNewMapEntry);
 
@@ -373,18 +393,19 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
     /**
      * Verify commit address of interleaving transactions on disk-backed tables.
      */
-    // TODO(ZacH):
     @Property(tries = NUM_OF_TRIES)
-    void verifyCommitAddressInterleavingTxn(@ForAll @Size(SAMPLE_SIZE) Set<String> intended) throws Exception {
+    void verifyCommitAddressInterleavingTxnReadCommitted(
+            @ForAll @Size(SAMPLE_SIZE) Set<String> intended) throws Exception {
         resetTests();
-        try (final PersistedCorfuTable<String, String> table = setupTable()) {
+        final AtomicBoolean testSucceeded = new AtomicBoolean(true);
+        try (final PersistedCorfuTable<String, String> table = setupTable(!ENABLE_READ_YOUR_WRITES)) {
             CountDownLatch latch1 = new CountDownLatch(1);
             CountDownLatch latch2 = new CountDownLatch(1);
 
             Thread t1 = new Thread(() -> {
                 table.insert(defaultNewMapEntry, defaultNewMapEntry);
                 assertThat(executeTx(() -> table.get(nonExistingKey))).isEqualTo(0L);
-                assertThat(executeTx(() -> {
+                long commitAddress = executeTx(() -> {
                     try {
                         table.get(nonExistingKey);
                         latch2.countDown();
@@ -393,14 +414,21 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
                     } catch (InterruptedException ignored) {
                         // Ignored
                     }
-                })).isEqualTo(intended.size());
+                });
+
+                if (commitAddress != intended.size()) {
+                    testSucceeded.set(false);
+                }
             });
 
             Thread t2 = new Thread(() -> {
                 try {
                     latch2.await();
                     intended.forEach(value -> table.insert(value, value));
-                    assertThat(executeTx(() -> table.get(nonExistingKey))).isEqualTo(intended.size());
+                    long commitAddress = executeTx(() -> table.get(nonExistingKey));
+                    if (commitAddress != intended.size()) {
+                        testSucceeded.set(false);
+                    }
                     latch1.countDown();
                 } catch (InterruptedException ex) {
                     // Ignored
@@ -411,6 +439,61 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
             t2.start();
             t1.join();
             t2.join();
+            assertThat(testSucceeded.get()).isTrue();
+            intended.forEach(value -> assertThat(table.get(value)).isEqualTo(value));
+        }
+    }
+
+    /**
+     * Verify commit address of interleaving transactions on disk-backed tables.
+     */
+    @Property(tries = NUM_OF_TRIES)
+    void verifyCommitAddressInterleavingTxnReadYourWrites(
+            @ForAll @Size(SAMPLE_SIZE) Set<String> intended) throws Exception {
+        resetTests();
+        final AtomicBoolean testSucceeded = new AtomicBoolean(true);
+        try (final PersistedCorfuTable<String, String> table = setupTable(ENABLE_READ_YOUR_WRITES)) {
+            CountDownLatch latch1 = new CountDownLatch(1);
+            CountDownLatch latch2 = new CountDownLatch(1);
+
+            Thread t1 = new Thread(() -> {
+                table.insert(defaultNewMapEntry, defaultNewMapEntry);
+                assertThat(executeTx(() -> table.get(nonExistingKey))).isEqualTo(0L);
+                long commitAddress = executeTx(() -> {
+                    try {
+                        table.get(nonExistingKey);
+                        latch2.countDown();
+                        latch1.await();
+                        table.get(nonExistingKey);
+                    } catch (InterruptedException ignored) {
+                        // Ignored
+                    }
+                });
+
+                if (commitAddress != 0) {
+                    testSucceeded.set(false);
+                }
+            });
+
+            Thread t2 = new Thread(() -> {
+                try {
+                    latch2.await();
+                    intended.forEach(value -> table.insert(value, value));
+                    long commitAddress = executeTx(() -> table.get(nonExistingKey));
+                    if (commitAddress != intended.size()) {
+                        testSucceeded.set(false);
+                    }
+                    latch1.countDown();
+                } catch (InterruptedException ex) {
+                    // Ignored
+                }
+            });
+
+            t1.start();
+            t2.start();
+            t1.join();
+            t2.join();
+            assertThat(testSucceeded.get()).isTrue();
             intended.forEach(value -> assertThat(table.get(value)).isEqualTo(value));
         }
     }

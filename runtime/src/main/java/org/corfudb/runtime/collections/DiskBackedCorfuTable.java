@@ -17,12 +17,14 @@ import org.corfudb.runtime.CorfuOptions;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.object.ColumnFamilyRegistry;
 import org.corfudb.runtime.object.ConsistencyView;
+import org.corfudb.runtime.object.DiskBackedSMRSnapshot;
 import org.corfudb.runtime.object.PersistenceOptions;
 import org.corfudb.runtime.object.RocksDbApi;
 import org.corfudb.runtime.object.RocksDbSnapshotGenerator;
 import org.corfudb.runtime.object.RocksDbStore;
 import org.corfudb.runtime.object.SMRSnapshot;
 import org.corfudb.runtime.object.SnapshotGenerator;
+import org.corfudb.runtime.object.SnapshotProxy;
 import org.corfudb.runtime.object.VersionedObjectIdentifier;
 import org.corfudb.runtime.object.ViewGenerator;
 import org.corfudb.runtime.view.ObjectOpenOption;
@@ -59,6 +61,31 @@ import java.util.stream.StreamSupport;
 import static org.corfudb.runtime.CorfuOptions.ConsistencyModel.READ_COMMITTED;
 import static org.corfudb.runtime.CorfuOptions.SizeComputationModel.EXACT_SIZE;
 
+/**
+ * This is the underlying implementation of {@link PersistedCorfuTable}.
+ * <p>
+ * There are two higher level constructs that incorporate {@link DiskBackedCorfuTable}:
+ * {@link DiskBackedSMRSnapshot}: A particular snapshot in time associated with some version.
+ * {@link SnapshotProxy}: A particular view of the above snapshot.
+ * <p>
+ * As we are moving the object/table forward, we end up creating new snapshots. When a client
+ * wants to consume that snapshot, we create a new view. The hierarchy can be represented
+ * as follows:
+ * <p>
+ * MVO
+ * |------ Version 1: DiskBackedSMRSnapshot
+ * |                  |------ DiskBackedCorfuTable(RocksDbTx1) (SnapshotProxy)
+ * |                  |------ DiskBackedCorfuTable(RocksDbTx2) (SnapshotProxy)
+ * |                  |------ ...
+ * |------ Version 2: DiskBackedSMRSnapshot
+ * |------ Version 3: DiskBackedSMRSnapshot
+ * |                  |------ DiskBackedCorfuTable(RocksDbTx3) (SnapshotProxy)
+ * |                  |------ DiskBackedCorfuTable(RocksDbTx4) (SnapshotProxy)
+ * |                  |------ ...
+ *
+ * @param <K> key type
+ * @param <V> value type
+ */
 @Slf4j
 @AllArgsConstructor
 @Builder(toBuilder = true)

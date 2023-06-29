@@ -92,7 +92,9 @@ public class MVOCorfuCompileProxy<
 
         // Perform underlying access
         ICorfuSMRSnapshotProxy<S> snapshotProxy = underlyingMVO.getSnapshotProxy(timestamp);
-        return snapshotProxy.access(accessMethod, v -> {});
+        final R result = snapshotProxy.access(accessMethod, v -> {});
+        snapshotProxy.releaseView();
+        return result;
     }
 
     @Override

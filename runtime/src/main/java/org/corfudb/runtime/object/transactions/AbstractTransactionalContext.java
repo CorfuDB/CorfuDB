@@ -168,14 +168,19 @@ public abstract class AbstractTransactionalContext implements
         Long val = knownStreamsPosition.get(proxy.getStreamID());
 
         if (val != null) {
-            // This precondition is not valid for monotonic objects since multiple accesses
-            // performed by a transaction may not always see the same stream position.
-            // This can occur if another thread performs accesses at a later snapshot and
-            // interleaves with this transaction.
-            Preconditions.checkState(val == position,
-                    "inconsistent stream positions %s and %s", val, position);
+            if (proxy.getUnderlyingMVO().getCurrentObject().getConsistencyModel() == READ_COMMITTED) {
+                Preconditions.checkState(val <= position,
+                        "new stream position %s has decreased from %s", position, val);
+            } else {
+                // This precondition is not valid for monotonic objects since multiple accesses
+                // performed by a transaction may not always see the same stream position.
+                // This can occur if another thread performs accesses at a later snapshot and
+                // interleaves with this transaction.
+                Preconditions.checkState(val == position,
+                        "inconsistent stream positions %s and %s", val, position);
+                return;
+            }
         }
-
 
         if (proxy.getUnderlyingMVO().getCurrentObject().getConsistencyModel() == READ_COMMITTED) {
             accessedReadCommittedObject = true;

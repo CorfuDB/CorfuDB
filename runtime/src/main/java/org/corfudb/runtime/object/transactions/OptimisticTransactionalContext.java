@@ -3,6 +3,7 @@ package org.corfudb.runtime.object.transactions;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
+import org.corfudb.runtime.CorfuOptions;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.AppendException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
@@ -15,6 +16,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+
+import static org.corfudb.runtime.CorfuOptions.ConsistencyModel.READ_COMMITTED;
 
 
 /** A Corfu optimistic transaction context.
@@ -74,10 +77,8 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
             // First, we add this access to the read set
             addToReadSet(proxy, conflictObject);
 
-            // Get snapshot timestamp in advance so it is not performed under the VLO lock
+            // Get snapshot timestamp in advance, so it is not performed under the VLO lock
             long ts = getSnapshotTimestamp().getSequence();
-
-            // TODO: better proxy type check, or refactor to avoid.
             return getAndCacheSnapshotProxy(proxy, ts)
                     .access(accessFunction, version -> updateKnownStreamPosition(proxy, version));
         } finally {
