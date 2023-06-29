@@ -485,6 +485,7 @@ public class MultiVersionObject<S extends SnapshotGenerator<S> & ConsistencyView
      */
     private void resetUnsafe() {
         log.debug("Reset[{}]", Utils.toReadableId(getID()));
+        mvoCache.invalidateAllVersionsOf(getSmrStream().getID());
         materializedUpTo = Address.NON_ADDRESS;
         resolvedUpTo = Address.NON_ADDRESS;
 
