@@ -485,13 +485,11 @@ public class MultiVersionObject<S extends SnapshotGenerator<S> & ConsistencyView
      */
     private void resetUnsafe() {
         log.debug("Reset[{}]", Utils.toReadableId(getID()));
-        mvoCache.invalidateAllVersionsOf(getSmrStream().getID());
         materializedUpTo = Address.NON_ADDRESS;
         resolvedUpTo = Address.NON_ADDRESS;
 
-        // It is safe to release the current snapshot here as it hasn't been
-        // propagated into any caches yet.
         snapshotFifo.forEach(SMRSnapshot::release);
+        mvoCache.invalidateAllVersionsOf(getSmrStream().getID());
         snapshotFifo = new ArrayDeque<>(snapshotFifoSize);
         currentObject.close();
         currentObject = newObjectFn.get();

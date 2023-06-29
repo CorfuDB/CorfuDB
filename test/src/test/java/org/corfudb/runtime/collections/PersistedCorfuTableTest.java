@@ -67,6 +67,7 @@ import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -280,7 +281,7 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
             Assertions.assertEquals(intended.size(), table.size());
 
             executeTx(() -> {
-                final Set<String> persisted = table.entryStream().map(Map.Entry::getValue).collect(Collectors.toSet());
+                final Set<String> persisted = table.entryStream().map(Entry::getValue).collect(Collectors.toSet());
                 Assertions.assertEquals(intended, persisted);
                 Assertions.assertEquals(table.size(), persisted.size());
             });
@@ -297,7 +298,7 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
             intended.forEach(value -> table.insert(value, value));
             Assertions.assertEquals(intended.size(), table.size());
 
-            final Set<String> persisted = table.entryStream().map(Map.Entry::getValue).collect(Collectors.toSet());
+            final Set<String> persisted = table.entryStream().map(Entry::getValue).collect(Collectors.toSet());
             Assertions.assertEquals(intended, persisted);
             Assertions.assertEquals(table.size(), persisted.size());
         }
@@ -312,7 +313,7 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
             intended.forEach(value -> Assertions.assertEquals(table.get(value), value));
             intended.forEach(table::delete);
 
-            final Set<String> persisted = table.entryStream().map(Map.Entry::getValue).collect(Collectors.toSet());
+            final Set<String> persisted = table.entryStream().map(Entry::getValue).collect(Collectors.toSet());
             Assertions.assertTrue(persisted.isEmpty());
         }
     }
@@ -329,7 +330,7 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
             });
 
             executeTx(() -> {
-                final Set<String> persisted = table.entryStream().map(Map.Entry::getValue).collect(Collectors.toSet());
+                final Set<String> persisted = table.entryStream().map(Entry::getValue).collect(Collectors.toSet());
                 Assertions.assertTrue(persisted.isEmpty());
             });
         }
@@ -597,6 +598,53 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
         }
     }
 
+    /**
+     * After encountering TrimmedException while syncing the object,
+     * ensure that all snapshots are released.
+     */
+    @Property(tries = NUM_OF_TRIES)
+    void objectReset() {
+        resetTests();
+
+        final AtomicBoolean testSucceeded = new AtomicBoolean(false);
+        final CountDownLatch secondAccessLatch = new CountDownLatch(1);
+        final CountDownLatch firstAccessLatch = new CountDownLatch(1);
+
+        try (final PersistedCorfuTable<String, String> table = setupTable()) {
+
+            Thread thread = new Thread(() -> executeTx(() -> {
+                table.size();
+                firstAccessLatch.countDown();
+                Failable.run(secondAccessLatch::await);
+                try {
+                    table.size();
+                } catch (TransactionAbortedException abortedException) {
+                    if (abortedException.getCause().getMessage().contains("Snapshot is not longer active")) {
+                        testSucceeded.set(true);
+                    }
+                }
+            }));
+
+            thread.start();
+            Failable.run(firstAccessLatch::await);
+
+            executeTx(() -> table.insert(defaultNewMapEntry, defaultNewMapEntry));
+            executeTx(() -> table.insert(defaultNewMapEntry, defaultNewMapEntry));
+
+            final Token token = new Token(getDefaultRuntime().getLayoutView().getLayout().getEpoch(), Integer.MAX_VALUE);
+            getDefaultRuntime().getSequencerView().trimCache(Integer.MAX_VALUE);
+            getDefaultRuntime().getAddressSpaceView().prefixTrim(token);
+            getDefaultRuntime().getAddressSpaceView().invalidateServerCaches();
+            getDefaultRuntime().getAddressSpaceView().invalidateClientCache();
+
+            assertThatThrownBy(() -> table.get(defaultNewMapEntry)).isInstanceOf(TrimmedException.class);
+
+            secondAccessLatch.countDown();
+            Failable.run(thread::join);
+            assertThat(testSucceeded.get()).isTrue();
+        }
+    }
+
     @Property(tries = NUM_OF_TRIES)
     void invalidView() {
         PersistenceOptionsBuilder persistenceOptions = PersistenceOptions.builder()
@@ -656,8 +704,8 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
             executeTx(() -> {
                 assertThat(table.entryStream().count()).isEqualTo(intended.size());
 
-                Stream<Map.Entry<String, String>> stream = table.entryStream();
-                Iterator<Map.Entry<String, String>> iterator = stream.iterator();
+                Stream<Entry<String, String>> stream = table.entryStream();
+                Iterator<Entry<String, String>> iterator = stream.iterator();
                 assertThat(iterator.next()).isNotNull();
                 assertThat(iterator.next()).isNotNull();
 
@@ -741,7 +789,7 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
 
             groups.forEach((character, strings) -> assertThat(StreamSupport.stream(
                             table.getByIndex(StringIndexer.BY_FIRST_LETTER, character).spliterator(), false)
-                    .map(Map.Entry::getValue)
+                    .map(Entry::getValue)
                     .collect(Collectors.toSet()))
                     .isEqualTo(strings));
 
@@ -754,7 +802,7 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
 
                 groups.forEach((character, strings) -> assertThat(StreamSupport.stream(
                                 table.getByIndex(StringIndexer.BY_FIRST_LETTER, character).spliterator(), false)
-                        .map(Map.Entry::getValue)
+                        .map(Entry::getValue)
                         .collect(Collectors.toSet()))
                         .isEmpty());
             });
@@ -765,12 +813,12 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
 
             executeTx(() -> groups.forEach((character, strings) -> assertThat(StreamSupport.stream(
                             table.getByIndex(StringIndexer.BY_FIRST_LETTER, character).spliterator(), false)
-                    .map(Map.Entry::getValue)
+                    .map(Entry::getValue)
                     .collect(Collectors.toSet()))
                     .isEmpty()));
             groups.forEach((character, strings) -> assertThat(StreamSupport.stream(
                             table.getByIndex(StringIndexer.BY_FIRST_LETTER, character).spliterator(), false)
-                    .map(Map.Entry::getValue)
+                    .map(Entry::getValue)
                     .collect(Collectors.toSet()))
                     .isEmpty());
         }
@@ -784,7 +832,7 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
             // StringIndexer does not work with empty strings (StringIndexOutOfBoundsException)
             executeTx(() -> intended.forEach(value -> table.insert(StringUtils.reverse(value), value)));
 
-            final Set<String> persisted = table.entryStream().map(Map.Entry::getValue).collect(Collectors.toSet());
+            final Set<String> persisted = table.entryStream().map(Entry::getValue).collect(Collectors.toSet());
             assertThat(intended).isEqualTo(persisted);
 
             Map<Character, Set<String>> groups = persisted.stream()
@@ -794,7 +842,7 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
                 // Transactional getByIndex.
                 groups.forEach((character, strings) -> assertThat(StreamSupport.stream(
                                 table.getByIndex(StringIndexer.BY_FIRST_LETTER, character).spliterator(), false)
-                        .map(Map.Entry::getValue)
+                        .map(Entry::getValue)
                         .collect(Collectors.toSet()))
                         .isEqualTo(strings));
 
@@ -802,7 +850,7 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
 
                 groups.forEach((character, strings) -> assertThat(StreamSupport.stream(
                                 table.getByIndex(StringIndexer.BY_FIRST_LETTER, character).spliterator(), false)
-                        .map(Map.Entry::getValue)
+                        .map(Entry::getValue)
                         .collect(Collectors.toSet()))
                         .isEmpty());
 
@@ -811,7 +859,7 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
 
             groups.forEach(((character, strings) -> assertThat(StreamSupport.stream(
                             table.getByIndex(StringIndexer.BY_FIRST_LETTER, character).spliterator(), false)
-                    .map(Map.Entry::getValue)
+                    .map(Entry::getValue)
                     .collect(Collectors.toSet()))
                     .isEqualTo(strings)));
         }
@@ -825,7 +873,7 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
             executeTx(() -> intended.forEach(value -> table.insert(value, value)));
 
             {
-                final Set<String> persisted = table.entryStream().map(Map.Entry::getValue).collect(Collectors.toSet());
+                final Set<String> persisted = table.entryStream().map(Entry::getValue).collect(Collectors.toSet());
                 assertThat(intended).isEqualTo(persisted);
                 Map<Character, Set<String>> groups = persisted.stream()
                         .collect(Collectors.groupingBy(s -> s.charAt(0), Collectors.toSet()));
@@ -833,13 +881,13 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
                 // Non-transactional getByIndex.
                 groups.forEach(((character, strings) -> assertThat(StreamSupport.stream(
                                 table.getByIndex(StringIndexer.BY_FIRST_LETTER, character).spliterator(), false)
-                        .map(Map.Entry::getValue)
+                        .map(Entry::getValue)
                         .collect(Collectors.toSet()))
                         .isEqualTo(strings)));
             }
 
             executeTx(() -> {
-                final Set<String> persisted = table.entryStream().map(Map.Entry::getValue).collect(Collectors.toSet());
+                final Set<String> persisted = table.entryStream().map(Entry::getValue).collect(Collectors.toSet());
 
                 {
                     assertThat(intended).isEqualTo(persisted);
@@ -849,7 +897,7 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
                     // Transactional getByIndex.
                     groups.forEach(((character, strings) -> assertThat(StreamSupport.stream(
                                     table.getByIndex(StringIndexer.BY_FIRST_LETTER, character).spliterator(), false)
-                            .map(Map.Entry::getValue)
+                            .map(Entry::getValue)
                             .collect(Collectors.toSet()))
                             .isEqualTo(strings)));
                 }
@@ -858,13 +906,13 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
                 intended.forEach(value -> table.insert(StringUtils.reverse(value), StringUtils.reverse(value)));
 
                 {
-                    final Set<String> newPersisted = table.entryStream().map(Map.Entry::getValue).collect(Collectors.toSet());
+                    final Set<String> newPersisted = table.entryStream().map(Entry::getValue).collect(Collectors.toSet());
                     Map<Character, Set<String>> groups = newPersisted.stream()
                             .collect(Collectors.groupingBy(s -> s.charAt(0), Collectors.toSet()));
 
                     groups.forEach(((character, strings) -> assertThat(StreamSupport.stream(
                                     table.getByIndex(StringIndexer.BY_FIRST_LETTER, character).spliterator(), false)
-                            .map(Map.Entry::getValue)
+                            .map(Entry::getValue)
                             .collect(Collectors.toSet()))
                             .isEqualTo(strings)));
                 }
