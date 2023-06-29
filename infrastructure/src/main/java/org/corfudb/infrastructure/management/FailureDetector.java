@@ -2,6 +2,7 @@ package org.corfudb.infrastructure.management;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Iterables;
 import io.micrometer.core.instrument.Timer;
 import lombok.Builder;
 import lombok.Builder.Default;
@@ -123,53 +124,8 @@ public class FailureDetector implements IDetector {
         return routers;
     }
 
-    PollReport pollRoundExpBackoff(long epoch, UUID clusterID, Set<String> allServers, Map<String, IClientRouter> router,
-                                   SequencerMetrics sequencerMetrics, ImmutableList<String> layoutUnresponsiveNodes,
-                                   FileSystemStats fileSystemStats) {
-
-        final PollConfig pollConfig = this.pollConfig.orElseGet(() -> PollConfig.builder().build());
-        Consumer<MixedBoundRetry> retrySettings = settings -> {
-            settings.setOverallMaxRetryDuration(pollConfig.getMaxDetectionDuration());
-            settings.setMaxRetryDuration(pollConfig.getMaxSleepBetweenRetries());
-            settings.setBaseDuration(pollConfig.getInitSleepBetweenRetries());
-            settings.setRandomPart(pollConfig.getJitterFactor());
-        };
-        List<PollReport> reports = new ArrayList<>();
-        final long start = System.currentTimeMillis();
-        try {
-            IRetry.build(MixedBoundRetry.class, () -> {
-                PollReport currReport = pollIteration(
-                        allServers, router, epoch, clusterID, sequencerMetrics, layoutUnresponsiveNodes, fileSystemStats
-                );
-                reports.add(currReport);
-                // Finish the poll round if we've reached the desired number of reports or when
-                // the current cluster state is not ready.
-                // Cluster state is not ready unless the overall cluster view is updated.
-                // The resulting report will not be used in the failure detection anyway.
-                // Cut this round short and continue on the next FD iteration.
-                if (!currReport.getClusterState().isReady()) {
-                    log.trace("Cluster state is not ready. Skipping iterations.");
-                    throw new RetryExhaustedException();
-                }
-                if (reports.size() == pollConfig.getMaxPollRounds()) {
-                    log.trace("Collected all {} reports.", reports.size());
-                    throw new RetryExhaustedException();
-                }
-                // There are failed nodes. Increase the sleep interval.
-                if (!currReport.getFailedNodes().isEmpty()) {
-                    throw new MixedBoundRetry.BackoffRetryNeededException();
-                } else {
-                    throw new RetryNeededException();
-                }
-            }).setOptions(retrySettings).run();
-        } catch (RetryExhaustedException re) {
-            log.debug("Poll round finished. Took: {}ms", System.currentTimeMillis() - start);
-        } catch (InterruptedException ie) {
-            log.error("Interrupted exception occurred.");
-            throw new UnrecoverableCorfuInterruptedError(ie);
-        }
-
-        //Aggregation step
+    private PollReport aggregatePollReports(long epoch, List<PollReport> reports,
+                                            ImmutableList<String> layoutUnresponsiveNodes) {
         Map<String, Long> wrongEpochsAggregated = new HashMap<>();
 
         reports.forEach(report -> {
@@ -201,6 +157,59 @@ public class FailureDetector implements IDetector {
                 .clusterState(aggregatedClusterState)
                 .build();
     }
+
+    PollReport pollRoundExpBackoff(long epoch, UUID clusterID, Set<String> allServers, Map<String, IClientRouter> router,
+                                   SequencerMetrics sequencerMetrics, ImmutableList<String> layoutUnresponsiveNodes,
+                                   FileSystemStats fileSystemStats) {
+
+        final PollConfig pollConfig = this.pollConfig.orElseGet(() -> PollConfig.builder().build());
+        Consumer<MixedBoundRetry> retrySettings = settings -> {
+            settings.setOverallMaxRetryDuration(pollConfig.getMaxDetectionDuration());
+            settings.setMaxRetryDuration(pollConfig.getMaxSleepBetweenRetries());
+            settings.setBaseDuration(pollConfig.getInitSleepBetweenRetries());
+            settings.setRandomPart(pollConfig.getJitterFactor());
+        };
+        List<PollReport> reports = new ArrayList<>();
+        try {
+            return IRetry.build(MixedBoundRetry.class, () -> {
+                PollReport currReport = pollIteration(
+                        allServers, router, epoch, clusterID, sequencerMetrics, layoutUnresponsiveNodes, fileSystemStats
+                );
+                reports.add(currReport);
+                // Finish the poll round if we've reached the desired number of reports or when
+                // the current cluster state is not ready.
+                // Cluster state is not ready unless the overall cluster view is updated.
+                // The resulting report will not be used in the failure detection anyway.
+                // Cut this round short and continue on the next FD iteration.
+                if (!currReport.getClusterState().isReady()) {
+                    log.trace("Cluster state is not ready. Skipping iterations.");
+                    throw new IllegalStateException();
+                }
+                if (reports.size() == pollConfig.getMaxPollRounds()) {
+                    log.trace("Aggregating all {} collected reports.", reports.size());
+                    return aggregatePollReports(epoch, reports, layoutUnresponsiveNodes);
+                }
+                // There are failed nodes. Increase the sleep interval.
+                if (!currReport.getFailedNodes().isEmpty()) {
+                    throw new MixedBoundRetry.BackoffRetryNeededException();
+                } else {
+                    throw new RetryNeededException();
+                }
+            }).setOptions(retrySettings).run();
+        } catch (IllegalStateException is) {
+            log.warn("Iterations skipped due to incomplete cluster state. " +
+                    "Returning last not ready report.");
+            return Iterables.getLast(reports);
+        } catch (RetryExhaustedException ree) {
+            log.info("Overall retry duration exceeded: {}. Aggregating poll reports.",
+                    pollConfig.getMaxDetectionDuration());
+            return aggregatePollReports(epoch, reports, layoutUnresponsiveNodes);
+        } catch (InterruptedException ie) {
+            log.error("Interrupted exception occurred.");
+            throw new UnrecoverableCorfuInterruptedError(ie);
+        }
+    }
+
 
     /**
      * Poll iteration step, provides a {@link PollReport} composed from pings and {@link NodeState}-s collected by

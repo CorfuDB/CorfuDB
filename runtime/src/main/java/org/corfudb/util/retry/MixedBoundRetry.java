@@ -4,10 +4,17 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
 import org.corfudb.runtime.exceptions.RetryExhaustedException;
+import org.corfudb.util.CFUtils;
 import org.corfudb.util.Sleep;
 
 import java.time.Duration;
+import java.util.Optional;
 import java.util.Random;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 
 /**
  * This retry class is a mix between interval retry and exponential backoff retry with the finite
@@ -78,20 +85,46 @@ public class MixedBoundRetry<E extends Exception, F extends Exception,
     @Getter
     long endSession = 0;
 
+    /**
+     * Completes and throws RetryExhaustedException on get after overallMaxRetryDuration is reached
+     * after run has started.
+     */
+    @Getter
+    Optional<ScheduledFuture<?>> endSessionFuture = Optional.empty();
 
     public MixedBoundRetry(IRetryable<E, F, G, H, O> runFunction) {
         super(runFunction);
     }
 
+    private void waitUntilSessionExpires() {
+        endSessionFuture.ifPresent(f -> CFUtils.getUninterruptibly(f, RetryExhaustedException.class));
+    }
+
+    private long getRemainingSessionTime() {
+        return endSessionFuture.map(f -> f.getDelay(TimeUnit.MILLISECONDS))
+                .orElseThrow(() -> new IllegalStateException("Scheduler is not started"));
+    }
+
+    private void expireSessionIfSleepExceedsDelay(long sleepTime) {
+        if (sleepTime > getRemainingSessionTime()) {
+            waitUntilSessionExpires();
+        }
+    }
+
+    private void cleanupIfSessionExpired(ScheduledExecutorService scheduler) {
+        endSessionFuture.map(Future::isDone).ifPresent(expired -> {
+            if (expired) {
+                scheduler.shutdown();
+            }
+        });
+    }
 
     @Override
     public void nextWait() {
-        if (System.currentTimeMillis() + lastDuration.toMillis() > endSession) {
-            throw new RetryExhaustedException();
-        }
         if (maxRetryDuration.toMillis() > 0) {
             lastDuration = Duration.ofMillis(Math.min(lastDuration.toMillis(), maxRetryDuration.toMillis()));
         }
+        expireSessionIfSleepExceedsDelay(lastDuration.toMillis());
         Sleep.sleepUninterruptibly(lastDuration);
     }
 
@@ -102,16 +135,18 @@ public class MixedBoundRetry<E extends Exception, F extends Exception,
         if (maxRetryDuration.toMillis() > 0) {
             sleepTime = Math.min(sleepTime, maxRetryDuration.toMillis());
         }
-        if (System.currentTimeMillis() + sleepTime > endSession) {
-            throw new RetryExhaustedException();
-        }
+        expireSessionIfSleepExceedsDelay(sleepTime);
         lastDuration = Duration.ofMillis(sleepTime);
         Sleep.sleepUninterruptibly(lastDuration);
     }
 
     @Override
     public O run() throws E, F, G, H, InterruptedException {
-        endSession = System.currentTimeMillis() + overallMaxRetryDuration.toMillis();
+        ScheduledExecutorService scheduler =
+                Executors.newScheduledThreadPool(1);
+        endSessionFuture = Optional.of(scheduler.schedule(() -> {
+            throw new RetryExhaustedException();
+        }, overallMaxRetryDuration.toMillis(), TimeUnit.MILLISECONDS));
         lastDuration = baseDuration;
         while (true) {
             try {
@@ -120,6 +155,8 @@ public class MixedBoundRetry<E extends Exception, F extends Exception,
                 nextWait();
             } catch (BackoffRetryNeededException ex) {
                 backOffWait();
+            } finally {
+                cleanupIfSessionExpired(scheduler);
             }
         }
     }
