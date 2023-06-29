@@ -90,7 +90,7 @@ public class CompactorLeaderServices {
 
             long newCycleCount = managerStatus == null ? 0 : managerStatus.getCycleCount() + 1;
             List<TableName> tableNames = new ArrayList<>(corfuStore.listTables(null));
-            CheckpointingStatus idleStatus = buildCheckpointStatus(StatusType.IDLE, newCycleCount);
+            CheckpointingStatus idleStatus = buildCheckpointStatus(StatusType.IDLE, nodeEndpoint, newCycleCount);
 
             txn.clear(CompactorMetadataTables.CHECKPOINT_STATUS_TABLE_NAME);
             txn.clear(CompactorMetadataTables.ACTIVE_CHECKPOINTS_TABLE_NAME);
@@ -169,7 +169,7 @@ public class CompactorLeaderServices {
 
             if (tableStatus.getStatus() != StatusType.COMPLETED && tableStatus.getStatus() != StatusType.FAILED) {
                 txn.putRecord(compactorMetadataTables.getCheckpointingStatusTable(), table,
-                        buildCheckpointStatus(StatusType.FAILED, tableStatus.getCycleCount()), null);
+                        buildCheckpointStatus(StatusType.FAILED, tableStatus.getClientName(), tableStatus.getCycleCount()), null);
                 txn.delete(CompactorMetadataTables.ACTIVE_CHECKPOINTS_TABLE_NAME, table);
                 txn.commit();
                 log.warn("Marked table {}${} FAILED due to no checkpoint activity",
@@ -287,10 +287,10 @@ public class CompactorLeaderServices {
         }
     }
 
-    private CheckpointingStatus buildCheckpointStatus(CheckpointingStatus.StatusType statusType, long compactorCycleCount) {
+    private CheckpointingStatus buildCheckpointStatus(CheckpointingStatus.StatusType statusType, String clientName, long compactorCycleCount) {
         return CheckpointingStatus.newBuilder()
                 .setStatus(statusType)
-                .setClientName(nodeEndpoint)
+                .setClientName(clientName)
                 .setCycleCount(compactorCycleCount)
                 .build();
     }
