@@ -289,7 +289,8 @@ class CompactorRunner(object):
                     return
             cmd = self._command_builder.get_corfu_compactor_cmd(compactor_config, class_to_invoke)
             self._print_and_log("Start compacting. Command %s" % cmd)
-            check_call(cmd, shell=True)
+            with open(corfu_paths["CompactorLogfile"], 'a') as f:
+                check_call(cmd, stdout=f, stderr=f, shell=True)
             self._print_and_log("Finished running corfu compactor tool.")
 
         except Exception as ex:

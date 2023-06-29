@@ -20,6 +20,7 @@ import java.io.IOException;
 import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 import static org.corfudb.common.metrics.micrometer.MeterRegistryProvider.MeterRegistryInitializer.initServerMetrics;
@@ -38,6 +39,7 @@ import static org.corfudb.util.NetworkUtils.getAddressFromInterfaceName;
 public class CorfuServer {
     private static final Duration TIMEOUT = Duration.ofSeconds(3);
 
+    private static volatile CountDownLatch resetLatch;
     // Active Corfu Server.
     private static volatile CorfuServerNode activeServer;
 
@@ -127,6 +129,7 @@ public class CorfuServer {
 
         // Manages the lifecycle of the Corfu Server.
         while (!shutdownServer) {
+            resetLatch = new CountDownLatch(1);
             ServerContext serverContext;
             try {
                 serverContext = new ServerContext(opts);
@@ -152,7 +155,9 @@ public class CorfuServer {
             }
 
             if (!shutdownServer) {
-                log.info("main: Server restarting.");
+                log.info("main: Waiting until restart is complete.");
+                resetLatch.await();
+                log.info("main: Server restarted.");
             }
         }
 
@@ -298,6 +303,7 @@ public class CorfuServer {
 
         log.info("RestartServer: Shutting down corfu server");
         activeServer.close();
+        resetLatch.countDown();
         log.info("RestartServer: Starting corfu server");
     }
 
