@@ -7,6 +7,7 @@ import org.corfudb.runtime.collections.*;
 import org.corfudb.runtime.exceptions.StreamingException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
 
 import javax.annotation.Nonnull;
 import java.lang.reflect.InvocationTargetException;
@@ -298,11 +299,13 @@ public abstract class LogReplicationRoutingQueueListener implements StreamListen
                         callbackResult = processUpdatesInLogEntrySync(Collections.singletonList(entry));
                     }
                     if (callbackResult) {
+                        this.lastProcessedEntryTs =
+                                Timestamp.newBuilder().setEpoch(0L)
+                                        .setSequence(records.get(i).getTxSequence().getTxSequence()).build();
                         // When the client processed the entry successfully, delete the entry from the routing queue.
                         tx.delete(routingQueue, recordId);
                     }
                 }
-                this.lastProcessedEntryTs = tx.commit();
                 log.info("Resume routing queue subscribtion onError");
                 resumeSubscription();
             }
