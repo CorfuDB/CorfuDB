@@ -1,13 +1,9 @@
 package org.corfudb.runtime;
 
 import com.google.common.base.Preconditions;
-import com.google.common.base.Strings;
 import com.google.protobuf.Message;
-import com.google.protobuf.Timestamp;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.LogReplication.ClientDestinationInfoKey;
-import org.corfudb.runtime.LogReplication.ClientRegistrationId;
-import org.corfudb.runtime.LogReplication.ClientRegistrationInfo;
 import org.corfudb.runtime.LogReplication.DestinationInfoVal;
 import org.corfudb.runtime.LogReplication.ReplicationModel;
 import org.corfudb.runtime.collections.CorfuStore;
@@ -23,9 +19,7 @@ import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.RetryNeededException;
 
 import java.lang.reflect.InvocationTargetException;
-import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.NoSuchElementException;
@@ -41,15 +35,9 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
  * may succeed concurrently, leading to potential race conditions as retries are not deterministic.
  */
 @Slf4j
-public class LogReplicationLogicalGroupClient {
+public class LogReplicationLogicalGroupClient extends LogReplicationClient{
     // TODO (V2): This field should be removed after the rpc stream is added for Sink side session creation.
     public static final String DEFAULT_LOGICAL_GROUP_CLIENT = "00000000-0000-0000-0000-0000000000001";
-
-    /**
-     * Key: ClientRegistrationId
-     * Value: ClientRegistrationInfo
-     */
-    public static final String LR_REGISTRATION_TABLE_NAME = "LogReplicationRegistrationTable";
 
     /**
      * Key: ClientDestinationInfoKey
@@ -59,12 +47,9 @@ public class LogReplicationLogicalGroupClient {
 
     private static final ReplicationModel model = ReplicationModel.LOGICAL_GROUPS;
 
-    private Table<ClientRegistrationId, ClientRegistrationInfo, Message> replicationRegistrationTable;
     private Table<ClientDestinationInfoKey, DestinationInfoVal, Message> sourceMetadataTable;
 
     private final CorfuStore corfuStore;
-    private final ClientRegistrationId clientKey;
-    private final ClientRegistrationInfo clientInfo;
     private final String clientName;
 
     /**
@@ -84,28 +69,6 @@ public class LogReplicationLogicalGroupClient {
         this.corfuStore = new CorfuStore(runtime);
         // TODO (V2): client name cannot be customized as Sink side does not have a way to create sessions for now
         this.clientName = DEFAULT_LOGICAL_GROUP_CLIENT;
-        this.clientKey = ClientRegistrationId.newBuilder()
-                .setClientName(clientName)
-                .build();
-        Instant time = Instant.now();
-        Timestamp timestamp = Timestamp.newBuilder().setSeconds(time.getEpochSecond())
-                .setNanos(time.getNano()).build();
-        this.clientInfo = ClientRegistrationInfo.newBuilder()
-                .setClientName(clientName)
-                .setModel(model)
-                .setRegistrationTime(timestamp)
-                .build();
-
-        try {
-            this.replicationRegistrationTable = corfuStore.getTable(CORFU_SYSTEM_NAMESPACE, LR_REGISTRATION_TABLE_NAME);
-        } catch (NoSuchElementException | IllegalArgumentException e) {
-            log.warn("Failed getTable operation, opening table.", e);
-            this.replicationRegistrationTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, LR_REGISTRATION_TABLE_NAME,
-                    ClientRegistrationId.class,
-                    ClientRegistrationInfo.class,
-                    null,
-                    TableOptions.fromProtoSchema(ClientRegistrationInfo.class));
-        }
 
         try {
             this.sourceMetadataTable = corfuStore.getTable(CORFU_SYSTEM_NAMESPACE, LR_MODEL_METADATA_TABLE_NAME);
@@ -118,37 +81,7 @@ public class LogReplicationLogicalGroupClient {
                     TableOptions.fromProtoSchema(DestinationInfoVal.class));
         }
 
-        register();
-    }
-
-    /**
-     * Registers client for replication utilizing logical groups.
-     *
-     */
-    private void register() {
-        try {
-            IRetry.build(ExponentialBackoffRetry.class, () -> {
-                try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-                    ClientRegistrationInfo clientRegistrationInfo = txn.getRecord(replicationRegistrationTable, clientKey).getPayload();
-
-                    if (clientRegistrationInfo != null) {
-                        log.warn(String.format("Client already registered.\n--- ClientRegistrationId ---\n%s" +
-                                "--- ClientRegistrationInfo ---\n%s", clientKey, clientRegistrationInfo));
-                    } else {
-                        txn.putRecord(replicationRegistrationTable, clientKey, clientInfo, null);
-                    }
-
-                    txn.commit();
-                } catch (TransactionAbortedException tae) {
-                    log.error(String.format("[%s] Unable to register client.", clientName), tae);
-                    throw new RetryNeededException();
-                }
-                return null;
-            }).run();
-        } catch (InterruptedException e) {
-            log.error(String.format("[%s] Client registration failed.", clientName), e);
-            throw new UnrecoverableCorfuInterruptedError(e);
-        }
+        register(corfuStore, clientName, model);
     }
 
     /**
@@ -171,7 +104,7 @@ public class LogReplicationLogicalGroupClient {
                 String.format("[%s] remoteDestinations is null or empty.", clientName));
         Preconditions.checkArgument(hasNoNullOrEmptyElements(remoteDestinations),
                 String.format("[%s] remoteDestinations contains null or empty elements.", clientName));
-        List<String> finalRemoteDestinations = new ArrayList<>(deduplicate(remoteDestinations));
+        List<String> finalRemoteDestinations = new ArrayList<>(deduplicate(remoteDestinations, clientName));
         try {
             IRetry.build(ExponentialBackoffRetry.class, () -> {
                 try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
@@ -233,7 +166,7 @@ public class LogReplicationLogicalGroupClient {
                 String.format("[%s] remoteDestinations is null.", clientName));
         Preconditions.checkArgument(hasNoNullOrEmptyElements(remoteDestinations),
                 String.format("[%s] remoteDestinations contains null or empty elements.", clientName));
-        List<String> finalRemoteDestinations = new ArrayList<>(deduplicate(remoteDestinations));
+        List<String> finalRemoteDestinations = new ArrayList<>(deduplicate(remoteDestinations, clientName));
         try {
             IRetry.build(ExponentialBackoffRetry.class, () -> {
                 try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
@@ -292,7 +225,7 @@ public class LogReplicationLogicalGroupClient {
                 String.format("[%s] remoteDestinations is null or empty.", clientName));
         Preconditions.checkArgument(hasNoNullOrEmptyElements(remoteDestinations),
                 String.format("[%s] remoteDestinations contains null or empty elements.", clientName));
-        Set<String> removeRemoteDestinationsSet = deduplicate(remoteDestinations);
+        Set<String> removeRemoteDestinationsSet = deduplicate(remoteDestinations, clientName);
         try {
             IRetry.build(ExponentialBackoffRetry.class, () -> {
                 try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
@@ -381,37 +314,6 @@ public class LogReplicationLogicalGroupClient {
             log.error(String.format("[%s] Unable to get destinations.", clientName), e);
             throw new UnrecoverableCorfuInterruptedError(e);
         }
-    }
-
-    private boolean isValid(final Object obj) {
-        if (obj == null) {
-            return false;
-        } else if (obj instanceof Collection) {
-            return !((Collection<?>) obj).isEmpty();
-        } else {
-            return !Strings.isNullOrEmpty(obj.toString());
-        }
-    }
-
-    private boolean hasNoNullOrEmptyElements(final Collection<?> collection) {
-        if (collection == null) {
-            return false;
-        }
-        for (Object obj : collection) {
-            if (obj == null || obj instanceof String && ((String) obj).isEmpty()) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    private Set<String> deduplicate(List<String> list) {
-        int initialSize = list.size();
-        Set<String> set = new HashSet<>(list);
-        if (initialSize != set.size()) {
-            log.info(String.format("[%s] Duplicate elements removed from list.", clientName));
-        }
-        return set;
     }
 
     private ClientDestinationInfoKey buildClientDestinationInfoKey(String logicalGroup) {
