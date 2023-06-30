@@ -26,7 +26,7 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
     // TODO (V2): This field should be removed after the rpc stream is added for Sink side session creation.
     public static final String DEFAULT_ROUTING_QUEUE_CLIENT = "00000000-0000-0000-0000-0000000000002";
 
-    private final Table<Queue.CorfuGuidMsg, RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg> lrqSendEntries;
+    private final Table<Queue.CorfuGuidMsg, RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg> logEntryQ;
     private final CorfuStore corfuStore;
 
     /**
@@ -44,7 +44,7 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
         Preconditions.checkArgument(isValid(clientName), "clientName is null or empty.");
 
         this.corfuStore = new CorfuStore(runtime);
-        lrqSendEntries = corfuStore.openQueue(CORFU_SYSTEM_NAMESPACE, LOG_ENTRY_SYNC_QUEUE_NAME_SENDER,
+        logEntryQ = corfuStore.openQueue(CORFU_SYSTEM_NAMESPACE, LOG_ENTRY_SYNC_QUEUE_NAME_SENDER,
                 RoutingTableEntryMsg.class, TableOptions.fromProtoSchema(RoutingTableEntryMsg.class));
 
         register(corfuStore, clientName, model);
@@ -58,7 +58,7 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
      */
     @Override
     public void transmitDeltaMessage(TxnContext txn, RoutingTableEntryMsg message) {
-        txn.logUpdateEnqueue(lrqSendEntries, message, message.getDestinationsList().stream()
+        txn.logUpdateEnqueue(logEntryQ, message, message.getDestinationsList().stream()
                 .map(x -> UUID.fromString(String.join("", LOG_ENTRY_SYNC_QUEUE_TAG_SENDER_PREFIX, x)))
                 .collect(Collectors.toList()), corfuStore);
         log.debug("Enqueued message to delta queue, message: {}", message);
@@ -73,7 +73,7 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
     @Override
     public void transmitDeltaMessages(TxnContext txn, List<RoutingTableEntryMsg> messages) {
         for (RoutingTableEntryMsg message : messages) {
-            txn.logUpdateEnqueue(lrqSendEntries, message, message.getDestinationsList().stream()
+            txn.logUpdateEnqueue(logEntryQ, message, message.getDestinationsList().stream()
                     .map(x -> UUID.fromString(String.join("", LOG_ENTRY_SYNC_QUEUE_TAG_SENDER_PREFIX, x)))
                     .collect(Collectors.toList()), corfuStore);
             log.debug("Enqueued message to delta queue, message: {}", message);
