@@ -447,7 +447,7 @@ public class CorfuStore {
      * @param streamTag
      * @return table names (without namespace prefix)
      */
-    private List<String> getTablesOfInterest(@Nonnull String namespace, @Nonnull String streamTag) {
+    public List<String> getTablesOfInterest(@Nonnull String namespace, @Nonnull String streamTag) {
         List<String> tablesOfInterest = runtime.getTableRegistry().listTables(namespace, streamTag);
         log.info("Tag[{}${}] :: Subscribing to {} tables - {}", namespace, streamTag, tablesOfInterest.size(), tablesOfInterest);
         return tablesOfInterest;
