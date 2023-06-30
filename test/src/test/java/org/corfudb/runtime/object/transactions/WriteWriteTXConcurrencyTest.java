@@ -33,11 +33,11 @@ public class WriteWriteTXConcurrencyTest extends TXConflictScenariosTest {
                 valB = new AtomicInteger(0);
 
 
-        t(0, () -> WWTXBegin());
+        t(0, this::WWTXBegin);
         t(0, () -> map.insert("a", 1));
         t(0, () -> map.insert("b", 1));
 
-        t(1, () -> WWTXBegin());
+        t(1, this::WWTXBegin);
         t(1, () -> {
             Integer ga  = map.get("a");
             if (ga != null) valA.set(ga);
@@ -47,9 +47,9 @@ public class WriteWriteTXConcurrencyTest extends TXConflictScenariosTest {
             if (gb != null) valB.set(gb);
         } );
 
-        t(1, () -> TXEnd());
+        t(1, this::TXEnd);
 
-        t(0, () -> TXEnd());
+        t(0, this::TXEnd);
 
         assertThat(valA.get()).isEqualTo(valB.get());
     }
@@ -125,16 +125,13 @@ public class WriteWriteTXConcurrencyTest extends TXConflictScenariosTest {
      * This test uses the concurrentAbortTest scenario.
      * The test invokes numTasks tasks, each one writes exclusively to a map entry,
      * and reads a few entries arbitrarily at random.
-     *
+     * <p>
      * Unlike optimistic TXs, in write-write conflict mode, there should be --no-- conflicts,
      * unless the conflict-parameters of different tasks happen to collide in hashCode().
      *
-     * @param testInterleaved
-     * @throws Exception
+     * @throws Exception error
      */
-    public void testAbortWW(boolean testInterleaved)
-            throws Exception
-    {
+    public void testAbortWW(boolean testInterleaved) throws Exception {
         concurrentAbortTest(testInterleaved);
 
         // calculate how many false abort might happen due to collisions in hashCode()
@@ -153,16 +150,12 @@ public class WriteWriteTXConcurrencyTest extends TXConflictScenariosTest {
     }
 
     @Test
-    public void testAbortWWInterleaved()
-            throws Exception
-    {
+    public void testAbortWWInterleaved() throws Exception {
         testAbortWW(true);
     }
 
     @Test
-    public void testAbortWWThreaded()
-            throws Exception
-    {
+    public void testAbortWWThreaded() throws Exception {
         testAbortWW(false);
     }
 }

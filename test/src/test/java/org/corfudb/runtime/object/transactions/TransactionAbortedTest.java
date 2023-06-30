@@ -16,7 +16,7 @@ import org.junit.Test;
 
 /**
  * Ensure that the aborted transaction reporting adheres to the contract.
- *
+ * <p>
  * This test does the following:
  * 1) Creates two threads.
  * 2) Synchronizes them using a count-down latch to ensure concurrent execution.
@@ -41,7 +41,7 @@ public class TransactionAbortedTest extends AbstractTransactionContextTest {
 
         ICorfuTable<String, String> map = runtime.getObjectsView()
                 .build()
-                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setTypeToken(PersistentCorfuTable.<String,String>getTableType())
                 .setStreamName(this.getClass().getSimpleName())
                 .open();
         final String key = "key";

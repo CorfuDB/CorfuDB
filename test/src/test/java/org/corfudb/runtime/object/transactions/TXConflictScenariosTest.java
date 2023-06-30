@@ -20,12 +20,12 @@ public abstract class TXConflictScenariosTest extends AbstractTransactionContext
 
     /**
      * test concurrent transactions for opacity. This works as follows:
-     *
+     * <p>
      * there are 'numTasks' shared counters numbered 0..numTasks-1,
      * and 'numTasks' tasks executing by an interleaving engine by CONCURRENCY_SOME number of  threads.
-     *
+     * <p>
      * all counters are initialized to INITIAL.
-     *
+     * <p>
      * Each task is specified as a state machine.
      * The state machine starts a transaction.
      * Then it repeats twice modify, read own counter, read other counter.
@@ -33,17 +33,16 @@ public abstract class TXConflictScenariosTest extends AbstractTransactionContext
      *  - task j modifies counter j to OVERWRITE_ONCE,
      *  - task j reads counter j (own), expecting to read OVERWRITE_ONCE,
      *  - task j reads counter (j+1) mod n, and records the value it reads,
-     *
+     * <p>
      *  - then task j modifies counter j to OVERWRITE_TWICE,
      *  - task j reads counter j (own), expecting to read OVERWRITE_TWICE,
      *  - task j reads counter (j+1) mod n, expecting to read the same value as before,
-     *
+     * <p>
      *  Then all tasks try to commit their transactions.
      *
-     * @throws Exception
+     * @throws Exception error
      */
-    void testOpacity(boolean testInterleaved)
-            throws Exception {
+    void testOpacity(boolean testInterleaved) throws Exception {
         // populate numTasks and sharedCounters array
         setupCounters();
 
@@ -107,25 +106,25 @@ public abstract class TXConflictScenariosTest extends AbstractTransactionContext
 
     /**
      * test multiple threads optimistically manipulating objects concurrently. This works as follows:
-     *
+     * <p>
      * there are 'numTasks' shared counters numbered 0..numTasks-1,
      * and 'numTasks' tasks executing by an interleaving engine by CONCURRENCY_SOME number of  threads.
-     *
+     * <p>
      * all counters are initialized to INITIAL.
-     *
+     * <p>
      * Each task is specified as a state machine.
      * The state machine starts a transaction.
      * Within each transaction, each task repeats twice modify, read own, read other.
-     *
+     * <p>
      * Specifically,
      *  - task j modifies counter j to OVERWRITE_ONCE,
      *  - task j reads counter j (own), expecting to read OVERWRITE_ONCE,
      *  - task j reads counter (j+1) mod n, expecting to read either OVERWRITE_ONCE or INITIAL,
-     *
+     * <p>
      *  - then task j modifies counter (j+1) mod n to OVERWRITE_TWICE,
      *  - task j reads counter j+1 mod n (own), expecting to read OVERWRITE_TWICE,
      *  - task j reads counter j (the one it changed before), expecting to read OVERWRITE_ONCE ,
-     *
+     * <p>
      *  Then all tasks try to commit their transactions.
      */
     void testRWConflicts(boolean testInterleaved)
@@ -193,7 +192,7 @@ public abstract class TXConflictScenariosTest extends AbstractTransactionContext
 
     }
 
-    void testNoWriteConflictSimple() throws Exception {
+    void testNoWriteConflictSimple() {
 
         final CorfuSharedCounter sharedCounter1 =
                 instantiateCorfuObject(CorfuSharedCounter.class, "test"+1);
@@ -208,20 +207,20 @@ public abstract class TXConflictScenariosTest extends AbstractTransactionContext
         t(1, () -> { sharedCounter1.setValue(OVERWRITE_ONCE);});
         t(2, () -> { sharedCounter2.setValue(OVERWRITE_ONCE);});
 
-        t(1, () -> sharedCounter1.getValue());
-        t(2, () -> sharedCounter2.getValue());
+        t(1, sharedCounter1::getValue);
+        t(2, sharedCounter2::getValue);
 
-        t(1, () -> sharedCounter2.getValue());
-        t(2, () -> sharedCounter1.getValue());
+        t(1, sharedCounter2::getValue);
+        t(2, sharedCounter1::getValue);
 
-        t(1, () -> { sharedCounter1.setValue(OVERWRITE_TWICE);});
-        t(2, () -> { sharedCounter2.setValue(OVERWRITE_TWICE);});
+        t(1, () -> sharedCounter1.setValue(OVERWRITE_TWICE));
+        t(2, () -> sharedCounter2.setValue(OVERWRITE_TWICE));
 
-        t(1, () -> sharedCounter1.getValue());
-        t(1, () -> sharedCounter2.getValue());
+        t(1, sharedCounter1::getValue);
+        t(1, sharedCounter2::getValue);
 
-        t(2, () -> sharedCounter2.getValue());
-        t(2, () -> sharedCounter1.getValue());
+        t(2, sharedCounter2::getValue);
+        t(2, sharedCounter1::getValue);
 
         t(1, () -> {
             try {
@@ -244,22 +243,21 @@ public abstract class TXConflictScenariosTest extends AbstractTransactionContext
 
     @Test
     @SuppressWarnings("unchecked")
-    public void finegrainedUpdatesDoNotConflict()
-            throws Exception {
+    public void finegrainedUpdatesDoNotConflict() {
         AtomicBoolean commitStatus = new AtomicBoolean(true);
 
         ICorfuTable<String, String> testMap = getMap();
 
         ICorfuTable<String, String> testMap2 = (ICorfuTable<String, String>)
                 instantiateCorfuObject(
-                        new TypeToken<PersistentCorfuTable<String, String>>() {}, "test stream");
+                        PersistentCorfuTable.<String,String>getTableType(), "test stream");
 
-        t(1, () -> TXBegin() );
+        t(1, this::TXBegin);
         t(1, () -> testMap.insert("a", "a") );
 
-        t(2, () -> TXBegin() );
+        t(2, this::TXBegin);
         t(2, () -> testMap2.insert("b", "f") );
-        t(2, () -> TXEnd() );
+        t(2, this::TXEnd);
 
         t(1, () -> {
                     try {
@@ -301,6 +299,7 @@ public abstract class TXConflictScenariosTest extends AbstractTransactionContext
                 TXEnd();
                 commitStatus.set(task_num, COMMITVALUE);
             } catch (TransactionAbortedException tae) {
+                //ignore
             }
         });
     }

@@ -30,9 +30,9 @@ import org.junit.Test;
 
 public class UtilsTest {
 
-  private static String nodeA = "nodeA";
-  private static String nodeB = "nodeB";
-  private static String nodeC = "nodeC";
+  private static final String nodeA = "nodeA";
+  private static final String nodeB = "nodeB";
+  private static final String nodeC = "nodeC";
 
   @Data
   class Context {
@@ -54,7 +54,7 @@ public class UtilsTest {
             Arrays.asList(nodeA, nodeB, nodeC),
             Arrays.asList(nodeA, nodeB, nodeC),
             Collections.singletonList(segment),
-            Collections.EMPTY_LIST,
+            Collections.emptyList(),
             epoch,
             uuid);
   }
@@ -94,8 +94,8 @@ public class UtilsTest {
 
     when(runtimeLayout.getLogUnitClient(anyString()))
             .then(
-                    invokation -> {
-                      String node = (String) invokation.getArguments()[0];
+                    invocation -> {
+                      String node = (String) invocation.getArguments()[0];
                       if (!clientMap.containsKey(node)) {
                         throw new IllegalStateException("not expecting a call to " + node);
                       }
@@ -125,7 +125,7 @@ public class UtilsTest {
   }
 
   private CompletableFuture<TailsResponse> getTailsResponse(long globalTail, long epoch) {
-    return getTailsResponse(globalTail, Collections.EMPTY_MAP, epoch);
+    return getTailsResponse(globalTail, Collections.emptyMap(), epoch);
   }
 
   @Test

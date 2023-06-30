@@ -4,9 +4,7 @@ import org.junit.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/**
- * Created by dmalkhi on 12/4/16.
- */
+
 public class CorfuSMRObjectConcurrencyTest extends AbstractObjectTest {
     @Test
     public void testCorfuSharedCounterConcurrentReads() throws Exception {
@@ -14,8 +12,7 @@ public class CorfuSMRObjectConcurrencyTest extends AbstractObjectTest {
 
         final int COUNTER_INITIAL = 55;
 
-        CorfuSharedCounter sharedCounter = (CorfuSharedCounter)
-                instantiateCorfuObject(CorfuSharedCounter.class, "test");
+        CorfuSharedCounter sharedCounter = instantiateCorfuObject(CorfuSharedCounter.class, "test");
 
         sharedCounter.setValue(COUNTER_INITIAL);
 

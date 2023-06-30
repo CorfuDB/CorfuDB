@@ -6,13 +6,10 @@ import org.corfudb.annotations.Accessor;
 import org.corfudb.annotations.CorfuObject;
 import org.corfudb.annotations.Mutator;
 
-/**
- * Created by dmalkhi on 12/2/16.
- */
 @CorfuObject
 public class CorfuCompoundObj implements ICorfuSMR<CorfuCompoundObj> {
 
-    public class Inner {
+    public static class Inner {
         @Setter @Getter
         String firstName, lastName;
 

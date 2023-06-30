@@ -52,7 +52,7 @@ public class AbstractCorfuTest {
 
     public Map<Integer, TestThread> threadsMap = new ConcurrentHashMap<>();
 
-    /** Lambdas for the each state of the state machine
+    /** Lambdas for each state of the state machine
      */
     public ArrayList<IntConsumer> testSM = null;
 

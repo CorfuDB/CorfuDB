@@ -31,8 +31,8 @@ public abstract class AbstractTransactionContextTest extends AbstractTransaction
 
     public ICorfuTable<String, String> getMap() {
         if (testMap == null) {
-            testMap = (ICorfuTable<String, String>) instantiateCorfuObject(
-                    new TypeToken<PersistentCorfuTable<String, String>>() {},
+            testMap = instantiateCorfuObject(
+                    PersistentCorfuTable.getTableType(),
                     "test stream"
             );
         }

@@ -5,9 +5,6 @@ import org.corfudb.annotations.CorfuObject;
 import org.corfudb.annotations.TransactionalMethod;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 
-/**
- * Created by rmichoud on 8/1/17.
- */
 @CorfuObject
 public class TransactionalObject implements ICorfuSMR<TransactionalObject> {
     @TransactionalMethod

@@ -14,7 +14,7 @@ public class AbstractObjectTest extends AbstractViewTest {
 
     /**
      * Utility method to instantiate a Corfu object
-     *
+     * <p>
      * A Corfu Stream is a log dedicated specifically to the history of updates of one object.
      * This method will instantiate a stream by giving it a name,
      * and then instantiate an object by specifying its class
@@ -62,24 +62,16 @@ public class AbstractObjectTest extends AbstractViewTest {
      * @param <T> the return class
      * @return an object instance of type T backed by a stream named 'name'
      */
-    protected <T extends ICorfuSMR> Object instantiateCorfuObject(
-            CorfuRuntime r, TypeToken<T> tType, String name) {
-        if (tType.getRawType() == PersistentCorfuTable.class) {
-            return r.getObjectsView()
-                    .build()
-                    .setStreamName(name)     // stream name
-                    .setTypeToken(tType)    // a TypeToken of the specified class
-                    .open();                // instantiate the object!
-        } else {
-            return r.getObjectsView()
-                    .build()
-                    .setStreamName(name)     // stream name
-                    .setTypeToken(tType)    // a TypeToken of the specified class
-                    .open();                // instantiate the object!
-        }
+    protected <T extends ICorfuSMR<T>> T instantiateCorfuObject(CorfuRuntime r, TypeToken<T> tType, String name) {
+
+        return r.getObjectsView()
+                .build()
+                .setStreamName(name)
+                .setTypeToken(tType)
+                .open();
 
     }
-    protected <T extends ICorfuSMR> Object instantiateCorfuObject(TypeToken<T> tType, String name) {
+    protected <T extends ICorfuSMR<T>> T instantiateCorfuObject(TypeToken<T> tType, String name) {
         return instantiateCorfuObject(getRuntime(), tType, name);
     }
 

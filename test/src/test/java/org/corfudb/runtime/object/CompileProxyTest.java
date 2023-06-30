@@ -6,6 +6,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.runtime.object.CorfuCompoundObj.Inner;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.SMRObject;
 import org.junit.Test;
@@ -17,19 +18,16 @@ import java.util.concurrent.atomic.AtomicLong;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-/**
- * Created by mwei on 11/11/16.
- */
 @SuppressWarnings("checkstyle:magicnumber")
 public class CompileProxyTest extends AbstractViewTest {
     
     @Test
-    public void testObjectMapSimple() throws Exception {
+    public void testObjectMapSimple() {
 
         ICorfuTable<String, String> map = getDefaultRuntime()
                                     .getObjectsView().build()
                                     .setStreamName("my stream")
-                                    .setTypeToken(new TypeToken<PersistentCorfuTable<String,String>>() {})
+                                    .setTypeToken(PersistentCorfuTable.<String,String>getTableType())
                                     .open();
 
         getDefaultRuntime().getObjectsView().TXBegin();
@@ -42,7 +40,7 @@ public class CompileProxyTest extends AbstractViewTest {
     }
 
     @Test
-    public void testTrimmedObject() throws Exception {
+    public void testTrimmedObject() {
         CorfuRuntime rt = getDefaultRuntime();
 
         // Advance the sequencer counter and trim up to the tail, so that the first
@@ -59,7 +57,7 @@ public class CompileProxyTest extends AbstractViewTest {
 
         ICorfuTable<String, String> map = rt.getObjectsView().build()
                 .setStreamName(streamName)
-                .setTypeToken(new TypeToken<PersistentCorfuTable<String,String>>() {})
+                .setTypeToken(PersistentCorfuTable.<String,String>getTableType())
                 .open();
         // Note: because we trimmed and no CP covers these changes we throw a trimmedException, is this right? we would never recover from this...
         assertThatThrownBy(() -> {
@@ -68,7 +66,7 @@ public class CompileProxyTest extends AbstractViewTest {
     }
 
     @Test
-    public void testObjectCounterSimple() throws Exception {
+    public void testObjectCounterSimple() {
         CorfuSharedCounter sharedCounter = getDefaultRuntime()
                 .getObjectsView().build()
                 .setStreamName("my stream")
@@ -87,7 +85,7 @@ public class CompileProxyTest extends AbstractViewTest {
      * set up 'concurrency' threads that concurrently try to set the counter to their thread-index.
      * the test tracks raw stream updates, one by one, guaranteeing that all the updates appended to the stream differ from each other.
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void testObjectCounterWriteConcurrency() throws Exception {
@@ -106,15 +104,12 @@ public class CompileProxyTest extends AbstractViewTest {
 
         // schedule 'concurrency' number of threads,
         // each one sets the shared counter value to its thread index
-        scheduleConcurrently(concurrency, t ->
-                sharedCounter.setValue(t)
-        );
+        scheduleConcurrently(concurrency, sharedCounter::setValue);
         executeScheduled(concurrency, PARAMETERS.TIMEOUT_NORMAL);
 
         // track the raw stream updates caused by the execution so far
-        ICorfuSMR<CorfuSharedCounter> compiledSharedCounter = (ICorfuSMR<CorfuSharedCounter>) sharedCounter;
-        ICorfuSMRProxyInternal<CorfuSharedCounter> proxy_CORFUSMR = (ICorfuSMRProxyInternal<CorfuSharedCounter>) compiledSharedCounter.getCorfuSMRProxy();
-        //IStreamView objStream = proxy_CORFUSMR.getUnderlyingObject().getStreamViewUnsafe();
+        ICorfuSMRProxyInternal<CorfuSharedCounter> proxy_CORFUSMR = (ICorfuSMRProxyInternal<CorfuSharedCounter>)
+                sharedCounter.getCorfuSMRProxy();
 
         int beforeSync, afterSync;
 
@@ -143,7 +138,7 @@ public class CompileProxyTest extends AbstractViewTest {
     /**
      * test serializability guarantee of mutatorAccessor methods.
      * The test invokes CorfuSharedCounter::CAS by 'concurrency' number of concurrent threads.
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void testObjectCounterCASConcurrency() throws Exception {
@@ -175,15 +170,14 @@ public class CompileProxyTest extends AbstractViewTest {
 
     /**
      * the test interleaves reads and writes to a shared counter.
-     *
+     * <p>
      * The test uses the interleaving engine to interleave numTasks*threads state machines.
      * A simple state-machine is built. It randomly chooses to either read or append the counter.
      * On a read, the last written value is expected.
      *
-     * @throws Exception
      */
     @Test
-    public void testObjectCounterReadConcurrency() throws Exception {
+    public void testObjectCounterReadConcurrency() {
         CorfuSharedCounter sharedCounter = getDefaultRuntime()
                 .getObjectsView().build()
                 .setStreamName("my stream")
@@ -217,16 +211,15 @@ public class CompileProxyTest extends AbstractViewTest {
     /**
      * the test is similar to the interleaved read/append above to a shared counter.
      * in addition to checking read/append values, it tracks the raw stream state between updates and syncs.
-     *
+     * <p>
      * The test uses the interleaving engine to interleave numTasks*threads state machines.
      * A simple state-machine is built. It randomly chooses to either read or append the counter.
      * On a read, the last written value is expected.
      *
-     * @throws Exception
      */
 
     @Test
-    public void testObjectCounterConcurrencyStream() throws Exception {
+    public void testObjectCounterConcurrencyStream() {
         CorfuSharedCounter sharedCounter = getDefaultRuntime()
                 .getObjectsView().build()
                 .setStreamName("my stream")
@@ -234,9 +227,9 @@ public class CompileProxyTest extends AbstractViewTest {
                 })
                 .open();
 
-        ICorfuSMR<CorfuSharedCounter> compiledSharedCounter = (ICorfuSMR<CorfuSharedCounter>)  sharedCounter;
-        ICorfuSMRProxyInternal<CorfuSharedCounter> proxy_CORFUSMR = (ICorfuSMRProxyInternal<CorfuSharedCounter>) compiledSharedCounter.getCorfuSMRProxy();
-      //  IStreamView objStream = proxy_CORFUSMR.getUnderlyingObject().getStreamViewUnsafe();
+        ICorfuSMR<CorfuSharedCounter> compiledSharedCounter = sharedCounter;
+        ICorfuSMRProxyInternal<CorfuSharedCounter> proxy_CORFUSMR = (ICorfuSMRProxyInternal<CorfuSharedCounter>)
+                compiledSharedCounter.getCorfuSMRProxy();
 
         int numTasks = PARAMETERS.NUM_ITERATIONS_LOW;
         Random r = new Random(PARAMETERS.SEED);
@@ -289,7 +282,7 @@ public class CompileProxyTest extends AbstractViewTest {
      * the test sets up 'concurrency' number of threads that each inserts a map entry using its own thread index as key.
      * we then check that the map contains keys with all thread indexes.
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void testCorfuMapConcurrency() throws Exception {
@@ -297,8 +290,7 @@ public class CompileProxyTest extends AbstractViewTest {
         ICorfuTable<String, String> map = getDefaultRuntime()
                 .getObjectsView().build()
                 .setStreamName("my stream")
-                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {
-                })
+                .setTypeToken(PersistentCorfuTable.<String,String>getTableType())
                 .open();
         int concurrency = PARAMETERS.CONCURRENCY_LOTS;
 
@@ -329,10 +321,9 @@ public class CompileProxyTest extends AbstractViewTest {
      * test a corfu compound object, where a class field contains an inner class.
      * this is a simple test: set the object fields and check reading back the values.
      *
-     * @throws Exception
      */
     @Test
-    public void testObjectCompoundSimple() throws Exception {
+    public void testObjectCompoundSimple() {
         CorfuCompoundObj sharedCorfuCompound = getDefaultRuntime()
                 .getObjectsView().build()
                 .setStreamName("my stream")
@@ -341,7 +332,7 @@ public class CompileProxyTest extends AbstractViewTest {
                 .open();
 
         final int TESTVALUE = 33;
-        sharedCorfuCompound.set(sharedCorfuCompound.new Inner("A", "B"), TESTVALUE);
+        sharedCorfuCompound.set(new Inner("A", "B"), TESTVALUE);
 
         assertThat(sharedCorfuCompound.getID())
                 .isEqualTo(TESTVALUE);
@@ -356,7 +347,7 @@ public class CompileProxyTest extends AbstractViewTest {
      * the test sets up 'concurrency' number of threads that each sets the compound object fields to thread-specific values.
      * then it does some sanity checks on the final value of the object.
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void testObjectCompoundWriteConcurrency() throws Exception {
@@ -374,7 +365,7 @@ public class CompileProxyTest extends AbstractViewTest {
 
         // set up 'concurrency' number of threads that concurrency update sharedCorfuCompound, each to a different value
         scheduleConcurrently(concurrency, t -> {
-            sharedCorfuCompound.set(sharedCorfuCompound.new Inner("A"+t, "B"+t), t);
+            sharedCorfuCompound.set(new Inner("A" + t, "B" + t), t);
         });
         executeScheduled(concurrency, PARAMETERS.TIMEOUT_NORMAL);
 
@@ -390,22 +381,21 @@ public class CompileProxyTest extends AbstractViewTest {
     /**
      * test concurrent updates and reads to/from a compound Corfu object with an inner class.
      * this is similar to the tests above, but add tracking of raw stream status.
-     *
+     * <p>
      * the test sets up 'concurrency' number of concurrent threads.
      * each thread execute a 2-step state machine:
-     *
+     * <p>
      * One step updates the compound object to a task-specific value.
      * This step also verifies that the stream grows in length by 1.
-     *
+     * <p>
      * The second step checks that the in-memory object state has not been updated.
-     *
+     * <p>
      * The test utilizes the interleaving engine to interleaving executions of these state machines
      * over PARAMETERS.NUM_ITERATIONS_MODERATE number of tasks with PARAMETERS.CONCURRENCY_SOME concurrent threads.
      *
-     * @throws Exception
      */
     @Test
-    public void testObjectCompoundWriteConcurrencyStream() throws Exception {
+    public void testObjectCompoundWriteConcurrencyStream() {
         CorfuCompoundObj sharedCorfuCompound = getDefaultRuntime()
                 .getObjectsView().build()
                 .setStreamName("my stream")
@@ -414,12 +404,12 @@ public class CompileProxyTest extends AbstractViewTest {
                 .open();
 
         // for tracking raw stream status
-        ICorfuSMR<CorfuCompoundObj> compiledCorfuCompound = (ICorfuSMR<CorfuCompoundObj>) sharedCorfuCompound;
-        ICorfuSMRProxyInternal<CorfuCompoundObj> proxy_CORFUSMR = (ICorfuSMRProxyInternal<CorfuCompoundObj>) compiledCorfuCompound.getCorfuSMRProxy();
-       // IStreamView objStream = proxy_CORFUSMR.getUnderlyingObject().getStreamViewUnsafe();
+        ICorfuSMR<CorfuCompoundObj> compiledCorfuCompound = sharedCorfuCompound;
+        ICorfuSMRProxyInternal<CorfuCompoundObj> proxy_CORFUSMR = (ICorfuSMRProxyInternal<CorfuCompoundObj>)
+                compiledCorfuCompound.getCorfuSMRProxy();
 
         // initialization
-        sharedCorfuCompound.set(sharedCorfuCompound.new Inner("E" + 0, "F" + 0), 0);
+        sharedCorfuCompound.set(new Inner("E" + 0, "F" + 0), 0);
 
         // invoke some accessor to sync the in-memory object
         // return value is ignored
@@ -429,7 +419,7 @@ public class CompileProxyTest extends AbstractViewTest {
 
         // step 1: update the shared compound to task-specific value
         addTestStep((task_num) -> {
-            sharedCorfuCompound.set(sharedCorfuCompound.new Inner("C" + task_num, "D" + task_num), task_num);
+            sharedCorfuCompound.set(new Inner("C" + task_num, "D" + task_num), task_num);
         });
 
         // step 2: check the unsync'ed in-memory object state

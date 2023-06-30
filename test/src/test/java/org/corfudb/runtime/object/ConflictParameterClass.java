@@ -6,9 +6,6 @@ import org.corfudb.annotations.CorfuObject;
 import org.corfudb.annotations.Mutator;
 import org.corfudb.annotations.MutatorAccessor;
 
-/**
- * Created by mwei on 12/15/16.
- */
 @CorfuObject
 public class ConflictParameterClass implements ICorfuSMR<ConflictParameterClass> {
 

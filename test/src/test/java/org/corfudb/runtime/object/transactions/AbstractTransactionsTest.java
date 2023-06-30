@@ -50,7 +50,7 @@ public abstract class AbstractTransactionsTest extends AbstractObjectTest {
      */
     protected void SnapshotTXBegin() {
         // By default, begin a snapshot at address 2L
-        Token t2 = new Token(0l, 2l);
+        Token t2 = new Token(0L, 2L);
         TokenResponse s2 = new TokenResponse(t2, Collections.emptyMap());
 
         if (getRuntime().getAddressSpaceView().peek(t2.getSequence()) == null) {

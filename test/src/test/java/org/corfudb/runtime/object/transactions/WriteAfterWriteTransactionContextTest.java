@@ -1,7 +1,5 @@
 package org.corfudb.runtime.object.transactions;
 
-import com.google.common.reflect.TypeToken;
-
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.MultiSMREntry;
@@ -11,7 +9,6 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.junit.Test;
 
@@ -19,9 +16,6 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/**
- * Created by mwei on 11/22/16.
- */
 public class WriteAfterWriteTransactionContextTest extends AbstractTransactionContextTest {
     private final String streamName = "test stream";
     private final String txnStreamName = "txn" + streamName;
@@ -36,8 +30,7 @@ public class WriteAfterWriteTransactionContextTest extends AbstractTransactionCo
 
 
     @Test
-    public void concurrentModificationsCauseAbort()
-    {
+    public void concurrentModificationsCauseAbort() {
         getRuntime();
 
         getMap();
@@ -81,12 +74,11 @@ public class WriteAfterWriteTransactionContextTest extends AbstractTransactionCo
     @Override
     public ICorfuTable<String, String> getMap() {
         if (testMap == null) {
-            Object obj = getRuntime().getObjectsView().build()
+            testMap = getRuntime().getObjectsView().build()
                 .setStreamName(streamName)
-                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
-                .setStreamTags(getRuntime().getStreamID(txnStreamName))
+                .setTypeToken(PersistentCorfuTable.<String,String>getTableType())
+                .setStreamTags(CorfuRuntime.getStreamID(txnStreamName))
                 .open();
-            testMap = (ICorfuTable<String, String>) obj;
         }
        return testMap;
     }

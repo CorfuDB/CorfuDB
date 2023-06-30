@@ -12,14 +12,9 @@ import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.SMRObject;
 import org.junit.Test;
 
-/**
- * Created by dalia on 12/8/16.
- */
 public class OptimisticTXConcurrencyTest extends TXConflictScenariosTest {
     @Override
     public void TXBegin() { OptimisticTXBegin(); }
-
-
 
     public void testOpacityOptimistic(boolean isInterleaved) throws Exception {
 
@@ -107,8 +102,8 @@ public class OptimisticTXConcurrencyTest extends TXConflictScenariosTest {
 
         final int nmaps = 2;
         for (int i = 0; i < nmaps; i++)
-            maps.add( (ICorfuTable<Integer, String>) instantiateCorfuObject(
-                    new TypeToken<PersistentCorfuTable<Integer, String>>() {}, "test stream" + i)
+            maps.add(instantiateCorfuObject(
+                    PersistentCorfuTable.<Integer, String>getTableType(), "test stream" + i)
             );
         final int key1 = 1, key2 = 2, key3 = 3;
         final String tst1 = "foo", tst2 = "bar";

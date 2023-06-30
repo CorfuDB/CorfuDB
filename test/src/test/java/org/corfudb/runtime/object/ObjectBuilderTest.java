@@ -1,6 +1,5 @@
 package org.corfudb.runtime.object;
 
-import com.google.common.reflect.TypeToken;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.view.SMRObject;
@@ -24,9 +23,6 @@ public class ObjectBuilderTest {
     static class Child extends Base { }
 
     public static class ExampleInterface {
-        public ExampleInterface(ChildInterface base) {
-            // NOOP.
-        }
 
         public ExampleInterface(BaseInterface base) {
             throw new IllegalStateException("Not suppose to be called");
@@ -53,7 +49,7 @@ public class ObjectBuilderTest {
         assertThatThrownBy(() -> {
             SMRObject.builder()
                     .runtime(rt)
-                    .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                    .setTypeToken(PersistentCorfuTable.<String, String>getTableType())
                     .open();
         }).isInstanceOf(NullPointerException.class)
           .hasMessageStartingWith("streamID is marked non-null but is null");

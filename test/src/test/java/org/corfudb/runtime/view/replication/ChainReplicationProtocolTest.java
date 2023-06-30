@@ -23,8 +23,6 @@ import static org.assertj.core.api.Assertions.fail;
 
 /**
  * Test the chain replication protocol.
- * <p>
- * Created by mwei on 4/11/17.
  */
 @SuppressWarnings("checkstyle:magicnumber")
 public class ChainReplicationProtocolTest extends AbstractReplicationProtocolTest {

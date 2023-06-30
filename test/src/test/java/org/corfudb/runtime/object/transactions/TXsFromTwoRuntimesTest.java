@@ -20,10 +20,8 @@ public class TXsFromTwoRuntimesTest extends AbstractTransactionsTest {
     @Override
     public void TXBegin() { OptimisticTXBegin(); }
 
-
-
     @Test
-    public void staggeredTXsConflict() throws Exception {
+    public void staggeredTXsConflict() {
         final int nTXs = 5;
         final Semaphore sem0 = new Semaphore(0),
                 sem1 = new Semaphore(0);
@@ -40,7 +38,7 @@ public class TXsFromTwoRuntimesTest extends AbstractTransactionsTest {
                     myruntime.getObjectsView()
                             .build()
                             .setStreamName("nonidepmpotentmaptest")    // stream name
-                            .setTypeToken(new TypeToken<PersistentCorfuTable<Integer, Integer>>() {}) // object TokenType class
+                            .setTypeToken(PersistentCorfuTable.<Integer, Integer>getTableType()) // object TokenType class
                             .open() ;
 
             assertThat(mymap.get("world1"))
@@ -78,7 +76,7 @@ public class TXsFromTwoRuntimesTest extends AbstractTransactionsTest {
                     myruntime.getObjectsView()
                         .build()
                             .setStreamName("nonidepmpotentmaptest")    // stream name
-                            .setTypeToken(new TypeToken<PersistentCorfuTable<Integer, Integer>>() {}) // object TokenType class
+                            .setTypeToken(PersistentCorfuTable.<Integer, Integer>getTableType()) // object TokenType class
                         .open();
 
             // start a transaction and then hand over to thread 1
@@ -146,7 +144,7 @@ public class TXsFromTwoRuntimesTest extends AbstractTransactionsTest {
                     myruntime.getObjectsView()
                             .build()
                             .setStreamName("nonidepmpotentmaptest")    // stream name
-                            .setTypeToken(new TypeToken<PersistentCorfuTable<Integer, Integer>>() {}) // object TokenType class
+                            .setTypeToken(PersistentCorfuTable.<Integer, Integer>getTableType()) // object TokenType class
                             .open() ;
 
             assertThat(mymap.get("world1"))
@@ -186,7 +184,7 @@ public class TXsFromTwoRuntimesTest extends AbstractTransactionsTest {
                     myruntime.getObjectsView()
                             .build()
                             .setStreamName("nonidepmpotentmaptest")    // stream name
-                            .setTypeToken(new TypeToken<PersistentCorfuTable<Integer, Integer>>() {}) // object TokenType class
+                            .setTypeToken(PersistentCorfuTable.<Integer, Integer>getTableType()) // object TokenType class
                             .open();
 
                     // start a transaction and then hand over to thread 1

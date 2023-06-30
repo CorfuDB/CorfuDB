@@ -22,11 +22,10 @@ import org.junit.Test;
 
 /**
  * These tests generate workloads with mixed reads/writes on multiple maps.
- *
+ * <p>
  * The tests previously surfaced a concurrency bug in navigating streams
  * by concurrent threads. It's good to leave it in.
- *
- * Created by dmalkhi on 12/13/16.
+ * <p>
  */
 public class StreamTest extends AbstractTransactionsTest {
     @Override
@@ -90,14 +89,14 @@ public class StreamTest extends AbstractTransactionsTest {
         TXBegin();
         map.insert(key, val);
 
-        assertThatThrownBy(() ->TXEnd())
+        assertThatThrownBy(this::TXEnd)
                 .isInstanceOf(TransactionAbortedException.class);
     }
 
     @Test
     public void sequencerTrimTest() {
 
-        ICorfuTable<String, String> map = instantiateCorfuObject(PersistentCorfuTable.class, "A");
+        PersistentCorfuTable<String, String> map = instantiateCorfuObject(PersistentCorfuTable.class, "A");
         final int numEntries = 10;
         TXBegin();
         map.get("a");
@@ -160,7 +159,7 @@ public class StreamTest extends AbstractTransactionsTest {
     public void mixBackpointers() {
         final int smallNumber = 5;
 
-        /**
+        /*
          * Instantiate three streams with three SMRmap objects
          */
         map1 = instantiateCorfuObject(PersistentCorfuTable.class, "A"); map1.clear();
@@ -181,9 +180,7 @@ public class StreamTest extends AbstractTransactionsTest {
         final int concurrency = 4;
 
         for (int j = 0; j < concurrency; j++)
-            t(j, () -> {
-                WWTXBegin();
-            });
+            t(j, this::WWTXBegin);
 
         t(concurrency, () -> { WWTXBegin(); map2.insert("foo", 0); TXEnd(); });
 
@@ -206,7 +203,7 @@ public class StreamTest extends AbstractTransactionsTest {
      * This method initiates all the data structures for this program
      */
     public void generateMaps() {
-        /**
+        /*
          * Instantiate three streams with three SMRmap objects
          */
         map1 = instantiateCorfuObject(PersistentCorfuTable.class, "A");
@@ -236,14 +233,12 @@ public class StreamTest extends AbstractTransactionsTest {
         final AtomicInteger aborts = new AtomicInteger(0);
 
         for (int i = 0; i < NUM_BATCHES; i++) {
-            final int fi = i;
 
             addTestStep(task_num -> {
                 WWTXBegin();
             });
 
             for (int j = 0; j < BATCH_SZ; j++) {
-                final int fj = j;
 
                 addTestStep(task_num -> {
 

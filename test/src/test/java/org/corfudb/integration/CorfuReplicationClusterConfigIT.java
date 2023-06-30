@@ -1,6 +1,5 @@
 package org.corfudb.integration;
 
-import com.google.common.reflect.TypeToken;
 import com.google.protobuf.Message;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
@@ -17,7 +16,9 @@ import org.corfudb.infrastructure.logreplication.replication.LogReplicationAckRe
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuOptions;
+import org.corfudb.runtime.CorfuOptions.SchemaOptions;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.ExampleSchemas.ClusterUuidMsg;
 import org.corfudb.runtime.MultiCheckpointWriter;
@@ -44,7 +45,6 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.io.IOException;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
@@ -116,7 +116,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         activeCorfuServer = runServer(activeClusterCorfuPort, true);
         standbyCorfuServer = runServer(standbyClusterCorfuPort, true);
 
-        CorfuRuntime.CorfuRuntimeParameters params = CorfuRuntime.CorfuRuntimeParameters
+        CorfuRuntimeParameters params = CorfuRuntimeParameters
                 .builder()
                 .build();
 
@@ -435,7 +435,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
      * 3. Start LR on both clusters and assign roles
      * 4. Verify that after successful snapshot sync, no data from 2. is
      * present on the Standby
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void testDataConsistentForEmptyStreams() throws Exception {
@@ -795,8 +795,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
                 .build()
                 .setStreamName(streamName+"noisy")
                 .setStreamTags(ObjectsView.getLogReplicatorStreamId())
-                .setTypeToken(new TypeToken<PersistentCorfuTable<String, Integer>>() {
-                })
+                .setTypeToken(PersistentCorfuTable.<String, Integer>getTableType())
                 .open();
         for (int i = 0; i < firstBatch; i++) {
             activeRuntime.getObjectsView().TXBegin();
@@ -1546,32 +1545,35 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
      *    Change the topology, the backup cluster 9030 will be the new active cluster.
      * 7. Trigger a force snapshot sync
      * 8. Verify the force snapshot sync is completed
-     * 9. Write 5 entries to backup map, to verify Log Entry Sync
+     * 9. Write 5 entries to back up a map, to verify Log Entry Sync
      */
     @Test
     public void testBackupRestoreWorkflow() throws Exception {
         Process backupCorfu = runServer(backupClusterCorfuPort, true);
         Process backupReplicationServer = runReplicationServer(backupReplicationServerPort, nettyPluginPath);
 
-        CorfuRuntime.CorfuRuntimeParameters params = CorfuRuntime.CorfuRuntimeParameters
+        CorfuRuntimeParameters params = CorfuRuntimeParameters
                 .builder()
                 .build();
+
         CorfuRuntime backupRuntime = CorfuRuntime.fromParameters(params);
         backupRuntime.parseConfigurationString(backupCorfuEndpoint).connect();
         CorfuStore backupCorfuStore = new CorfuStore(backupRuntime);
 
+        SchemaOptions schemaOptions = SchemaOptions.newBuilder()
+                .setIsFederated(true)
+                .addStreamTag(ObjectsView.LOG_REPLICATOR_STREAM_INFO.getTagName())
+                .build();
+        TableOptions tableOptions = TableOptions.builder()
+                .schemaOptions(schemaOptions)
+                .build();
         Table<StringKey, IntValue, Metadata> mapBackup = backupCorfuStore.openTable(
                 NAMESPACE,
                 streamName,
                 StringKey.class,
                 IntValue.class,
                 Metadata.class,
-                TableOptions.builder().schemaOptions(
-                                CorfuOptions.SchemaOptions.newBuilder()
-                                        .setIsFederated(true)
-                                        .addStreamTag(ObjectsView.LOG_REPLICATOR_STREAM_INFO.getTagName())
-                                        .build())
-                        .build()
+                tableOptions
         );
 
         assertThat(mapBackup.count()).isZero();
@@ -1692,9 +1694,9 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
     }
 
     // StreamListener on the ReplicationStatus table which updates the latch when ReplicationStatus reaches STOPPED
-    private class ReplicationStopListener implements StreamListener {
+    private static class ReplicationStopListener implements StreamListener {
 
-        private CountDownLatch countDownLatch;
+        private final CountDownLatch countDownLatch;
 
         ReplicationStopListener(CountDownLatch countDownLatch) {
             this.countDownLatch = countDownLatch;

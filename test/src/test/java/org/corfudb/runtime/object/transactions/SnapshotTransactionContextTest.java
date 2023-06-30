@@ -2,9 +2,6 @@ package org.corfudb.runtime.object.transactions;
 
 import org.junit.Test;
 
-/**
- * Created by mwei on 11/22/16.
- */
 public class SnapshotTransactionContextTest extends AbstractTransactionContextTest {
     @Override
     public void TXBegin() { SnapshotTXBegin(); }
@@ -23,7 +20,7 @@ public class SnapshotTransactionContextTest extends AbstractTransactionContextTe
         // Verify that the snapshot transaction reads the table
         // with the latest snapshot
         t2(() -> get("k")).assertResult().isEqualTo("v2");
-        t2(() -> TXEnd());
+        t2(this::TXEnd);
     }
 
     /** Check if we can read a snapshot from the past, without

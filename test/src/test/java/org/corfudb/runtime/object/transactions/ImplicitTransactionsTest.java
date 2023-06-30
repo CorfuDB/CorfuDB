@@ -6,9 +6,6 @@ import org.junit.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/**
- * Created by rmichoud on 7/28/17.
- */
 public class ImplicitTransactionsTest extends AbstractTransactionsTest{
 
     @Override
@@ -22,10 +19,9 @@ public class ImplicitTransactionsTest extends AbstractTransactionsTest{
      * end up in TXExecute, so here we execute isInNestedTransaction
      * in TXExecute to check that we are indeed not in a nested tx.
      *
-     * @throws Exception
      */
     @Test
-    public void implicitTransactionalMethodAreNotNested() throws Exception {
+    public void implicitTransactionalMethodAreNotNested() {
         TransactionalObject to = getDefaultRuntime()
                 .getObjectsView().build()
                 .setStreamName("my stream")
@@ -43,10 +39,9 @@ public class ImplicitTransactionsTest extends AbstractTransactionsTest{
      * Implicit transaction should be in a transaction. If we are not
      * in a transaction already, it should create a new transaction,.
      *
-     * @throws Exception
      */
     @Test
-    public void implicitTransactionalMethodIsInTransaction() throws Exception {
+    public void implicitTransactionalMethodIsInTransaction() {
         TransactionalObject to = getDefaultRuntime()
                 .getObjectsView().build()
                 .setStreamName("my stream")
@@ -62,7 +57,7 @@ public class ImplicitTransactionsTest extends AbstractTransactionsTest{
      * abort the transaction.
      */
     @Test
-    public void runtimeExceptionAbortNestedTransaction() throws Exception {
+    public void runtimeExceptionAbortNestedTransaction() {
         TransactionalObject to = getDefaultRuntime()
                 .getObjectsView().build()
                 .setStreamName("my stream")

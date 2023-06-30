@@ -105,8 +105,7 @@ public class SequencerServerCacheTest extends AbstractObjectTest {
         ICorfuTable<Integer, Integer> map = getDefaultRuntime()
                 .getObjectsView()
                 .build()
-                .setTypeToken(new TypeToken<PersistentCorfuTable<Integer, Integer>>() {
-                })
+                .setTypeToken(PersistentCorfuTable.<Integer, Integer>getTableType())
                 .setStreamName(TEST_STREAM)
                 .open();
 
@@ -132,8 +131,7 @@ public class SequencerServerCacheTest extends AbstractObjectTest {
         ICorfuTable<Integer, Integer> map = getDefaultRuntime()
                 .getObjectsView()
                 .build()
-                .setTypeToken(new TypeToken<PersistentCorfuTable<Integer, Integer>>() {
-                })
+                .setTypeToken(PersistentCorfuTable.<Integer, Integer>getTableType())
                 .setStreamName(TEST_STREAM)
                 .open();
 
@@ -164,18 +162,19 @@ public class SequencerServerCacheTest extends AbstractObjectTest {
      */
     @Test
     public void testCacheBasicEvict() {
-        SequencerServerCache cache = new SequencerServerCache(1, Address.NOT_FOUND);
-        final int iterations = 10;
-        final ConflictTxStream firstKey = new ConflictTxStream(UUID.randomUUID(), new byte[]{});
-        final ConflictTxStream secondKey = new ConflictTxStream(UUID.randomUUID(), new byte[]{});
+        try(SequencerServerCache cache = new SequencerServerCache(1, Address.NOT_FOUND)) {
+            final int iterations = 10;
+            final ConflictTxStream firstKey = new ConflictTxStream(UUID.randomUUID(), new byte[]{});
+            final ConflictTxStream secondKey = new ConflictTxStream(UUID.randomUUID(), new byte[]{});
 
-        for (int i = 0; i < iterations; i++) {
-            cache.put(Collections.singletonList(firstKey), 2*i);
-            cache.put(Collections.singletonList(secondKey), 2*i + 1);
+            for (int i = 0; i < iterations; i++) {
+                cache.put(Collections.singletonList(firstKey), 2 * i);
+                cache.put(Collections.singletonList(secondKey), 2 * i + 1);
 
-            assertThat(cache.size()).isOne();
-            assertThat(cache.get(firstKey)).isEqualTo(Address.NON_ADDRESS);
-            assertThat(cache.get(secondKey)).isEqualTo(2*i + 1);
+                assertThat(cache.size()).isOne();
+                assertThat(cache.get(firstKey)).isEqualTo(Address.NON_ADDRESS);
+                assertThat(cache.get(secondKey)).isEqualTo(2 * i + 1);
+            }
         }
     }
 
@@ -185,21 +184,22 @@ public class SequencerServerCacheTest extends AbstractObjectTest {
      */
     @Test
     public void testCachePutVersionSmallerThanSmallest() {
-        SequencerServerCache cache = new SequencerServerCache(1, Address.NOT_FOUND);
-        final ConflictTxStream firstKey = new ConflictTxStream(UUID.randomUUID(), new byte[]{});
-        final ConflictTxStream secondKey = new ConflictTxStream(UUID.randomUUID(), new byte[]{});
+        try(SequencerServerCache cache = new SequencerServerCache(1, Address.NOT_FOUND)) {
+            final ConflictTxStream firstKey = new ConflictTxStream(UUID.randomUUID(), new byte[]{});
+            final ConflictTxStream secondKey = new ConflictTxStream(UUID.randomUUID(), new byte[]{});
 
-        cache.put(Collections.singletonList(firstKey), 0);
-        cache.put(Collections.singletonList(secondKey), 1);
+            cache.put(Collections.singletonList(firstKey), 0);
+            cache.put(Collections.singletonList(secondKey), 1);
 
-        assertThat(cache.size()).isEqualTo(1);
-        assertThat(cache.get(secondKey)).isEqualTo(1);
+            assertThat(cache.size()).isEqualTo(1);
+            assertThat(cache.get(secondKey)).isEqualTo(1);
 
-        assertThrows(IllegalStateException.class, () ->
-                cache.put(Collections.singletonList(firstKey), 0));
+            assertThrows(IllegalStateException.class, () ->
+                    cache.put(Collections.singletonList(firstKey), 0));
 
-        assertThat(cache.size()).isEqualTo(1);
-        assertThat(cache.get(secondKey)).isEqualTo(1);
+            assertThat(cache.size()).isEqualTo(1);
+            assertThat(cache.get(secondKey)).isEqualTo(1);
+        }
     }
 
     /**
@@ -257,12 +257,13 @@ public class SequencerServerCacheTest extends AbstractObjectTest {
      */
     @Test
     public void testSequencerPutLargerThanCapacity() {
-        SequencerServerCache cache = new SequencerServerCache(1, Address.NOT_FOUND);
-        final ConflictTxStream firstKey = new ConflictTxStream(UUID.randomUUID(), new byte[]{});
-        final ConflictTxStream secondKey = new ConflictTxStream(UUID.randomUUID(), new byte[]{});
+        try(SequencerServerCache cache = new SequencerServerCache(1, Address.NOT_FOUND)) {
+            final ConflictTxStream firstKey = new ConflictTxStream(UUID.randomUUID(), new byte[]{});
+            final ConflictTxStream secondKey = new ConflictTxStream(UUID.randomUUID(), new byte[]{});
 
-        assertThrows(IllegalStateException.class,
-                () -> cache.put(Arrays.asList(firstKey, secondKey), 0));
+            assertThrows(IllegalStateException.class,
+                    () -> cache.put(Arrays.asList(firstKey, secondKey), 0));
+        }
     }
 
     /**
@@ -363,7 +364,7 @@ public class SequencerServerCacheTest extends AbstractObjectTest {
         };
 
         List<Map.Entry<ConflictTxStream, Long>> listOfEntries = new ArrayList<>(recordMap.entrySet());
-        Collections.sort(listOfEntries, valueComparator);
+        listOfEntries.sort(valueComparator);
 
         for (Map.Entry<ConflictTxStream, Long> entryVal : listOfEntries) {
             if (entryVal.getValue() != address) {

@@ -27,6 +27,7 @@ import org.junit.Test;
 
 import java.nio.ByteBuffer;
 import java.time.Duration;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -53,7 +54,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
         ICorfuTable<String, String> map = getDefaultRuntime().getObjectsView()
                 .build()
                 .setStreamName("stream2")
-                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setTypeToken(PersistentCorfuTable.<String, String>getTableType())
                 .open();
 
         assertThat(sv.remaining()).isEmpty();
@@ -140,7 +141,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
                 .getReadSetInfo().getConflicts()
                 .values()
                 .stream()
-                .flatMap(x -> x.stream())
+                .flatMap(Collection::stream)
                 .collect(Collectors.toList()))
                 .contains(TEST_0, TEST_4);
 
@@ -148,7 +149,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
         assertThat(TransactionalContext.getCurrentContext()
                 .getReadSetInfo()
                 .getConflicts().values().stream()
-                .flatMap(x -> x.stream())
+                .flatMap(Collection::stream)
                 .collect(Collectors.toList()))
                 .doesNotContain(TEST_2, TEST_3, TEST_5);
 
@@ -176,8 +177,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
 
         ICorfuTable<CustomConflictObject, String> map = getDefaultRuntime().getObjectsView()
                 .build()
-                .setTypeToken(new TypeToken<PersistentCorfuTable<CustomConflictObject, String>>() {
-                })
+                .setTypeToken(PersistentCorfuTable.<CustomConflictObject, String>getTableType())
                 .setStreamName("test")
                 .open();
 
@@ -225,7 +225,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
         ICorfuTable<String, String> map = rtWriter
                 .getObjectsView().build()
                 .setStreamID(streamID)
-                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setTypeToken(PersistentCorfuTable.<String, String>getTableType())
                 .open();
         // Add rule to force a read on the assigned token before actually writing to that position
         TestRule testRule = new TestRule()
@@ -265,11 +265,11 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
         ICorfuTable<String, String> map = rtSlowWriter
                 .getObjectsView().build()
                 .setStreamID(streamID)
-                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setTypeToken(PersistentCorfuTable.<String, String>getTableType())
                 .open();
 
         int[] retry = new int[1];
-        retry[0] = 0;
+
         // Add rule to force a read on the assigned token before actually writing to that position
         TestRule testRule = new TestRule()
                 .requestMatches(m -> {
@@ -309,7 +309,6 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
         CorfuRuntime rtPropagateWrite = new CorfuRuntime(getDefaultConfigurationString()).connect();
 
         int[] retry = new int[1];
-        retry[0] = 0;
         // Add rule to force a read on the assigned token before actually writing to that position
         TestRule testRule = new TestRule()
                 .requestMatches(m -> {
@@ -345,8 +344,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
 
         ICorfuTable<CustomConflictObject, String> map = getDefaultRuntime().getObjectsView()
                 .build()
-                .setTypeToken(new TypeToken<PersistentCorfuTable<CustomConflictObject, String>>() {
-                })
+                .setTypeToken(PersistentCorfuTable.<CustomConflictObject, String>getTableType())
                 .setStreamName("test")
                 .open();
 
@@ -392,8 +390,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
 
         ICorfuTable<CustomSameHashConflictObject, String> map = getDefaultRuntime().getObjectsView()
                 .build()
-                .setTypeToken(new TypeToken<PersistentCorfuTable<CustomSameHashConflictObject, String>>() {
-                })
+                .setTypeToken(PersistentCorfuTable.<CustomSameHashConflictObject, String>getTableType())
                 .setStreamName("test")
                 .open();
 
@@ -446,8 +443,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
 
         ICorfuTable<CustomHashConflictObject, String> map = getDefaultRuntime().getObjectsView()
                 .build()
-                .setTypeToken(new TypeToken<PersistentCorfuTable<CustomHashConflictObject, String>>() {
-                })
+                .setTypeToken(PersistentCorfuTable.<CustomHashConflictObject, String>getTableType())
                 .setStreamName("test")
                 .open();
 
@@ -492,8 +488,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
 
         ICorfuTable<IHashAlwaysConflictObject, String> map = getDefaultRuntime().getObjectsView()
                 .build()
-                .setTypeToken(new TypeToken<PersistentCorfuTable<IHashAlwaysConflictObject, String>>() {
-                })
+                .setTypeToken(PersistentCorfuTable.<IHashAlwaysConflictObject, String>getTableType())
                 .setStreamName("test")
                 .open();
 
@@ -543,8 +538,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
 
         ICorfuTable<IHashConflictObject, String> map = getDefaultRuntime().getObjectsView()
                 .build()
-                .setTypeToken(new TypeToken<PersistentCorfuTable<IHashConflictObject, String>>() {
-                })
+                .setTypeToken(PersistentCorfuTable.<IHashConflictObject, String>getTableType())
                 .setStreamName("test")
                 .open();
 
@@ -592,8 +586,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
 
         ICorfuTable<ExtendedIHashObject, String> map = getDefaultRuntime().getObjectsView()
                 .build()
-                .setTypeToken(new TypeToken<PersistentCorfuTable<ExtendedIHashObject, String>>() {
-                })
+                .setTypeToken(PersistentCorfuTable.<ExtendedIHashObject, String>getTableType())
                 .setStreamName("test")
                 .open();
 
@@ -923,15 +916,13 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
         ICorfuTable<String, String> m1 = rt.getObjectsView()
                 .build()
                 .setStreamName("test-1")
-                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {
-                })
+                .setTypeToken(PersistentCorfuTable.<String, String>getTableType())
                 .open();
 
         ICorfuTable<String, String> m2 = rt.getObjectsView()
                 .build()
                 .setStreamName("test-2")
-                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {
-                })
+                .setTypeToken(PersistentCorfuTable.<String, String>getTableType())
                 .open();
 
         t1(() -> rt.getObjectsView().TXBegin());
@@ -1065,7 +1056,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
         ICorfuTable<String, String> testMap2 = rt.getObjectsView()
             .build()
             .setStreamID(streamId2)
-            .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+            .setTypeToken(PersistentCorfuTable.<String, String>getTableType())
             .setStreamTags(streamTag2, streamTag3)
             .open();
 
@@ -1073,7 +1064,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
         ICorfuTable<String, String> testMap3 = rt.getObjectsView()
             .build()
             .setStreamID(streamId3)
-            .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+            .setTypeToken(PersistentCorfuTable.<String, String>getTableType())
             .open();
 
         t1(() -> rt.getObjectsView().TXBegin());

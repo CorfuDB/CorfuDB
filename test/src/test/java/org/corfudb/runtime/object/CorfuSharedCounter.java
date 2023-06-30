@@ -5,9 +5,6 @@ import org.corfudb.annotations.CorfuObject;
 import org.corfudb.annotations.Mutator;
 import org.corfudb.annotations.MutatorAccessor;
 
-/**
- * Created by dmalkhi on 12/2/16.
- */
 @CorfuObject
 public class CorfuSharedCounter implements ICorfuSMR<CorfuSharedCounter> {
     int value = 0;

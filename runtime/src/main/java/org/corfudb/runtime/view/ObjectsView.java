@@ -56,11 +56,11 @@ public class ObjectsView extends AbstractView {
     }
 
     @Getter
-    Map<ObjectID, Object> objectCache = new ConcurrentHashMap<>();
+    Map<ObjectID<?>, Object> objectCache = new ConcurrentHashMap<>();
 
     @Getter
     @Setter
-    MVOCache mvoCache = new MVOCache(runtime);
+    MVOCache<?> mvoCache = new MVOCache<>(runtime);
 
     public ObjectsView(@Nonnull final CorfuRuntime runtime) {
         super(runtime);
@@ -71,8 +71,8 @@ public class ObjectsView extends AbstractView {
      *
      * @return An object builder to open an object with.
      */
-    public SMRObject.Builder<?> build() {
-        return new SMRObject.Builder<>().runtime(runtime);
+    public <T extends ICorfuSMR<T>> SMRObject.Builder<T> build() {
+        return new SMRObject.Builder<T>().runtime(runtime);
     }
 
     /**
@@ -230,13 +230,19 @@ public class ObjectsView extends AbstractView {
      */
     public void gc(long trimMark) {
         for (Object obj : getObjectCache().values()) {
-            if (((ICorfuSMR) obj).getCorfuSMRProxy() instanceof CorfuCompileProxy) {
-                ((CorfuCompileProxy) ((ICorfuSMR) obj).
-                        getCorfuSMRProxy()).getUnderlyingObject().gc(trimMark);
+            ICorfuSMR<?> smrObj = (ICorfuSMR<?>) obj;
+
+            if (smrObj.getCorfuSMRProxy() instanceof CorfuCompileProxy) {
+                CorfuCompileProxy<?> compileProxy = (CorfuCompileProxy<?>) smrObj.getCorfuSMRProxy();
+                compileProxy
+                        .getUnderlyingObject()
+                        .gc(trimMark);
             } else {
                 // MVOCorfuCompileProxy
-                ((MVOCorfuCompileProxy) ((ICorfuSMR) obj).
-                        getCorfuSMRProxy()).getUnderlyingMVO().gc(trimMark);
+                MVOCorfuCompileProxy<?> mvoCompileProxy = (MVOCorfuCompileProxy<?>) smrObj.getCorfuSMRProxy();
+                mvoCompileProxy
+                        .getUnderlyingMVO()
+                        .gc(trimMark);
             }
         }
     }
