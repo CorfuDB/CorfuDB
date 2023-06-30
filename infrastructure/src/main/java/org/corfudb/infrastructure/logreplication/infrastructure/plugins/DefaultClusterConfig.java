@@ -113,6 +113,20 @@ public final class DefaultClusterConfig {
         return sessions;
     }
 
+    public static List<LogReplicationSession> getRoutingQueueSessions() {
+        List<LogReplicationSession> sessions = new LinkedList<>();
+        for(String sourceClusterId : sourceClusterIds) {
+            for(String sinkClusterId : sinkClusterIds) {
+                sessions.add(LogReplicationSession.newBuilder()
+                    .setSourceClusterId(sourceClusterId)
+                    .setSinkClusterId(sinkClusterId)
+                    .setSubscriber(LogReplicationConfigManager.getDefaultRoutingQueueSubscriber())
+                    .build());
+            }
+        }
+        return sessions;
+    }
+
     public String getDefaultNodeId(String endpoint) {
         String port = getPortFromEndpointURL(endpoint);
         if (Objects.equals(port, backupLogReplicationPort)) {
