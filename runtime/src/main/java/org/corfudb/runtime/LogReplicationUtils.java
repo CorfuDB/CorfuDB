@@ -65,6 +65,8 @@ public final class LogReplicationUtils {
     // Stream tag applied to the replicated queue on the receiver
     public static final String REPLICATED_QUEUE_TAG_PREFIX = "lrq_recv_";
 
+    public static final String SNAPSHOT_END_MARKER_TABLE_NAME = "SnapshotSyncEndMarker";
+
     // ---- End RoutingQueue Model constants -------/
 
     public static final UUID lrLogEntrySendQId = CorfuRuntime.getStreamID(TableRegistry
