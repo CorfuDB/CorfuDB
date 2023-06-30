@@ -270,9 +270,7 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
             throw e;
         }
 
-        log.trace("CurrentMsgSize {} lastEntrySize {}  maxDataSizePerMsg {}",
-            currentMsgSize, lastEntry == null ? 0 : ReaderUtility.calculateSize(lastEntry.getEntries().get(snapshotSyncQueueId)),
-            maxDataSizePerMsg);
+        log.trace("CurrentMsgSize {}  maxDataSizePerMsg {}", currentMsgSize, maxDataSizePerMsg);
         return new SMREntryList(currentMsgSize, smrList);
     }
 

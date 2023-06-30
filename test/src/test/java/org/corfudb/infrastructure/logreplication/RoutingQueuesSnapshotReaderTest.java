@@ -8,16 +8,23 @@ import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultC
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.BaseSnapshotReader;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.RoutingQueuesSnapshotReader;
+import org.corfudb.infrastructure.logreplication.replication.send.logreader.SnapshotReadMessage;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
+import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplicationUtils;
 import org.corfudb.runtime.Queue;
+import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.view.AbstractViewTest;
+import org.corfudb.runtime.view.TableRegistry;
+import org.corfudb.util.serializer.ProtobufSerializer;
+import org.junit.After;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import java.nio.ByteBuffer;
@@ -33,8 +40,8 @@ public class RoutingQueuesSnapshotReaderTest extends AbstractViewTest {
 
     private UUID syncRequestId;
     private BaseSnapshotReader snapshotReader;
-    private CorfuRuntime runtime1;
-    private CorfuRuntime runtime2;
+    private CorfuRuntime lrRuntime;
+    private CorfuRuntime clientRuntime;
     private LogReplication.LogReplicationSession session;
     private LogReplicationConfigManager configManager;
     private LogReplicationContext replicationContext;
@@ -44,17 +51,17 @@ public class RoutingQueuesSnapshotReaderTest extends AbstractViewTest {
     @Before
     public void setUp() {
         syncRequestId = UUID.randomUUID();
-        runtime1 = getDefaultRuntime();
-        runtime2 = getNewRuntime(getDefaultNode()).connect();
-        corfuStore = new CorfuStore(runtime2);
+        lrRuntime = getDefaultRuntime();
+        clientRuntime = getNewRuntime(getDefaultNode()).connect();
+        corfuStore = new CorfuStore(clientRuntime);
         session = DefaultClusterConfig.getRoutingQueueSessions().get(0);
 
-        configManager = new LogReplicationConfigManager(runtime1, session.getSourceClusterId());
+        configManager = new LogReplicationConfigManager(lrRuntime, session.getSourceClusterId());
         replicationContext = new LogReplicationContext(configManager, 5, session.getSourceClusterId(),
                 true, new LogReplicationPluginConfig(""));
         configManager.generateConfig(Collections.singleton(session));
-        snapshotReader = new RoutingQueuesSnapshotReader(runtime1, session, replicationContext);
-        snapshotReader.reset(runtime1.getAddressSpaceView().getLogTail());
+        snapshotReader = new RoutingQueuesSnapshotReader(lrRuntime, session, replicationContext);
+        snapshotReader.reset(lrRuntime.getAddressSpaceView().getLogTail());
 
         streamTagFollowed = LogReplicationUtils.SNAPSHOT_SYNC_QUEUE_TAG_SENDER_PREFIX + session.getSinkClusterId();
     }
@@ -62,7 +69,8 @@ public class RoutingQueuesSnapshotReaderTest extends AbstractViewTest {
     @Test
     public void testRead() throws Exception {
         generateData();
-        snapshotReader.read(syncRequestId);
+        SnapshotReadMessage snapshotMessage = snapshotReader.read(syncRequestId);
+        Assert.assertTrue(snapshotMessage.isEndRead());
     }
 
     private void generateData() throws Exception {
@@ -104,11 +112,28 @@ public class RoutingQueuesSnapshotReaderTest extends AbstractViewTest {
         Queue.RoutingTableSnapshotEndMarkerMsg endMarker =
             Queue.RoutingTableSnapshotEndMarkerMsg.newBuilder().setDestination(session.getSinkClusterId()).build();
 
+        CorfuRecord<Queue.RoutingTableSnapshotEndMarkerMsg, Message> record = new CorfuRecord<>(endMarker, null);
+
+        Object[] smrArgs = new Object[2];
+        smrArgs[0] = snapshotSyncId;
+        smrArgs[1] = record;
+
+        UUID endMarkerStreamId = CorfuRuntime.getStreamID(TableRegistry.getFullyQualifiedTableName(
+            CORFU_SYSTEM_NAMESPACE, SNAPSHOT_END_MARKER_TABLE_NAME));
+
         try (TxnContext txnContext = corfuStore.txn(namespace)) {
-            txnContext.putRecord(endMarkerTable, snapshotSyncId, endMarker, null);
+            txnContext.logUpdate(endMarkerStreamId, new SMREntry("put", smrArgs,
+                corfuStore.getRuntime().getSerializers().getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE)),
+                Arrays.asList(CorfuRuntime.getStreamID(streamTagFollowed)));
             txnContext.commit();
         } catch (Exception e) {
             log.error("Failed to add End Marker", e);
         }
+    }
+
+    @After
+    public void cleanUp() {
+        lrRuntime.shutdown();
+        clientRuntime.shutdown();
     }
 }
