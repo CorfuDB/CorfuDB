@@ -6,18 +6,27 @@ import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
 import org.corfudb.runtime.LogReplication.ReplicationModel;
 import org.corfudb.runtime.Queue.RoutingTableEntryMsg;
 import org.corfudb.runtime.collections.CorfuStore;
+import org.corfudb.runtime.collections.Table;
+import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
 
 import java.lang.reflect.InvocationTargetException;
 import java.util.List;
+import java.util.UUID;
+import java.util.stream.Collectors;
+
+import static org.corfudb.runtime.LogReplicationUtils.LOG_ENTRY_SYNC_QUEUE_NAME_SENDER;
+import static org.corfudb.runtime.LogReplicationUtils.LOG_ENTRY_SYNC_QUEUE_TAG_SENDER_PREFIX;
+import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 @Slf4j
-public class RoutingQueueSenderClient extends LogReplicationClient implements LogReplicationRoutingQueueClient{
+public class RoutingQueueSenderClient extends LogReplicationClient implements LogReplicationRoutingQueueClient {
     private static final ReplicationModel model = ReplicationModel.ROUTING_QUEUES;
 
     // TODO (V2): This field should be removed after the rpc stream is added for Sink side session creation.
     public static final String DEFAULT_ROUTING_QUEUE_CLIENT = "00000000-0000-0000-0000-0000000000002";
 
+    private final Table<Queue.CorfuGuidMsg, RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg> logEntryQ;
     private final CorfuStore corfuStore;
 
     /**
@@ -35,15 +44,49 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
         Preconditions.checkArgument(isValid(clientName), "clientName is null or empty.");
 
         this.corfuStore = new CorfuStore(runtime);
+        logEntryQ = corfuStore.openQueue(CORFU_SYSTEM_NAMESPACE, LOG_ENTRY_SYNC_QUEUE_NAME_SENDER,
+                RoutingTableEntryMsg.class, TableOptions.fromProtoSchema(RoutingTableEntryMsg.class));
+
         register(corfuStore, clientName, model);
     }
 
+    /**
+     * Enqueues message to be replicated onto the sender's delta queue.
+     *
+     * @param txn Transaction context in which the operation will be performed
+     * @param message RoutingTableEntryMsg
+     */
+    @Override
     public void transmitDeltaMessage(TxnContext txn, RoutingTableEntryMsg message) {
+        txn.logUpdateEnqueue(logEntryQ, message, message.getDestinationsList().stream()
+                .map(x -> UUID.fromString(String.join("", LOG_ENTRY_SYNC_QUEUE_TAG_SENDER_PREFIX, x)))
+                .collect(Collectors.toList()), corfuStore);
+        log.debug("Enqueued message to delta queue, message: {}", message);
     }
 
+    /**
+     * Enqueues messages to be replicated onto the sender's delta queue.
+     *
+     * @param txn Transaction context in which the operation will be performed
+     * @param messages List of RoutingTableEntryMsg
+     */
+    @Override
     public void transmitDeltaMessages(TxnContext txn, List<RoutingTableEntryMsg> messages) {
+        for (RoutingTableEntryMsg message : messages) {
+            txn.logUpdateEnqueue(logEntryQ, message, message.getDestinationsList().stream()
+                    .map(x -> UUID.fromString(String.join("", LOG_ENTRY_SYNC_QUEUE_TAG_SENDER_PREFIX, x)))
+                    .collect(Collectors.toList()), corfuStore);
+            log.debug("Enqueued message to delta queue, message: {}", message);
+        }
     }
 
+    /**
+     * TODO: May not be needed for poc
+     * Request LR to perform a forced snapshot sync.
+     *
+     * @param timestamp Timestamp from which recovery is possible.
+     */
     public void requestSnapshotSync(Timestamp timestamp) {
+
     }
 }
