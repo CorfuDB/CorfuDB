@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplicationListener;
+import org.corfudb.runtime.LogReplicationRoutingQueueListener;
 import org.corfudb.runtime.collections.StreamListener;
 import org.corfudb.runtime.exceptions.StreamingException;
 import org.corfudb.runtime.exceptions.TrimmedException;
@@ -103,6 +104,34 @@ public class StreamingManager {
      */
     public void subscribeLogReplicationListener(@Nonnull LogReplicationListener streamListener, Map<String, List<String>> nsToTableName,
                                                 Map<String, String> nsToStreamTags, long lastAddress, int bufferSize) {
+        this.scheduler.addLRTask(streamListener, nsToStreamTags, nsToTableName, lastAddress,
+                bufferSize == 0 ? defaultBufferSize : bufferSize);
+    }
+
+    public void subscribeLogReplicationRoutingQueueListener(@Nonnull LogReplicationRoutingQueueListener streamListener,
+                                                            @Nonnull String namespace,long lastAddress, int bufferSize,
+                                                            String routingQueueName) {
+        Map<String, List<String>> nsToTableName = new HashMap<>();
+        nsToTableName.put(CORFU_SYSTEM_NAMESPACE, Arrays.asList(REPLICATION_STATUS_TABLE_NAME));
+        // Queue is already opened. Add Routing Queue.
+        nsToTableName.put(namespace, Arrays.asList(routingQueueName));
+
+        // TODO: Form the routing queue tag from the client_name input parameter.
+        // TODO: Check if we need to modify the addLRTask for multiple tags per namespace
+        Map<String, String> nsToStreamTags = new HashMap<>();
+        nsToStreamTags.put(CORFU_SYSTEM_NAMESPACE, LR_STATUS_STREAM_TAG);
+        nsToStreamTags.put(namespace, REPLICATED_QUEUE_TAG_PREFIX);
+        this.scheduler.addLRTask(streamListener, nsToStreamTags, nsToTableName, lastAddress,
+                bufferSize == 0 ? defaultBufferSize : bufferSize);
+    }
+
+    public void subscribeLogReplicationLrStatusTableListener(@Nonnull LogReplicationRoutingQueueListener streamListener,
+                                                            long lastAddress, int bufferSize) {
+        Map<String, List<String>> nsToTableName = new HashMap<>();
+        nsToTableName.put(CORFU_SYSTEM_NAMESPACE, Arrays.asList(REPLICATION_STATUS_TABLE_NAME));
+
+        Map<String, String> nsToStreamTags = new HashMap<>();
+        nsToStreamTags.put(CORFU_SYSTEM_NAMESPACE, LR_STATUS_STREAM_TAG);
         this.scheduler.addLRTask(streamListener, nsToStreamTags, nsToTableName, lastAddress,
                 bufferSize == 0 ? defaultBufferSize : bufferSize);
     }

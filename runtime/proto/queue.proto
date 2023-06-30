@@ -16,13 +16,20 @@ message CorfuQueueMetadataMsg {
     int64 txSequence = 1;
 }
 
+enum ReplicationType {
+    NONE = 0;
+    LOG_ENTRY_SYNC = 1; // This entry was made during a delta sync
+    SNAPSHOT_SYNC = 2; // This entry was made during a snapshot sync
+    LAST_FULL_SYNC_ENTRY = 3; // Last entry denoting the end marker of a full sync
+}
+
 // This message forms the value part of the payload used for LogReplication over Routing Queues
 message RoutingTableEntryMsg {
     // List of unique destinations from topology.
     repeated string destinations = 1;
 
-    // An optional field placed in the full sync queue to denote the end of a snapshot sync.
-    bool is_snapshot_end = 2;
+    // Specify the replication type for routing queue model.
+    ReplicationType type = 2;
 
     // The actual payload carrying data that will be replicated to the destinations specified.
     bytes opaque_payload = 3;
