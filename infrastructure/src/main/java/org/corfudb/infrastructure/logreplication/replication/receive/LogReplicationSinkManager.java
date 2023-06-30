@@ -49,7 +49,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
 import static org.corfudb.protocols.service.CorfuProtocolLogReplication.getLrEntryAckMsg;
-import static org.corfudb.runtime.LogReplicationRoutingQueueClient.DEFAULT_ROUTING_QUEUE_CLIENT;
 import static org.corfudb.runtime.LogReplicationUtils.REPLICATED_QUEUE_NAME_PREFIX;
 import static org.corfudb.runtime.LogReplicationUtils.REPLICATED_QUEUE_TAG_PREFIX;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
