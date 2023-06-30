@@ -6,11 +6,12 @@ import org.corfudb.runtime.collections.TxnContext;
 /**
  * Default testing implementation of a Log Replication Config Provider
  */
+
 public class DefaultLogReplicationConfigAdapter implements ILogReplicationVersionAdapter {
 
     private static final String latestVer = "LATEST-VERSION";
 
-    public DefaultLogReplicationConfigAdapter(CorfuRuntime runtime) {
+    public void openVersionTable(CorfuRuntime runtime) {
         if (runtime == null) {
             throw new IllegalArgumentException("Null runtime passed in");
         }
@@ -24,5 +25,10 @@ public class DefaultLogReplicationConfigAdapter implements ILogReplicationVersio
     @Override
     public String getPinnedClusterVersion(TxnContext txnContext) {
         return latestVer;
+    }
+
+    @Override
+    public boolean isSaasDeployment() {
+        return false;
     }
 }

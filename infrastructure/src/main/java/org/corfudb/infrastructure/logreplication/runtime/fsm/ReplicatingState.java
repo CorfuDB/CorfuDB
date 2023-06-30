@@ -1,11 +1,14 @@
 package org.corfudb.infrastructure.logreplication.runtime.fsm;
 
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.logreplication.replication.LogReplicationSourceManager;
+import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationSourceManager;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent;
 import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
+import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientServerRouter;
 
 import java.util.UUID;
+
+import static org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationFsmUtil.canEnqueueStopRuntimeFsmEvent;
 
 /**
  * Log Replication Runtime Replicating State.
@@ -20,10 +23,13 @@ public class ReplicatingState implements LogReplicationRuntimeState {
     private CorfuLogReplicationRuntime fsm;
     private LogReplicationSourceManager replicationSourceManager;
     private LogReplicationEvent replicationEvent;
+    private LogReplicationClientServerRouter router;
 
-    public ReplicatingState(CorfuLogReplicationRuntime fsm, LogReplicationSourceManager sourceManager) {
+    public ReplicatingState(CorfuLogReplicationRuntime fsm, LogReplicationSourceManager sourceManager,
+                            LogReplicationClientServerRouter router) {
         this.fsm = fsm;
         this.replicationSourceManager = sourceManager;
+        this.router = router;
     }
 
     @Override
@@ -41,7 +47,7 @@ public class ReplicatingState implements LogReplicationRuntimeState {
 
                 // If the leader is the node that became unavailable, verify new leader and attempt to reconnect.
                 if (fsm.getRemoteLeaderNodeId().isPresent() && fsm.getRemoteLeaderNodeId().get().equals(nodeIdDown)) {
-                    log.warn("Connection to remote leader id={} is down. Attempt to reconnect.", nodeIdDown);
+                    log.warn("Connection to remote leader id={} is down. Attempt to reconnect ONLY if connection starter.", nodeIdDown);
                     fsm.resetRemoteLeaderNodeId();
                     // If remaining connections verify leadership on connected endpoints, otherwise, return to init
                     // state, until a connection is available.
@@ -65,7 +71,10 @@ public class ReplicatingState implements LogReplicationRuntimeState {
                 fsm.updateConnectedNodes(event.getNodeId());
                 return null;
             case LOCAL_LEADER_LOSS:
-                return fsm.getStates().get(LogReplicationRuntimeStateType.STOPPED);
+                if (canEnqueueStopRuntimeFsmEvent(router, fsm, event.isConnectionStarter())) {
+                    return fsm.getStates().get(LogReplicationRuntimeStateType.STOPPED);
+                }
+                return null;
             default: {
                 log.warn("Unexpected communication event {} when in init state.", event.getType());
                 throw new IllegalTransitionException(event.getType(), getType());

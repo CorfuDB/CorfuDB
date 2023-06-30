@@ -5,11 +5,10 @@ import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.infrastructure.logreplication.DataSender;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal.SyncType;
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationEventMetadata;
 import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
-import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
+import org.corfudb.runtime.LogReplication.SyncType;
 
 import java.util.Optional;
 import java.util.UUID;
@@ -55,11 +54,6 @@ public class WaitSnapshotApplyState implements LogReplicationState {
     private final DataSender dataSender;
 
     /**
-     * Used for checking LR is in upgrading path or not
-     */
-    private final LogReplicationConfigManager tableManagerPlugin;
-
-    /**
      * Base Snapshot Timestamp for current Snapshot Sync
      */
     private long baseSnapshotTimestamp;
@@ -75,14 +69,13 @@ public class WaitSnapshotApplyState implements LogReplicationState {
      *
      * @param logReplicationFSM log replication state machine
      */
-    public WaitSnapshotApplyState(LogReplicationFSM logReplicationFSM, DataSender dataSender, LogReplicationConfigManager tableManagerPlugin) {
+    public WaitSnapshotApplyState(LogReplicationFSM logReplicationFSM, DataSender dataSender) {
         this.fsm = logReplicationFSM;
         this.dataSender = dataSender;
         this.snapshotSyncApplyMonitorExecutor = Executors.newSingleThreadScheduledExecutor(new ThreadFactoryBuilder()
                 .setDaemon(true)
                 .setNameFormat("snapshotSyncApplyVerificationScheduler")
                 .build());
-        this.tableManagerPlugin = tableManagerPlugin;
     }
 
     @Override
@@ -124,13 +117,6 @@ public class WaitSnapshotApplyState implements LogReplicationState {
                     logEntrySyncState.setTransitionEventId(event.getEventId());
                     fsm.setBaseSnapshot(event.getMetadata().getLastTransferredBaseSnapshot());
                     fsm.setAckedTimestamp(event.getMetadata().getLastLogEntrySyncedTimestamp());
-                    if (tableManagerPlugin.isUpgraded()) {
-                        // If LR is in upgrading path, it means this cycle of snapshot sync was triggered
-                        // forcibly because LR detected a version mismatch. Flipping the flag back to false
-                        // here to indicate that the upgrade path is completed.
-                        log.info("Forced snapshot sync due to LR upgrade is COMPLETE.");
-                        tableManagerPlugin.resetUpgradeFlag();
-                    }
                     log.info("Snapshot Sync apply completed, syncRequestId={}, baseSnapshot={}. Transition to LOG_ENTRY_SYNC",
                             event.getEventId(), event.getMetadata().getLastTransferredBaseSnapshot());
                     return logEntrySyncState;

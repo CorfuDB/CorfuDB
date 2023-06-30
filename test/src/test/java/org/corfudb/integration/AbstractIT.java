@@ -61,6 +61,7 @@ public class AbstractIT extends AbstractCorfuTest {
     static final String DEFAULT_ENDPOINT = DEFAULT_HOST + ":" + DEFAULT_PORT;
 
     static final String CORFU_PROJECT_DIR = new File("..").getAbsolutePath() + File.separator;
+
     public static final String CORFU_LOG_PATH = PARAMETERS.TEST_TEMP_DIR;
 
     static final long DEFAULT_MVO_CACHE_SIZE = 100;
@@ -78,7 +79,7 @@ public class AbstractIT extends AbstractCorfuTest {
     private static final long SHUTDOWN_RETRY_WAIT = 500;
 
     // Config the msg size for log replication data
-    // sent from active cluster to the standby cluster.
+    // sent from source cluster to the sink cluster.
     // We set it as 128KB to make multiple messages during the tests.
     private static final int MSG_SIZE = 131072;
 
@@ -375,42 +376,51 @@ public class AbstractIT extends AbstractCorfuTest {
                 .runServer();
     }
 
-    public Process runReplicationServer(int port) throws IOException {
+    public Process runReplicationServer(int port, int corfuServerPort, String transportType) throws IOException {
         return new CorfuReplicationServerRunner()
                 .setHost(DEFAULT_HOST)
                 .setPort(port)
+                .setCorfuServerConnectionPort(corfuServerPort)
+                .setTransportType(transportType)
                 .runServer();
     }
 
-    public Process runReplicationServer(int port, String pluginConfigFilePath) throws IOException {
+    public Process runReplicationServer(int port, int corfuServerPort, String pluginConfigFilePath, String transportType) throws IOException {
         return new CorfuReplicationServerRunner()
                 .setHost(DEFAULT_HOST)
                 .setPort(port)
+                .setCorfuServerConnectionPort(corfuServerPort)
                 .setPluginConfigFilePath(pluginConfigFilePath)
                 .setMsg_size(MSG_SIZE)
+                .setTransportType(transportType)
                 .runServer();
     }
 
-    public Process runReplicationServer(int port, String pluginConfigFilePath, int lockLeaseDuration) throws IOException {
+    public Process runReplicationServer(int port, int corfuServerPort, String pluginConfigFilePath,
+                                        int lockLeaseDuration, String transportType) throws IOException {
         return new CorfuReplicationServerRunner()
                 .setHost(DEFAULT_HOST)
                 .setPort(port)
-                .setLockLeaseDuration(lockLeaseDuration)
+                .setCorfuServerConnectionPort(corfuServerPort)
+                .setLockLeaseDuration(Integer.valueOf(lockLeaseDuration))
                 .setPluginConfigFilePath(pluginConfigFilePath)
                 .setMsg_size(MSG_SIZE)
+                .setTransportType(transportType)
                 .runServer();
     }
 
-    public Process runReplicationServerCustomMaxWriteSize(int port,
+    public Process runReplicationServerCustomMaxWriteSize(int port, int corfuServerPort,
                                                           String pluginConfigFilePath, int maxWriteSize,
-                                                          int maxEntriesApplied) throws IOException {
+                                                          int maxEntriesApplied, String transportType) throws IOException {
         return new CorfuReplicationServerRunner()
                 .setHost(DEFAULT_HOST)
                 .setPort(port)
+                .setCorfuServerConnectionPort(corfuServerPort)
                 .setPluginConfigFilePath(pluginConfigFilePath)
                 .setMsg_size(MSG_SIZE)
                 .setMaxWriteSize(maxWriteSize)
                 .setMaxSnapshotEntriesApplied(maxEntriesApplied)
+                .setTransportType(transportType)
                 .runServer();
     }
 
@@ -708,6 +718,11 @@ public class AbstractIT extends AbstractCorfuTest {
         private Integer lockLeaseDuration;
         private int maxWriteSize = 0;
         private int maxSnapshotEntriesApplied;
+        private int corfuServerConnectionPort = 0;
+
+        // Used only for testing. This is set as a system env in the LR process which is read by
+        // DefaultTransportPluginSelector.
+        private String transportType = "GRPC";
 
         /**
          * Create a command line string according to the properties set for a Corfu Server
@@ -769,6 +784,10 @@ public class AbstractIT extends AbstractCorfuTest {
 
             if (maxSnapshotEntriesApplied != 0) {
                 command.append(" --max-snapshot-entries-applied=").append(maxSnapshotEntriesApplied);
+            }
+
+            if (corfuServerConnectionPort != 0) {
+                command.append(" --corfu-port-for-lr=").append(corfuServerConnectionPort);
             }
 
             command.append(" -d ").append(logLevel).append(" ")

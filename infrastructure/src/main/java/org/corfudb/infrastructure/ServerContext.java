@@ -1,9 +1,9 @@
 package org.corfudb.infrastructure;
 
-import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_MAX_NUM_MSG_PER_BATCH;
-import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_DATA_MSG_SIZE_SUPPORTED;
-import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_CACHE_NUM_ENTRIES;
-import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED;
+import static org.corfudb.infrastructure.logreplication.config.LogReplicationConfig.DEFAULT_MAX_NUM_MSG_PER_BATCH;
+import static org.corfudb.infrastructure.logreplication.config.LogReplicationConfig.DEFAULT_MAX_DATA_MSG_SIZE;
+import static org.corfudb.infrastructure.logreplication.config.LogReplicationConfig.DEFAULT_MAX_CACHE_NUM_ENTRIES;
+import static org.corfudb.infrastructure.logreplication.config.LogReplicationConfig.DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED;
 import static org.corfudb.common.util.URLUtils.getVersionFormattedHostAddress;
 
 import com.google.common.collect.Sets;
@@ -91,7 +91,6 @@ public class ServerContext implements AutoCloseable {
 
     /** The node Id, stored as a base64 string. */
     private static final String NODE_ID = "NODE_ID";
-
 
     private static final KvRecord<String> NODE_ID_RECORD = KvRecord.of(NODE_ID, String.class);
 
@@ -280,7 +279,7 @@ public class ServerContext implements AutoCloseable {
      */
     public int getLogReplicationMaxDataMessageSize() {
         String val = getServerConfig(String.class, "--max-replication-data-message-size");
-        return val == null ? MAX_DATA_MSG_SIZE_SUPPORTED : Integer.parseInt(val);
+        return val == null ? DEFAULT_MAX_DATA_MSG_SIZE : Integer.parseInt(val);
     }
 
     /**
@@ -290,7 +289,7 @@ public class ServerContext implements AutoCloseable {
      */
     public int getLogReplicationCacheMaxSize() {
         String val = getServerConfig(String.class, "--lrCacheSize");
-        return val == null ? MAX_CACHE_NUM_ENTRIES : Integer.parseInt(val);
+        return val == null ? DEFAULT_MAX_CACHE_NUM_ENTRIES : Integer.parseInt(val);
     }
 
     /**
@@ -305,6 +304,11 @@ public class ServerContext implements AutoCloseable {
     public int getMaxSnapshotEntriesApplied() {
         String val = getServerConfig(String.class, "--max-snapshot-entries-applied");
         return val == null ? DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED : Integer.parseInt(val);
+    }
+
+    public int getCorfuServerConnectionPort() {
+        String val = getServerConfig(String.class, "--corfu-port-for-lr");
+        return Integer.parseInt(val);
     }
 
     /**
