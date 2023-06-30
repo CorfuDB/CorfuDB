@@ -32,7 +32,7 @@ message RoutingTableEntryMsg {
     ReplicationType type = 2;
 
     // The actual payload carrying data that will be replicated to the destinations specified.
-    bytes opaque_payload = 2;
+    bytes opaque_payload = 3;
 }
 
 message RoutingTableSnapshotEndKeyMsg {
