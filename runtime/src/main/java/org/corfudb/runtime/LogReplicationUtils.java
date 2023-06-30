@@ -9,10 +9,10 @@ import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.LogReplication.ReplicationStatus;
 import org.corfudb.runtime.collections.CorfuStore;
-import org.corfudb.runtime.collections.CorfuStoreEntry;
 import org.corfudb.runtime.collections.Table;
-import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.runtime.collections.CorfuStoreEntry;
+import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.StreamingException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
@@ -60,7 +60,8 @@ public final class LogReplicationUtils {
 
     // Prefix of the name of queue as it will appear on the receiver after replicated.  The suffix will be the Sender
     // (Source) cluster id Receiving queues per client name.
-    public static final String REPLICATED_QUEUE_NAME = "LRQ_Recv-source_cluster_id";
+    // Example: LRQ_Recv_<client_name>_<source_id>
+    public static final String REPLICATED_QUEUE_NAME_PREFIX = "LRQ_Recv_";
 
     // Stream tag applied to the replicated queue on the receiver
     public static final String SNAP_SYNC_START_END_Q_NAME = "LRQ_SNAPSHOT_START_END_MARKER";
@@ -100,11 +101,11 @@ public final class LogReplicationUtils {
         // Open the routing queue from corfu store (Disk backed mode)
         // since the subscribe API will run in client jvm
         // TODO: Get client name as input params. For now, hard coding the stream tag. and expose this API via corfuStore.
-        if (checkIfRoutingQueueExists(corfuStore, namespace, REPLICATED_QUEUE_TAG)) {
+        if (checkIfRoutingQueueExists(corfuStore, namespace, REPLICATED_QUEUE_TAG_PREFIX)) {
             // Table registry contains the routing queue already.
             corfuStore.getRuntime().getTableRegistry().getStreamingManager().subscribeLogReplicationRoutingQueueListener(
                     clientListener, namespace, subscriptionTimestamp, bufferSize,
-                    getRoutingQueue(corfuStore, namespace, REPLICATED_QUEUE_TAG));
+                    getRoutingQueue(corfuStore, namespace, REPLICATED_QUEUE_TAG_PREFIX));
             log.info("Routing queue client subscription at timestamp {} successful.", subscriptionTimestamp);
         } else {
             // Routing queue is not registered at the sink (receiver side) yet.
@@ -122,9 +123,9 @@ public final class LogReplicationUtils {
         // Open the routing queue from corfu store (Disk backed mode)
         // since the subscribe API will run in policy jvm
         // TODO: Get client name as input params. For now, hard coding the stream tag.
-        if (checkIfRoutingQueueExists(corfuStore, namespace, REPLICATED_QUEUE_TAG)) {
+        if (checkIfRoutingQueueExists(corfuStore, namespace, REPLICATED_QUEUE_TAG_PREFIX)) {
             // Table registry contains the routing queue already.
-            String routingQueueName = getRoutingQueue(corfuStore, namespace, REPLICATED_QUEUE_TAG);
+            String routingQueueName = getRoutingQueue(corfuStore, namespace, REPLICATED_QUEUE_TAG_PREFIX);
             corfuStore.getRuntime().getTableRegistry().getStreamingManager().subscribeLogReplicationRoutingQueueListener(
                     clientListener, namespace, subscriptionTimestamp, bufferSize, routingQueueName);
             log.info("Routing queue client subscription at timestamp {} successful.", subscriptionTimestamp);
