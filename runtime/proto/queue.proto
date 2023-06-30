@@ -34,3 +34,13 @@ message RoutingTableEntryMsg {
     // The actual payload carrying data that will be replicated to the destinations specified.
     bytes opaque_payload = 3;
 }
+
+message RoutingTableSnapshotEndKeyMsg {
+    string snapshot_sync_id = 1;
+}
+
+// Marker message denoting the end of a snapshot sync
+message RoutingTableSnapshotEndMarkerMsg {
+    // Destination corresponding to this snapshot sync
+    string destination = 1;
+}
