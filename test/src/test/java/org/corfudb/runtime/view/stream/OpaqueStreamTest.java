@@ -1,15 +1,6 @@
 package org.corfudb.runtime.view.stream;
 
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.corfudb.protocols.service.CorfuProtocolLogReplication.extractOpaqueEntries;
-import static org.corfudb.protocols.service.CorfuProtocolLogReplication.generatePayload;
-
 import com.google.common.reflect.TypeToken;
-
-import java.util.List;
-import java.util.UUID;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 import lombok.extern.slf4j.Slf4j;
 import org.assertj.core.api.Assertions;
 import org.corfudb.CustomSerializer;
@@ -21,10 +12,18 @@ import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.exceptions.SerializerException;
 import org.corfudb.runtime.view.AbstractViewTest;
-import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
+
+import java.util.List;
+import java.util.UUID;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.corfudb.protocols.service.CorfuProtocolLogReplication.extractOpaqueEntries;
+import static org.corfudb.protocols.service.CorfuProtocolLogReplication.generatePayload;
 
 @Slf4j
 public class OpaqueStreamTest extends AbstractViewTest {

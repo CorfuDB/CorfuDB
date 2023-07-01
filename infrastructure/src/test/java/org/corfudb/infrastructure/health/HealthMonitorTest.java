@@ -7,7 +7,6 @@ import org.corfudb.infrastructure.health.HealthReport.ReportedLivenessStatus;
 import org.corfudb.util.Sleep;
 import org.junit.jupiter.api.Test;
 
-
 import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.BrokenBarrierException;

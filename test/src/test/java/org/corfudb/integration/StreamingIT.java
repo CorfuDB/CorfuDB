@@ -3,7 +3,6 @@ package org.corfudb.integration;
 import com.google.protobuf.Message;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
@@ -16,7 +15,6 @@ import org.corfudb.runtime.collections.CorfuStoreEntry;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
 import org.corfudb.runtime.collections.CorfuStreamEntry;
 import org.corfudb.runtime.collections.IsolationLevel;
-import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.collections.StreamListener;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
@@ -25,15 +23,10 @@ import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.StreamingException;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.TableRegistry;
-import org.corfudb.test.SampleSchema;
-import org.corfudb.test.SampleSchema.EventInfo;
-import org.corfudb.test.SampleSchema.ManagedResources;
 import org.corfudb.test.SampleSchema.SampleTableAMsg;
 import org.corfudb.test.SampleSchema.SampleTableBMsg;
 import org.corfudb.test.SampleSchema.SampleTableCMsg;
 import org.corfudb.test.SampleSchema.Uuid;
-import org.corfudb.util.serializer.ISerializer;
-import org.corfudb.util.serializer.ProtobufSerializer;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -1104,10 +1097,10 @@ public class StreamingIT extends AbstractIT {
         } // This will load up the table's map with all entries
 
         // Now run a round of checkpoint and trim (Queue's data will be purged)
-        List<String> allRegisteredTablesAndQs = runtime.getTableRegistry().listTables().stream().map(
+        List<String> allRegisteredTablesAndQs = store.getRuntime().getTableRegistry().listTables().stream().map(
                 CorfuStoreMetadata.TableName::getTableName
         ).collect(Collectors.toList());
-        checkpointAndTrim(runtime, TableRegistry.CORFU_SYSTEM_NAMESPACE, allRegisteredTablesAndQs, false);
+        checkpointAndTrim(store.getRuntime(), TableRegistry.CORFU_SYSTEM_NAMESPACE, allRegisteredTablesAndQs, false);
 
         // Since the original data is cached in-memory, it should still be readable.
         try (TxnContext tx = store.txn(TableRegistry.CORFU_SYSTEM_NAMESPACE)) {

@@ -1,20 +1,6 @@
 package org.corfudb.runtime.concurrent;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
-
 import com.google.protobuf.ByteString;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Hashtable;
-import java.util.List;
-import java.util.Map;
-import java.util.Random;
-import java.util.TreeMap;
-import java.util.concurrent.Semaphore;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.locks.ReentrantLock;
-
 import com.google.protobuf.Message;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -35,6 +21,19 @@ import org.corfudb.runtime.object.transactions.AbstractTransactionsTest;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.proto.RpcCommon.UuidMsg;
 import org.junit.Test;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Hashtable;
+import java.util.List;
+import java.util.Map;
+import java.util.Random;
+import java.util.TreeMap;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.ReentrantLock;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Created by hisundar on 5/30/19.

@@ -7,7 +7,6 @@ import org.corfudb.runtime.collections.CorfuStore;
 import org.junit.Before;
 import org.junit.Test;
 
-import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.anyBoolean;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doReturn;

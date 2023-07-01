@@ -1,13 +1,14 @@
 package org.corfudb.runtime.object.transactions;
 
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
+
 import java.util.Collections;
 import java.util.Deque;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
-
-import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.wireprotocol.TokenResponse;
 
 /** A class which allows access to transactional contexts, which manage
  * transactions. The static methods of this class provide access to the
@@ -85,8 +86,9 @@ public class TransactionalContext {
      *
      * @return          The context which was removed from the transaction stack.
      */
-    public static AbstractTransactionalContext removeContext() {
-        AbstractTransactionalContext context = getTransactionStack().pollFirst();
+    public static Optional<AbstractTransactionalContext> removeContext() {
+        final Optional<AbstractTransactionalContext> context =
+                Optional.ofNullable(getTransactionStack().pollFirst());
         log.trace("TransactionalContext removed: [{}]", context);
 
         if (getTransactionStack().isEmpty()) {
@@ -94,6 +96,8 @@ public class TransactionalContext {
                 getTransactionStack().notifyAll();
             }
         }
+
+        context.ifPresent(AbstractTransactionalContext::close);
         return context;
     }
 

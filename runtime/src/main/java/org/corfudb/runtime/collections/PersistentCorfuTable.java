@@ -2,19 +2,18 @@ package org.corfudb.runtime.collections;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.reflect.TypeToken;
-import org.corfudb.runtime.object.ICorfuExecutionContext;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.ICorfuSMRProxy;
 import org.corfudb.runtime.object.ICorfuSMRUpcallTarget;
-import org.corfudb.runtime.object.MVOCorfuCompileProxy;
 
 import javax.annotation.Nonnull;
 import java.util.Map;
 import java.util.Set;
-import java.util.UUID;
 import java.util.stream.Stream;
 
-public class PersistentCorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<PersistentCorfuTable<K, V>> {
+public class PersistentCorfuTable<K, V> implements
+        ICorfuTable<K, V>,
+        ICorfuSMR<ImmutableCorfuTable<K, V>> {
 
     private ICorfuSMRProxy<ImmutableCorfuTable<K, V>> proxy;
 
@@ -25,36 +24,41 @@ public class PersistentCorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<
             .put("remove", (obj, args) -> obj.remove((K) args[0]))
             .build();
 
-    public static <K, V> TypeToken<PersistentCorfuTable<K, V>> getTableType() {
+    public static <K, V> TypeToken<PersistentCorfuTable<K, V>> getTypeToken() {
         return new TypeToken<PersistentCorfuTable<K, V>>() {};
     }
 
+    public PersistentCorfuTable() {}
+
+    public PersistentCorfuTable(ICorfuSMRProxy<ImmutableCorfuTable<K, V>> proxy) {
+        this.proxy = proxy;
+    }
+
     @Override
-    public <R> void setProxy$CORFUSMR(ICorfuSMRProxy<R> proxy) {
+    public void setCorfuSMRProxy(ICorfuSMRProxy<ImmutableCorfuTable<K, V>> proxy) {
         this.proxy = (ICorfuSMRProxy<ImmutableCorfuTable<K, V>>) proxy;
     }
 
     @Override
-    // TODO: use proper return type
-    public ICorfuSMRProxy getCorfuSMRProxy() {
+    public ICorfuSMRProxy<?> getCorfuSMRProxy() {
         return proxy;
     }
 
     @Override
     public void delete(@Nonnull K key) {
         Object[] conflictField = new Object[]{key};
-        proxy.logUpdate("remove", false, conflictField, key);
+        proxy.logUpdate("remove", conflictField, key);
     }
 
     @Override
     public void insert(@Nonnull K key, @Nonnull V value) {
         Object[] conflictField = new Object[]{key};
-        proxy.logUpdate("put", false, conflictField, key, value);
+        proxy.logUpdate("put", conflictField, key, value);
     }
 
     @Override
     public void clear() {
-        proxy.logUpdate("clear", false, null);
+        proxy.logUpdate("clear", null);
     }
 
     @Override
@@ -64,7 +68,7 @@ public class PersistentCorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<
 
     @Override
     public boolean isTableCached() {
-        return ((MVOCorfuCompileProxy)proxy).isObjectCached();
+        return proxy.isObjectCached();
     }
 
     @Override
@@ -105,17 +109,7 @@ public class PersistentCorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<
     }
 
     @Override
-    public PersistentCorfuTable<K, V> getContext(ICorfuExecutionContext.Context context) {
-        return null;
-    }
-
-    @Override
     public Map<String, ICorfuSMRUpcallTarget<ImmutableCorfuTable<K, V>>> getSMRUpcallMap() {
         return upcallTargetMap;
-    }
-
-    @Override
-    public UUID getCorfuStreamID() {
-        return proxy.getStreamID();
     }
 }

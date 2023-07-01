@@ -2,9 +2,9 @@ package org.corfudb.infrastructure.log.statetransfer;
 
 
 import com.google.common.collect.ImmutableList;
+import org.corfudb.infrastructure.log.statetransfer.exceptions.TransferSegmentException;
 import org.corfudb.infrastructure.log.statetransfer.segment.TransferSegment;
 import org.corfudb.infrastructure.log.statetransfer.segment.TransferSegmentStatus;
-import org.corfudb.infrastructure.log.statetransfer.exceptions.TransferSegmentException;
 
 import java.util.Optional;
 

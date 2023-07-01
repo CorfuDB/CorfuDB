@@ -3,13 +3,12 @@ package org.corfudb.util.serializer;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufInputStream;
 import io.netty.buffer.ByteBufOutputStream;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.runtime.CorfuRuntime;
 
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
-
-import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.CorfuRuntime;
 
 
 /**

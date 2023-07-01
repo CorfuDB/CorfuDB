@@ -9,6 +9,8 @@ import com.google.common.collect.HashMultiset;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Multiset;
 import com.google.common.collect.TreeMultimap;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 
 import java.util.Comparator;
 import java.util.Set;
@@ -18,10 +20,6 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-
-import lombok.extern.slf4j.Slf4j;
-
-import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 
 /**
  * Factory for custom futures used by the quorum replication.

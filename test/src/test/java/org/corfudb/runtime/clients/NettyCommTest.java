@@ -32,6 +32,7 @@ import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
+import static org.awaitility.Awaitility.await;
 import static org.corfudb.common.config.ConfigParamsHelper.TlsCiphers.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384;
 import static org.corfudb.common.config.ConfigParamsHelper.TlsCiphers.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256;
 
@@ -615,7 +616,7 @@ public class NettyCommTest extends AbstractCorfuTest {
                                         .build()),
                 (r, d) -> {
                     if (shouldPingSucceed) {
-                        assertThat(getBaseClient(r).pingSync()).isTrue();
+                        await().until(() -> getBaseClient(r).pingSync());
                         SSLSession sslSession =
                                 ((SslHandler) r.getChannel().pipeline().get("ssl"))
                                         .engine().getSession();

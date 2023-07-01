@@ -4,6 +4,10 @@ import com.google.protobuf.TextFormat;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.runtime.proto.ServerErrors.ServerErrorMsg.ErrorCase;
+import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg.PayloadCase;
+
 import java.lang.invoke.LambdaMetafactory;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
@@ -13,10 +17,6 @@ import java.util.Arrays;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-
-import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg.PayloadCase;
-import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
-import org.corfudb.runtime.proto.ServerErrors.ServerErrorMsg.ErrorCase;
 
 /**
  * Invokes the message handler to handle Protobuf responses from server.

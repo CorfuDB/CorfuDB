@@ -23,8 +23,8 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Set;
 
-import static org.mockito.Matchers.anyLong;
-import static org.mockito.Matchers.anyObject;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.any;
 
 
 public class SessionManagerTest extends AbstractViewTest {
@@ -43,7 +43,7 @@ public class SessionManagerTest extends AbstractViewTest {
 
         msgHandler = Mockito.mock(LogReplicationServer.class);
         Mockito.doNothing().when(msgHandler).updateTopologyConfigId(anyLong());
-        Mockito.doReturn(Mockito.mock(LogReplicationSinkManager.class)).when(msgHandler).createSinkManager(anyObject());
+        Mockito.doReturn(Mockito.mock(LogReplicationSinkManager.class)).when(msgHandler).createSinkManager(any());
 
         router = Mockito.mock(LogReplicationClientServerRouter.class);
         Mockito.doNothing().when(router).updateTopologyConfigId(anyLong());
@@ -53,9 +53,9 @@ public class SessionManagerTest extends AbstractViewTest {
 
 
         replicationManager = Mockito.mock(CorfuReplicationManager.class);
-        Mockito.doNothing().when(replicationManager).refreshRuntime(anyObject(), anyObject(), anyLong());
-        Mockito.doNothing().when(replicationManager).updateTopology(anyObject());
-        Mockito.doNothing().when(replicationManager).createAndStartRuntime(anyObject(), anyObject(), anyObject());
+        Mockito.doNothing().when(replicationManager).refreshRuntime(any(), any(), anyLong());
+        Mockito.doNothing().when(replicationManager).updateTopology(any());
+        Mockito.doNothing().when(replicationManager).createAndStartRuntime(any(), any(), any());
 
         pluginConfig = Mockito.mock(LogReplicationPluginConfig.class);
     }

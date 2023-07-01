@@ -2,6 +2,7 @@ package org.corfudb.integration;
 
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.CorfuTestParameters;
 import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.config.LogReplicationConfig;

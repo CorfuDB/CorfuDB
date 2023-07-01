@@ -1,11 +1,5 @@
 package org.corfudb.protocols.service;
 
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
-import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.CorfuProtocolLogData;
 import org.corfudb.protocols.wireprotocol.InspectAddressesResponse;
@@ -18,10 +12,10 @@ import org.corfudb.runtime.proto.RpcCommon.UuidToLongPairMsg;
 import org.corfudb.runtime.proto.RpcCommon.UuidToStreamAddressSpacePairMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg;
-import org.corfudb.runtime.proto.service.LogUnit.CompactRequestMsg;
-import org.corfudb.runtime.proto.service.LogUnit.CompactResponseMsg;
 import org.corfudb.runtime.proto.service.LogUnit.CommittedTailRequestMsg;
 import org.corfudb.runtime.proto.service.LogUnit.CommittedTailResponseMsg;
+import org.corfudb.runtime.proto.service.LogUnit.CompactRequestMsg;
+import org.corfudb.runtime.proto.service.LogUnit.CompactResponseMsg;
 import org.corfudb.runtime.proto.service.LogUnit.FlushCacheRequestMsg;
 import org.corfudb.runtime.proto.service.LogUnit.FlushCacheResponseMsg;
 import org.corfudb.runtime.proto.service.LogUnit.InspectAddressesRequestMsg;
@@ -47,6 +41,13 @@ import org.corfudb.runtime.proto.service.LogUnit.UpdateCommittedTailResponseMsg;
 import org.corfudb.runtime.proto.service.LogUnit.WriteLogRequestMsg;
 import org.corfudb.runtime.proto.service.LogUnit.WriteLogResponseMsg;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
+
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.stream.Collectors;
 
 import static org.corfudb.protocols.CorfuProtocolCommon.getStreamAddressSpaceMsg;
 import static org.corfudb.protocols.CorfuProtocolCommon.getTokenMsg;

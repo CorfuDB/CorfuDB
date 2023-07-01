@@ -2,15 +2,16 @@ package org.corfudb.util.serializer;
 
 import com.google.common.collect.ImmutableMap;
 import io.netty.buffer.ByteBuf;
+import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.runtime.CorfuRuntime;
+
 import java.lang.reflect.Array;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-import lombok.Getter;
-import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.CorfuRuntime;
 
 
 /**

@@ -1,12 +1,11 @@
 package org.corfudb.util.serializer;
 
-import static com.google.common.base.Preconditions.checkNotNull;
-
-
 import com.google.protobuf.ByteString;
 import io.netty.buffer.ByteBuf;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuQueue;
+
+import static com.google.common.base.Preconditions.checkNotNull;
 
 public class CorfuQueueSerializer implements ISerializer {
 

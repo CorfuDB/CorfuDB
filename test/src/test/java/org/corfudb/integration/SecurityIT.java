@@ -1,8 +1,5 @@
 package org.corfudb.integration;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.corfudb.common.util.URLUtils.getVersionFormattedEndpointURL;
-
 import com.google.common.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
 import org.assertj.core.api.Assertions;
@@ -22,6 +19,9 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.Arrays;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.common.util.URLUtils.getVersionFormattedEndpointURL;
 
 /**
  * This test suit exercises the ability to enable TLS on Corfu servers and runtime

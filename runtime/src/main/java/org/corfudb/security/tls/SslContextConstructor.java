@@ -10,10 +10,6 @@ import org.corfudb.security.tls.TlsUtils.CertStoreConfig.TrustStoreConfig;
 
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLException;
-import java.security.KeyStore;
-import java.security.KeyStoreException;
-import java.security.NoSuchAlgorithmException;
-import java.security.UnrecoverableKeyException;
 
 @Slf4j
 public class SslContextConstructor {

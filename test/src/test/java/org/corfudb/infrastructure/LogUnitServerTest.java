@@ -3,7 +3,6 @@ package org.corfudb.infrastructure;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import org.corfudb.infrastructure.log.LogFormat.LogHeader;
-import org.corfudb.infrastructure.log.StreamLogFiles;
 import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
 import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
 import org.corfudb.protocols.wireprotocol.DataType;

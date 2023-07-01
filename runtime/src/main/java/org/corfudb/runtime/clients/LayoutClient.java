@@ -1,20 +1,19 @@
 package org.corfudb.runtime.clients;
 
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-
-import javax.annotation.Nonnull;
-
 import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
 import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
 import org.corfudb.protocols.wireprotocol.LayoutPrepareResponse;
 import org.corfudb.runtime.view.Layout;
 
-import static org.corfudb.protocols.service.CorfuProtocolLayout.getLayoutRequestMsg;
+import javax.annotation.Nonnull;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+
 import static org.corfudb.protocols.service.CorfuProtocolLayout.getBootstrapLayoutRequestMsg;
+import static org.corfudb.protocols.service.CorfuProtocolLayout.getCommitLayoutRequestMsg;
+import static org.corfudb.protocols.service.CorfuProtocolLayout.getLayoutRequestMsg;
 import static org.corfudb.protocols.service.CorfuProtocolLayout.getPrepareLayoutRequestMsg;
 import static org.corfudb.protocols.service.CorfuProtocolLayout.getProposeLayoutRequestMsg;
-import static org.corfudb.protocols.service.CorfuProtocolLayout.getCommitLayoutRequestMsg;
 
 /**
  * A client to the layout server.

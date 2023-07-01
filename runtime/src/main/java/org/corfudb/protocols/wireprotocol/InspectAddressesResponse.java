@@ -1,8 +1,9 @@
 package org.corfudb.protocols.wireprotocol;
 
-import java.util.List;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
+
+import java.util.List;
 
 /**
  * A response message containing a list of uncommitted addresses.

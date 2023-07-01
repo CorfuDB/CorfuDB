@@ -1,14 +1,14 @@
 package org.corfudb.runtime.clients;
 
-import java.util.concurrent.CompletableFuture;
-import java.util.UUID;
 import lombok.Getter;
 import lombok.Setter;
-
 import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
-import org.corfudb.runtime.proto.service.CorfuMessage.PriorityLevel;
 import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
+import org.corfudb.runtime.proto.service.CorfuMessage.PriorityLevel;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
+
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 
 import static org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg;
 

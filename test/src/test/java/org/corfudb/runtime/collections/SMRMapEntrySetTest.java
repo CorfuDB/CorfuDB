@@ -1,10 +1,8 @@
 package org.corfudb.runtime.collections;
 
-import com.google.common.reflect.TypeToken;
 import lombok.Getter;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.object.transactions.AbstractTransactionsTest;
-import org.corfudb.runtime.view.SMRObject;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -37,7 +35,7 @@ public class SMRMapEntrySetTest extends AbstractTransactionsTest {
                 .getObjectsView()
                 .build()
                 .setStreamName("mapsettest")
-                .setTypeToken(new TypeToken<PersistentCorfuTable<Long, Long>>() {})
+                .setTypeToken(PersistentCorfuTable.<Long, Long>getTypeToken())
                 .open();
 
         // populate the map
@@ -69,7 +67,7 @@ public class SMRMapEntrySetTest extends AbstractTransactionsTest {
                 .getObjectsView()
                 .build()
                 .setStreamName("mapsettest")
-                .setTypeToken(new TypeToken<PersistentCorfuTable<Long, Long>>() {})
+                .setTypeToken(PersistentCorfuTable.<Long, Long>getTypeToken())
                 .open();
 
         CountDownLatch l1 = new CountDownLatch(1);

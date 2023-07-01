@@ -1,13 +1,6 @@
 package org.corfudb.protocols.logprotocol;
 
-import static com.google.common.base.Preconditions.checkState;
-
-
 import io.netty.buffer.ByteBuf;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-import java.util.UUID;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -16,6 +9,13 @@ import lombok.ToString;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.serializer.CorfuSerializer;
 import org.corfudb.util.serializer.ISerializer;
+
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.UUID;
+
+import static com.google.common.base.Preconditions.checkState;
 
 /**
  * Created by mwei on 1/8/16.

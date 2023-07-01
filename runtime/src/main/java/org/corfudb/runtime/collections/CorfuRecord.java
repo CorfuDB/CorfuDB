@@ -1,7 +1,6 @@
 package org.corfudb.runtime.collections;
 
 import com.google.protobuf.Message;
-
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Setter;
