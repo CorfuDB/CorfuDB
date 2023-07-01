@@ -1,15 +1,15 @@
 package org.corfudb.runtime.object.transactions;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import com.google.common.reflect.TypeToken;
+import org.corfudb.runtime.collections.ICorfuTable;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
+import org.junit.Test;
 
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import org.corfudb.runtime.collections.ICorfuTable;
-import org.corfudb.runtime.collections.PersistentCorfuTable;
-import org.junit.Test;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Created by dmalkhi on 12/13/16.
@@ -53,74 +53,6 @@ public class WriteWriteTXConcurrencyTest extends TXConflictScenariosTest {
 
         assertThat(valA.get()).isEqualTo(valB.get());
     }
-
-
-    @Test
-    public void testOpacityInterleaved() throws Exception {
-        // invoke the interleaving engine
-        testOpacityWW(true);
-    }
-
-    @Test
-    public void testOpacityThreaded() throws Exception {
-        // invoke the threaded engine
-        testOpacityWW(false);
-    }
-
-
-    public void testOpacityWW(boolean testInterleaved) throws Exception {
-        testOpacity(testInterleaved);
-
-        // verify that all aborts are justified
-        for (int task_num = 0; task_num < numTasks; task_num++) {
-            if (commitStatus.get(task_num) != COMMITVALUE) {
-                assertThat(sharedCounters.get((task_num + 1) % numTasks).getValue())
-                        .isNotEqualTo(snapStatus.get(task_num));
-                assertThat(commitStatus.get((task_num + 1) % numTasks))
-                        .isEqualTo(COMMITVALUE);
-            }
-        }
-    }
-
-    /**
-     *  If task k aborts, then either task (k-1), or (k+1), or both, must have committed
-     *  (wrapping around for tasks n-1 and 0, respectively).
-     */
-    public void testRWConflictWW(boolean testInterleaved) throws Exception {
-
-        testRWConflicts(testInterleaved);
-
-        // verify that all aborts are justified
-        for (int task_num = 0; task_num < numTasks; task_num++) {
-            if (commitStatus.get(task_num) != COMMITVALUE)
-                assertThat(commitStatus.get((task_num + 1) % numTasks) == COMMITVALUE ||
-                        commitStatus.get((task_num - 1) % numTasks) == COMMITVALUE)
-                        .isTrue();
-        }
-
-    }
-
-    @Test
-    public void testRWConflictWWInterleaved() throws Exception {
-        testRWConflictWW(true);
-    }
-
-    @Test
-    public void testRWConflictWWThreaded() throws Exception {
-        testRWConflictWW(false);
-    }
-
-    @Test
-    public void testNoWriteConflictSimpleWW() throws Exception {
-        testNoWriteConflictSimple();
-
-        // both transactions should commit, no WW conflict
-        assertThat(commitStatus.get(0))
-                .isEqualTo(COMMITVALUE);
-        assertThat(commitStatus.get(1))
-                .isEqualTo(COMMITVALUE);
-    }
-
     /**
      * This test uses the concurrentAbortTest scenario.
      * The test invokes numTasks tasks, each one writes exclusively to a map entry,

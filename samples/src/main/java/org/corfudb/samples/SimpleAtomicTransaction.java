@@ -1,12 +1,8 @@
 package org.corfudb.samples;
 
-import java.util.Map;
-
 import com.google.common.reflect.TypeToken;
-import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
-import org.corfudb.runtime.view.SMRObject;
 
 /**
  * Consider again the code from {@link org.corfudb.samples::HeloCorfu.java}:

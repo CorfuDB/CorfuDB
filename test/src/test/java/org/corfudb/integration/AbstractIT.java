@@ -5,6 +5,7 @@ import lombok.NonNull;
 import lombok.Setter;
 import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
+import net.bytebuddy.agent.ByteBuddyAgent;
 import org.apache.commons.io.FileUtils;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.common.util.URLUtils.NetworkInterfaceVersion;
@@ -53,6 +54,11 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 @Slf4j
 public class AbstractIT extends AbstractCorfuTest {
+
+    static {
+        ByteBuddyAgent.install();
+    }
+
     static final String DEFAULT_HOST = "localhost";
     static final int DEFAULT_PORT = 9000;
     static final int DEFAULT_HEALTH_PORT = 8080;
@@ -479,7 +485,7 @@ public class AbstractIT extends AbstractCorfuTest {
         return rt.getObjectsView()
                 .build()
                 .setStreamName(streamName)
-                .setTypeToken(PersistentCorfuTable.<K, V>getTableType())
+                .setTypeToken(PersistentCorfuTable.<K, V>getTypeToken())
                 .open();
     }
 
@@ -491,7 +497,7 @@ public class AbstractIT extends AbstractCorfuTest {
                 .build()
                 .setStreamName(streamName)
                 .setSerializer(serializer)
-                .setTypeToken(PersistentCorfuTable.<K, V>getTableType())
+                .setTypeToken(PersistentCorfuTable.<K, V>getTypeToken())
                 .open();
     }
 

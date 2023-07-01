@@ -19,8 +19,14 @@ import org.corfudb.utils.lock.persistence.LockStore;
 import org.corfudb.utils.lock.states.LockEvent;
 
 import java.lang.reflect.InvocationTargetException;
-import java.util.*;
-import java.util.concurrent.*;
+import java.util.Collection;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Applications can register interest for a lock using the LockClient. When a lock is acquired on behalf of an instance

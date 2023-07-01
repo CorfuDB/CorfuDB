@@ -2,22 +2,20 @@ package org.corfudb.util.serializer;
 
 import com.google.protobuf.Any;
 import com.google.protobuf.Message;
-
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufInputStream;
 import io.netty.buffer.ByteBufOutputStream;
+import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuStoreMetadata.Record;
+import org.corfudb.runtime.collections.CorfuRecord;
+import org.corfudb.runtime.exceptions.SerializerException;
 
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentMap;
-
-import lombok.Getter;
-import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.CorfuStoreMetadata.Record;
-import org.corfudb.runtime.collections.CorfuRecord;
-import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.exceptions.SerializerException;
 
 /**
  * The Protobuf serializer is the main component that allows CorfuStore to use Protobufs to

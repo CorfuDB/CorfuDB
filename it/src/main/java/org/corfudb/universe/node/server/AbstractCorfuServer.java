@@ -4,7 +4,6 @@ import com.google.common.collect.ImmutableSortedSet;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.CorfuServerCmdLine;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.universe.logging.LoggingParams;
 import org.corfudb.universe.node.client.LocalCorfuClient;
@@ -57,7 +56,7 @@ public abstract class AbstractCorfuServer<T extends CorfuServerParams, U extends
         }
 
         int healthPort = params.getHealthPort();
-        cmd.append(" ").append(CorfuServerCmdLine.HEALTH_PORT_PARAM).append("=").append(healthPort);
+        cmd.append(" --health-port=").append(healthPort);
 
         cmd.append(" --log-size-quota-percentage=").append(params.getLogSizeQuotaPercentage()).append(" ");
 

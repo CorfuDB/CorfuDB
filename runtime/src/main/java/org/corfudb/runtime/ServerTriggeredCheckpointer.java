@@ -1,13 +1,16 @@
 package org.corfudb.runtime;
 
-import com.google.common.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
-import org.corfudb.runtime.collections.*;
-import org.corfudb.runtime.object.CorfuCompileProxy;
-import org.corfudb.runtime.object.ICorfuVersionPolicy;
+import org.corfudb.runtime.collections.CorfuDynamicKey;
+import org.corfudb.runtime.collections.CorfuStore;
+import org.corfudb.runtime.collections.ICorfuTable;
+import org.corfudb.runtime.collections.OpaqueCorfuDynamicRecord;
+import org.corfudb.runtime.collections.PersistedCorfuTable;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
+import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.runtime.object.PersistenceOptions;
 import org.corfudb.runtime.view.ObjectOpenOption;
-import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.KeyDynamicProtobufSerializer;
@@ -18,8 +21,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
-import java.util.function.Supplier;
 
+import static org.corfudb.runtime.CorfuOptions.ConsistencyModel.READ_COMMITTED;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 @Slf4j
@@ -54,37 +57,46 @@ public class ServerTriggeredCheckpointer extends DistributedCheckpointer {
     private CheckpointWriter<ICorfuTable<?,?>> getCheckpointWriter(TableName tableName,
                                                               KeyDynamicProtobufSerializer keyDynamicProtobufSerializer) {
         UUID streamId = CorfuRuntime.getStreamID(TableRegistry.getFullyQualifiedTableName(tableName));
-        CorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord> corfuTable = openTable(tableName, keyDynamicProtobufSerializer,
-                checkpointerBuilder.cpRuntime.get());
+        ICorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord> corfuTable = openTable(
+                tableName, keyDynamicProtobufSerializer, checkpointerBuilder.cpRuntime.get());
         CheckpointWriter<ICorfuTable<?,?>> cpw =
                 new CheckpointWriter(checkpointerBuilder.cpRuntime.get(), streamId, "ServerCheckpointer", corfuTable);
         cpw.setSerializer(keyDynamicProtobufSerializer);
         return cpw;
     }
 
-    private CorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord> openTable(TableName tableName,
+    private ICorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord> openTable(TableName tableName,
                                                                             ISerializer serializer,
                                                                             CorfuRuntime rt) {
         log.info("Opening table {} in namespace {}", tableName.getTableName(), tableName.getNamespace());
-        SMRObject.Builder<CorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord>> corfuTableBuilder =
-                rt.getObjectsView().build()
-                        .setTypeToken(new TypeToken<CorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord>>() {
-                        })
-                        .setStreamName(TableRegistry.getFullyQualifiedTableName(tableName.getNamespace(), tableName.getTableName()))
-                        .setSerializer(serializer)
-                        .addOpenOption(ObjectOpenOption.NO_CACHE);
+
         if (this.checkpointerBuilder.persistedCacheRoot.isPresent()) {
-            log.info("Opening table in diskBacked mode");
-            String persistentCacheDirName = String.format("compactor_%s_%s",
+            log.info("Opening table in disk mode");
+            final String persistentCacheDirName = String.format("compactor_%s_%s",
                     tableName.getNamespace(), tableName.getTableName());
-            Path persistedCacheLocation = Paths.get(this.checkpointerBuilder.persistedCacheRoot.get()).resolve(persistentCacheDirName);
-            Supplier<StreamingMap<CorfuDynamicKey, OpaqueCorfuDynamicRecord>> mapSupplier =
-                    () -> new PersistedStreamingMap<>(
-                            persistedCacheLocation, PersistedStreamingMap.getPersistedStreamingMapOptions(),
-                            serializer, rt);
-            corfuTableBuilder.setArguments(mapSupplier, ICorfuVersionPolicy.MONOTONIC);
+            final Path persistedCacheLocation = Paths.get(this.checkpointerBuilder.persistedCacheRoot
+                    .get()).resolve(persistentCacheDirName);
+            final PersistenceOptions persistenceOptions = PersistenceOptions.builder()
+                    .consistencyModel(READ_COMMITTED)
+                    .dataPath(persistedCacheLocation)
+                    .build();
+
+            return rt.getObjectsView().<PersistedCorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord>>build()
+                    .setStreamName(TableRegistry.getFullyQualifiedTableName(tableName.getNamespace(), tableName.getTableName()))
+                    .setSerializer(serializer)
+                    .addOpenOption(ObjectOpenOption.NO_CACHE)
+                    .setTypeToken(PersistedCorfuTable.<CorfuDynamicKey, OpaqueCorfuDynamicRecord>getTypeToken())
+                    .setArguments(persistenceOptions, serializer)
+                    .open();
+        } else {
+            return rt.getObjectsView()
+                            .<PersistentCorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord>>build()
+                            .setStreamName(TableRegistry.getFullyQualifiedTableName(tableName.getNamespace(), tableName.getTableName()))
+                            .setSerializer(serializer)
+                            .addOpenOption(ObjectOpenOption.NO_CACHE)
+                            .setTypeToken(PersistentCorfuTable.<CorfuDynamicKey, OpaqueCorfuDynamicRecord>getTypeToken())
+                            .open();
         }
-        return corfuTableBuilder.open();
     }
 
     private List<TableName> getAllTablesToCheckpoint() {

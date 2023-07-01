@@ -1,8 +1,42 @@
 package org.corfudb.browser;
 
 import com.google.common.collect.Iterables;
-import com.google.common.reflect.TypeToken;
+import com.google.protobuf.Any;
+import com.google.protobuf.DynamicMessage;
+import com.google.protobuf.InvalidProtocolBufferException;
+import com.google.protobuf.util.JsonFormat;
+import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.IMetadata;
+import org.corfudb.runtime.CorfuOptions;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuStoreMetadata.ProtobufFileName;
+import org.corfudb.runtime.CorfuStoreMetadata.TableDescriptors;
+import org.corfudb.runtime.CorfuStoreMetadata.TableMetadata;
+import org.corfudb.runtime.CorfuStoreMetadata.TableName;
+import org.corfudb.runtime.ExampleSchemas.ExampleTableName;
+import org.corfudb.runtime.ExampleSchemas.ManagedMetadata;
+import org.corfudb.runtime.RoutingQueueSenderClient;
+import org.corfudb.runtime.collections.CorfuDynamicKey;
+import org.corfudb.runtime.collections.CorfuDynamicRecord;
+import org.corfudb.runtime.collections.CorfuRecord;
+import org.corfudb.runtime.collections.CorfuStore;
+import org.corfudb.runtime.collections.CorfuStoreShim;
+import org.corfudb.runtime.collections.CorfuStreamEntries;
+import org.corfudb.runtime.collections.ICorfuTable;
+import org.corfudb.runtime.collections.PersistedCorfuTable;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
+import org.corfudb.runtime.collections.StreamListener;
+import org.corfudb.runtime.collections.Table;
+import org.corfudb.runtime.collections.TableOptions;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.object.PersistenceOptions;
+import org.corfudb.runtime.object.transactions.TransactionalContext;
+import org.corfudb.runtime.view.TableRegistry;
+import org.corfudb.util.serializer.DynamicProtobufSerializer;
 
+import javax.annotation.Nonnull;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -19,50 +53,8 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-
-import com.google.protobuf.Any;
-import com.google.protobuf.DynamicMessage;
-import com.google.protobuf.InvalidProtocolBufferException;
-import lombok.Getter;
-import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.wireprotocol.ILogData;
-import org.corfudb.protocols.wireprotocol.IMetadata;
-import org.corfudb.runtime.CorfuOptions;
-import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.CorfuStoreMetadata.ProtobufFileName;
-import org.corfudb.runtime.CorfuStoreMetadata.TableDescriptors;
-import org.corfudb.runtime.CorfuStoreMetadata.TableMetadata;
-import org.corfudb.runtime.CorfuStoreMetadata.TableName;
-import org.corfudb.runtime.ExampleSchemas.ExampleTableName;
-import org.corfudb.runtime.ExampleSchemas.ManagedMetadata;
-import org.corfudb.runtime.RoutingQueueSenderClient;
-import org.corfudb.runtime.collections.CorfuRecord;
-import org.corfudb.runtime.collections.CorfuStore;
-import org.corfudb.runtime.collections.CorfuStoreShim;
-import org.corfudb.runtime.collections.CorfuStreamEntries;
-import org.corfudb.runtime.collections.CorfuTable;
-import org.corfudb.runtime.collections.CorfuDynamicKey;
-import org.corfudb.runtime.collections.CorfuDynamicRecord;
-import org.corfudb.runtime.collections.ICorfuTable;
-import org.corfudb.runtime.collections.PersistedStreamingMap;
-import org.corfudb.runtime.collections.StreamListener;
-import org.corfudb.runtime.collections.StreamingMap;
-import org.corfudb.runtime.collections.Table;
-import org.corfudb.runtime.collections.TableOptions;
-import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.object.ICorfuVersionPolicy;
-import org.corfudb.runtime.object.transactions.TransactionalContext;
-import org.corfudb.runtime.view.SMRObject;
-import org.corfudb.runtime.view.TableRegistry;
-import org.corfudb.util.serializer.DynamicProtobufSerializer;
-import org.rocksdb.Options;
-
-import com.google.protobuf.util.JsonFormat;
-
-import javax.annotation.Nonnull;
 
 /**
  * This is the CorfuStore Browser/Editor Tool which prints data in a given
@@ -148,27 +140,22 @@ public class CorfuStoreBrowserEditor implements CorfuBrowserEditorCommands {
         String fullTableName = TableRegistry.getFullyQualifiedTableName(namespace, tableName);
 
         if (diskPath == null) {
-            SMRObject.Builder<PersistentCorfuTable<CorfuDynamicKey, CorfuDynamicRecord>> corfuTableBuilder =
-                    runtime.getObjectsView().build()
-                            .setTypeToken(new TypeToken<PersistentCorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>() {})
+            return runtime.getObjectsView().<PersistentCorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>build()
                             .setStreamName(fullTableName)
-                            .setSerializer(dynamicProtobufSerializer);
-            return corfuTableBuilder.open();
+                            .setSerializer(dynamicProtobufSerializer)
+                            .setTypeToken(PersistentCorfuTable.<CorfuDynamicKey, CorfuDynamicRecord>getTypeToken())
+                            .open();
         } else {
-            SMRObject.Builder<CorfuTable<CorfuDynamicKey, CorfuDynamicRecord>> corfuTableBuilder =
-                    runtime.getObjectsView().build()
-                            .setTypeToken(new TypeToken<CorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>() {})
-                            .setStreamName(fullTableName)
-                            .setSerializer(dynamicProtobufSerializer);
-            final Options options = new Options().setCreateIfMissing(true);
-            final Supplier<StreamingMap<CorfuDynamicKey, CorfuDynamicRecord>> mapSupplier = () ->
-                    new PersistedStreamingMap<>(
-                            Paths.get(diskPath),
-                            options,
-                            dynamicProtobufSerializer, runtime);
-            corfuTableBuilder.setArguments(mapSupplier, ICorfuVersionPolicy.MONOTONIC);
-            return corfuTableBuilder.open();
+            final PersistenceOptions persistenceOptions = PersistenceOptions.builder()
+                    .dataPath(Paths.get(diskPath)).build();
+            return runtime.getObjectsView().<PersistedCorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>build()
+                    .setStreamName(fullTableName)
+                    .setSerializer(dynamicProtobufSerializer)
+                    .setTypeToken(PersistedCorfuTable.<CorfuDynamicKey, CorfuDynamicRecord>getTypeToken())
+                    .setArguments(persistenceOptions, dynamicProtobufSerializer)
+                    .open();
         }
+
     }
 
     /**

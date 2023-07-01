@@ -5,7 +5,8 @@ import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NonNull;
-import org.corfudb.runtime.CorfuOptions;
+import org.corfudb.runtime.CorfuOptions.PersistenceOptions;
+import org.corfudb.runtime.CorfuOptions.SchemaOptions;
 
 /**
  * Table parameters including table's namespace, fullyQualifiedTableName,
@@ -56,7 +57,10 @@ public class TableParameters<K extends Message, V extends Message, M extends Mes
     // These schema options are extracted from TableOptions and passed around for feature flags
     // like stream_tags, secondary indexes, backup_restore, log replication etc
     @Getter
-    private final CorfuOptions.SchemaOptions schemaOptions;
+    private final SchemaOptions schemaOptions;
+
+    @Getter
+    private final PersistenceOptions persistenceOptions;
 
     @Getter
     private final boolean secondaryIndexesDisabled;

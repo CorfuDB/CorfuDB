@@ -1,11 +1,11 @@
 package org.corfudb.runtime.clients;
 
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Function;
-
 import org.corfudb.infrastructure.IServerRouter;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
+
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Function;
 
 /**
  * Created by mwei on 6/29/16.

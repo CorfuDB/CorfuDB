@@ -1,12 +1,11 @@
 package org.corfudb.runtime.collections;
 
 import com.google.protobuf.Message;
+import lombok.Getter;
+import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
 
 import java.util.Comparator;
 import java.util.function.Function;
-
-import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
-import lombok.Getter;
 
 /**
  * QueryOptions enables querying the CorfuStore with projections and custom comparators.

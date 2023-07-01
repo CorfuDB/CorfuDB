@@ -27,7 +27,6 @@ import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
-import org.mockito.Matchers;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -45,6 +44,7 @@ import static org.corfudb.infrastructure.health.HealthReport.ComponentReportedHe
 import static org.corfudb.infrastructure.health.HealthReport.ComponentStatus.FAILURE;
 import static org.corfudb.infrastructure.health.HealthReport.ComponentStatus.UP;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.spy;
@@ -596,7 +596,7 @@ public class DistributedCheckpointerTest extends AbstractViewTest {
                 .build(), corfuStore, compactorMetadataTables);
         ServerTriggeredCheckpointer serverTriggeredCheckpointerSpy = spy(distributedCheckpointer);
         doNothing().when(serverTriggeredCheckpointerSpy).checkpointOpenedTables();
-        doReturn(false).when(serverTriggeredCheckpointerSpy).tryCheckpointTable(Matchers.any(), Matchers.any());
+        doReturn(false).when(serverTriggeredCheckpointerSpy).tryCheckpointTable(any(), any());
         serverTriggeredCheckpointerSpy.checkpointTables();
 
         ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();

@@ -1,11 +1,7 @@
 package org.corfudb.universe.scenario;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.fail;
-import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_WAIT_TIME;
-
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.exceptions.UnreachableClusterException;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.universe.node.client.CorfuClient;
@@ -17,6 +13,10 @@ import java.time.Duration;
 import java.util.concurrent.TimeUnit;
 import java.util.function.IntPredicate;
 import java.util.function.Predicate;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.fail;
+import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_WAIT_TIME;
 
 @Slf4j
 public class ScenarioUtils {
@@ -119,16 +119,16 @@ public class ScenarioUtils {
      * @param table CorfuTable to generate write request
      */
     @SuppressWarnings("unchecked")
-    static void waitForClusterDown(CorfuTable table) {
+    static void waitForClusterDown(ICorfuTable table) {
         try {
-            table.put(new Object(), new Object());
+            table.insert(new Object(), new Object());
             fail("Cluster should already be down");
         } catch (UnreachableClusterException e) {
             log.info("Successfully waited failure detector to detect cluster down");
         }
     }
 
-    static void waitForClusterUp(CorfuTable table, String value) {
+    static void waitForClusterUp(ICorfuTable table, String value) {
         for (int i = 0; i < 3; i++) {
             try {
                 table.get(value);

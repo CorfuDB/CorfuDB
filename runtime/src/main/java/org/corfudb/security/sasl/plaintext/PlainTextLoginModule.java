@@ -1,8 +1,5 @@
 package org.corfudb.security.sasl.plaintext;
 
-import java.io.IOException;
-import java.util.Map;
-
 import javax.security.auth.Subject;
 import javax.security.auth.callback.Callback;
 import javax.security.auth.callback.CallbackHandler;
@@ -11,6 +8,8 @@ import javax.security.auth.callback.PasswordCallback;
 import javax.security.auth.callback.UnsupportedCallbackException;
 import javax.security.auth.login.LoginException;
 import javax.security.auth.spi.LoginModule;
+import java.io.IOException;
+import java.util.Map;
 
 /**
  * Created by sneginhal on 01/27/2017

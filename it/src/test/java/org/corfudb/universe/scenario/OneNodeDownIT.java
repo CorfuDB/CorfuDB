@@ -1,12 +1,6 @@
 package org.corfudb.universe.scenario;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.corfudb.universe.scenario.ScenarioUtils.waitForUnresponsiveServersChange;
-import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_STREAM_NAME;
-import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_TABLE_ITER;
-import static org.junit.jupiter.api.Assertions.fail;
-
-import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.view.ClusterStatusReport;
 import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
 import org.corfudb.runtime.view.ClusterStatusReport.NodeStatus;
@@ -23,6 +17,12 @@ import org.junit.Test;
 import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.universe.scenario.ScenarioUtils.waitForUnresponsiveServersChange;
+import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_STREAM_NAME;
+import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_TABLE_ITER;
+import static org.junit.jupiter.api.Assertions.fail;
 
 public class OneNodeDownIT extends GenericIntegrationTest {
 
@@ -55,11 +55,11 @@ public class OneNodeDownIT extends GenericIntegrationTest {
 
         CorfuClient corfuClient = corfuCluster.getLocalCorfuClient();
 
-        CorfuTable<String, String> table = corfuClient
+        ICorfuTable<String, String> table = corfuClient
                 .createDefaultCorfuTable(DEFAULT_STREAM_NAME);
 
         for (int i = 0; i < DEFAULT_TABLE_ITER; i++) {
-            table.put(String.valueOf(i), String.valueOf(i));
+            table.insert(String.valueOf(i), String.valueOf(i));
         }
 
         //Should stop one node and then restart

@@ -1,5 +1,8 @@
 package org.corfudb.runtime.object.transactions;
 
+import lombok.Getter;
+import org.corfudb.runtime.object.MVOCorfuCompileProxy;
+
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -7,11 +10,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
-
-import org.corfudb.runtime.object.ICorfuSMR;
-import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
-
-import lombok.Getter;
 
 /**
  * This class captures information about objects accessed (read) during speculative
@@ -21,10 +19,10 @@ import lombok.Getter;
 public class ConflictSetInfo {
 
     /** Set of objects this conflict set conflicts with. */
-    protected Map<ICorfuSMRProxyInternal, Set<Object>> conflicts = new HashMap<>();
+    protected Map<MVOCorfuCompileProxy, Set<Object>> conflicts = new HashMap<>();
 
     /** Get a hash for the object, given a proxy. */
-    public static byte[] generateHashFromObject(ICorfuSMRProxyInternal p, Object o) {
+    public static byte[] generateHashFromObject(MVOCorfuCompileProxy p, Object o) {
         return p.getSerializer().hash(o);
     }
 
@@ -57,7 +55,7 @@ public class ConflictSetInfo {
     }
 
     /** Add an operation into this conflict set. */
-    public <T extends ICorfuSMR<T>> void add(ICorfuSMRProxyInternal<T> proxy, Object[] conflictObjects) {
+    public <T> void add(MVOCorfuCompileProxy<?> proxy, Object[] conflictObjects) {
         // Add the conflict objects to the set for this proxy,
         // creating a new set if needed.
         conflicts.compute(proxy, (p, c) -> {

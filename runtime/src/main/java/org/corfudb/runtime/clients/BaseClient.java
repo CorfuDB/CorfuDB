@@ -1,10 +1,11 @@
 package org.corfudb.runtime.clients;
 
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
 import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
+
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 
 import static org.corfudb.protocols.service.CorfuProtocolBase.getPingRequestMsg;
 import static org.corfudb.protocols.service.CorfuProtocolBase.getResetRequestMsg;

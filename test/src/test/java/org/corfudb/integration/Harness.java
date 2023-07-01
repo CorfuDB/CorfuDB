@@ -1,9 +1,5 @@
 package org.corfudb.integration;
 
-import static org.corfudb.AbstractCorfuTest.PARAMETERS;
-import static org.corfudb.integration.AbstractIT.PROPERTIES;
-import static org.corfudb.integration.AbstractIT.getCorfuServerLogPath;
-
 import lombok.Builder;
 import lombok.Getter;
 import org.corfudb.integration.cluster.Harness.Action;
@@ -20,6 +16,10 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
+
+import static org.corfudb.AbstractCorfuTest.PARAMETERS;
+import static org.corfudb.integration.AbstractIT.PROPERTIES;
+import static org.corfudb.integration.AbstractIT.getCorfuServerLogPath;
 
 /**
  * Utilities to form and manipulate a corfu cluster. This class provides a convenience instance builder

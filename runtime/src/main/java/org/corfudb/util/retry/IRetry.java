@@ -1,8 +1,8 @@
 package org.corfudb.util.retry;
 
-import java.util.function.Consumer;
-
 import lombok.SneakyThrows;
+
+import java.util.function.Consumer;
 
 
 /**

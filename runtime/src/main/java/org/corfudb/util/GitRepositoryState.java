@@ -1,8 +1,9 @@
 package org.corfudb.util;
 
+import lombok.extern.slf4j.Slf4j;
+
 import java.io.IOException;
 import java.util.Properties;
-import lombok.extern.slf4j.Slf4j;
 
 /**
  * Created by mwei on 8/12/15.

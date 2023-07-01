@@ -3,13 +3,14 @@ package org.corfudb.runtime.collections;
 import io.netty.buffer.Unpooled;
 import org.corfudb.util.serializer.ISerializer;
 import org.rocksdb.ReadOptions;
-import org.rocksdb.RocksDB;
+import org.rocksdb.RocksIterator;
 
 import javax.annotation.concurrent.NotThreadSafe;
 import java.util.AbstractMap;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.concurrent.locks.StampedLock;
 
 /**
  *
@@ -20,15 +21,17 @@ import java.util.NoSuchElementException;
 @NotThreadSafe
 public class RocksDbEntryIterator<K, V> implements Iterator<Map.Entry<K, V>>, AutoCloseable {
 
+    public static final boolean LOAD_VALUES = true;
+
     /**
      * A reference to the underlying RocksDb iterator
      */
-    final private WrappedRocksIterator wrappedRocksIterator;
+    private final CheckedRocksIterator wrappedRocksIterator;
 
     /**
      * Serializer to serialize/deserialize the key/values
      */
-    final private ISerializer serializer;
+    private final ISerializer serializer;
 
     /**
      * place holder for the current value
@@ -40,20 +43,11 @@ public class RocksDbEntryIterator<K, V> implements Iterator<Map.Entry<K, V>>, Au
      */
     private final boolean loadValues;
 
-    final private ReadOptions readOptions;
-
-    public RocksDbEntryIterator(RocksDB rocksDB, ISerializer serializer, boolean loadValues) {
-        // Start iterator at the current snapshot
-        readOptions = new ReadOptions();
-        readOptions.setSnapshot(null);
-        this.wrappedRocksIterator = new WrappedRocksIterator(rocksDB.newIterator(readOptions));
+    public RocksDbEntryIterator(RocksIterator rocksIterator, ISerializer serializer,
+                                ReadOptions readOptions, StampedLock lock, boolean loadValues) {
+        this.wrappedRocksIterator = new CheckedRocksIterator(rocksIterator, lock, readOptions);
         this.serializer = serializer;
-        wrappedRocksIterator.seekToFirst();
         this.loadValues = loadValues;
-    }
-
-    public RocksDbEntryIterator(RocksDB rocksDB, ISerializer serializer) {
-        this(rocksDB, serializer, true);
     }
 
     /**
@@ -73,7 +67,6 @@ public class RocksDbEntryIterator<K, V> implements Iterator<Map.Entry<K, V>>, Au
         if (next == null && wrappedRocksIterator.isOpen()) {
             // close the iterator if it has fully consumed.
             wrappedRocksIterator.close();
-            readOptions.close();
         }
 
         return next != null;
@@ -98,10 +91,13 @@ public class RocksDbEntryIterator<K, V> implements Iterator<Map.Entry<K, V>>, Au
      */
     @Override
     public void close() {
-        // Release the underlying RocksDB resources
+        // Release the underlying RocksDB resources.
         if (wrappedRocksIterator.isOpen()) {
             wrappedRocksIterator.close();
-            readOptions.close();
         }
+    }
+
+    public void invalidateIterator() {
+        wrappedRocksIterator.invalidateIterator();
     }
 }

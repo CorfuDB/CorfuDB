@@ -1,6 +1,5 @@
 package org.corfudb.protocols;
 
-import java.util.UUID;
 import org.corfudb.protocols.wireprotocol.orchestrator.AddNodeRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.CreateWorkflowResponse;
 import org.corfudb.protocols.wireprotocol.orchestrator.ForceRemoveNodeRequest;
@@ -12,10 +11,12 @@ import org.corfudb.runtime.proto.Workflows.AddNodeWorkflowMsg;
 import org.corfudb.runtime.proto.Workflows.CreatedWorkflowMsg;
 import org.corfudb.runtime.proto.Workflows.ForceRemoveNodeWorkflowMsg;
 import org.corfudb.runtime.proto.Workflows.HealNodeWorkflowMsg;
-import org.corfudb.runtime.proto.Workflows.RemoveNodeWorkflowMsg;
-import org.corfudb.runtime.proto.Workflows.RestoreRedundancyMergeSegmentsWorkflowMsg;
 import org.corfudb.runtime.proto.Workflows.QueriedWorkflowMsg;
 import org.corfudb.runtime.proto.Workflows.QueryWorkflowMsg;
+import org.corfudb.runtime.proto.Workflows.RemoveNodeWorkflowMsg;
+import org.corfudb.runtime.proto.Workflows.RestoreRedundancyMergeSegmentsWorkflowMsg;
+
+import java.util.UUID;
 
 import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
 import static org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg;

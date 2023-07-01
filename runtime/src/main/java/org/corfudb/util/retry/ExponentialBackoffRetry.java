@@ -1,12 +1,12 @@
 package org.corfudb.util.retry;
 
-import java.time.Duration;
-import java.util.Random;
-
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.util.Sleep;
+
+import java.time.Duration;
+import java.util.Random;
 
 
 /**

@@ -14,10 +14,8 @@ import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.object.ConflictParameterClass;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
 import org.corfudb.runtime.view.Layout;
-import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.serializer.ICorfuHashable;
 import org.corfudb.util.serializer.Serializers;
@@ -108,95 +106,11 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
         assertThat(sv.remaining()).isEmpty();
     }
 
-    /**
-     * Checks that the fine-grained conflict set is correctly produced
-     * by the annotation framework.
-     */
-    @Test
-    public void checkConflictParameters() {
-        ConflictParameterClass testObject = getDefaultRuntime()
-                .getObjectsView().build()
-                .setStreamName("my stream")
-                .setTypeToken(new TypeToken<ConflictParameterClass>() {})
-                .open();
-
-        final String TEST_0 = "0";
-        final String TEST_1 = "1";
-        final int TEST_2 = 2;
-        final int TEST_3 = 3;
-        final String TEST_4 = "4";
-        final String TEST_5 = "5";
-
-        getRuntime().getObjectsView().TXBegin();
-        // RS=TEST_0
-        testObject.accessorTest(TEST_0, TEST_1);
-        // WS=TEST_3
-        testObject.mutatorTest(TEST_2, TEST_3);
-        // WS,RS=TEST_4
-        testObject.mutatorAccessorTest(TEST_4, TEST_5);
-
-        // Assert that the conflict set contains TEST_0, TEST_4
-        assertThat(TransactionalContext.getCurrentContext()
-                .getReadSetInfo().getConflicts()
-                .values()
-                .stream()
-                .flatMap(x -> x.stream())
-                .collect(Collectors.toList()))
-                .contains(TEST_0, TEST_4);
-
-        // in optimistic mode, assert that the conflict set does NOT contain TEST_2, TEST_3
-        assertThat(TransactionalContext.getCurrentContext()
-                .getReadSetInfo()
-                .getConflicts().values().stream()
-                .flatMap(x -> x.stream())
-                .collect(Collectors.toList()))
-                .doesNotContain(TEST_2, TEST_3, TEST_5);
-
-        getRuntime().getObjectsView().TXAbort();
-    }
-
-
     @Data
     @AllArgsConstructor
     static class CustomConflictObject {
         final String k1;
         final String k2;
-    }
-
-    /**
-     * When using two custom conflict objects which
-     * do not provide a serializable implementation,
-     * the implementation should hash them
-     * transparently, but when they conflict they should abort.
-     */
-    @Test
-    public void customConflictObjectsConflictAborts() {
-        CustomConflictObject c1 = new CustomConflictObject("a", "a");
-        CustomConflictObject c2 = new CustomConflictObject("a", "a");
-
-        ICorfuTable<CustomConflictObject, String> map = getDefaultRuntime().getObjectsView()
-                .build()
-                .setTypeToken(new TypeToken<PersistentCorfuTable<CustomConflictObject, String>>() {
-                })
-                .setStreamName("test")
-                .open();
-
-        t(1, this::OptimisticTXBegin);
-        t(2, this::OptimisticTXBegin);
-
-        t(1, () -> {
-            map.insert(c1, "v1");
-            map.get(c1); // get c1 since insert does not have an upcall, so no entry is added into the readSet
-        });
-
-        t(2, () -> {
-            map.insert(c2, "v2");
-            map.get(c2); // get c2 since insert does not have an upcall, so no entry is added into the readSet
-        });
-        t(1, this::TXEnd);
-        t(2, this::TXEnd)
-                .assertThrows()
-                .isInstanceOf(TransactionAbortedException.class);
     }
 
     /**

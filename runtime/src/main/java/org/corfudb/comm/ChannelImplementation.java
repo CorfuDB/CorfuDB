@@ -17,10 +17,11 @@ import io.netty.channel.local.LocalServerChannel;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
-import java.util.concurrent.ThreadFactory;
-import javax.annotation.Nonnull;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
+
+import javax.annotation.Nonnull;
+import java.util.concurrent.ThreadFactory;
 
 /** An enum representing channel implementation types available to the client. */
 @AllArgsConstructor
