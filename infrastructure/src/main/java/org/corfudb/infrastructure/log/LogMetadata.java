@@ -5,8 +5,8 @@ import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.wireprotocol.LogData;
-import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.view.stream.StreamAddressSpace;
 
 import javax.annotation.concurrent.NotThreadSafe;
 import java.util.Collections;

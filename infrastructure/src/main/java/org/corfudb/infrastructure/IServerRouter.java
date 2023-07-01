@@ -2,9 +2,6 @@ package org.corfudb.infrastructure;
 
 import com.google.protobuf.TextFormat;
 import io.netty.channel.ChannelHandlerContext;
-import java.util.List;
-import java.util.Optional;
-
 import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
 import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
 import org.corfudb.runtime.proto.RpcCommon.UuidMsg;
@@ -15,10 +12,13 @@ import org.corfudb.runtime.view.Layout;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.List;
+import java.util.Optional;
+
 import static org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg;
+import static org.corfudb.protocols.CorfuProtocolServerErrors.getNotBootstrappedErrorMsg;
 import static org.corfudb.protocols.CorfuProtocolServerErrors.getWrongClusterErrorMsg;
 import static org.corfudb.protocols.CorfuProtocolServerErrors.getWrongEpochErrorMsg;
-import static org.corfudb.protocols.CorfuProtocolServerErrors.getNotBootstrappedErrorMsg;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getHeaderMsg;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getResponseMsg;
 

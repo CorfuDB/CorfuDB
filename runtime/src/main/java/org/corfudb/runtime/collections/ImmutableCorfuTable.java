@@ -10,11 +10,16 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.collections.vavr.TupleIterableWrapper;
-import org.corfudb.runtime.object.ICorfuExecutionContext;
-import org.corfudb.runtime.object.ICorfuSMR;
+import org.corfudb.runtime.object.ConsistencyView;
+import org.corfudb.runtime.object.InMemorySMRSnapshot;
+import org.corfudb.runtime.object.SMRSnapshot;
+import org.corfudb.runtime.object.SnapshotGenerator;
+import org.corfudb.runtime.object.VersionedObjectIdentifier;
+import org.corfudb.runtime.view.ObjectOpenOption;
 
 import javax.annotation.Nonnull;
 import java.util.Collections;
+import java.util.Optional;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
@@ -29,8 +34,9 @@ import java.util.stream.StreamSupport;
  */
 @Slf4j
 @AllArgsConstructor(access = AccessLevel.PRIVATE)
-// TODO: don't need to implement ICorfuSMR?
-public class ImmutableCorfuTable<K, V> implements ICorfuSMR<ImmutableCorfuTable<K, V>> {
+public class ImmutableCorfuTable<K, V> implements
+        SnapshotGenerator<ImmutableCorfuTable<K, V>>,
+        ConsistencyView {
 
     // The "main" map which contains the primary key-value mappings.
     private final Map<K, V> mainMap;
@@ -44,7 +50,7 @@ public class ImmutableCorfuTable<K, V> implements ICorfuSMR<ImmutableCorfuTable<
      * @param <V> The value type.
      * @return A type token to pass to the builder.
      */
-    public static <K, V> TypeToken<ImmutableCorfuTable<K, V>> getTableType() {
+    public static <K, V> TypeToken<ImmutableCorfuTable<K, V>> getTypeToken() {
         return new TypeToken<ImmutableCorfuTable<K, V>>() {};
     }
 
@@ -59,8 +65,45 @@ public class ImmutableCorfuTable<K, V> implements ICorfuSMR<ImmutableCorfuTable<
     }
 
     @Override
-    public ImmutableCorfuTable<K, V> getContext(ICorfuExecutionContext.Context context) {
-        return this;
+    public SMRSnapshot<ImmutableCorfuTable<K, V>> generateSnapshot(@Nonnull VersionedObjectIdentifier version) {
+        return new InMemorySMRSnapshot<>(this);
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public Optional<SMRSnapshot<ImmutableCorfuTable<K, V>>> generateTargetSnapshot(
+            VersionedObjectIdentifier version,
+            ObjectOpenOption objectOpenOption,
+            SMRSnapshot<ImmutableCorfuTable<K, V>> previousSnapshot) {
+        if (objectOpenOption == ObjectOpenOption.NO_CACHE) {
+            // Always release the previous target version.
+            previousSnapshot.release();
+            return Optional.of(new InMemorySMRSnapshot<>(this));
+        }
+
+        return Optional.empty();
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public Optional<SMRSnapshot<ImmutableCorfuTable<K, V>>> generateIntermediarySnapshot(
+            VersionedObjectIdentifier version,
+            ObjectOpenOption objectOpenOption) {
+        if (objectOpenOption == ObjectOpenOption.NO_CACHE) {
+            // We never generate an intermediary version.
+            return Optional.empty();
+        }
+
+        return Optional.of(new InMemorySMRSnapshot<>(this));
+    }
+
+    @Override
+    public void close() {
+        // Noop.
     }
 
     /**

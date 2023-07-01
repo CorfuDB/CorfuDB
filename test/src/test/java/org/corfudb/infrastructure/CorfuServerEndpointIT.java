@@ -7,12 +7,9 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.junit.Test;
 
 import java.io.IOException;
-import java.net.Inet4Address;
-import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
 import java.net.SocketException;
-import java.net.UnknownHostException;
 import java.util.Enumeration;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -47,25 +44,22 @@ public class CorfuServerEndpointIT extends AbstractIT {
                 .runServer();
     }
 
-    private String getLocalNetworkInterface() throws UnknownHostException, SocketException {
-        return NetworkInterface.getByInetAddress(InetAddress.getLocalHost()).getName();
-    }
-
-    private String getVersionSpecificNetworkAddress(NetworkInterfaceVersion networkInterfaceVersion) throws SocketException, UnknownHostException {
-
-        // Get the default local host address's network interface
-        Enumeration<InetAddress> inetAddressEnumeration = NetworkInterface.getByInetAddress(
-                InetAddress.getLocalHost()).getInetAddresses();
-
-        // Find an address that matches with the version.
-        while (inetAddressEnumeration.hasMoreElements()){
-            InetAddress inetAddress = inetAddressEnumeration.nextElement();
-            if (inetAddress instanceof Inet6Address && networkInterfaceVersion == NetworkInterfaceVersion.IPV6) {
-                return inetAddress.getHostAddress();
-            } else if (inetAddress instanceof Inet4Address && networkInterfaceVersion == NetworkInterfaceVersion.IPV4) {
-                return inetAddress.getHostAddress();
+    private String getLocalNetworkInterface() throws SocketException {
+        Enumeration<NetworkInterface> networkInterfaces = NetworkInterface.getNetworkInterfaces();
+        while (networkInterfaces.hasMoreElements()) {
+            NetworkInterface networkInterface = networkInterfaces.nextElement();
+            Enumeration<InetAddress> inetAddresses = networkInterface.getInetAddresses();
+            while (inetAddresses.hasMoreElements()) {
+                InetAddress inetAddress = inetAddresses.nextElement();
+                if (!inetAddress.isLoopbackAddress()) {
+                    continue;
+                }
+                if (inetAddress.getHostAddress().contains(".") || inetAddress.getHostAddress().contains(":")) {
+                    return networkInterface.getName();
+                }
             }
         }
+
         return null;
     }
 
@@ -81,12 +75,34 @@ public class CorfuServerEndpointIT extends AbstractIT {
         testEndpointOnlyHelper(NetworkInterfaceVersion.IPV6);
     }
 
+    public static String getLoopbackAddress(NetworkInterfaceVersion version) throws SocketException {
+            Enumeration<NetworkInterface> networkInterfaces = NetworkInterface.getNetworkInterfaces();
+            while (networkInterfaces.hasMoreElements()) {
+                NetworkInterface networkInterface = networkInterfaces.nextElement();
+                Enumeration<InetAddress> inetAddresses = networkInterface.getInetAddresses();
+                while (inetAddresses.hasMoreElements()) {
+                    InetAddress inetAddress = inetAddresses.nextElement();
+                    if (!inetAddress.isLoopbackAddress()) {
+                        continue;
+                    }
+                    if (version == NetworkInterfaceVersion.IPV4 && inetAddress.getHostAddress().contains(".")) {
+                        return inetAddress.getHostAddress();
+                    } else if (version == NetworkInterfaceVersion.IPV6 && inetAddress.getHostAddress().contains(":")) {
+                        return inetAddress.getHostAddress();
+                    }
+                }
+            }
+
+        return null;
+    }
+
     /**
      * Helper method to test that Corfu Server runs when only endpoint address is configured.
      * (No network interface)
      */
     private void testEndpointOnlyHelper(NetworkInterfaceVersion networkInterfaceVersion) throws Exception {
-        String address = getVersionSpecificNetworkAddress(networkInterfaceVersion);
+        String address = getLoopbackAddress(networkInterfaceVersion);
+
         if (address != null) {
             Process corfuServerProcess = runCorfuServerWithAddress(address, networkInterfaceVersion);
             CorfuRuntime corfuRuntime = createRuntime(getVersionFormattedEndpointURL(address, PORT_INT_9000));

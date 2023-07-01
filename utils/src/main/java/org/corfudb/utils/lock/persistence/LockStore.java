@@ -6,7 +6,11 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.collections.*;
+import org.corfudb.runtime.collections.CorfuStore;
+import org.corfudb.runtime.collections.CorfuStoreEntry;
+import org.corfudb.runtime.collections.Table;
+import org.corfudb.runtime.collections.TableOptions;
+import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.utils.CommonTypes.Uuid;
 import org.corfudb.utils.lock.LockDataTypes;
 import org.corfudb.utils.lock.LockDataTypes.LockData;
@@ -20,8 +24,8 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
-import static org.corfudb.utils.lock.Lock.leaseDuration;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
+import static org.corfudb.utils.lock.Lock.leaseDuration;
 
 /**
  * Enables instances of <class>Lock</class> to acquire locks and renew leases.

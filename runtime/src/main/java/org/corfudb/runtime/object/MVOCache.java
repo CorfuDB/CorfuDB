@@ -10,8 +10,10 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.collections.PersistedCorfuTable;
 
 import javax.annotation.Nonnull;
+import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -25,16 +27,35 @@ import java.util.stream.Collectors;
  * cache-related properties (LRU) under the hood.
  */
 @Slf4j
-public class MVOCache<T extends ICorfuSMR<T>> {
+public class MVOCache<S extends SnapshotGenerator<S>> {
 
     /**
      * A collection of strong references to all versioned objects and their state.
      */
     @Getter
-    private final Cache<VersionedObjectIdentifier, T> objectCache;
+    final Cache<VersionedObjectIdentifier, SMRSnapshot<S>> objectCache;
+
+    /**
+     * Construct an MVO cache whose eviction policy is strictly time based.
+     * This is used in the context of {@link PersistedCorfuTable} where
+     * snapshots are merely references and thus do not consume any significant
+     * amount of resources.
+     *
+     * @param expireAfter time after which a snapshot will be considered invalid
+     */
+    public MVOCache(Duration expireAfter) {
+        // See https://github.com/google/guava/wiki/CachesExplained#when-does-cleanup-happen
+        this.objectCache = CacheBuilder.newBuilder()
+                .expireAfterWrite(expireAfter)
+                .removalListener(this::handleEviction)
+                .recordStats()
+                .build();
+
+        MeterRegistryProvider.getInstance()
+                .map(registry -> GuavaCacheMetrics.monitor(registry, objectCache, "mvo_cache"));
+    }
 
     public MVOCache(@Nonnull CorfuRuntime corfuRuntime) {
-
         // If not explicitly set by user, it takes default value in CorfuRuntimeParameters
         long maxCacheSize = corfuRuntime.getParameters().getMaxMvoCacheEntries();
         if (corfuRuntime.getParameters().isCacheDisabled()) {
@@ -53,8 +74,9 @@ public class MVOCache<T extends ICorfuSMR<T>> {
                 .map(registry -> GuavaCacheMetrics.monitor(registry, objectCache, "mvo_cache"));
     }
 
-    private void handleEviction(RemovalNotification<VersionedObjectIdentifier, T> notification) {
+    public void handleEviction(RemovalNotification<VersionedObjectIdentifier, SMRSnapshot<S>> notification) {
         log.trace("handleEviction: evicting {} cause {}", notification.getKey(), notification.getCause());
+        notification.getValue().release();
     }
 
     /**
@@ -68,7 +90,7 @@ public class MVOCache<T extends ICorfuSMR<T>> {
      * @param voId The desired object version.
      * @return An optional containing the corresponding versioned object, if present.
      */
-    public Optional<T> get(@Nonnull VersionedObjectIdentifier voId) {
+    public Optional<SMRSnapshot<S>> get(@Nonnull VersionedObjectIdentifier voId) {
         if (log.isTraceEnabled()) {
             log.trace("MVOCache: performing a get for {}", voId.toString());
         }
@@ -81,9 +103,10 @@ public class MVOCache<T extends ICorfuSMR<T>> {
      * @param voId   The version of the object being placed into the cache.
      * @param object The actual underlying object corresponding to this voId.
      */
-    public void put(@Nonnull VersionedObjectIdentifier voId, @Nonnull T object) {
+    public void put(@Nonnull VersionedObjectIdentifier voId, @Nonnull SMRSnapshot<S> object) {
+        objectCache.cleanUp();
         if (log.isTraceEnabled()) {
-            log.trace("MVOCache: performing a put for {}", voId.toString());
+            log.trace("MVOCache: performing a put for {}", voId);
         }
 
         objectCache.put(voId, object);

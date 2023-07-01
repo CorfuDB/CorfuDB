@@ -11,7 +11,6 @@ import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.object.transactions.TransactionType;
-import org.corfudb.runtime.view.SMRObject;
 
 import java.util.Collection;
 import java.util.HashMap;

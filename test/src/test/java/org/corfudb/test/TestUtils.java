@@ -1,13 +1,13 @@
 package org.corfudb.test;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.corfudb.AbstractCorfuTest.PARAMETERS;
-
-import java.util.function.Predicate;
-
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.Sleep;
+
+import java.util.function.Predicate;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.AbstractCorfuTest.PARAMETERS;
 
 /**
  * Created by zlokhandwala on 2019-06-06.

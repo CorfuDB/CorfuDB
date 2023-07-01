@@ -1,16 +1,14 @@
 package org.corfudb.runtime.object;
 
 import com.google.common.reflect.TypeToken;
+import org.corfudb.CustomSerializer;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.view.ObjectsView;
-import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
-
-import org.corfudb.CustomSerializer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -39,61 +37,6 @@ public class CorfuSMRObjectProxyTest extends AbstractObjectTest {
 
         assertThat(testMap2.get("a"))
                 .isEqualTo("b");
-    }
-
-    @Test
-    public void canOpenObjectWithTwoRuntimes()
-            throws Exception {
-        getDefaultRuntime();
-
-        final int TEST_VALUE = 42;
-        TestClass testClass = (TestClass)
-                instantiateCorfuObject(new TypeToken<TestClass>() {}, "test");
-
-        testClass.set(TEST_VALUE);
-        assertThat(testClass.get())
-                .isEqualTo(TEST_VALUE);
-
-        CorfuRuntime runtime2 = getNewRuntime(getDefaultNode());
-        runtime2.connect();
-
-        TestClass testClass2 = (TestClass)
-                instantiateCorfuObject(runtime2,
-                        new TypeToken<TestClass>() {}, "test");
-
-        assertThat(testClass2.get())
-                .isEqualTo(TEST_VALUE);
-    }
-
-    @Test
-    @SuppressWarnings("unchecked")
-    public void canUseAnnotations()
-            throws Exception {
-        getDefaultRuntime();
-
-        TestClassUsingAnnotation test = (TestClassUsingAnnotation)
-                instantiateCorfuObject(new TypeToken<TestClassUsingAnnotation>() {}, "test");
-
-        assertThat(test.testFn1())
-                .isTrue();
-
-        assertThat(test.testIncrement())
-                .isTrue();
-
-        assertThat(test.getValue())
-                .isNotZero();
-
-        // clear the cache, forcing a new object to be built.
-        getRuntime().getObjectsView().getObjectCache().clear();
-
-        TestClassUsingAnnotation test2 = (TestClassUsingAnnotation)
-                instantiateCorfuObject(TestClassUsingAnnotation.class, "test");
-
-        assertThat(test)
-                .isNotSameAs(test2);
-
-        assertThat(test2.getValue())
-                .isNotZero();
     }
 
     @Test
@@ -143,10 +86,10 @@ public class CorfuSMRObjectProxyTest extends AbstractObjectTest {
         ObjectsView.ObjectID mapId = new ObjectsView.
                 ObjectID(CorfuRuntime.getStreamID("test"), PersistentCorfuTable.class);
 
-        MVOCorfuCompileProxy cp = ((MVOCorfuCompileProxy) ((ICorfuSMR) r.getObjectsView().
+        ICorfuSMRProxy cp = ((ICorfuSMR) r.getObjectsView().
                 getObjectCache().
                 get(mapId)).
-                getCorfuSMRProxy());
+                getCorfuSMRProxy();
 
         assertThat(cp.getSerializer()).isEqualTo(customSerializer);
     }

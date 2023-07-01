@@ -1,10 +1,11 @@
 package org.corfudb.protocols.wireprotocol.failuredetector;
 
-import java.util.List;
-import java.util.NavigableSet;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import org.corfudb.util.JsonUtils;
+
+import java.util.List;
+import java.util.NavigableSet;
 
 /**
  * Full information about failure that changed cluster state.

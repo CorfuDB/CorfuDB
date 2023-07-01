@@ -1,12 +1,13 @@
 package org.corfudb.runtime.view.replication;
 
-import java.time.Duration;
-import java.util.function.Function;
-import javax.annotation.Nonnull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.exceptions.HoleFillRequiredException;
 import org.corfudb.util.Sleep;
+
+import javax.annotation.Nonnull;
+import java.time.Duration;
+import java.util.function.Function;
 
 
 /**

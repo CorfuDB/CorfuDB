@@ -1,14 +1,15 @@
 package org.corfudb.protocols;
 
-import java.util.stream.Collectors;
-import com.google.common.collect.ImmutableBiMap;
 import com.google.common.collect.EnumBiMap;
+import com.google.common.collect.ImmutableBiMap;
 import com.google.common.collect.ImmutableMap;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.ConnectionStatus;
 import org.corfudb.runtime.proto.NodeConnectivity.ConnectivityEntryMsg;
 import org.corfudb.runtime.proto.NodeConnectivity.NodeConnectivityMsg;
 import org.corfudb.runtime.proto.NodeConnectivity.NodeConnectivityType;
+
+import java.util.stream.Collectors;
 
 /**
  * This class provides methods for creating the Protobuf objects

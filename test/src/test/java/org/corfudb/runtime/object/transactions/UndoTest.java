@@ -1,61 +1,75 @@
 package org.corfudb.runtime.object.transactions;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import com.google.common.reflect.TypeToken;
-
-import java.util.ArrayList;
-
-import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.junit.Test;
+
+import java.util.ArrayList;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Created by dalia on 3/6/17.
  */
 public class UndoTest extends AbstractTransactionsTest {
+
+    private static final String Z = "z";
+    private static final String A = "a";
+    private static final String Y = "y";
+    private static final String X = "x";
+
+    final int specialKey = 10;
+    final String normalValue = Z;
+    final String specialValue = Y;
+    final String specialValue2 = X;
+    final int t1 = 1;
+    final int t2 = 2;
+    final int t3 = 3;
+
     @Override
     public void TXBegin() { WWTXBegin(); }
-
 
     @Test
     public void ckCorrectUndo()
             throws Exception {
-        CorfuTable<String, String> testMap = getRuntime()
+        PersistentCorfuTable<String, String> testMap = getRuntime()
                 .getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {
                 })
                 .open();
+        
 
         // populate the map with an element
-        t(0, () -> testMap.put("z", "z"));
+        t(0, () -> testMap.insert(Z, Z));
 
         // start a transaction whose snapshot of the map
-        // should contain precisely one element, ("z", "z")
+        // should contain precisely one element, (z, z)
         //
         t(0, () -> getRuntime().getObjectsView().TXBegin());
         t(0, () -> {
-            assertThat(testMap.get("z"))
-                    .isEqualTo("z");
-            testMap.put("a", "a");
+            assertThat(testMap.get(Z))
+                    .isEqualTo(Z);
+            testMap.insert(A, A);
         });
 
         // in another thread, do something to be undone
         t(1, () -> {
-            assertThat(testMap.get("z"))
-                    .isEqualTo("z");
-            testMap.put("y", "y");
+            assertThat(testMap.get(Z))
+                    .isEqualTo(Z);
+            testMap.insert(Y, Y);
         });
 
         // now check the map inside the transaction
-        // it should contain two elements, ("z", "z") and ("a", "a")
-        // it should not contain ("y", "y")
+        // it should contain two elements, (z, z) and (a, a)
+        // it should not contain (y, y)
         t(0, () -> {
-            assertThat(testMap.get("z"))
-                    .isEqualTo("z");
-            assertThat(testMap.get("y"))
+            assertThat(testMap.get(Z))
+                    .isEqualTo(Z);
+            assertThat(testMap.get(Y))
                     .isEqualTo(null);
             assertThat(testMap.size())
                     .isEqualTo(2);
@@ -65,47 +79,47 @@ public class UndoTest extends AbstractTransactionsTest {
     @Test
     public void canRollbackWithoutUndo()
             throws Exception {
-        CorfuTable<String, String> testMap = getRuntime()
+        PersistentCorfuTable<String, String> testMap = getRuntime()
                 .getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {
                 })
                 .open();
 
         // populate the map with an element
-        t(0, () -> testMap.put("z", "z"));
+        t(0, () -> testMap.insert(Z, Z));
 
         // start a transaction whose snapshot of the map
-        // should contain precisely one element, ("z", "z")
+        // should contain precisely one element, (z, z)
         //
         t(0, () -> getRuntime().getObjectsView().TXBegin());
         t(0, () -> {
-            assertThat(testMap.get("z"))
-                    .isEqualTo("z");
-            testMap.put("a", "a");
+            assertThat(testMap.get(Z))
+                    .isEqualTo(Z);
+            testMap.insert(A, A);
         });
 
         // in another thread, do something to the map that cannot be undone
         t(1, () -> {
-            assertThat(testMap.get("z"))
-                    .isEqualTo("z");
-            testMap.put("y", "y");
+            assertThat(testMap.get(Z))
+                    .isEqualTo(Z);
+            testMap.insert(Y, Y);
             testMap.clear();
             assertThat(testMap.size())
                     .isEqualTo(0);
-            assertThat(testMap.get("z"))
+            assertThat(testMap.get(Z))
                     .isEqualTo(null);
         });
 
         // now check the map inside the transaction
-        // it should contain two elements, ("z", "z") and ("a", "a")
-        // it should not contain ("y", "y")
+        // it should contain two elements, (z, z) and (a, a)
+        // it should not contain (y, y)
         // it should not be clear
         t(0, () -> {
-            assertThat(testMap.get("z"))
-                    .isEqualTo("z");
-            assertThat(testMap.get("y"))
+            assertThat(testMap.get(Z))
+                    .isEqualTo(Z);
+            assertThat(testMap.get(Y))
                     .isEqualTo(null);
             assertThat(testMap.size())
                     .isEqualTo(2);
@@ -119,26 +133,24 @@ public class UndoTest extends AbstractTransactionsTest {
      * <p>
      * This test verifies that after one transaction with undoable operation is rolled- back,
      * the performance of further transactions is not hurt.
-     *
-     * @throws Exception
      */
     @Test
-    public void canUndoAfterNoUndo()
-            throws Exception {
-        CorfuTable<Integer, String> testMap = getRuntime()
+    public void canUndoAfterNoUndo() {
+        PersistentCorfuTable<Integer, String> testMap = getRuntime()
                 .getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setTypeToken(new TypeToken<CorfuTable<Integer, String>>() {
+                .setTypeToken(new TypeToken<PersistentCorfuTable<Integer, String>>() {
                 })
                 .open();
         final int specialKey = 10;
-        final String normalValue = "z", specialValue = "y";
+        final String normalValue = Z;
+        final String specialValue = Y;
         final int mapSize = 10 * PARAMETERS.NUM_ITERATIONS_LARGE;
 
         // populate the map with many elements
         for (int i = 0; i < mapSize; i++)
-            testMap.put(i, normalValue);
+            testMap.insert(i, normalValue);
 
         // start a transaction after the map was built
         t(0, () -> {
@@ -181,7 +193,7 @@ public class UndoTest extends AbstractTransactionsTest {
                     .isEqualTo(mapSize);
 
             getRuntime().getObjectsView().TXBegin();
-            testMap.put(specialKey, specialValue);
+            testMap.insert(specialKey, specialValue);
             assertThat(testMap.get(specialKey))
                     .isEqualTo(specialValue);
         });
@@ -207,21 +219,22 @@ public class UndoTest extends AbstractTransactionsTest {
     @Test
     public void ckRollbackToRightPlace()
             throws Exception {
-        CorfuTable<Integer, String> testMap = getRuntime()
+        PersistentCorfuTable<Integer, String> testMap = getRuntime()
                 .getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setTypeToken(new TypeToken<CorfuTable<Integer, String>>() {
+                .setTypeToken(new TypeToken<PersistentCorfuTable<Integer, String>>() {
                 })
                 .open();
 
         final int specialKey = 10;
-        final String normalValue = "z", specialValue = "y";
+        final String normalValue = Z;
+        final String specialValue = Y;
         final int mapSize = 10 * PARAMETERS.NUM_ITERATIONS_LARGE;
 
         // put something in map before t1 starts
         WWTXBegin();
-        testMap.put(specialKey, normalValue);
+        testMap.insert(specialKey, normalValue);
         TXEnd();
 
         // t1 starts transaction. snapshot should include the key inserted above
@@ -230,7 +243,7 @@ public class UndoTest extends AbstractTransactionsTest {
         // another update to the entry is committed while TXs are pending on
         // both t1 and t2
         WWTXBegin();
-        testMap.put(specialKey, specialValue);
+        testMap.insert(specialKey, specialValue);
         TXEnd();
 
         // t2 starts a transaction. snapshot should include the second
@@ -239,7 +252,7 @@ public class UndoTest extends AbstractTransactionsTest {
         // t2 attempts to remove it, and commits.
         t(2, () -> {
             WWTXBegin();
-            testMap.remove(specialKey);
+            testMap.delete(specialKey);
             TXEnd();
         });
 
@@ -250,10 +263,6 @@ public class UndoTest extends AbstractTransactionsTest {
             TXEnd();
         });
     }
-
-    final int specialKey = 10;
-    final String normalValue = "z", specialValue = "y", specialValue2 = "x";
-    final int t1 = 1, t2 = 2, t3 = 3;
 
     /**
      * In this test, transactions are started on two threads, 1, 2.
@@ -267,14 +276,13 @@ public class UndoTest extends AbstractTransactionsTest {
      * @throws Exception
      */
     @Test
-    public void ckMultiStreamRollback()
-            throws Exception {
-        ArrayList<CorfuTable> maps = new ArrayList<>();
+    public void ckMultiStreamRollback() {
+        ArrayList<PersistentCorfuTable> maps = new ArrayList<>();
 
         final int nmaps = 3;
         for (int i = 0; i < nmaps; i++)
-            maps.add( (CorfuTable<Integer, String>) instantiateCorfuObject(
-                new TypeToken<CorfuTable<Integer, String>>() {}, "test stream" + i)
+            maps.add((PersistentCorfuTable<Integer, String>) instantiateCorfuObject(
+                new TypeToken<PersistentCorfuTable<Integer, String>>() {}, "test stream" + i)
             );
 
         // before t1 starts
@@ -304,7 +312,7 @@ public class UndoTest extends AbstractTransactionsTest {
 
         // t1 should undo everything by t2 and by t3
         t(t1, () -> {
-            for (CorfuTable m : maps) {
+            for (PersistentCorfuTable m : maps) {
                 assertThat(m.get(specialKey))
                         .isEqualTo(normalValue);
                 assertThat(m.get(specialKey+1))
@@ -315,12 +323,12 @@ public class UndoTest extends AbstractTransactionsTest {
         // now, t2 optimistically modifying everything, but
         // not yet committing
         t(t2, () -> {
-                    for (CorfuTable m : maps)
-                        m.put(specialKey, specialValue2);
-                } );
+                    for (PersistentCorfuTable m : maps) {
+                        m.insert(specialKey, specialValue2);
+                    }});
 
         // main thread, t2's work should be committed
-        for (CorfuTable m : maps) {
+        for (PersistentCorfuTable m : maps) {
             assertThat(m.get(specialKey))
                     .isEqualTo(specialValue);
             assertThat(m.get(specialKey + 1))
@@ -340,7 +348,7 @@ public class UndoTest extends AbstractTransactionsTest {
         });
 
         // back to main thread, t2's work should be committed
-        for (CorfuTable m : maps) {
+        for (PersistentCorfuTable m : maps) {
             assertThat(m.get(specialKey))
                     .isEqualTo(specialValue);
             assertThat(m.get(specialKey + 1))
@@ -362,19 +370,15 @@ public class UndoTest extends AbstractTransactionsTest {
      *
      * then t1 resumes and should roll back both the optimistic updates
      * adn these commits.
-     *
-     * @throws Exception
      */
     @Test
-    public void ckMultiStreamRollback2()
-            throws Exception {
-        ArrayList<CorfuTable> maps = new ArrayList<>();
+    public void ckMultiStreamRollback2() {
+        ArrayList<PersistentCorfuTable> maps = new ArrayList<>();
 
         final int nmaps = 3;
         for (int i = 0; i < nmaps; i++)
-            maps.add( (CorfuTable<Integer, String>) instantiateCorfuObject(
-                    new TypeToken<CorfuTable<Integer, String>>() {}, "test stream" + i)
-            );
+            maps.add((PersistentCorfuTable<Integer, String>) instantiateCorfuObject(
+                    new TypeToken<PersistentCorfuTable<Integer, String>>() {}, "test stream" + i));
 
         // before t1 starts
         crossStream(maps, normalValue);
@@ -403,13 +407,13 @@ public class UndoTest extends AbstractTransactionsTest {
         // now, t2 optimistically modifying everything, but
         // not yet committing
         t(t2, () -> {
-            for (CorfuTable m : maps)
-                m.put(specialKey, specialValue2);
-        } );
+            for (PersistentCorfuTable m : maps) {
+                m.insert(specialKey, specialValue2);
+            }});
 
         // t1 should undo everything by t2 and by t3
         t(t1, () -> {
-            for (CorfuTable m : maps) {
+            for (PersistentCorfuTable m : maps) {
                 assertThat(m.get(specialKey))
                         .isEqualTo(normalValue);
                 assertThat(m.get(specialKey+1))
@@ -418,7 +422,7 @@ public class UndoTest extends AbstractTransactionsTest {
         });
 
         // main thread, t2's work should be committed
-        for (CorfuTable m : maps) {
+        for (PersistentCorfuTable m : maps) {
             assertThat(m.get(specialKey))
                     .isEqualTo(specialValue);
             assertThat(m.get(specialKey + 1))
@@ -427,16 +431,16 @@ public class UndoTest extends AbstractTransactionsTest {
 
     }
 
-    protected void crossStream(ArrayList<CorfuTable> maps, String value) {
+    protected void crossStream(ArrayList<PersistentCorfuTable> maps, String value) {
         // put a transaction across all streams
         WWTXBegin();
-        for (CorfuTable m : maps)
-            m.put(specialKey, value);
+        for (PersistentCorfuTable m : maps) {
+            m.insert(specialKey, value);
+        }
         TXEnd();
 
         // put separate updates on all streams before t1 starts
-        for (CorfuTable m : maps)
-            m.put(specialKey + 1, value);
+        for (PersistentCorfuTable m : maps)
+            m.insert(specialKey + 1, value);
     }
-
 }

@@ -1,9 +1,17 @@
 package org.corfudb.runtime.collections;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.reflect.TypeToken;
+import lombok.Data;
+import lombok.Getter;
+import lombok.ToString;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.object.ICorfuSMR;
+import org.corfudb.runtime.view.AbstractViewTest;
+import org.corfudb.util.serializer.Serializers;
+import org.junit.Before;
+import org.junit.Test;
 
 import java.util.Map;
 import java.util.Random;
@@ -12,19 +20,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.IntStream;
 
-import lombok.Data;
-import lombok.Getter;
-import lombok.ToString;
-
-import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.object.ICorfuSMR;
-import org.corfudb.runtime.view.AbstractViewTest;
-import org.corfudb.runtime.view.ObjectOpenOption;
-import org.corfudb.runtime.view.SMRObject;
-import org.corfudb.util.serializer.Serializers;
-import org.junit.Before;
-import org.junit.Test;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Created by mwei on 1/7/16.
@@ -94,7 +91,7 @@ public class SMRMapTest extends AbstractViewTest {
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
                 .open();
 
-        assertThat(id).isEqualTo(testTable.getCorfuStreamID());
+        assertThat(id).isEqualTo(testTable.getCorfuSMRProxy().getStreamID());
     }
 
     @Test

@@ -1,8 +1,9 @@
 package org.corfudb.runtime.exceptions;
 
-import java.util.UUID;
-import javax.annotation.Nullable;
 import lombok.Getter;
+
+import javax.annotation.Nullable;
+import java.util.UUID;
 
 public class WrongClusterException extends RuntimeException {
 

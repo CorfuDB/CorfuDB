@@ -17,8 +17,8 @@ import java.security.cert.X509Certificate;
 
 import static org.corfudb.security.tls.TlsTestContext.CLIENT_CERT;
 import static org.corfudb.security.tls.TlsTestContext.CLIENT_CERT_ECDSA_EXPIRED;
-import static org.corfudb.security.tls.TlsTestContext.CLIENT_TRUST_NO_SERVER;
 import static org.corfudb.security.tls.TlsTestContext.CLIENT_TRUST_ECDSA_EXPIRED_NO_SERVER;
+import static org.corfudb.security.tls.TlsTestContext.CLIENT_TRUST_NO_SERVER;
 import static org.corfudb.security.tls.TlsTestContext.CLIENT_TRUST_WITH_SERVER;
 import static org.corfudb.security.tls.TlsTestContext.SERVER_CERT;
 import static org.corfudb.security.tls.TlsTestContext.SERVER_TRUST_NO_CLIENT;

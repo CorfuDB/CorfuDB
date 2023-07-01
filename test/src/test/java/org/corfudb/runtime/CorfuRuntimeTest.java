@@ -2,12 +2,10 @@ package org.corfudb.runtime;
 
 import org.assertj.core.api.Assertions;
 import org.corfudb.infrastructure.TestLayoutBuilder;
-
 import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.clients.TestRule;
-import org.corfudb.runtime.exceptions.unrecoverable.SystemUnavailableError;
-
 import org.corfudb.runtime.exceptions.WrongEpochException;
+import org.corfudb.runtime.exceptions.unrecoverable.SystemUnavailableError;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.Layout;

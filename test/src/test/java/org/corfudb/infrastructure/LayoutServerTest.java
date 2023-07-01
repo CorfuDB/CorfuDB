@@ -1,8 +1,6 @@
 package org.corfudb.infrastructure;
 
 import io.netty.channel.ChannelHandlerContext;
-import java.util.concurrent.CompletableFuture;
-import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
 import org.assertj.core.api.Assertions;
 import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
@@ -17,15 +15,18 @@ import org.corfudb.runtime.view.Layout;
 import org.junit.Test;
 import org.mockito.Mockito;
 
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.corfudb.infrastructure.LayoutServerAssertions.assertThat;
 import static org.corfudb.protocols.CorfuProtocolCommon.DEFAULT_UUID;
 import static org.corfudb.protocols.service.CorfuProtocolBase.getSealRequestMsg;
-import static org.corfudb.protocols.service.CorfuProtocolLayout.getLayoutRequestMsg;
 import static org.corfudb.protocols.service.CorfuProtocolLayout.getBootstrapLayoutRequestMsg;
+import static org.corfudb.protocols.service.CorfuProtocolLayout.getCommitLayoutRequestMsg;
+import static org.corfudb.protocols.service.CorfuProtocolLayout.getLayoutRequestMsg;
 import static org.corfudb.protocols.service.CorfuProtocolLayout.getPrepareLayoutRequestMsg;
 import static org.corfudb.protocols.service.CorfuProtocolLayout.getProposeLayoutRequestMsg;
-import static org.corfudb.protocols.service.CorfuProtocolLayout.getCommitLayoutRequestMsg;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getHeaderMsg;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getRequestMsg;
 
