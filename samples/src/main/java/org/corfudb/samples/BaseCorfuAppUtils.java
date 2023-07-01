@@ -87,7 +87,7 @@ public abstract class BaseCorfuAppUtils {
      * @param <T> the return class
      * @return an object instance of type T backed by a stream named 'name'
      */
-    protected <T extends ICorfuSMR<T>> T instantiateCorfuObject(
+    protected <T extends ICorfuSMR> T instantiateCorfuObject(
             TypeToken<T> tType, String name) {
         return getCorfuRuntime().getObjectsView()
                 .build()

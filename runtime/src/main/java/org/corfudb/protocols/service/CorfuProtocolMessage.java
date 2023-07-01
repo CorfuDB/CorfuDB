@@ -1,18 +1,19 @@
 package org.corfudb.protocols.service;
 
-import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.util.CompatibilityVectorUtils;
 import org.corfudb.runtime.proto.RpcCommon.UuidMsg;
 import org.corfudb.runtime.proto.ServerErrors.ServerErrorMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.PriorityLevel;
 import org.corfudb.runtime.proto.service.CorfuMessage.ProtocolVersionMsg;
-import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg;
 import org.corfudb.util.GitRepositoryState;
+
+import java.util.UUID;
 
 import static org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg;
 

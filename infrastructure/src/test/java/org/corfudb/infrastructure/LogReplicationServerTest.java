@@ -17,15 +17,15 @@ import org.junit.Test;
 import org.mockito.ArgumentCaptor;
 
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getRequestMsg;
-import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.same;
+import static org.mockito.Mockito.atMost;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
-import static org.mockito.Mockito.atMost;
 
 /**
  * Tests {@link LogReplicationServer} message handing.

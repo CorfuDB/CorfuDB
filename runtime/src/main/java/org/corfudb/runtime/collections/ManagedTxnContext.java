@@ -15,6 +15,7 @@ import java.util.function.BiFunction;
 import java.util.function.BiPredicate;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.stream.Stream;
 
 /**
  * Shim layer around CorfuStore's TxnContext for providing metadata management
@@ -288,6 +289,17 @@ public class ManagedTxnContext implements AutoCloseable {
     public <K extends Message, V extends Message, M extends Message>
     Set<K> keySet(@Nonnull Table<K, V, M> table) {
         return this.txnContext.keySet(table);
+    }
+
+    /**
+     * Gets all entries in the table in form of a stream.
+     *
+     * @param table - the table whose entrires are requested.
+     * @return stream of entries in the table
+     */
+    public <K extends Message, V extends Message, M extends Message>
+    Stream<CorfuStoreEntry<K, V, M>> entryStream(@Nonnull final Table<K, V, M> table) {
+        return table.entryStream();
     }
 
     /**

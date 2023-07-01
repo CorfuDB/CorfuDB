@@ -23,6 +23,22 @@ message SchemaOptions {
     optional ReplicationLogicalGroup replication_group = 7;
 }
 
+enum ConsistencyModel {
+    READ_YOUR_WRITES = 0;
+    READ_COMMITTED = 1;
+}
+
+enum SizeComputationModel {
+    ESTIMATE_NUM_KEYS = 0;
+    EXACT_SIZE = 1;
+}
+
+message PersistenceOptions {
+    optional string dataPath = 1;
+    optional ConsistencyModel consistencyModel = 2;
+    optional SizeComputationModel sizeComputationModel = 3;
+}
+
 message ReplicationLogicalGroup {
     // Logical group name that helps club a number of tables into one group for Log Replication.
     required string logical_group = 1;

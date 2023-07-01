@@ -1,9 +1,9 @@
 package org.corfudb.infrastructure;
 
 import com.google.protobuf.Message;
+import org.corfudb.runtime.CorfuCompactorManagement.ActiveCPStreamMsg;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus.StatusType;
-import org.corfudb.runtime.CorfuCompactorManagement.ActiveCPStreamMsg;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
@@ -14,13 +14,14 @@ import org.corfudb.runtime.view.SequencerView;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
-import org.mockito.Matchers;
 
 import java.time.Duration;
 import java.util.List;
 import java.util.function.Predicate;
 
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
@@ -50,16 +51,16 @@ public class LivenessValidatorUnitTest {
 
         when(corfuRuntime.getSequencerView()).thenReturn(sequencerView);
         when(corfuStore.txn(CORFU_SYSTEM_NAMESPACE)).thenReturn(txn);
-        when(txn.getRecord(Matchers.anyString(), Matchers.any(Message.class))).thenReturn(corfuStoreEntry);
-        doNothing().when(txn).putRecord(Matchers.any(), Matchers.any(), Matchers.any(), Matchers.any());
-        doNothing().when(txn).delete(Matchers.anyString(), Matchers.any(Message.class));
+        when(txn.getRecord(anyString(), any(Message.class))).thenReturn(corfuStoreEntry);
+        doNothing().when(txn).putRecord(any(), any(), any(), any());
+        doNothing().when(txn).delete(anyString(), any(Message.class));
         when(txn.commit()).thenReturn(Timestamp.getDefaultInstance());
     }
 
     @Test
     public void isTableCheckpointActiveTest() {
         when(corfuStoreEntry.getPayload()).thenReturn(ActiveCPStreamMsg.newBuilder().setSyncHeartbeat(-1).build());
-        doReturn(1L).when(livenessValidatorSpy).getCpStreamTail(Matchers.any());
+        doReturn(1L).when(livenessValidatorSpy).getCpStreamTail(any());
         assert livenessValidatorSpy.isTableCheckpointActive(tableName, Duration.ofSeconds(0));
         assert livenessValidatorSpy.isTableCheckpointActive(tableName, Duration.ofSeconds(TIMEOUT_SECONDS));
         //ActiveCheckpointsTable with same heartbeat value for more than timeout time
@@ -67,11 +68,11 @@ public class LivenessValidatorUnitTest {
         livenessValidatorSpy.clearLivenessMap();
 
         //assert that isTableCheckpointActive returns true if one of the fields(heartbeat, streamTail) increases over time
-        doReturn(1L).when(livenessValidatorSpy).getCpStreamTail(Matchers.any());
+        doReturn(1L).when(livenessValidatorSpy).getCpStreamTail(any());
         assert livenessValidatorSpy.isTableCheckpointActive(tableName, Duration.ofSeconds(0));
         when(corfuStoreEntry.getPayload()).thenReturn(ActiveCPStreamMsg.newBuilder().setSyncHeartbeat(1).build());
         assert livenessValidatorSpy.isTableCheckpointActive(tableName, Duration.ofSeconds(TIMEOUT_SECONDS + 1));
-        doReturn(2L).when(livenessValidatorSpy).getCpStreamTail(Matchers.any());
+        doReturn(2L).when(livenessValidatorSpy).getCpStreamTail(any());
         assert livenessValidatorSpy.isTableCheckpointActive(tableName, Duration.ofSeconds(TIMEOUT_SECONDS * 2 + 1));
 
         when(corfuStoreEntry.getPayload()).thenReturn(null);
@@ -81,7 +82,7 @@ public class LivenessValidatorUnitTest {
     @Test
     public void shouldChangeManagerStatusTest() {
         List<CorfuStoreEntry<? extends Message, ? extends Message, ? extends Message>> mockList = mock(List.class);
-        when(txn.executeQuery(Matchers.anyString(), Matchers.any(Predicate.class))).thenReturn(mockList);
+        when(txn.executeQuery(anyString(), any(Predicate.class))).thenReturn(mockList);
 
         when(mockList.size()).thenReturn(1);
         Assert.assertEquals(LivenessValidator.Status.NONE,

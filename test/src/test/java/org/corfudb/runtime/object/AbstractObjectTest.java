@@ -4,8 +4,6 @@ import com.google.common.reflect.TypeToken;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.view.AbstractViewTest;
-import org.corfudb.runtime.view.SMRObject;
-import org.corfudb.util.serializer.ISerializer;
 
 /**
  * Created by dalia on 4/11/17.

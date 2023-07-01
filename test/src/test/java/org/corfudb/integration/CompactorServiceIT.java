@@ -20,11 +20,13 @@ import java.io.IOException;
 import java.time.Duration;
 import java.util.UUID;
 
-import static org.mockito.Matchers.anyString;
+import static org.awaitility.Awaitility.await;
 import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.anyString;
+import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.doCallRealMethod;
-import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
@@ -104,8 +106,7 @@ public class CompactorServiceIT extends AbstractIT {
         doReturn(mockAddressSpaceView).when(runtime).getAddressSpaceView();
         doThrow(new UnrecoverableCorfuError(new InterruptedException("Thread interrupted"))).when(mockAddressSpaceView).read(eq(address), any(), any());
         compactorServiceSpy.start(SCHEDULER_INTERVAL);
-
-        verify(compactorServiceSpy, timeout(VERIFY_TIMEOUT.toMillis()).atLeast(2)).start(any());
+        await().untilAsserted(() -> verify(compactorServiceSpy, atLeast(2)).start(any()));
         verify(compactorServiceSpy).shutdown();
     }
 
@@ -117,7 +118,7 @@ public class CompactorServiceIT extends AbstractIT {
                 .doCallRealMethod().when(runtime).checkClusterId(any());
         compactorServiceSpy.start(SCHEDULER_INTERVAL);
 
-        verify(compactorServiceSpy, timeout(VERIFY_TIMEOUT.toMillis()).times(2)).start(any());
+        await().untilAsserted(() -> verify(compactorServiceSpy, times(2)).start(any()));
         verify(compactorServiceSpy).shutdown();
     }
 

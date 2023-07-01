@@ -1,7 +1,7 @@
 package org.corfudb.universe.scenario;
 
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.universe.GenericIntegrationTest;
 import org.corfudb.universe.UniverseManager.UniverseWorkflow;
 import org.corfudb.universe.group.Group.GroupParams;
@@ -51,11 +51,11 @@ public class BaseServerFileDescriptorLeaksIT extends GenericIntegrationTest {
 
         CorfuClient corfuClient = corfuCluster.getLocalCorfuClient();
 
-        CorfuTable<String, String> table = corfuClient
+        ICorfuTable<String, String> table = corfuClient
                 .createDefaultCorfuTable(DEFAULT_STREAM_NAME);
 
         for (int i = 0; i < 100; i++) {
-            table.put(String.valueOf(i), String.valueOf(i));
+            table.insert(String.valueOf(i), String.valueOf(i));
         }
 
         //Should stop one node and then restart

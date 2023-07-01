@@ -1,9 +1,10 @@
 package org.corfudb.infrastructure;
 
-import java.util.concurrent.CompletableFuture;
 import lombok.Data;
 import lombok.ToString;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
+
+import java.util.concurrent.CompletableFuture;
 
 /**
  * This container is used by the logunit to add work to the batch writer. Its also used

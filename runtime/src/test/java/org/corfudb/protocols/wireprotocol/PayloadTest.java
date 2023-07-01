@@ -1,19 +1,19 @@
 package org.corfudb.protocols.wireprotocol;
 
-import static org.assertj.core.api.Java6Assertions.assertThat;
-
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import org.corfudb.protocols.CorfuProtocolCommon;
+import org.corfudb.protocols.logprotocol.CheckpointEntry.CheckpointEntryType;
+import org.corfudb.runtime.view.Layout;
+import org.junit.Test;
+
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
-import org.corfudb.protocols.CorfuProtocolCommon;
-import org.corfudb.protocols.logprotocol.CheckpointEntry.CheckpointEntryType;
-import org.corfudb.runtime.view.Layout;
-import org.junit.Test;
+import static org.assertj.core.api.Assertions.assertThat;
 
 public class PayloadTest {
 

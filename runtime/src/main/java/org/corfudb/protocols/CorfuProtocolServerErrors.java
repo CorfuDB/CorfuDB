@@ -2,8 +2,6 @@ package org.corfudb.protocols;
 
 import com.google.protobuf.ByteString;
 import lombok.extern.slf4j.Slf4j;
-import java.io.ObjectOutputStream;
-
 import org.corfudb.runtime.proto.RpcCommon.UuidMsg;
 import org.corfudb.runtime.proto.ServerErrors.BootstrappedErrorMsg;
 import org.corfudb.runtime.proto.ServerErrors.DataCorruptionErrorMsg;
@@ -15,6 +13,8 @@ import org.corfudb.runtime.proto.ServerErrors.TrimmedErrorMsg;
 import org.corfudb.runtime.proto.ServerErrors.UnknownErrorMsg;
 import org.corfudb.runtime.proto.ServerErrors.WrongClusterErrorMsg;
 import org.corfudb.runtime.proto.ServerErrors.WrongEpochErrorMsg;
+
+import java.io.ObjectOutputStream;
 
 /**
  * This class provides methods for creating the Protobuf objects defined

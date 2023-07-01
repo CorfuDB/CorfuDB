@@ -32,8 +32,8 @@ import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.eq;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.only;
 import static org.mockito.Mockito.times;
@@ -390,7 +390,7 @@ public class StreamPollingSchedulerTest {
 
         // Verify that the scheduler re-scheduled itself
         streamPoller.schedule();
-        verify(scheduler, times(2)).schedule(any(StreamPollingScheduler.Tick.class),
+        verify(scheduler, times(2)).schedule(any(Runnable.class),
                 any(Long.class),
                 eq(TimeUnit.NANOSECONDS));
         // Verify that while the task is syncing, it hasn't been polled (because its backed up, that is

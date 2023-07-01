@@ -19,8 +19,8 @@ import java.util.stream.LongStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.infrastructure.LogUnitServerAssertions.assertThat;
-import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getReadLogRequestMsg;
 import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getRangeWriteLogRequestMsg;
+import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getReadLogRequestMsg;
 
 /**
  * Created by WenbinZhu on 5/30/19.

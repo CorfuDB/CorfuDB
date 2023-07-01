@@ -1,18 +1,17 @@
 package org.corfudb.runtime.object.transactions;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
-import java.util.Arrays;
-import java.util.concurrent.atomic.AtomicLong;
-
 import com.google.common.reflect.TypeToken;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
-import org.corfudb.runtime.view.SMRObject;
+import org.corfudb.runtime.object.MVOCorfuCompileProxy;
 import org.junit.Test;
+
+import java.util.Arrays;
+import java.util.concurrent.atomic.AtomicLong;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Ensure that the aborted transaction reporting adheres to the contract.
@@ -36,7 +35,7 @@ public class TransactionAbortedTest extends AbstractTransactionContextTest {
     }
 
     @Test
-    public void abortTransactionTest() throws Exception {
+    public void abortTransactionTest() {
         CorfuRuntime runtime = getDefaultRuntime();
 
         ICorfuTable<String, String> map = runtime.getObjectsView()
@@ -70,7 +69,7 @@ public class TransactionAbortedTest extends AbstractTransactionContextTest {
                 assertThat(tae.getOffendingAddress().equals(offendingAddress.get()));
 
                 // Ensure that the correct key is reported.
-                final ICorfuSMRProxyInternal proxyInternal =
+                final MVOCorfuCompileProxy proxyInternal =
                         tae.getContext().getWriteSetInfo().getConflicts().keySet().stream().findFirst().get();
                 final byte[] keyHash = ConflictSetInfo.generateHashFromObject(proxyInternal, key);
                 assertThat(Arrays.equals(keyHash, tae.getConflictKey())).isTrue();

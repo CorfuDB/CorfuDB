@@ -1,12 +1,12 @@
 package org.corfudb.infrastructure;
 
-import java.util.UUID;
-
 import lombok.AllArgsConstructor;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
+
+import java.util.UUID;
 
 /**
  * Tuple to store the rank and clientId for each round in Paxos.

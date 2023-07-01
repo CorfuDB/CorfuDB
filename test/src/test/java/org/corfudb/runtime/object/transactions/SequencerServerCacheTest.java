@@ -1,8 +1,5 @@
 package org.corfudb.runtime.object.transactions;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.Assert.assertThrows;
-
 import com.google.common.reflect.TypeToken;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -13,7 +10,6 @@ import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.object.AbstractObjectTest;
 import org.corfudb.runtime.view.Address;
-import org.corfudb.runtime.view.SMRObject;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -25,6 +21,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.Assert.assertThrows;
 
 /**
  * Created by maithem on 7/24/17.

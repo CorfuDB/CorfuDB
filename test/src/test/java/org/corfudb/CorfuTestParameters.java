@@ -81,15 +81,14 @@ public class CorfuTestParameters {
      */
     public final long SEED;
 
-    // Magic number check disabled to make this constants more readable.
+    // Magic number check disabled to make constants more readable.
     @SuppressWarnings("checkstyle:magicnumber")
-    public CorfuTestParameters(){
-
+    public CorfuTestParameters(Duration timeoutLong) {
         // Timeouts
         TIMEOUT_VERY_SHORT = Duration.of(500, MILLIS);
         TIMEOUT_SHORT = Duration.of(1, SECONDS);
         TIMEOUT_NORMAL = Duration.of(10, SECONDS);
-        TIMEOUT_LONG = Duration.of(2, MINUTES);
+        TIMEOUT_LONG = timeoutLong;
 
         // Iterations
         NUM_ITERATIONS_VERY_LOW = 10;
@@ -110,6 +109,12 @@ public class CorfuTestParameters {
         SEED = System.getProperty("test.seed") == null ? 0L :
                 Long.parseLong(System.getProperty("test.seed"));
         printParameters();
+    }
+
+    // Magic number check disabled to make constants more readable.
+    @SuppressWarnings("checkstyle:magicnumber")
+    public CorfuTestParameters() {
+        this(Duration.of(2, MINUTES));
     }
 
     /** Print the parameters, using reflection magic

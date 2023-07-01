@@ -1,9 +1,8 @@
 package org.corfudb.integration;
 
-import java.util.UUID;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.junit.Ignore;
@@ -14,6 +13,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStreamReader;
 import java.util.Collections;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -305,13 +305,13 @@ public class CmdletIT extends AbstractIT {
         final String commandPut = CORFU_PROJECT_DIR + "bin/corfu_smrobject" +
                 " -i " + streamA +
                 " -c " + ENDPOINT +
-                " " + CorfuTable.class.getCanonicalName() + " putIfAbsent x " + payload;
+                " " + PersistentCorfuTable.class.getCanonicalName() + " putIfAbsent x " + payload;
         runCmdletGetOutput(commandPut);
 
         final String commandGet = CORFU_PROJECT_DIR + "bin/corfu_smrobject" +
                 " -i " + streamA +
                 " -c " + ENDPOINT +
-                " " + CorfuTable.class.getCanonicalName() + " getOrDefault x none";
+                " " + PersistentCorfuTable.class.getCanonicalName() + " getOrDefault x none";
 
         assertThat(runCmdletGetOutput(commandGet).contains(payload)).isTrue();
 

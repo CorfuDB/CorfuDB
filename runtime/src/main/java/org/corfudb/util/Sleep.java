@@ -1,9 +1,9 @@
 package org.corfudb.util;
 
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
+
 import java.time.Duration;
 import java.util.concurrent.TimeUnit;
-
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 
 /** Utils for sleeping with or without interruptions using timeunits, much like
  *  {@link TimeUnit}'s sleep functionality.

@@ -1,13 +1,13 @@
 package org.corfudb.runtime.object;
 
+import lombok.Data;
+import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
+
 import java.util.List;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Stream;
-
-import lombok.Data;
-import org.corfudb.protocols.logprotocol.SMREntry;
-import org.corfudb.protocols.wireprotocol.TokenResponse;
 
 /**
  * On top of a stream, an SMR object layer implements objects whose history of updates are backed

@@ -1,7 +1,6 @@
 package org.corfudb.runtime.object.transactions;
 
 import com.google.common.reflect.TypeToken;
-
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.MultiSMREntry;
@@ -11,7 +10,6 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.junit.Test;
 

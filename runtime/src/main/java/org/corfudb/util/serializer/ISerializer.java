@@ -2,26 +2,22 @@ package org.corfudb.util.serializer;
 
 import com.esotericsoftware.kryo.Kryo;
 import com.google.common.collect.ImmutableMap;
-
-import java.nio.ByteBuffer;
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-
-import java.util.function.Function;
-
 import de.javakaffee.kryoserializers.guava.ImmutableListSerializer;
 import de.javakaffee.kryoserializers.guava.ImmutableMapSerializer;
 import de.javakaffee.kryoserializers.guava.ImmutableMultimapSerializer;
 import de.javakaffee.kryoserializers.guava.ImmutableSetSerializer;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-
 import net.openhft.hashing.LongHashFunction;
-
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.Utils;
 import org.objenesis.strategy.StdInstantiatorStrategy;
+
+import java.nio.ByteBuffer;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
 
 /**
  * This class represents a serializer, which takes an object and reads/writes it to a bytebuf.

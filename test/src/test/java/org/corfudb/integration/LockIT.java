@@ -1,7 +1,5 @@
 package org.corfudb.integration;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.util.ObservableValue;
 import org.corfudb.runtime.CorfuRuntime;
@@ -31,6 +29,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.Semaphore;
 import java.util.stream.Collectors;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 @Slf4j
 public class LockIT extends AbstractIT implements Observer {

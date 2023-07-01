@@ -23,34 +23,34 @@ import org.corfudb.util.serializer.ISerializer;
 import java.lang.reflect.InvocationTargetException;
 import java.util.Set;
 import java.util.UUID;
-import java.util.function.Function;
-import java.util.function.Supplier;
 
 @Slf4j
-public class MVOCorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxyInternal<T> {
+public class MVOCorfuCompileProxy<
+        S extends SnapshotGenerator<S> & ConsistencyView>
+        implements ICorfuSMRProxy<S> {
 
     @Getter
-    MultiVersionObject<T> underlyingMVO;
+    private final MultiVersionObject<S> underlyingMVO;
 
-    final CorfuRuntime rt;
+    private final CorfuRuntime rt;
 
-    final UUID streamID;
+    private final UUID streamID;
 
-    final Class<T> type;
-
-    @Getter
-    ISerializer serializer;
+    private final Class<S> type;
 
     @Getter
-    Set<UUID> streamTags;
+    private final ISerializer serializer;
+
+    @Getter
+    private final Set<UUID> streamTags;
 
     private final Object[] args;
 
     private final ObjectOpenOption objectOpenOption;
 
-    public MVOCorfuCompileProxy(CorfuRuntime rt, UUID streamID, Class<T> type, Object[] args,
-                                ISerializer serializer, Set<UUID> streamTags, ICorfuSMR<T> wrapperObject,
-                                ObjectOpenOption objectOpenOption) {
+    public MVOCorfuCompileProxy(CorfuRuntime rt, UUID streamID, Class<S> type, Object[] args,
+                                ISerializer serializer, Set<UUID> streamTags, ICorfuSMR wrapperObject,
+                                ObjectOpenOption objectOpenOption, MVOCache<S> mvoCache) {
         this.rt = rt;
         this.streamID = streamID;
         this.type = type;
@@ -58,27 +58,23 @@ public class MVOCorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRPr
         this.serializer = serializer;
         this.streamTags = streamTags;
         this.objectOpenOption = objectOpenOption;
-
         this.underlyingMVO = new MultiVersionObject<>(
                 rt,
                 this::getNewInstance,
                 new StreamViewSMRAdapter(rt, rt.getStreamsView().getUnsafe(streamID)),
                 wrapperObject,
-                objectOpenOption);
+                mvoCache,
+                objectOpenOption
+        );
     }
 
     @Override
-    public <R> R passThrough(Function<T, R> method) {
-        return null;
-    }
-
-    @Override
-    public <R> R access(ICorfuSMRAccess<R, T> accessMethod, Object[] conflictObject) {
+    public <R> R access(ICorfuSMRAccess<R, S> accessMethod, Object[] conflictObject) {
         return MicroMeterUtils.time(() -> accessInner(accessMethod, conflictObject),
                 "mvo.read.timer", "streamId", streamID.toString());
     }
 
-    private <R> R accessInner(ICorfuSMRAccess<R, T> accessMethod,
+    private <R> R accessInner(ICorfuSMRAccess<R, S> accessMethod,
                               Object[] conflictObject) {
         if (TransactionalContext.isInTransaction()) {
             try {
@@ -95,12 +91,14 @@ public class MVOCorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRPr
         log.trace("Access[{}] conflictObj={} version={}", this, conflictObject, timestamp);
 
         // Perform underlying access
-        ICorfuSMRSnapshotProxy<T> snapshotProxy = underlyingMVO.getSnapshotProxy(timestamp);
-        return snapshotProxy.access(accessMethod, v -> {});
+        ICorfuSMRSnapshotProxy<S> snapshotProxy = underlyingMVO.getSnapshotProxy(timestamp);
+        final R result = snapshotProxy.access(accessMethod, v -> {});
+        snapshotProxy.releaseView();
+        return result;
     }
 
     @Override
-    public long logUpdate(String smrUpdateFunction, boolean keepUpcallResult, Object[] conflictObject, Object... args) {
+    public long logUpdate(String smrUpdateFunction, Object[] conflictObject, Object... args) {
         return MicroMeterUtils.time(
                 () -> logUpdateInner(smrUpdateFunction, conflictObject, args),
                 "mvo.write.timer", "streamId", streamID.toString());
@@ -133,38 +131,13 @@ public class MVOCorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRPr
     }
 
     @Override
-    public <R> R getUpcallResult(long timestamp, Object[] conflictObject) {
-        return null;
-    }
-
-    @Override
     public UUID getStreamID() {
         return streamID;
     }
 
-    @Override
-    public <R> R TXExecute(Supplier<R> txFunction) {
-        return null;
-    }
-
-    @Override
-    public Class<T> getObjectType() {
-        return type;
-    }
-
-    @Override
-    public long getVersion() {
-        return 0;
-    }
-
-    @Override
-    public VersionLockedObject<T> getUnderlyingObject() {
-        return null;
-    }
-
-    private T getNewInstance() {
+    private S getNewInstance() {
         try {
-            T ret = (T) ReflectionUtils
+            S ret = (S) ReflectionUtils
                     .findMatchingConstructor(type.getDeclaredConstructors(), args);
             return ret;
         } catch (InstantiationException | IllegalAccessException | InvocationTargetException e) {
@@ -205,7 +178,7 @@ public class MVOCorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRPr
             snapshotTimestamp = context.getSnapshotTimestamp();
             abortCause = AbortCause.TRIM;
         } else {
-            log.error("abortTransaction[{}] Abort Transaction with Exception {}", this, e);
+            log.error("abortTransaction[{}] Abort Transaction with Exception", this, e);
             snapshotTimestamp = context.getSnapshotTimestamp();
         }
 
@@ -217,16 +190,6 @@ public class MVOCorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRPr
         context.abortTransaction(tae);
 
         throw tae;
-    }
-
-    @Override
-    public boolean isMonotonicObject() {
-        return false;
-    }
-
-    @Override
-    public boolean isMonotonicStreamAccess() {
-        return true;
     }
 
     @Override

@@ -2,7 +2,6 @@ package org.corfudb.protocols.wireprotocol;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
-
 import org.corfudb.runtime.view.Layout;
 
 /**

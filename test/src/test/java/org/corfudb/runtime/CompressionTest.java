@@ -1,7 +1,5 @@
 package org.corfudb.runtime;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
 import org.corfudb.common.compression.Codec;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.view.AbstractViewTest;
@@ -15,6 +13,8 @@ import java.util.Collection;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 
 /**
