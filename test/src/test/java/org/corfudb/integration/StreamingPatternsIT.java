@@ -19,11 +19,11 @@ import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.view.TableRegistry;
-import org.corfudb.test.SampleSchema.ManagedResources;
 import org.corfudb.test.SampleSchema.EventInfo;
-import org.corfudb.test.SampleSchema.Uuid;
+import org.corfudb.test.SampleSchema.ManagedResources;
 import org.corfudb.test.SampleSchema.SampleTableAMsg;
 import org.corfudb.test.SampleSchema.SampleTableBMsg;
+import org.corfudb.test.SampleSchema.Uuid;
 import org.junit.Before;
 import org.junit.Test;
 

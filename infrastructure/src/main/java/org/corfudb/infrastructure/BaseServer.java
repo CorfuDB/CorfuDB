@@ -1,9 +1,6 @@
 package org.corfudb.infrastructure;
 
 import io.netty.channel.ChannelHandlerContext;
-import java.lang.invoke.MethodHandles;
-import java.util.concurrent.ExecutorService;
-import javax.annotation.Nonnull;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
@@ -13,6 +10,10 @@ import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
+
+import javax.annotation.Nonnull;
+import java.lang.invoke.MethodHandles;
+import java.util.concurrent.ExecutorService;
 
 import static org.corfudb.common.util.URLUtils.getRemoteEndpointFromCtx;
 import static org.corfudb.protocols.CorfuProtocolServerErrors.getWrongEpochErrorMsg;

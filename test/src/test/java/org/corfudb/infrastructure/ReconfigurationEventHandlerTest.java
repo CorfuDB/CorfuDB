@@ -1,7 +1,5 @@
 package org.corfudb.infrastructure;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
 import org.corfudb.infrastructure.management.ReconfigurationEventHandler;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.AbstractViewTest;
@@ -12,6 +10,8 @@ import org.junit.Test;
 
 import java.util.HashSet;
 import java.util.Set;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Tests the failure handling : Sealing and updating layout

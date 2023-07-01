@@ -1,8 +1,6 @@
 package org.corfudb.security.sasl.plaintext;
 
-import java.io.UnsupportedEncodingException;
-import java.util.Arrays;
-import java.util.Map;
+import lombok.extern.slf4j.Slf4j;
 
 import javax.security.auth.callback.CallbackHandler;
 import javax.security.auth.login.LoginContext;
@@ -11,7 +9,9 @@ import javax.security.sasl.Sasl;
 import javax.security.sasl.SaslException;
 import javax.security.sasl.SaslServer;
 import javax.security.sasl.SaslServerFactory;
-import lombok.extern.slf4j.Slf4j;
+import java.io.UnsupportedEncodingException;
+import java.util.Arrays;
+import java.util.Map;
 
 /**
  * Created by sneginhal on 01/27/2017.

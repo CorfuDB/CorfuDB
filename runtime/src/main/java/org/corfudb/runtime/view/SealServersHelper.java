@@ -1,5 +1,11 @@
 package org.corfudb.runtime.view;
 
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.runtime.exceptions.QuorumUnreachableException;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
+import org.corfudb.runtime.view.QuorumFuturesFactory.CompositeFuture;
+import org.corfudb.util.CFUtils;
+
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -8,13 +14,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Predicate;
-
-import lombok.extern.slf4j.Slf4j;
-
-import org.corfudb.runtime.exceptions.QuorumUnreachableException;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
-import org.corfudb.runtime.view.QuorumFuturesFactory.CompositeFuture;
-import org.corfudb.util.CFUtils;
 
 /**
  * Helper class to seal requested servers.

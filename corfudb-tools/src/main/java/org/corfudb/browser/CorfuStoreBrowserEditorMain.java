@@ -1,15 +1,7 @@
 package org.corfudb.browser;
 
-import java.util.Arrays;
-import java.util.EnumMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
-
 import com.google.common.base.Preconditions;
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
@@ -17,6 +9,13 @@ import org.corfudb.runtime.collections.CorfuDynamicRecord;
 import org.corfudb.runtime.proto.service.CorfuMessage;
 import org.corfudb.util.GitRepositoryState;
 import org.docopt.Docopt;
+
+import java.util.Arrays;
+import java.util.EnumMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 
 /**
  * Main class for the CorfuStore Browser Tool.

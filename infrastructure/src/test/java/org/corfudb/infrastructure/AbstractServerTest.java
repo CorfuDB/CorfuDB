@@ -1,10 +1,11 @@
 package org.corfudb.infrastructure;
 
 import io.netty.channel.ChannelHandlerContext;
-import java.util.concurrent.ExecutorService;
 import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.junit.Test;
+
+import java.util.concurrent.ExecutorService;
 
 import static org.corfudb.protocols.service.CorfuProtocolBase.getPingRequestMsg;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getRequestMsg;

@@ -1,6 +1,5 @@
 package org.corfudb.runtime.clients;
 
-import java.util.concurrent.TimeoutException;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.infrastructure.BaseServer;
 import org.corfudb.infrastructure.ServerContextBuilder;
@@ -8,6 +7,8 @@ import org.corfudb.infrastructure.TestServerRouter;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg.PayloadCase;
 import org.junit.Before;
 import org.junit.Test;
+
+import java.util.concurrent.TimeoutException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;

@@ -1,7 +1,7 @@
 package org.corfudb.universe.scenario;
 
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.universe.GenericIntegrationTest;
 import org.corfudb.universe.group.cluster.CorfuCluster;
 import org.corfudb.universe.node.client.ClientParams;
@@ -53,10 +53,10 @@ public class ConcurrentClusterResizeIT extends GenericIntegrationTest {
 
             CorfuClient corfuClient = corfuCluster.getLocalCorfuClient();
 
-            CorfuTable<String, String> table =
+            ICorfuTable<String, String> table =
                     corfuClient.createDefaultCorfuTable(TestFixtureConst.DEFAULT_STREAM_NAME);
             for (int i = 0; i < TestFixtureConst.DEFAULT_TABLE_ITER; i++) {
-                table.put(String.valueOf(i), String.valueOf(i));
+                table.insert(String.valueOf(i), String.valueOf(i));
             }
 
             CorfuServer server0 = corfuCluster.getFirstServer();

@@ -1,9 +1,8 @@
 package org.corfudb.util.concurrent;
 
+import javax.annotation.Nonnull;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
-
-import javax.annotation.Nonnull;
 
 /**
  * Utility class which implements a singleton resource pattern.

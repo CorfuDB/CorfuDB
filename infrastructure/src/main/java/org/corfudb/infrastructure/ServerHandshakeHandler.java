@@ -6,16 +6,16 @@ import io.netty.channel.ChannelPromise;
 import io.netty.handler.timeout.ReadTimeoutException;
 import io.netty.handler.timeout.ReadTimeoutHandler;
 import io.netty.util.AttributeKey;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.Set;
-import java.util.UUID;
-import javax.net.ssl.SSLHandshakeException;
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.protocols.wireprotocol.HandshakeState;
 import org.corfudb.runtime.proto.service.Base.HandshakeRequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
+
+import javax.net.ssl.SSLHandshakeException;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static org.corfudb.protocols.CorfuProtocolCommon.DEFAULT_UUID;
 import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;

@@ -27,18 +27,19 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
+import static org.awaitility.Awaitility.await;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
-import static org.mockito.Matchers.any;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.after;
-import static org.mockito.Matchers.anyLong;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.timeout;
-import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @Slf4j
 public class CompactorServiceUnitTest {
@@ -174,7 +175,7 @@ public class CompactorServiceUnitTest {
     }
 
     @Test
-    public void runOrchestratorSchedulerTest() throws Exception {
+    public void runOrchestratorSchedulerTest() {
         Layout mockLayout = mock(Layout.class);
         CompletableFuture invalidateLayoutFuture = mock(CompletableFuture.class);
         when(corfuRuntime.invalidateLayout()).thenReturn(invalidateLayoutFuture);
@@ -195,7 +196,7 @@ public class CompactorServiceUnitTest {
 
         compactorServiceSpy.start(Duration.ofSeconds(SCHEDULER_INTERVAL));
 
-        verify(leaderServices, timeout(TIMEOUT.toMillis())).initCompactionCycle();
+        await().untilAsserted(() -> verify(leaderServices).initCompactionCycle());
         verify(invokeCheckpointingJvm, timeout(TIMEOUT.toMillis())).shutdown();
     }
 

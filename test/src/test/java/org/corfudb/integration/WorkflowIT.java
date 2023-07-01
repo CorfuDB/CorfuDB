@@ -1,8 +1,5 @@
 package org.corfudb.integration;
 
-import static org.assertj.core.api.Assertions.*;
-import static org.corfudb.integration.Harness.run;
-
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.integration.cluster.Harness.Node;
 import org.corfudb.protocols.wireprotocol.Token;
@@ -12,11 +9,14 @@ import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.Sleep;
-
 import org.junit.Test;
+
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.integration.Harness.run;
 
 /**
  * This integration test verifies the behaviour of the add node workflow. In particular, a single node

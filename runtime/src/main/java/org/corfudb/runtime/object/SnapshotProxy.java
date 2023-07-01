@@ -3,31 +3,35 @@ package org.corfudb.runtime.object;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 
 import javax.annotation.concurrent.NotThreadSafe;
 import java.util.Map;
 import java.util.function.LongConsumer;
+import java.util.function.Supplier;
 
 @NotThreadSafe
 @Slf4j
-public class SnapshotProxy<T> implements ICorfuSMRSnapshotProxy<T> {
+public class SnapshotProxy<T extends AutoCloseable> implements ICorfuSMRSnapshotProxy<T> {
 
-    private T snapshot;
-
-    private final long baseSnapshotVersion;
+    private final SMRSnapshot<T> snapshot;
+    private T snapshotView;
+    private final Supplier<Long> snapshotVersionSupplier;
 
     private final Map<String, ICorfuSMRUpcallTarget<T>> upcallTargetMap;
 
-    public SnapshotProxy(@NonNull final T snapshot, final long baseSnapshotVersion,
+    public SnapshotProxy(@NonNull final SMRSnapshot<T> snapshot, Supplier<Long> snapshotVersionSupplier,
                          @NonNull final Map<String, ICorfuSMRUpcallTarget<T>> upcallTargetMap) {
         this.snapshot = snapshot;
-        this.baseSnapshotVersion = baseSnapshotVersion;
+        this.snapshotView = snapshot.consume();
+        this.snapshotVersionSupplier = snapshotVersionSupplier;
         this.upcallTargetMap = upcallTargetMap;
     }
 
-    public <R> R access(@NonNull ICorfuSMRAccess<R, T> accessFunction, @NonNull LongConsumer versionAccessed) {
-        final R ret = accessFunction.access(snapshot);
-        versionAccessed.accept(baseSnapshotVersion);
+    public <R> R access(@NonNull ICorfuSMRAccess<R, T> accessFunction,
+                        @NonNull LongConsumer versionAccessed) {
+        final R ret = accessFunction.access(snapshotView);
+        versionAccessed.accept(snapshotVersionSupplier.get());
         return ret;
     }
 
@@ -38,14 +42,18 @@ public class SnapshotProxy<T> implements ICorfuSMRSnapshotProxy<T> {
             throw new RuntimeException("Unknown upcall " + updateEntry.getSMRMethod());
         }
 
-        snapshot = (T) target.upcall(snapshot, updateEntry.getSMRArguments());
+        snapshotView = (T) target.upcall(snapshotView, updateEntry.getSMRArguments());
     }
 
-    public long getVersion() {
-        return baseSnapshotVersion;
+    public void release() {
+        snapshot.release();
     }
 
-    public T get() {
-        return snapshot;
+    public void releaseView() {
+        try {
+            snapshotView.close();
+        } catch (Exception e) {
+            throw new UnrecoverableCorfuError(e);
+        }
     }
 }

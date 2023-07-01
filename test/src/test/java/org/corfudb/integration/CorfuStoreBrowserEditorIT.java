@@ -3,6 +3,29 @@ package org.corfudb.integration;
 import com.google.protobuf.Any;
 import com.google.protobuf.DynamicMessage;
 import com.google.protobuf.UnknownFieldSet;
+import org.corfudb.browser.CorfuOfflineBrowserEditor;
+import org.corfudb.browser.CorfuStoreBrowserEditor;
+import org.corfudb.protocols.wireprotocol.IMetadata;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuStoreMetadata;
+import org.corfudb.runtime.collections.CorfuDynamicKey;
+import org.corfudb.runtime.collections.CorfuDynamicRecord;
+import org.corfudb.runtime.collections.CorfuStore;
+import org.corfudb.runtime.collections.ICorfuTable;
+import org.corfudb.runtime.collections.PersistedCorfuTable;
+import org.corfudb.runtime.collections.Table;
+import org.corfudb.runtime.collections.TableOptions;
+import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.runtime.view.TableRegistry;
+import org.corfudb.test.SampleAppliance;
+import org.corfudb.test.SampleSchema;
+import org.corfudb.test.SampleSchema.SampleTableAMsg;
+import org.corfudb.test.SampleSchema.SampleTableBMsg;
+import org.corfudb.test.SampleSchema.SampleTableCMsg;
+import org.corfudb.test.SampleSchema.SampleTableDMsg;
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Test;
 
 import java.io.File;
 import java.io.FileWriter;
@@ -17,32 +40,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 import java.util.concurrent.ConcurrentMap;
-
-import org.corfudb.browser.CorfuOfflineBrowserEditor;
-import org.corfudb.browser.CorfuStoreBrowserEditor;
-import org.corfudb.protocols.wireprotocol.IMetadata;
-import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.CorfuStoreMetadata;
-import org.corfudb.runtime.collections.CorfuDynamicKey;
-import org.corfudb.runtime.collections.ICorfuTable;
-import org.corfudb.runtime.collections.Table;
-import org.corfudb.runtime.collections.CorfuStore;
-import org.corfudb.runtime.collections.TableOptions;
-import org.corfudb.runtime.collections.TxnContext;
-import org.corfudb.runtime.collections.CorfuDynamicRecord;
-import org.corfudb.runtime.view.TableRegistry;
-import org.corfudb.test.SampleSchema.SampleTableAMsg;
-import org.corfudb.test.SampleSchema.SampleTableBMsg;
-import org.corfudb.test.SampleSchema.SampleTableCMsg;
-import org.corfudb.test.SampleSchema.SampleTableDMsg;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
-
-import org.corfudb.test.SampleAppliance;
-import org.corfudb.test.SampleSchema;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -628,6 +627,8 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
                         TableOptions.builder()
                                 .persistentDataPath(Paths.get(PARAMETERS.TEST_TEMP_DIR)).build())
         );
+
+        assertThat(table.getUnderlyingType()).isEqualTo(PersistedCorfuTable.class);
 
         final long keyUuid = 1L;
         final long valueUuid = 3L;

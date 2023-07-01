@@ -6,6 +6,7 @@ import com.google.common.collect.Range;
 import lombok.AllArgsConstructor;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.CorfuTestParameters;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
@@ -47,6 +48,11 @@ public class StateTransferIT extends AbstractIT {
     private CorfuRuntime firstRuntime;
     private CorfuRuntime secondRuntime;
     private CorfuRuntime writerRuntime;
+
+    public StateTransferIT() {
+        PARAMETERS = new CorfuTestParameters(Duration.ofMinutes(5));
+    }
+
     private String getServerEndpoint(int port) {
         return corfuSingleNodeHost + ":" + port;
     }

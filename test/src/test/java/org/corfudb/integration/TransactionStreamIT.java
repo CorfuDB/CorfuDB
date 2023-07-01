@@ -7,7 +7,6 @@ import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
-import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.junit.Test;
 

@@ -1,6 +1,11 @@
 package org.corfudb.infrastructure;
 
 import com.google.common.collect.ImmutableMap;
+import org.corfudb.AbstractCorfuTest;
+import org.corfudb.infrastructure.datastore.DataStore;
+import org.corfudb.infrastructure.datastore.KvDataStore.KvRecord;
+import org.corfudb.runtime.exceptions.DataCorruptionException;
+import org.junit.Test;
 
 import java.io.File;
 import java.io.IOException;
@@ -8,12 +13,6 @@ import java.io.RandomAccessFile;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
-
-import org.corfudb.AbstractCorfuTest;
-import org.corfudb.infrastructure.datastore.DataStore;
-import org.corfudb.infrastructure.datastore.KvDataStore.KvRecord;
-import org.corfudb.runtime.exceptions.DataCorruptionException;
-import org.junit.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;

@@ -7,7 +7,6 @@ import org.corfudb.runtime.exceptions.SerializerException;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
-import org.junit.After;
 import org.junit.Test;
 
 import java.util.Arrays;

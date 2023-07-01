@@ -17,7 +17,6 @@ import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.view.RuntimeLayout;
 import org.corfudb.util.NodeLocator;
 import org.junit.jupiter.api.Test;
-import org.mockito.Matchers;
 
 import java.util.Arrays;
 import java.util.HashMap;
@@ -32,12 +31,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.corfudb.infrastructure.log.statetransfer.batch.TransferBatchResponse.TransferStatus.FAILED;
 import static org.corfudb.infrastructure.log.statetransfer.batch.TransferBatchResponse.TransferStatus.SUCCEEDED;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.when;
+
 
 class CommittedBatchProcessorTest extends DataTest {
     @Test
@@ -178,7 +179,7 @@ class CommittedBatchProcessorTest extends DataTest {
         CommittedBatchProcessor testProcessor = CommittedBatchProcessor.builder()
                 .currentNode("test").runtimeLayout(runtimeLayout).build();
         CommittedBatchProcessor spytestProcessor = spy(testProcessor);
-        doReturn(ReadBatch.builder().status(ReadBatch.ReadStatus.FAILED).build()).when(spytestProcessor).checkReadRecords(Matchers.anyObject(), Matchers.anyObject(), Matchers.anyObject());
+        doReturn(ReadBatch.builder().status(ReadBatch.ReadStatus.FAILED).build()).when(spytestProcessor).checkReadRecords(any(), any(), any());
         assertThatThrownBy(() -> spytestProcessor.readRecords(batch.getAddresses(), Optional.empty(), logUnitClient))
                 .isInstanceOf(ReadBatchException.class);
         assertThat(retries.get()).isEqualTo(3);
@@ -203,7 +204,7 @@ class CommittedBatchProcessorTest extends DataTest {
         CommittedBatchProcessor spytestProcessor = spy(testProcessor);
         ReadBatch readBatch = ReadBatch.builder().status(ReadBatch.ReadStatus.SUCCEEDED).build();
 
-        doReturn(readBatch).when(spytestProcessor).checkReadRecords(Matchers.anyObject(), Matchers.anyObject(), Matchers.anyObject());
+        doReturn(readBatch).when(spytestProcessor).checkReadRecords(any(), any(), any());
         assertThat(spytestProcessor.readRecords(batch.getAddresses(), Optional.empty(), logUnitClient)).isEqualTo(readBatch);
     }
 
@@ -211,11 +212,11 @@ class CommittedBatchProcessorTest extends DataTest {
     public void testTransferTerminateExceptionallyIfNoNodesArePresentInTheRequest() {
         LogUnitClient logUnitClient = mock(LogUnitClient.class);
         RuntimeLayout runtimeLayout = mock(RuntimeLayout.class);
-        doReturn(logUnitClient).when(runtimeLayout).getLogUnitClient(Matchers.anyObject());
+        doReturn(logUnitClient).when(runtimeLayout).getLogUnitClient(any());
         CommittedBatchProcessor testProcessor = CommittedBatchProcessor.builder()
                 .currentNode("test").runtimeLayout(runtimeLayout).build();
         CommittedBatchProcessor spy = spy(testProcessor);
-        doThrow(new RetryExhaustedException()).when(spy).readRecords(Matchers.anyObject(), Matchers.anyObject(), Matchers.anyObject());
+        doThrow(new RetryExhaustedException()).when(spy).readRecords(any(), any(), any());
         ImmutableList<String> servers = ImmutableList.of();
         TransferBatchRequest req = TransferBatchRequest.builder().destinationNodes(Optional.of(servers)).build();
         CompletableFuture<TransferBatchResponse> transferBatchResponseCompletableFuture = spy.transfer(req);
@@ -232,12 +233,12 @@ class CommittedBatchProcessorTest extends DataTest {
     public void testTransferTerminateExceptionallyIfItsNotReadException() {
         LogUnitClient logUnitClient = mock(LogUnitClient.class);
         RuntimeLayout runtimeLayout = mock(RuntimeLayout.class);
-        doReturn(logUnitClient).when(runtimeLayout).getLogUnitClient(Matchers.anyObject());
+        doReturn(logUnitClient).when(runtimeLayout).getLogUnitClient(any());
         CommittedBatchProcessor testProcessor = CommittedBatchProcessor.builder()
                 .currentNode("test").runtimeLayout(runtimeLayout).build();
         ReadBatch batch = ReadBatch.builder().build();
         CommittedBatchProcessor spy = spy(testProcessor);
-        doReturn(batch).when(spy).readRecords(Matchers.anyObject(), Matchers.anyObject(), Matchers.anyObject());
+        doReturn(batch).when(spy).readRecords(any(), any(), any());
         doThrow(new RuntimeException()).when(spy).writeRecords(batch,
                 logUnitClient, testProcessor.getMaxWriteRetries(), testProcessor.getWriteSleepDuration());
 
@@ -256,12 +257,12 @@ class CommittedBatchProcessorTest extends DataTest {
     public void testTransferTerminateSuccessfully() {
         LogUnitClient logUnitClient = mock(LogUnitClient.class);
         RuntimeLayout runtimeLayout = mock(RuntimeLayout.class);
-        doReturn(logUnitClient).when(runtimeLayout).getLogUnitClient(Matchers.anyObject());
+        doReturn(logUnitClient).when(runtimeLayout).getLogUnitClient(any());
         CommittedBatchProcessor testProcessor = CommittedBatchProcessor.builder()
                 .currentNode("test").runtimeLayout(runtimeLayout).build();
         ReadBatch batch = ReadBatch.builder().build();
         CommittedBatchProcessor spy = spy(testProcessor);
-        doReturn(batch).when(spy).readRecords(Matchers.anyObject(), Matchers.anyObject(), Matchers.anyObject());
+        doReturn(batch).when(spy).readRecords(any(), any(), any());
         TransferBatchResponse expected = TransferBatchResponse.builder().build();
         doReturn(expected).when(spy).writeRecords(batch,
                 logUnitClient, testProcessor.getMaxWriteRetries(), testProcessor.getWriteSleepDuration());
