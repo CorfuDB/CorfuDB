@@ -357,26 +357,45 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         }
 
         sessionManager.notifyLeadershipChange();
-        sessionManager.refresh(topologyDescriptor);
-        // check if all the sessions in system tables are valid
-        sessionManager.removeStaleSessionOnLeadershipAcquire();
-
-
-        // If local cluster is Source, start the client config listener.
-        if (isSource(topologyDescriptor)) {
-            sessionManager.startClientConfigListener();
-        }
-
-        setupConnectionComponents();
-
-        if (isSource(topologyDescriptor)) {
-            logReplicationEventListener = new LogReplicationEventListener(this, runtime);
-            logReplicationEventListener.start();
-        }
-
+        performReplicationSetup(topologyDescriptor, true);
         // record metrics about the lock acquired.
         lockAcquireSample = recordLockAcquire();
         processCountOnLockAcquire();
+    }
+
+    private void performReplicationSetup(TopologyDescriptor topology, boolean onLeadershipAcquire) {
+        sessionManager.refresh(topology);
+
+        // If not invoked as part of leadership change,
+        // If invoked as part of leadership acquisition, check if all the sessions in system tables are valid
+        if (onLeadershipAcquire) {
+            sessionManager.removeStaleSessionOnLeadershipAcquire();
+        } else {
+            // Otherwise, this method was invoked due to a topology change.  So update the topology descriptor
+            topologyDescriptor = topology;
+        }
+
+        // Setup the connection components if this node is the leader
+        if (sessionManager.getReplicationContext().getIsLeader().get()) {
+            setupConnectionComponents();
+        }
+
+        // If invoked on a topology change and no longer a Source, stop the listeners
+        if (!onLeadershipAcquire && !isSource(topologyDescriptor)) {
+            if (logReplicationEventListener != null) {
+                logReplicationEventListener.stop();
+            }
+            sessionManager.stopClientConfigListener();
+        }
+
+        // If the current cluster is a Source and a leader, start the listeners
+        if (isSource(topologyDescriptor) && sessionManager.getReplicationContext().getIsLeader().get()) {
+            if (logReplicationEventListener == null) {
+                logReplicationEventListener = new LogReplicationEventListener(this, runtime);
+            }
+            logReplicationEventListener.start();
+            sessionManager.startClientConfigListener();
+        }
     }
 
     private void setupConnectionComponents() {
@@ -524,25 +543,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
     private void onTopologyChange(TopologyDescriptor newTopology) {
         log.info("A role change or a remote cluster may have been added or removed");
 
-        // refresh the session so new sessions are added and stale sessions are stopped.
-        sessionManager.refresh(newTopology);
-        topologyDescriptor = newTopology;
-
-        if (sessionManager.getReplicationContext().getIsLeader().get()) {
-            setupConnectionComponents();
-
-            if (isSource(topologyDescriptor)) {
-                // If local cluster is a Source, start config listener
-                sessionManager.startClientConfigListener();
-            }
-
-            if (!isSource(topologyDescriptor) && logReplicationEventListener != null) {
-                // If no longer a Source, stop the event listener and config
-                // listener
-                logReplicationEventListener.stop();
-                sessionManager.stopClientConfigListener();
-            }
-        }
+        performReplicationSetup(newTopology, false);
 
         log.debug("Persisted new topologyConfigId {}, cluster id={}", topologyDescriptor.getTopologyConfigId(),
             topologyDescriptor.getLocalClusterDescriptor().getClusterId());
