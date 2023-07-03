@@ -1,14 +1,11 @@
 package org.corfudb.infrastructure.logreplication.infrastructure;
 
-import com.google.common.collect.ImmutableMap;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.AbstractServer;
-import org.corfudb.infrastructure.BaseServer;
 import org.corfudb.infrastructure.LogReplicationServer;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerThreadFactory;
-import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationServerRouter;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 

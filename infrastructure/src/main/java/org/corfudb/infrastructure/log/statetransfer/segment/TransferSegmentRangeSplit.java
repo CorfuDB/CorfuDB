@@ -1,13 +1,13 @@
 package org.corfudb.infrastructure.log.statetransfer.segment;
 
 import com.google.common.collect.ImmutableList;
-import lombok.EqualsAndHashCode;
-import lombok.ToString;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NonNull;
+import lombok.ToString;
 import org.corfudb.common.util.Tuple;
 
 import java.util.List;

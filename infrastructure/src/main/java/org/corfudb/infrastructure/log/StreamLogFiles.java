@@ -16,8 +16,6 @@ import org.corfudb.runtime.exceptions.LogUnitException;
 import org.corfudb.runtime.exceptions.OverwriteCause;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.TrimmedException;
-import org.corfudb.runtime.view.Layout;
-import org.corfudb.util.JsonUtils;
 
 import java.io.File;
 import java.io.FileFilter;

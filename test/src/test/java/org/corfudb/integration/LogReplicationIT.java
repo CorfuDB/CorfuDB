@@ -2,6 +2,7 @@ package org.corfudb.integration;
 
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.CorfuTestParameters;
 import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
@@ -30,12 +31,12 @@ import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.proto.service.CorfuMessage;
-
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.util.Utils;
 import org.junit.Test;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
@@ -53,8 +54,8 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import static java.lang.Thread.sleep;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_CACHE_NUM_ENTRIES;
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED;
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_CACHE_NUM_ENTRIES;
 import static org.corfudb.integration.LogReplicationAbstractIT.checkpointAndTrimCorfuStore;
 import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
 
@@ -189,6 +190,10 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     private final String t2NameUFO = TEST_NAMESPACE + "$" + t2Name;
 
     private final CountDownLatch blockUntilFSMTransition = new CountDownLatch(1);
+
+    public LogReplicationIT() {
+        PARAMETERS = new CorfuTestParameters(Duration.ofMinutes(5));
+    }
 
     /**
      * Setup Test Environment

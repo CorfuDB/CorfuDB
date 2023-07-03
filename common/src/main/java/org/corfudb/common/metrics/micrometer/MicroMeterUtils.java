@@ -34,7 +34,6 @@ public class MicroMeterUtils {
             "corfu.infrastructure.message-handler.committed_tail_request",
             "corfu.infrastructure.message-handler.inspect_addresses_request",
             "corfu.infrastructure.message-handler.query_node_request",
-            "corfu.infrastructure.message-handler.write_log_request",
             "corfu.infrastructure.message-handler.read_log_request",
             "corfu.infrastructure.message-handler.sequencer_metrics_request",
             "corfu.infrastructure.message-handler.trim_mark_request",

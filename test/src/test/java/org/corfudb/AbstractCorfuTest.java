@@ -57,7 +57,7 @@ public class AbstractCorfuTest {
      */
     public ArrayList<IntConsumer> testSM = null;
 
-    public static final CorfuTestParameters PARAMETERS = new CorfuTestParameters();
+    public static CorfuTestParameters PARAMETERS = new CorfuTestParameters();
 
     public static final CorfuTestServers SERVERS = new CorfuTestServers();
 

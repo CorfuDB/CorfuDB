@@ -1,11 +1,12 @@
 package org.corfudb.infrastructure;
 
-import java.util.concurrent.CompletableFuture;
 import org.corfudb.protocols.service.CorfuProtocolBase;
 import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
 import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.junit.Test;
+
+import java.util.concurrent.CompletableFuture;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;

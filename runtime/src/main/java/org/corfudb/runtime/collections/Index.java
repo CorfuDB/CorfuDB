@@ -11,14 +11,14 @@ public class Index {
 
     /**
      * Denotes a function that supplies the unique name of an index registered to
-     * {@link CorfuTable}.
+     * {@link ICorfuTable}.
      */
     @FunctionalInterface
     public interface Name extends Supplier<String> {
     }
 
     /**
-     * Denotes a function that takes as input the key and value of an {@link CorfuTable}
+     * Denotes a function that takes as input the key and value of an {@link ICorfuTable}
      * record, and computes the associated index value for the record.
      *
      * @param <K> type of the record key.

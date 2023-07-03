@@ -13,16 +13,14 @@ import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.runtime.CheckpointWriter;
 import org.corfudb.runtime.CorfuOptions;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuStoreMetadata.ProtobufFileDescriptor;
+import org.corfudb.runtime.CorfuStoreMetadata.ProtobufFileName;
 import org.corfudb.runtime.CorfuStoreMetadata.TableDescriptors;
 import org.corfudb.runtime.CorfuStoreMetadata.TableMetadata;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
-import org.corfudb.runtime.CorfuStoreMetadata.ProtobufFileName;
-import org.corfudb.runtime.CorfuStoreMetadata.ProtobufFileDescriptor;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.ICorfuTable;
-import org.corfudb.runtime.collections.PersistedStreamingMap;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
-import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TableParameters;
@@ -57,7 +55,6 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import static org.corfudb.runtime.view.ObjectsView.LOG_REPLICATOR_STREAM_INFO;
@@ -300,7 +297,7 @@ public class TableRegistry {
                 break;
             } catch (TransactionAbortedException txAbort) {
                 if (txAbort.getAbortCause() == AbortCause.CONFLICT &&
-                        txAbort.getConflictStream().equals(protobufDescriptorTable.getCorfuStreamID())) {
+                        txAbort.getConflictStream().equals(protobufDescriptorTable.getCorfuSMRProxy().getStreamID())) {
                     // Updates to protobuf descriptor tables are internal so conflicts hit here
                     // should not count towards the normal retry count.
                     log.info("registerTable {}${} failed due to conflict in protobuf descriptors. Retrying",
@@ -620,12 +617,12 @@ public class TableRegistry {
 
         String fullyQualifiedTableName = getFullyQualifiedTableName(namespace, tableName);
 
-        Supplier<StreamingMap<K, V>> mapSupplier = null;
+        // persistentDataPath is deprecated and needs to be removed.
+        CorfuOptions.PersistenceOptions persistenceOptions =
+                tableOptions.getPersistenceOptions();
         if (tableOptions.getPersistentDataPath().isPresent()) {
-            mapSupplier = () -> new PersistedStreamingMap<>(
-                    tableOptions.getPersistentDataPath().get(),
-                    PersistedStreamingMap.getPersistedStreamingMapOptions(),
-                    protobufSerializer, this.runtime);
+            persistenceOptions = tableOptions.getPersistenceOptions().toBuilder().setDataPath(
+                    tableOptions.getPersistentDataPath().get().toString()).build();
         }
 
         CorfuOptions.SchemaOptions tableSchemaOptions;
@@ -664,12 +661,12 @@ public class TableRegistry {
                         .valueSchema(defaultValueMessage)
                         .metadataSchema(defaultMetadataMessage)
                         .schemaOptions(tableSchemaOptions)
+                        .persistenceOptions(persistenceOptions)
                         .secondaryIndexesDisabled(tableOptions.isSecondaryIndexesDisabled())
                         .build(),
                 this.runtime,
                 this.protobufSerializer,
-                streamTagIdsForTable,
-                mapSupplier);
+                streamTagIdsForTable);
         tableMap.put(fullyQualifiedTableName, (Table<Message, Message, Message>) table);
 
         registerTable(namespace, tableName, kClass, vClass, mClass, tableOptions);
@@ -828,13 +825,12 @@ public class TableRegistry {
                                                        @Nonnull final TableOptions tableOptions)
             throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
 
-        // In-memory PersistentCorfuTable does not need a map supplier
-        Supplier<StreamingMap<K, V>> mapSupplier = null;
+        // persistentDataPath is deprecated and needs to be removed.
+        CorfuOptions.PersistenceOptions persistenceOptions =
+                tableOptions.getPersistenceOptions();
         if (tableOptions.getPersistentDataPath().isPresent()) {
-            mapSupplier = () -> new PersistedStreamingMap<>(
-                    tableOptions.getPersistentDataPath().get(),
-                    PersistedStreamingMap.getPersistedStreamingMapOptions(),
-                    protobufSerializer, this.runtime);
+            persistenceOptions = tableOptions.getPersistenceOptions().toBuilder().setDataPath(
+                    tableOptions.getPersistentDataPath().get().toString()).build();
         }
 
         CorfuOptions.SchemaOptions tableSchemaOptions;
@@ -856,11 +852,11 @@ public class TableRegistry {
                         .valueSchema(defaultValueMessage)
                         .metadataSchema(defaultMetadataMessage)
                         .schemaOptions(tableSchemaOptions)
+                        .persistenceOptions(persistenceOptions)
                         .secondaryIndexesDisabled(tableOptions.isSecondaryIndexesDisabled())
                         .build(),
                 this.runtime,
                 this.protobufSerializer,
-                mapSupplier,
                 new HashSet<>(Collections.singletonList(LOG_REPLICATOR_STREAM_INFO.getStreamId())));
     }
 

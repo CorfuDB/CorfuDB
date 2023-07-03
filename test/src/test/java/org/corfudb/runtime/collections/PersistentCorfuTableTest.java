@@ -46,8 +46,8 @@ import java.util.stream.StreamSupport;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.eq;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.reset;
@@ -150,15 +150,16 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
             args = new Object[]{new ProtobufIndexer(defaultValueMessage, schemaOptions)};
         }
 
-        table.setProxy$CORFUSMR(new MVOCorfuCompileProxy(
+        table.setCorfuSMRProxy(new MVOCorfuCompileProxy(
                 runtime,
                 UUID.nameUUIDFromBytes(fullyQualifiedTableName.getBytes()),
-                ImmutableCorfuTable.<K, CorfuRecord<V, M>>getTableType().getRawType(),
+                ImmutableCorfuTable.<K, CorfuRecord<V, M>>getTypeToken().getRawType(),
                 args,
                 runtime.getSerializers().getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE),
                 new HashSet<UUID>(),
                 table,
-                ObjectOpenOption.CACHE
+                ObjectOpenOption.CACHE,
+                rt.getObjectsView().getMvoCache()
                 ));
 
         return table;
@@ -348,8 +349,8 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
         // Verify the MVOCache has exactly 2 versions
         Set<VersionedObjectIdentifier> voIds = rt.getObjectsView().getMvoCache().keySet();
         assertThat(voIds).containsExactlyInAnyOrder(
-                new VersionedObjectIdentifier(corfuTable.getCorfuStreamID(), -1L),
-                new VersionedObjectIdentifier(corfuTable.getCorfuStreamID(), 0L));
+                new VersionedObjectIdentifier(corfuTable.getCorfuSMRProxy().getStreamID(), -1L),
+                new VersionedObjectIdentifier(corfuTable.getCorfuSMRProxy().getStreamID(), 0L));
     }
 
     @Test
@@ -510,14 +511,14 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
                 .build()
                 .setStreamID(streamA)
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
-                .option(ObjectOpenOption.CACHE)
+                .addOpenOption(ObjectOpenOption.CACHE)
                 .open();
 
         PersistentCorfuTable<String, String> tableB = rt.getObjectsView()
                 .build()
                 .setStreamID(streamB)
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
-                .option(ObjectOpenOption.NO_CACHE)
+                .addOpenOption(ObjectOpenOption.NO_CACHE)
                 .open();
 
         String key = "key";

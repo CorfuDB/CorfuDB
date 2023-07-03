@@ -1,15 +1,6 @@
 package org.corfudb.infrastructure;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-
-
 import com.google.common.collect.Sets;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
 import org.assertj.core.api.Assertions;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.runtime.exceptions.LayoutModificationException;
@@ -17,6 +8,15 @@ import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.Layout.ReplicationMode;
 import org.corfudb.runtime.view.LayoutBuilder;
 import org.junit.Test;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Created by zlokhandwala on 10/26/16.

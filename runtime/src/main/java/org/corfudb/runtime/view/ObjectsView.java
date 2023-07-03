@@ -1,7 +1,7 @@
 package org.corfudb.runtime.view;
 
 import lombok.AllArgsConstructor;
-import lombok.Data;
+import lombok.Builder;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NonNull;
@@ -18,10 +18,8 @@ import org.corfudb.runtime.exceptions.QuotaExceededException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.WriteSizeException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
-import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.MVOCache;
-import org.corfudb.runtime.object.MVOCorfuCompileProxy;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.object.transactions.Transaction;
 import org.corfudb.runtime.object.transactions.Transaction.TransactionBuilder;
@@ -71,8 +69,8 @@ public class ObjectsView extends AbstractView {
      *
      * @return An object builder to open an object with.
      */
-    public SMRObject.Builder<?> build() {
-        return new SMRObject.Builder<>().runtime(runtime);
+    public <T extends ICorfuSMR<?>> SMRObject.Builder<T> build() {
+        return new SMRObject.Builder<T>().setCorfuRuntime(runtime);
     }
 
     /**
@@ -230,21 +228,18 @@ public class ObjectsView extends AbstractView {
      */
     public void gc(long trimMark) {
         for (Object obj : getObjectCache().values()) {
-            if (((ICorfuSMR) obj).getCorfuSMRProxy() instanceof CorfuCompileProxy) {
-                ((CorfuCompileProxy) ((ICorfuSMR) obj).
-                        getCorfuSMRProxy()).getUnderlyingObject().gc(trimMark);
-            } else {
-                // MVOCorfuCompileProxy
-                ((MVOCorfuCompileProxy) ((ICorfuSMR) obj).
-                        getCorfuSMRProxy()).getUnderlyingMVO().gc(trimMark);
-            }
+            ((ICorfuSMR) obj).getCorfuSMRProxy().getUnderlyingMVO().gc(trimMark);
         }
     }
 
-    @Data
+    @Builder
+    @AllArgsConstructor
+    @EqualsAndHashCode
     @SuppressWarnings({"checkstyle:abbreviation"})
     public static class ObjectID<T> {
         final UUID streamID;
+
+        @EqualsAndHashCode.Exclude
         final Class<T> type;
 
         public String toString() {

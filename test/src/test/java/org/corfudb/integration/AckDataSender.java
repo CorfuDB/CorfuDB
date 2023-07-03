@@ -7,13 +7,13 @@ import org.corfudb.infrastructure.logreplication.replication.send.LogReplication
 import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 
-import static org.assertj.core.api.Assertions.fail;
-
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+
+import static org.assertj.core.api.Assertions.fail;
 
 @Data
 public class AckDataSender implements DataSender {

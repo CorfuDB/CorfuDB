@@ -1,12 +1,12 @@
 package org.corfudb.runtime.clients;
 
 import io.netty.channel.ChannelHandlerContext;
-import java.util.Set;
-
 import org.corfudb.runtime.proto.ServerErrors.ServerErrorMsg.ErrorCase;
 import org.corfudb.runtime.proto.service.CorfuMessage.PriorityLevel;
-import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg.PayloadCase;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg.PayloadCase;
+
+import java.util.Set;
 
 /**
  * This is an interface which all clients to a ClientRouter must implement.

@@ -1,6 +1,5 @@
 package org.corfudb.infrastructure;
 
-import java.util.UUID;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.experimental.Accessors;
@@ -8,6 +7,7 @@ import org.corfudb.runtime.view.Layout;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**

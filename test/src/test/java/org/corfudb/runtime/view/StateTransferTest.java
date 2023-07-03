@@ -6,6 +6,7 @@ import com.google.common.collect.Range;
 import com.google.common.io.Files;
 import lombok.Getter;
 import org.apache.commons.io.FileUtils;
+import org.corfudb.CorfuTestParameters;
 import org.corfudb.common.compression.Codec;
 import org.corfudb.infrastructure.AutoCommitService;
 import org.corfudb.infrastructure.ServerContext;
@@ -22,8 +23,8 @@ import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.TestRule;
 import org.corfudb.runtime.exceptions.RetryExhaustedException;
-import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg.PayloadCase;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg.PayloadCase;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg;
 import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
 import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatusReliability;
@@ -65,6 +66,10 @@ public class StateTransferTest extends AbstractViewTest {
 
     @Getter
     protected CorfuRuntime corfuRuntime = null;
+
+    public StateTransferTest() {
+        PARAMETERS = new CorfuTestParameters(Duration.ofMinutes(5));
+    }
 
     @Before
     public void clearRuntime() {

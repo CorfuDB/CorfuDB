@@ -31,8 +31,8 @@ import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalRetry;
 import org.corfudb.util.retry.RetryNeededException;
 import org.corfudb.utils.CommonTypes.Uuid;
-import org.corfudb.utils.LogReplicationStreams.VersionString;
 import org.corfudb.utils.LogReplicationStreams.Version;
+import org.corfudb.utils.LogReplicationStreams.VersionString;
 
 import java.io.File;
 import java.lang.reflect.InvocationTargetException;

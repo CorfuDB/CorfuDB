@@ -2,24 +2,24 @@ package org.corfudb.runtime.clients;
 
 import com.google.protobuf.ByteString;
 import io.netty.channel.ChannelHandlerContext;
-import java.io.ObjectInputStream;
-import java.lang.invoke.MethodHandles;
-import java.util.UUID;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.protocols.CorfuProtocolCommon;
+import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
 import org.corfudb.runtime.exceptions.DeserializationFailedException;
+import org.corfudb.runtime.exceptions.NoBootstrapException;
 import org.corfudb.runtime.exceptions.ServerNotReadyException;
 import org.corfudb.runtime.exceptions.WrongClusterException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
-import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
-import org.corfudb.runtime.exceptions.NoBootstrapException;
 import org.corfudb.runtime.proto.ServerErrors.ServerErrorMsg.ErrorCase;
 import org.corfudb.runtime.proto.ServerErrors.WrongClusterErrorMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg.PayloadCase;
+
+import java.io.ObjectInputStream;
+import java.lang.invoke.MethodHandles;
+import java.util.UUID;
 
 /**
  * This is a base client which handles basic Corfu messages such as PING, ACK.

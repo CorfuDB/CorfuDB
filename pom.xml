@@ -14,9 +14,8 @@
         <module>corfudb-tools</module>
         <module>generator</module>
         <module>coverage</module>
-        <module>annotationProcessor</module>
-        <module>annotations</module>
         <module>samples</module>
+	<module>annotations</module>
         <module>debian</module>
         <module>test</module>
         <module>it</module>
@@ -49,7 +48,8 @@
         <lombok.version>1.18.24</lombok.version>
         <guava.version>28.0-jre</guava.version>
         <junit.jupiter.version>5.7.1</junit.jupiter.version>
-        <mockito.version>1.10.19</mockito.version>
+        <mockito.version>4.11.0</mockito.version>
+        <bytebuddy.version>1.14.4</bytebuddy.version>
         <assertj.version>3.19.0</assertj.version>
         <zero.allocation.hashing.version>0.8</zero.allocation.hashing.version>
         <jacoco.version>0.8.8</jacoco.version>
@@ -154,8 +154,26 @@
         </dependency>
         <dependency>
             <groupId>org.mockito</groupId>
-            <artifactId>mockito-all</artifactId>
+            <artifactId>mockito-core</artifactId>
             <version>${mockito.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-inline</artifactId>
+            <version>${mockito.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>net.bytebuddy</groupId>
+            <artifactId>byte-buddy-agent</artifactId>
+            <version>${bytebuddy.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>net.bytebuddy</groupId>
+            <artifactId>byte-buddy</artifactId>
+            <version>${bytebuddy.version}</version>
             <scope>test</scope>
         </dependency>
 

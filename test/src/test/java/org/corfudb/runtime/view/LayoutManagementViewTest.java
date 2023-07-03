@@ -1,15 +1,15 @@
 package org.corfudb.runtime.view;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
-
-import java.util.Arrays;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.TestLayoutBuilder;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.view.Layout.ReplicationMode;
 import org.junit.Test;
+
+import java.util.Arrays;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Created by Maithem on 12/13/17.

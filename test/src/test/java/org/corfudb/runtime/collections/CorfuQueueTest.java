@@ -1,28 +1,28 @@
 package org.corfudb.runtime.collections;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-
 import com.google.common.primitives.UnsignedBytes;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Map;
-import java.util.TreeMap;
-import lombok.Getter;
-import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.CorfuRuntime;
 import com.google.common.reflect.TypeToken;
 import com.google.protobuf.ByteString;
-import java.util.Set;
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
+import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.CorfuQueue.CorfuQueueRecord;
 import org.corfudb.runtime.view.AbstractViewTest;
-import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
+
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Created by Sundar Sridharan on May 22, 2019

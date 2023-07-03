@@ -42,8 +42,8 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MERGE_ONLY_STREAMS;
-import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.REGISTRY_TABLE_ID;
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.PROTOBUF_TABLE_ID;
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.REGISTRY_TABLE_ID;
 
 /**
  * This class represents the entity responsible for writing streams' snapshots into the sink cluster DB.

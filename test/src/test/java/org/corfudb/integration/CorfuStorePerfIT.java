@@ -1,6 +1,21 @@
 package org.corfudb.integration;
 
 
+import com.google.common.reflect.TypeToken;
+import org.apache.commons.io.FileUtils;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.collections.CorfuStore;
+import org.corfudb.runtime.collections.ICorfuTable;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
+import org.corfudb.runtime.collections.Table;
+import org.corfudb.runtime.collections.TableOptions;
+import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.test.SampleSchema;
+import org.corfudb.test.SampleSchema.EventInfo;
+import org.corfudb.test.SampleSchema.ManagedResources;
+import org.corfudb.test.SampleSchema.Uuid;
+import org.junit.jupiter.api.Test;
+
 import java.lang.reflect.InvocationTargetException;
 import java.nio.file.FileStore;
 import java.nio.file.Files;
@@ -8,24 +23,6 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
-
-import com.google.common.reflect.TypeToken;
-import org.apache.commons.io.FileUtils;
-
-import org.corfudb.runtime.collections.ICorfuTable;
-import org.corfudb.runtime.collections.PersistentCorfuTable;
-import org.corfudb.runtime.collections.TxnContext;
-import org.corfudb.runtime.view.SMRObject;
-import org.junit.jupiter.api.Test;
-
-import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.collections.CorfuStore;
-import org.corfudb.runtime.collections.Table;
-import org.corfudb.runtime.collections.TableOptions;
-import org.corfudb.test.SampleSchema;
-import org.corfudb.test.SampleSchema.ManagedResources;
-import org.corfudb.test.SampleSchema.Uuid;
-import org.corfudb.test.SampleSchema.EventInfo;
 
 import static org.assertj.core.api.Assertions.assertThat;
 /**

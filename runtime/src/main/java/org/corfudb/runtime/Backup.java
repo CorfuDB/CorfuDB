@@ -6,11 +6,15 @@ import org.apache.commons.compress.archivers.tar.TarArchiveOutputStream;
 import org.apache.commons.io.FileUtils;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.exceptions.BackupRestoreException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.StreamOptions;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.runtime.view.stream.OpaqueStream;
+
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -18,6 +22,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -46,16 +51,19 @@ public class Backup {
     private String backupTempDirPath;
 
     // The stream IDs of tables which are backed up
-    private final List<UUID> streamIDs;
+    private final List<UUID> streamsToBackUp = new ArrayList<>();
 
     // The snapshot address to back up
     private long timestamp;
 
-    // The Corfu Runtime which is performing the back up
+    // The Corfu Runtime which is performing the backup
     private final CorfuRuntime runtime;
 
-    // All tables in Corfu Db
-    private List<UUID> allTablesInDb;
+    // The tables belonging to this namespace will be backed up
+    private final String namespace;
+
+    // Whether to back up only tagged tables or all tables
+    private final boolean taggedTables;
 
     /**
      * Backup files of tables are temporarily stored under BACKUP_TEMP_DIR. They are deleted after backup finishes.
@@ -63,32 +71,22 @@ public class Backup {
     private static final String BACKUP_TEMP_DIR_PREFIX = "corfu_backup_";
 
     /**
-     * @param filePath      - the filePath where the generated backup tar file will be placed
-     * @param streamIDs     - the stream IDs of tables which are backed up
-     * @param runtime       - the runtime which is performing the back up
-     */
-    public Backup(String filePath, List<UUID> streamIDs, CorfuRuntime runtime) {
-        this.filePath = filePath;
-        this.streamIDs = streamIDs;
-        this.runtime = runtime;
-    }
-
-    /**
-     * Discover and back up all tables, or tables with requires_backup_support tag
+     * Discover and back up all tables
      *
      * @param filePath          - the filePath where the generated backup tar file will be placed
-     * @param runtime           - the runtime which is performing the back up
-     * @param taggedTablesOnly  - if true, back up tables which has requires_backup_support tag set;
-     *                            if false, back up all UFO tables
+     * @param runtime           - the runtime which is performing the backup
+     * @param taggedTables      - if true, back up only tagged tables; if false, back up all tables
+     * @param namespace         - tables belonging to this namespace will be backed up; if null, back up all namespaces
      */
-    public Backup(String filePath, CorfuRuntime runtime, boolean taggedTablesOnly) {
+    public Backup(@Nonnull String filePath,
+                  @Nonnull CorfuRuntime runtime,
+                  boolean taggedTables,
+                  @Nullable String namespace) {
+
         this.filePath = filePath;
         this.runtime = runtime;
-        if (taggedTablesOnly) {
-            this.streamIDs = getTaggedTables();
-        } else {
-            this.streamIDs = getAllTables();
-        }
+        this.taggedTables = taggedTables;
+        this.namespace = namespace;
     }
 
     /**
@@ -98,10 +96,19 @@ public class Backup {
      */
     public void start() throws IOException {
         log.info("started corfu backup");
-        if (streamIDs == null) {
-            log.warn("streamIDs is a null variable! back up aborted!");
-            return;
+
+        streamsToBackUp.addAll(runtime.getTableRegistry()
+                .getRegistryTable()
+                .entryStream()
+                .filter(this::filterTable)
+                .map(table -> CorfuRuntime.getStreamID(TableRegistry.getFullyQualifiedTableName(table.getKey())))
+                .collect(Collectors.toList()));
+
+        if (streamsToBackUp.isEmpty()) {
+            log.warn("back up is called with empty streamIDs!");
         }
+
+        log.info("Preparing to back up {} tables: {}", streamsToBackUp.size(), streamsToBackUp);
 
         this.timestamp = runtime.getAddressSpaceView().getLogTail();
 
@@ -112,7 +119,7 @@ public class Backup {
             backup();
             generateTarFile();
         } catch (Exception e) {
-            throw new BackupRestoreException("failed to backup tables " + streamIDs, e);
+            throw new BackupRestoreException("failed to backup tables " + streamsToBackUp, e);
         } finally {
             cleanup();
         }
@@ -120,19 +127,15 @@ public class Backup {
     }
 
     /**
-     * Check if table exists in Corfu Db
+     * A predicate checking if the given table should be backed up based on the given configuration
      *
-     * @param streamId   the stream id of the table which is being checked
-     * @return           true if table exists
+     * @param table a given table entry from RegistryTable
+     * @return if the table should be backed up
      */
-    private boolean tableExists(UUID streamId) {
-        if (allTablesInDb == null) {
-            allTablesInDb = runtime.getTableRegistry().listTables()
-                    .stream()
-                    .map(tableName -> CorfuRuntime.getStreamID(TableRegistry.getFullyQualifiedTableName(tableName)))
-                    .collect(Collectors.toList());
-        }
-        return allTablesInDb.contains(streamId);
+    private boolean filterTable(Map.Entry<CorfuStoreMetadata.TableName,
+            CorfuRecord<CorfuStoreMetadata.TableDescriptors, CorfuStoreMetadata.TableMetadata>> table) {
+        return (namespace == null || table.getKey().getNamespace().equals(namespace)) &&
+                (!taggedTables || table.getValue().getMetadata().getTableOptions().getRequiresBackupSupport());
     }
 
     /**
@@ -141,22 +144,11 @@ public class Backup {
      * @throws IOException
      */
     private void backup() throws IOException {
-        if (streamIDs.isEmpty()) {
-            log.warn("back up is called with empty streamIDs!");
-            return;
-        }
-
         long startTime = System.currentTimeMillis();
 
         this.backupTempDirPath = Files.createTempDirectory(BACKUP_TEMP_DIR_PREFIX).toString();
         Map<UUID, String> streamIdToTableNameMap = getStreamIdToTableNameMap();
-        for (UUID streamId : streamIDs) {
-            if (!tableExists(streamId)) {
-                log.warn("cannot back up a non-existent table stream id {} table name {}",
-                        streamId, streamIdToTableNameMap.get(streamId));
-                continue;
-            }
-
+        for (UUID streamId : streamsToBackUp) {
             // temporary backup file's name format: uuid.namespace$tableName
             Path filePath = Paths.get(backupTempDirPath)
                     .resolve(streamId + "." + streamIdToTableNameMap.get(streamId));
@@ -165,7 +157,7 @@ public class Backup {
         long elapsedTime = System.currentTimeMillis() - startTime;
 
         log.info("successfully backed up {} tables to {} directory, elapsed time {}ms",
-                streamIDs.size(), backupTempDirPath, elapsedTime);
+                streamsToBackUp.size(), backupTempDirPath, elapsedTime);
     }
 
     /**
@@ -200,7 +192,7 @@ public class Backup {
 
         long elapsedTime = System.currentTimeMillis() - startTime;
 
-        log.info("{} entries (size: {} bytes, elapsed time: {} ms) saved to temp file {}",
+        log.info("{} SMREntry (size: {} bytes, elapsed time: {} ms) saved to temp file {}",
                 backupTableStats.getNumOfEntries(), backupTableStats.getTableSize(), elapsedTime, filePath);
     }
 
@@ -209,10 +201,10 @@ public class Backup {
         int numOfEntries = 0;
         int tableSize = 0;
         while (iterator.hasNext()) {
-            numOfEntries++;
             OpaqueEntry lastEntry = iterator.next();
             List<SMREntry> smrEntries = lastEntry.getEntries().get(uuid);
             if (smrEntries != null) {
+                numOfEntries += smrEntries.size();
                 Map<UUID, List<SMREntry>> map = new HashMap<>();
                 map.put(uuid, smrEntries);
                 OpaqueEntry newOpaqueEntry = new OpaqueEntry(lastEntry.getVersion(), map);
@@ -274,42 +266,6 @@ public class Backup {
             log.error("failed to add table backup file {} to tar file", tableFile.getName());
             throw e;
         }
-    }
-
-    /**
-     * Get UUIDs of tables which have the requires_backup_support tag set
-     *
-     * @return  List<UUID>   - a list of UUIDs for all the tables which require backup support
-     */
-    private List<UUID> getTaggedTables() {
-        TableRegistry tableRegistry = runtime.getTableRegistry();
-        List<UUID> tables = tableRegistry
-                .listTables()
-                .stream()
-                .filter(tableName -> tableRegistry
-                        .getRegistryTable()
-                        .get(tableName)
-                        .getMetadata()
-                        .getTableOptions()
-                        .getRequiresBackupSupport())
-                .map(tableName -> CorfuRuntime
-                        .getStreamID(TableRegistry.getFullyQualifiedTableName(tableName)))
-                .collect(Collectors.toList());
-        log.info("{} tables need to be backed up.", tables.size());
-
-        return tables;
-    }
-
-    /**
-     * Get UUIDs of all registered UFO tables
-     *
-     * @return  List<UUID>   - a list of UUIDs for all registered UFO tables
-     */
-    private List<UUID> getAllTables() {
-        return runtime.getTableRegistry().listTables().stream()
-                .map(table -> CorfuRuntime.getStreamID(
-                        TableRegistry.getFullyQualifiedTableName(table.getNamespace(), table.getTableName())))
-                .collect(Collectors.toList());
     }
 
     /**

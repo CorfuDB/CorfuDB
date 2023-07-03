@@ -225,5 +225,4 @@ public class LoggingMeterRegistryTest {
         assertTrue(sink.substringIsPresent("summary_percentile,endpoint=localhost:9000,phi=0.95,metric_type=gauge value=100"));
         assertTrue(sink.substringIsPresent("summary_percentile,endpoint=localhost:9000,phi=0.5,metric_type=gauge value=100"));
     }
-
 }

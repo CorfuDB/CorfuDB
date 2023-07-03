@@ -1,9 +1,9 @@
 package org.corfudb.runtime.view;
 
-import java.util.Set;
-
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
+
+import java.util.Set;
 
 /**
  * Conserves the failures.

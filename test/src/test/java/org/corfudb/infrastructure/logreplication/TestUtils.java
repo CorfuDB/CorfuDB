@@ -3,6 +3,7 @@ package org.corfudb.infrastructure.logreplication;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.service.CorfuProtocolLogReplication;
 import org.corfudb.runtime.LogReplication;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;

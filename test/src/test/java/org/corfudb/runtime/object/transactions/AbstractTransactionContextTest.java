@@ -1,21 +1,19 @@
 package org.corfudb.runtime.object.transactions;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import com.google.common.reflect.TypeToken;
-
-import java.util.ArrayList;
-import java.util.concurrent.atomic.AtomicIntegerArray;
-import java.util.concurrent.atomic.AtomicLong;
-
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
-import org.corfudb.runtime.object.CorfuSharedCounter;
 import org.corfudb.runtime.view.Address;
 import org.junit.Before;
 import org.junit.Test;
+
+import java.util.concurrent.atomic.AtomicIntegerArray;
+import java.util.concurrent.atomic.AtomicLong;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Created by mwei on 11/21/16.
@@ -59,31 +57,9 @@ public abstract class AbstractTransactionContextTest extends AbstractTransaction
     static final int OVERWRITE_TWICE = 34;
 
     int numTasks;
-    ArrayList<CorfuSharedCounter> sharedCounters;
     AtomicIntegerArray commitStatus;
     final int COMMITVALUE = 1; // by default, ABORTVALUE = 0
     AtomicIntegerArray snapStatus;
-
-    /**
-     * build an array of shared counters for the test
-     */
-    void setupCounters() {
-
-        numTasks = PARAMETERS.NUM_ITERATIONS_MODERATE;
-        sharedCounters = new ArrayList<>();
-
-        for (int i = 0; i < numTasks; i++)
-            sharedCounters.add(i,
-                    instantiateCorfuObject(CorfuSharedCounter.class, "test"+i)
-            );
-
-        // initialize all shared counters
-        for (int i = 0; i < numTasks; i++)
-            sharedCounters.get(i).setValue(INITIAL);
-
-        commitStatus = new AtomicIntegerArray(numTasks);
-        snapStatus = new AtomicIntegerArray(numTasks);
-    }
 
     /** Ensure that empty write sets are not written to the log.
      * This test applies to all contexts which is why it is in

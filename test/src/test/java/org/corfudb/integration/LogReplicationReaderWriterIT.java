@@ -24,7 +24,7 @@ import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStoreEntry;
-import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
@@ -54,9 +54,9 @@ import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_MAX_NUM_MSG_PER_BATCH;
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED;
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_CACHE_NUM_ENTRIES;
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_DATA_MSG_SIZE_SUPPORTED;
-import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED;
 
 @Slf4j
 public class LogReplicationReaderWriterIT extends AbstractIT {
@@ -361,10 +361,10 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
      * enforce checkpoint entries at the streams.
      */
     public static Token ckStreamsAndTrim(CorfuRuntime rt, Map<String, Table<StringKey, IntValue, Metadata>> tables) {
-        MultiCheckpointWriter<CorfuTable<StringKey, CorfuRecord<IntValue, Metadata>>> mcw1 = new MultiCheckpointWriter<>();
+        MultiCheckpointWriter<PersistentCorfuTable<StringKey, CorfuRecord<IntValue, Metadata>>> mcw1 = new MultiCheckpointWriter<>();
         for (Table<StringKey, IntValue, Metadata> map : tables.values()) {
-            CorfuTable<StringKey, CorfuRecord<IntValue, Metadata>> table = rt.getObjectsView().build()
-                    .setTypeToken(new TypeToken<CorfuTable<StringKey, CorfuRecord<IntValue, Metadata>>>() {})
+            PersistentCorfuTable<StringKey, CorfuRecord<IntValue, Metadata>> table = rt.getObjectsView().build()
+                    .setTypeToken(new TypeToken<PersistentCorfuTable<StringKey, CorfuRecord<IntValue, Metadata>>>() {})
                     .setStreamName(map.getFullyQualifiedTableName())
                     .open();
             mcw1.addMap(table);
@@ -452,10 +452,10 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
         trimAlone(srcDataRuntime.getAddressSpaceView().getLogTail() - offset, srcDataRuntime);
 
         try {
-            CorfuTable<Long, Long> testTable = srcDataRuntime.getObjectsView()
+            PersistentCorfuTable<Long, Long> testTable = srcDataRuntime.getObjectsView()
                     .build()
                     .setStreamName("test0")
-                    .setTypeToken(new TypeToken<CorfuTable<Long, Long>>() {
+                    .setTypeToken(new TypeToken<PersistentCorfuTable<Long, Long>>() {
                     })
                     .setSerializer(Serializers.PRIMITIVE)
                     .open();

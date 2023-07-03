@@ -5,9 +5,8 @@ import io.netty.channel.EventLoopGroup;
 import lombok.Data;
 import org.corfudb.comm.ChannelImplementation;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
-import org.corfudb.infrastructure.logreplication.transport.IChannelContext;
-
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
+import org.corfudb.infrastructure.logreplication.transport.IChannelContext;
 import org.corfudb.runtime.RuntimeParameters;
 import org.corfudb.runtime.RuntimeParametersBuilder;
 

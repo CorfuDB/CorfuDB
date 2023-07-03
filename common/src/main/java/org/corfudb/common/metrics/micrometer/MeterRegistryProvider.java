@@ -3,7 +3,6 @@ package org.corfudb.common.metrics.micrometer;
 import io.micrometer.core.instrument.Meter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Tag;
-
 import io.micrometer.core.instrument.composite.CompositeMeterRegistry;
 import io.micrometer.core.instrument.logging.LoggingRegistryConfig;
 import lombok.Getter;
@@ -15,7 +14,9 @@ import org.slf4j.Logger;
 
 import java.time.Duration;
 import java.util.Iterator;
+import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 
 /**
@@ -25,11 +26,11 @@ import java.util.function.Supplier;
 public class MeterRegistryProvider {
     @Getter
     private static CompositeMeterRegistry meterRegistry;
-    @Getter
     private static Optional<String> id = Optional.empty();
-    @Getter
     private static Optional<MetricType> metricType = Optional.empty();
     private static Optional<RegistryProvider> provider = Optional.empty();
+    private static final Map<String, Supplier<String>> externalMetricsSuppliers
+            = new ConcurrentHashMap<>();
 
     private MeterRegistryProvider() {
 
@@ -89,7 +90,7 @@ public class MeterRegistryProvider {
             Supplier<Optional<MeterRegistry>> supplier = () -> {
                 LoggingRegistryConfig config = new IntervalLoggingConfig(loggingInterval);
                 LoggingMeterRegistryWithHistogramSupport registry =
-                        new LoggingMeterRegistryWithHistogramSupport(config, logger::debug);
+                        new LoggingMeterRegistryWithHistogramSupport(config, logger::debug, externalMetricsSuppliers);
                 registry.config().commonTags("id", identifier);
                 Optional<MeterRegistry> ret = Optional.of(registry);
                 JVMMetrics.register(ret);
@@ -159,6 +160,7 @@ public class MeterRegistryProvider {
     public static synchronized void close() {
         meterRegistry.close();
         meterRegistry.getRegistries().forEach(registry -> meterRegistry.remove(registry));
+        externalMetricsSuppliers.clear();
         provider.ifPresent(RegistryProvider::close);
         provider = Optional.empty();
         metricType = Optional.empty();
@@ -172,6 +174,14 @@ public class MeterRegistryProvider {
      */
     public static synchronized Optional<MetricType> getMetricType() {
         return metricType;
+    }
+
+    public static void registerExternalSupplier(String identifier, Supplier<String> supplier) {
+        externalMetricsSuppliers.put(identifier, supplier);
+    }
+
+    public static void unregisterExternalSupplier(String identifier) {
+        externalMetricsSuppliers.remove(identifier);
     }
 
     /**

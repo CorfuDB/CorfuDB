@@ -5,11 +5,12 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufOutputStream;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.MessageToByteEncoder;
-import java.io.IOException;
-import java.util.concurrent.atomic.LongAccumulator;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
+
+import java.io.IOException;
+import java.util.concurrent.atomic.LongAccumulator;
 
 import static org.corfudb.protocols.CorfuProtocolCommon.MessageMarker.PROTO_REQUEST_MSG_MARK;
 import static org.corfudb.protocols.CorfuProtocolCommon.MessageMarker.PROTO_RESPONSE_MSG_MARK;

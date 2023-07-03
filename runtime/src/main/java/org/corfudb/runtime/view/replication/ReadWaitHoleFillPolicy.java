@@ -1,11 +1,6 @@
 package org.corfudb.runtime.view.replication;
 
-import java.time.Duration;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.function.Function;
-
-import javax.annotation.Nonnull;
-
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.exceptions.HoleFillRequiredException;
 import org.corfudb.runtime.exceptions.RetryExhaustedException;
@@ -13,7 +8,11 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterrupte
 import org.corfudb.util.retry.ExponentialBackoffRetry;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.RetryNeededException;
-import lombok.extern.slf4j.Slf4j;
+
+import javax.annotation.Nonnull;
+import java.time.Duration;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Function;
 
 
 /**

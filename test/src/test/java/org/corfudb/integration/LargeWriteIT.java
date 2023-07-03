@@ -8,7 +8,6 @@ import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.WriteSizeException;
-import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
 
@@ -79,7 +78,7 @@ public class LargeWriteIT extends AbstractIT {
                 .build()
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, byte[]>>() {})
                 .setStreamName(tableName)
-                .serializer(Serializers.JAVA)
+                .setSerializer(Serializers.JAVA)
                 .open();
 
         runtime.getObjectsView().TXBegin();

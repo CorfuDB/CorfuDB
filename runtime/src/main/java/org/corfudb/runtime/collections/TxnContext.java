@@ -29,6 +29,7 @@ import java.util.function.BiPredicate;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static org.corfudb.runtime.collections.QueryOptions.DEFAULT_OPTIONS;
 
@@ -557,6 +558,17 @@ public class TxnContext implements AutoCloseable {
     public <K extends Message, V extends Message, M extends Message>
     Set<K> keySet(@Nonnull final Table<K, V, M> table) {
         return table.keySet();
+    }
+
+    /**
+     * Gets all entries in the table in form of a stream.
+     *
+     * @param table - the table whose entrires are requested.
+     * @return stream of entries in the table
+     */
+    public <K extends Message, V extends Message, M extends Message>
+    Stream<CorfuStoreEntry<K, V, M>> entryStream(@Nonnull final Table<K, V, M> table) {
+        return table.entryStream();
     }
 
     /**
