@@ -9,11 +9,13 @@ import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRunt
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientServerRouter;
 import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
+import org.corfudb.runtime.exceptions.ServerNotReadyException;
 import org.corfudb.runtime.proto.service.CorfuMessage;
 import org.corfudb.runtime.view.Address;
 
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -141,8 +143,17 @@ public class NegotiatingState implements LogReplicationRuntimeState {
                 // No leader found at the time of negotiation
                 fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.REMOTE_LEADER_LOSS));
             }
-        } catch (LogReplicationNegotiationException | TimeoutException ex) {
-            log.error("Negotiation failed. Retry, until negotiation succeeds or connection is marked as down.", ex);
+        } catch (TimeoutException ex) {
+            log.error("The wait for the negotiation response timed out, retry");
+            fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.NEGOTIATION_FAILED));
+        } catch (ExecutionException e) {
+            if (e.getCause() instanceof ServerNotReadyException) {
+                log.error("Sink side LR server is not ready for current session yet, retry", e);
+            } else if (e.getCause() instanceof LogReplicationNegotiationException) {
+                log.error("Negotiation failed. Retry, until negotiation succeeds or connection is marked as down.", e);
+            } else {
+                log.error("Unexpected exception during negotiation, retry.", e);
+            }
             fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.NEGOTIATION_FAILED));
         } catch (Exception e) {
             log.error("Unexpected exception during negotiation, retry.", e);

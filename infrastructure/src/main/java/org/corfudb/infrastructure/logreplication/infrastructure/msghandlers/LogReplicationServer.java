@@ -10,11 +10,14 @@ import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.Re
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.transport.IClientServerRouter;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
+import org.corfudb.protocols.CorfuProtocolServerErrors;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationSinkManager;
 import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
+import org.corfudb.runtime.exceptions.ServerNotReadyException;
+import org.corfudb.runtime.proto.ServerErrors;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
@@ -38,6 +41,7 @@ import static org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg.P
 import static org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg.PayloadCase.LR_ENTRY_ACK;
 import static org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg.PayloadCase.LR_LEADERSHIP_RESPONSE;
 import static org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg.PayloadCase.LR_METADATA_RESPONSE;
+import static org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg.PayloadCase.SERVER_ERROR;
 
 /**
  * This class represents the Log Replication Server, which is responsible of providing Log Replication across sites.
@@ -206,8 +210,6 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
                     log.error("SessionManager does not know about incoming session {}, total={}, current sessions={}",
                             session, sessionToSinkManagerMap.size(), sessionToSinkManagerMap.keySet());
                     return;
-                } else {
-                    sinkManager = createSinkManager(session);
                 }
             }
 
@@ -267,14 +269,13 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
             // TODO[V2] : We still have a case where the cluster does not ever discover a session on its own.
             //  To resolve this, we need to have a long living RPC from the connectionInitiator cluster which will query
             //  for sessions from the other cluster
-            if (sinkManager == null) {
-                if(!allSessions.contains(session)) {
-                    log.error("SessionManager does not know about incoming session {}, total={}, current sessions={}",
-                            session, sessionToSinkManagerMap.size(), sessionToSinkManagerMap.keySet());
-                    return;
-                } else {
-                    sinkManager = createSinkManager(session);
-                }
+            if (sinkManager == null || !allSessions.contains(session)) {
+                log.error("SessionManager does not know about incoming session {}, total={}, current sessions={}",
+                        session, sessionToSinkManagerMap.size(), sessionToSinkManagerMap.keySet());
+                ServerErrors.ServerErrorMsg errorMsg = CorfuProtocolServerErrors.getNotReadyErrorMsg();
+                ResponseMsg response = getResponseMsg(getHeaderMsg(request.getHeader()), errorMsg);
+                router.sendResponse(response);
+                return;
             }
 
             ReplicationMetadata metadata = metadataManager.getReplicationMetadata(session);
@@ -340,6 +341,14 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
         log.debug("Handle log replication query leadership response msg {}", TextFormat.shortDebugString(response));
         router.completeRequest(response.getHeader().getSession(), response.getHeader().getRequestId(),
                 response.getPayload().getLrLeadershipResponse());
+    }
+
+    @LogReplicationResponseHandler(responseType = SERVER_ERROR)
+    private void handleServerErrorResponse(RequestMsg req, ResponseMsg response,
+                                          @Nonnull IClientServerRouter router) {
+        log.debug("Handle log replication query leadership response msg {}", TextFormat.shortDebugString(response));
+        router.completeExceptionally(response.getHeader().getSession(), response.getHeader().getRequestId(),
+                new ServerNotReadyException());
     }
 
     /**
