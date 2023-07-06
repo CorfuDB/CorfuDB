@@ -1341,6 +1341,7 @@ public class CorfuRuntime {
         this(CorfuRuntimeParameters.builder().build());
         this.parseConfigurationString(configurationString);
     }
+
     // endregion
 
     // region Deprecated Setters
