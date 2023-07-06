@@ -357,23 +357,18 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         }
 
         sessionManager.notifyLeadershipChange();
-        performReplicationSetup(topologyDescriptor, true);
+        performReplicationSetup(topologyDescriptor);
         // record metrics about the lock acquired.
         lockAcquireSample = recordLockAcquire();
         processCountOnLockAcquire();
     }
 
-    private void performReplicationSetup(TopologyDescriptor topology, boolean onLeadershipAcquire) {
+    private void performReplicationSetup(TopologyDescriptor topology) {
         sessionManager.refresh(topology);
 
-        // If not invoked as part of leadership change,
-        // If invoked as part of leadership acquisition, check if all the sessions in system tables are valid
-        if (onLeadershipAcquire) {
-            sessionManager.removeStaleSessionOnLeadershipAcquire();
-        } else {
-            // Otherwise, this method was invoked due to a topology change.  So update the topology descriptor
-            topologyDescriptor = topology;
-        }
+        // Update the topology
+        // Note: Topology will be different only if we reached here due to a topology change
+        topologyDescriptor = topology;
 
         // Setup the connection components if this node is the leader
         if (sessionManager.getReplicationContext().getIsLeader().get()) {
@@ -381,7 +376,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         }
 
         // If invoked on a topology change and no longer a Source, stop the listeners
-        if (!onLeadershipAcquire && !isSource(topologyDescriptor)) {
+        if (!sessionManager.getReplicationContext().getIsLeader().get() && !isSource(topologyDescriptor)) {
             if (logReplicationEventListener != null) {
                 logReplicationEventListener.stop();
             }
@@ -543,7 +538,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
     private void onTopologyChange(TopologyDescriptor newTopology) {
         log.info("A role change or a remote cluster may have been added or removed");
 
-        performReplicationSetup(newTopology, false);
+        performReplicationSetup(newTopology);
 
         log.debug("Persisted new topologyConfigId {}, cluster id={}", topologyDescriptor.getTopologyConfigId(),
             topologyDescriptor.getLocalClusterDescriptor().getClusterId());
