@@ -26,7 +26,7 @@ public class StreamSeekAtomicityTest extends AbstractTransactionsTest {
      * This test verifies commit atomicity against concurrent -read- activity,
      * which constantly causes rollbacks and optimistic-rollbacks.
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void ckCommitAtomicity() throws Exception {
@@ -35,7 +35,7 @@ public class StreamSeekAtomicityTest extends AbstractTransactionsTest {
         PersistentCorfuTable<Long, Long> testTable = getRuntime().getObjectsView()
                 .build()
                 .setStreamName(tableName)
-                .setTypeToken(new TypeToken<PersistentCorfuTable<Long, Long>>() {})
+                .setTypeToken(PersistentCorfuTable.<Long, Long>getTableType())
                 .open();
 
         CountDownLatch l1 = new CountDownLatch(2);
@@ -98,7 +98,7 @@ public class StreamSeekAtomicityTest extends AbstractTransactionsTest {
      * It verifies commit atomicity against concurrent -read- activity,
      * which constantly causes rollbacks and optimistic-rollbacks.
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void ckCommitAtomicity2() throws Exception {
@@ -107,14 +107,14 @@ public class StreamSeekAtomicityTest extends AbstractTransactionsTest {
         PersistentCorfuTable<Long, Long> testTable1 = getRuntime().getObjectsView()
                 .build()
                 .setStreamName(tableName1)
-                .setTypeToken(new TypeToken<PersistentCorfuTable<Long, Long>>() {})
+                .setTypeToken(PersistentCorfuTable.<Long, Long>getTableType())
                 .open();
 
         final String tableName2 = "testTableB";
         PersistentCorfuTable<Long, Long> testTable2 = getRuntime().getObjectsView()
                 .build()
                 .setStreamName(tableName2)
-                .setTypeToken(new TypeToken<PersistentCorfuTable<Long, Long>>() {})
+                .setTypeToken(PersistentCorfuTable.<Long, Long>getTableType())
                 .open();
 
         CountDownLatch l1 = new CountDownLatch(2);
@@ -180,7 +180,7 @@ public class StreamSeekAtomicityTest extends AbstractTransactionsTest {
     /**
      * This test is similar to above, but with concurrent -write- activity
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void ckCommitAtomicity3() throws Exception {
@@ -189,14 +189,14 @@ public class StreamSeekAtomicityTest extends AbstractTransactionsTest {
         PersistentCorfuTable<Long, Long> testTable1 = getRuntime().getObjectsView()
                 .build()
                 .setStreamName(tableName1)
-                .setTypeToken(new TypeToken<PersistentCorfuTable<Long, Long>>() {})
+                .setTypeToken(PersistentCorfuTable.<Long, Long>getTableType())
                 .open();
 
         final String tableName2 = "testTableB";
         PersistentCorfuTable<Long, Long> testTable2 = getRuntime().getObjectsView()
                 .build()
                 .setStreamName(tableName2)
-                .setTypeToken(new TypeToken<PersistentCorfuTable<Long, Long>>() {})
+                .setTypeToken(PersistentCorfuTable.<Long, Long>getTableType())
                 .open();
 
         CountDownLatch l1 = new CountDownLatch(2);

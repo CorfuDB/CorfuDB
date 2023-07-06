@@ -25,11 +25,8 @@ import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.MVOCorfuCompileProxy;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.view.AbstractViewTest;
-import org.corfudb.runtime.view.SMRObject;
 import org.junit.Ignore;
 import org.junit.Test;
-
-import javax.annotation.Nonnull;
 
 public class CorfuTableTest extends AbstractViewTest {
 
@@ -45,7 +42,7 @@ public class CorfuTableTest extends AbstractViewTest {
     public void openingCorfuTableTwice() {
         CorfuTable<String, String>
                 instance1 = getDefaultRuntime().getObjectsView().build()
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setTypeToken(CorfuTable.<String, String>getTableType())
                 .setArguments(new StringIndexer())
                 .setStreamName("test")
                 .open();
@@ -54,7 +51,7 @@ public class CorfuTableTest extends AbstractViewTest {
 
         CorfuTable<String, String>
                 instance2 = getDefaultRuntime().getObjectsView().build()
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setTypeToken(CorfuTable.<String, String>getTableType())
                 .setStreamName("test")
                 .open();
 
@@ -68,7 +65,7 @@ public class CorfuTableTest extends AbstractViewTest {
     public void internalMapContainersTest() {
         PersistentCorfuTable<String, String>
                 corfuTable = getDefaultRuntime().getObjectsView().build()
-                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setTypeToken(PersistentCorfuTable.<String, String>getTableType())
                 .setArguments(new StringIndexer())
                 .setStreamName("test")
                 .open();
@@ -90,11 +87,10 @@ public class CorfuTableTest extends AbstractViewTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     public void canReadFromEachIndex() {
         PersistentCorfuTable<String, String>
                 corfuTable = getDefaultRuntime().getObjectsView().build()
-                    .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                    .setTypeToken(PersistentCorfuTable.<String, String>getTableType())
                     .setArguments(new StringIndexer())
                     .setStreamName("test")
                     .open();
@@ -115,7 +111,7 @@ public class CorfuTableTest extends AbstractViewTest {
     public void testUnmappingSecondaryIndex() {
         CorfuTable<String, String>
                 corfuTable = getDefaultRuntime().getObjectsView().build()
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setTypeToken(CorfuTable.<String, String>getTableType())
                 .setArguments(new StringIndexer())
                 .setStreamName("test")
                 .open();
@@ -146,11 +142,10 @@ public class CorfuTableTest extends AbstractViewTest {
      * when the index has never been specified for this CorfuTable.
      */
     @Test (expected = IllegalArgumentException.class)
-    @SuppressWarnings("unchecked")
     public void cannotLookupByIndexWhenIndexNotSpecified() {
         PersistentCorfuTable<String, String>
                 corfuTable = getDefaultRuntime().getObjectsView().build()
-                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setTypeToken(PersistentCorfuTable.<String, String>getTableType())
                 .setStreamName("test")
                 .open();
 
@@ -162,15 +157,14 @@ public class CorfuTableTest extends AbstractViewTest {
     }
 
     /**
-     * Can create create multiple index for the same value
+     * Can create multiple index for the same value
      */
     @Test
-    @SuppressWarnings("unchecked")
     public void canReadFromMultipleIndices() {
         PersistentCorfuTable<String, String> corfuTable = getDefaultRuntime()
                 .getObjectsView()
                 .build()
-                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setTypeToken(PersistentCorfuTable.<String, String>getTableType())
                 .setArguments(new StringMultiIndexer())
                 .setStreamName("test-map")
                 .open();
@@ -185,11 +179,10 @@ public class CorfuTableTest extends AbstractViewTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     public void emptyIndexesReturnEmptyValues() {
         PersistentCorfuTable<String, String>
                 corfuTable = getDefaultRuntime().getObjectsView().build()
-                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setTypeToken(PersistentCorfuTable.<String, String>getTableType())
                 .setArguments(new StringIndexer())
                 .setStreamName("test")
                 .open();
@@ -208,11 +201,10 @@ public class CorfuTableTest extends AbstractViewTest {
      * percolated all the way to the client.
      */
     @Test
-    @SuppressWarnings("unchecked")
     public void problematicIndexFunction() {
         PersistentCorfuTable<String, String>
                 corfuTable = getDefaultRuntime().getObjectsView().build()
-                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setTypeToken(PersistentCorfuTable.<String, String>getTableType())
                 .setArguments(new StringIndexer.FailingIndex())
                 .setStreamName("failing-index")
                 .open();
@@ -229,12 +221,11 @@ public class CorfuTableTest extends AbstractViewTest {
      * percolated all the way to the client (TX flavour).
      */
     @Test
-    @SuppressWarnings("unchecked")
     @Ignore // TODO: Exception thrown from different location
     public void problematicIndexFunctionTx() {
         CorfuTable<String, String>
                 corfuTable = getDefaultRuntime().getObjectsView().build()
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setTypeToken(CorfuTable.<String, String>getTableType())
                 .setArguments(new StringIndexer.FailingIndex())
                 .setStreamName("failing-index")
                 .open();
@@ -250,11 +241,10 @@ public class CorfuTableTest extends AbstractViewTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     public void canReadWithoutIndexes() {
         PersistentCorfuTable<String, String>
                 corfuTable = getDefaultRuntime().getObjectsView().build()
-                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setTypeToken(PersistentCorfuTable.<String, String>getTableType())
                 .setStreamName("test")
                 .open();
 
@@ -276,7 +266,7 @@ public class CorfuTableTest extends AbstractViewTest {
     public void doUpdateIndicesOnRemove() throws Exception {
         PersistentCorfuTable<String, String>
                 corfuTable = getDefaultRuntime().getObjectsView().build()
-                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setTypeToken(PersistentCorfuTable.<String, String>getTableType())
                 .setArguments(new StringIndexer())
                 .setStreamName("test")
                 .open();
@@ -311,14 +301,14 @@ public class CorfuTableTest extends AbstractViewTest {
     }
 
     @Test
-    @SuppressWarnings({"unchecked", "checkstyle:magicnumber"})
+    @SuppressWarnings({"checkstyle:magicnumber"})
     public void canHandleHoleInTail() {
-        UUID streamID = UUID.randomUUID();
+        final UUID streamID = UUID.randomUUID();
 
         PersistentCorfuTable<String, String> corfuTable = getDefaultRuntime()
                 .getObjectsView()
                 .build()
-                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setTypeToken(PersistentCorfuTable.<String, String>getTableType())
                 .setStreamID(streamID)
                 .open();
 
@@ -350,8 +340,9 @@ public class CorfuTableTest extends AbstractViewTest {
             getDefaultRuntime().getObjectsView().TXEnd();
         }
 
-        assertThat(((MVOCorfuCompileProxy) ((ICorfuSMR) corfuTable).
-                getCorfuSMRProxy()).getUnderlyingMVO().getSmrStream().pos()).isEqualTo(3);
+        ICorfuSMR<PersistentCorfuTable<String, String>> corfuSmr = corfuTable;
+        MVOCorfuCompileProxy corfuSMRProxy = (MVOCorfuCompileProxy) corfuSmr.getCorfuSMRProxy();
+        assertThat(corfuSMRProxy.getUnderlyingMVO().getSmrStream().pos()).isEqualTo(3);
     }
 
     /**

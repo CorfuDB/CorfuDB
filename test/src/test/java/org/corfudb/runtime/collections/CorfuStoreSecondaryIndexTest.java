@@ -275,7 +275,7 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
 
         for(int i=0; i<totalRecords; i++) {
             if(i % 2 == 0) {
-                evenRecordIndexes.add(Long.valueOf(i));
+                evenRecordIndexes.add((long) i);
             }
 
             UUID uuid = UUID.randomUUID();
@@ -931,14 +931,14 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
      *      (b) Index non-Primitive type (within the oneOf)
      *      (c) Index is on a repeated field of the 'oneOf' attribute (e.g., in example_schemas.proto consider
      *         the case of contacts.number.mobile)
-     *
+     * <p>
      * Please see example_schemas.proto: ContactBook
-     *
+     * <p>
      * In this test, we create 3 contact books: work, friends & family
      * A 'contact book' is composed of a list of 'contact', each contact has a 'name' and its 'contactInformation'
      * is either an 'address' (which has a field city) or a 'phone number' (contactInformation is 'oneOf')
      * A 'common' phone number, is a number shared across different contacts
-     *
+     * <p>
      * * ContactBookWork (4 contacts):
      *   - 1 with San Francisco Address
      *   - 3 with Phone Number: 1 contact with common phone number (home and mobile)
@@ -949,7 +949,7 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
      *   - 2 with Phone Number:
      *                          1 friend contact with unique phone number
      *                          1 contact with a common mobile number (its own home number)
-     *
+     * <p>
      * * ContactBookFamily (4 contacts):
      *   - 1 with Los Angeles Address
      *   - 3 with Phone Number: 1 contact with common phone number (home and mobile)
@@ -1096,10 +1096,9 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
      * throw an error on openTable if the schema has an index on a non-existent field
      * Please see example_schemas.proto.
      *
-     * @throws Exception exception
      */
     @Test
-    public void testInvalidSecondaryIndexNonExistentField() throws Exception {
+    public void testInvalidSecondaryIndexNonExistentField() {
         // Get a Corfu Runtime instance.
         CorfuRuntime corfuRuntime = getTestRuntime();
 
@@ -1125,10 +1124,9 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
      * throw an error on openTable (the name is invalid from lower in the chain of the secondary index definition).
      * Please see example_schemas.proto.
      *
-     * @throws Exception exception
      */
     @Test
-    public void testInvalidNestedSecondaryIndexLowerLevel() throws Exception {
+    public void testInvalidNestedSecondaryIndexLowerLevel() {
         // Get a Corfu Runtime instance.
         CorfuRuntime corfuRuntime = getTestRuntime();
 
@@ -1155,10 +1153,9 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
      * throw an error on openTable (the full path is invalid as it is indexed beyond a primitive type).
      * Please see example_schemas.proto.
      *
-     * @throws Exception exception
      */
     @Test
-    public void testInvalidNestedSecondaryIndexFullPath() throws Exception {
+    public void testInvalidNestedSecondaryIndexFullPath() {
         // Get a Corfu Runtime instance.
         CorfuRuntime corfuRuntime = getTestRuntime();
 
@@ -1282,10 +1279,9 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
     /**
      * Simple example to prove we can't register a table with non unique (default) alias
      *
-     * @throws Exception
      */
     @Test
-    public void testInvalidAlias() throws Exception {
+    public void testInvalidAlias() {
         // Get a Corfu Runtime instance.
         CorfuRuntime corfuRuntime = getTestRuntime();
 
@@ -1310,10 +1306,9 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
     /**
      * Simple example to prove we can't register a table with non-unique alias (user-defined)
      *
-     * @throws Exception
      */
     @Test
-    public void testInvalidAliasUserDefined() throws Exception {
+    public void testInvalidAliasUserDefined() {
         // Get a Corfu Runtime instance.
         CorfuRuntime corfuRuntime = getTestRuntime();
 
@@ -1504,14 +1499,14 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
     /**
      * Test indexing of 'NULL' (i.e., unset non-primitive sub-fields) for the following sub-field patterns (from
      * the root):
-     *
+     * <p>
      * Refer to SportsProfessional proto, in 'example_schemas.proto' for definitions.
-     *
+     * <p>
      * (1) Repeated field followed by oneOf field (e.g., hobby.sport)
      * (2) Non-repeated field followed by oneOf field (e.g., profession.sport)
      * (3) Repeated field followed by repeated field (e.g., training.exercises)
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void testNestedIndexesWithNullValues() throws Exception {

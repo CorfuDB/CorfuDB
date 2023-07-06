@@ -18,15 +18,15 @@ public class MultipleNonOverlappingTest extends AbstractTransactionsTest {
 
     /**
      * High level:
-     *
+     * <p>
      * This test will create OBJECT_NUM of objects in an CorfuTable. Each object's sum will be incremented by VAL until we
      * reach FINAL_SUM. At the end of this test we:
-     *
+     * <p>
      *   1) Check that there are OBJECT_NUM number of objects in the CorfuTable.
      *   2) Ensure that each object's sum is equal to FINAL_SUM
-     *
+     * <p>
      * Details (the mechanism by which we increment the values in each object):
-     *
+     * <p>
      *   1) We create THREAD_NUM number of threads
      *   2) Each thread is given a non-overlapping range on which to increment objects' sum. Each thread will increment
      *      it only once by VAL.

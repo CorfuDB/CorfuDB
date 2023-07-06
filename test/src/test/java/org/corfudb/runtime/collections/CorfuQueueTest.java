@@ -25,10 +25,6 @@ import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
 
 /**
- * Created by Sundar Sridharan on May 22, 2019
- */
-
-/**
  * Simple test of basic operations to check that insert order is preserved in the queue.
  * Created by hisundar on 05/27/2019
  */
@@ -61,7 +57,6 @@ public class CorfuQueueTest extends AbstractViewTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     public void basicQueueOrder() {
         CorfuRuntime runtime = createDefaultRuntime();
         CorfuQueue corfuQueue = new CorfuQueue(runtime, "test");
@@ -193,7 +188,7 @@ public class CorfuQueueTest extends AbstractViewTest {
         PersistentCorfuTable<CorfuQueue.CorfuRecordId, ByteString> map = rt2.getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setTypeToken(new TypeToken<PersistentCorfuTable<CorfuQueue.CorfuRecordId, ByteString>>() {})
+                .setTypeToken(PersistentCorfuTable.<CorfuQueue.CorfuRecordId, ByteString>getTableType())
                 .setSerializer(Serializers.QUEUE_SERIALIZER)
                 .open();
 
@@ -234,7 +229,7 @@ public class CorfuQueueTest extends AbstractViewTest {
                 .getObjectsView()
                 .build()
                 .setStreamName("stream1")
-                .setTypeToken(new TypeToken<PersistentCorfuTable<CorfuQueue.CorfuRecordId, ByteString>>() {})
+                .setTypeToken(PersistentCorfuTable.<CorfuQueue.CorfuRecordId, ByteString>getTableType())
                 .setSerializer(Serializers.QUEUE_SERIALIZER)
                 .open();
 
@@ -242,7 +237,7 @@ public class CorfuQueueTest extends AbstractViewTest {
                 .getObjectsView()
                 .build()
                 .setStreamName("stream2")
-                .setTypeToken(new TypeToken<PersistentCorfuTable<CorfuQueue.CorfuRecordId, ByteString>>() {})
+                .setTypeToken(PersistentCorfuTable.<CorfuQueue.CorfuRecordId, ByteString>getTableType())
                 .setSerializer(Serializers.QUEUE_SERIALIZER)
                 .open();
 

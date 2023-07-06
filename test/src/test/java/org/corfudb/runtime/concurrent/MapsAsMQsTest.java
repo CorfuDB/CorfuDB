@@ -25,7 +25,7 @@ public class MapsAsMQsTest extends AbstractTransactionsTest {
      * This test verifies commit atomicity against concurrent -read- activity,
      * which constantly causes rollbacks and optimistic-rollbacks.
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void useMapsAsMQs() throws Exception {
@@ -34,7 +34,7 @@ public class MapsAsMQsTest extends AbstractTransactionsTest {
                 .getObjectsView()
                 .build()
                 .setStreamName(tableName1)
-                .setTypeToken(new TypeToken<PersistentCorfuTable<Long, Long>>() {})
+                .setTypeToken(PersistentCorfuTable.<Long, Long>getTableType())
                 .open();
 
         final int nThreads = 4;

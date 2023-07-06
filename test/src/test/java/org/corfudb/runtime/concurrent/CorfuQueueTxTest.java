@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.google.protobuf.ByteString;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Hashtable;
 import java.util.List;
@@ -42,7 +43,8 @@ import org.junit.Test;
 @Slf4j
 @SuppressWarnings("checkstyle:magicnumber")
 public class CorfuQueueTxTest extends AbstractTransactionsTest {
-    static int myTable = 0;
+    private static int myTable = 0;
+
     @Override
     public void TXBegin() {
         TXBegin(TransactionType.OPTIMISTIC);
@@ -151,7 +153,7 @@ public class CorfuQueueTxTest extends AbstractTransactionsTest {
             log.debug("Entry:" + records.get(i).getRecordId());
             CorfuRecordId order = records.get(i).getRecordId();
             assertThat(testOrder.compareTo(order)).isLessThanOrEqualTo(0);
-            log.debug("queue entry"+i+":"+order+"UUID:"+order.toByteArray());
+            log.debug("queue entry" + i + ":" + order + "UUID:" + Arrays.toString(order.toByteArray()));
             testOrder = order;
             assertThat(getByteString(validator.get(i).getData())).isEqualTo(records.get(i).getEntry());
         }
@@ -200,14 +202,14 @@ public class CorfuQueueTxTest extends AbstractTransactionsTest {
 
         scheduleConcurrently(numThreads, t ->
         {
-            for (Long i = 0L; i < numIterations; i++) {
-                String queueDataStr = t.toString() + ":" + i.toString();
+            for (long i = 0L; i < numIterations; i++) {
+                String queueDataStr = t.toString() + ":" + Long.toString(i);
                 ExampleSchemas.ExampleValue queueData = ExampleSchemas.ExampleValue.newBuilder()
                         .setPayload(queueDataStr)
                         .setAnotherKey(i).build();
                 try {
                     ManagedTxnContext txn = shimStore.txn(someNamespace);
-                    Long coinToss = new Random().nextLong() % numConflictKeys;
+                    long coinToss = new Random().nextLong() % numConflictKeys;
                     UuidMsg conflictKey = UuidMsg.newBuilder().setMsb(coinToss).build();
                     txn.putRecord(conflictTable, conflictKey, conflictKey);
                     txn.enqueue(corfuQueue, queueData);
@@ -285,8 +287,8 @@ public class CorfuQueueTxTest extends AbstractTransactionsTest {
 
             ICorfuTable<Long, Long> testTable = tables.get(tableID);
 
-            for (Long i = 0L; i < numIterations; i++) {
-                String queueData = t.toString() + ":" + i.toString();
+            for (long i = 0L; i < numIterations; i++) {
+                String queueData = t.toString() + ":" + Long.toString(i);
                 try {
                     TXBegin(txnType);
                     Long coinToss = new Random().nextLong() % numConflictKeys;

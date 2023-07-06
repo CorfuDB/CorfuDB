@@ -16,6 +16,7 @@ import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.CorfuStoreMetadata.ProtobufFileDescriptor;
 import org.corfudb.runtime.CorfuStoreMetadata.ProtobufFileName;
 import org.corfudb.runtime.ExampleSchemas;
+import org.corfudb.runtime.ExampleSchemas.ClusterUuidMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMetadataMsg;
 import org.corfudb.runtime.Queue;
 import org.corfudb.runtime.exceptions.StaleRevisionUpdateException;
@@ -29,6 +30,7 @@ import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.ExampleSchemas.ManagedMetadata;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.ObjectsView;
+import org.corfudb.runtime.view.ObjectsView.ObjectID;
 import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
@@ -187,11 +189,11 @@ public class CorfuStoreShimTest extends AbstractViewTest {
 
         // Create & Register the table.
         // This is required to initialize the table for the current corfu client.
-        Table<UuidMsg, ExampleSchemas.ClusterUuidMsg, ManagedMetadata> table = shimStore.openTable(
+        Table<UuidMsg, ClusterUuidMsg, ManagedMetadata> table = shimStore.openTable(
                 someNamespace,
                 tableName,
                 UuidMsg.class,
-                ExampleSchemas.ClusterUuidMsg.class,
+                ClusterUuidMsg.class,
                 ManagedMetadata.class,
                 // TableOptions includes option to choose - Memory/Disk based corfu table.
                 TableOptions.builder().build());
@@ -203,7 +205,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
 
             ManagedTxnContext txn = shimStore.tx(someNamespace);
             txn.putRecord(table, key,
-                    ExampleSchemas.ClusterUuidMsg.newBuilder().setMsb(i).build(),
+                    ClusterUuidMsg.newBuilder().setMsb(i).build(),
                     user_1);
             txn.commit();
         }
@@ -237,7 +239,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
             UuidMsg key = UuidMsg.newBuilder().setMsb(i)
                     .build();
             ManagedTxnContext txn = shimStore.tx(someNamespace);
-            CorfuStoreEntry<UuidMsg, ExampleSchemas.ClusterUuidMsg, ManagedMetadata> record = txn.getRecord(table, key);
+            CorfuStoreEntry<UuidMsg, ClusterUuidMsg, ManagedMetadata> record = txn.getRecord(table, key);
             assertThat(record.getPayload()).isNotNull();
             assertThat(record.getPayload().getMsb()).isEqualTo(i);
             txn.commit();
@@ -245,7 +247,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
 
         // By some future bug should the table disappear from the object cache ensure that
         // the method still fails gracefully with a NoSuchElementException
-        ObjectsView.ObjectID oid = new ObjectsView.ObjectID(table.getStreamUUID(), PersistentCorfuTable.class);
+        ObjectID<PersistentCorfuTable> oid = new ObjectID<>(table.getStreamUUID(), PersistentCorfuTable.class);
         corfuRuntime.getObjectsView().getObjectCache().remove(oid);
         assertThatThrownBy(() -> shimStore.freeTableData(someNamespace, tableName))
                 .isExactlyInstanceOf(NoSuchElementException.class);
@@ -255,7 +257,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
      * CorfuStore stores 3 pieces of information - key, value and metadata
      * This test demonstrates how metadata field options especially "version" can be used and verified.
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void checkMetadataTransactions() throws Exception {
@@ -367,7 +369,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
     /**
      * Demonstrates that opening same table from multiple threads will retry internal transactions
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void checkOpenRetriesTXN() throws Exception {
@@ -394,11 +396,11 @@ public class CorfuStoreShimTest extends AbstractViewTest {
      * TX2: updates key K concurrently.
      * When TX1 commits, it will not hit a TransacationAbortedException.  To consider K for conflict resolution, TX1
      * must touch() it if no other updates are made to it.
-     *
+     * <p>
      * This test runs the above 2 transactions concurrently for 100 iterations and verifies that
      * TransactionAbortedException gets thrown at least once if the key is touched.
      * Additionally, it verifies that the exception is not thrown if the key is not touched.
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void testTouchReqdForReadTxWriteTxConflict() throws Exception {
@@ -502,7 +504,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
      * This test verifies getHighestSequenceNumber is able to return the highest sequence number
      * corresponding to a DATA entry when the tail of a stream is filled with HOLES.
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void getHighestSequenceNumberPresenceOfHoles() throws Exception {
@@ -790,7 +792,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
     /**
      * Validate that fields of metadata that are not set explicitly retain their prior values.
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void checkMetadataWorksWithoutSupervision() throws Exception {
@@ -896,7 +898,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
     /**
      * Validate that nested transactions do not throw exception if txnWithNesting is used.
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void checkNestedTransaction() throws Exception {
@@ -956,7 +958,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         // ----- check nested transactions NOT started by CorfuStore isn't messed up by CorfuStore txn -----
         PersistentCorfuTable<String, String>
                 corfuTable = corfuRuntime.getObjectsView().build()
-                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setTypeToken(PersistentCorfuTable.<String, String>getTableType())
                 .setStreamName("test")
                 .open();
 
@@ -1055,7 +1057,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
      * This is a research work done to demonstrate how Google DynamicMessage can be used to print/dump
      * the contents of the protobuf store which was written by a fully qualified type.
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Ignore
     @Test
@@ -1115,10 +1117,9 @@ public class CorfuStoreShimTest extends AbstractViewTest {
     /**
      * Verify null Value and Key schemas are blocked on openTable.
      *
-     * @throws Exception
      */
     @Test
-    public void checkNullValueAndKeySchema() throws Exception {
+    public void checkNullValueAndKeySchema() {
         // Get a Corfu Runtime instance.
         CorfuRuntime corfuRuntime = getTestRuntime();
 
@@ -1151,7 +1152,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
     /**
      * Demonstrates how features switches can be extracted from table options.
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void checkTableOptions() throws Exception {
