@@ -29,9 +29,6 @@ ENV JAVA_OPTS -verbose:gc \
     -Xloggc:/var/log/corfu/corfu.jvm.gc.9000.log \
     -XX:+UseG1GC \
     -XX:+UseStringDeduplication \
-    -XX:+UseGCLogFileRotation \
-    -XX:NumberOfGCLogFiles=10 \
-    -XX:GCLogFileSize=5M \
     -XX:+HeapDumpOnOutOfMemoryError \
     -XX:HeapDumpPath=/var/log/corfu/corfu_oom.hprof \
     -XX:+HeapDumpOnOutOfMemoryError \
