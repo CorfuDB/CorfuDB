@@ -26,7 +26,6 @@ COPY target/compactor-logback.prod.xml /usr/share/corfu/conf/compactor-logback.p
 COPY target/${CORFU_JAR} /app/corfu.jar
 
 ENV JAVA_OPTS -verbose:gc \
-    -XX:+PrintGCDetails \
     -Xloggc:/var/log/corfu/corfu.jvm.gc.9000.log \
     -XX:+UseG1GC \
     -XX:+UseStringDeduplication \
