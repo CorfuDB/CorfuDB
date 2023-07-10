@@ -27,8 +27,6 @@ COPY target/${CORFU_JAR} /app/corfu.jar
 
 ENV JAVA_OPTS -verbose:gc \
     -XX:+PrintGCDetails \
-    -XX:+PrintGCTimeStamps \
-    -XX:+PrintGCDateStamps \
     -Xloggc:/var/log/corfu/corfu.jvm.gc.9000.log \
     -XX:+UseG1GC \
     -XX:+UseStringDeduplication \
@@ -40,8 +38,6 @@ ENV JAVA_OPTS -verbose:gc \
     -XX:+HeapDumpOnOutOfMemoryError \
     -Djdk.nio.maxCachedBufferSize=1048576 \
     -Dio.netty.recycler.maxCapacityPerThread=0 \
-    -XX:+PrintGCApplicationStoppedTime \
-    -XX:+PrintGCApplicationConcurrentTime \
     -Djava.io.tmpdir=/image/corfu-server/temp
 
 CMD java -cp *.jar \
