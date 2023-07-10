@@ -26,22 +26,13 @@ COPY target/compactor-logback.prod.xml /usr/share/corfu/conf/compactor-logback.p
 COPY target/${CORFU_JAR} /app/corfu.jar
 
 ENV JAVA_OPTS -verbose:gc \
-    -XX:+PrintGCDetails \
-    -XX:+PrintGCTimeStamps \
-    -XX:+PrintGCDateStamps \
-    -Xloggc:/var/log/corfu/corfu.jvm.gc.9000.log \
     -XX:+UseG1GC \
     -XX:+UseStringDeduplication \
-    -XX:+UseGCLogFileRotation \
-    -XX:NumberOfGCLogFiles=10 \
-    -XX:GCLogFileSize=5M \
     -XX:+HeapDumpOnOutOfMemoryError \
     -XX:HeapDumpPath=/var/log/corfu/corfu_oom.hprof \
     -XX:+HeapDumpOnOutOfMemoryError \
     -Djdk.nio.maxCachedBufferSize=1048576 \
     -Dio.netty.recycler.maxCapacityPerThread=0 \
-    -XX:+PrintGCApplicationStoppedTime \
-    -XX:+PrintGCApplicationConcurrentTime \
     -Djava.io.tmpdir=/image/corfu-server/temp
 
 CMD java -cp *.jar \
