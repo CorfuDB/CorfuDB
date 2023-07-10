@@ -300,9 +300,9 @@ public abstract class LogReplicationRoutingQueueListener implements StreamListen
                     Queue.CorfuGuidMsg recordId = records.get(i).getRecordId();
                     Queue.RoutingTableEntryMsg entry = tx.getRecord(routingQueue, recordId).getPayload();
                     boolean callbackResult = false;
-                    if (entry.getType() == Queue.ReplicationType.SNAPSHOT_SYNC) {
+                    if (entry.getReplicationType() == Queue.ReplicationType.SNAPSHOT_SYNC) {
                         callbackResult = processUpdatesInSnapshotSync(Collections.singletonList(entry));
-                    } else if (entry.getType() == Queue.ReplicationType.LOG_ENTRY_SYNC) {
+                    } else if (entry.getReplicationType() == Queue.ReplicationType.LOG_ENTRY_SYNC) {
                         callbackResult = processUpdatesInLogEntrySync(Collections.singletonList(entry));
                     }
                     if (callbackResult) {
