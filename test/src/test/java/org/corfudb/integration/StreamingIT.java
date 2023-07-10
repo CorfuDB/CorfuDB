@@ -1066,7 +1066,7 @@ public class StreamingIT extends AbstractIT {
     @Test
     public void testSafeDataLossOnRoutingQs() throws Exception {
         // Run a corfu server & initialize CorfuStore
-        initializeCorfu();
+        CorfuRuntime runtime = initializeCorfu();
         final String systemNamespace = TableRegistry.CORFU_SYSTEM_NAMESPACE;
         final String logEntryQName = LogReplicationUtils.LOG_ENTRY_SYNC_QUEUE_NAME_SENDER;
         final String snapSyncQName = LogReplicationUtils.SNAPSHOT_SYNC_QUEUE_NAME_SENDER;

@@ -26,8 +26,12 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
     // TODO (V2): This field should be removed after the rpc stream is added for Sink side session creation.
     public static final String DEFAULT_ROUTING_QUEUE_CLIENT = "00000000-0000-0000-0000-0000000000002";
 
-    private final Table<Queue.CorfuGuidMsg, RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg> logEntryQ;
-    private final CorfuStore corfuStore;
+    private Table<Queue.CorfuGuidMsg, RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg> logEntryQ;
+    private CorfuStore corfuStore;
+
+    public RoutingQueueSenderClient() {
+        // TODO: This might be removed in the future. Temporary solution for bypassing providing a CorfuRuntime
+    }
 
     /**
      * Constructor for the log replication client for routing queues on sender.
@@ -81,7 +85,6 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
     }
 
     /**
-     * TODO: May not be needed for poc
      * Request LR to perform a forced snapshot sync.
      *
      * @param timestamp Timestamp from which recovery is possible.
