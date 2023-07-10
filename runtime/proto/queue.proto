@@ -23,16 +23,43 @@ enum ReplicationType {
     LAST_FULL_SYNC_ENTRY = 3; // Last entry denoting the end marker of a full sync
 }
 
+enum OperationType {
+    INVALID = 0;
+    PUT = 1;
+    REMOVE = 2;
+}
+
+message DataLocatorMsg {
+
+    // Name of the table that will be modified.
+    string tableName = 1;
+
+    // Serialized form of the keys of the table that will be modified.
+    bytes key_serialized = 2;
+}
+
 // This message forms the value part of the payload used for LogReplication over Routing Queues
 message RoutingTableEntryMsg {
+    // Source cluster id that is sending messages
+    string source_cluster_id = 1;
+
     // List of unique destinations from topology.
-    repeated string destinations = 1;
+    repeated string destinations = 2;
 
     // Specify the replication type for routing queue model.
-    ReplicationType type = 2;
+    ReplicationType replication_type = 3;
 
     // The actual payload carrying data that will be replicated to the destinations specified.
-    bytes opaque_payload = 3;
+    bytes opaque_payload = 4;
+
+    // Serialized metadata field for certain types
+    bytes opaque_metadata = 5;
+
+    // Contains the table name and serialized keys that will be updated of that table
+    DataLocatorMsg dataLocator = 6;
+
+    // Operation type that marks the table content is being created or removed.
+    OperationType operation_type = 7;
 }
 
 message RoutingTableSnapshotEndKeyMsg {
