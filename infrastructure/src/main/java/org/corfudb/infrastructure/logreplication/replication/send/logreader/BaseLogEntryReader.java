@@ -130,7 +130,7 @@ public abstract class BaseLogEntryReader extends LogEntryReader {
      * @return true, if the transaction entry has any valid stream to replicate.
      * false, otherwise.
      */
-    private boolean isValidTransactionEntry(@NonNull OpaqueEntry entry) {
+    protected boolean isValidTransactionEntry(@NonNull OpaqueEntry entry) {
         Set<UUID> txEntryStreamIds = new HashSet<>(entry.getEntries().keySet());
 
         // Sanity Check: discard if transaction stream opaque entry is empty (no streams are present)
@@ -246,7 +246,7 @@ public abstract class BaseLogEntryReader extends LogEntryReader {
      * @param opaqueEntry opaque entry to parse.
      * @return filtered opaque entry
      */
-    private OpaqueEntry filterTransactionEntry(OpaqueEntry opaqueEntry) {
+    protected OpaqueEntry filterTransactionEntry(OpaqueEntry opaqueEntry) {
         Map<UUID, List<SMREntry>> filteredTxEntryMap = opaqueEntry.getEntries().entrySet().stream()
             .filter(entry -> getStreamUUIDs().contains(entry.getKey()))
             .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
@@ -311,7 +311,7 @@ public abstract class BaseLogEntryReader extends LogEntryReader {
         public ModelBasedOpaqueStream(CorfuRuntime rt) {
             this.rt = rt;
             opaqueStream = new OpaqueStream(rt.getStreamsView().get(replicationContext.getConfigManager()
-                    .getOpaqueStreamToTrack(session.getSubscriber())));
+                    .getLogEntrySyncOpaqueStream(session)));
             streamUpTo();
         }
 
