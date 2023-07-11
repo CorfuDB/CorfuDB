@@ -52,11 +52,14 @@ message RoutingTableEntryMsg {
     // The actual payload carrying data that will be replicated to the destinations specified.
     bytes opaque_payload = 4;
 
+    // Serialized metadata field for certain types
+    bytes opaque_metadata = 5;
+
     // Contains the table name and serialized keys that will be updated of that table
-    DataLocatorMsg dataLocator = 5;
+    DataLocatorMsg dataLocator = 6;
 
     // Operation type that marks the table content is being created or removed.
-    OperationType operation_type = 6;
+    OperationType operation_type = 7;
 }
 
 message RoutingTableSnapshotEndKeyMsg {
