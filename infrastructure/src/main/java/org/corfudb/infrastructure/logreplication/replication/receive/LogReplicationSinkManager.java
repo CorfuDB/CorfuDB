@@ -195,6 +195,11 @@ public class LogReplicationSinkManager implements DataReceiver {
             insertQInRegistryTable();
         }
         initWriterAndBufferMgr();
+
+        // Temporary hack so that the receiver starts with data consistent = true (LogEntry sync)
+        if (session.getSubscriber().getModel() == LogReplication.ReplicationModel.ROUTING_QUEUES) {
+            setDataConsistentWithRetry(true);
+        }
     }
 
     private void setDataConsistentWithRetry(boolean isDataConsistent) {
