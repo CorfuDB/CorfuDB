@@ -32,6 +32,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.UUID;
 
+import static org.corfudb.runtime.LogReplicationUtils.DEMO_NAMESPACE;
 import static org.corfudb.runtime.LogReplicationUtils.SNAPSHOT_END_MARKER_TABLE_NAME;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
@@ -76,7 +77,7 @@ public class RoutingQueuesSnapshotReaderTest extends AbstractViewTest {
     private void generateData() throws Exception {
 
         String tableName = LogReplicationUtils.SNAPSHOT_SYNC_QUEUE_NAME_SENDER;
-        String namespace = CORFU_SYSTEM_NAMESPACE;
+        String namespace = DEMO_NAMESPACE;
 
         Table<Queue.CorfuGuidMsg, Queue.RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg> q =
                 corfuStore.openQueue(namespace, tableName, Queue.RoutingTableEntryMsg.class,
