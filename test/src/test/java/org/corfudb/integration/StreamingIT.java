@@ -52,6 +52,7 @@ import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.corfudb.runtime.LogReplicationUtils.DEMO_NAMESPACE;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.fail;
 
@@ -1074,7 +1075,7 @@ public class StreamingIT extends AbstractIT {
     public void testSafeDataLossOnRoutingQs() throws Exception {
         // Run a corfu server & initialize CorfuStore
         CorfuRuntime runtime = initializeCorfu();
-        final String systemNamespace = TableRegistry.CORFU_SYSTEM_NAMESPACE;
+        final String systemNamespace = DEMO_NAMESPACE;
         final String logEntryQName = LogReplicationUtils.LOG_ENTRY_SYNC_QUEUE_NAME_SENDER;
         final String snapSyncQName = LogReplicationUtils.SNAPSHOT_SYNC_QUEUE_NAME_SENDER;
 
