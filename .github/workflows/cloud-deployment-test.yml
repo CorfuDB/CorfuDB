@@ -53,7 +53,7 @@ jobs:
       - name: install corfu package
         working-directory: ./cloud/corfu
         run: |
-          helm install cert-manager jetstack/cert-manager --namespace cert-manager --create-namespace --version v1.8.0 --set installCRDs=true
+          helm install cert-manager jetstack/cert-manager --namespace cert-manager --create-namespace --version v1.12.0 --set installCRDs=true
           helm install corfu corfu --set persistence.enabled=true --set global.replicas=3 
           
           sleep 120
