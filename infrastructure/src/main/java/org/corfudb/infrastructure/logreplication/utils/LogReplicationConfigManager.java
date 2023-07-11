@@ -23,6 +23,7 @@ import org.corfudb.runtime.LogReplication.DestinationInfoVal;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.LogReplication.ReplicationModel;
 import org.corfudb.runtime.LogReplication.ReplicationSubscriber;
+import org.corfudb.runtime.Queue;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStoreEntry;
@@ -57,6 +58,8 @@ import static org.corfudb.infrastructure.logreplication.replication.send.logread
 import static org.corfudb.runtime.LogReplicationLogicalGroupClient.DEFAULT_LOGICAL_GROUP_CLIENT;
 import static org.corfudb.runtime.LogReplicationLogicalGroupClient.LR_MODEL_METADATA_TABLE_NAME;
 import static org.corfudb.runtime.LogReplicationLogicalGroupClient.LR_REGISTRATION_TABLE_NAME;
+import static org.corfudb.runtime.LogReplicationUtils.DEMO_NAMESPACE;
+import static org.corfudb.runtime.LogReplicationUtils.LOG_ENTRY_SYNC_QUEUE_NAME_SENDER;
 import static org.corfudb.runtime.RoutingQueueSenderClient.DEFAULT_ROUTING_QUEUE_CLIENT;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
@@ -163,6 +166,13 @@ public class LogReplicationConfigManager {
         openClientConfigTables();
         syncWithRegistryTable();
         syncWithClientConfigTable();
+
+        try {
+            corfuStore.openQueue(DEMO_NAMESPACE, LOG_ENTRY_SYNC_QUEUE_NAME_SENDER, Queue.RoutingTableEntryMsg.class,
+                TableOptions.fromProtoSchema(Queue.RoutingTableEntryMsg.class));
+        } catch (Exception e) {
+            log.error("Failed to open the Log Entry Sync Queue", e);
+        }
     }
 
     private void openClientConfigTables() {

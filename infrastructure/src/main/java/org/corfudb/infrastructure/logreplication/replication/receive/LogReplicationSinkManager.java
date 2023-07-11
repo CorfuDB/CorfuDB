@@ -49,8 +49,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
 import static org.corfudb.protocols.service.CorfuProtocolLogReplication.getLrEntryAckMsg;
-import static org.corfudb.runtime.LogReplicationUtils.REPLICATED_QUEUE_NAME_PREFIX;
-import static org.corfudb.runtime.LogReplicationUtils.REPLICATED_QUEUE_TAG_PREFIX;
+import static org.corfudb.runtime.LogReplicationUtils.*;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 /**
@@ -251,7 +250,7 @@ public class LogReplicationSinkManager implements DataReceiver {
                                 .build())
                         .persistentDataPath(Paths.get("/nonconfig/logReplication/RoutingQModel/", replicatedQName))
                         .build();
-                tableRegistry.registerTable(CORFU_SYSTEM_NAMESPACE, replicatedQName, Queue.CorfuGuidMsg.class,
+                tableRegistry.registerTable(DEMO_NAMESPACE, replicatedQName, Queue.CorfuGuidMsg.class,
                         Queue.RoutingTableEntryMsg.class, Queue.CorfuQueueMetadataMsg.class,
                         tableOptions);
             } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
