@@ -46,6 +46,8 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
  */
 @Slf4j
 public final class LogReplicationUtils {
+    public static final String DEMO_NAMESPACE = "nsx";
+
 
     public static final String LR_STATUS_STREAM_TAG = "lr_status";
 
@@ -80,9 +82,9 @@ public final class LogReplicationUtils {
     // ---- End RoutingQueue Model constants -------/
 
     public static final UUID lrLogEntrySendQId = CorfuRuntime.getStreamID(TableRegistry
-            .getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, LOG_ENTRY_SYNC_QUEUE_NAME_SENDER));
+            .getFullyQualifiedTableName(DEMO_NAMESPACE, LOG_ENTRY_SYNC_QUEUE_NAME_SENDER));
     public static final UUID lrFullSyncSendQId = CorfuRuntime.getStreamID(TableRegistry
-            .getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, SNAPSHOT_SYNC_QUEUE_NAME_SENDER));
+            .getFullyQualifiedTableName(DEMO_NAMESPACE, SNAPSHOT_SYNC_QUEUE_NAME_SENDER));
 
     public static final UUID lrSnapStartEndQId = CorfuRuntime.getStreamID(TableRegistry
             .getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, SNAP_SYNC_START_END_Q_NAME));

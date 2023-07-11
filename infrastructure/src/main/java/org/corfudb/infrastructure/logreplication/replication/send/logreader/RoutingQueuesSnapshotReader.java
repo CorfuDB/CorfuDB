@@ -38,9 +38,9 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
+import static org.corfudb.runtime.LogReplicationUtils.DEMO_NAMESPACE;
 import static org.corfudb.runtime.LogReplicationUtils.SNAPSHOT_END_MARKER_TABLE_NAME;
 import static org.corfudb.runtime.LogReplicationUtils.SNAPSHOT_SYNC_QUEUE_NAME_SENDER;
-import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 import static org.corfudb.infrastructure.logreplication.config.LogReplicationConfig.DEFAULT_MAX_DATA_MSG_SIZE;
 
 /**
@@ -75,7 +75,7 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
         super(corfuRuntime, session, replicationContext);
         streamTagFollowed = LogReplicationUtils.SNAPSHOT_SYNC_QUEUE_TAG_SENDER_PREFIX + session.getSinkClusterId();
 
-        String snapshotSyncQueueFullyQualifiedName = TableRegistry.getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE,
+        String snapshotSyncQueueFullyQualifiedName = TableRegistry.getFullyQualifiedTableName(DEMO_NAMESPACE,
                 SNAPSHOT_SYNC_QUEUE_NAME_SENDER);
         snapshotSyncQueueId = CorfuRuntime.getStreamID(snapshotSyncQueueFullyQualifiedName);
 
@@ -84,14 +84,14 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
         dataPoller = Executors.newSingleThreadExecutor(new ThreadFactoryBuilder().setNameFormat("snapshot-sync-data" +
             "-poller-" + session.hashCode()).build());
 
-        String replicatedQueueName = TableRegistry.getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE,
+        String replicatedQueueName = TableRegistry.getFullyQualifiedTableName(DEMO_NAMESPACE,
                 LogReplicationUtils.REPLICATED_QUEUE_NAME_PREFIX + session.getSourceClusterId());
         replicatedQueueId = CorfuRuntime.getStreamID(replicatedQueueName);
 
         // Open the marker table so that its entries can be deserialized
         try {
             CorfuStore corfuStore = new CorfuStore(replicationContext.getConfigManager().getRuntime());
-            corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, SNAPSHOT_END_MARKER_TABLE_NAME,
+            corfuStore.openTable(DEMO_NAMESPACE, SNAPSHOT_END_MARKER_TABLE_NAME,
                 Queue.RoutingTableSnapshotEndKeyMsg.class, Queue.RoutingTableSnapshotEndMarkerMsg.class, null,
                 TableOptions.fromProtoSchema(Queue.RoutingTableEntryMsg.class));
         } catch (IllegalAccessException | InvocationTargetException | NoSuchMethodException e) {
@@ -99,7 +99,7 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
             throw new RuntimeException(e);
         }
 
-        String endMarkerTableName = TableRegistry.getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE,
+        String endMarkerTableName = TableRegistry.getFullyQualifiedTableName(DEMO_NAMESPACE,
             SNAPSHOT_END_MARKER_TABLE_NAME);
         endMarkerStreamId = CorfuRuntime.getStreamID(endMarkerTableName);
 
