@@ -8,9 +8,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
 import org.corfudb.runtime.LogReplicationUtils;
-import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.Queue;
-import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStoreEntry;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
@@ -52,6 +50,7 @@ import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.corfudb.runtime.LogReplicationUtils.DEMO_NAMESPACE;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.fail;
 
@@ -1073,8 +1072,8 @@ public class StreamingIT extends AbstractIT {
     @Test
     public void testSafeDataLossOnRoutingQs() throws Exception {
         // Run a corfu server & initialize CorfuStore
-        initializeCorfu();
-        final String systemNamespace = TableRegistry.CORFU_SYSTEM_NAMESPACE;
+        CorfuRuntime runtime = initializeCorfu();
+        final String systemNamespace = DEMO_NAMESPACE;
         final String logEntryQName = LogReplicationUtils.LOG_ENTRY_SYNC_QUEUE_NAME_SENDER;
         final String snapSyncQName = LogReplicationUtils.SNAPSHOT_SYNC_QUEUE_NAME_SENDER;
 

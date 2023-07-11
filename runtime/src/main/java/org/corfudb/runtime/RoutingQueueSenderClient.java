@@ -15,9 +15,9 @@ import java.lang.reflect.InvocationTargetException;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import static org.corfudb.runtime.LogReplicationUtils.DEMO_NAMESPACE;
 import static org.corfudb.runtime.LogReplicationUtils.LOG_ENTRY_SYNC_QUEUE_NAME_SENDER;
 import static org.corfudb.runtime.LogReplicationUtils.LOG_ENTRY_SYNC_QUEUE_TAG_SENDER_PREFIX;
-import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 @Slf4j
 public class RoutingQueueSenderClient extends LogReplicationClient implements LogReplicationRoutingQueueClient {
@@ -48,7 +48,7 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
         Preconditions.checkArgument(isValid(clientName), "clientName is null or empty.");
 
         this.corfuStore = new CorfuStore(runtime);
-        logEntryQ = corfuStore.openQueue(CORFU_SYSTEM_NAMESPACE, LOG_ENTRY_SYNC_QUEUE_NAME_SENDER,
+        logEntryQ = corfuStore.openQueue(DEMO_NAMESPACE, LOG_ENTRY_SYNC_QUEUE_NAME_SENDER,
                 RoutingTableEntryMsg.class, TableOptions.fromProtoSchema(RoutingTableEntryMsg.class));
 
         register(corfuStore, clientName, model);
