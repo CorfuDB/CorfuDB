@@ -10,7 +10,11 @@ import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.LogReplicationUtils;
+import org.corfudb.runtime.Queue;
 import org.corfudb.runtime.Queue.RoutingTableEntryMsg;
+import org.corfudb.runtime.collections.CorfuRecord;
+import org.corfudb.runtime.collections.CorfuStore;
+import org.corfudb.runtime.collections.TableOptions;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -19,7 +23,9 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
 
+import static org.corfudb.runtime.LogReplicationUtils.LOG_ENTRY_SYNC_QUEUE_NAME_SENDER;
 import static org.corfudb.runtime.LogReplicationUtils.REPLICATED_QUEUE_NAME_PREFIX;
+import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 
 /**
@@ -46,10 +52,11 @@ public class RoutingQueuesLogEntryReader extends BaseLogEntryReader {
         for (SMREntry entry : routingTableEntryMsgs) {
             Object[] objs = entry.getSMRArguments();
             ByteBuf valueBuf = Unpooled.wrappedBuffer((byte[])objs[1]);
-            RoutingTableEntryMsg msg =
-                    (RoutingTableEntryMsg)replicationContext.getProtobufSerializer().deserialize(valueBuf, null);
+            CorfuRecord<RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg> record =
+                (CorfuRecord<RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg>)
+                    replicationContext.getProtobufSerializer().deserialize(valueBuf, null);
 
-            if (msg.getDestinationsList().contains(session.getSinkClusterId())) {
+            if (record.getPayload().getDestinationsList().contains(session.getSinkClusterId())) {
                 filteredMsgs.add(entry);
             }
         }
