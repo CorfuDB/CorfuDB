@@ -516,7 +516,7 @@ public class LogReplicationConfigManager {
             case ROUTING_QUEUES:
                 String logEntrySyncStreamTag = ((LogReplicationRoutingQueueConfig) sessionToConfigMap.get(session))
                         .getLogEntrySyncStreamTag();
-                return CorfuRuntime.getStreamID(logEntrySyncStreamTag);
+                return TableRegistry.getStreamIdForStreamTag(DEMO_NAMESPACE, logEntrySyncStreamTag);
             default:
                 throw new IllegalArgumentException("Subscriber with invalid replication model: " +
                         session.getSubscriber().getModel());
