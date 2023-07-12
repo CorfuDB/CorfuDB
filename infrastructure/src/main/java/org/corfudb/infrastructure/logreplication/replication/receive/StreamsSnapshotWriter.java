@@ -6,6 +6,8 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationMetadata;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.protocols.CorfuProtocolCommon;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
@@ -13,8 +15,6 @@ import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.service.CorfuProtocolLogReplication;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
-import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMetadataMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
@@ -38,11 +38,13 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.corfudb.infrastructure.logreplication.config.LogReplicationConfig.MERGE_ONLY_STREAMS;
 import static org.corfudb.infrastructure.logreplication.config.LogReplicationConfig.REGISTRY_TABLE_ID;
 import static org.corfudb.infrastructure.logreplication.config.LogReplicationConfig.PROTOBUF_TABLE_ID;
+import static org.corfudb.runtime.LogReplication.ReplicationModel.ROUTING_QUEUES;
 
 /**
  * This class represents the entity responsible for writing streams' snapshots into the sink cluster DB.
@@ -169,7 +171,7 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
             }
         }
 
-        log.debug("Process entries total={}, set sequence number {}", smrEntries.size(), currentSeqNum);
+        log.debug("Process entries total={}, set sequence number {}, for shadow stream {}", smrEntries.size(), currentSeqNum, shadowStreamUuid);
     }
 
     /**
@@ -247,6 +249,8 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
         // Collect the streams that have evidenced data from source.
         replicatedStreamIds.add(regularStreamId);
 
+        log.debug("Process shadow steam updates for regular stream: {}", regularStreamId);
+
         processUpdatesShadowStream(opaqueEntry.getEntries().get(regularStreamId),
             message.getMetadata().getSnapshotSyncSeqNum(),
             getShadowStreamId(regularStreamId),
@@ -279,6 +283,7 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
             new StreamAddressRange(streamId, Long.MAX_VALUE, Address.NON_ADDRESS)));
 
         UUID shadowStreamId = getShadowStreamId(streamId);
+        log.debug("Shadow stream id to apply: {}", shadowStreamId);
 
         // In order to avoid data loss as part of a plugin failing to successfully
         // stop/resume checkpoint and trim. We will not ignore trims on the shadow stream.
@@ -394,13 +399,21 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
         // Sync the config with registry table after applying its entries
         replicationContext.refresh();
 
-        for (String stream : replicationContext.getConfig(session).getStreamsToReplicate()) {
-            UUID regularStreamId = CorfuRuntime.getStreamID(stream);
-            if (regularStreamId.equals(REGISTRY_TABLE_ID)) {
+        // TODO: Temporary fix for routing queue poc, will need more complete fix to getStreamsToReplicate()
+        // Use replicatedStreamIds if model is routing queues
+        List<UUID> replicatedStreams = new ArrayList<>();
+        if (session.getSubscriber().getModel() == ROUTING_QUEUES) {
+            replicatedStreams.addAll(replicatedStreamIds);
+        } else {
+            replicatedStreams.addAll(replicationContext.getConfig(session).getStreamsToReplicate().stream().map(CorfuRuntime::getStreamID).collect(Collectors.toList()));
+        }
+
+        for (UUID stream : replicatedStreams) {
+            if (stream.equals(REGISTRY_TABLE_ID)) {
                 // Skip registry table as it has been applied in advance
                 continue;
             }
-            applyShadowStream(regularStreamId, snapshot);
+            applyShadowStream(stream, snapshot);
         }
 
         // Invalidate client cache after snapshot sync is completed, as shadow streams are
