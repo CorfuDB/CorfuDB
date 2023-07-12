@@ -1,6 +1,8 @@
 name: Cloud Deployment Test
 
-on: pull_request
+on:
+  workflow_dispatch:
+  pull_request:
 
 jobs:
 
