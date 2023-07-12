@@ -491,7 +491,7 @@ public class LogReplicationConfigManager {
             case ROUTING_QUEUES:
                 String logEntrySyncStreamTag = ((LogReplicationRoutingQueueConfig) sessionToConfigMap.get(session))
                         .getLogEntrySyncStreamTag();
-                return CorfuRuntime.getStreamID(logEntrySyncStreamTag);
+                return TableRegistry.getStreamIdForStreamTag(DEMO_NAMESPACE, logEntrySyncStreamTag);
             default:
                 log.error("Unsupported replication model received: {}", session.getSubscriber().getModel());
                 return null;
