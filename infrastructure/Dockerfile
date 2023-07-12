@@ -1,4 +1,4 @@
-ARG BASE_IMAGE=openjdk:8-jdk-bullseye
+ARG BASE_IMAGE=openjdk:11-jdk-bullseye
 FROM $BASE_IMAGE
 
 ARG CORFU_JAR
