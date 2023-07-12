@@ -9,10 +9,10 @@ import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.runtime.view.TableRegistry;
 
 import java.lang.reflect.InvocationTargetException;
 import java.util.List;
-import java.util.UUID;
 import java.util.stream.Collectors;
 
 import static org.corfudb.runtime.LogReplicationUtils.LOG_ENTRY_SYNC_QUEUE_NAME_SENDER;
@@ -62,10 +62,10 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
      */
     @Override
     public void transmitDeltaMessage(TxnContext txn, RoutingTableEntryMsg message) {
+        log.info("Enqueuing message to delta queue, message: {}", message);
         txn.logUpdateEnqueue(logEntryQ, message, message.getDestinationsList().stream()
-                .map(x -> UUID.fromString(String.join("", LOG_ENTRY_SYNC_QUEUE_TAG_SENDER_PREFIX, x)))
+                .map(destination -> TableRegistry.getStreamIdForStreamTag(DEMO_NAMESPACE, LOG_ENTRY_SYNC_QUEUE_TAG_SENDER_PREFIX + destination))
                 .collect(Collectors.toList()), corfuStore);
-        log.debug("Enqueued message to delta queue, message: {}", message);
     }
 
     /**
@@ -77,10 +77,10 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
     @Override
     public void transmitDeltaMessages(TxnContext txn, List<RoutingTableEntryMsg> messages) {
         for (RoutingTableEntryMsg message : messages) {
+            log.info("Enqueuing message to delta queue, message: {}", message);
             txn.logUpdateEnqueue(logEntryQ, message, message.getDestinationsList().stream()
-                    .map(x -> UUID.fromString(String.join("", LOG_ENTRY_SYNC_QUEUE_TAG_SENDER_PREFIX, x)))
+                    .map(destination -> TableRegistry.getStreamIdForStreamTag(DEMO_NAMESPACE, LOG_ENTRY_SYNC_QUEUE_TAG_SENDER_PREFIX + destination))
                     .collect(Collectors.toList()), corfuStore);
-            log.debug("Enqueued message to delta queue, message: {}", message);
         }
     }
 
