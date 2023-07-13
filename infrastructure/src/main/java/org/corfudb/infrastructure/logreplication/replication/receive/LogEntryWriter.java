@@ -7,6 +7,7 @@ import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationCo
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.service.CorfuProtocolLogReplication;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMetadataMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
@@ -163,6 +164,9 @@ public class LogEntryWriter extends SinkWriter {
                                 // If stream tags exist for the current stream, it means it's intended for streaming
                                 // on the Sink (receiver)
                                 if (session.getSubscriber().getModel().equals(LogReplication.ReplicationModel.ROUTING_QUEUES)) {
+                                    String replicatedQueueName = TableRegistry.getFullyQualifiedTableName(DEMO_NAMESPACE,
+                                            LogReplicationUtils.REPLICATED_QUEUE_NAME_PREFIX + session.getSourceClusterId());
+                                    streamId = CorfuRuntime.getStreamID(replicatedQueueName);
                                     UUID replicatedQueueTag = TableRegistry.getStreamIdForStreamTag(DEMO_NAMESPACE,
                                             LogReplicationUtils.REPLICATED_QUEUE_TAG);
                                     txnContext.logUpdate(streamId, smrEntry, Collections.singletonList(replicatedQueueTag));
