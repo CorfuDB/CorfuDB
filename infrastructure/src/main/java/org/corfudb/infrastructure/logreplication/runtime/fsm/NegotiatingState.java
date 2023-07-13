@@ -318,12 +318,14 @@ public class NegotiatingState implements LogReplicationRuntimeState {
     }
 
     private void startSnapshotSync() {
-        // If Routing Queue Replication Model, request LR Client to provide full sync data
-        if (fsm.getSession().getSubscriber().getModel() == LogReplication.ReplicationModel.ROUTING_QUEUES) {
-            SnapshotSyncUtils.enforceSnapshotSync(fsm.getSession(), new CorfuStore(metadataManager.getRuntime()),
-                LogReplicationMetadata.ReplicationEvent.ReplicationEventType.RECEIVER_OUT_OF_SYNC_FORCE_SNAPSHOT_SYNC);
-        }
-        // Temporary hack to always request LogEntry Sync
+        // TODO: Revert this! Temporary hack to always request LogEntry Sync
+
+//        // If Routing Queue Replication Model, request LR Client to provide full sync data
+//        if (fsm.getSession().getSubscriber().getModel() == LogReplication.ReplicationModel.ROUTING_QUEUES) {
+//            SnapshotSyncUtils.enforceSnapshotSync(fsm.getSession(), new CorfuStore(metadataManager.getRuntime()),
+//                LogReplicationMetadata.ReplicationEvent.ReplicationEventType.RECEIVER_OUT_OF_SYNC_FORCE_SNAPSHOT_SYNC);
+//        }
+
         fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.NEGOTIATION_COMPLETE,
             new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.LOG_ENTRY_SYNC_REQUEST)));
     }
