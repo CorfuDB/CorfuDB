@@ -50,6 +50,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
 import static org.corfudb.protocols.service.CorfuProtocolLogReplication.getLrEntryAckMsg;
 import static org.corfudb.runtime.LogReplicationUtils.*;
+import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 /**
  * This class represents the Log Replication Manager at the destination.
