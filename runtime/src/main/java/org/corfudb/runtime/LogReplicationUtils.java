@@ -75,7 +75,7 @@ public final class LogReplicationUtils {
 
     // Stream tag applied to the replicated queue on the receiver
     public static final String SNAP_SYNC_START_END_Q_NAME = "LRQ_SNAPSHOT_START_END_MARKER";
-    public static final String REPLICATED_QUEUE_TAG_PREFIX = "lrq_recv_";
+    public static final String REPLICATED_QUEUE_TAG = "lrq_recv";
 
     public static final String SNAPSHOT_END_MARKER_TABLE_NAME = "SnapshotSyncEndMarker";
 
