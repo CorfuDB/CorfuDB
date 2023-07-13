@@ -6,6 +6,7 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationMetadata;
+import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.protocols.CorfuProtocolCommon;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
@@ -18,11 +19,13 @@ import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMetadataMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
+import org.corfudb.runtime.LogReplicationUtils;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.StreamOptions;
+import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.runtime.view.stream.OpaqueStream;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalRetry;
@@ -31,18 +34,13 @@ import org.corfudb.util.serializer.Serializers;
 
 import javax.annotation.concurrent.NotThreadSafe;
 import java.lang.reflect.Array;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Optional;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 import java.util.stream.Stream;
 
 import static org.corfudb.infrastructure.logreplication.config.LogReplicationConfig.MERGE_ONLY_STREAMS;
 import static org.corfudb.infrastructure.logreplication.config.LogReplicationConfig.REGISTRY_TABLE_ID;
 import static org.corfudb.infrastructure.logreplication.config.LogReplicationConfig.PROTOBUF_TABLE_ID;
+import static org.corfudb.runtime.LogReplicationUtils.DEMO_NAMESPACE;
 
 /**
  * This class represents the entity responsible for writing streams' snapshots into the sink cluster DB.
@@ -195,7 +193,12 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
         metadataManager.updateReplicationMetadataField(txnContext, session, ReplicationMetadata.LASTSNAPSHOTSTARTED_FIELD_NUMBER, srcGlobalSnapshot);
 
         for (SMREntry smrEntry : smrEntries) {
-            txnContext.logUpdate(streamId, smrEntry, replicationContext.getConfig(session).getDataStreamToTagsMap().get(streamId));
+            if (session.getSubscriber().getModel().equals(LogReplication.ReplicationModel.ROUTING_QUEUES)) {
+                UUID replicatedQueueTag = TableRegistry.getStreamIdForStreamTag(DEMO_NAMESPACE, LogReplicationUtils.REPLICATED_QUEUE_TAG);
+                txnContext.logUpdate(streamId, smrEntry, Collections.singletonList(replicatedQueueTag));
+            } else {
+                txnContext.logUpdate(streamId, smrEntry, replicationContext.getConfig(session).getDataStreamToTagsMap().get(streamId));
+            }
         }
     }
 
