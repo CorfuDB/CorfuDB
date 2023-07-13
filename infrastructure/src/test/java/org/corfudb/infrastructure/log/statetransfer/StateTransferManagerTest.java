@@ -18,7 +18,11 @@ import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.util.NodeLocator;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Optional;
+import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeoutException;
@@ -458,6 +462,103 @@ class StateTransferManagerTest implements TransferSegmentCreator {
                         .boxed().collect(ImmutableList.toImmutableList())).destinationNodes(nodes).build());
 
         assertThat(collect).isEqualTo(expected);
+    }
+
+    boolean sequential(List<Long> batch) {
+        if (batch.size() < 2) {
+            return true;
+        }
+        for (int i = 0; i < batch.size() - 1; i++) {
+            if (batch.get(i) + 1 != batch.get(i + 1)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    boolean batchedAndSequential(List<List<Long>> batches, int batchSize) {
+        for (List<Long> batch : batches) {
+            if (batch.size() > batchSize) {
+                return false;
+            }
+            if (!sequential(batch)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    long getSequentialOrRandomNumber(Random random, long num, int bound) {
+        final int sequentialBound = 2;
+        final int totalBound = 3;
+        if (random.nextInt(totalBound) < sequentialBound) {
+            return num + 1;
+        } else {
+            return random.nextInt(bound);
+        }
+    }
+
+    List<Long> generateRandomListOfSize(Random random, int size, int bound) {
+        LinkedHashSet<Long> set = new LinkedHashSet<>();
+        for (int i = 0; i < size; i++) {
+            final long randomNumber = random.nextInt(bound);
+            set.add(randomNumber);
+            final long sequentialOrRandomNumber = getSequentialOrRandomNumber(random, randomNumber, bound);
+            set.add(sequentialOrRandomNumber);
+
+        }
+        return new ArrayList<>(set).stream().sorted().collect(Collectors.toList());
+    }
+
+    @Test
+    void partitionWorkloadTest() {
+        // Test that partition functionality is preserved
+        int batchSize = 3;
+        ImmutableList<Long> initList = ImmutableList.of(1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L);
+        List<List<Long>> resultList = StateTransferManager.partitionSequentialAddresses(initList, batchSize);
+        ImmutableList<ImmutableList<Long>> expectedList = ImmutableList.of(
+                ImmutableList.of(1L, 2L, 3L),
+                ImmutableList.of(4L, 5L, 6L),
+                ImmutableList.of(7L, 8L, 9L)
+        );
+        assertThat(resultList).isEqualTo(expectedList);
+        batchSize = 2;
+        resultList = StateTransferManager.partitionSequentialAddresses(initList, batchSize);
+        expectedList = ImmutableList.of(
+                ImmutableList.of(1L, 2L),
+                ImmutableList.of(3L, 4L),
+                ImmutableList.of(5L, 6L),
+                ImmutableList.of(7L, 8L),
+                ImmutableList.of(9L)
+        );
+        assertThat(resultList).isEqualTo(expectedList);
+        batchSize = 8;
+        resultList = StateTransferManager.partitionSequentialAddresses(initList, batchSize);
+        expectedList = ImmutableList.of(
+                ImmutableList.of(1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L),
+                ImmutableList.of(9L)
+        );
+        assertThat(resultList).isEqualTo(expectedList);
+        batchSize = 20;
+        resultList = StateTransferManager.partitionSequentialAddresses(initList, batchSize);
+        expectedList = ImmutableList.of(
+                ImmutableList.of(1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L)
+        );
+        assertThat(resultList).isEqualTo(expectedList);
+
+        // Test sequential aspect
+        int seed = 42;
+        Random rand = new Random(seed);
+        int numBound = 100;
+        int listSizeMax = 100;
+        int batchSizeMax = 100;
+        for (int size = 0; size < listSizeMax; size++) {
+            for (int batchSizeCurrent = 1; batchSizeCurrent < batchSizeMax; batchSizeCurrent++) {
+                final List<Long> longs = generateRandomListOfSize(rand, size, numBound);
+                resultList = StateTransferManager.partitionSequentialAddresses(longs, batchSizeCurrent);
+                assertThat(batchedAndSequential(resultList, batchSizeCurrent)).isTrue();
+            }
+        }
     }
 
     @Test
