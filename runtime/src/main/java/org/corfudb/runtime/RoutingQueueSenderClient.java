@@ -1,6 +1,5 @@
 package org.corfudb.runtime;
 
-import com.google.common.base.Preconditions;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
 import org.corfudb.runtime.LogReplication.ReplicationModel;
@@ -11,7 +10,6 @@ import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.view.TableRegistry;
 
-import java.lang.reflect.InvocationTargetException;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -27,32 +25,31 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
     public static final String DEFAULT_ROUTING_QUEUE_CLIENT = "00000000-0000-0000-0000-0000000000002";
 
     private Table<Queue.CorfuGuidMsg, RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg> logEntryQ;
-    private CorfuStore corfuStore;
 
     public RoutingQueueSenderClient() {
         // TODO: This might be removed in the future. Temporary solution for bypassing providing a CorfuRuntime
     }
 
-    /**
-     * Constructor for the log replication client for routing queues on sender.
-     *
-     * @param runtime Corfu Runtime.
-     * @param clientName String representation of the client name. This parameter is case-sensitive.
-     * @throws IllegalArgumentException If clientName is null or empty.
-     * @throws InvocationTargetException InvocationTargetException.
-     * @throws NoSuchMethodException NoSuchMethodException.
-     * @throws IllegalAccessException IllegalAccessException.
-     */
-    public RoutingQueueSenderClient(CorfuRuntime runtime, String clientName)
-            throws InvocationTargetException, NoSuchMethodException, IllegalAccessException {
-        Preconditions.checkArgument(isValid(clientName), "clientName is null or empty.");
-
-        this.corfuStore = new CorfuStore(runtime);
-        logEntryQ = corfuStore.openQueue(DEMO_NAMESPACE, LOG_ENTRY_SYNC_QUEUE_NAME_SENDER,
-                RoutingTableEntryMsg.class, TableOptions.fromProtoSchema(RoutingTableEntryMsg.class));
-
-        register(corfuStore, clientName, model);
-    }
+//    /**
+//     * Constructor for the log replication client for routing queues on sender.
+//     *
+//     * @param runtime Corfu Runtime.
+//     * @param clientName String representation of the client name. This parameter is case-sensitive.
+//     * @throws IllegalArgumentException If clientName is null or empty.
+//     * @throws InvocationTargetException InvocationTargetException.
+//     * @throws NoSuchMethodException NoSuchMethodException.
+//     * @throws IllegalAccessException IllegalAccessException.
+//     */
+//    public RoutingQueueSenderClient(CorfuRuntime runtime, String clientName)
+//            throws InvocationTargetException, NoSuchMethodException, IllegalAccessException {
+//        Preconditions.checkArgument(isValid(clientName), "clientName is null or empty.");
+//
+//        this.corfuStore = new CorfuStore(runtime);
+//        logEntryQ = corfuStore.openQueue(DEMO_NAMESPACE, LOG_ENTRY_SYNC_QUEUE_NAME_SENDER,
+//                RoutingTableEntryMsg.class, TableOptions.fromProtoSchema(RoutingTableEntryMsg.class));
+//
+//        register(corfuStore, clientName, model);
+//    }
 
     /**
      * Enqueues message to be replicated onto the sender's delta queue.
@@ -61,10 +58,20 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
      * @param message RoutingTableEntryMsg
      */
     @Override
-    public void transmitDeltaMessage(TxnContext txn, RoutingTableEntryMsg message) {
+    public void transmitDeltaMessage(TxnContext txn, RoutingTableEntryMsg message, CorfuStore corfuStore) throws Exception {
         log.info("Enqueuing message to delta queue, message: {}", message);
+        try {
+            log.info("Get log entry sync queue: {}", LOG_ENTRY_SYNC_QUEUE_NAME_SENDER);
+            logEntryQ = txn.getTable(LOG_ENTRY_SYNC_QUEUE_NAME_SENDER);
+        } catch (IllegalStateException e) {
+            log.info("Log entry sync queue not opened yet, opening it now!");
+            logEntryQ = corfuStore.openQueue(DEMO_NAMESPACE, LOG_ENTRY_SYNC_QUEUE_NAME_SENDER,
+                    RoutingTableEntryMsg.class, TableOptions.fromProtoSchema(RoutingTableEntryMsg.class));
+        }
+
         txn.logUpdateEnqueue(logEntryQ, message, message.getDestinationsList().stream()
-                .map(destination -> TableRegistry.getStreamIdForStreamTag(DEMO_NAMESPACE, LOG_ENTRY_SYNC_QUEUE_TAG_SENDER_PREFIX + destination))
+                .map(destination -> TableRegistry.getStreamIdForStreamTag(DEMO_NAMESPACE,
+                        LOG_ENTRY_SYNC_QUEUE_TAG_SENDER_PREFIX + destination))
                 .collect(Collectors.toList()), corfuStore);
     }
 
@@ -75,11 +82,21 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
      * @param messages List of RoutingTableEntryMsg
      */
     @Override
-    public void transmitDeltaMessages(TxnContext txn, List<RoutingTableEntryMsg> messages) {
+    public void transmitDeltaMessages(TxnContext txn, List<RoutingTableEntryMsg> messages, CorfuStore corfuStore) throws Exception {
+        try {
+            log.info("Get log entry sync queue: {}", LOG_ENTRY_SYNC_QUEUE_NAME_SENDER);
+            logEntryQ = txn.getTable(LOG_ENTRY_SYNC_QUEUE_NAME_SENDER);
+        } catch (IllegalStateException e) {
+            log.info("Log entry sync queue not opened yet, opening it now!");
+            logEntryQ = corfuStore.openQueue(DEMO_NAMESPACE, LOG_ENTRY_SYNC_QUEUE_NAME_SENDER,
+                    RoutingTableEntryMsg.class, TableOptions.fromProtoSchema(RoutingTableEntryMsg.class));
+        }
+
         for (RoutingTableEntryMsg message : messages) {
             log.info("Enqueuing message to delta queue, message: {}", message);
             txn.logUpdateEnqueue(logEntryQ, message, message.getDestinationsList().stream()
-                    .map(destination -> TableRegistry.getStreamIdForStreamTag(DEMO_NAMESPACE, LOG_ENTRY_SYNC_QUEUE_TAG_SENDER_PREFIX + destination))
+                    .map(destination -> TableRegistry.getStreamIdForStreamTag(DEMO_NAMESPACE,
+                            LOG_ENTRY_SYNC_QUEUE_TAG_SENDER_PREFIX + destination))
                     .collect(Collectors.toList()), corfuStore);
         }
     }
