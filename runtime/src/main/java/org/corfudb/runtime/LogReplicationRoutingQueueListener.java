@@ -79,7 +79,7 @@ public abstract class LogReplicationRoutingQueueListener implements StreamListen
                         Queue.RoutingTableEntryMsg.class,
                         TableOptions.builder().schemaOptions(
                                         CorfuOptions.SchemaOptions.newBuilder()
-                                                .addStreamTag(LogReplicationUtils.REPLICATED_QUEUE_TAG_PREFIX)
+                                                .addStreamTag(LogReplicationUtils.REPLICATED_QUEUE_TAG)
                                                 .build())
                                 .build());
     }
@@ -123,12 +123,15 @@ public abstract class LogReplicationRoutingQueueListener implements StreamListen
             rqEntries.add((Queue.RoutingTableEntryMsg) entry.getPayload());
         }
         if (snapshotSyncInProgress.get()) {
+            log.info("SnapshotSync is in progress, processUpdatesInSnapshotSync");
             // For routing queue listener, we have only 1 entry inside corfuStreamEntries.
             callbackResult = processUpdatesInSnapshotSync(rqEntries);
         } else {
+            log.info("LogEntrySync is in progress, processUpdatesInLogEntrySync");
             callbackResult = processUpdatesInLogEntrySync(rqEntries);
         }
         if (callbackResult) {
+            log.info("Delete entry from queue");
             // When the client processed the entry successfully, delete the entry from the routing queue.
             deleteEntryFromQueue(results);
         }
@@ -140,6 +143,7 @@ public abstract class LogReplicationRoutingQueueListener implements StreamListen
         List<CorfuStreamEntry> routingQueueTableEntries = entries.entrySet().stream().map(Map.Entry::getValue).findFirst().get();
 
         for (CorfuStreamEntry entry : routingQueueTableEntries) {
+            log.info("Entry to be deleted: {}", entry);
             Queue.CorfuGuidMsg key = (Queue.CorfuGuidMsg)entry.getKey();
             // Only process updates where operation type == UPDATE.
             if (entry.getOperation() == CorfuStreamEntry.OperationType.UPDATE) {
@@ -166,7 +170,7 @@ public abstract class LogReplicationRoutingQueueListener implements StreamListen
         // routing queue with table registry.
 
         if (!routingQRegistered.get() && LogReplicationUtils.checkIfRoutingQueueExists(corfuStore, namespace,
-                LogReplicationUtils.REPLICATED_QUEUE_TAG_PREFIX)) {
+                LogReplicationUtils.REPLICATED_QUEUE_TAG)) {
             // Unsubscribe the LR status table
             corfuStore.unsubscribeListener(this);
             // Re-subscribe the LR status table && Subscribe the routing queue.
@@ -218,14 +222,14 @@ public abstract class LogReplicationRoutingQueueListener implements StreamListen
         }
 
         try {
-            log.info("Resume RQ subscription on [tag:{}] {} from {}", LogReplicationUtils.REPLICATED_QUEUE_TAG_PREFIX,
+            log.info("Resume RQ subscription on [tag:{}] {} from {}", LogReplicationUtils.REPLICATED_QUEUE_TAG,
                     namespace, lastProcessedEntryTs);
 
             LogReplicationUtils.subscribeRqListenerWithTs(this, namespace, 5, corfuStore,
                     lastProcessedEntryTs.getSequence());
         } catch (StreamingException e) {
             log.error("Failed to resume subscription [tag:{}] from last processed entry {}. Re-subscribe based on " +
-                    "implemented fallback.", LogReplicationUtils.REPLICATED_QUEUE_TAG_PREFIX, lastProcessedEntryTs, e);
+                    "implemented fallback.", LogReplicationUtils.REPLICATED_QUEUE_TAG, lastProcessedEntryTs, e);
         }
     }
 
@@ -295,9 +299,9 @@ public abstract class LogReplicationRoutingQueueListener implements StreamListen
             corfuStore.unsubscribeListener(this);
             try (TxnContext tx = corfuStore.txn(namespace)) {
                 List<Table.CorfuQueueRecord> records = routingQueue.entryList();
-                for (int i = 0; i < records.size(); i++) {
-                    log.debug("Entry:" + records.get(i).getRecordId());
-                    Queue.CorfuGuidMsg recordId = records.get(i).getRecordId();
+                for (Table.CorfuQueueRecord record : records) {
+                    log.info("Entry:" + record.getRecordId());
+                    Queue.CorfuGuidMsg recordId = record.getRecordId();
                     Queue.RoutingTableEntryMsg entry = tx.getRecord(routingQueue, recordId).getPayload();
                     boolean callbackResult = false;
                     if (entry.getReplicationType() == Queue.ReplicationType.SNAPSHOT_SYNC) {
@@ -308,7 +312,7 @@ public abstract class LogReplicationRoutingQueueListener implements StreamListen
                     if (callbackResult) {
                         this.lastProcessedEntryTs =
                                 Timestamp.newBuilder().setEpoch(0L)
-                                        .setSequence(records.get(i).getTxSequence().getTxSequence()).build();
+                                        .setSequence(record.getTxSequence().getTxSequence()).build();
                         // When the client processed the entry successfully, delete the entry from the routing queue.
                         tx.delete(routingQueue, recordId);
                     }
