@@ -230,6 +230,7 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
                                         SNAPSHOT_SYNC_QUEUE_TAG_SENDER_PREFIX + destination))
                                 .collect(Collectors.toList())
                         );
+                baseSnapshotSent = true;
             }
         }
 
