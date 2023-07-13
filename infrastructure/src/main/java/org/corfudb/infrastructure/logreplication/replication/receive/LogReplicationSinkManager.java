@@ -254,7 +254,7 @@ public class LogReplicationSinkManager implements DataReceiver {
                                 .build())
                         .persistentDataPath(Paths.get("/nonconfig/logReplication/RoutingQModel/", replicatedQName))
                         .build();
-                tableRegistry.registerTable(DEMO_NAMESPACE, replicatedQName, Queue.CorfuGuidMsg.class,
+                tableRegistry.registerTable(CORFU_SYSTEM_NAMESPACE, replicatedQName, Queue.CorfuGuidMsg.class,
                         Queue.RoutingTableEntryMsg.class, Queue.CorfuQueueMetadataMsg.class,
                         tableOptions);
             } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {

@@ -32,8 +32,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.UUID;
 
-import static org.corfudb.runtime.LogReplicationUtils.DEMO_NAMESPACE;
-import static org.corfudb.runtime.LogReplicationUtils.SNAPSHOT_END_MARKER_TABLE_NAME;
+import static org.corfudb.runtime.LogReplicationUtils.SNAP_SYNC_START_END_Q_NAME;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 @Slf4j
@@ -77,7 +76,7 @@ public class RoutingQueuesSnapshotReaderTest extends AbstractViewTest {
     private void generateData() throws Exception {
 
         String tableName = LogReplicationUtils.SNAPSHOT_SYNC_QUEUE_NAME_SENDER;
-        String namespace = DEMO_NAMESPACE;
+        String namespace = CORFU_SYSTEM_NAMESPACE;
 
         Table<Queue.CorfuGuidMsg, Queue.RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg> q =
                 corfuStore.openQueue(namespace, tableName, Queue.RoutingTableEntryMsg.class,
@@ -102,25 +101,25 @@ public class RoutingQueuesSnapshotReaderTest extends AbstractViewTest {
         }
         log.info("Queue Size = {}.  Stream tags = {}", q.count(), q.getStreamTags());
 
-        Table<Queue.RoutingTableSnapshotEndKeyMsg, Queue.RoutingTableSnapshotEndMarkerMsg, Message> endMarkerTable =
-            corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, SNAPSHOT_END_MARKER_TABLE_NAME,
-                Queue.RoutingTableSnapshotEndKeyMsg.class, Queue.RoutingTableSnapshotEndMarkerMsg.class, null,
-                TableOptions.fromProtoSchema(Queue.RoutingTableSnapshotEndMarkerMsg.class));
+        Table<Queue.RoutingQSnapStartEndKeyMsg, Queue.RoutingQSnapStartEndMarkerMsg, Message> endMarkerTable =
+            corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, SNAP_SYNC_START_END_Q_NAME,
+                Queue.RoutingQSnapStartEndKeyMsg.class, Queue.RoutingQSnapStartEndMarkerMsg.class, null,
+                TableOptions.fromProtoSchema(Queue.RoutingQSnapStartEndMarkerMsg.class));
 
-        Queue.RoutingTableSnapshotEndKeyMsg snapshotSyncId =
-                Queue.RoutingTableSnapshotEndKeyMsg.newBuilder().setSnapshotSyncId(syncRequestId.toString()).build();
+        Queue.RoutingQSnapStartEndKeyMsg snapshotSyncId =
+                Queue.RoutingQSnapStartEndKeyMsg.newBuilder().setSnapshotSyncId(syncRequestId.toString()).build();
 
-        Queue.RoutingTableSnapshotEndMarkerMsg endMarker =
-            Queue.RoutingTableSnapshotEndMarkerMsg.newBuilder().setDestination(session.getSinkClusterId()).build();
+        Queue.RoutingQSnapStartEndMarkerMsg endMarker =
+            Queue.RoutingQSnapStartEndMarkerMsg.newBuilder().setDestination(session.getSinkClusterId()).build();
 
-        CorfuRecord<Queue.RoutingTableSnapshotEndMarkerMsg, Message> record = new CorfuRecord<>(endMarker, null);
+        CorfuRecord<Queue.RoutingQSnapStartEndMarkerMsg, Message> record = new CorfuRecord<>(endMarker, null);
 
         Object[] smrArgs = new Object[2];
         smrArgs[0] = snapshotSyncId;
         smrArgs[1] = record;
 
         UUID endMarkerStreamId = CorfuRuntime.getStreamID(TableRegistry.getFullyQualifiedTableName(
-            CORFU_SYSTEM_NAMESPACE, SNAPSHOT_END_MARKER_TABLE_NAME));
+            CORFU_SYSTEM_NAMESPACE, SNAP_SYNC_START_END_Q_NAME));
 
         try (TxnContext txnContext = corfuStore.txn(namespace)) {
             txnContext.logUpdate(endMarkerStreamId, new SMREntry("put", smrArgs,
