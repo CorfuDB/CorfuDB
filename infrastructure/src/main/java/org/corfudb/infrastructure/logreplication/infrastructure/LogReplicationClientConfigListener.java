@@ -1,9 +1,7 @@
 package org.corfudb.infrastructure.logreplication.infrastructure;
 
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
-import org.corfudb.infrastructure.logreplication.utils.SnapshotSyncUtils;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.ClientDestinationInfoKey;
@@ -179,8 +177,8 @@ public class LogReplicationClientConfigListener extends StreamListenerResumeOrFu
             if (impactedSessions != null) {
                 log.info("Sessions that a forced snapshot sync will be triggered: {}", impactedSessions);
                 impactedSessions.forEach(session -> {
-                    SnapshotSyncUtils.enforceSnapshotSync(session, corfuStore,
-                            LogReplicationMetadata.ReplicationEvent.ReplicationEventType.FORCE_SNAPSHOT_SYNC);
+//                    SnapshotSyncUtils.enforceSnapshotSync(session, corfuStore,
+//                            LogReplicationMetadata.ReplicationEvent.ReplicationEventType.FORCE_SNAPSHOT_SYNC);
                 });
             }
         }
@@ -215,8 +213,8 @@ public class LogReplicationClientConfigListener extends StreamListenerResumeOrFu
         CorfuStoreMetadata.Timestamp timestamp = configManager.onClientListenerResume();
         configManager.generateConfig(sessionManager.getSessions());
         sessionManager.getSessions().forEach(session -> {
-            SnapshotSyncUtils.enforceSnapshotSync(session, corfuStore,
-                    LogReplicationMetadata.ReplicationEvent.ReplicationEventType.FORCE_SNAPSHOT_SYNC);
+//            SnapshotSyncUtils.enforceSnapshotSync(session, corfuStore,
+//                    LogReplicationMetadata.ReplicationEvent.ReplicationEventType.FORCE_SNAPSHOT_SYNC);
         });
         return timestamp;
     }
