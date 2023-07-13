@@ -120,7 +120,7 @@ public class StreamingManager {
         // TODO: Check if we need to modify the addLRTask for multiple tags per namespace
         Map<String, String> nsToStreamTags = new HashMap<>();
         nsToStreamTags.put(CORFU_SYSTEM_NAMESPACE, LR_STATUS_STREAM_TAG);
-        nsToStreamTags.put(namespace, REPLICATED_QUEUE_TAG_PREFIX);
+        nsToStreamTags.put(namespace, REPLICATED_QUEUE_TAG);
         this.scheduler.addLRTask(streamListener, nsToStreamTags, nsToTableName, lastAddress,
                 bufferSize == 0 ? defaultBufferSize : bufferSize);
     }
