@@ -1,22 +1,17 @@
 package org.corfudb.integration;
 
 import com.google.protobuf.ByteString;
-import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.runtime.CorfuOptions;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.LiteRoutingQueueListener;
 import org.corfudb.runtime.LogReplication;
-import org.corfudb.runtime.LogReplicationRoutingQueueListener;
-import org.corfudb.runtime.LogReplicationUtils;
 import org.corfudb.runtime.Queue;
 import org.corfudb.runtime.RoutingQueueSenderClient;
 import org.corfudb.runtime.collections.CorfuStore;
-import org.corfudb.runtime.collections.CorfuStreamEntries;
-import org.corfudb.runtime.collections.CorfuStreamEntry;
-import org.corfudb.runtime.collections.StreamListener;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
@@ -28,13 +23,12 @@ import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.runtime.LogReplicationUtils.DEMO_NAMESPACE;
 import static org.corfudb.runtime.LogReplicationUtils.LOG_ENTRY_SYNC_QUEUE_NAME_SENDER;
 import static org.corfudb.runtime.LogReplicationUtils.LOG_ENTRY_SYNC_QUEUE_TAG_SENDER_PREFIX;
-import static org.corfudb.runtime.LogReplicationUtils.REPLICATED_QUEUE_NAME_PREFIX;
+import static org.corfudb.runtime.LogReplicationUtils.REPLICATED_QUEUE_NAME;
 import static org.corfudb.runtime.LogReplicationUtils.REPLICATED_QUEUE_TAG;
 import static org.corfudb.runtime.LogReplicationUtils.REPLICATION_STATUS_TABLE_NAME;
 
@@ -70,22 +64,14 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
 
         // Open queue on sink
         try {
-            log.info("Sink queue name: {}", String.join("", REPLICATED_QUEUE_NAME_PREFIX,
-                    DefaultClusterConfig.getSourceClusterIds().get(0)));
-            log.info("Sink Queue name: {}", REPLICATED_QUEUE_NAME_PREFIX + DefaultClusterConfig.getSourceClusterIds().get(0));
+            log.info("Sink Queue name: {}", REPLICATED_QUEUE_NAME);
             Table<Queue.CorfuGuidMsg, Queue.RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg> replicatedQueueSink
-                    = sinkCorfuStores.get(0).openQueue(DEMO_NAMESPACE, String.join("",
-                            REPLICATED_QUEUE_NAME_PREFIX,
-                            DefaultClusterConfig.getSourceClusterIds().get(0)),
+                    = sinkCorfuStores.get(0).openQueue(DEMO_NAMESPACE, REPLICATED_QUEUE_NAME,
                     Queue.RoutingTableEntryMsg.class, TableOptions.builder().schemaOptions(CorfuOptions.SchemaOptions.newBuilder()
                             .addStreamTag(REPLICATED_QUEUE_TAG).build()).build());
 
-            RoutingQueueListener listener = new RoutingQueueListener();
-            sinkCorfuStores.get(0).subscribeListener(listener, DEMO_NAMESPACE, REPLICATED_QUEUE_TAG);
-
-            RoutingQueueMultiNamespaceListener nsListener =
-                    new RoutingQueueMultiNamespaceListener(sinkCorfuStores.get(0), DEMO_NAMESPACE);
-            LogReplicationUtils.subscribeRqListener(nsListener, DEMO_NAMESPACE, 5, sinkCorfuStores.get(0));
+            RoutingQueueListener listener = new RoutingQueueListener(sinkCorfuStores.get(0));
+            sinkCorfuStores.get(0).subscribeListenerFromTrimMark(listener, DEMO_NAMESPACE, REPLICATED_QUEUE_TAG);
 
             startReplicationServers();
             generateData(clientCorfuStore, queueSenderClient);
@@ -97,10 +83,7 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
                 sinkQueueSize = replicatedQueueSink.count();
                 log.info("Sink replicated queue size: {}", sinkQueueSize);
             }
-            sinkQueueSize = replicatedQueueSink.count();
-            replicatedQueueSink.entryStream().forEach(e -> {
-                log.info("{}", e.getPayload());
-            });
+            assertThat(listener.logEntryMsgCnt).isEqualTo(10);
         } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
             throw new RuntimeException(e);
         }
@@ -154,111 +137,24 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
         }
     }
 
-    private void verifySessionInLogEntrySyncState(int sinkIndex, LogReplication.ReplicationSubscriber subscriber) {
-        LogReplication.LogReplicationSession session = LogReplication.LogReplicationSession.newBuilder()
-            .setSourceClusterId(DefaultClusterConfig.getSourceClusterIds().get(0))
-            .setSinkClusterId(DefaultClusterConfig.getSinkClusterIds().get(sinkIndex))
-            .setSubscriber(subscriber)
-            .build();
+    static class RoutingQueueListener extends LiteRoutingQueueListener {
+        public int logEntryMsgCnt;
 
-        LogReplication.ReplicationStatus status = null;
-
-        while (status == null || !status.getSourceStatus().getReplicationInfo().getSyncType().equals(LogReplication.SyncType.LOG_ENTRY)
-            || !status.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus()
-            .equals(LogReplication.SyncStatus.COMPLETED)) {
-            try (TxnContext txn = sourceCorfuStores.get(0).txn(LogReplicationMetadataManager.NAMESPACE)) {
-                status = (LogReplication.ReplicationStatus) txn.getRecord(REPLICATION_STATUS_TABLE_NAME, session).getPayload();
-                txn.commit();
-            }
-        }
-
-        // Snapshot sync should have completed and log entry sync is ongoing
-        assertThat(status.getSourceStatus().getReplicationInfo().getSyncType()).isEqualTo(LogReplication.SyncType.LOG_ENTRY);
-        assertThat(status.getSourceStatus().getReplicationInfo().getStatus())
-            .isEqualTo(LogReplication.SyncStatus.ONGOING);
-
-        assertThat(status.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getType())
-            .isEqualTo(LogReplication.SnapshotSyncInfo.SnapshotSyncType.DEFAULT);
-        assertThat(status.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus())
-            .isEqualTo(LogReplication.SyncStatus.COMPLETED);
-    }
-
-    static class RoutingQueueListener implements StreamListener {
-
-        @Override
-        public void onNext(CorfuStreamEntries results) {
-            List<CorfuStreamEntry> entries = results.getEntries().entrySet().stream()
-                    .map(Map.Entry::getValue).findFirst().get();
-            for (CorfuStreamEntry entry : entries) {
-                if (((Queue.RoutingTableEntryMsg) entry.getPayload()).getReplicationType()
-                        .equals(Queue.ReplicationType.LOG_ENTRY_SYNC)) {
-                    log.info("Process log entry sync msg: {}", entry.getPayload());
-                    processUpdatesInLogEntrySync();
-                } else {
-                    log.info("Process snapshot sync msg: {}", entry.getPayload());
-                    processUpdatesInSnapshotSync();
-                }
-            }
+        public RoutingQueueListener(CorfuStore corfuStore) {
+            super(corfuStore);
+            logEntryMsgCnt = 0;
         }
 
         @Override
-        public void onError(Throwable throwable) {
-
-        }
-
-        protected boolean processUpdatesInSnapshotSync() {
-            return false;
-        }
-
-        protected boolean processUpdatesInLogEntrySync() {
-            return false;
-        }
-    }
-
-
-
-
-    static class RoutingQueueMultiNamespaceListener extends LogReplicationRoutingQueueListener {
-
-        /**
-         * Special LogReplication listener which a client creates to receive ordered updates for replicated data.
-         *
-         * @param corfuStore Corfu Store used on the client
-         * @param namespace  Namespace of the client's tables
-         */
-        public RoutingQueueMultiNamespaceListener(CorfuStore corfuStore, @NonNull String namespace) throws InvocationTargetException, NoSuchMethodException, IllegalAccessException {
-            super(corfuStore, namespace);
-
-        }
-        @Override
-        protected void onSnapshotSyncStart() {
-
-        }
-
-        @Override
-        protected void onSnapshotSyncComplete() {
-
-        }
-
-        @Override
-        protected boolean processUpdatesInSnapshotSync(List<Queue.RoutingTableEntryMsg> results) {
+        protected boolean processUpdatesInSnapshotSync(List<Queue.RoutingTableEntryMsg> updates) {
             return false;
         }
 
         @Override
-        protected boolean processUpdatesInLogEntrySync(List<Queue.RoutingTableEntryMsg> results) {
-            log.info("processUpdatesInLogEntrySync {}", results);
+        protected boolean processUpdatesInLogEntrySync(List<Queue.RoutingTableEntryMsg> updates) {
+            log.info("LiteRoutingQueueListener::processUpdatesInLogEntrySync::{}", updates);
+            logEntryMsgCnt++;
             return false;
-        }
-
-        @Override
-        protected void performFullSyncAndMerge(TxnContext txnContext) {
-
-        }
-
-        @Override
-        protected String getClientName() {
-            return null;
         }
     }
 }

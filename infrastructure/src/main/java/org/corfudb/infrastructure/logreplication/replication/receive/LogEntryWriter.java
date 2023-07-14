@@ -3,6 +3,7 @@ package org.corfudb.infrastructure.logreplication.replication.receive;
 import com.google.protobuf.TextFormat;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.logreplication.config.LogReplicationRoutingQueueConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
@@ -164,11 +165,11 @@ public class LogEntryWriter extends SinkWriter {
                                 // If stream tags exist for the current stream, it means it's intended for streaming
                                 // on the Sink (receiver)
                                 if (session.getSubscriber().getModel().equals(LogReplication.ReplicationModel.ROUTING_QUEUES)) {
-                                    String replicatedQueueName = TableRegistry.getFullyQualifiedTableName(DEMO_NAMESPACE,
-                                            LogReplicationUtils.REPLICATED_QUEUE_NAME_PREFIX + session.getSourceClusterId());
+                                    String replicatedQueueName = ((LogReplicationRoutingQueueConfig) replicationContext
+                                            .getConfig(session)).getSinkQueueName();
                                     streamId = CorfuRuntime.getStreamID(replicatedQueueName);
-                                    UUID replicatedQueueTag = TableRegistry.getStreamIdForStreamTag(DEMO_NAMESPACE,
-                                            LogReplicationUtils.REPLICATED_QUEUE_TAG);
+                                    UUID replicatedQueueTag = ((LogReplicationRoutingQueueConfig) replicationContext
+                                            .getConfig(session)).getSinkQueueStreamTag();
                                     txnContext.logUpdate(streamId, smrEntry, Collections.singletonList(replicatedQueueTag));
                                 } else {
                                     txnContext.logUpdate(streamId, smrEntry,

@@ -6,6 +6,7 @@ import com.google.protobuf.Message;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.logreplication.config.LogReplicationRoutingQueueConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.infrastructure.logreplication.replication.send.IllegalSnapshotEntrySizeException;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
@@ -84,8 +85,8 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
         dataPoller = Executors.newSingleThreadExecutor(new ThreadFactoryBuilder().setNameFormat("snapshot-sync-data" +
             "-poller-" + session.hashCode()).build());
 
-        String replicatedQueueName = TableRegistry.getFullyQualifiedTableName(DEMO_NAMESPACE,
-                LogReplicationUtils.REPLICATED_QUEUE_NAME_PREFIX + session.getSourceClusterId());
+        String replicatedQueueName = ((LogReplicationRoutingQueueConfig) replicationContext
+                .getConfig(session)).getSinkQueueName();
         replicatedQueueId = CorfuRuntime.getStreamID(replicatedQueueName);
 
         // Open the marker table so that its entries can be deserialized
