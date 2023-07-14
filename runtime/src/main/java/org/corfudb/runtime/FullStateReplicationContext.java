@@ -1,13 +1,15 @@
 package org.corfudb.runtime;
 
+import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
 import org.corfudb.runtime.LogReplication.ReplicationEvent.ReplicationEventType;
+import org.corfudb.runtime.collections.FullStateMessage;
 import org.corfudb.runtime.collections.TxnContext;
 
 import javax.annotation.Nullable;
 import java.util.UUID;
 import java.util.concurrent.CancellationException;
 
-public interface LRFullStateReplicationContext {
+public interface FullStateReplicationContext {
     /**
      * LR starts this transaction and the callback must use the same to do its full table scans
      *
@@ -38,7 +40,7 @@ public interface LRFullStateReplicationContext {
      * Transmits one message for full sync.
      *
      */
-    void transmit(Queue.RoutingTableEntryMsg message) throws CancellationException;
+    void transmit(FullStateMessage message) throws CancellationException;
 
     /**
      * Transmits one message for full sync.
@@ -46,13 +48,13 @@ public interface LRFullStateReplicationContext {
      * @param message message to transmit.
      * @param progress indicates progress of transmission, value between 0 and 100.
      */
-    void transmit(Queue.RoutingTableEntryMsg message, int progress) throws CancellationException;
+    void transmit(FullStateMessage message, int progress) throws CancellationException;
 
     /**
      * Indicates that all data was transmitted from application to client.
      *
      */
-    void markCompleted() throws CancellationException;
+    void markCompleted(Timestamp timestamp) throws CancellationException;
 
     /**
      * Cancels this full sync replication.
