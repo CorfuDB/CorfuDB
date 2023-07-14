@@ -11,7 +11,7 @@ jobs:
 
     strategy:
       matrix:
-        jdk_base_image_version: ['openjdk:8-jdk-bullseye', 'openjdk:11-jdk-bullseye']
+        jdk_base_image_version: ['openjdk:11-jdk-bullseye', 'openjdk:17-jdk-bullseye']
 
     steps:
       - uses: actions/checkout@v2
@@ -67,17 +67,28 @@ jobs:
       - name: install corfu package
         working-directory: ./cloud/corfu
         run: |
-          helm install cert-manager jetstack/cert-manager --namespace cert-manager --create-namespace --version v1.8.0 --set installCRDs=true
+          helm install cert-manager jetstack/cert-manager \
+            --namespace cert-manager \
+            --create-namespace \
+            --version v1.8.0 \
+            --set installCRDs=true
+          
+          helm install corfu corfu \
+            --set persistence.enabled=true \
+            --set global.replicas=3 \
+            --set image.pullPolicy=IfNotPresent
+            --set image.registry=""
           
           helm install corfu corfu --set persistence.enabled=true --set global.replicas=3 --set image.pullPolicy=IfNotPresent --set image.registry=""
           
-          sleep 120
-
-      - name: check deployment status
-        working-directory: ./cloud/corfu
-        run: |
+          echo print docker container information (docker base image name):
+          docker run -ti --rm corfudb/corfu-server:cloud sh -c 'cat /app/docker.container.info.txt'
+          
+          echo print docker image information:
+          docker image inspect corfudb/corfu-server:cloud
+          
           echo check deployment status:
-          if kubectl get pods | grep "corfu-0"; then
+          if kubectl wait --for=condition=complete --timeout=180s job/configure-corfu | grep "job.batch/configure-corfu condition met"; then
             echo "Successful deployment!"
             exit 0
           else
