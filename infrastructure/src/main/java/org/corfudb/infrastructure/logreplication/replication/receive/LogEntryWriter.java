@@ -28,7 +28,7 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.corfudb.infrastructure.logreplication.config.LogReplicationConfig.REGISTRY_TABLE_ID;
-import static org.corfudb.runtime.LogReplicationUtils.DEMO_NAMESPACE;
+import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 /**
  * Process TxMessage that contains transaction logs for registered streams.
@@ -163,7 +163,7 @@ public class LogEntryWriter extends SinkWriter {
                                 // If stream tags exist for the current stream, it means it's intended for streaming
                                 // on the Sink (receiver)
                                 if (session.getSubscriber().getModel().equals(LogReplication.ReplicationModel.ROUTING_QUEUES)) {
-                                    UUID replicatedQueueTag = TableRegistry.getStreamIdForStreamTag(DEMO_NAMESPACE,
+                                    UUID replicatedQueueTag = TableRegistry.getStreamIdForStreamTag(CORFU_SYSTEM_NAMESPACE,
                                             LogReplicationUtils.REPLICATED_QUEUE_TAG);
                                     txnContext.logUpdate(streamId, smrEntry, Collections.singletonList(replicatedQueueTag));
                                 } else {

@@ -40,7 +40,7 @@ import java.util.stream.Stream;
 import static org.corfudb.infrastructure.logreplication.config.LogReplicationConfig.MERGE_ONLY_STREAMS;
 import static org.corfudb.infrastructure.logreplication.config.LogReplicationConfig.REGISTRY_TABLE_ID;
 import static org.corfudb.infrastructure.logreplication.config.LogReplicationConfig.PROTOBUF_TABLE_ID;
-import static org.corfudb.runtime.LogReplicationUtils.DEMO_NAMESPACE;
+import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 /**
  * This class represents the entity responsible for writing streams' snapshots into the sink cluster DB.
@@ -194,7 +194,7 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
 
         for (SMREntry smrEntry : smrEntries) {
             if (session.getSubscriber().getModel().equals(LogReplication.ReplicationModel.ROUTING_QUEUES)) {
-                UUID replicatedQueueTag = TableRegistry.getStreamIdForStreamTag(DEMO_NAMESPACE, LogReplicationUtils.REPLICATED_QUEUE_TAG);
+                UUID replicatedQueueTag = TableRegistry.getStreamIdForStreamTag(CORFU_SYSTEM_NAMESPACE, LogReplicationUtils.REPLICATED_QUEUE_TAG);
                 txnContext.logUpdate(streamId, smrEntry, Collections.singletonList(replicatedQueueTag));
             } else {
                 txnContext.logUpdate(streamId, smrEntry, replicationContext.getConfig(session).getDataStreamToTagsMap().get(streamId));
