@@ -11,6 +11,8 @@ RUN apt update && apt -y install iptables bash jq python3 sudo iproute2 python3-
 RUN python3 -m pip install pyyaml==5.4.1
 RUN python3 -m pip install netifaces==0.11.0
 
+RUN echo $BASE_IMAGE > docker.container.info.txt
+
 COPY target/${CORFU_JAR} /usr/share/corfu/lib/${CORFU_JAR}
 COPY target/${CMDLETS_JAR} /usr/share/corfu/lib/${CMDLETS_JAR}
 COPY target/${CORFU_TOOLS_JAR} /usr/share/corfu/lib/${CORFU_TOOLS_JAR}
