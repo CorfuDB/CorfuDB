@@ -66,14 +66,20 @@ jobs:
           
           helm install corfu corfu --set persistence.enabled=true --set global.replicas=3 --set image.pullPolicy=IfNotPresent --set image.registry=""
           
-          helm install corfu corfu --set persistence.enabled=true --set global.replicas=3 --set image.pullPolicy=IfNotPresent --set image.registry=""
-          
+          sleep 120
+
+      - name: print container information
+        working-directory: ./cloud/corfu
+        run: |
           echo print docker container information (docker base image name):
-          docker run -ti --rm corfudb/corfu-server:cloud sh -c 'cat /app/docker.container.info.txt'
-          
+          docker run -ti --rm corfudb/corfu-server:cloud sh -c 'cat /app/docker.container.info.txt' || true
+
           echo print docker image information:
-          docker image inspect corfudb/corfu-server:cloud
-          
+          docker image inspect corfudb/corfu-server:cloud 
+
+      - name: check deployment status
+        working-directory: ./cloud/corfu
+        run: |
           echo check deployment status:
           if kubectl wait --for=condition=complete --timeout=180s job/configure-corfu | grep "job.batch/configure-corfu condition met"; then
             echo "Successful deployment!"
@@ -83,6 +89,9 @@ jobs:
 
             echo pods:
             kubectl get pods
+
+            echo corfu job:
+            kubectl describe job/configure-corfu
 
             echo corfu pod:
             kubectl describe pod corfu-0
