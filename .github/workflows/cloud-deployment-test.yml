@@ -68,16 +68,6 @@ jobs:
           
           sleep 120
 
-      - name: print container information
-        working-directory: ./.ci
-        run: |
-          make print_container_information
-
-      - name: inspect container
-        working-directory: ./cloud/corfu
-        run: |
-          make inspect_container
-
       - name: check deployment status
         working-directory: ./cloud/corfu
         run: |
