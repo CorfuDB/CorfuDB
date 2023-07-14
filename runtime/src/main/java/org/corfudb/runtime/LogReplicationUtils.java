@@ -46,8 +46,6 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
  */
 @Slf4j
 public final class LogReplicationUtils {
-    public static final String DEMO_NAMESPACE = "nsx";
-
 
     public static final String LR_STATUS_STREAM_TAG = "lr_status";
 
@@ -77,14 +75,17 @@ public final class LogReplicationUtils {
     public static final String SNAP_SYNC_START_END_Q_NAME = "LRQ_SNAPSHOT_START_END_MARKER";
     public static final String REPLICATED_QUEUE_TAG = "lrq_recv";
 
-    public static final String SNAPSHOT_END_MARKER_TABLE_NAME = "SnapshotSyncEndMarker";
+    public static final String SNAP_SYNC_START_END_Q_NAME = "LRQ_SNAPSHOT_START_END_MARKER";
 
     // ---- End RoutingQueue Model constants -------/
 
     public static final UUID lrLogEntrySendQId = CorfuRuntime.getStreamID(TableRegistry
-            .getFullyQualifiedTableName(DEMO_NAMESPACE, LOG_ENTRY_SYNC_QUEUE_NAME_SENDER));
+            .getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, LOG_ENTRY_SYNC_QUEUE_NAME_SENDER));
     public static final UUID lrFullSyncSendQId = CorfuRuntime.getStreamID(TableRegistry
-            .getFullyQualifiedTableName(DEMO_NAMESPACE, SNAPSHOT_SYNC_QUEUE_NAME_SENDER));
+            .getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, SNAPSHOT_SYNC_QUEUE_NAME_SENDER));
+
+    public static final UUID lrSnapStartEndQId = CorfuRuntime.getStreamID(TableRegistry
+            .getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, SNAP_SYNC_START_END_Q_NAME));
 
     public static final UUID lrSnapStartEndQId = CorfuRuntime.getStreamID(TableRegistry
             .getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, SNAP_SYNC_START_END_Q_NAME));
