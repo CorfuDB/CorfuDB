@@ -865,6 +865,7 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
                 clusterManager.isSinkConnectionStarter = true;
                 clusterManager.initSingleSourceSinkTopology();
             } else if (entry.getKey().equals(TP_SINGLE_SOURCE_SINK_ROUTING_QUEUE)) {
+                clusterManager.isSinkConnectionStarter = true;
                 clusterManager.createSingleSourceSinkRoutingQueueTopology();
             }
     }

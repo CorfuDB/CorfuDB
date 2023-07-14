@@ -95,8 +95,12 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
         for (RoutingTableEntryMsg message : messages) {
             log.info("Enqueuing message to delta queue, message: {}", message);
             txn.logUpdateEnqueue(logEntryQ, message, message.getDestinationsList().stream()
-                    .map(destination -> TableRegistry.getStreamIdForStreamTag(DEMO_NAMESPACE,
-                            LOG_ENTRY_SYNC_QUEUE_TAG_SENDER_PREFIX + destination))
+                    .map(destination -> {
+                        log.info("Stream tag ID: {}", TableRegistry.getStreamIdForStreamTag(DEMO_NAMESPACE,
+                                LOG_ENTRY_SYNC_QUEUE_TAG_SENDER_PREFIX + destination));
+                        return TableRegistry.getStreamIdForStreamTag(DEMO_NAMESPACE,
+                                LOG_ENTRY_SYNC_QUEUE_TAG_SENDER_PREFIX + destination);
+                    })
                     .collect(Collectors.toList()), corfuStore);
         }
     }

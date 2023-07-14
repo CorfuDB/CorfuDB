@@ -501,7 +501,10 @@ public class LogReplicationConfigManager {
             case ROUTING_QUEUES:
                 String logEntrySyncStreamTag = ((LogReplicationRoutingQueueConfig) sessionToConfigMap.get(session))
                         .getLogEntrySyncStreamTag();
-                return TableRegistry.getStreamIdForStreamTag(DEMO_NAMESPACE, logEntrySyncStreamTag);
+                log.info("logEntrySyncStreamTag: {}", logEntrySyncStreamTag);
+                UUID tagID = TableRegistry.getStreamIdForStreamTag(DEMO_NAMESPACE, logEntrySyncStreamTag);
+                log.info("tagID: {}", tagID);
+                return tagID;
             default:
                 log.error("Unsupported replication model received: {}", session.getSubscriber().getModel());
                 return null;
