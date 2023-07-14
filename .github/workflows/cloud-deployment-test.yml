@@ -72,10 +72,13 @@ jobs:
         working-directory: ./cloud/corfu
         run: |
           echo print docker container information (docker base image name):
-          docker run -ti --rm corfudb/corfu-server:cloud sh -c 'cat /app/docker.container.info.txt' || true
+          docker run -ti --rm corfudb/corfu-server:cloud sh -c "cat /app/docker.container.info.txt" || true
 
+      - name: inspect container
+        working-directory: ./cloud/corfu
+        run: |
           echo print docker image information:
-          docker image inspect corfudb/corfu-server:cloud 
+          docker image inspect corfudb/corfu-server:cloud || true 
 
       - name: check deployment status
         working-directory: ./cloud/corfu
