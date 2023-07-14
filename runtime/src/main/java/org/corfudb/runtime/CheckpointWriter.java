@@ -13,13 +13,16 @@ import org.corfudb.protocols.logprotocol.MultiSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.object.transactions.TransactionType;
+import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.CacheOption;
 import org.corfudb.runtime.view.StreamsView;
 import org.corfudb.runtime.view.TableRegistry;
+import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.serializer.DynamicProtobufSerializer;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
@@ -168,8 +171,27 @@ public class CheckpointWriter<T extends ICorfuTable<?, ?>> {
                 .begin();
 
         log.info("appendCheckpoint: Started checkpoint for {} at snapshot {}", streamId, snapshotTimestamp);
+        if (LogReplicationUtils.skipCheckpointFor(streamId)) {
+           livenessUpdater.ifPresent(LivenessUpdater::notifyOnSyncComplete);
+           try { // Certain tables are ephemeral and do not need to be checkpointed.
+               startCheckpoint(snapshotTimestamp); // We also do not want to throw trimmed exceptions.
+               finishCheckpoint(); // To achieve this we append an empty checkpoint here.
+               StreamAddressSpace streamAddressSpace = rt.getSequencerView()
+                       .getStreamAddressSpace(new StreamAddressRange(streamId, Address.MAX, Address.NON_ADDRESS));
+               long addressCount = streamAddressSpace.size();
+               long cpDuration = System.currentTimeMillis() - start;
+               MicroMeterUtils.time(Duration.ofMillis(cpDuration), "checkpoint.timer",
+                       "streamId", streamId.toString());
+               MicroMeterUtils.measure(addressCount, "checkpoint.write_entries");
+               log.info("appendCheckpoint: completed checkpoint for {}, " +
+                               "dropping ({}) addresses, at snapshot {} in {} ms",
+                       streamId, addressCount, snapshotTimestamp, cpDuration);
+           } finally {
+               rt.getObjectsView().TXEnd();
+           }
+           return snapshotTimestamp;
+        }
 
-        
         try (Stream<? extends Map.Entry<?, ?>> entries = this.corfuTable.entryStream()) {
             // A checkpoint writer will do two accesses one to obtain the object
             // vlo version and to get a shallow copy of the entry set

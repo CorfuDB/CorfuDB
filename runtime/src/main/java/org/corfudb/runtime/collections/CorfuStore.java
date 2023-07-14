@@ -313,6 +313,17 @@ public class CorfuStore {
     }
 
     /**
+     * TODO: Remove this!
+     * Temporary hack for subscribing simplified version of routing queue listener from trim mark
+     */
+    public void subscribeListenerFromTrimMark(@Nonnull StreamListener streamListener, @Nonnull String namespace,
+                                              @Nonnull String streamTag) {
+        Token token = runtime.getAddressSpaceView().getTrimMark();
+        Timestamp ts = Timestamp.newBuilder().setEpoch(token.getEpoch()).setSequence(token.getSequence()).build();
+        this.subscribeListener(streamListener, namespace, streamTag, getTablesOfInterest(namespace, streamTag), ts);
+    }
+
+    /**
      * Subscribe to transaction updates on specific tables with the streamTag in the namespace.
      * Objects returned will honor transactional boundaries.
      * <p>
@@ -447,7 +458,7 @@ public class CorfuStore {
      * @param streamTag
      * @return table names (without namespace prefix)
      */
-    private List<String> getTablesOfInterest(@Nonnull String namespace, @Nonnull String streamTag) {
+    public List<String> getTablesOfInterest(@Nonnull String namespace, @Nonnull String streamTag) {
         List<String> tablesOfInterest = runtime.getTableRegistry().listTables(namespace, streamTag);
         log.info("Tag[{}${}] :: Subscribing to {} tables - {}", namespace, streamTag, tablesOfInterest.size(), tablesOfInterest);
         return tablesOfInterest;
