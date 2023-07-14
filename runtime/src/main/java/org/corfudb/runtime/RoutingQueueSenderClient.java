@@ -56,18 +56,17 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
     private Table<Queue.CorfuGuidMsg, RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg> snapSyncQ;
     private Table<RoutingQSnapStartEndKeyMsg, Queue.RoutingQSnapStartEndMarkerMsg, Message> snapStartEndTable;
 
+    private FullSyncRequestor fullSyncRequestor;
     /**
      * Constructor for the log replication client for routing queues on sender.
      *
      * @param corfuStore CorfuStore instance used by the jvm
      * @param clientName String representation of the client name. This parameter is case-sensitive.
-     * @param snapSyncProvider Callback implemented by application that transmits full snap sync data to LR
      * @throws IllegalArgumentException If clientName is null or empty.
      * @throws NoSuchMethodException NoSuchMethodException.
      * @throws IllegalAccessException IllegalAccessException.
      */
-    public RoutingQueueSenderClient(CorfuStore corfuStore, String clientName,
-                                        LRTransmitterReplicationModule snapSyncProvider)
+    public RoutingQueueSenderClient(CorfuStore corfuStore, String clientName)
             throws NoSuchMethodException, IllegalAccessException {
         Preconditions.checkArgument(isValid(clientName), "clientName is null or empty.");
 
@@ -88,13 +87,6 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
                         RoutingQSnapStartEndKeyMsg.class, Queue.RoutingQSnapStartEndMarkerMsg.class, null,
                         TableOptions.fromProtoSchema(Queue.RoutingTableEntryMsg.class));
 
-                FullSyncRequestor fullSyncRequestor = new FullSyncRequestor(
-                        corfuStore, snapSyncProvider, CORFU_SYSTEM_NAMESPACE,
-                        LR_STREAM_TAG, Collections.singletonList(REPLICATION_EVENT_TABLE_NAME));
-
-                corfuStore.subscribeListener(fullSyncRequestor, CORFU_SYSTEM_NAMESPACE,
-                        LR_STREAM_TAG, Collections.singletonList(REPLICATION_EVENT_TABLE_NAME));
-
                 break;
             } catch (InvocationTargetException e) {
                 throw new RuntimeException("InvocationTargetException in fromProtoSchema"+ e.getMessage());
@@ -110,6 +102,19 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
 
         // TODO: Register this client once the DEFAULT CLIENT implementation is no longer needed
         // register(corfuStore, clientName);
+    }
+
+    public void startLRSnapshotTransmitter(LRTransmitterReplicationModule snapSyncProvider) {
+        this.fullSyncRequestor = new FullSyncRequestor(
+                corfuStore, snapSyncProvider, CORFU_SYSTEM_NAMESPACE,
+                LR_STREAM_TAG, Collections.singletonList(REPLICATION_EVENT_TABLE_NAME));
+
+        corfuStore.subscribeListener(fullSyncRequestor, CORFU_SYSTEM_NAMESPACE,
+                LR_STREAM_TAG, Collections.singletonList(REPLICATION_EVENT_TABLE_NAME));
+    }
+
+    public void stopLRSnapshotTransmitter() {
+        corfuStore.unsubscribeListener(fullSyncRequestor);
     }
 
     public interface LRTransmitterReplicationModule {
