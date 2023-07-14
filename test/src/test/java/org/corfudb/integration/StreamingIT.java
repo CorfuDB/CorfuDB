@@ -43,7 +43,7 @@ import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.corfudb.runtime.LogReplicationUtils.DEMO_NAMESPACE;
+import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.fail;
 
@@ -1066,7 +1066,7 @@ public class StreamingIT extends AbstractIT {
     public void testSafeDataLossOnRoutingQs() throws Exception {
         // Run a corfu server & initialize CorfuStore
         CorfuRuntime runtime = initializeCorfu();
-        final String systemNamespace = DEMO_NAMESPACE;
+        final String systemNamespace = CORFU_SYSTEM_NAMESPACE;
         final String logEntryQName = LogReplicationUtils.LOG_ENTRY_SYNC_QUEUE_NAME_SENDER;
         final String snapSyncQName = LogReplicationUtils.SNAPSHOT_SYNC_QUEUE_NAME_SENDER;
 
@@ -1081,7 +1081,7 @@ public class StreamingIT extends AbstractIT {
 
         final int numEntries = PARAMETERS.NUM_ITERATIONS_VERY_LOW;
         for (int i = 0; i < numEntries; i++) {
-            try (TxnContext tx = store.txn(TableRegistry.CORFU_SYSTEM_NAMESPACE)) {
+            try (TxnContext tx = store.txn(CORFU_SYSTEM_NAMESPACE)) {
                 Queue.RoutingTableEntryMsg entry = Queue.RoutingTableEntryMsg.newBuilder()
                         .addDestinations(tx.getNamespace()).build();
                 tx.enqueue(logEntryQ, entry);
@@ -1090,7 +1090,7 @@ public class StreamingIT extends AbstractIT {
             }
         }
         // Validate that the queues do have entries before checkpointing
-        try (TxnContext tx = store.txn(TableRegistry.CORFU_SYSTEM_NAMESPACE)) {
+        try (TxnContext tx = store.txn(CORFU_SYSTEM_NAMESPACE)) {
             assertThat(tx.entryList(logEntryQ).size()).isEqualTo(numEntries);
             assertThat(tx.entryList(fullSyncQ).size()).isEqualTo(numEntries);
         } // This will load up the table's map with all entries
@@ -1099,10 +1099,10 @@ public class StreamingIT extends AbstractIT {
         List<String> allRegisteredTablesAndQs = runtime.getTableRegistry().listTables().stream().map(
                 CorfuStoreMetadata.TableName::getTableName
         ).collect(Collectors.toList());
-        checkpointAndTrim(runtime, TableRegistry.CORFU_SYSTEM_NAMESPACE, allRegisteredTablesAndQs, false);
+        checkpointAndTrim(store.getRuntime(), CORFU_SYSTEM_NAMESPACE, allRegisteredTablesAndQs, false);
 
         // Since the original data is cached in-memory, it should still be readable.
-        try (TxnContext tx = store.txn(TableRegistry.CORFU_SYSTEM_NAMESPACE)) {
+        try (TxnContext tx = store.txn(CORFU_SYSTEM_NAMESPACE)) {
             assertThat(tx.entryList(logEntryQ).size()).isEqualTo(numEntries);
             assertThat(tx.entryList(fullSyncQ).size()).isEqualTo(numEntries);
         }
@@ -1112,7 +1112,7 @@ public class StreamingIT extends AbstractIT {
         store.freeTableData(systemNamespace, snapSyncQName);
 
         // The next access will read from checkpoint but checkpoint has no data, so a safe data loss.
-        try (TxnContext tx = store.txn(TableRegistry.CORFU_SYSTEM_NAMESPACE)) {
+        try (TxnContext tx = store.txn(CORFU_SYSTEM_NAMESPACE)) {
             // This operation should not throw a trimmed exception
             assertThat(tx.entryList(logEntryQ).size()).isEqualTo(0);
             // Yet all the entries should disappear
