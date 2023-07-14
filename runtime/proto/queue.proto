@@ -62,12 +62,13 @@ message RoutingTableEntryMsg {
     OperationType operation_type = 7;
 }
 
-message RoutingTableSnapshotEndKeyMsg {
+message RoutingQSnapStartEndKeyMsg {
     string snapshot_sync_id = 1;
 }
 
 // Marker message denoting the end of a snapshot sync
-message RoutingTableSnapshotEndMarkerMsg {
+message RoutingQSnapStartEndMarkerMsg {
     // Destination corresponding to this snapshot sync
     string destination = 1;
+    int64 snapshot_start_timestamp = 2;
 }
