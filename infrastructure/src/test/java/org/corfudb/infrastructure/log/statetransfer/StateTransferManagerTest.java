@@ -469,7 +469,9 @@ class StateTransferManagerTest implements TransferSegmentCreator {
             return true;
         }
         for (int i = 0; i < batch.size() - 1; i++) {
-            if (batch.get(i) + 1 != batch.get(i + 1)) {
+            Long current = batch.get(i) + 1;
+            Long next = batch.get(i + 1);
+            if (!current.equals(next)) {
                 return false;
             }
         }

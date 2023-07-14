@@ -107,8 +107,8 @@ public class StateTransferManager {
                 .build();
     }
 
-    static boolean sequential(long first, long second) {
-        return first + 1 == second;
+    static boolean sequential(long current, long next) {
+        return current + 1 == next;
     }
 
     static Stream<List<Long>> splitNonSequentialAddresses(List<Long> batch) {
@@ -117,6 +117,7 @@ public class StateTransferManager {
         }
         List<List<Long>> lists = new ArrayList<>();
         List<Long> sequentialList = new ArrayList<>();
+
         sequentialList.add(batch.get(0));
         for (int i = 0; i < batch.size() - 1; i++) {
             long current = batch.get(i);
@@ -137,8 +138,9 @@ public class StateTransferManager {
      * There are cases in which the unknownAddresses can consist of non-sequential segments.
      * Make sure that each batch is at least of size batchSize and all addresses in a batch are
      * sequential.
+     *
      * @param unknownAddresses List of unknown addresses
-     * @param batchSize Max size of a batch
+     * @param batchSize        Max size of a batch
      * @return Batched, sequential addresses
      */
     static List<List<Long>> partitionSequentialAddresses(List<Long> unknownAddresses, int batchSize) {
