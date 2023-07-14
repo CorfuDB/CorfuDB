@@ -363,7 +363,7 @@ public abstract class BaseLogEntryReader extends LogEntryReader {
          */
         public void seek(long firstAddress) {
             log.trace("seek head {}", firstAddress);
-            opaqueStream.seek(firstAddress);
+            opaqueStream.seek(rt.getAddressSpaceView().getTrimMark().getSequence());
             streamUpTo();
         }
     }
