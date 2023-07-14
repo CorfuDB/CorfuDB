@@ -69,16 +69,14 @@ jobs:
           sleep 120
 
       - name: print container information
-        working-directory: ./cloud/corfu
+        working-directory: ./.ci
         run: |
-          echo print docker container information (docker base image name):
-          docker run -ti --rm corfudb/corfu-server:cloud sh -c \"cat /app/docker.container.info.txt\" || true
+          make print_container_information
 
       - name: inspect container
         working-directory: ./cloud/corfu
         run: |
-          echo print docker image information:
-          docker image inspect corfudb/corfu-server:cloud || true 
+          make inspect_container
 
       - name: check deployment status
         working-directory: ./cloud/corfu
