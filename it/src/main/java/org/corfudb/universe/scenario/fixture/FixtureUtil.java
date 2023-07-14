@@ -6,7 +6,6 @@ import lombok.Builder.Default;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.universe.group.cluster.CorfuClusterParams;
 import org.corfudb.universe.node.server.CorfuServerParams;
-import org.corfudb.universe.node.server.CorfuServerParams.ContainerResources;
 import org.corfudb.universe.node.server.CorfuServerParams.CorfuServerParamsBuilder;
 import org.corfudb.universe.node.server.ServerUtil;
 import org.corfudb.universe.node.server.vm.VmCorfuServerParams;

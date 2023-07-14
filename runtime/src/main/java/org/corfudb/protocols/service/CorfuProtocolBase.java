@@ -1,6 +1,5 @@
 package org.corfudb.protocols.service;
 
-import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.proto.service.Base.HandshakeRequestMsg;
 import org.corfudb.runtime.proto.service.Base.HandshakeResponseMsg;
@@ -14,6 +13,8 @@ import org.corfudb.runtime.proto.service.Base.SealRequestMsg;
 import org.corfudb.runtime.proto.service.Base.SealResponseMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg;
+
+import java.util.UUID;
 
 import static org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg;
 

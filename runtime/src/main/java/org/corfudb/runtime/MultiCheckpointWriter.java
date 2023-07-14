@@ -6,7 +6,6 @@ import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.object.ICorfuSMR;
-import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
 import org.corfudb.util.serializer.ISerializer;
 
 import java.util.ArrayList;
@@ -21,12 +20,12 @@ import java.util.UUID;
 @Slf4j
 public class MultiCheckpointWriter<T extends ICorfuTable<?, ?>> {
     @Getter
-    private List<ICorfuSMR<T>> tables = new ArrayList<>();
+    private List<ICorfuSMR> tables = new ArrayList<>();
 
     /** Add a table to the list of tables to be checkpointed by this class. */
     @SuppressWarnings("unchecked")
     public void addMap(T table) {
-        this.tables.add((ICorfuSMR<T>) table);
+        this.tables.add((ICorfuSMR) table);
     }
 
     /** Add table(s) to the list of tables to be checkpointed by this class. */
@@ -51,11 +50,11 @@ public class MultiCheckpointWriter<T extends ICorfuTable<?, ?>> {
         Token minSnapshot = Token.UNINITIALIZED;
 
         try {
-            for (ICorfuSMR<T> table : tables) {
-                UUID streamId = table.getCorfuStreamID();
+            for (ICorfuSMR table : tables) {
+                UUID streamId = table.getCorfuSMRProxy().getStreamID();
 
                 CheckpointWriter<T> cpw = new CheckpointWriter<>(rt, streamId, author, (T) table);
-                ISerializer serializer = ((ICorfuSMRProxyInternal) table.getCorfuSMRProxy()).getSerializer();
+                ISerializer serializer = table.getCorfuSMRProxy().getSerializer();
                 cpw.setSerializer(serializer);
 
                 Token minCPSnapshot = Token.UNINITIALIZED;

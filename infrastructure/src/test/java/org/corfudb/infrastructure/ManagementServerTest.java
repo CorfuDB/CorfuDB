@@ -3,18 +3,6 @@ package org.corfudb.infrastructure;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.ByteString;
 import io.netty.channel.ChannelHandlerContext;
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
-import java.io.ObjectInputStream;
-import java.time.Duration;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Supplier;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.management.ClusterStateContext;
@@ -47,6 +35,19 @@ import org.mockito.ArgumentMatchers;
 import org.mockito.MockedStatic;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
+
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+import java.io.ObjectInputStream;
+import java.time.Duration;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Supplier;
 
 import static org.corfudb.protocols.CorfuProtocolCommon.DEFAULT_UUID;
 import static org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg;
@@ -431,7 +432,7 @@ public class ManagementServerTest {
 
         try (MockedStatic<ReconfigurationEventHandler> configMocked = mockStatic(ReconfigurationEventHandler.class)) {
             managementServer.handleMessage(request, mChannelHandlerContext, mServerRouter);
-            configMocked.verify(never(), () -> ReconfigurationEventHandler.handleFailure(any(), any(), any(), any()));
+            configMocked.verify(() -> ReconfigurationEventHandler.handleFailure(any(), any(), any(), any()), never());
         }
 
         // Verify that a NOT_BOOTSTRAPPED error was sent through the router.
@@ -457,7 +458,7 @@ public class ManagementServerTest {
 
         try (MockedStatic<ReconfigurationEventHandler> configMocked = mockStatic(ReconfigurationEventHandler.class)) {
             managementServer.handleMessage(request, mChannelHandlerContext, mServerRouter);
-            configMocked.verify(never(), () -> ReconfigurationEventHandler.handleFailure(any(), any(), any(), any()));
+            configMocked.verify(() -> ReconfigurationEventHandler.handleFailure(any(), any(), any(), any()), never());
         }
 
         // Assert that the payload has a REPORT_FAILURE response and that the base
@@ -546,7 +547,7 @@ public class ManagementServerTest {
 
         try (MockedStatic<ReconfigurationEventHandler> configMocked = mockStatic(ReconfigurationEventHandler.class)) {
             managementServer.handleMessage(request, mChannelHandlerContext, mServerRouter);
-            configMocked.verify(never(), () -> ReconfigurationEventHandler.handleHealing(any(), any(), any()));
+            configMocked.verify(() -> ReconfigurationEventHandler.handleHealing(any(), any(), any()), never());
         }
 
         // Verify that a NOT_BOOTSTRAPPED error was sent through the router.
@@ -572,7 +573,7 @@ public class ManagementServerTest {
 
         try (MockedStatic<ReconfigurationEventHandler> configMocked = mockStatic(ReconfigurationEventHandler.class)) {
             managementServer.handleMessage(request, mChannelHandlerContext, mServerRouter);
-            configMocked.verify(never(), () -> ReconfigurationEventHandler.handleHealing(any(), any(), any()));
+            configMocked.verify(() -> ReconfigurationEventHandler.handleHealing(any(), any(), any()), never());
         }
 
         // Assert that the payload has a HEAL_FAILURE response and that the base

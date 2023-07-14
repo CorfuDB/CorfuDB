@@ -8,6 +8,7 @@ import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
 import org.junit.jupiter.api.Assertions;
 import org.rocksdb.Options;
+import org.rocksdb.ReadOptions;
 import org.rocksdb.RocksDB;
 import org.rocksdb.RocksDBException;
 
@@ -16,11 +17,13 @@ import java.util.Arrays;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.UUID;
+import java.util.concurrent.locks.StampedLock;
 import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.corfudb.AbstractCorfuTest.PARAMETERS;
+import static org.corfudb.runtime.collections.RocksDbEntryIterator.LOAD_VALUES;
 
 /**
  *
@@ -61,7 +64,8 @@ public class RocksDbEntryIteratorTest {
 
         generateData(numEntries, serializer, rocksDb);
 
-        RocksDbEntryIterator<Integer, Integer> iterator = new RocksDbEntryIterator<>(rocksDb, serializer);
+        RocksDbEntryIterator<Integer, Integer> iterator = new RocksDbEntryIterator<>(
+                rocksDb.newIterator(), serializer, new ReadOptions(), new StampedLock(), LOAD_VALUES);
 
         // Verify that all the entries can be retrieved from the iterator
         IntStream.range(0, numEntries).forEach(num -> {
@@ -94,7 +98,8 @@ public class RocksDbEntryIteratorTest {
 
         generateData(numEntries, serializer, rocksDb);
 
-        RocksDbEntryIterator<Integer, Integer> iterator = new RocksDbEntryIterator<>(rocksDb, serializer, false);
+        RocksDbEntryIterator<Integer, Integer> iterator = new RocksDbEntryIterator<>(
+                rocksDb.newIterator(), serializer, new ReadOptions(), new StampedLock(), !LOAD_VALUES);
 
         IntStream.range(0, numEntries).forEach(num -> {
             Map.Entry<Integer, Integer> entry = iterator.next();

@@ -1,6 +1,5 @@
 package org.corfudb.universe;
 
-import com.google.gson.Gson;
 import org.corfudb.infrastructure.health.HealthReport;
 import org.corfudb.runtime.exceptions.RetryExhaustedException;
 import org.corfudb.universe.UniverseManager.UniverseWorkflow;

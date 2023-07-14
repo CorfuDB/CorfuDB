@@ -1,22 +1,5 @@
 package org.corfudb.util;
 
-import static com.google.common.base.Preconditions.checkArgument;
-import static com.google.common.base.Preconditions.checkNotNull;
-import static com.google.common.base.Preconditions.checkState;
-
-
-import java.text.DecimalFormat;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.NoSuchElementException;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ThreadLocalRandom;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.stream.Collectors;
 import jdk.internal.org.objectweb.asm.util.Printer;
 import jdk.internal.org.objectweb.asm.util.Textifier;
 import jdk.internal.org.objectweb.asm.util.TraceMethodVisitor;
@@ -30,6 +13,23 @@ import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.RuntimeLayout;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
+
+import java.text.DecimalFormat;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.NoSuchElementException;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
+
+import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkState;
 
 /**
  * Created by crossbach on 5/22/15.
@@ -124,6 +124,20 @@ public class Utils {
             }
         }
         return result;
+    }
+
+    public static boolean startsWith(byte[] array, byte[] prefix) {
+        if (array == null || prefix == null || array.length < prefix.length) {
+            return false;
+        }
+
+        for (int i = 0; i < prefix.length; i++) {
+            if (array[i] != prefix[i]) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**

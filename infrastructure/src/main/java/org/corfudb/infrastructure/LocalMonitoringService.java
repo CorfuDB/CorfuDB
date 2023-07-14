@@ -1,7 +1,5 @@
 package org.corfudb.infrastructure;
 
-import static org.corfudb.util.LambdaUtils.runSansThrow;
-
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -17,6 +15,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+
+import static org.corfudb.util.LambdaUtils.runSansThrow;
 
 /**
  * Local Metrics Polling Service polls the local server state.

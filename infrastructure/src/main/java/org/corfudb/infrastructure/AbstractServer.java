@@ -1,13 +1,14 @@
 package org.corfudb.infrastructure;
 
 import io.netty.channel.ChannelHandlerContext;
-import java.util.concurrent.atomic.AtomicReference;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
 import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
 import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
+
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.corfudb.protocols.CorfuProtocolServerErrors.getNotReadyErrorMsg;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getHeaderMsg;

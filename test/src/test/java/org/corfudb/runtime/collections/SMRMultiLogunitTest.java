@@ -7,7 +7,6 @@ import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.ObjectsView;
-import org.corfudb.runtime.view.SMRObject;
 import org.junit.Before;
 import org.junit.Test;
 

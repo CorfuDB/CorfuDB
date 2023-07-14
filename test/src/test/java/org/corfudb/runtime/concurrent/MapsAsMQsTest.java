@@ -4,7 +4,6 @@ import com.google.common.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.object.transactions.AbstractTransactionsTest;
-import org.corfudb.runtime.view.SMRObject;
 import org.junit.Test;
 
 import java.util.concurrent.CountDownLatch;

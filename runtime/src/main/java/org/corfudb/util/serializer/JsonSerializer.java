@@ -2,19 +2,17 @@ package org.corfudb.util.serializer;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufInputStream;
 import io.netty.buffer.ByteBufOutputStream;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.object.ICorfuSMR;
 
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.util.UUID;
-
-import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.object.ICorfuSMR;
 
 /**
  * Created by mwei on 2/10/16.
@@ -84,34 +82,18 @@ public class JsonSerializer implements ISerializer {
     @Override
     public void serialize(Object o, ByteBuf b) {
         String className = o == null ? "null" : o.getClass().getName();
-        if (className.endsWith(ICorfuSMR.CORFUSMR_SUFFIX)) {
-            className = "CorfuObject";
-            byte[] classNameBytes = className.getBytes();
-            b.writeShort(classNameBytes.length);
-            b.writeBytes(classNameBytes);
-            String smrClass = className.split("\\$")[0];
-            byte[] smrClassNameBytes = smrClass.getBytes();
-            b.writeShort(smrClassNameBytes.length);
-            b.writeBytes(smrClassNameBytes);
-            UUID id = ((ICorfuSMR) o).getCorfuStreamID();
-            log.trace("Serializing a CorfuObject of type {} as a stream pointer to {}",
-                    smrClass, id);
-            b.writeLong(id.getMostSignificantBits());
-            b.writeLong(id.getLeastSignificantBits());
-        } else {
-            byte[] classNameBytes = className.getBytes();
-            b.writeShort(classNameBytes.length);
-            b.writeBytes(classNameBytes);
-            if (o == null) {
-                return;
+        byte[] classNameBytes = className.getBytes();
+        b.writeShort(classNameBytes.length);
+        b.writeBytes(classNameBytes);
+        if (o == null) {
+            return;
+        }
+        try (ByteBufOutputStream bbos = new ByteBufOutputStream(b)) {
+            try (OutputStreamWriter osw = new OutputStreamWriter(bbos)) {
+                gson.toJson(o, o.getClass(), osw);
             }
-            try (ByteBufOutputStream bbos = new ByteBufOutputStream(b)) {
-                try (OutputStreamWriter osw = new OutputStreamWriter(bbos)) {
-                    gson.toJson(o, o.getClass(), osw);
-                }
-            } catch (IOException ie) {
-                log.error("Exception during serialization!", ie);
-            }
+        } catch (IOException ie) {
+            log.error("Exception during serialization!", ie);
         }
     }
 }

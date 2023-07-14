@@ -1,32 +1,37 @@
 package org.corfudb.runtime.collections;
 
-import com.google.common.reflect.TypeToken;
 import com.google.protobuf.Message;
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
+import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CheckpointWriter;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.Queue;
-import org.corfudb.runtime.object.ICorfuVersionPolicy;
+import org.corfudb.runtime.object.PersistenceOptions;
+import org.corfudb.runtime.object.PersistenceOptions.PersistenceOptionsBuilder;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.CorfuGuidGenerator;
-import org.corfudb.runtime.view.ObjectsView;
+import org.corfudb.runtime.view.ObjectsView.ObjectID;
 import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.util.serializer.ISerializer;
+import org.corfudb.util.serializer.ProtobufSerializer;
+import org.corfudb.util.serializer.SafeProtobufSerializer;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Deque;
 import java.util.List;
-import java.util.Map;
+import java.util.Map.Entry;
 import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.Set;
@@ -34,7 +39,6 @@ import java.util.UUID;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.ForkJoinWorkerThread;
 import java.util.function.Predicate;
-import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
@@ -46,7 +50,9 @@ import java.util.stream.StreamSupport;
  * <p>
  */
 @Slf4j
-public class Table<K extends Message, V extends Message, M extends Message> {
+@AllArgsConstructor
+@Builder(toBuilder = true)
+public class Table<K extends Message, V extends Message, M extends Message> implements AutoCloseable {
 
     // Accessor/Mutator threads can interleave in a way that create a deadlock because they can create a
     // circular dependency between the VersionLockedObject(VLO) lock and the common forkjoin thread pool. In order
@@ -96,7 +102,6 @@ public class Table<K extends Message, V extends Message, M extends Message> {
     private final Set<UUID> streamTags;
 
     private final TableParameters<K, V, M> tableParameters;
-    private final Supplier<StreamingMap<K, V>> streamingMapSupplier;
     /**
      * In case this table is opened as a Queue, we need the Guid generator to support enqueue operations.
      */
@@ -115,14 +120,11 @@ public class Table<K extends Message, V extends Message, M extends Message> {
      * @param corfuRuntime         connected instance of the Corfu Runtime
      * @param serializer           protobuf serializer
      * @param streamTags           set of UUIDs representing the streamTags
-     * @param streamingMapSupplier supplier of underlying map data structure.
-     *                             Only required for disk-backed CorfuTable
      */
     public Table(@Nonnull final TableParameters<K, V, M> tableParameters,
                  @Nonnull final CorfuRuntime corfuRuntime,
                  @Nonnull final ISerializer serializer,
-                 @NonNull final Set<UUID> streamTags,
-                 @Nullable final Supplier<StreamingMap<K, V>> streamingMapSupplier) {
+                 @NonNull final Set<UUID> streamTags) {
 
         this.namespace = tableParameters.getNamespace();
         this.fullyQualifiedTableName = tableParameters.getFullyQualifiedTableName();
@@ -136,7 +138,6 @@ public class Table<K extends Message, V extends Message, M extends Message> {
                 .orElse(MetadataOptions.builder().build());
 
         this.tableParameters = tableParameters;
-        this.streamingMapSupplier = streamingMapSupplier;
         this.serializer = serializer;
 
         initializeCorfuTable(corfuRuntime);
@@ -151,14 +152,6 @@ public class Table<K extends Message, V extends Message, M extends Message> {
         } else {
             this.guidGenerator = null;
         }
-    }
-
-    public Table(@Nonnull final TableParameters<K, V, M> tableParameters,
-                 @Nonnull final CorfuRuntime corfuRuntime,
-                 @Nonnull final ISerializer serializer,
-                 @Nonnull final Supplier<StreamingMap<K, V>> streamingMapSupplier,
-                 @NonNull final Set<UUID> streamTags) {
-        this(tableParameters, corfuRuntime, serializer, streamTags, streamingMapSupplier);
     }
 
     /**
@@ -215,23 +208,17 @@ public class Table<K extends Message, V extends Message, M extends Message> {
      * @param runtime - the runtime that was used to create this table
      */
     public void resetTableData(CorfuRuntime runtime) {
-
         if (!corfuTable.isTableCached()) {
             throw new IllegalStateException("Cannot reset a table opened with NO_CACHE option.");
         }
 
-        ObjectsView.ObjectID oid;
 
-        if (streamingMapSupplier == null) {
-            // PersistentCorfuTable
-            oid = new ObjectsView.ObjectID(getStreamUUID(), PersistentCorfuTable.class);
+        // PersistentCorfuTable
+        ObjectID<?> oid = ObjectID.builder().streamID(getStreamUUID()).build();
 
-            // Evict all versions of this Table from MVOCache
-            runtime.getObjectsView().getMvoCache().invalidateAllVersionsOf(getStreamUUID());
-        } else {
-            // Disk-backed CorfuTable
-            oid = new ObjectsView.ObjectID(getStreamUUID(), CorfuTable.class);
-        }
+        // Evict all versions of this Table from MVOCache
+        runtime.getObjectsView().getMvoCache().invalidateAllVersionsOf(getStreamUUID());
+        corfuTable.close();
 
         Object tableObject = runtime.getObjectsView().getObjectCache().remove(oid);
         if (tableObject == null) {
@@ -242,8 +229,38 @@ public class Table<K extends Message, V extends Message, M extends Message> {
     }
 
     private void initializeCorfuTable(CorfuRuntime runtime) {
-        SMRObject.Builder<? extends ICorfuTable<K, CorfuRecord<V, M>>> builder;
+        final SMRObject.Builder<? extends ICorfuTable<K, CorfuRecord<V, M>>> builder;
         final Deque<Object> arguments = new ArrayDeque<>();
+
+        // Check to see if we should be used a disk backed table.
+        if (tableParameters.getPersistenceOptions().hasDataPath()) {
+            PersistenceOptionsBuilder persistenceOptions = PersistenceOptions.builder();
+            persistenceOptions.dataPath(Paths.get(tableParameters.getPersistenceOptions().getDataPath()));
+            if (tableParameters.getPersistenceOptions().hasConsistencyModel()) {
+                persistenceOptions.consistencyModel(tableParameters.getPersistenceOptions().getConsistencyModel());
+            }
+            if (tableParameters.getPersistenceOptions().hasSizeComputationModel()) {
+                persistenceOptions.sizeComputationModel(tableParameters.getPersistenceOptions().getSizeComputationModel());
+            }
+
+            ISerializer safeSerializer = new SafeProtobufSerializer(serializer);
+            builder = runtime.getObjectsView().<PersistedCorfuTable<K, CorfuRecord<V, M>>>build()
+                    .setStreamName(fullyQualifiedTableName)
+                    .setStreamTags(streamTags)
+                    .setSerializer(safeSerializer)
+                    .setTypeToken(PersistedCorfuTable.getTypeToken());
+
+            arguments.add(persistenceOptions.build());
+            arguments.add(DiskBackedCorfuTable.defaultOptions);
+            arguments.add(safeSerializer);
+        } else {
+            // Default in-memory implementation.
+            builder = runtime.getObjectsView().<PersistentCorfuTable<K, CorfuRecord<V, M>>>build()
+                    .setStreamName(fullyQualifiedTableName)
+                    .setStreamTags(streamTags)
+                    .setSerializer(serializer)
+                    .setTypeToken(PersistentCorfuTable.getTypeToken());
+        }
 
         if (!tableParameters.isSecondaryIndexesDisabled()) {
             arguments.add(new ProtobufIndexer(
@@ -251,24 +268,8 @@ public class Table<K extends Message, V extends Message, M extends Message> {
                     tableParameters.getSchemaOptions()));
         }
 
-        if (streamingMapSupplier == null) {
-            // PersistentCorfuTable
-            builder = runtime.getObjectsView().build()
-                    .setTypeToken(new TypeToken<PersistentCorfuTable<K, CorfuRecord<V, M>>>() {})
-                    .setArguments(arguments.toArray());
-        } else {
-            arguments.add(streamingMapSupplier);
-            arguments.add(ICorfuVersionPolicy.MONOTONIC);
-            // Disk-backed CorfuTable
-            builder = runtime.getObjectsView().build()
-                    .setTypeToken(new TypeToken<CorfuTable<K, CorfuRecord<V, M>>>() {})
-                    .setArguments(arguments.toArray());
-        }
-
-        this.corfuTable = builder.setStreamName(this.fullyQualifiedTableName)
-                .setStreamTags(streamTags)
-                .setSerializer(serializer)
-                .open();
+        builder.setArguments(arguments.toArray());
+        this.corfuTable = builder.open();
     }
 
     /**
@@ -323,6 +324,61 @@ public class Table<K extends Message, V extends Message, M extends Message> {
     }
 
     /**
+     * Appends the specified element to the end of this unbounded queue, without materializing the queue in memory.
+     *
+     * @param e the element to add
+     * @param streamTags  - stream tags associated to the given stream id
+     * @param corfuStore CorfuStore that gets the runtime for the serializer.
+     * @throws IllegalArgumentException if some property of the specified
+     *                                  element prevents it from being added to the queue.
+     */
+    public K logUpdateEnqueue(V e, List<UUID> streamTags, CorfuStore corfuStore) {
+        /**
+         * This is a callback that is placed into the root transaction's context on
+         * the thread local stack which will be invoked right after this transaction
+         * is deemed successful and has obtained a final sequence number to write.
+         */
+        @AllArgsConstructor
+        class QueueEntryAddressGetter implements TransactionalContext.PreCommitListener {
+            private CorfuRecord<V, M> record;
+
+            /**
+             * If we are in a transaction, determine the commit address and fix it up in
+             * the queue entry's metadata.
+             * @param tokenResponse - the sequencer's token response returned.
+             */
+            @Override
+            public void preCommitCallback(TokenResponse tokenResponse) {
+                record.setMetadata((M) Queue.CorfuQueueMetadataMsg.newBuilder()
+                        .setTxSequence(tokenResponse.getSequence()).build());
+                log.trace("preCommitCallback for Queue: " + tokenResponse);
+            }
+        }
+
+        // Obtain a cluster-wide unique 64-bit id to identify this entry in the queue.
+        long entryId = guidGenerator.nextLong();
+        // Embed this key into a protobuf.
+        K keyOfQueueEntry = (K) Queue.CorfuGuidMsg.newBuilder().setInstanceId(entryId).build();
+
+        // Prepare a partial record with the queue's payload and temporary metadata that will be overwritten
+        // by the QueueEntryAddressGetter callback above when the transaction finally commits.
+        CorfuRecord<V, M> queueEntry = new CorfuRecord<>(e,
+                (M) Queue.CorfuQueueMetadataMsg.newBuilder().setTxSequence(0).build());
+
+        QueueEntryAddressGetter addressGetter = new QueueEntryAddressGetter(queueEntry);
+        log.trace("enqueue: Adding preCommitListener for Queue: " + e.toString());
+        TransactionalContext.getRootContext().addPreCommitListener(addressGetter);
+
+        Object[] smrArgs = new Object[2];
+        smrArgs[0] = keyOfQueueEntry;
+        smrArgs[1] = queueEntry;
+        TransactionalContext.getCurrentContext().logUpdate(this.getStreamUUID(), new SMREntry("put", smrArgs,
+                corfuStore.getRuntime().getSerializers().getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE)),
+                streamTags);
+        return keyOfQueueEntry;
+    }
+
+    /**
      * Returns a List of CorfuQueueRecords sorted by the order in which the enqueue materialized.
      * This is the primary method of consumption of entries enqueued into CorfuQueue.
      *
@@ -332,8 +388,8 @@ public class Table<K extends Message, V extends Message, M extends Message> {
      * @return List of Entries sorted by their enqueue order
      */
     public List<CorfuQueueRecord> entryList() {
-        Comparator<Map.Entry<K, CorfuRecord<V, M>>> queueComparator =
-                (Map.Entry<K, CorfuRecord<V, M>> rec1, Map.Entry<K, CorfuRecord<V, M>> rec2) -> {
+        Comparator<Entry<K, CorfuRecord<V, M>>> queueComparator =
+                (Entry<K, CorfuRecord<V, M>> rec1, Entry<K, CorfuRecord<V, M>> rec2) -> {
                     long r1EntryId = ((Queue.CorfuGuidMsg) rec1.getKey()).getInstanceId();
                     long r1Sequence = ((Queue.CorfuQueueMetadataMsg) rec1.getValue().getMetadata()).getTxSequence();
 
@@ -341,15 +397,19 @@ public class Table<K extends Message, V extends Message, M extends Message> {
                     long r2Sequence = ((Queue.CorfuQueueMetadataMsg) rec2.getValue().getMetadata()).getTxSequence();
                     return CorfuQueueRecord.compareTo(r1EntryId, r2EntryId, r1Sequence, r2Sequence);
                 };
-
         List<CorfuQueueRecord> copy = new ArrayList<>(corfuTable.size());
-        for (Map.Entry<K, CorfuRecord<V, M>> entry : corfuTable.entryStream()
+        for (Entry<K, CorfuRecord<V, M>> entry : corfuTable.entryStream()
                 .sorted(queueComparator).collect(Collectors.toList())) {
             copy.add(new CorfuQueueRecord((Queue.CorfuGuidMsg) entry.getKey(),
                     (Queue.CorfuQueueMetadataMsg) entry.getValue().getMetadata(),
                     entry.getValue().getPayload()));
         }
         return copy;
+    }
+
+    @Override
+    public void close() throws Exception {
+        corfuTable.close();
     }
 
     /**
@@ -446,7 +506,7 @@ public class Table<K extends Message, V extends Message, M extends Message> {
     List<CorfuStoreEntry<K, V, M>> scanAndFilterByEntry(
             @Nonnull final Predicate<CorfuStoreEntry<K, V, M>> entryPredicate) {
         long startTime = System.nanoTime();
-        try(Stream<Map.Entry<K, CorfuRecord<V, M>>> stream = corfuTable.entryStream()) {
+        try(Stream<Entry<K, CorfuRecord<V, M>>> stream = corfuTable.entryStream()) {
             List<CorfuStoreEntry<K, V, M>> res = pool.submit(() -> stream
                     .filter(recordEntry ->
                             entryPredicate.test(new CorfuStoreEntry<>(
@@ -503,5 +563,15 @@ public class Table<K extends Message, V extends Message, M extends Message> {
         CheckpointWriter<ICorfuTable<?,?>> cpw = new CheckpointWriter(rt, streamUUID, author, this.corfuTable);
         cpw.setSerializer(serializer);
         return cpw;
+    }
+
+    public Class<?> getUnderlyingType() {
+        return corfuTable.getClass();
+    }
+
+    Table<K, V, M> generateImmutableView(long sequence) {
+        return this.toBuilder()
+                .corfuTable(this.corfuTable.generateImmutableView(sequence))
+                .build();
     }
 }

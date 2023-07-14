@@ -1,16 +1,15 @@
 package org.corfudb.runtime;
 
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.Function;
-
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.util.NodeLocator;
+
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
 
 /**
  * Pool of client routers.

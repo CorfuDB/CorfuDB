@@ -2,21 +2,23 @@ package org.corfudb.runtime.collections;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.reflect.TypeToken;
-import org.corfudb.runtime.object.ICorfuExecutionContext;
 import org.corfudb.runtime.object.ICorfuSMR;
+import org.corfudb.runtime.object.ICorfuSMRProxyMetadata;
 import org.corfudb.runtime.object.ICorfuSMRProxy;
 import org.corfudb.runtime.object.ICorfuSMRUpcallTarget;
-import org.corfudb.runtime.object.MVOCorfuCompileProxy;
 
 import javax.annotation.Nonnull;
 import java.util.Map;
 import java.util.Set;
-import java.util.UUID;
 import java.util.stream.Stream;
 
-public class PersistentCorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<PersistentCorfuTable<K, V>> {
+public class PersistentCorfuTable<K, V> implements
+        ICorfuTable<K, V>,
+        ICorfuSMR<ImmutableCorfuTable<K, V>> {
 
     private ICorfuSMRProxy<ImmutableCorfuTable<K, V>> proxy;
+    private ICorfuSMRProxyMetadata proxyMetadata;
+
 
     private final Map<String, ICorfuSMRUpcallTarget<ImmutableCorfuTable<K, V>>> upcallTargetMap
         = ImmutableMap.<String, ICorfuSMRUpcallTarget<ImmutableCorfuTable<K, V>>>builder()
@@ -25,36 +27,45 @@ public class PersistentCorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<
             .put("remove", (obj, args) -> obj.remove((K) args[0]))
             .build();
 
-    public static <K, V> TypeToken<PersistentCorfuTable<K, V>> getTableType() {
+    public static <K, V> TypeToken<PersistentCorfuTable<K, V>> getTypeToken() {
         return new TypeToken<PersistentCorfuTable<K, V>>() {};
     }
 
-    @Override
-    public <R> void setProxy$CORFUSMR(ICorfuSMRProxy<R> proxy) {
-        this.proxy = (ICorfuSMRProxy<ImmutableCorfuTable<K, V>>) proxy;
+    public PersistentCorfuTable() {}
+
+    public PersistentCorfuTable(ICorfuSMRProxy<ImmutableCorfuTable<K, V>> proxy,
+                                ICorfuSMRProxyMetadata proxyMetadata) {
+        this.proxy = proxy;
+        this.proxyMetadata = proxyMetadata;
     }
 
     @Override
-    // TODO: use proper return type
-    public ICorfuSMRProxy getCorfuSMRProxy() {
-        return proxy;
+    public <P extends ICorfuSMRProxyMetadata & ICorfuSMRProxy<ImmutableCorfuTable<K, V>>>
+    void setCorfuSMRProxy(P proxy) {
+        this.proxy = proxy;
+        this.proxyMetadata = proxy;
+    }
+
+    @Override
+    public ICorfuSMRProxyMetadata getCorfuSMRProxy() {
+        return proxyMetadata;
     }
 
     @Override
     public void delete(@Nonnull K key) {
         Object[] conflictField = new Object[]{key};
-        proxy.logUpdate("remove", false, conflictField, key);
+        proxy.logUpdate("remove", conflictField, key);
     }
 
     @Override
     public void insert(@Nonnull K key, @Nonnull V value) {
         Object[] conflictField = new Object[]{key};
-        proxy.logUpdate("put", false, conflictField, key, value);
+        proxy.logUpdate("put", conflictField, key, value);
     }
 
     @Override
     public void clear() {
-        proxy.logUpdate("clear", false, null);
+        proxy.logUpdate("clear", null);
     }
 
     @Override
@@ -64,8 +75,16 @@ public class PersistentCorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<
 
     @Override
     public boolean isTableCached() {
-        return ((MVOCorfuCompileProxy)proxy).isObjectCached();
+        return proxyMetadata.isObjectCached();
     }
+
+    @Override
+    public ICorfuTable<K, V> generateImmutableView(long sequence) {
+        ICorfuSMRProxy<ImmutableCorfuTable<K, V>> snapshotProxy =
+                this.proxy.getUnderlyingMVO().getSnapshotProxy(sequence);
+        return new PersistentCorfuTable<>(snapshotProxy, this.proxyMetadata);
+    }
+
 
     @Override
     public V get(@Nonnull Object key) {
@@ -105,17 +124,7 @@ public class PersistentCorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<
     }
 
     @Override
-    public PersistentCorfuTable<K, V> getContext(ICorfuExecutionContext.Context context) {
-        return null;
-    }
-
-    @Override
     public Map<String, ICorfuSMRUpcallTarget<ImmutableCorfuTable<K, V>>> getSMRUpcallMap() {
         return upcallTargetMap;
-    }
-
-    @Override
-    public UUID getCorfuStreamID() {
-        return proxy.getStreamID();
     }
 }

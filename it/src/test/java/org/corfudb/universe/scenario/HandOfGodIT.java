@@ -1,6 +1,6 @@
 package org.corfudb.universe.scenario;
 
-import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.view.ClusterStatusReport;
 import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
 import org.corfudb.runtime.view.Layout;
@@ -38,9 +38,9 @@ public class HandOfGodIT extends GenericIntegrationTest {
 
             CorfuClient corfuClient = corfuCluster.getLocalCorfuClient();
 
-            CorfuTable<String, String> table = corfuClient.createDefaultCorfuTable(DEFAULT_STREAM_NAME);
+            ICorfuTable<String, String> table = corfuClient.createDefaultCorfuTable(DEFAULT_STREAM_NAME);
             for (int i = 0; i < DEFAULT_TABLE_ITER; i++) {
-                table.put(String.valueOf(i), String.valueOf(i));
+                table.insert(String.valueOf(i), String.valueOf(i));
             }
 
             //Should force remove two nodes from cluster
@@ -66,6 +66,7 @@ public class HandOfGodIT extends GenericIntegrationTest {
                     clientFixture.getTimeout(),
                     clientFixture.getPollPeriod()
             );
+
             // Verify layout contains only the node that is up
             corfuClient.invalidateLayout();
             Layout layout = corfuClient.getLayout();

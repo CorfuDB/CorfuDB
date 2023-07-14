@@ -1,13 +1,5 @@
 package org.corfudb.runtime.object.transactions;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-import javax.annotation.Nullable;
-
 import com.google.common.base.Preconditions;
 import lombok.Getter;
 import lombok.NonNull;
@@ -16,29 +8,31 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.Token;
-import org.corfudb.protocols.wireprotocol.TokenResponse;
-import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.collections.TxnContext;
-import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.exceptions.TrimmedException;
-import org.corfudb.runtime.object.CorfuCompileProxy;
-import org.corfudb.runtime.object.ICorfuSMR;
+import org.corfudb.runtime.object.ConsistencyView;
 import org.corfudb.runtime.object.ICorfuSMRAccess;
-import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
-import org.corfudb.runtime.object.ICorfuSMRSnapshotProxy;
 import org.corfudb.runtime.object.MVOCorfuCompileProxy;
-import org.corfudb.runtime.object.VersionLockedObject;
+import org.corfudb.runtime.object.SnapshotGenerator;
+import org.corfudb.runtime.object.SnapshotProxy;
 import org.corfudb.runtime.object.transactions.TransactionalContext.PreCommitListener;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.util.Utils;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
+import static org.corfudb.runtime.CorfuOptions.ConsistencyModel.READ_COMMITTED;
 
 /**
  * Represents a transactional context. Transactional contexts
  * manage per-thread transaction state.
  *
- * <p>Recall from {@link CorfuCompileProxy} that an SMR object layer implements objects whose
- * history of updates
+ * <p>SMR object layer implements objects whose history of updates
  * are backed by a stream. If a Corfu object's method is an Accessor, it invokes the proxy's
  * access() method. Likewise, if a Corfu object's method is a Mutator or Accessor-Mutator,
  * it invokes the proxy's logUpdate() method.
@@ -61,7 +55,7 @@ import org.corfudb.util.Utils;
  */
 @Slf4j
 public abstract class AbstractTransactionalContext implements
-        Comparable<AbstractTransactionalContext> {
+        Comparable<AbstractTransactionalContext>, AutoCloseable {
 
     /**
      * Constant for the address of an uncommitted log entry.
@@ -103,7 +97,7 @@ public abstract class AbstractTransactionalContext implements
      * The global-log position that the transaction snapshots in all reads.
      */
     @Getter(lazy = true)
-    private final Token snapshotTimestamp = obtainSnapshotTimestamp();
+    private final Token snapshotTimestamp = obtainSnapshotTimestamp(getTransaction().getSnapshot());
 
     /**
      * The address that the transaction was committed at.
@@ -132,7 +126,7 @@ public abstract class AbstractTransactionalContext implements
      * on monotonic objects. This is used to compute the commit address
      * of read-only transactions.
      */
-    protected boolean hasAccessedMonotonicObject = false;
+    protected boolean accessedReadCommittedObject = false;
 
     @Getter
     private final WriteSetInfo writeSetInfo = new WriteSetInfo();
@@ -141,7 +135,7 @@ public abstract class AbstractTransactionalContext implements
     private final ConflictSetInfo readSetInfo = new ConflictSetInfo();
 
     // TODO: Make into a class?
-    protected final Map<ICorfuSMRProxyInternal<?>, ICorfuSMRSnapshotProxy<?>> snapshotProxyMap = new HashMap<>();
+    protected final Map<MVOCorfuCompileProxy<?>, SnapshotProxy<?>> snapshotProxyMap = new HashMap<>();
 
     /**
      * Cache of last known position of streams accessed in this transaction.
@@ -158,23 +152,23 @@ public abstract class AbstractTransactionalContext implements
         AbstractTransactionalContext.log.trace("TXBegin[{}]", this);
     }
 
-    protected <T extends ICorfuSMR<T>> ICorfuSMRSnapshotProxy<T> getAndCacheSnapshotProxy(ICorfuSMRProxyInternal<T> proxy, long ts) {
+    protected <S extends SnapshotGenerator<S> & ConsistencyView> SnapshotProxy<S> getAndCacheSnapshotProxy(
+            MVOCorfuCompileProxy<S> proxy, long ts) {
         // TODO: Refactor me to avoid casting on ICorfuSMRProxyInternal type.
-        ICorfuSMRSnapshotProxy<T> snapshotProxy = (ICorfuSMRSnapshotProxy<T>) snapshotProxyMap.get(proxy);
-        final MVOCorfuCompileProxy<T> persistentProxy = (MVOCorfuCompileProxy<T>) proxy;
+        SnapshotProxy<S> snapshotProxy = (SnapshotProxy<S>) snapshotProxyMap.get(proxy);
         if (snapshotProxy == null) {
-            snapshotProxy = persistentProxy.getUnderlyingMVO().getSnapshotProxy(ts);
+            snapshotProxy = proxy.getUnderlyingMVO().getSnapshotProxy(ts);
             snapshotProxyMap.put(proxy, snapshotProxy);
         }
 
         return snapshotProxy;
     }
 
-    protected void updateKnownStreamPosition(@NonNull ICorfuSMRProxyInternal<?> proxy, long position) {
+    protected void updateKnownStreamPosition(@NonNull MVOCorfuCompileProxy<?> proxy, long position) {
         Long val = knownStreamsPosition.get(proxy.getStreamID());
 
         if (val != null) {
-            if (proxy.isMonotonicStreamAccess()) {
+            if (proxy.getUnderlyingMVO().getCurrentObject().getConsistencyModel() == READ_COMMITTED) {
                 Preconditions.checkState(val <= position,
                         "new stream position %s has decreased from %s", position, val);
             } else {
@@ -188,7 +182,9 @@ public abstract class AbstractTransactionalContext implements
             }
         }
 
-        hasAccessedMonotonicObject = hasAccessedMonotonicObject || proxy.isMonotonicObject();
+        if (proxy.getUnderlyingMVO().getCurrentObject().getConsistencyModel() == READ_COMMITTED) {
+            accessedReadCommittedObject = true;
+        }
         knownStreamsPosition.put(proxy.getStreamID(), position);
     }
 
@@ -200,63 +196,10 @@ public abstract class AbstractTransactionalContext implements
      *                       of the object.
      * @param conflictObject Fine-grained conflict information, if available.
      * @param <R>            The return type of the access function.
-     * @param <T>            The type of the proxy's underlying object.
      * @return The return value of the access function.
      */
-    public abstract <R, T extends ICorfuSMR<T>> R access(ICorfuSMRProxyInternal<T> proxy,
-                                                         ICorfuSMRAccess<R, T> accessFunction,
-                                                         Object[] conflictObject);
-
-    /**
-     * Get the result of an upcall.
-     *
-     * @param proxy          The proxy to retrieve the upcall for.
-     * @param timestamp      The timestamp to return the upcall for.
-     * @param conflictObject Fine-grained conflict information, if available.
-     * @param <T>            The type of the proxy's underlying object.
-     * @return The result of the upcall.
-     */
-    public abstract <T extends ICorfuSMR<T>> Object getUpcallResult(ICorfuSMRProxyInternal<T> proxy,
-                                                                     long timestamp,
-                                                                     Object[] conflictObject);
-
-    public void syncWithRetryUnsafe(VersionLockedObject vlo,
-                                    Token snapshotTimestamp,
-                                    ICorfuSMRProxyInternal proxy,
-                                    @Nullable Runnable optimisticStreamSetter) {
-        for (int x = 0; x < this.transaction.getRuntime().getParameters().getTrimRetry(); x++) {
-            try {
-                if (optimisticStreamSetter != null) {
-                    // Swap ourselves to be the active optimistic stream.
-                    // Inside setAsOptimisticStream, if there are
-                    // currently optimistic updates on the object, we
-                    // roll them back.  Then, we set this context as  the
-                    // object's new optimistic context.
-                    optimisticStreamSetter.run();
-                }
-                vlo.syncObjectUnsafe(snapshotTimestamp.getSequence());
-                break;
-            } catch (TrimmedException te) {
-                log.info("syncWithRetryUnsafe: Encountered trimmed address space " +
-                                "for snapshot {} of stream {} with pointer={} on attempt {}",
-                        snapshotTimestamp.getSequence(), vlo.getID(), vlo.getVersionUnsafe(), x);
-
-                // If a trim is encountered, we must reset the object
-                vlo.resetUnsafe();
-                if (!te.isRetriable()
-                        || x == this.transaction.getRuntime().getParameters().getTrimRetry() - 1) {
-                    // abort the transaction
-                    TransactionAbortedException tae =
-                            new TransactionAbortedException(
-                                    new TxResolutionInfo(getTransactionID(), snapshotTimestamp),
-                                    TokenResponse.NO_CONFLICT_KEY, proxy.getStreamID(),
-                                    Address.NON_ADDRESS, AbortCause.TRIM, te, this);
-                    abortTransaction(tae);
-                    throw tae;
-                }
-            }
-        }
-    }
+    public abstract <R, S extends SnapshotGenerator<S> & ConsistencyView> R access(
+            MVOCorfuCompileProxy<S> proxy, ICorfuSMRAccess<R, S> accessFunction, Object[] conflictObject);
 
     /**
      * Log an SMR update to the Corfu log.
@@ -264,12 +207,10 @@ public abstract class AbstractTransactionalContext implements
      * @param proxy          The proxy which generated the update.
      * @param updateEntry    The entry which we are writing to the log.
      * @param conflictObject Fine-grained conflict information, if available.
-     * @param <T>            The type of the proxy's underlying object.
      * @return The address the update was written at.
      */
-    public abstract <T extends ICorfuSMR<T>> long logUpdate(ICorfuSMRProxyInternal<T> proxy,
-                                                             SMREntry updateEntry,
-                                                             Object[] conflictObject);
+    public abstract long logUpdate(
+            MVOCorfuCompileProxy<?> proxy, SMREntry updateEntry, Object[] conflictObject);
 
     public abstract void logUpdate(UUID streamId, SMREntry updateEntry);
 
@@ -344,11 +285,10 @@ public abstract class AbstractTransactionalContext implements
      *
      * @return the current global tail
      */
-    private Token obtainSnapshotTimestamp() {
+    private Token obtainSnapshotTimestamp(Token txnBuilderTs) {
         long startSnapshotTime = System.nanoTime();
         try {
             final AbstractTransactionalContext parentCtx = getParentContext();
-            final Token txnBuilderTs = getTransaction().getSnapshot();
             if (parentCtx != null) {
                 // If we're in a nested transaction, the first read timestamp
                 // needs to come from the root.
@@ -383,7 +323,7 @@ public abstract class AbstractTransactionalContext implements
      * @param conflictObjects The fine-grained conflict information, if
      *                        available.
      */
-    public <T extends ICorfuSMR<T>> void addToReadSet(ICorfuSMRProxyInternal<T> proxy, Object[] conflictObjects) {
+    public void addToReadSet(MVOCorfuCompileProxy<?> proxy, Object[] conflictObjects) {
         getReadSetInfo().add(proxy, conflictObjects);
     }
 
@@ -405,8 +345,8 @@ public abstract class AbstractTransactionalContext implements
      * @return a synthetic "address" in the write-set, to be used for
      *     checking upcall results
      */
-    <T extends ICorfuSMR<T>> long addToWriteSet(ICorfuSMRProxyInternal<T> proxy,
-                                                SMREntry updateEntry, Object[] conflictObjects) {
+    long addToWriteSet(MVOCorfuCompileProxy<?> proxy,
+                       SMREntry updateEntry, Object[] conflictObjects) {
         return getWriteSetInfo().add(proxy, updateEntry, conflictObjects);
     }
 
@@ -464,5 +404,11 @@ public abstract class AbstractTransactionalContext implements
     @Override
     public String toString() {
         return "TX[" + Utils.toReadableId(transactionID) + "]";
+    }
+
+    @Override
+    public void close() {
+        snapshotProxyMap.forEach((version, snapshot) -> snapshot.releaseView());
+        snapshotProxyMap.clear();
     }
 }

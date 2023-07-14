@@ -216,6 +216,17 @@ public class CorfuStore {
                 false);
     }
 
+    @Nonnull
+    public ScopedTransaction scopedTxn(
+            @Nonnull final String namespace, IsolationLevel isolationLevel,
+            Table<?, ?, ?>... tables) {
+        return new ScopedTransaction(
+                this.runtime,
+                namespace,
+                isolationLevel,
+                tables);
+    }
+
     /**
      * Return the address of the latest update made in this table.
      * <p>
@@ -447,7 +458,7 @@ public class CorfuStore {
      * @param streamTag
      * @return table names (without namespace prefix)
      */
-    private List<String> getTablesOfInterest(@Nonnull String namespace, @Nonnull String streamTag) {
+    public List<String> getTablesOfInterest(@Nonnull String namespace, @Nonnull String streamTag) {
         List<String> tablesOfInterest = runtime.getTableRegistry().listTables(namespace, streamTag);
         log.info("Tag[{}${}] :: Subscribing to {} tables - {}", namespace, streamTag, tablesOfInterest.size(), tablesOfInterest);
         return tablesOfInterest;

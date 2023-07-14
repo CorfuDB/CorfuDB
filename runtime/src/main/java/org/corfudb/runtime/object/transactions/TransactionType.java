@@ -1,8 +1,8 @@
 package org.corfudb.runtime.object.transactions;
 
-import java.util.function.Function;
-
 import lombok.RequiredArgsConstructor;
+
+import java.util.function.Function;
 
 /**
  * Created by mwei on 11/21/16.

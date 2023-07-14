@@ -1,8 +1,24 @@
 package org.corfudb.integration;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
 import com.google.common.reflect.TypeToken;
+import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
+import org.corfudb.runtime.CheckpointWriter;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.MultiCheckpointWriter;
+import org.corfudb.runtime.collections.Index;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
+import org.corfudb.runtime.collections.StringIndexer;
+import org.corfudb.runtime.collections.StringMultiIndexer;
+import org.corfudb.runtime.exceptions.NetworkException;
+import org.corfudb.runtime.exceptions.StaleTokenException;
+import org.corfudb.runtime.view.stream.StreamAddressSpace;
+import org.corfudb.util.CFUtils;
+import org.corfudb.util.Utils;
+import org.junit.Before;
+import org.junit.Test;
+
+import javax.annotation.Nonnull;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -21,36 +37,12 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.ScheduledThreadPoolExecutor;
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
-import org.corfudb.protocols.wireprotocol.Token;
-import org.corfudb.protocols.wireprotocol.TokenResponse;
-import org.corfudb.runtime.CheckpointWriter;
-import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.MultiCheckpointWriter;
-import org.corfudb.runtime.collections.CorfuTable;
-import org.corfudb.runtime.collections.Index;
-import org.corfudb.runtime.collections.PersistentCorfuTable;
-import org.corfudb.runtime.collections.StringIndexer;
-import org.corfudb.runtime.collections.StringMultiIndexer;
-import org.corfudb.runtime.exceptions.AbortCause;
-import org.corfudb.runtime.exceptions.NetworkException;
-import org.corfudb.runtime.exceptions.StaleTokenException;
-import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.view.SMRObject;
-import org.corfudb.runtime.view.stream.StreamAddressSpace;
-import org.corfudb.util.CFUtils;
-import org.corfudb.util.Utils;
-import org.junit.Before;
-import org.junit.Test;
-
-import javax.annotation.Nonnull;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Tests the recovery of the Corfu instance.

@@ -1,24 +1,9 @@
 package org.corfudb.runtime.checkpoint;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.corfudb.runtime.view.TableRegistry.getFullyQualifiedTableName;
-import static org.junit.Assert.fail;
 import com.google.common.collect.ImmutableMap;
-
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.ThreadLocalRandom;
-import java.util.function.BiConsumer;
-import java.util.function.Consumer;
-import java.util.function.Function;
-
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import org.corfudb.CorfuTestParameters;
 import org.corfudb.common.compression.Codec;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.LogEntry;
@@ -56,6 +41,23 @@ import org.corfudb.util.serializer.KeyDynamicProtobufSerializer;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.function.BiConsumer;
+import java.util.function.Consumer;
+import java.util.function.Function;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.runtime.view.TableRegistry.getFullyQualifiedTableName;
+import static org.junit.Assert.fail;
+
 /**
  * Basic smoke tests for checkpoint-in-stream PoC.
  */
@@ -64,6 +66,10 @@ public class CheckpointSmokeTest extends AbstractViewTest {
     private final byte serilizerByte = (byte) 20;
     private final ISerializer serializer = new CPSerializer(serilizerByte);
     private CorfuRuntime r;
+
+    public CheckpointSmokeTest() {
+        PARAMETERS = new CorfuTestParameters(Duration.ofMinutes(5));
+    }
 
     @Before
     public void setRuntime() {
@@ -114,8 +120,8 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         // Only [:-1] and [:1] are present in the cache.
         Set<VersionedObjectIdentifier> cache = getRuntime().getObjectsView().getMvoCache().keySet();
         assertThat(cache).containsExactlyInAnyOrder(
-                new VersionedObjectIdentifier(tableFirstRuntime.getCorfuStreamID(), -1L),
-                new VersionedObjectIdentifier(tableFirstRuntime.getCorfuStreamID(), 1L)
+                new VersionedObjectIdentifier(tableFirstRuntime.getCorfuSMRProxy().getStreamID(), -1L),
+                new VersionedObjectIdentifier(tableFirstRuntime.getCorfuSMRProxy().getStreamID(), 1L)
         );
     }
 
@@ -123,7 +129,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
     public void testEmptyMapCP() throws Exception {
         PersistentCorfuTable<String, String> table = r.getObjectsView()
                 .build()
-                .setTypeToken(PersistentCorfuTable.<String, String>getTableType())
+                .setTypeToken(PersistentCorfuTable.<String, String>getTypeToken())
                 .setStreamName("Map1")
                 .open();
 
@@ -814,7 +820,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
     private Token checkpointUfoSystemTables(CorfuRuntime runtime, ISerializer serializer) {
         PersistentCorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord> tableRegistry = runtime.getObjectsView()
                 .build()
-                .setTypeToken(PersistentCorfuTable.<CorfuDynamicKey, OpaqueCorfuDynamicRecord>getTableType())
+                .setTypeToken(PersistentCorfuTable.<CorfuDynamicKey, OpaqueCorfuDynamicRecord>getTypeToken())
                 .setStreamName(TableRegistry.getFullyQualifiedTableName(TableRegistry.CORFU_SYSTEM_NAMESPACE,
                         TableRegistry.REGISTRY_TABLE_NAME))
                 .setSerializer(serializer)
@@ -823,7 +829,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
 
         PersistentCorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord> descriptorTable = runtime.getObjectsView()
                 .build()
-                .setTypeToken(PersistentCorfuTable.<CorfuDynamicKey, OpaqueCorfuDynamicRecord>getTableType())
+                .setTypeToken(PersistentCorfuTable.<CorfuDynamicKey, OpaqueCorfuDynamicRecord>getTypeToken())
                 .setStreamName(TableRegistry.getFullyQualifiedTableName(TableRegistry.CORFU_SYSTEM_NAMESPACE,
                         TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME))
                 .setSerializer(serializer)
@@ -873,7 +879,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         r.getSerializers().registerSerializer(serializer);
         PersistentCorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord> corfuTable = r.getObjectsView()
                 .build()
-                .setTypeToken(PersistentCorfuTable.<CorfuDynamicKey, OpaqueCorfuDynamicRecord>getTableType())
+                .setTypeToken(PersistentCorfuTable.<CorfuDynamicKey, OpaqueCorfuDynamicRecord>getTypeToken())
                 .setStreamName(getFullyQualifiedTableName(namespace, streamName))
                 .setSerializer(serializer)
                 .addOpenOption(ObjectOpenOption.NO_CACHE)
@@ -940,7 +946,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         return r.getObjectsView()
                 .build()
                 .setStreamName(streamName)
-                .setTypeToken(PersistentCorfuTable.<String, Long>getTableType())
+                .setTypeToken(PersistentCorfuTable.<String, Long>getTypeToken())
                 .setSerializer(serializer)
                 .open();
     }
@@ -950,7 +956,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         return rt.getObjectsView()
                 .build()
                 .setStreamName(streamName)
-                .setTypeToken(PersistentCorfuTable.<String, Long>getTableType())
+                .setTypeToken(PersistentCorfuTable.<String, Long>getTypeToken())
                 .setSerializer(serializer)
                 .open();
     }
@@ -960,7 +966,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         return r.getObjectsView()
                 .build()
                 .setStreamName(streamName)
-                .setTypeToken(PersistentCorfuTable.<String, String>getTableType())
+                .setTypeToken(PersistentCorfuTable.<String, String>getTypeToken())
                 .setSerializer(serializer)
                 .open();
     }
@@ -1227,7 +1233,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         PersistentCorfuTable<String, Long> mA2 = rt2.getObjectsView()
                 .build()
                 .setStreamName(streamA)
-                .setTypeToken(PersistentCorfuTable.<String, Long>getTableType())
+                .setTypeToken(PersistentCorfuTable.<String, Long>getTypeToken())
                 .setSerializer(serializer)
                 .open();
 
@@ -1285,7 +1291,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         PersistentCorfuTable<String, Long> mA2 = rt2.getObjectsView()
                 .build()
                 .setStreamName(streamA)
-                .setTypeToken(PersistentCorfuTable.<String, Long>getTableType())
+                .setTypeToken(PersistentCorfuTable.<String, Long>getTypeToken())
                 .setSerializer(serializer)
                 .open();
 

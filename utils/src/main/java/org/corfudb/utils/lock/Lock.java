@@ -5,9 +5,13 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.utils.lock.LockClient.ClientContext;
-import org.corfudb.utils.lock.states.*;
+import org.corfudb.utils.lock.states.HasLeaseState;
+import org.corfudb.utils.lock.states.IllegalTransitionException;
+import org.corfudb.utils.lock.states.LockEvent;
+import org.corfudb.utils.lock.states.LockState;
+import org.corfudb.utils.lock.states.LockStateType;
+import org.corfudb.utils.lock.states.NoLeaseState;
 
 import java.util.HashMap;
 import java.util.Map;
