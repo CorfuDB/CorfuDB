@@ -24,11 +24,6 @@ jobs:
 
       - uses: docker/setup-buildx-action@v2
 
-      - name: Cancel Previous Runs
-        uses: styfle/cancel-workflow-action@0.6.0
-        with:
-          access_token: ${{ github.token }}
-
       - name: Cache local Maven repository
         uses: actions/cache@v2
         with:
@@ -67,17 +62,9 @@ jobs:
       - name: install corfu package
         working-directory: ./cloud/corfu
         run: |
-          helm install cert-manager jetstack/cert-manager \
-            --namespace cert-manager \
-            --create-namespace \
-            --version v1.8.0 \
-            --set installCRDs=true
+          helm install cert-manager jetstack/cert-manager --namespace cert-manager --create-namespace --version v1.8.0 --set installCRDs=true
           
-          helm install corfu corfu \
-            --set persistence.enabled=true \
-            --set global.replicas=3 \
-            --set image.pullPolicy=IfNotPresent
-            --set image.registry=""
+          helm install corfu corfu --set persistence.enabled=true --set global.replicas=3 --set image.pullPolicy=IfNotPresent --set image.registry=""
           
           helm install corfu corfu --set persistence.enabled=true --set global.replicas=3 --set image.pullPolicy=IfNotPresent --set image.registry=""
           
