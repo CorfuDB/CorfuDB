@@ -29,12 +29,15 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.List;
 import java.util.UUID;
 
 import static org.corfudb.runtime.LogReplicationUtils.SNAP_SYNC_START_END_Q_NAME;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
+import static org.junit.jupiter.api.Assertions.fail;
 
 @Slf4j
 public class RoutingQueuesSnapshotReaderTest extends AbstractViewTest {
@@ -70,12 +73,43 @@ public class RoutingQueuesSnapshotReaderTest extends AbstractViewTest {
 
     @Test
     public void testRead() throws Exception {
-        generateData();
+        generateData(0);
         SnapshotReadMessage snapshotMessage = snapshotReader.read(syncRequestId);
         Assert.assertTrue(snapshotMessage.isEndRead());
     }
 
-    private void generateData() throws Exception {
+
+    @Test
+    public void testConcurrentDataGenerationAndRead() throws Exception {
+        List<SnapshotReadMessage> messagesRead = new ArrayList<>();
+
+        scheduleConcurrently(f -> {
+            for (int i = 0; i < 3; i++) {
+                generateData(i*10);
+            }
+        });
+
+        scheduleConcurrently(f -> {
+            boolean endMarkerFound = false;
+            while (!endMarkerFound) {
+                SnapshotReadMessage messageRead = snapshotReader.read(syncRequestId);
+                messagesRead.add(messageRead);
+                endMarkerFound = messageRead.isEndRead();
+            }
+        });
+        executeScheduled(2, PARAMETERS.TIMEOUT_NORMAL);
+
+        Assert.assertTrue(messagesRead.get(messagesRead.size() - 1).isEndRead());
+    }
+
+    @Test
+    public void testEmptySnapshotRead() {
+        generateEmptySnapshot();
+        SnapshotReadMessage snapshotMessage = snapshotReader.read(syncRequestId);
+        Assert.assertTrue(snapshotMessage.isEndRead());
+    }
+
+    private void generateData(int start) throws Exception {
 
         Table<Queue.RoutingQSnapStartEndKeyMsg, Queue.RoutingQSnapStartEndMarkerMsg, Message> endMarkerTable =
             corfuStore.openTable(namespace, SNAP_SYNC_START_END_Q_NAME,
@@ -90,7 +124,7 @@ public class RoutingQueuesSnapshotReaderTest extends AbstractViewTest {
 
         log.info("Stream UUID: {}", CorfuRuntime.getStreamID(streamTagFollowed));
 
-        for (int i = 0; i < 10; i++) {
+        for (int i = start; i < (start + 10); i++) {
             ByteBuffer buffer = ByteBuffer.allocate(Integer.SIZE);
             buffer.putInt(i);
             Queue.RoutingTableEntryMsg val =
@@ -106,6 +140,7 @@ public class RoutingQueuesSnapshotReaderTest extends AbstractViewTest {
                 txnContext.commit();
             } catch (Exception e) {
                 log.error("Failed to add data to the queue", e);
+                fail("Failed to add data to the queue", e);
             }
         }
         log.info("Queue Size = {}.  Stream tags = {}", q.count(), q.getStreamTags());
@@ -149,8 +184,20 @@ public class RoutingQueuesSnapshotReaderTest extends AbstractViewTest {
                 Arrays.asList(CorfuRuntime.getStreamID(streamTagFollowed)));
             txn.commit();
         } catch (Exception e) {
-            log.error("Failed to add the Marker", e);
+            log.error("Failed to add the End Marker", e);
+            fail("Failed to add the End Marker", e);
         }
+    }
+
+    private void generateEmptySnapshot() {
+        try (TxnContext txnContext = corfuStore.txn(namespace)) {
+            writeMarker(true, txnContext.getTxnSequence(), txnContext);
+            txnContext.commit();
+        } catch (Exception e) {
+            log.error("Failed to write the Start Marker", e);
+            fail("Failed to write the Start Marker", e);
+        }
+        writeMarker(false, Address.NON_ADDRESS, null);
     }
 
     @After
