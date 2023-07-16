@@ -3,10 +3,12 @@ package org.corfudb.infrastructure.logreplication.replication.receive;
 import com.google.protobuf.TextFormat;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.logreplication.config.LogReplicationRoutingQueueConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.service.CorfuProtocolLogReplication;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMetadataMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
@@ -28,7 +30,6 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.corfudb.infrastructure.logreplication.config.LogReplicationConfig.REGISTRY_TABLE_ID;
-import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 /**
  * Process TxMessage that contains transaction logs for registered streams.
@@ -112,22 +113,22 @@ public class LogEntryWriter extends SinkWriter {
                         long baseSnapshotTs = txMessage.getMetadata().getSnapshotTimestamp();
                         long prevTs = txMessage.getMetadata().getPreviousTimestamp();
 
-                        // Validate the message metadata with the local metadata table
-                        if (topologyConfigId != persistedTopologyConfigId || baseSnapshotTs != persistedSnapshotStart ||
-                            baseSnapshotTs != persistedSnapshotDone || prevTs != persistedBatchTs) {
-                            log.warn("Message metadata mismatch. Skip applying message {}, persistedTopologyConfigId={}," +
-                                    "persistedSnapshotStart={}, persistedSnapshotDone={}, persistedBatchTs={}",
-                                txMessage.getMetadata(), persistedTopologyConfigId, persistedSnapshotStart,
-                                persistedSnapshotDone, persistedBatchTs);
-                            throw new IllegalArgumentException("Cannot apply log entry message due to metadata mismatch");
-                        }
-
-                        // Skip Opaque entries with timestamp that are not larger than persistedOpaqueEntryTs
-                        if (opaqueEntry.getVersion() <= persistedOpaqueEntryTs) {
-                            log.trace("Skipping entry {} as it is less than the last applied opaque entry {}",
-                                opaqueEntry.getVersion(), persistedOpaqueEntryTs);
-                            return null;
-                        }
+//                        // Validate the message metadata with the local metadata table
+//                        if (topologyConfigId != persistedTopologyConfigId || baseSnapshotTs != persistedSnapshotStart ||
+//                            baseSnapshotTs != persistedSnapshotDone || prevTs != persistedBatchTs) {
+//                            log.warn("Message metadata mismatch. Skip applying message {}, persistedTopologyConfigId={}," +
+//                                    "persistedSnapshotStart={}, persistedSnapshotDone={}, persistedBatchTs={}",
+//                                txMessage.getMetadata(), persistedTopologyConfigId, persistedSnapshotStart,
+//                                persistedSnapshotDone, persistedBatchTs);
+//                            throw new IllegalArgumentException("Cannot apply log entry message due to metadata mismatch");
+//                        }
+//
+//                        // Skip Opaque entries with timestamp that are not larger than persistedOpaqueEntryTs
+//                        if (opaqueEntry.getVersion() <= persistedOpaqueEntryTs) {
+//                            log.trace("Skipping entry {} as it is less than the last applied opaque entry {}",
+//                                opaqueEntry.getVersion(), persistedOpaqueEntryTs);
+//                            return null;
+//                        }
 
                         ReplicationMetadata.Builder updatedMetadata = metadata.toBuilder()
                                 .setTopologyConfigId(topologyConfigId)
@@ -163,8 +164,11 @@ public class LogEntryWriter extends SinkWriter {
                                 // If stream tags exist for the current stream, it means it's intended for streaming
                                 // on the Sink (receiver)
                                 if (session.getSubscriber().getModel().equals(LogReplication.ReplicationModel.ROUTING_QUEUES)) {
-                                    UUID replicatedQueueTag = TableRegistry.getStreamIdForStreamTag(CORFU_SYSTEM_NAMESPACE,
-                                            LogReplicationUtils.REPLICATED_QUEUE_TAG);
+                                    String replicatedQueueName = ((LogReplicationRoutingQueueConfig) replicationContext
+                                            .getConfig(session)).getSinkQueueName();
+                                    streamId = CorfuRuntime.getStreamID(replicatedQueueName);
+                                    UUID replicatedQueueTag = ((LogReplicationRoutingQueueConfig) replicationContext
+                                            .getConfig(session)).getSinkQueueStreamTag();
                                     txnContext.logUpdate(streamId, smrEntry, Collections.singletonList(replicatedQueueTag));
                                 } else {
                                     txnContext.logUpdate(streamId, smrEntry,
