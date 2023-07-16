@@ -113,22 +113,22 @@ public class LogEntryWriter extends SinkWriter {
                         long baseSnapshotTs = txMessage.getMetadata().getSnapshotTimestamp();
                         long prevTs = txMessage.getMetadata().getPreviousTimestamp();
 
-                        // Validate the message metadata with the local metadata table
-                        if (topologyConfigId != persistedTopologyConfigId || baseSnapshotTs != persistedSnapshotStart ||
-                            baseSnapshotTs != persistedSnapshotDone || prevTs != persistedBatchTs) {
-                            log.warn("Message metadata mismatch. Skip applying message {}, persistedTopologyConfigId={}," +
-                                    "persistedSnapshotStart={}, persistedSnapshotDone={}, persistedBatchTs={}",
-                                txMessage.getMetadata(), persistedTopologyConfigId, persistedSnapshotStart,
-                                persistedSnapshotDone, persistedBatchTs);
-                            throw new IllegalArgumentException("Cannot apply log entry message due to metadata mismatch");
-                        }
-
-                        // Skip Opaque entries with timestamp that are not larger than persistedOpaqueEntryTs
-                        if (opaqueEntry.getVersion() <= persistedOpaqueEntryTs) {
-                            log.trace("Skipping entry {} as it is less than the last applied opaque entry {}",
-                                opaqueEntry.getVersion(), persistedOpaqueEntryTs);
-                            return null;
-                        }
+//                        // Validate the message metadata with the local metadata table
+//                        if (topologyConfigId != persistedTopologyConfigId || baseSnapshotTs != persistedSnapshotStart ||
+//                            baseSnapshotTs != persistedSnapshotDone || prevTs != persistedBatchTs) {
+//                            log.warn("Message metadata mismatch. Skip applying message {}, persistedTopologyConfigId={}," +
+//                                    "persistedSnapshotStart={}, persistedSnapshotDone={}, persistedBatchTs={}",
+//                                txMessage.getMetadata(), persistedTopologyConfigId, persistedSnapshotStart,
+//                                persistedSnapshotDone, persistedBatchTs);
+//                            throw new IllegalArgumentException("Cannot apply log entry message due to metadata mismatch");
+//                        }
+//
+//                        // Skip Opaque entries with timestamp that are not larger than persistedOpaqueEntryTs
+//                        if (opaqueEntry.getVersion() <= persistedOpaqueEntryTs) {
+//                            log.trace("Skipping entry {} as it is less than the last applied opaque entry {}",
+//                                opaqueEntry.getVersion(), persistedOpaqueEntryTs);
+//                            return null;
+//                        }
 
                         ReplicationMetadata.Builder updatedMetadata = metadata.toBuilder()
                                 .setTopologyConfigId(topologyConfigId)
