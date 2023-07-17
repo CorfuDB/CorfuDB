@@ -50,7 +50,7 @@ public final class SnapshotSyncUtils {
                                            ReplicationEventType eventType) {
         UUID forceSyncId = UUID.randomUUID();
 
-        log.info("Forced snapshot sync will be triggered because of group destination change, session={}, sync_id={}",
+        log.info("Forced snapshot sync will be triggered, session={}, sync_id={}",
                 session, forceSyncId);
 
         // Write a force sync event to the logReplicationEventTable

@@ -69,8 +69,7 @@ public final class LogReplicationUtils {
 
     // Prefix of the name of queue as it will appear on the receiver after replicated.  The suffix will be the Sender
     // (Source) cluster id Receiving queues per client name.
-    // Example: LRQ_Recv_<client_name>_<source_id>
-    public static final String REPLICATED_QUEUE_NAME_PREFIX = "LRQ_Recv_";
+    public static final String REPLICATED_QUEUE_NAME = "LRQ_Recv";
 
     // Stream tag applied to the replicated queue on the receiver
     public static final String SNAP_SYNC_START_END_Q_NAME = "LRQ_SNAPSHOT_START_END_MARKER";
