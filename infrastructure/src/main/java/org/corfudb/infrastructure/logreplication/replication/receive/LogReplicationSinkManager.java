@@ -49,7 +49,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
 import static org.corfudb.protocols.service.CorfuProtocolLogReplication.getLrEntryAckMsg;
-import static org.corfudb.runtime.LogReplicationUtils.*;
+import static org.corfudb.runtime.LogReplicationUtils.REPLICATED_QUEUE_NAME;
+import static org.corfudb.runtime.LogReplicationUtils.REPLICATED_QUEUE_TAG;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 /**
@@ -195,11 +196,6 @@ public class LogReplicationSinkManager implements DataReceiver {
             insertQInRegistryTable();
         }
         initWriterAndBufferMgr();
-
-        // Temporary hack so that the receiver starts with data consistent = true (LogEntry sync)
-        if (session.getSubscriber().getModel() == LogReplication.ReplicationModel.ROUTING_QUEUES) {
-            setDataConsistentWithRetry(true);
-        }
     }
 
     private void setDataConsistentWithRetry(boolean isDataConsistent) {
@@ -246,7 +242,7 @@ public class LogReplicationSinkManager implements DataReceiver {
      */
     private void insertQInRegistryTable() {
         TableRegistry tableRegistry = runtime.getTableRegistry();
-        String replicatedQName = REPLICATED_QUEUE_NAME_PREFIX + session.getSourceClusterId();
+        String replicatedQName = REPLICATED_QUEUE_NAME;
         if (!tableRegistry.getRegistryTable().containsKey(replicatedQName)) {
             try {
                 TableOptions tableOptions = TableOptions.builder()
@@ -255,7 +251,7 @@ public class LogReplicationSinkManager implements DataReceiver {
                                 .build())
                         .persistentDataPath(Paths.get("/nonconfig/logReplication/RoutingQModel/", replicatedQName))
                         .build();
-                tableRegistry.registerTable(TableRegistry.CORFU_SYSTEM_NAMESPACE, replicatedQName, Queue.CorfuGuidMsg.class,
+                tableRegistry.registerTable(CORFU_SYSTEM_NAMESPACE, replicatedQName, Queue.CorfuGuidMsg.class,
                         Queue.RoutingTableEntryMsg.class, Queue.CorfuQueueMetadataMsg.class,
                         tableOptions);
             } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
