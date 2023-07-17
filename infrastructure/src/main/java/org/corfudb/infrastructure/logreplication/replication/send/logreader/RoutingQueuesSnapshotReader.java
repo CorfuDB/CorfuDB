@@ -86,7 +86,7 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
             "-poller-" + session.hashCode()).build());
 
         String replicatedQueueName = TableRegistry.getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE,
-                LogReplicationUtils.REPLICATED_QUEUE_NAME_PREFIX + session.getSourceClusterId());
+                LogReplicationUtils.REPLICATED_QUEUE_NAME);
         replicatedQueueId = CorfuRuntime.getStreamID(replicatedQueueName);
 
         // Open the marker table so that its entries can be deserialized

@@ -108,7 +108,7 @@ public class LogReplicationUtilsTest extends AbstractViewTest {
         }
 
         // Open routing queue before the subscribe call at the receiver.
-        String recvQueueName = LogReplicationUtils.REPLICATED_QUEUE_NAME_PREFIX;
+        String recvQueueName = LogReplicationUtils.REPLICATED_QUEUE_NAME;
         Table<Queue.CorfuGuidMsg, Queue.RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg> routingQueue;
         try {
             routingQueue =
