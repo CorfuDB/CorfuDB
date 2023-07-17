@@ -60,7 +60,8 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
         // Register client and setup initial group destinations mapping
         CorfuRuntime clientRuntime = getClientRuntime();
         CorfuStore clientCorfuStore = new CorfuStore(clientRuntime);
-        RoutingQueueSenderClient queueSenderClient = new RoutingQueueSenderClient();
+        String clientName = "testClient";
+        RoutingQueueSenderClient queueSenderClient = new RoutingQueueSenderClient(clientCorfuStore, clientName);
 
         // Open queue on sink
         try {
