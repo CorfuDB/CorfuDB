@@ -5,6 +5,7 @@ import lombok.NonNull;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplication;
+import org.corfudb.runtime.view.TableRegistry;
 
 import java.util.Collections;
 import java.util.HashMap;
@@ -12,10 +13,10 @@ import java.util.HashSet;
 import java.util.UUID;
 
 import static org.corfudb.runtime.LogReplicationUtils.LOG_ENTRY_SYNC_QUEUE_TAG_SENDER_PREFIX;
-import static org.corfudb.runtime.LogReplicationUtils.REPLICATED_QUEUE_NAME_PREFIX;
+import static org.corfudb.runtime.LogReplicationUtils.REPLICATED_QUEUE_NAME;
 import static org.corfudb.runtime.LogReplicationUtils.REPLICATED_QUEUE_TAG;
 import static org.corfudb.runtime.LogReplicationUtils.SNAPSHOT_SYNC_QUEUE_TAG_SENDER_PREFIX;
-import static org.corfudb.runtime.RoutingQueueSenderClient.DEFAULT_ROUTING_QUEUE_CLIENT;
+import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 /**
  * This class represents the Log Replication Configuration field(s) for ROUTING_QUEUES replication model.
@@ -58,9 +59,10 @@ public class LogReplicationRoutingQueueConfig extends LogReplicationConfig {
         super(session, new HashSet<>(), new HashMap<>(), serverContext);
         this.snapshotSyncStreamTag = SNAPSHOT_SYNC_QUEUE_TAG_SENDER_PREFIX + session.getSinkClusterId();
         this.logEntrySyncStreamTag = LOG_ENTRY_SYNC_QUEUE_TAG_SENDER_PREFIX + session.getSinkClusterId();
-        this.sinkQueueName = REPLICATED_QUEUE_NAME_PREFIX + session.getSourceClusterId();
-        this.sinkQueueStreamId = CorfuRuntime.getStreamID(this.sinkQueueName);
-        this.sinkQueueStreamTag = CorfuRuntime.getStreamID(REPLICATED_QUEUE_TAG + DEFAULT_ROUTING_QUEUE_CLIENT);
+        this.sinkQueueName = TableRegistry.getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, REPLICATED_QUEUE_NAME);
+        this.sinkQueueStreamId = CorfuRuntime.getStreamID(TableRegistry.getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE,
+                REPLICATED_QUEUE_NAME));
+        this.sinkQueueStreamTag = TableRegistry.getStreamIdForStreamTag(CORFU_SYSTEM_NAMESPACE, REPLICATED_QUEUE_TAG);
         getStreamsToReplicate().add(snapshotSyncStreamTag);
         getDataStreamToTagsMap().put(sinkQueueStreamId, Collections.singletonList(sinkQueueStreamTag));
     }

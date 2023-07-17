@@ -13,19 +13,15 @@ import org.corfudb.runtime.LogReplicationUtils;
 import org.corfudb.runtime.Queue;
 import org.corfudb.runtime.Queue.RoutingTableEntryMsg;
 import org.corfudb.runtime.collections.CorfuRecord;
-import org.corfudb.runtime.collections.CorfuStore;
-import org.corfudb.runtime.collections.TableOptions;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
-import static org.corfudb.runtime.LogReplicationUtils.LOG_ENTRY_SYNC_QUEUE_NAME_SENDER;
-import static org.corfudb.runtime.LogReplicationUtils.REPLICATED_QUEUE_NAME_PREFIX;
-import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
+import static org.corfudb.runtime.LogReplicationUtils.REPLICATED_QUEUE_NAME;
 
 
 /**
@@ -61,7 +57,7 @@ public class RoutingQueuesLogEntryReader extends BaseLogEntryReader {
             }
         }
         HashMap<UUID, List<SMREntry>> opaqueEntryMap = new HashMap<>();
-        opaqueEntryMap.put(CorfuRuntime.getStreamID(REPLICATED_QUEUE_NAME_PREFIX + session.getSourceClusterId()),
+        opaqueEntryMap.put(CorfuRuntime.getStreamID(REPLICATED_QUEUE_NAME),
                 filteredMsgs);
         return new OpaqueEntry(opaqueEntry.getVersion(), opaqueEntryMap);
     }
@@ -69,11 +65,6 @@ public class RoutingQueuesLogEntryReader extends BaseLogEntryReader {
     @Override
     protected boolean isValidTransactionEntry(@NonNull OpaqueEntry entry) {
         Set<UUID> txEntryStreamIds = new HashSet<>(entry.getEntries().keySet());
-        if (txEntryStreamIds.size() != 1) {
-            log.warn("Routing queue session's log entries should only come from the shared data queue " +
-                    "for log entry sync");
-            return false;
-        }
 
         return txEntryStreamIds.contains(LogReplicationUtils.lrLogEntrySendQId);
     }
