@@ -313,6 +313,17 @@ public class CorfuStore {
     }
 
     /**
+     * TODO: Remove this!
+     * Temporary hack for subscribing simplified version of routing queue listener from trim mark
+     */
+    public void subscribeListenerFromTrimMark(@Nonnull StreamListener streamListener, @Nonnull String namespace,
+                                              @Nonnull String streamTag) {
+        Token token = runtime.getAddressSpaceView().getTrimMark();
+        Timestamp ts = Timestamp.newBuilder().setEpoch(token.getEpoch()).setSequence(token.getSequence()).build();
+        this.subscribeListener(streamListener, namespace, streamTag, getTablesOfInterest(namespace, streamTag), ts);
+    }
+
+    /**
      * Subscribe to transaction updates on specific tables with the streamTag in the namespace.
      * Objects returned will honor transactional boundaries.
      * <p>
