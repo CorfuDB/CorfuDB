@@ -323,6 +323,7 @@ public class NegotiatingState implements LogReplicationRuntimeState {
             SnapshotSyncUtils.enforceSnapshotSync(fsm.getSession(), new CorfuStore(metadataManager.getRuntime()),
                 LogReplicationMetadata.ReplicationEvent.ReplicationEventType.RECEIVER_OUT_OF_SYNC_FORCE_SNAPSHOT_SYNC);
         }
+
         fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.NEGOTIATION_COMPLETE,
             new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_SYNC_REQUEST)));
     }
