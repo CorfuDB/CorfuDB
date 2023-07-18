@@ -2,6 +2,8 @@ package org.corfudb.runtime;
 
 import com.google.common.base.Preconditions;
 import com.google.protobuf.Message;
+import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
@@ -11,6 +13,7 @@ import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
 import org.corfudb.runtime.collections.CorfuStreamEntry;
+import org.corfudb.runtime.collections.ScopedTransaction;
 import org.corfudb.runtime.collections.StreamListenerResumeOrDefault;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
@@ -200,6 +203,10 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
 
     private class SnapshotSyncDataTransmitter implements LRFullStateReplicationContext {
 
+        @Getter
+        @Setter
+        ScopedTransaction snapshot = null;
+
         private boolean baseSnapshotSent;
 
         private final LogReplication.ReplicationEvent requestingEvent;
@@ -257,10 +264,18 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
             totalPayloadSize += message.getSerializedSize();
 
             if (!baseSnapshotSent) {
+                long baseSnapshotToPick;
+                if (snapshot != null) {
+                    baseSnapshotToPick = snapshot.getTxnSnapshot().getSequence();
+                    log.info("FullSync base snapshot from Scoped Transaction = {}", baseSnapshotToPick);
+                } else {
+                    baseSnapshotToPick = getTxn().getTxnSequence();
+                    log.info("FullSync base snapshot from first full sync transaction = {}", baseSnapshotToPick);
+                }
                 Queue.RoutingQSnapStartEndKeyMsg keyOfStartMarker = Queue.RoutingQSnapStartEndKeyMsg.newBuilder()
                         .setSnapshotSyncId(requestingEvent.getEventId()).build();
                 Queue.RoutingQSnapStartEndMarkerMsg startMarker = Queue.RoutingQSnapStartEndMarkerMsg.newBuilder()
-                    .setSnapshotStartTimestamp(getTxn().getTxnSequence()) // This is the base snapshot timestamp
+                    .setSnapshotStartTimestamp(baseSnapshotToPick) // This is the base snapshot timestamp
                     .setDestination(key.getSession().getSinkClusterId()).build();
 
                 CorfuRecord<Queue.RoutingQSnapStartEndMarkerMsg, Message> markerEntry =
