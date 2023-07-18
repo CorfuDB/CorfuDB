@@ -9,12 +9,15 @@ import org.corfudb.runtime.CorfuOptions;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LiteRoutingQueueListener;
 import org.corfudb.runtime.LogReplication;
+import org.corfudb.runtime.LogReplicationRoutingQueueListener;
+import org.corfudb.runtime.LogReplicationUtils;
 import org.corfudb.runtime.Queue;
 import org.corfudb.runtime.RoutingQueueSenderClient;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.runtime.view.TableRegistry;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -71,8 +74,12 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
                     Queue.RoutingTableEntryMsg.class, TableOptions.builder().schemaOptions(CorfuOptions.SchemaOptions.newBuilder()
                             .addStreamTag(REPLICATED_QUEUE_TAG).build()).build());
 
-            RoutingQueueListener listener = new RoutingQueueListener(sinkCorfuStores.get(0));
-            sinkCorfuStores.get(0).subscribeListenerFromTrimMark(listener, CORFU_SYSTEM_NAMESPACE, REPLICATED_QUEUE_TAG);
+            // Please uncomment the following lines and comment out the 2 lines after it to test LiteRoutingQ
+            // RoutingQueueListener listener = new RoutingQueueListener(sinkCorfuStores.get(0));
+            // sinkCorfuStores.get(0).subscribeListenerFromTrimMark(listener, CORFU_SYSTEM_NAMESPACE, REPLICATED_QUEUE_TAG);
+
+            LRoutingQueueListener listener = new LRoutingQueueListener(sinkCorfuStores.get(0));
+            LogReplicationUtils.subscribeRqListener(listener, CORFU_SYSTEM_NAMESPACE, 0, sinkCorfuStores.get(0));
 
             startReplicationServers();
             generateData(clientCorfuStore, queueSenderClient);
@@ -85,6 +92,7 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
                 log.info("Sink replicated queue size: {}", sinkQueueSize);
             }
             assertThat(listener.logEntryMsgCnt).isEqualTo(10);
+            //assertThat(listener.snapStartEndMarks).isEqualTo(0);
         } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
             throw new RuntimeException(e);
         }
@@ -94,24 +102,24 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
         String namespace = CORFU_SYSTEM_NAMESPACE;
 
         Table<Queue.CorfuGuidMsg, Queue.RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg> q =
-            corfuStore.openQueue(namespace, LOG_ENTRY_SYNC_QUEUE_NAME_SENDER, Queue.RoutingTableEntryMsg.class,
-                TableOptions.fromProtoSchema(Queue.RoutingTableEntryMsg.class));
+                corfuStore.openQueue(namespace, LOG_ENTRY_SYNC_QUEUE_NAME_SENDER, Queue.RoutingTableEntryMsg.class,
+                        TableOptions.fromProtoSchema(Queue.RoutingTableEntryMsg.class));
 
         String streamTagFollowed =
-            LOG_ENTRY_SYNC_QUEUE_TAG_SENDER_PREFIX + DefaultClusterConfig.getSinkClusterIds().get(0);
+                LOG_ENTRY_SYNC_QUEUE_TAG_SENDER_PREFIX + DefaultClusterConfig.getSinkClusterIds().get(0);
         log.info("Stream UUID: {}", CorfuRuntime.getStreamID(streamTagFollowed));
 
         for (int i = 0; i < 10; i++) {
             ByteBuffer buffer = ByteBuffer.allocate(Integer.SIZE);
             buffer.putInt(i);
             Queue.RoutingTableEntryMsg val =
-                Queue.RoutingTableEntryMsg.newBuilder()
-                        .setSourceClusterId(DefaultClusterConfig.getSourceClusterIds().get(0))
-                        .addAllDestinations(Arrays.asList(DefaultClusterConfig.getSinkClusterIds().get(0),
-                                DefaultClusterConfig.getSinkClusterIds().get(1)))
-                        .setOpaquePayload(ByteString.copyFrom(buffer.array()))
-                        .setReplicationType(Queue.ReplicationType.LOG_ENTRY_SYNC)
-                        .build();
+                    Queue.RoutingTableEntryMsg.newBuilder()
+                            .setSourceClusterId(DefaultClusterConfig.getSourceClusterIds().get(0))
+                            .addAllDestinations(Arrays.asList(DefaultClusterConfig.getSinkClusterIds().get(0),
+                                    DefaultClusterConfig.getSinkClusterIds().get(1)))
+                            .setOpaquePayload(ByteString.copyFrom(buffer.array()))
+                            .setReplicationType(Queue.ReplicationType.LOG_ENTRY_SYNC)
+                            .build();
 
             try (TxnContext txnContext = corfuStore.txn(namespace)) {
                 client.transmitDeltaMessages(txnContext, Collections.singletonList(val), corfuStore);
@@ -128,13 +136,60 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
     private void openLogReplicationStatusTable() throws Exception {
         for (int i = 0; i < numSource; i++) {
             sourceCorfuStores.get(i).openTable(
-                LogReplicationMetadataManager.NAMESPACE,
-                REPLICATION_STATUS_TABLE_NAME,
-                LogReplication.LogReplicationSession.class,
-                LogReplication.ReplicationStatus.class,
-                null,
-                TableOptions.fromProtoSchema(LogReplication.ReplicationStatus.class)
+                    LogReplicationMetadataManager.NAMESPACE,
+                    REPLICATION_STATUS_TABLE_NAME,
+                    LogReplication.LogReplicationSession.class,
+                    LogReplication.ReplicationStatus.class,
+                    null,
+                    TableOptions.fromProtoSchema(LogReplication.ReplicationStatus.class)
             );
+        }
+    }
+    static class LRoutingQueueListener extends LogReplicationRoutingQueueListener {
+        public int snapSyncMsgCnt;
+        public int logEntryMsgCnt;
+
+        public int snapStartEndMarks;
+
+        public LRoutingQueueListener(CorfuStore corfuStore) throws InvocationTargetException, NoSuchMethodException, IllegalAccessException {
+            super(corfuStore, TableRegistry.CORFU_SYSTEM_NAMESPACE);
+            snapSyncMsgCnt = 0;
+            logEntryMsgCnt = 0;
+            snapStartEndMarks = 0;
+        }
+
+        @Override
+        protected void onSnapshotSyncStart() {
+            snapStartEndMarks |= 0x01;
+        }
+
+        @Override
+        protected void onSnapshotSyncComplete() {
+            snapStartEndMarks |= 0x02;
+        }
+
+        @Override
+        protected boolean processUpdatesInSnapshotSync(List<Queue.RoutingTableEntryMsg> updates) {
+            log.info("LRoutingQListener::processUpdatesInLogEntrySync::{}", updates);
+            snapSyncMsgCnt++;
+            return true;
+        }
+
+        @Override
+        protected boolean processUpdatesInLogEntrySync(List<Queue.RoutingTableEntryMsg> updates) {
+            log.info("LRoutingQListener::processUpdatesInLogEntrySync::{}", updates);
+            logEntryMsgCnt++;
+            return true;
+        }
+
+        @Override
+        protected void performFullSyncAndMerge(TxnContext txnContext) {
+
+        }
+
+        @Override
+        protected String getClientName() {
+            return null;
         }
     }
 
