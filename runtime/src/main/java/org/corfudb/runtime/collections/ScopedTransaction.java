@@ -1,6 +1,7 @@
 package org.corfudb.runtime.collections;
 
 import com.google.protobuf.Message;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
@@ -27,6 +28,8 @@ public class ScopedTransaction implements StoreTransaction<TxnContext>,
 
     private final TransactionCrud<TxnContext> crud;
     private final CorfuRuntime runtime;
+
+    @Getter
     private final Token txnSnapshot;
     private final Map<
             Table<? extends Message, ? extends Message, ? extends Message>,
