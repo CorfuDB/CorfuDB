@@ -42,11 +42,13 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.corfudb.infrastructure.logreplication.config.LogReplicationConfig.MERGE_ONLY_STREAMS;
 import static org.corfudb.infrastructure.logreplication.config.LogReplicationConfig.REGISTRY_TABLE_ID;
 import static org.corfudb.infrastructure.logreplication.config.LogReplicationConfig.PROTOBUF_TABLE_ID;
+import static org.corfudb.runtime.LogReplication.ReplicationModel.ROUTING_QUEUES;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 /**
@@ -200,7 +202,7 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
         metadataManager.updateReplicationMetadataField(txnContext, session, ReplicationMetadata.LASTSNAPSHOTSTARTED_FIELD_NUMBER, srcGlobalSnapshot);
 
         for (SMREntry smrEntry : smrEntries) {
-            if (session.getSubscriber().getModel().equals(LogReplication.ReplicationModel.ROUTING_QUEUES)) {
+            if (session.getSubscriber().getModel().equals(ROUTING_QUEUES)) {
                 UUID replicatedQueueTag = TableRegistry.getStreamIdForStreamTag(CORFU_SYSTEM_NAMESPACE, LogReplicationUtils.REPLICATED_QUEUE_TAG);
                 txnContext.logUpdate(streamId, smrEntry, Collections.singletonList(replicatedQueueTag));
             } else {
@@ -404,13 +406,23 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
         // Sync the config with registry table after applying its entries
         replicationContext.refreshConfig(session, true);
 
-        for (String stream : replicationContext.getConfig(session).getStreamsToReplicate()) {
-            UUID regularStreamId = CorfuRuntime.getStreamID(stream);
-            if (regularStreamId.equals(REGISTRY_TABLE_ID)) {
+       // TODO: Temporary fix for routing queue poc, will need more complete fix to getStreamsToReplicate()
+        // Use replicatedStreamIds if model is routing queues
+        List<UUID> replicatedStreams = new ArrayList<>();
+        if (session.getSubscriber().getModel() == ROUTING_QUEUES) {
+            replicatedStreams.addAll(replicatedStreamIds);
+        } else {
+            replicatedStreams.addAll(replicationContext.getConfig(session)
+                    .getStreamsToReplicate().stream()
+                    .map(CorfuRuntime::getStreamID).collect(Collectors.toList()));
+        }
+
+        for (UUID stream : replicatedStreams) {
+            if (stream.equals(REGISTRY_TABLE_ID)) {
                 // Skip registry table as it has been applied in advance
                 continue;
             }
-            applyShadowStream(regularStreamId, snapshot);
+            applyShadowStream(stream, snapshot);
         }
 
         // Invalidate client cache after snapshot sync is completed, as shadow streams are
