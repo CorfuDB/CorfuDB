@@ -461,7 +461,8 @@ public class TxnContext
     @Override
     public <K extends Message, V extends Message, M extends Message>
     TxnContext delete(@Nonnull Table<K, V, M> table, @Nonnull K key) {
-        return crud.delete(table, key);
+        crud.delete(table, key);
+        return this;
     }
 
     @Nonnull
