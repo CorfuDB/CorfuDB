@@ -30,6 +30,10 @@ message ClusterUuidMsg {
     fixed64 lsb = 2;
 }
 
+message ExampleKey {
+    string key = 1;
+}
+
 message ExampleValue {
     option (org.corfudb.runtime.table_schema).stream_tag = "search_streamer";
     option (org.corfudb.runtime.table_schema).stream_tag = "slow_streamer";

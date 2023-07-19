@@ -1,0 +1,1 @@
+java -Xmx5g -Dlogback.configurationFile=src/main/resources/logback.xml -cp target/longevity-tests-0.4.0-SNAPSHOT-shaded.jar org.corfudb.LongevityTesting --serverEndpoints localhost:9000 --listWorkflowPropFiles "src/main/resources/ReadWriteTxn.properties" --listWorkflows "org.corfudb.ReadWriteTxnWorkflow" --testDuration 10 --configFile src/main/resources/config.properties
