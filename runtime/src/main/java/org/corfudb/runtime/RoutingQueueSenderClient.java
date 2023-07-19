@@ -165,6 +165,7 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
             log.info("onNext[{}] :: got updates on RoutingQSender for tables {}", results.getTimestamp(),
                 results.getEntries().keySet().stream().map(TableSchema::getTableName).collect(Collectors.toList()));
             LogReplication.ReplicationEvent fullSyncEvent = null;
+            LogReplication.ReplicationEventInfoKey key = null;
             // Any notification here indicates a full sync request
             for (List<CorfuStreamEntry> entryList : results.getEntries().values()) {
                 for (CorfuStreamEntry entry : entryList) {
@@ -172,7 +173,7 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
                         log.warn("RoutingQEventListener ignoring a CLEAR operation");
                         continue;
                     }
-                    LogReplication.ReplicationEventInfoKey key = (LogReplication.ReplicationEventInfoKey) entry.getKey();
+                    key = (LogReplication.ReplicationEventInfoKey) entry.getKey();
                     fullSyncEvent = (LogReplication.ReplicationEvent) entry.getPayload();
                     log.info("Full Sync requested due to event :: id={}, type={}, session={}, ts={}",
                         fullSyncEvent.getEventId(), fullSyncEvent.getType(),
@@ -181,7 +182,7 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
             }
             if (fullSyncEvent != null) {
                 SnapshotSyncDataTransmitter snapshotSyncDataTransmitter = new SnapshotSyncDataTransmitter(
-                    fullSyncEvent);
+                    fullSyncEvent, key);
                 snapSyncProvider.provideFullStateData(snapshotSyncDataTransmitter);
             }
         }
@@ -193,9 +194,13 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
 
         private final LogReplication.ReplicationEvent requestingEvent;
 
-        public SnapshotSyncDataTransmitter(LogReplication.ReplicationEvent requestingEvent) {
+        LogReplication.ReplicationEventInfoKey key;
+
+        public SnapshotSyncDataTransmitter(LogReplication.ReplicationEvent requestingEvent,
+                                           LogReplication.ReplicationEventInfoKey key) {
             this.requestingEvent = requestingEvent;
             this.baseSnapshotSent = false;
+            this.key = key;
         }
 
         @Override
@@ -208,7 +213,7 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
 
         @Override
         public String getDestinationSiteId() {
-            return requestingEvent.getClusterId();
+            return key.getSession().getSinkClusterId();
         }
 
         @Override
