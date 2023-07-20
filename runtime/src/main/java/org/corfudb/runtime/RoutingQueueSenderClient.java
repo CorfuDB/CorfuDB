@@ -162,6 +162,7 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
 
         @Override
         public void onNext(CorfuStreamEntries results) {
+            // TODO: Check for existing events. What if subscription comes later than the event is published.
             log.info("onNext[{}] :: got updates on RoutingQSender for tables {}", results.getTimestamp(),
                 results.getEntries().keySet().stream().map(TableSchema::getTableName).collect(Collectors.toList()));
             LogReplication.ReplicationEvent fullSyncEvent = null;
@@ -244,10 +245,10 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
                     .setSnapshotSyncId(requestingEvent.getEventId()).build();
                 Queue.RoutingQSnapStartEndMarkerMsg startMarker = Queue.RoutingQSnapStartEndMarkerMsg.newBuilder()
                     .setSnapshotStartTimestamp(getTxn().getTxnSequence())
-                    .setDestination(requestingEvent.getClusterId()).build();
+                    .setDestination(key.getSession().getSinkClusterId()).build();
 
-                CorfuRecord<Queue.RoutingQSnapStartEndKeyMsg, Queue.RoutingQSnapStartEndMarkerMsg> markerEntry =
-                    new CorfuRecord<>(keyOfStartMarker, startMarker);
+                CorfuRecord<Queue.RoutingQSnapStartEndMarkerMsg, Message> markerEntry =
+                    new CorfuRecord<>(startMarker, null);
 
                 Object[] smrArgs = new Object[2];
                 smrArgs[0] = keyOfStartMarker;
@@ -271,7 +272,7 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
                 .setSnapshotSyncId(requestingEvent.getEventId()).build();
             Queue.RoutingQSnapStartEndMarkerMsg startMarker = Queue.RoutingQSnapStartEndMarkerMsg.newBuilder()
                 .setSnapshotStartTimestamp(getTxn().getTxnSequence())
-                .setDestination(requestingEvent.getClusterId()).build();
+                .setDestination(key.getSession().getSinkClusterId()).build();
 
             CorfuRecord<Queue.RoutingQSnapStartEndMarkerMsg, Message> markerEntry =
                 new CorfuRecord<>(startMarker, null);
@@ -283,7 +284,7 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
                 new SMREntry("put", smrArgs,
                     corfuStore.getRuntime().getSerializers().getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE)),
                 Arrays.asList(TableRegistry.getStreamIdForStreamTag(CORFU_SYSTEM_NAMESPACE,
-                    SNAPSHOT_SYNC_QUEUE_TAG_SENDER_PREFIX + requestingEvent.getClusterId()))
+                    SNAPSHOT_SYNC_QUEUE_TAG_SENDER_PREFIX + key.getSession().getSinkClusterId()))
             );
         }
 
