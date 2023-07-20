@@ -107,8 +107,8 @@ public class LogReplicationAbstractIT extends AbstractIT {
     public final int sourceSiteCorfuPort = 9000;
     public final int sinkSiteCorfuPort = 9001;
 
-    public final int sourceReplicationServerPort = 9100;
-    public final int sinkReplicationServerPort = 9101;
+    public final int sourceReplicationServerPort = 9500;
+    public final int sinkReplicationServerPort = 9501;
 
     public final String sourceEndpoint = DEFAULT_HOST + ":" + sourceSiteCorfuPort;
     public final String sinkEndpoint = DEFAULT_HOST + ":" + sinkSiteCorfuPort;

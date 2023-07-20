@@ -140,6 +140,13 @@ public class AbstractIT extends AbstractCorfuTest {
         }
     }
 
+    public static String isLrSource(int port) {
+        if (port == 9500) {
+            return "export LR_SOURCE=true;";
+        }
+        return "";
+    }
+
     private static String getMetricsCmd(String metricsConfigFile) throws IOException {
         if (!metricsConfigFile.isEmpty()) {
             URL resource = AbstractIT.class.getResource("/" + metricsConfigFile);
@@ -733,12 +740,7 @@ public class AbstractIT extends AbstractCorfuTest {
          */
         public String getOptionsString() {
             StringBuilder command = new StringBuilder();
-            if(port == 9100) {
-                System.out.println("====>>>> attached");
-                command.append("-agentpath:").append("/Applications/YourKit-Java-Profiler-2021.3.app/Contents/Resources/bin/mac/libyjpagent.dylib," +
-                        "port=1234,listen=localhost,tmpdir=/tmp,dir=/tmp,snapshot_name_format={LrTest}-{datetime}-{pid},disableall");
 
-            }
             command.append("-a ").append(host);
 
             if (msg_size != 0) {
@@ -801,7 +803,6 @@ public class AbstractIT extends AbstractCorfuTest {
                     .append(port);
 
 
-
             return command.toString();
         }
 
@@ -821,12 +822,20 @@ public class AbstractIT extends AbstractCorfuTest {
             ProcessBuilder builder = new ProcessBuilder();
 
 
-            builder.command(SH, HYPHEN_C, getCodeCoverageCmd() + getMetricsCmd(metricsConfigFile) +
+            builder.command(SH, HYPHEN_C, getCodeCoverageCmd() + isLrSource(port) + getMetricsCmd(metricsConfigFile) +
                     " bin/corfu_replication_server " + getOptionsString());
 
             builder.directory(new File(CORFU_PROJECT_DIR));
             Process corfuReplicationServerProcess = builder.redirectErrorStream(true).start();
-            if (port == 9100) {
+            if (port == 9500) {
+//                String procname = "myProcess";
+//                String[] cmd = new String[]{"bash","-c", "ps -eaf | grep 9100"};
+//                ProcessBuilder pb = new ProcessBuilder(cmd);
+//                pb.redirectErrorStream(true);
+//                Process process = pb.start();
+//                process.getInputStream().transferTo(System.out);
+
+
                 System.out.println("=============> " + getPid(corfuReplicationServerProcess));
             }
             StreamGobbler streamGobbler = new StreamGobbler(corfuReplicationServerProcess.getInputStream(), serverConsoleLogPath);

@@ -95,7 +95,7 @@ public class CorfuTestParameters {
         TIMEOUT_VERY_SHORT = Duration.of(500, MILLIS);
         TIMEOUT_SHORT = Duration.of(1, SECONDS);
         TIMEOUT_NORMAL = Duration.of(10, SECONDS);
-        TIMEOUT_LONG = Duration.of(30, MINUTES);
+        TIMEOUT_LONG = Duration.of(20, MINUTES);
         TIMEOUT_VERY_LONG = Duration.of(4, MINUTES);
 
         // Iterations

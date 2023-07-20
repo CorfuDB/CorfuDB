@@ -41,10 +41,10 @@ public final class DefaultClusterConfig {
     private final int corfuSinkPortBegin = 9001;
 
     @Getter
-    private final int lrSourcePortBegin = 9100;
+    private final int lrSourcePortBegin = 9500;
 
     @Getter
-    private final int lrSinkPortBegin = 9101;
+    private final int lrSinkPortBegin = 9501;
 
     @Getter
     private final List<String> sourceNodeUuids =
@@ -103,7 +103,7 @@ public final class DefaultClusterConfig {
         Arrays.asList("9020", "9021", "9022");
 
     @Getter
-    private final String backupLogReplicationPort = "9200";
+    private final String backupLogReplicationPort = "9800";
 
     @Getter
     private final int logSinkBufferSize = 40;
@@ -152,12 +152,12 @@ public final class DefaultClusterConfig {
         int portCounter;
         //TODO: current assumption is that there is only 1 node. We need to overcome this constraint/assumption
         if (Integer.parseInt(port) % 2 == 0) {
-            portCounter = Integer.parseInt(port) - 9100;
+            portCounter = Integer.parseInt(port) - 9500;
             log.info("Shama port counter is {}", portCounter);
             log.info("Shama, getting Source UUID");
             return UUID.nameUUIDFromBytes(("Source" + portCounter + "Node" +  String.valueOf(0)).getBytes()).toString();
         }
-        portCounter = Integer.parseInt(port) - 9101;
+        portCounter = Integer.parseInt(port) - 9501;
 
         log.info("Shama port counter is {}", portCounter);
         log.info("Shama, getting Sink UUID, portCounter {} and ID is {}", portCounter,

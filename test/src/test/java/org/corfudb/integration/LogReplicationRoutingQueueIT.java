@@ -151,7 +151,7 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
                 }
             }
             sinkCounterForUuid += 2;
-            keyCounter *= 10;
+            keyCounter *= numRecords;
         }
 
         assertThat(senderQ.count()).isEqualTo(numRecords * getNumSinkClusters());

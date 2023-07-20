@@ -164,7 +164,7 @@ public class CorfuReplicationMultiSourceSinkIT extends AbstractIT {
     }
 
     protected void startReplicationServers() throws Exception {
-        int sourceLrPortStart = 9100;
+        int sourceLrPortStart = 9500;
         int sourceCorfuPortStart = 9000;
         for (int i = 0; i < numSourceClusters; i++) {
             sourceReplicationServers.add(runReplicationServer(sourceLrPortStart, sourceCorfuPortStart,
@@ -173,7 +173,7 @@ public class CorfuReplicationMultiSourceSinkIT extends AbstractIT {
             sourceCorfuPortStart += 2;
         }
 
-        int sinkLrPortStart = 9101;
+        int sinkLrPortStart = 9501;
         int sinkCorfuPortStart = 9001;
         for (int i = 0; i < numSinkClusters; i++) {
             sinkReplicationServers.add(runReplicationServer(sinkLrPortStart, sinkCorfuPortStart,

@@ -48,6 +48,11 @@ if [ "$CODE_COVERAGE" = true ]; then
   JAVA="$JAVA $JACOCO_CMD"
 fi
 
+if [ "$LR_SOURCE" = true ]; then
+  PROFILER_AGENT="-agentpath:/Applications/YourKit-Java-Profiler-2021.3.app/Contents/Resources/bin/mac/libyjpagent.dylib=disablestacktelemetry,exceptions=disable,delay=10000,port=1234"
+  JAVA="$JAVA $PROFILER_AGENT"
+fi
+
 # default heap for corfudb
 CORFUDB_HEAP="${CORFUDB_HEAP:-2000}"
 export JVMFLAGS="-Xmx${CORFUDB_HEAP}m $SERVER_JVMFLAGS"

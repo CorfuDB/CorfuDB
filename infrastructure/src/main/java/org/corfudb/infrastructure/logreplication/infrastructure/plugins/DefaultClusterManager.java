@@ -295,6 +295,8 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
                 BACKUP_CORFU_PORT, nodes);
         allClusters.put(backupCluster.getClusterId(), backupCluster);
 
+        log.info("Number of source {} and sink {}", numSource, numSink);
+
         return new TopologyDescriptor(0L, sinkClustersToReplicationModel, sourceClustersToReplicationModel,
                 allClusters, new HashSet<>(), localNodeId);
     }
@@ -316,7 +318,6 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
                 nodes.add(nodeInfo);
             }
             ClusterDescriptor cluster = new ClusterDescriptor(clusterId, corfuPortCounter, nodes);
-            log.info("Shama the cluster is {}, and node is {}", cluster, nodes);
             clustersToReplicationModel.put(cluster,
                     addModel(Arrays.asList(LogReplication.ReplicationModel.FULL_TABLE)));
             allClusters.put(cluster.getClusterId(), cluster);
