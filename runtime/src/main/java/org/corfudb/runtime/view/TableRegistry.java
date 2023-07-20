@@ -551,7 +551,17 @@ public class TableRegistry {
      * @return stream Id in UUID
      */
     public static UUID getStreamIdForStreamTag(String namespace, String streamTag) {
-        return CorfuRuntime.getStreamID(STREAM_TAG_PREFIX + namespace + streamTag);
+        return CorfuRuntime.getStreamID(getFullStreamTagStreamName(namespace, streamTag));
+    }
+
+    /**
+     *
+     * @param namespace namespace of this stream tag
+     * @param streamTag the tag without the namespace
+     * @return the fully qualified stream name of this stream tag
+     */
+    public static String getFullStreamTagStreamName(String namespace, String streamTag) {
+        return STREAM_TAG_PREFIX + namespace + streamTag;
     }
 
     /**
