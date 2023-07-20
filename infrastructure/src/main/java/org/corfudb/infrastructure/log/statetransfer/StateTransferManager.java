@@ -107,22 +107,20 @@ public class StateTransferManager {
                 .build();
     }
 
-    static boolean sequential(long current, long next) {
-        return current + 1 == next;
-    }
-
-    static Stream<List<Long>> splitNonSequentialAddresses(List<Long> batch) {
-        if (batch.size() < 2) {
-            return Stream.of(batch);
-        }
+    static List<List<Long>> splitNonSequentialAddresses(List<Long> batch) {
         List<List<Long>> lists = new ArrayList<>();
+        if (batch.size() < 2) {
+            lists.add(batch);
+            return lists;
+        }
+
         List<Long> sequentialList = new ArrayList<>();
 
         sequentialList.add(batch.get(0));
         for (int i = 0; i < batch.size() - 1; i++) {
             long current = batch.get(i);
             long next = batch.get(i + 1);
-            if (sequential(current, next)) {
+            if (current + 1 == next) {
                 sequentialList.add(next);
             } else {
                 lists.add(sequentialList);
@@ -131,23 +129,7 @@ public class StateTransferManager {
             }
         }
         lists.add(sequentialList);
-        return lists.stream();
-    }
-
-    /**
-     * There are cases in which the unknownAddresses can consist of non-sequential segments.
-     * Make sure that each batch is at least of size batchSize and all addresses in a batch are
-     * sequential.
-     *
-     * @param unknownAddresses List of unknown addresses
-     * @param batchSize        Max size of a batch
-     * @return Batched, sequential addresses
-     */
-    static List<List<Long>> partitionSequentialAddresses(List<Long> unknownAddresses, int batchSize) {
-        return Lists.partition(unknownAddresses, batchSize)
-                .stream()
-                .flatMap(StateTransferManager::splitNonSequentialAddresses)
-                .collect(Collectors.toList());
+        return lists;
     }
 
     /**
@@ -157,10 +139,12 @@ public class StateTransferManager {
      *              log unit servers.
      * @return A stream of transfer batch requests.
      */
-    Stream<TransferBatchRequest> rangeToBatchRequestStream(TransferSegmentRangeSingle range) {
+    public Stream<TransferBatchRequest> rangeToBatchRequestStream(TransferSegmentRangeSingle range) {
         ImmutableList<Long> unknownAddressesInRange = range.getUnknownAddressesInRange();
         Optional<ImmutableList<String>> availableServers = range.getAvailableServers();
-        return partitionSequentialAddresses(unknownAddressesInRange, batchSize).stream()
+        return StateTransferManager.splitNonSequentialAddresses(unknownAddressesInRange)
+                .stream()
+                .flatMap(list -> Lists.partition(list,batchSize).stream())
                 .map(partition -> TransferBatchRequest
                         .builder()
                         .addresses(partition)

@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure.log.statetransfer;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import org.corfudb.common.util.Tuple;
 import org.corfudb.infrastructure.log.statetransfer.batch.TransferBatchRequest;
@@ -34,6 +35,7 @@ import java.util.stream.Stream;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.corfudb.infrastructure.log.statetransfer.segment.StateTransferType.CONSISTENT_READ;
+import static org.corfudb.infrastructure.log.statetransfer.segment.StateTransferType.PROTOCOL_READ;
 import static org.corfudb.infrastructure.log.statetransfer.segment.TransferSegmentStatus.SegmentState.RESTORED;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
@@ -47,11 +49,29 @@ class StateTransferManagerTest implements TransferSegmentCreator {
                 mock(BasicTransferProcessor.class), mock(ParallelTransferProcessor.class));
     }
 
+    private StateTransferManager getDefaultInstance(int batchSize) {
+        return getConfiguredInstance(mock(LogUnitClient.class),
+                mock(BasicTransferProcessor.class), mock(ParallelTransferProcessor.class),
+                batchSize);
+    }
+
     private StateTransferManager getConfiguredInstance(LogUnitClient client,
                                                        BasicTransferProcessor processor1,
                                                        ParallelTransferProcessor processor2) {
         return StateTransferManager.builder()
                 .batchSize(10)
+                .logUnitClient(client)
+                .basicTransferProcessor(processor1)
+                .parallelTransferProcessor(processor2)
+                .build();
+    }
+
+    private StateTransferManager getConfiguredInstance(LogUnitClient client,
+                                                       BasicTransferProcessor processor1,
+                                                       ParallelTransferProcessor processor2,
+                                                       int batchSize) {
+        return StateTransferManager.builder()
+                .batchSize(batchSize)
                 .logUnitClient(client)
                 .basicTransferProcessor(processor1)
                 .parallelTransferProcessor(processor2)
@@ -478,12 +498,12 @@ class StateTransferManagerTest implements TransferSegmentCreator {
         return true;
     }
 
-    boolean batchedAndSequential(List<List<Long>> batches, int batchSize) {
-        for (List<Long> batch : batches) {
-            if (batch.size() > batchSize) {
+    boolean batchedAndSequential(List<TransferBatchRequest> batches, int batchSize) {
+        for (TransferBatchRequest batch : batches) {
+            if (batch.getAddresses().size() > batchSize) {
                 return false;
             }
-            if (!sequential(batch)) {
+            if (!sequential(batch.getAddresses())) {
                 return false;
             }
         }
@@ -500,7 +520,7 @@ class StateTransferManagerTest implements TransferSegmentCreator {
         }
     }
 
-    List<Long> generateRandomListOfSize(Random random, int size, int bound) {
+    ImmutableList<Long> generateRandomListOfSize(Random random, int size, int bound) {
         LinkedHashSet<Long> set = new LinkedHashSet<>();
         for (int i = 0; i < size; i++) {
             final long randomNumber = random.nextInt(bound);
@@ -509,23 +529,50 @@ class StateTransferManagerTest implements TransferSegmentCreator {
             set.add(sequentialOrRandomNumber);
 
         }
-        return new ArrayList<>(set).stream().sorted().collect(Collectors.toList());
+        return new ArrayList<>(set).stream().sorted().collect(ImmutableList.toImmutableList());
+    }
+
+    TransferSegmentRangeSingle getTestTransferSegmentRange(ImmutableList<Long> addresses) {
+        Preconditions.checkArgument(!addresses.isEmpty());
+        return TransferSegmentRangeSingle
+                .builder()
+                .availableServers(Optional.empty())
+                .unknownAddressesInRange(addresses)
+                .startAddress(addresses.get(0))
+                .endAddress(addresses.get(addresses.size() - 1))
+                .typeOfTransfer(PROTOCOL_READ)
+                .split(false)
+                .status(TransferSegmentStatus.builder().build())
+                .build();
+    }
+
+    List<TransferBatchRequest> toBatches(List<List<Long>> addresses) {
+        return addresses
+                .stream()
+                .map(x -> TransferBatchRequest.builder().addresses(x).build())
+                .collect(Collectors.toList());
     }
 
     @Test
     void partitionWorkloadTest() {
         // Test that partition functionality is preserved
         int batchSize = 3;
+        StateTransferManager stateTransferManager = getDefaultInstance(batchSize);
         ImmutableList<Long> initList = ImmutableList.of(1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L);
-        List<List<Long>> resultList = StateTransferManager.partitionSequentialAddresses(initList, batchSize);
-        ImmutableList<ImmutableList<Long>> expectedList = ImmutableList.of(
+        TransferSegmentRangeSingle testTransferSegmentRange = getTestTransferSegmentRange(initList);
+        List<TransferBatchRequest> batches = stateTransferManager.rangeToBatchRequestStream(testTransferSegmentRange).collect(Collectors.toList());
+
+        List<List<Long>> expectedList = ImmutableList.of(
                 ImmutableList.of(1L, 2L, 3L),
                 ImmutableList.of(4L, 5L, 6L),
                 ImmutableList.of(7L, 8L, 9L)
         );
-        assertThat(resultList).isEqualTo(expectedList);
+
+        assertThat(toBatches(expectedList)).isEqualTo(batches);
+
         batchSize = 2;
-        resultList = StateTransferManager.partitionSequentialAddresses(initList, batchSize);
+        stateTransferManager = getDefaultInstance(batchSize);
+        batches = stateTransferManager.rangeToBatchRequestStream(testTransferSegmentRange).collect(Collectors.toList());
         expectedList = ImmutableList.of(
                 ImmutableList.of(1L, 2L),
                 ImmutableList.of(3L, 4L),
@@ -533,20 +580,22 @@ class StateTransferManagerTest implements TransferSegmentCreator {
                 ImmutableList.of(7L, 8L),
                 ImmutableList.of(9L)
         );
-        assertThat(resultList).isEqualTo(expectedList);
+        assertThat(toBatches(expectedList)).isEqualTo(batches);
         batchSize = 8;
-        resultList = StateTransferManager.partitionSequentialAddresses(initList, batchSize);
+        stateTransferManager = getDefaultInstance(batchSize);
+        batches = stateTransferManager.rangeToBatchRequestStream(testTransferSegmentRange).collect(Collectors.toList());
         expectedList = ImmutableList.of(
                 ImmutableList.of(1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L),
                 ImmutableList.of(9L)
         );
-        assertThat(resultList).isEqualTo(expectedList);
+        assertThat(toBatches(expectedList)).isEqualTo(batches);
         batchSize = 20;
-        resultList = StateTransferManager.partitionSequentialAddresses(initList, batchSize);
+        stateTransferManager = getDefaultInstance(batchSize);
+        batches = stateTransferManager.rangeToBatchRequestStream(testTransferSegmentRange).collect(Collectors.toList());
         expectedList = ImmutableList.of(
                 ImmutableList.of(1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L)
         );
-        assertThat(resultList).isEqualTo(expectedList);
+        assertThat(toBatches(expectedList)).isEqualTo(batches);
 
         // Test sequential aspect
         int seed = 42;
@@ -554,11 +603,13 @@ class StateTransferManagerTest implements TransferSegmentCreator {
         int numBound = 100;
         int listSizeMax = 100;
         int batchSizeMax = 100;
-        for (int size = 0; size < listSizeMax; size++) {
+        for (int size = 1; size < listSizeMax; size++) {
             for (int batchSizeCurrent = 1; batchSizeCurrent < batchSizeMax; batchSizeCurrent++) {
-                final List<Long> longs = generateRandomListOfSize(rand, size, numBound);
-                resultList = StateTransferManager.partitionSequentialAddresses(longs, batchSizeCurrent);
-                assertThat(batchedAndSequential(resultList, batchSizeCurrent)).isTrue();
+                final ImmutableList<Long> longs = generateRandomListOfSize(rand, size, numBound);
+                testTransferSegmentRange = getTestTransferSegmentRange(longs);
+                stateTransferManager = getDefaultInstance(batchSizeCurrent);
+                final List<TransferBatchRequest> batchRequests = stateTransferManager.rangeToBatchRequestStream(testTransferSegmentRange).collect(Collectors.toList());
+                assertThat(batchedAndSequential(batchRequests, batchSizeCurrent)).isTrue();
             }
         }
     }
