@@ -398,6 +398,7 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.0.0-M5</version>
                 <configuration>
+                    <argLine>-agentpath:/Applications/YourKit-Java-Profiler-2021.3.app/Contents/Resources/bin/mac/libyjpagent.dylib=tracing,onexit=snapshot,disablej2ee</argLine>
                     <!--suppress UnresolvedMavenProperty (resolved at runtime) -->
                     <argLine>${unit.jacoco.args}</argLine>
                     <forkCount>1C</forkCount>

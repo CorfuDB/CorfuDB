@@ -71,7 +71,7 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
 
         List<Table<Queue.CorfuGuidMsg, Queue.RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg>> sinkReplicatedQueues = new ArrayList<>();
         List<RoutingQueueListener> listeners = new ArrayList<>();
-        openSinkReplicatedQueues(sinkReplicatedQueues, listeners);
+        openSinkReplicatedQueuesAndListeners(sinkReplicatedQueues, listeners);
         startReplicationServers();
         int numRecords = 10;
         generateData(clientCorfuStore, queueSenderClient, numRecords);
@@ -82,17 +82,21 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
             while(sinkReplicatedQueues.get(i).count() != expectedCount) {
                 // wait
 //                System.out.println("count is {}"+ sinkReplicatedQueues.get(i).count());
+                Thread.sleep(5000);
             }
             System.out.println("table is " + i);
         }
 
         for(int i = 0; i < sinkReplicatedQueues.size(); ++i) {
             int expectedCount = i == 0 ? numRecords : numRecords * 2;
-            assertThat(listeners.get(i).logEntryMsgCnt).isGreaterThanOrEqualTo(expectedCount);
+            while(listeners.get(i).logEntryMsgCnt != expectedCount) {
+
+            }
+            assertThat(listeners.get(i).logEntryMsgCnt).isEqualTo(expectedCount);
         }
     }
 
-    private void openSinkReplicatedQueues(
+    private void openSinkReplicatedQueuesAndListeners(
             List<Table<Queue.CorfuGuidMsg, Queue.RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg>> sinkReplicatedQueues,
             List<RoutingQueueListener> listeners) {
 

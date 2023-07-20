@@ -51,6 +51,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * This class contains basic functionality for any IT test.
  * Any IT test should inherit this test.
  */
+@SuppressWarnings("checkstyle:magicnumber")
 @Slf4j
 public class AbstractIT extends AbstractCorfuTest {
     static final String DEFAULT_HOST = "localhost";
@@ -62,7 +63,7 @@ public class AbstractIT extends AbstractCorfuTest {
 
     static final String CORFU_PROJECT_DIR = new File("..").getAbsolutePath() + File.separator;
 
-    public static final String CORFU_LOG_PATH = PARAMETERS.TEST_TEMP_DIR;
+    public static final String CORFU_LOG_PATH = "/Users/hshama/Desktop/LR_logs";
 
     static final long DEFAULT_MVO_CACHE_SIZE = 100;
 
@@ -574,7 +575,7 @@ public class AbstractIT extends AbstractCorfuTest {
         private boolean noAutoCommit = true;
         private String keyStore = null;
         private String keyStorePassword = null;
-        private String logLevel = "INFO";
+        private String logLevel = "DEBUG";
         private String logPath = null;
         private String trustStore = null;
         private String logSizeLimitPercentage = null;
@@ -707,7 +708,7 @@ public class AbstractIT extends AbstractCorfuTest {
         private boolean tlsMutualAuthEnabled = false;
         private String keyStore = null;
         private String keyStorePassword = null;
-        private String logLevel = "INFO";
+        private String logLevel = "DEBUG";
         private String trustStore = null;
         private String trustStorePassword = null;
         private String disableCertExpiryCheckFile = null;
@@ -732,6 +733,12 @@ public class AbstractIT extends AbstractCorfuTest {
          */
         public String getOptionsString() {
             StringBuilder command = new StringBuilder();
+            if(port == 9100) {
+                System.out.println("====>>>> attached");
+                command.append("-agentpath:").append("/Applications/YourKit-Java-Profiler-2021.3.app/Contents/Resources/bin/mac/libyjpagent.dylib," +
+                        "port=1234,listen=localhost,tmpdir=/tmp,dir=/tmp,snapshot_name_format={LrTest}-{datetime}-{pid},disableall");
+
+            }
             command.append("-a ").append(host);
 
             if (msg_size != 0) {
@@ -793,6 +800,8 @@ public class AbstractIT extends AbstractCorfuTest {
             command.append(" -d ").append(logLevel).append(" ")
                     .append(port);
 
+
+
             return command.toString();
         }
 
@@ -811,11 +820,15 @@ public class AbstractIT extends AbstractCorfuTest {
             }
             ProcessBuilder builder = new ProcessBuilder();
 
+
             builder.command(SH, HYPHEN_C, getCodeCoverageCmd() + getMetricsCmd(metricsConfigFile) +
                     " bin/corfu_replication_server " + getOptionsString());
 
             builder.directory(new File(CORFU_PROJECT_DIR));
             Process corfuReplicationServerProcess = builder.redirectErrorStream(true).start();
+            if (port == 9100) {
+                System.out.println("=============> " + getPid(corfuReplicationServerProcess));
+            }
             StreamGobbler streamGobbler = new StreamGobbler(corfuReplicationServerProcess.getInputStream(), serverConsoleLogPath);
             Executors.newSingleThreadExecutor().submit(streamGobbler);
             return corfuReplicationServerProcess;
