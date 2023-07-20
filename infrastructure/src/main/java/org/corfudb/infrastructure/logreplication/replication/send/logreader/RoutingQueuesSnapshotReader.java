@@ -19,6 +19,7 @@ import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.runtime.view.stream.OpaqueStream;
 import org.corfudb.util.retry.ExponentialBackoffRetry;
@@ -56,10 +57,10 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
     private long lastReadTimestamp;
 
     // UUID of the replicated queue on the receiver(Sink)
-    private UUID replicatedQueueId;
+    private final UUID replicatedQueueId;
 
     // UUID of the stream which contains snapshot end markers
-    private UUID endMarkerStreamId;
+    private final UUID endMarkerStreamId;
 
     // Boolean indicating if the Snapshot reader is waiting for a start marker from this snapshot sync
     private boolean waitingForStartMarker = true;
@@ -101,17 +102,21 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
     // Create an opaque stream and iterator for the stream of interest, starting from lastReadTimestamp+1 to the global
     // log tail
     private void buildOpaqueStreamIterator() {
-        OpaqueStream opaqueStream =
-                new OpaqueStream(rt.getStreamsView().get(TableRegistry.getStreamIdForStreamTag(CORFU_SYSTEM_NAMESPACE, streamTagFollowed)));
+        String streamOfStreamTag = TableRegistry.getFullStreamTagStreamName(CORFU_SYSTEM_NAMESPACE, streamTagFollowed);
+        UUID uuidOfStreamTagFollowed = CorfuRuntime.getStreamID(streamOfStreamTag);
+
+        OpaqueStream opaqueStream = new OpaqueStream(rt.getStreamsView().get(uuidOfStreamTagFollowed));
 
         // Seek till the last read timestamp so that duplicate entries are eliminated.
         opaqueStream.seek(lastReadTimestamp + 1);
 
-        long logTail = rt.getAddressSpaceView().getLogTail();
+        // long logTail = rt.getAddressSpaceView().getLogTail();
+        long logTail = Address.MAX;
 
-        log.info("Start reading data from {}, log tail = {}", lastReadTimestamp, logTail);
+        log.info("Start reading data from {}, log tail = {} streamName={} uuid={}", lastReadTimestamp,
+                logTail, streamOfStreamTag, uuidOfStreamTagFollowed);
 
-        currentStreamInfo = new OpaqueStreamIterator(opaqueStream, streamTagFollowed, logTail);
+        currentStreamInfo = new OpaqueStreamIterator(opaqueStream, streamOfStreamTag, logTail);
     }
 
     /**
@@ -140,8 +145,9 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
 
         LogReplication.LogReplicationEntryMsg msg;
 
-        log.info("Start Snapshot Sync replication for stream name={}, id={}", streamTagFollowed,
-                CorfuRuntime.getStreamID(streamTagFollowed));
+        String streamNameOfTag = TableRegistry.getFullStreamTagStreamName(CORFU_SYSTEM_NAMESPACE, streamTagFollowed);
+        log.info("Start Snapshot Sync replication for stream name={}, id={}", streamNameOfTag,
+                CorfuRuntime.getStreamID(streamNameOfTag));
 
         // Wait for data to be available on the Snapshot Sync Queue if it is empty
         if (currentStreamInfo == null || !currentStreamHasNext()) {
@@ -191,7 +197,7 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
         Preconditions.checkState(Objects.equals(record.getPayload().getDestination(), session.getSinkClusterId()));
 
         // TODO Pankti: Pass the sync request id and return true only if the marker is for this snapshot sync
-        return true;
+        return (record.getPayload().getSnapshotStartTimestamp() == 0);
     }
 
     private void processStartMarker(OpaqueEntry opaqueEntry) {
@@ -217,7 +223,6 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
 
         // Update the base snapshot timestamp
         snapshotTimestamp = record.getPayload().getSnapshotStartTimestamp();
-        waitingForStartMarker = false;
 
         // TODO Pankti: Pass the sync request id and check if the marker corresponds to this snapshot sync
     }
@@ -242,13 +247,18 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
 
                     // If this OpaqueEntry was for the end marker, no further processing is required.
                     if (isEndMarker(lastEntry)) {
+                        log.info("RQSnapReader found end marker {}", lastEntry.getVersion());
                         endMarkerReached = true;
+                        waitingForStartMarker = true;
                         break;
                     }
 
                     // Process the start marker first if waiting for it
                     if (waitingForStartMarker) {
                         processStartMarker(lastEntry);
+                        waitingForStartMarker = false;
+                        endMarkerReached = false;
+                        log.info("RQSnapReader found start marker {}", lastEntry.getVersion());
                     }
 
                     List<SMREntry> smrEntries = lastEntry.getEntries().get(snapshotSyncQueueId);
@@ -313,7 +323,7 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
                     try {
                         buildOpaqueStreamIterator();
                         if (!currentStreamHasNext()) {
-                            log.info("Retrying");
+                            log.info("Retrying. currentStreamInfo={}", currentStreamInfo.maxVersion);
                             throw new RuntimeException("Retry");
                         }
                     } catch (Exception e) {
