@@ -7,6 +7,7 @@ import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultC
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.runtime.CorfuOptions;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.LRFullStateReplicationContext;
 import org.corfudb.runtime.LiteRoutingQueueListener;
 import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.Queue;
@@ -15,6 +16,9 @@ import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
+import org.corfudb.runtime.object.transactions.TransactionalContext;
+import org.corfudb.runtime.view.TableRegistry;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -23,6 +27,7 @@ import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.runtime.LogReplicationUtils.LOG_ENTRY_SYNC_QUEUE_NAME_SENDER;
@@ -55,13 +60,17 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
     }
 
     @Test
-    public void testLogEntrySync() throws Exception {
+    public void testRoutingQueueReplication() throws Exception {
 
         // Register client and setup initial group destinations mapping
         CorfuRuntime clientRuntime = getClientRuntime();
         CorfuStore clientCorfuStore = new CorfuStore(clientRuntime);
         String clientName = "testClient";
         RoutingQueueSenderClient queueSenderClient = new RoutingQueueSenderClient(clientCorfuStore, clientName);
+        // SnapshotProvider implements RoutingQueueSenderClient.LRTransmitterReplicationModule
+        SnapshotProvider snapshotProvider = new SnapshotProvider(clientCorfuStore);
+        queueSenderClient.startLRSnapshotTransmitter(snapshotProvider); // starts a listener on event table
+
 
         // Open queue on sink
         try {
@@ -74,9 +83,15 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
             RoutingQueueListener listener = new RoutingQueueListener(sinkCorfuStores.get(0));
             sinkCorfuStores.get(0).subscribeListenerFromTrimMark(listener, CORFU_SYSTEM_NAMESPACE, REPLICATED_QUEUE_TAG);
 
+            // Now request a full sync (uncomment if necessary)
+            // queueSenderClient.requestSnapshotSync(UUID.fromString(DefaultClusterConfig.getSourceClusterIds().get(0)),
+            //       UUID.fromString(DefaultClusterConfig.getSinkClusterIds().get(0)), null);
+
             startReplicationServers();
+            while (!snapshotProvider.isSnapshotSent) {
+                Thread.sleep(5000);
+            }
             generateData(clientCorfuStore, queueSenderClient);
-            Thread.sleep(5000);
 
             int sinkQueueSize = replicatedQueueSink.count();
             while (sinkQueueSize != 10) {
@@ -85,6 +100,7 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
                 log.info("Sink replicated queue size: {}", sinkQueueSize);
             }
             assertThat(listener.logEntryMsgCnt).isEqualTo(10);
+            log.info("Sink replicated queue size: {}", listener.snapSyncMsgCnt);
         } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
             throw new RuntimeException(e);
         }
@@ -93,13 +109,9 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
     private void generateData(CorfuStore corfuStore, RoutingQueueSenderClient client) throws Exception {
         String namespace = CORFU_SYSTEM_NAMESPACE;
 
-        Table<Queue.CorfuGuidMsg, Queue.RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg> q =
-            corfuStore.openQueue(namespace, LOG_ENTRY_SYNC_QUEUE_NAME_SENDER, Queue.RoutingTableEntryMsg.class,
-                TableOptions.fromProtoSchema(Queue.RoutingTableEntryMsg.class));
-
         String streamTagFollowed =
             LOG_ENTRY_SYNC_QUEUE_TAG_SENDER_PREFIX + DefaultClusterConfig.getSinkClusterIds().get(0);
-        log.info("Stream UUID: {}", CorfuRuntime.getStreamID(streamTagFollowed));
+        log.info("Stream UUID: {}", TableRegistry.getStreamIdForStreamTag(CORFU_SYSTEM_NAMESPACE, streamTagFollowed));
 
         for (int i = 0; i < 10; i++) {
             ByteBuffer buffer = ByteBuffer.allocate(Integer.SIZE);
@@ -123,6 +135,49 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
     }
 
     /**
+     * Provide a full sync or snapshot
+     */
+    public static class SnapshotProvider implements RoutingQueueSenderClient.LRTransmitterReplicationModule {
+
+        public final String someNamespace = "testNamespace";
+        public final int numFullSyncBatches = 5;
+        CorfuStore corfuStore;
+        public boolean isSnapshotSent = false;
+        SnapshotProvider(CorfuStore corfuStore) {
+            this.corfuStore = corfuStore;
+        }
+
+        @Override
+        public void provideFullStateData(LRFullStateReplicationContext context) {
+            for (int i = 0; i < numFullSyncBatches; i++) {
+                try (TxnContext tx = corfuStore.txn(someNamespace)) {
+                    Queue.RoutingTableEntryMsg message = Queue.RoutingTableEntryMsg.newBuilder()
+                            .addDestinations(context.getDestinationSiteId())
+                            .setOpaquePayload(ByteString.copyFromUtf8("opaquetxn"+i))
+                            .buildPartial();
+                    context.transmit(message);
+                    log.info("Transmitting full sync message{}", message);
+                    // For debugging Q's stream id should be "61d2fc0f-315a-3d87-a982-24fb36932050"
+                    AbstractTransactionalContext txCtx = TransactionalContext.getRootContext();
+                    log.info("FS Committed at {}", tx.commit());
+                }
+            }
+            try (TxnContext tx = corfuStore.txn(someNamespace)) {
+                context.markCompleted();
+                AbstractTransactionalContext txCtx = TransactionalContext.getRootContext();
+                // For debugging end marker stream id "9864efe6-d405-3d13-a45d-b0a61c2d5097"
+                txCtx.getWriteSetInfo();
+                log.info("FS end Committed at {}", tx.commit());
+            }
+            isSnapshotSent = true;
+        }
+
+        @Override
+        public void cancel(LRFullStateReplicationContext context) {
+            context.cancel();
+        }
+    }
+    /**
      * Open replication status table on each Sink for verify replication status.
      */
     private void openLogReplicationStatusTable() throws Exception {
@@ -140,22 +195,29 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
 
     static class RoutingQueueListener extends LiteRoutingQueueListener {
         public int logEntryMsgCnt;
+        public int snapSyncMsgCnt;
+        public int snapEndMark;
 
         public RoutingQueueListener(CorfuStore corfuStore) {
             super(corfuStore);
             logEntryMsgCnt = 0;
+            snapSyncMsgCnt = 0;
+            snapEndMark = 0;
         }
 
         @Override
         protected boolean processUpdatesInSnapshotSync(List<Queue.RoutingTableEntryMsg> updates) {
-            return false;
+            snapSyncMsgCnt++;
+            log.info("LitQListener:fullSyncMsg got {} updates {}", updates.size(), updates.get(0));
+            return true;
         }
 
         @Override
         protected boolean processUpdatesInLogEntrySync(List<Queue.RoutingTableEntryMsg> updates) {
-            log.info("LiteRoutingQueueListener::processUpdatesInLogEntrySync::{}", updates);
+            log.info("LiteRoutingQueueListener::processUpdatesInLogEntrySync:: got {}. {}", updates.size(),
+                    updates.get(0));
             logEntryMsgCnt++;
-            return false;
+            return true;
         }
     }
 }

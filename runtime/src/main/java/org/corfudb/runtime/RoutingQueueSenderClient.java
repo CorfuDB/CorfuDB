@@ -244,7 +244,7 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
                 Queue.RoutingQSnapStartEndKeyMsg keyOfStartMarker = Queue.RoutingQSnapStartEndKeyMsg.newBuilder()
                     .setSnapshotSyncId(requestingEvent.getEventId()).build();
                 Queue.RoutingQSnapStartEndMarkerMsg startMarker = Queue.RoutingQSnapStartEndMarkerMsg.newBuilder()
-                    .setSnapshotStartTimestamp(getTxn().getTxnSequence())
+                    .setSnapshotStartTimestamp(getTxn().getTxnSequence()) // This is the base snapshot timestamp
                     .setDestination(key.getSession().getSinkClusterId()).build();
 
                 CorfuRecord<Queue.RoutingQSnapStartEndMarkerMsg, Message> markerEntry =
@@ -261,6 +261,7 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
                             SNAPSHOT_SYNC_QUEUE_TAG_SENDER_PREFIX + destination))
                         .collect(Collectors.toList())
                 );
+                log.info("Base snapshot marker key {}, value {}", keyOfStartMarker, startMarker);
                 baseSnapshotSent = true;
             }
         }
@@ -271,7 +272,7 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
             Queue.RoutingQSnapStartEndKeyMsg keyOfStartMarker = Queue.RoutingQSnapStartEndKeyMsg.newBuilder()
                 .setSnapshotSyncId(requestingEvent.getEventId()).build();
             Queue.RoutingQSnapStartEndMarkerMsg startMarker = Queue.RoutingQSnapStartEndMarkerMsg.newBuilder()
-                .setSnapshotStartTimestamp(getTxn().getTxnSequence())
+                .setSnapshotStartTimestamp(0) // Empty snapshot timestamp signifies an end marker
                 .setDestination(key.getSession().getSinkClusterId()).build();
 
             CorfuRecord<Queue.RoutingQSnapStartEndMarkerMsg, Message> markerEntry =
