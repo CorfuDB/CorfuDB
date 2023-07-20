@@ -273,8 +273,8 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
                 .setSnapshotStartTimestamp(getTxn().getTxnSequence())
                 .setDestination(requestingEvent.getClusterId()).build();
 
-            CorfuRecord<Queue.RoutingQSnapStartEndKeyMsg, Queue.RoutingQSnapStartEndMarkerMsg> markerEntry =
-                new CorfuRecord<>(keyOfStartMarker, startMarker);
+            CorfuRecord<Queue.RoutingQSnapStartEndMarkerMsg, Message> markerEntry =
+                new CorfuRecord<>(startMarker, null);
 
             Object[] smrArgs = new Object[2];
             smrArgs[0] = keyOfStartMarker;
