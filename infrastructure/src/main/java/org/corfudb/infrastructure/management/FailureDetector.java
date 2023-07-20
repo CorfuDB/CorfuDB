@@ -1,5 +1,7 @@
 package org.corfudb.infrastructure.management;
 
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
@@ -17,14 +19,15 @@ import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
 import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.clients.IClient;
 import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.clients.ManagementClient;
+import org.corfudb.runtime.clients.NettyClientRouter;
 import org.corfudb.runtime.exceptions.RetryExhaustedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.retry.IRetry;
-import org.corfudb.util.retry.MixedBoundRetry;
 import org.corfudb.util.retry.RetryNeededException;
 
 import javax.annotation.Nonnull;
@@ -37,6 +40,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
@@ -59,28 +63,9 @@ public class FailureDetector implements IDetector {
      */
     @Getter
     private static final int MAX_POLL_ROUNDS = 3;
-    /**
-     * Max duration of the entire poll round
-     */
-    @Getter
-    private static final Duration MAX_DETECTION_DURATION = Duration.ofSeconds(12);
-    /**
-     * Max sleep duration between poll round iterations.
-     */
-    @Getter
-    private static final Duration MAX_SLEEP_BETWEEN_RETRIES = Duration.ofSeconds(5);
-    /**
-     * Initial sleep between poll round iterations.
-     */
-    @Getter
-    private static final Duration INIT_SLEEP_BETWEEN_RETRIES = Duration.ofSeconds(1);
 
     @Getter
-    private static final float JITTER_FACTOR = 0.2f;
-
-    @Setter
-    @Getter
-    private Optional<PollConfig> pollConfig = Optional.empty();
+    private static final Duration MAX_SLEEP_BETWEEN_RETRIES = Duration.ofSeconds(2);
 
     @NonNull
     private ServerContext serverContext;
@@ -89,6 +74,15 @@ public class FailureDetector implements IDetector {
         this.serverContext = serverContext;
     }
 
+    private Map<String, NettyClientRouter> adjustRouters(CorfuRuntime corfuRuntime, Set<String> allServers) {
+        // Set up arrays for routers to the endpoints.
+        Map<String, NettyClientRouter> routers = new HashMap<>();
+        allServers.forEach(server -> {
+            NettyClientRouter router = (NettyClientRouter) corfuRuntime.getRouter(server);
+            routers.put(server, router);
+        });
+        return routers;
+    }
     /**
      * Executes the policy once.
      * Checks for changes in the layout.
@@ -105,23 +99,13 @@ public class FailureDetector implements IDetector {
         // Collect and set all responsive servers in the members array.
         Set<String> allServers = layout.getAllServers();
 
-        Map<String, IClientRouter> routers = adjustRouters(corfuRuntime, allServers);
+        Map<String, NettyClientRouter> routers = adjustRouters(corfuRuntime, allServers);
 
         // Perform polling of all responsive servers.
-        return pollRoundExpBackoff(
+        return pollRound(
                 layout.getEpoch(), layout.getClusterId(), allServers, routers, sequencerMetrics,
                 ImmutableList.copyOf(layout.getUnresponsiveServers()),
                 fileSystemStats);
-    }
-
-    private Map<String, IClientRouter> adjustRouters(CorfuRuntime corfuRuntime, Set<String> allServers) {
-        // Set up arrays for routers to the endpoints.
-        Map<String, IClientRouter> routers = new HashMap<>();
-        allServers.forEach(server -> {
-            IClientRouter router = corfuRuntime.getRouter(server);
-            routers.put(server, router);
-        });
-        return routers;
     }
 
     private PollReport aggregatePollReports(long epoch, List<PollReport> reports,
@@ -158,57 +142,63 @@ public class FailureDetector implements IDetector {
                 .build();
     }
 
-    PollReport pollRoundExpBackoff(long epoch, UUID clusterID, Set<String> allServers, Map<String, IClientRouter> router,
-                                   SequencerMetrics sequencerMetrics, ImmutableList<String> layoutUnresponsiveNodes,
-                                   FileSystemStats fileSystemStats) {
+    static void adjustMaxRouterTimeout(Map<String, NettyClientRouter> routers) {
+        routers.keySet().forEach(endpoint -> routers.computeIfPresent(endpoint, (e, router) -> {
+            long currentConnectionTimeout = router.getTimeoutConnect();
+            long currentResponseTimeout = router.getTimeoutResponse();
+            long overallRouterTimeout = currentConnectionTimeout + currentResponseTimeout;
+            long maxSleepBetweenPolls = MAX_SLEEP_BETWEEN_RETRIES.toMillis();
+            long proposedResponseTimeout = currentResponseTimeout;
+            if (maxSleepBetweenPolls < overallRouterTimeout) {
+                proposedResponseTimeout = maxSleepBetweenPolls - currentConnectionTimeout;
+                Preconditions.checkArgument(proposedResponseTimeout > 0,
+                        "Poll response timeout must be positive");
+                router.setTimeoutResponse(proposedResponseTimeout);
+            }
 
-        final PollConfig pollConfig = this.pollConfig.orElseGet(() -> PollConfig.builder().build());
-        Consumer<MixedBoundRetry> retrySettings = settings -> {
-            settings.setOverallMaxRetryDuration(pollConfig.getMaxDetectionDuration());
-            settings.setMaxRetryDuration(pollConfig.getMaxSleepBetweenRetries());
-            settings.setBaseDuration(pollConfig.getInitSleepBetweenRetries());
-            settings.setRandomPart(pollConfig.getJitterFactor());
-        };
+            log.debug("Poll round connection timeout: {}, response timeout: {}", currentConnectionTimeout,
+                    proposedResponseTimeout);
+            return router;
+        }));
+    }
+
+    PollReport pollRound(long epoch, UUID clusterID, Set<String> allServers, Map<String, NettyClientRouter> router,
+                         SequencerMetrics sequencerMetrics, ImmutableList<String> layoutUnresponsiveNodes,
+                         FileSystemStats fileSystemStats) {
+        adjustMaxRouterTimeout(router);
         List<PollReport> reports = new ArrayList<>();
-        try {
-            return IRetry.build(MixedBoundRetry.class, () -> {
+        for (int i = 0; i < MAX_POLL_ROUNDS; i++) {
+            try {
                 PollReport currReport = pollIteration(
                         allServers, router, epoch, clusterID, sequencerMetrics, layoutUnresponsiveNodes, fileSystemStats
                 );
                 reports.add(currReport);
-                // Finish the poll round if we've reached the desired number of reports or when
-                // the current cluster state is not ready.
-                // Cluster state is not ready unless the overall cluster view is updated.
-                // The resulting report will not be used in the failure detection anyway.
-                // Cut this round short and continue on the next FD iteration.
+
                 if (!currReport.getClusterState().isReady()) {
                     log.trace("Cluster state is not ready. Skipping iterations.");
                     throw new IllegalStateException();
                 }
-                if (reports.size() == pollConfig.getMaxPollRounds()) {
-                    log.trace("Aggregating all {} collected reports.", reports.size());
-                    return aggregatePollReports(epoch, reports, layoutUnresponsiveNodes);
-                }
-                // There are failed nodes. Increase the sleep interval.
-                if (!currReport.getFailedNodes().isEmpty()) {
-                    throw new MixedBoundRetry.BackoffRetryNeededException();
-                } else {
-                    throw new RetryNeededException();
-                }
-            }).setOptions(retrySettings).run();
-        } catch (IllegalStateException is) {
-            log.warn("Iterations skipped due to incomplete cluster state. " +
-                    "Returning last not ready report.");
-            return Iterables.getLast(reports);
-        } catch (RetryExhaustedException ree) {
-            log.info("Overall retry duration exceeded: {}. Aggregating poll reports.",
-                    pollConfig.getMaxDetectionDuration());
-            return aggregatePollReports(epoch, reports, layoutUnresponsiveNodes);
-        } catch (InterruptedException ie) {
-            log.error("Interrupted exception occurred.");
-            throw new UnrecoverableCorfuInterruptedError(ie);
+                long pollIterationTook = currReport.getElapsedTime().toMillis();
+                log.debug("Poll iteration {} took {} millis.", i, pollIterationTook);
+
+                final long waitBetweenRetries =
+                        Math.max(MAX_SLEEP_BETWEEN_RETRIES.toMillis() - pollIterationTook, 0);
+
+                TimeUnit.MILLISECONDS.sleep(waitBetweenRetries);
+
+            }catch (InterruptedException ie) {
+                log.error("Interrupted exception occurred.");
+                throw new UnrecoverableCorfuInterruptedError(ie);
+            }catch (IllegalStateException is) {
+                log.warn("Iterations skipped due to incomplete cluster state. " +
+                        "Returning last not ready report.");
+                return Iterables.getLast(reports);
+            }
+
         }
+        return aggregatePollReports(epoch, reports, layoutUnresponsiveNodes);
     }
+
 
 
     /**
@@ -231,13 +221,13 @@ public class FailureDetector implements IDetector {
      * @return a poll report
      */
     private PollReport pollIteration(
-            Set<String> allServers, Map<String, IClientRouter> clientRouters, long epoch, UUID clusterID,
+            Set<String> allServers, Map<String, NettyClientRouter> clientRouters, long epoch, UUID clusterID,
             SequencerMetrics sequencerMetrics, ImmutableList<String> layoutUnresponsiveNodes,
             FileSystemStats fileSystemStats) {
 
         log.trace("Poll iteration. Epoch: {}", epoch);
 
-        long start = System.currentTimeMillis();
+        long start = System.nanoTime();
 
         ClusterStateCollector clusterCollector = ClusterStateCollector.builder()
                 .localEndpoint(serverContext.getLocalEndpoint())
@@ -249,7 +239,7 @@ public class FailureDetector implements IDetector {
         ClusterState clusterState = clusterCollector
                 .collectClusterState(layoutUnresponsiveNodes, sequencerMetrics);
 
-        Duration elapsedTime = Duration.ofMillis(System.currentTimeMillis() - start);
+        Duration elapsedTime = Duration.ofNanos(System.nanoTime() - start);
 
         return PollReport.builder()
                 .pollEpoch(epoch)
@@ -271,7 +261,7 @@ public class FailureDetector implements IDetector {
      * @return Map of Completable futures for the pings.
      */
     private Map<String, CompletableFuture<NodeState>> pollAsync(
-            Set<String> allServers, Map<String, IClientRouter> clientRouters, long epoch, UUID clusterId) {
+            Set<String> allServers, Map<String, NettyClientRouter> clientRouters, long epoch, UUID clusterId) {
         // Poll servers for health.  All ping activity will happen in the background.
         Map<String, CompletableFuture<NodeState>> clusterState = new HashMap<>();
         allServers.forEach(s -> {
@@ -299,21 +289,6 @@ public class FailureDetector implements IDetector {
         }
 
         return clusterState;
-    }
-
-    @Builder(toBuilder = true)
-    @Getter
-    public static class PollConfig {
-        @Default
-        private final int maxPollRounds = MAX_POLL_ROUNDS;
-        @Default
-        private final Duration maxDetectionDuration = MAX_DETECTION_DURATION;
-        @Default
-        private final Duration maxSleepBetweenRetries = MAX_SLEEP_BETWEEN_RETRIES;
-        @Default
-        private final Duration initSleepBetweenRetries = INIT_SLEEP_BETWEEN_RETRIES;
-        @Default
-        private final float jitterFactor = JITTER_FACTOR;
     }
 
 }
