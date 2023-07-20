@@ -73,6 +73,8 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
                 SNAPSHOT_SYNC_QUEUE_NAME_SENDER);
         snapshotSyncQueueId = CorfuRuntime.getStreamID(snapshotSyncQueueFullyQualifiedName);
 
+        lastReadTimestamp = snapshotTimestamp;
+
         dataPoller = Executors.newSingleThreadExecutor(new ThreadFactoryBuilder().setNameFormat("snapshot-sync-data" +
             "-poller-" + session.hashCode()).build());
 
@@ -124,7 +126,6 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
     public void reset(long ts) {
         streams = replicationContext.getConfig(session).getStreamsToReplicate();
         snapshotTimestamp = ts;
-        lastReadTimestamp = snapshotTimestamp;
     }
 
     /**
