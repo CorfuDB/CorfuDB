@@ -24,23 +24,14 @@ import org.corfudb.runtime.view.stream.OpaqueStream;
 import org.corfudb.util.retry.ExponentialBackoffRetry;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.RetryNeededException;
-import java.lang.reflect.InvocationTargetException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.UUID;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
-import static org.corfudb.runtime.LogReplicationUtils.SNAP_SYNC_START_END_Q_NAME;
-import static org.corfudb.runtime.LogReplicationUtils.SNAPSHOT_SYNC_QUEUE_NAME_SENDER;
+import java.lang.reflect.InvocationTargetException;
+import java.util.*;
+import java.util.concurrent.*;
+
 import static org.corfudb.infrastructure.logreplication.config.LogReplicationConfig.DEFAULT_MAX_DATA_MSG_SIZE;
+import static org.corfudb.runtime.LogReplicationUtils.SNAPSHOT_SYNC_QUEUE_NAME_SENDER;
+import static org.corfudb.runtime.LogReplicationUtils.SNAP_SYNC_START_END_Q_NAME;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 /**
@@ -109,7 +100,7 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
     // log tail
     private void buildOpaqueStreamIterator() {
         OpaqueStream opaqueStream =
-                new OpaqueStream(rt.getStreamsView().get(CorfuRuntime.getStreamID(streamTagFollowed)));
+                new OpaqueStream(rt.getStreamsView().get(TableRegistry.getStreamIdForStreamTag(CORFU_SYSTEM_NAMESPACE, streamTagFollowed)));
 
         // Seek till the last read timestamp so that duplicate entries are eliminated.
         opaqueStream.seek(lastReadTimestamp + 1);
@@ -174,6 +165,7 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
             throw new RuntimeException("Timed out waiting for data or end marker for Snapshot Sync");
         } catch (Exception e) {
             // Handle all other types of exceptions
+            log.error("Caught exception in WaitForData ", e);
         }
     }
 
@@ -182,7 +174,7 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
         if (!opaqueEntry.getEntries().keySet().contains(endMarkerStreamId)) {
             return false;
         }
-
+        log.info("isEndMarker is called from next of snapshot reader");
         // There should be a single SMR update for the end marker
         Preconditions.checkState(opaqueEntry.getEntries().get(endMarkerStreamId).size() == 1);
         SMREntry smrEntry = opaqueEntry.getEntries().get(endMarkerStreamId).get(0);
@@ -202,7 +194,7 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
     }
 
     private void processStartMarker(OpaqueEntry opaqueEntry) {
-
+        log.info("start is called from next of snapshot reader");
         // If waiting for a start marker and the first entry does not contain a start marker, throw an exception
         if (!opaqueEntry.getEntries().keySet().contains(endMarkerStreamId)) {
             throw new IllegalStateException("Waiting for a Start Marker but None Was Found");
@@ -238,6 +230,7 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
     protected SMREntryList next(OpaqueStreamIterator stream) {
         List<SMREntry> smrList = new ArrayList<>();
         int currentMsgSize = 0;
+        log.info("Enter next of Snapshot reader");
 
         try {
             while (currentMsgSize < maxDataSizePerMsg) {
@@ -297,7 +290,7 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
             throw e;
         }
 
-        log.trace("CurrentMsgSize {}  maxDataSizePerMsg {}", currentMsgSize, maxDataSizePerMsg);
+        log.info("CurrentMsgSize {}  maxDataSizePerMsg {}", currentMsgSize, maxDataSizePerMsg);
         return new SMREntryList(currentMsgSize, smrList);
     }
 
