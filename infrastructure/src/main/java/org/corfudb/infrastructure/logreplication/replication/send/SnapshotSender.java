@@ -22,6 +22,7 @@ import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.Address;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -129,6 +130,7 @@ public class SnapshotSender {
                     break;
                 } catch (Exception e) {
                     log.error("Caught exception during snapshot sync", e);
+                    log.error("Print stacktrace from thread {}", Arrays.toString(Thread.currentThread().getStackTrace()));
                     snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.UNKNOWN);
                     cancel = true;
                     break;
