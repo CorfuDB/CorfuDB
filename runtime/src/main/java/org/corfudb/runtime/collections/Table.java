@@ -379,6 +379,22 @@ public class Table<K extends Message, V extends Message, M extends Message> impl
     }
 
     /**
+     * Deletes a record without materializing the table's contents
+     *
+     * @param key - key of the record to delete
+     * @param streamTags  - stream tags associated to the given stream id
+     * @param corfuStore CorfuStore that gets the runtime for the serializer.
+     * @throws IllegalArgumentException if some property of the specified
+     *                                  element prevents it from being added to the queue.
+     */
+    public void logUpdateDelete(K key, List<UUID> streamTags, CorfuStore corfuStore) {
+        Object[] smrArgs = new Object[]{key};
+        TransactionalContext.getCurrentContext().logUpdate(this.getStreamUUID(), new SMREntry("remove", smrArgs,
+                        corfuStore.getRuntime().getSerializers().getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE)),
+                streamTags);
+    }
+
+    /**
      * Returns a List of CorfuQueueRecords sorted by the order in which the enqueue materialized.
      * This is the primary method of consumption of entries enqueued into CorfuQueue.
      *
@@ -438,7 +454,7 @@ public class Table<K extends Message, V extends Message, M extends Message> impl
             return String.format("%s | %s =>%s", recordId, txSequence, entry);
         }
 
-        CorfuQueueRecord(Queue.CorfuGuidMsg entryId, Queue.CorfuQueueMetadataMsg txSequence, Message entry) {
+        public CorfuQueueRecord(Queue.CorfuGuidMsg entryId, Queue.CorfuQueueMetadataMsg txSequence, Message entry) {
             this.recordId = entryId;
             this.txSequence = txSequence;
             this.entry = entry;
