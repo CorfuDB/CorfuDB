@@ -473,6 +473,24 @@ public class TxnContext implements AutoCloseable {
         return ret;
     }
 
+    /**
+     * This API is used to delete a record without materializing in-memory
+     *
+     * @param table  Table object to operate on the queue.
+     * @param key - key of the record to be deleted
+     * @param streamTags  - stream tags associated to the given stream id
+     * @param corfuStore CorfuStore that gets the runtime for the serializer.
+     * @param <K>    Type of Key.
+     * @param <V>    Type of Value.
+     * @param <M>    Type of Metadata.
+     */
+    public <K extends Message, V extends Message, M extends Message>
+    void logUpdateDelete(@Nonnull Table<K, V, M> table,
+                         @Nonnull final K key, List<UUID> streamTags, CorfuStore corfuStore) {
+        table.logUpdateDelete(key, streamTags, corfuStore);
+        tablesUpdated.putIfAbsent(table.getStreamUUID(), table);
+    }
+
     // *************************** READ API *****************************************
 
     /**
