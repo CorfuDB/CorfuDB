@@ -5,6 +5,7 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.google.protobuf.Message;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.infrastructure.logreplication.replication.send.IllegalSnapshotEntrySizeException;
@@ -18,19 +19,25 @@ import org.corfudb.runtime.Queue;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.TableOptions;
+import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.runtime.view.stream.OpaqueStream;
 import org.corfudb.util.retry.ExponentialBackoffRetry;
 import org.corfudb.util.retry.IRetry;
+import org.corfudb.util.retry.IntervalRetry;
 import org.corfudb.util.retry.RetryNeededException;
 
 import java.lang.reflect.InvocationTargetException;
+import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.*;
 
 import static org.corfudb.infrastructure.logreplication.config.LogReplicationConfig.DEFAULT_MAX_DATA_MSG_SIZE;
+import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.REPLICATION_EVENT_TABLE_NAME;
 import static org.corfudb.runtime.LogReplicationUtils.SNAPSHOT_SYNC_QUEUE_NAME_SENDER;
 import static org.corfudb.runtime.LogReplicationUtils.SNAP_SYNC_START_END_Q_NAME;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
@@ -42,6 +49,9 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
 
     private static final long DATA_WAIT_TIMEOUT_MS = 120000;
+
+    @Getter
+    private final CorfuStore corfuStore;
 
     // UUID of the global queue which contains snapshot sync data
     private UUID snapshotSyncQueueId;
@@ -85,10 +95,15 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
 
         // Open the marker table so that its entries can be deserialized
         try {
-            CorfuStore corfuStore = new CorfuStore(replicationContext.getConfigManager().getRuntime());
+            this.corfuStore = new CorfuStore(replicationContext.getConfigManager().getRuntime());
             corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, SNAP_SYNC_START_END_Q_NAME,
                 Queue.RoutingQSnapStartEndKeyMsg.class, Queue.RoutingQSnapStartEndMarkerMsg.class, null,
                 TableOptions.fromProtoSchema(Queue.RoutingTableEntryMsg.class));
+            corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, REPLICATION_EVENT_TABLE_NAME,
+                    LogReplication.ReplicationEventInfoKey.class,
+                    LogReplication.ReplicationEvent.class,
+                    null,
+                    TableOptions.fromProtoSchema(LogReplication.ReplicationStatus.class));
         } catch (IllegalAccessException | InvocationTargetException | NoSuchMethodException e) {
             log.error("Failed to open the End Marker table", e);
             throw new RuntimeException(e);
@@ -168,6 +183,38 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
             messages.add(msg);
         }
         return new SnapshotReadMessage(messages, endMarkerReached);
+    }
+
+    public void requestClientForSnapshotData(UUID snapshotRequestId) {
+        log.info("RQSnapReader asking sender for full sync data session={}, sync_id={}", session, snapshotRequestId);
+
+        // Write a force sync event to the logReplicationEventTable
+        LogReplication.ReplicationEventInfoKey key = LogReplication.ReplicationEventInfoKey.newBuilder()
+                .setSession(session)
+                .build();
+
+        LogReplication.ReplicationEvent event = LogReplication.ReplicationEvent.newBuilder()
+                .setEventId(snapshotRequestId.toString())
+                .setType(LogReplication.ReplicationEvent.ReplicationEventType.SERVER_REQUESTED_SNAPSHOT_SYNC)
+                .setEventTimestamp(com.google.protobuf.Timestamp.newBuilder().setSeconds(Instant.now().getEpochSecond()).build())
+                .build();
+
+        try {
+            IRetry.build(IntervalRetry.class, () -> {
+                try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+                    txn.putRecord(txn.getTable(REPLICATION_EVENT_TABLE_NAME), key, event, null);
+                    txn.commit();
+                } catch (TransactionAbortedException tae) {
+                    log.warn("TXAbort while adding enforce snapshot sync event, retrying", tae);
+                    throw new RetryNeededException();
+                }
+                log.debug("Added enforce snapshot sync event to the logReplicationEventTable for session={}", session);
+                return null;
+            }).run();
+        } catch (InterruptedException e) {
+            log.error("Unrecoverable exception while adding enforce snapshot sync event", e);
+            throw new UnrecoverableCorfuInterruptedError(e);
+        }
     }
 
     // Waits for a default timeout period for data to get written for this destination on the Snapshot Sync queue
