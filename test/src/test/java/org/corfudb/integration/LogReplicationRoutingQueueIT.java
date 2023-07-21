@@ -94,12 +94,15 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
             generateData(clientCorfuStore, queueSenderClient);
 
             int sinkQueueSize = replicatedQueueSink.count();
-            while (sinkQueueSize != 10) {
+            while (sinkQueueSize != 15) {
                 Thread.sleep(5000);
                 sinkQueueSize = replicatedQueueSink.count();
                 log.info("Sink replicated queue size: {}", sinkQueueSize);
             }
+
+            log.info("Expected num entries on the Sink Received");
             assertThat(listener.logEntryMsgCnt).isEqualTo(10);
+            assertThat(listener.snapSyncMsgCnt).isEqualTo(5);
             log.info("Sink replicated queue size: {}", listener.snapSyncMsgCnt);
         } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
             throw new RuntimeException(e);
