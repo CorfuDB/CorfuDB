@@ -183,7 +183,7 @@ public class FailureDetector implements IDetector {
                 log.debug("Poll iteration {} took {} millis.", i, pollIterationTook);
 
                 final long waitBetweenRetries =
-                        Math.max(MAX_SLEEP_BETWEEN_RETRIES.toMillis() - pollIterationTook, 0);
+                        Math.max(pollConfig.sleepBetweenPolls.toMillis() - pollIterationTook, 0);
 
                 TimeUnit.MILLISECONDS.sleep(waitBetweenRetries);
 
