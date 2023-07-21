@@ -371,18 +371,13 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
      */
     void setAggressiveDetectorTimeouts(int... managementServersPorts) {
         Arrays.stream(managementServersPorts).forEach(port -> {
-            FailureDetector.PollConfig config = FailureDetector.PollConfig
-                    .builder()
-                    .maxDetectionDuration(PARAMETERS.TIMEOUT_SHORT)
-                    .maxSleepBetweenRetries(PARAMETERS.TIMEOUT_SHORT)
-                    .initSleepBetweenRetries(PARAMETERS.TIMEOUT_SHORT)
-                    .jitterFactor(0)
-                    .build();
+            final int retries = 3;
+            FailureDetector.PollConfig config = new FailureDetector.PollConfig(retries, PARAMETERS.TIMEOUT_SHORT);
             FailureDetector failureDetector = getManagementServer(port)
                     .getManagementAgent()
                     .getRemoteMonitoringService()
                     .getFailureDetector();
-            failureDetector.setPollConfig(Optional.of(config));
+            failureDetector.setPollConfig(config);
         });
     }
 

@@ -1,56 +1,74 @@
 package org.corfudb.infrastructure.management;
 
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableSet;
-import org.corfudb.infrastructure.ServerContext;
-import org.corfudb.protocols.wireprotocol.SequencerMetrics;
-import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats;
-import org.corfudb.runtime.clients.IClientRouter;
+import com.google.common.collect.ImmutableMap;
+import org.assertj.core.api.Assertions;
+import org.corfudb.runtime.clients.NettyClientRouter;
 import org.junit.Test;
-import org.mockito.Mockito;
 
-import java.time.Duration;
-import java.util.HashMap;
 import java.util.Map;
-import java.util.UUID;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.corfudb.infrastructure.NodeNames.A;
-import static org.corfudb.infrastructure.NodeNames.B;
-import static org.corfudb.infrastructure.NodeNames.C;
-import java.util.Optional;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.mock;
 
 public class FailureDetectorTest {
 
+    NettyClientRouter getTestRouter(long rpcTimeout, long connectionTimeout) {
+          NettyClientRouter nettyClientRouter = mock(NettyClientRouter.class);
+          doReturn(rpcTimeout).when(nettyClientRouter).getTimeoutResponse();
+          doReturn(connectionTimeout).when(nettyClientRouter).getTimeoutConnect();
+          return nettyClientRouter;
+
+    }
+
+    void assertRouterTimeouts(long maxSleepBetweenPolls, Map<String, NettyClientRouter> routers,
+                              Map<String, Long> responseTimeouts, String endpoint) {
+        long newResponseTimeout = responseTimeouts.get(endpoint);
+        NettyClientRouter router =  routers.get(endpoint);
+        Assertions.assertThat(router.getTimeoutConnect() + newResponseTimeout)
+                .isLessThanOrEqualTo(maxSleepBetweenPolls);
+    }
+
     @Test
-    public void testPollRound() {
-        final String localEndpoint = A;
-        FailureDetector.PollConfig config = FailureDetector.PollConfig
-                .builder()
-                .maxPollRounds(10)
-                .maxDetectionDuration(Duration.ofSeconds(1))
-                .maxSleepBetweenRetries(Duration.ofMillis(200))
-                .initSleepBetweenRetries(Duration.ofMillis(100))
-                .jitterFactor(0)
-                .build();
-        ServerContext serverContext = Mockito.mock(ServerContext.class);
-        Mockito.when(serverContext.getLocalEndpoint()).thenReturn(localEndpoint);
-        FailureDetector failureDetector = new FailureDetector(serverContext);
-        failureDetector.setPollConfig(Optional.of(config));
-        long epoch = 1;
-        UUID clusterId = UUID.fromString("00000000-0000-0000-0000-000000000000");
-        ImmutableSet<String> allServers = ImmutableSet.of(A, B, C);
-        Map<String, IClientRouter> routerMap = new HashMap<>();
-        SequencerMetrics metrics = SequencerMetrics.READY;
-        ImmutableList<String> responsiveServers = ImmutableList.of(localEndpoint, B);
-        FileSystemStats fsStats = Mockito.mock(FileSystemStats.class);
-        PollReport report = failureDetector.pollRoundExpBackoff(
-                epoch, clusterId, allServers, routerMap, metrics, responsiveServers, fsStats);
+    public void testRouterTimeouts() {
+        long rpcTimeout = 5000;
+        long connectionTimeout = 500;
+        long maxSleepBetweenPolls = 2000;
+        String server = "localhost";
+        Map<String, NettyClientRouter> routers =
+                ImmutableMap.of(server, getTestRouter(rpcTimeout, connectionTimeout));
+        Map<String, Long> adjustedResponseTimeouts =
+                FailureDetector.getAdjustedResponseTimeouts(routers, maxSleepBetweenPolls);
+        assertRouterTimeouts(maxSleepBetweenPolls, routers, adjustedResponseTimeouts, server);
 
-        Duration time = report.getElapsedTime();
-        assertThat(time).isLessThanOrEqualTo(Duration.ofMillis(1000));
+        rpcTimeout = 5000;
+        connectionTimeout = 500;
+        maxSleepBetweenPolls = 10000;
+        routers = ImmutableMap.of(server, getTestRouter(rpcTimeout, connectionTimeout));
+        adjustedResponseTimeouts = FailureDetector.getAdjustedResponseTimeouts(routers, maxSleepBetweenPolls);
+        assertRouterTimeouts(maxSleepBetweenPolls, routers, adjustedResponseTimeouts, server);
 
-        assertThat(report.getReachableNodes()).isEmpty();
-        assertThat(report.getFailedNodes()).containsExactly(A, B, C);
+        rpcTimeout = 2000;
+        connectionTimeout = 3000;
+        maxSleepBetweenPolls = 4000;
+        routers = ImmutableMap.of(server, getTestRouter(rpcTimeout, connectionTimeout));
+        adjustedResponseTimeouts = FailureDetector.getAdjustedResponseTimeouts(routers, maxSleepBetweenPolls);
+        assertRouterTimeouts(maxSleepBetweenPolls, routers, adjustedResponseTimeouts, server);
+
+        rpcTimeout = 2000;
+        connectionTimeout = 3000;
+        maxSleepBetweenPolls = 10000;
+        routers = ImmutableMap.of(server, getTestRouter(rpcTimeout, connectionTimeout));
+        adjustedResponseTimeouts = FailureDetector.getAdjustedResponseTimeouts(routers, maxSleepBetweenPolls);
+        assertRouterTimeouts(maxSleepBetweenPolls, routers, adjustedResponseTimeouts, server);
+
+        rpcTimeout = 5000;
+        connectionTimeout = 1000;
+        maxSleepBetweenPolls = 900;
+        routers = ImmutableMap.of(server, getTestRouter(rpcTimeout, connectionTimeout));
+        final long maxSleep = maxSleepBetweenPolls;
+        final Map<String, NettyClientRouter> routers2 = routers;
+        Assertions.assertThatThrownBy(() -> FailureDetector.getAdjustedResponseTimeouts(routers2, maxSleep))
+                .isInstanceOf(IllegalArgumentException.class);
+
     }
 }

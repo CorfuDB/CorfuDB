@@ -1,34 +1,28 @@
 package org.corfudb.infrastructure.management;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import io.micrometer.core.instrument.Timer;
-import lombok.Builder;
-import lombok.Builder.Default;
+import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
+import org.corfudb.common.util.Tuple;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
 import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.clients.IClient;
-import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.clients.ManagementClient;
 import org.corfudb.runtime.clients.NettyClientRouter;
-import org.corfudb.runtime.exceptions.RetryExhaustedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.CFUtils;
-import org.corfudb.util.retry.IRetry;
-import org.corfudb.util.retry.RetryNeededException;
 
 import javax.annotation.Nonnull;
 import java.time.Duration;
@@ -41,7 +35,6 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 /**
@@ -70,6 +63,9 @@ public class FailureDetector implements IDetector {
     @NonNull
     private ServerContext serverContext;
 
+    @Setter
+    private PollConfig pollConfig = new PollConfig(MAX_POLL_ROUNDS, MAX_SLEEP_BETWEEN_RETRIES);
+
     public FailureDetector(ServerContext serverContext) {
         this.serverContext = serverContext;
     }
@@ -83,6 +79,7 @@ public class FailureDetector implements IDetector {
         });
         return routers;
     }
+
     /**
      * Executes the policy once.
      * Checks for changes in the layout.
@@ -142,32 +139,36 @@ public class FailureDetector implements IDetector {
                 .build();
     }
 
-    static void adjustMaxRouterTimeout(Map<String, NettyClientRouter> routers) {
-        routers.keySet().forEach(endpoint -> routers.computeIfPresent(endpoint, (e, router) -> {
+    static Map<String, Long> getAdjustedResponseTimeouts(Map<String, NettyClientRouter> routers, long maxSleepBetweenPolls) {
+        return routers.entrySet().stream().map(entry -> {
+            final NettyClientRouter router = entry.getValue();
             long currentConnectionTimeout = router.getTimeoutConnect();
+            Preconditions.checkArgument(maxSleepBetweenPolls > currentConnectionTimeout,
+                    "Max sleep between polls should be greater than connection timeout");
             long currentResponseTimeout = router.getTimeoutResponse();
             long overallRouterTimeout = currentConnectionTimeout + currentResponseTimeout;
-            long maxSleepBetweenPolls = MAX_SLEEP_BETWEEN_RETRIES.toMillis();
             long proposedResponseTimeout = currentResponseTimeout;
             if (maxSleepBetweenPolls < overallRouterTimeout) {
                 proposedResponseTimeout = maxSleepBetweenPolls - currentConnectionTimeout;
-                Preconditions.checkArgument(proposedResponseTimeout > 0,
-                        "Poll response timeout must be positive");
-                router.setTimeoutResponse(proposedResponseTimeout);
             }
-
-            log.debug("Poll round connection timeout: {}, response timeout: {}", currentConnectionTimeout,
-                    proposedResponseTimeout);
-            return router;
-        }));
+            final String endpoint = entry.getKey();
+            log.trace("For {}: connection timeout {}, response timeout {}, sleep between polls {}", endpoint,
+                    currentConnectionTimeout, proposedResponseTimeout, maxSleepBetweenPolls);
+            return Tuple.of(endpoint, proposedResponseTimeout);
+        }).collect(Collectors.toMap(tuple -> tuple.first, tuple -> tuple.second));
     }
+
 
     PollReport pollRound(long epoch, UUID clusterID, Set<String> allServers, Map<String, NettyClientRouter> router,
                          SequencerMetrics sequencerMetrics, ImmutableList<String> layoutUnresponsiveNodes,
                          FileSystemStats fileSystemStats) {
-        adjustMaxRouterTimeout(router);
+        Map<String, Long> timeouts = getAdjustedResponseTimeouts(router, pollConfig.sleepBetweenPolls.toMillis());
+        for (String server : allServers) {
+            final Long adjustedTimeout = timeouts.get(server);
+            router.get(server).setTimeoutResponse(adjustedTimeout);
+        }
         List<PollReport> reports = new ArrayList<>();
-        for (int i = 0; i < MAX_POLL_ROUNDS; i++) {
+        for (int i = 0; i < pollConfig.pollRounds; i++) {
             try {
                 PollReport currReport = pollIteration(
                         allServers, router, epoch, clusterID, sequencerMetrics, layoutUnresponsiveNodes, fileSystemStats
@@ -186,10 +187,10 @@ public class FailureDetector implements IDetector {
 
                 TimeUnit.MILLISECONDS.sleep(waitBetweenRetries);
 
-            }catch (InterruptedException ie) {
+            } catch (InterruptedException ie) {
                 log.error("Interrupted exception occurred.");
                 throw new UnrecoverableCorfuInterruptedError(ie);
-            }catch (IllegalStateException is) {
+            } catch (IllegalStateException is) {
                 log.warn("Iterations skipped due to incomplete cluster state. " +
                         "Returning last not ready report.");
                 return Iterables.getLast(reports);
@@ -198,7 +199,6 @@ public class FailureDetector implements IDetector {
         }
         return aggregatePollReports(epoch, reports, layoutUnresponsiveNodes);
     }
-
 
 
     /**
@@ -289,6 +289,12 @@ public class FailureDetector implements IDetector {
         }
 
         return clusterState;
+    }
+
+    @AllArgsConstructor
+    public static class PollConfig {
+        private final int pollRounds;
+        private final Duration sleepBetweenPolls;
     }
 
 }
