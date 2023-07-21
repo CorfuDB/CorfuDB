@@ -12,6 +12,7 @@ import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
+import org.corfudb.runtime.LiteRoutingQueueListener;
 import org.corfudb.runtime.LogReplicationListener;
 import org.corfudb.runtime.LogReplicationUtils;
 import org.corfudb.runtime.Queue;
@@ -23,6 +24,7 @@ import org.corfudb.util.Utils;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.lang.reflect.InvocationTargetException;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -30,6 +32,9 @@ import java.util.NavigableSet;
 import java.util.Optional;
 import java.util.TreeSet;
 import java.util.UUID;
+
+import static org.corfudb.runtime.LogReplicationUtils.REPLICATED_QUEUE_TAG;
+import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 /**
  * CorfuStore is a protobuf API layer that provides all the features of CorfuDB.
@@ -313,17 +318,6 @@ public class CorfuStore {
     }
 
     /**
-     * TODO: Remove this!
-     * Temporary hack for subscribing simplified version of routing queue listener from trim mark
-     */
-    public void subscribeListenerFromTrimMark(@Nonnull StreamListener streamListener, @Nonnull String namespace,
-                                              @Nonnull String streamTag) {
-        Token token = runtime.getAddressSpaceView().getTrimMark();
-        Timestamp ts = Timestamp.newBuilder().setEpoch(token.getEpoch()).setSequence(token.getSequence()).build();
-        this.subscribeListener(streamListener, namespace, streamTag, getTablesOfInterest(namespace, streamTag), ts);
-    }
-
-    /**
      * Subscribe to transaction updates on specific tables with the streamTag in the namespace.
      * Objects returned will honor transactional boundaries.
      * <p>
@@ -382,6 +376,15 @@ public class CorfuStore {
                                   @Nonnull String streamTag, @Nullable Timestamp timestamp, int bufferSize) {
         List<String> tablesOfInterest = getTablesOfInterest(namespace, streamTag);
         subscribeListener(streamListener, namespace, streamTag, tablesOfInterest, timestamp, bufferSize);
+    }
+
+    /**
+     * Subscribe to the routing queue notifications arriving from a remote cluster.
+     */
+    public void subscribeRoutingQListener(@Nonnull LiteRoutingQueueListener routingQueueListener) {
+        Timestamp ts = routingQueueListener.performFullSync();
+        this.subscribeListener(routingQueueListener, CORFU_SYSTEM_NAMESPACE, REPLICATED_QUEUE_TAG,
+                Arrays.asList(LogReplicationUtils.REPLICATED_QUEUE_NAME), ts);
     }
 
     /**
