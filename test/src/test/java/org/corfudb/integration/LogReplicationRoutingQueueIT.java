@@ -13,8 +13,6 @@ import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.Queue;
 import org.corfudb.runtime.RoutingQueueSenderClient;
 import org.corfudb.runtime.collections.CorfuStore;
-import org.corfudb.runtime.collections.CorfuStreamEntries;
-import org.corfudb.runtime.collections.StreamListenerResumeOrDefault;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
@@ -32,7 +30,6 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.runtime.LogReplicationUtils.LOG_ENTRY_SYNC_QUEUE_TAG_SENDER_PREFIX;
-import static org.corfudb.runtime.LogReplicationUtils.LR_STATUS_STREAM_TAG;
 import static org.corfudb.runtime.LogReplicationUtils.REPLICATED_QUEUE_NAME;
 import static org.corfudb.runtime.LogReplicationUtils.REPLICATED_QUEUE_TAG;
 import static org.corfudb.runtime.LogReplicationUtils.REPLICATION_STATUS_TABLE_NAME;
@@ -72,24 +69,7 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
         // SnapshotProvider implements RoutingQueueSenderClient.LRTransmitterReplicationModule
         SnapshotProvider snapshotProvider = new SnapshotProvider(clientCorfuStore);
         queueSenderClient.startLRSnapshotTransmitter(snapshotProvider); // starts a listener on event table
-        try {
-            clientCorfuStore.openTable(
-                    LogReplicationMetadataManager.NAMESPACE,
-                    REPLICATION_STATUS_TABLE_NAME,
-                    LogReplication.LogReplicationSession.class,
-                    LogReplication.ReplicationStatus.class,
-                    null,
-                    TableOptions.fromProtoSchema(LogReplication.ReplicationStatus.class)
-            );
-        } catch (Exception e) {
-            assertThat(false).isTrue();
-        }
 
-        /** // Experimental replication status table listener
-        StatusTableListener statusTableListener = new StatusTableListener(clientCorfuStore, clientName);
-        clientCorfuStore.subscribeListener(statusTableListener, CORFU_SYSTEM_NAMESPACE, LR_STATUS_STREAM_TAG,
-                Collections.singletonList(REPLICATION_STATUS_TABLE_NAME));
-         */
 
         // Open queue on sink
         try {
@@ -99,8 +79,6 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
                     Queue.RoutingTableEntryMsg.class, TableOptions.builder().schemaOptions(CorfuOptions.SchemaOptions.newBuilder()
                             .addStreamTag(REPLICATED_QUEUE_TAG).build()).build());
 
-            RoutingQueueListener listener = new RoutingQueueListener(sinkCorfuStores.get(0));
-            sinkCorfuStores.get(0).subscribeListenerFromTrimMark(listener, CORFU_SYSTEM_NAMESPACE, REPLICATED_QUEUE_TAG);
 
             // Now request a full sync (uncomment if necessary)
             // queueSenderClient.requestSnapshotSync(UUID.fromString(DefaultClusterConfig.getSourceClusterIds().get(0)),
@@ -112,11 +90,14 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
             }
             generateData(clientCorfuStore, queueSenderClient);
 
-            int sinkQueueSize = replicatedQueueSink.count();
-            while (sinkQueueSize != 15) {
+            RoutingQueueListener listener = new RoutingQueueListener(sinkCorfuStores.get(0));
+            sinkCorfuStores.get(0).subscribeRoutingQListener(listener);
+
+            int numLogEntriesReceived = listener.logEntryMsgCnt;
+            while (numLogEntriesReceived < 10) {
                 Thread.sleep(5000);
-                sinkQueueSize = replicatedQueueSink.count();
-                log.info("Sink replicated queue size: {}", sinkQueueSize);
+                numLogEntriesReceived = listener.logEntryMsgCnt;
+                log.info("Entries got on receiver {}", numLogEntriesReceived);
             }
 
             log.info("Expected num entries on the Sink Received");
@@ -125,28 +106,6 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
             log.info("Sink replicated queue size: {}", listener.snapSyncMsgCnt);
         } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
             throw new RuntimeException(e);
-        }
-    }
-
-    public static class StatusTableListener extends StreamListenerResumeOrDefault {
-        private final String clientName;
-
-        public StatusTableListener(CorfuStore store, String clientName) {
-            super(store, CORFU_SYSTEM_NAMESPACE, LR_STATUS_STREAM_TAG, Collections.singletonList(REPLICATION_STATUS_TABLE_NAME));
-            this.clientName = clientName;
-        }
-
-        @Override
-        public void onNext(CorfuStreamEntries results) {
-            results.getEntries().values().forEach( e -> {
-                LogReplication.LogReplicationSession session = (LogReplication.LogReplicationSession) e.get(0).getKey();
-                LogReplication.ReplicationStatus status = (LogReplication.ReplicationStatus) e.get(0).getPayload();
-                log.info("Replication status table sees this key {} value = {}", session.getSubscriber(),
-                        status.getSourceStatus().getReplicationInfo());
-
-            });
-
-
         }
     }
 
@@ -206,13 +165,7 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
                     log.info("FS Committed at {}", tx.commit());
                 }
             }
-            try (TxnContext tx = corfuStore.txn(someNamespace)) {
-                context.markCompleted();
-                AbstractTransactionalContext txCtx = TransactionalContext.getRootContext();
-                // For debugging end marker stream id "9864efe6-d405-3d13-a45d-b0a61c2d5097"
-                txCtx.getWriteSetInfo();
-                log.info("FS end Committed at {}", tx.commit());
-            }
+            context.markCompleted();
             isSnapshotSent = true;
         }
 
@@ -238,29 +191,31 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
     }
 
     static class RoutingQueueListener extends LiteRoutingQueueListener {
-        public int logEntryMsgCnt;
-        public int snapSyncMsgCnt;
-        public int snapEndMark;
+        public volatile int logEntryMsgCnt = 0;
+        public volatile int snapSyncMsgCnt = 0;
 
         public RoutingQueueListener(CorfuStore corfuStore) {
-            super(corfuStore);
-            logEntryMsgCnt = 0;
-            snapSyncMsgCnt = 0;
-            snapEndMark = 0;
+            super(corfuStore); // performFullSync is called here
         }
 
         @Override
         protected boolean processUpdatesInSnapshotSync(List<Queue.RoutingTableEntryMsg> updates) {
-            snapSyncMsgCnt++;
-            log.info("LitQListener:fullSyncMsg got {} updates {}", updates.size(), updates.get(0));
+            log.info("LiteRoutingQueueListener::SnapshotSync:: got {} updates", updates.size());
+            snapSyncMsgCnt += updates.size();
+
+            updates.forEach(u -> {
+                log.info("LitQListener:fullSyncMsg update {}", u);
+            });
             return true;
         }
 
         @Override
         protected boolean processUpdatesInLogEntrySync(List<Queue.RoutingTableEntryMsg> updates) {
-            log.info("LiteRoutingQueueListener::processUpdatesInLogEntrySync:: got {}. {}", updates.size(),
-                    updates.get(0));
-            logEntryMsgCnt++;
+            log.info("LiteRoutingQueueListener::processUpdatesInLogEntrySync:: got {} updates", updates.size());
+            logEntryMsgCnt += updates.size();
+            updates.forEach(u -> {
+                log.info("LitQListener:logEntrySync update {}", u);
+            });
             return true;
         }
     }
