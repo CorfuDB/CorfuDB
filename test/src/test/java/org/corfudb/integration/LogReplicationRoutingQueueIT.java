@@ -13,6 +13,8 @@ import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.Queue;
 import org.corfudb.runtime.RoutingQueueSenderClient;
 import org.corfudb.runtime.collections.CorfuStore;
+import org.corfudb.runtime.collections.CorfuStreamEntries;
+import org.corfudb.runtime.collections.StreamListenerResumeOrDefault;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
@@ -32,6 +34,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.runtime.LogReplicationUtils.LOG_ENTRY_SYNC_QUEUE_NAME_SENDER;
 import static org.corfudb.runtime.LogReplicationUtils.LOG_ENTRY_SYNC_QUEUE_TAG_SENDER_PREFIX;
+import static org.corfudb.runtime.LogReplicationUtils.LR_STATUS_STREAM_TAG;
 import static org.corfudb.runtime.LogReplicationUtils.REPLICATED_QUEUE_NAME;
 import static org.corfudb.runtime.LogReplicationUtils.REPLICATED_QUEUE_TAG;
 import static org.corfudb.runtime.LogReplicationUtils.REPLICATION_STATUS_TABLE_NAME;
@@ -70,7 +73,24 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
         // SnapshotProvider implements RoutingQueueSenderClient.LRTransmitterReplicationModule
         SnapshotProvider snapshotProvider = new SnapshotProvider(clientCorfuStore);
         queueSenderClient.startLRSnapshotTransmitter(snapshotProvider); // starts a listener on event table
+        try {
+            clientCorfuStore.openTable(
+                    LogReplicationMetadataManager.NAMESPACE,
+                    REPLICATION_STATUS_TABLE_NAME,
+                    LogReplication.LogReplicationSession.class,
+                    LogReplication.ReplicationStatus.class,
+                    null,
+                    TableOptions.fromProtoSchema(LogReplication.ReplicationStatus.class)
+            );
+        } catch (Exception e) {
+            assertThat(false).isTrue();
+        }
 
+        /** // Experimental replication status table listener
+        StatusTableListener statusTableListener = new StatusTableListener(clientCorfuStore, clientName);
+        clientCorfuStore.subscribeListener(statusTableListener, CORFU_SYSTEM_NAMESPACE, LR_STATUS_STREAM_TAG,
+                Collections.singletonList(REPLICATION_STATUS_TABLE_NAME));
+         */
 
         // Open queue on sink
         try {
@@ -106,6 +126,28 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
             log.info("Sink replicated queue size: {}", listener.snapSyncMsgCnt);
         } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
             throw new RuntimeException(e);
+        }
+    }
+
+    public static class StatusTableListener extends StreamListenerResumeOrDefault {
+        private final String clientName;
+
+        public StatusTableListener(CorfuStore store, String clientName) {
+            super(store, CORFU_SYSTEM_NAMESPACE, LR_STATUS_STREAM_TAG, Collections.singletonList(REPLICATION_STATUS_TABLE_NAME));
+            this.clientName = clientName;
+        }
+
+        @Override
+        public void onNext(CorfuStreamEntries results) {
+            results.getEntries().values().forEach( e -> {
+                LogReplication.LogReplicationSession session = (LogReplication.LogReplicationSession) e.get(0).getKey();
+                LogReplication.ReplicationStatus status = (LogReplication.ReplicationStatus) e.get(0).getPayload();
+                log.info("Replication status table sees this key {} value = {}", session.getSubscriber(),
+                        status.getSourceStatus().getReplicationInfo());
+
+            });
+
+
         }
     }
 
