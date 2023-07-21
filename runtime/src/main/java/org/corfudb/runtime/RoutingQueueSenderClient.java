@@ -59,7 +59,6 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
     private Table<Queue.CorfuGuidMsg, RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg> logEntryQ;
     private Table<Queue.CorfuGuidMsg, RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg> snapSyncQ;
     private Table<Queue.RoutingQSnapStartEndKeyMsg, Queue.RoutingQSnapStartEndMarkerMsg, Message> snapStartEndTable;
-    private Table<LogReplication.LogReplicationSession, LogReplication.ReplicationStatus, Message> replicationStatusTable;
     private Table<LogReplication.ReplicationEventInfoKey, LogReplication.ReplicationEvent, Message> replicationEventTable;
 
     private FullSyncRequestor fullSyncRequestor;
@@ -106,16 +105,11 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
 
         while ((numOpenQueueRetries--) > 0) {
             try {
-                replicationStatusTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, REPLICATION_STATUS_TABLE_NAME,
-                    LogReplication.LogReplicationSession.class,
-                    LogReplication.ReplicationStatus.class,
-                    null,
-                    TableOptions.fromProtoSchema(LogReplication.ReplicationStatus.class));
                 replicationEventTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, REPLICATION_EVENT_TABLE_NAME,
-                        LogReplication.ReplicationEventInfoKey.class,
-                        LogReplication.ReplicationEvent.class,
-                        null,
-                        TableOptions.fromProtoSchema(LogReplication.ReplicationStatus.class));
+                    LogReplication.ReplicationEventInfoKey.class,
+                    LogReplication.ReplicationEvent.class,
+                    null,
+                    TableOptions.fromProtoSchema(LogReplication.ReplicationEvent.class));
                 break;
             } catch (InvocationTargetException | IllegalArgumentException e) {
                 log.error("Failed to open the Event Table", e);
@@ -134,10 +128,10 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
     public void startLRSnapshotTransmitter(LRTransmitterReplicationModule snapSyncProvider) {
         this.fullSyncRequestor = new FullSyncRequestor(
             corfuStore, snapSyncProvider, CORFU_SYSTEM_NAMESPACE,
-            LR_STATUS_STREAM_TAG, Collections.singletonList(REPLICATION_STATUS_TABLE_NAME));
+            LR_STREAM_TAG, Collections.singletonList(REPLICATION_EVENT_TABLE_NAME));
 
         corfuStore.subscribeListener(fullSyncRequestor, CORFU_SYSTEM_NAMESPACE,
-            LR_STATUS_STREAM_TAG, Collections.singletonList(REPLICATION_STATUS_TABLE_NAME));
+            LR_STREAM_TAG, Collections.singletonList(REPLICATION_EVENT_TABLE_NAME));
     }
 
     public void stopLRSnapshotTransmitter() {
@@ -156,10 +150,10 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
         void cancel(LRFullStateReplicationContext context);
     }
 
-    public class FullSyncRequestor extends StreamListenerResumeOrDefault {
+    private class FullSyncRequestor extends StreamListenerResumeOrDefault {
 
         private final LRTransmitterReplicationModule snapSyncProvider;
-        private SnapshotSyncDataTransmitter snapshotSyncDataTransmitter;
+
         public FullSyncRequestor(CorfuStore store, LRTransmitterReplicationModule snapSyncProvider,
                                  String namespace, String streamTag, List<String> tablesOfInterest) {
             super(store, namespace, streamTag, tablesOfInterest);
@@ -171,9 +165,8 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
             // TODO: Check for existing events. What if subscription comes later than the event is published.
             log.info("onNext[{}] :: got updates on RoutingQSender for tables {}", results.getTimestamp(),
                 results.getEntries().keySet().stream().map(TableSchema::getTableName).collect(Collectors.toList()));
-            LogReplication.ReplicationStatus replicationStatus = null;
-            LogReplication.LogReplicationSession key = null;
-            boolean triggerFullSync = false;
+            LogReplication.ReplicationEvent fullSyncEvent = null;
+            LogReplication.ReplicationEventInfoKey key = null;
             // Any notification here indicates a full sync request
             for (List<CorfuStreamEntry> entryList : results.getEntries().values()) {
                 for (CorfuStreamEntry entry : entryList) {
@@ -181,43 +174,21 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
                         log.warn("RoutingQEventListener ignoring a CLEAR operation");
                         continue;
                     }
-                    key = (LogReplication.LogReplicationSession) entry.getKey();
-                    replicationStatus = (LogReplication.ReplicationStatus) entry.getPayload();
-                    if (key.getSubscriber().getModel() != ReplicationModel.ROUTING_QUEUES) {
-                        log.info("Ignoring replication status table update for non-routing Q model");
+                    key = (LogReplication.ReplicationEventInfoKey) entry.getKey();
+                    fullSyncEvent = (LogReplication.ReplicationEvent) entry.getPayload();
+                    if (fullSyncEvent.getType() !=
+                            LogReplication.ReplicationEvent.ReplicationEventType.SERVER_REQUESTED_SNAPSHOT_SYNC) {
+                        fullSyncEvent = null;
                         continue;
                     }
-                    if (replicationStatus.getSourceStatus().getReplicationInfo().getSyncType() !=
-                            LogReplication.SyncType.SNAPSHOT ||
-                            replicationStatus.getSourceStatus().getReplicationInfo().getStatus() !=
-                                    LogReplication.SyncStatus.ONGOING) {
-                        log.info("Ignoring non-snapshot sync event: {}, session={}, ts={}",
-                                replicationStatus.getSourceStatus().getReplicationInfo(),
-                                key, replicationStatus.getSourceStatus().getReplicationInfo()
-                                        .getSnapshotSyncInfo().getBaseSnapshot());
-                        continue;
-                    }
-                    if (snapshotSyncDataTransmitter != null &&
-                            replicationStatus.getSourceStatus()
-                                    .getReplicationInfo().getSnapshotSyncInfo().getSnapshotRequestId()
-                                    .equals(snapshotSyncDataTransmitter.requestingEvent
-                                            .getSourceStatus().getReplicationInfo()
-                                            .getSnapshotSyncInfo().getSnapshotRequestId())) {
-                        log.info("Ignoring full sync request for the same request Id");
-                        continue;
-                    }
-                    triggerFullSync = true;
                     log.info("Full Sync requested due to event :: id={}, type={}, session={}, ts={}",
-                        replicationStatus.getSourceStatus()
-                                .getReplicationInfo()
-                                .getSnapshotSyncInfo().getSnapshotRequestId(),
-                            replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getType(),
-                        key, replicationStatus.getSourceStatus().getReplicationInfo()
-                                    .getSnapshotSyncInfo().getBaseSnapshot());
+                        fullSyncEvent.getEventId(), fullSyncEvent.getType(),
+                        key.getSession(), fullSyncEvent.getEventTimestamp());
                 }
             }
-            if (triggerFullSync) {
-                snapshotSyncDataTransmitter = new SnapshotSyncDataTransmitter(replicationStatus, key);
+            if (fullSyncEvent != null) {
+                SnapshotSyncDataTransmitter snapshotSyncDataTransmitter = new SnapshotSyncDataTransmitter(
+                    fullSyncEvent, key);
                 snapSyncProvider.provideFullStateData(snapshotSyncDataTransmitter);
             }
         }
@@ -227,12 +198,12 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
 
         private boolean baseSnapshotSent;
 
-        private final LogReplication.ReplicationStatus requestingEvent;
+        private final LogReplication.ReplicationEvent requestingEvent;
 
-        LogReplication.LogReplicationSession key;
+        LogReplication.ReplicationEventInfoKey key;
 
-        public SnapshotSyncDataTransmitter(LogReplication.ReplicationStatus requestingEvent,
-                                           LogReplication.LogReplicationSession key) {
+        public SnapshotSyncDataTransmitter(LogReplication.ReplicationEvent requestingEvent,
+                                           LogReplication.ReplicationEventInfoKey key) {
             this.requestingEvent = requestingEvent;
             this.baseSnapshotSent = false;
             this.key = key;
@@ -248,22 +219,18 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
 
         @Override
         public String getDestinationSiteId() {
-            return key.getSinkClusterId();
+            return key.getSession().getSinkClusterId();
         }
 
         @Override
         public UUID getRequestId() {
-            return UUID.fromString(requestingEvent
-                    .getSourceStatus()
-                    .getReplicationInfo()
-                    .getSnapshotSyncInfo()
-                    .getSnapshotRequestId());
+            return UUID.fromString(requestingEvent.getEventId());
         }
 
         @Nullable
         @Override
         public LogReplication.ReplicationEvent.ReplicationEventType getReason() {
-            return LogReplication.ReplicationEvent.ReplicationEventType.FORCE_SNAPSHOT_SYNC;
+            return requestingEvent.getType();
         }
 
         @Override
@@ -280,10 +247,10 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
                 .collect(Collectors.toList()), corfuStore);
             if (!baseSnapshotSent) {
                 Queue.RoutingQSnapStartEndKeyMsg keyOfStartMarker = Queue.RoutingQSnapStartEndKeyMsg.newBuilder()
-                    .setSnapshotSyncId(getRequestId().toString()).build();
+                    .setSnapshotSyncId(requestingEvent.getEventId()).build();
                 Queue.RoutingQSnapStartEndMarkerMsg startMarker = Queue.RoutingQSnapStartEndMarkerMsg.newBuilder()
                     .setSnapshotStartTimestamp(getTxn().getTxnSequence()) // This is the base snapshot timestamp
-                    .setDestination(key.getSinkClusterId()).build();
+                    .setDestination(key.getSession().getSinkClusterId()).build();
 
                 CorfuRecord<Queue.RoutingQSnapStartEndMarkerMsg, Message> markerEntry =
                     new CorfuRecord<>(startMarker, null);
@@ -308,10 +275,10 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
         public void markCompleted() throws CancellationException {
             log.info("Got completion marker");
             Queue.RoutingQSnapStartEndKeyMsg keyOfStartMarker = Queue.RoutingQSnapStartEndKeyMsg.newBuilder()
-                .setSnapshotSyncId(getRequestId().toString()).build();
+                .setSnapshotSyncId(requestingEvent.getEventId()).build();
             Queue.RoutingQSnapStartEndMarkerMsg startMarker = Queue.RoutingQSnapStartEndMarkerMsg.newBuilder()
                 .setSnapshotStartTimestamp(0) // Empty snapshot timestamp signifies an end marker
-                .setDestination(key.getSinkClusterId()).build();
+                .setDestination(key.getSession().getSinkClusterId()).build();
 
             CorfuRecord<Queue.RoutingQSnapStartEndMarkerMsg, Message> markerEntry =
                 new CorfuRecord<>(startMarker, null);
@@ -327,7 +294,7 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
                                 new SMREntry("put", smrArgs,
                                         corfuStore.getRuntime().getSerializers().getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE)),
                                 Arrays.asList(TableRegistry.getStreamIdForStreamTag(CORFU_SYSTEM_NAMESPACE,
-                                        SNAPSHOT_SYNC_QUEUE_TAG_SENDER_PREFIX + key.getSinkClusterId()))
+                                        SNAPSHOT_SYNC_QUEUE_TAG_SENDER_PREFIX + key.getSession().getSinkClusterId()))
                         );
                         txnContext.commit();
                     } catch (TransactionAbortedException tae) {
@@ -339,7 +306,6 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
             } catch (InterruptedException e) {
                 log.error("Unrecoverable exception when attempting to insert an END_MARKER", e);
                 throw new UnrecoverableCorfuInterruptedError(e);
-
             }
         }
 
@@ -351,6 +317,7 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
 
         /**
          * Enqueues message to be replicated onto the sender's delta queue.
+         * Caller must set the replication type to LOG_ENTRY_SYNC
          *
          * @param txn     Transaction context in which the operation will be performed
          * @param message RoutingTableEntryMsg
@@ -358,10 +325,7 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
         @Override
         public void transmitDeltaMessage(TxnContext txn, RoutingTableEntryMsg message, CorfuStore corfuStore) throws Exception {
             log.info("Enqueuing message to delta queue, message: {}", message);
-            txn.logUpdateEnqueue(logEntryQ, message
-                    .toBuilder()
-                    .setReplicationType(Queue.ReplicationType.LOG_ENTRY_SYNC)
-                    .build(), message.getDestinationsList().stream()
+            txn.logUpdateEnqueue(logEntryQ, message, message.getDestinationsList().stream()
                 .map(destination -> {
                     UUID streamIdForTag = TableRegistry.getStreamIdForStreamTag(CORFU_SYSTEM_NAMESPACE,
                     LOG_ENTRY_SYNC_QUEUE_TAG_SENDER_PREFIX + destination);

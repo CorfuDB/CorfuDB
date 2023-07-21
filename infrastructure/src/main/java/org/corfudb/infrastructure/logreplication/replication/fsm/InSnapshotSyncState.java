@@ -6,6 +6,7 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.infrastructure.logreplication.replication.send.SnapshotSender;
+import org.corfudb.infrastructure.logreplication.replication.send.logreader.RoutingQueuesSnapshotReader;
 import org.corfudb.runtime.LogReplication.SyncStatus;
 import org.corfudb.runtime.LogReplication.SyncType;
 
@@ -162,7 +163,13 @@ public class InSnapshotSyncState implements LogReplicationState {
             if (from != this) {
                 fsm.getAckReader().setSyncType(SyncType.SNAPSHOT);
                 snapshotSender.reset();
-                fsm.getAckReader().markSnapshotSyncInfoOngoing(forcedSnapshotSync, transitionSyncId);
+
+                if (fsm.getSnapshotReader() instanceof RoutingQueuesSnapshotReader) {
+                    RoutingQueuesSnapshotReader reader = (RoutingQueuesSnapshotReader) fsm.getSnapshotReader();
+                    reader.requestClientForSnapshotData(transitionEventId);
+                }
+
+                fsm.getAckReader().markSnapshotSyncInfoOngoing(forcedSnapshotSync, transitionEventId);
                 snapshotSyncTransferTimerSample = MeterRegistryProvider.getInstance().map(Timer::start);
             }
             transmitFuture = fsm.getLogReplicationFSMWorkers()

@@ -174,6 +174,7 @@ public class LogReplicationFSM {
     /**
      * Snapshot Reader (read data from Corfu Datastore)
      */
+    @Getter
     private final SnapshotReader snapshotReader;
 
     /**
