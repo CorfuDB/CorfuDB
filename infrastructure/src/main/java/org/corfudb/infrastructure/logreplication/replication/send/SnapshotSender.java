@@ -199,6 +199,10 @@ public class SnapshotSender {
 
         // If we are starting a snapshot sync, send a start marker.
         if (startSnapshotSync) {
+            if (fsm.getSession().getSubscriber().getModel() == LogReplication.ReplicationModel.ROUTING_QUEUES) {
+                resetBaseSnapshotTimestamp(logReplicationEntries.get(0).getMetadata().getSnapshotTimestamp());
+            }
+
             dataSenderBufferManager.sendWithBuffering(getSnapshotSyncStartMarker(snapshotSyncEventId));
             startSnapshotSync = false;
             numMessages++;
@@ -242,6 +246,19 @@ public class SnapshotSender {
         return getLrEntryAckMsg(metadata);
     }
 
+    private LogReplicationEntryMsg getSnapshotSyncStartMarker(long timestamp, UUID snapshotSyncEventId) {
+        LogReplication.LogReplicationEntryMetadataMsg metadata = LogReplication.LogReplicationEntryMetadataMsg.newBuilder()
+            .setEntryType(LogReplicationEntryType.SNAPSHOT_START)
+            .setTopologyConfigID(fsm.getTopologyConfigId())
+            .setSyncRequestId(getUuidMsg(snapshotSyncEventId))
+            .setTimestamp(Address.NON_ADDRESS)
+            .setPreviousTimestamp(Address.NON_ADDRESS)
+            .setSnapshotTimestamp(timestamp)
+            .setSnapshotSyncSeqNum(Address.NON_ADDRESS)
+            .build();
+        return getLrEntryAckMsg(metadata);
+    }
+
     private LogReplicationEntryMsg getSnapshotSyncEndMarker(UUID snapshotSyncEventId) {
         LogReplication.LogReplicationEntryMetadataMsg metadata = LogReplication.LogReplicationEntryMetadataMsg.newBuilder()
                 .setEntryType(LogReplicationEntryType.SNAPSHOT_END)
@@ -252,6 +269,19 @@ public class SnapshotSender {
                 .setSnapshotTimestamp(baseSnapshotTimestamp)
                 .setSnapshotSyncSeqNum(Address.NON_ADDRESS)
                 .build();
+        return getLrEntryAckMsg(metadata);
+    }
+
+    private LogReplicationEntryMsg getSnapshotSyncEndMarker(long timestamp, UUID snapshotSyncEventId) {
+        LogReplication.LogReplicationEntryMetadataMsg metadata = LogReplication.LogReplicationEntryMetadataMsg.newBuilder()
+            .setEntryType(LogReplicationEntryType.SNAPSHOT_END)
+            .setTopologyConfigID(fsm.getTopologyConfigId())
+            .setSyncRequestId(getUuidMsg(snapshotSyncEventId))
+            .setTimestamp(Address.NON_ADDRESS)
+            .setPreviousTimestamp(Address.NON_ADDRESS)
+            .setSnapshotTimestamp(timestamp)
+            .setSnapshotSyncSeqNum(Address.NON_ADDRESS)
+            .build();
         return getLrEntryAckMsg(metadata);
     }
 
@@ -299,6 +329,12 @@ public class SnapshotSender {
 
         stopSnapshotSync.set(false);
         startSnapshotSync = true;
+    }
+
+    private void resetBaseSnapshotTimestamp(long timestamp) {
+        baseSnapshotTimestamp = timestamp;
+        fsm.setBaseSnapshot(timestamp);
+        fsm.getAckReader().setBaseSnapshot(timestamp);
     }
 
     /**
