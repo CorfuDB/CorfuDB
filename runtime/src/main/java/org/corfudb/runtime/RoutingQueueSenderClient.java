@@ -319,12 +319,18 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
             Object[] smrArgs = new Object[2];
             smrArgs[0] = keyOfStartMarker;
             smrArgs[1] = markerEntry;
-            getTxn().logUpdate(LogReplicationUtils.lrSnapStartEndQId,
-                new SMREntry("put", smrArgs,
-                    corfuStore.getRuntime().getSerializers().getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE)),
-                Arrays.asList(TableRegistry.getStreamIdForStreamTag(CORFU_SYSTEM_NAMESPACE,
-                    SNAPSHOT_SYNC_QUEUE_TAG_SENDER_PREFIX + key.getSinkClusterId()))
-            );
+
+            try (TxnContext txnContext = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+                txnContext.logUpdate(LogReplicationUtils.lrSnapStartEndQId,
+                    new SMREntry("put", smrArgs,
+                        corfuStore.getRuntime().getSerializers().getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE)),
+                    Arrays.asList(TableRegistry.getStreamIdForStreamTag(CORFU_SYSTEM_NAMESPACE,
+                        SNAPSHOT_SYNC_QUEUE_TAG_SENDER_PREFIX + key.getSinkClusterId()))
+                );
+                txnContext.commit();
+            } catch (Exception e) {
+                log.error("Caught an exception when writing the end marker", e);
+            }
         }
 
         @Override
