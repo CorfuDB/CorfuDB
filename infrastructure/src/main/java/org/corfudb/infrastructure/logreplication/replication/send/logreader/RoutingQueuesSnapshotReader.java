@@ -41,7 +41,7 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 @Slf4j
 public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
 
-    private static final long DATA_WAIT_TIMEOUT_MS = 120000;
+    private static final long DATA_WAIT_TIMEOUT_MS = 1800000;
 
     // UUID of the global queue which contains snapshot sync data
     private UUID snapshotSyncQueueId;
@@ -131,6 +131,8 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
     public void reset(long ts) {
         streams = replicationContext.getConfig(session).getStreamsToReplicate();
         snapshotTimestamp = ts;
+        waitingForStartMarker = true;
+        endMarkerReached = false;
     }
 
     /**
