@@ -24,7 +24,7 @@ def wait_for_compactor_end(port, target_cycle_count):
         status, cycle_count = get_compactor_status(port)
         if cycle_count >= target_cycle_count and status != "STARTED":
             log_info("status: " + status + " cycleCount: " + str(cycle_count))
-            return
+            return status, int(cycle_count)
         else:
             time.sleep(5)
 
@@ -49,8 +49,7 @@ def wait_and_verify_compactor_success(port, target_cycle_count):
     :return:
         True if the compactor cycle completed successfully, else returns False
     """
-    wait_for_compactor_end(port, target_cycle_count)
-    status, cycle_count = get_compactor_status(port)
+    status, cycle_count = wait_for_compactor_end(port, target_cycle_count)
     if status == "COMPLETED":
         log_info("Compaction status for corfu at port: " + str(port) + " is COMPLETED")
         return True
