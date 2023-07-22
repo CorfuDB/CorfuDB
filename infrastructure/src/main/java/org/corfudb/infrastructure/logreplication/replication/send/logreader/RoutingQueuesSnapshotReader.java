@@ -41,7 +41,7 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 @Slf4j
 public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
 
-    private static final long DATA_WAIT_TIMEOUT_MS = 1800000;
+    private static final long DATA_WAIT_TIMEOUT_MS = 120000;
 
     // UUID of the global queue which contains snapshot sync data
     private UUID snapshotSyncQueueId;
@@ -106,6 +106,12 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
         UUID uuidOfStreamTagFollowed = CorfuRuntime.getStreamID(streamOfStreamTag);
 
         OpaqueStream opaqueStream = new OpaqueStream(rt.getStreamsView().get(uuidOfStreamTagFollowed));
+
+        // On first snapshot sync, lastReadTs will be 0. Change it to the latest trim mark
+        long trimMark = rt.getAddressSpaceView().getTrimMark().getSequence();
+        if (lastReadTimestamp == 0 || lastReadTimestamp < trimMark) {
+            lastReadTimestamp = trimMark;
+        }
 
         // Seek till the last read timestamp so that duplicate entries are eliminated.
         opaqueStream.seek(lastReadTimestamp + 1);
