@@ -49,6 +49,7 @@ import static org.corfudb.infrastructure.utils.Crc32c.getChecksum;
 /**
  * Created by maithem on 11/2/16.
  */
+@SuppressWarnings("checkstyle:magicnumber")
 public class StreamLogFilesTest extends AbstractCorfuTest {
 
     private String getDirPath() {
