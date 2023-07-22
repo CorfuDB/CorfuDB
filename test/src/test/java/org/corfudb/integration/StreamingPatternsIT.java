@@ -43,6 +43,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Simple test that inserts data into CorfuStore and tests Streaming.
  */
+@SuppressWarnings("checkstyle:magicnumber")
 @Slf4j
 public class StreamingPatternsIT extends AbstractIT {
 

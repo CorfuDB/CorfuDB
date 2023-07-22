@@ -36,6 +36,7 @@ import java.util.UUID;
 import static org.corfudb.runtime.LogReplicationUtils.SNAP_SYNC_START_END_Q_NAME;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
+@SuppressWarnings("checkstyle:magicnumber")
 @Slf4j
 public class RoutingQueuesSnapshotReaderTest extends AbstractViewTest {
 
