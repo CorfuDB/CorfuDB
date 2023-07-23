@@ -139,6 +139,8 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
         snapshotTimestamp = ts;
         waitingForStartMarker = true;
         endMarkerReached = false;
+        currentStreamInfo = null;
+        lastEntry = null;
     }
 
     /**
