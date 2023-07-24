@@ -358,6 +358,11 @@ public class LogReplicationClientRouter implements IClientRouter {
         this.timeoutResponse = timeoutResponse;
     }
 
+    @Override
+    public long getTimeoutConnect() {
+        throw new UnsupportedOperationException();
+    }
+
 
     // ---------------------------------------------------------------------------
 

@@ -18,8 +18,8 @@ import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
 import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.clients.ManagementClient;
-import org.corfudb.runtime.clients.NettyClientRouter;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.CFUtils;
@@ -70,11 +70,11 @@ public class FailureDetector implements IDetector {
         this.serverContext = serverContext;
     }
 
-    private Map<String, NettyClientRouter> adjustRouters(CorfuRuntime corfuRuntime, Set<String> allServers) {
+    private Map<String, IClientRouter> adjustRouters(CorfuRuntime corfuRuntime, Set<String> allServers) {
         // Set up arrays for routers to the endpoints.
-        Map<String, NettyClientRouter> routers = new HashMap<>();
+        Map<String, IClientRouter> routers = new HashMap<>();
         allServers.forEach(server -> {
-            NettyClientRouter router = (NettyClientRouter) corfuRuntime.getRouter(server);
+            IClientRouter router = corfuRuntime.getRouter(server);
             routers.put(server, router);
         });
         return routers;
@@ -96,7 +96,7 @@ public class FailureDetector implements IDetector {
         // Collect and set all responsive servers in the members array.
         Set<String> allServers = layout.getAllServers();
 
-        Map<String, NettyClientRouter> routers = adjustRouters(corfuRuntime, allServers);
+        Map<String, IClientRouter> routers = adjustRouters(corfuRuntime, allServers);
 
         // Perform polling of all responsive servers.
         return pollRound(
@@ -139,12 +139,13 @@ public class FailureDetector implements IDetector {
                 .build();
     }
 
-    static Map<String, Long> getAdjustedResponseTimeouts(Map<String, NettyClientRouter> routers, long maxSleepBetweenPolls) {
+    static Map<String, Long> getAdjustedResponseTimeouts(Map<String, IClientRouter> routers, long maxSleepBetweenPolls) {
         return routers.entrySet().stream().map(entry -> {
-            final NettyClientRouter router = entry.getValue();
+            final IClientRouter router = entry.getValue();
             long currentConnectionTimeout = router.getTimeoutConnect();
             Preconditions.checkArgument(maxSleepBetweenPolls > currentConnectionTimeout,
-                    "Max sleep between polls should be greater than connection timeout");
+                    "Max sleep between polls:" + maxSleepBetweenPolls +
+                            " should be greater than connection timeout: " + currentConnectionTimeout);
             long currentResponseTimeout = router.getTimeoutResponse();
             long overallRouterTimeout = currentConnectionTimeout + currentResponseTimeout;
             long proposedResponseTimeout = currentResponseTimeout;
@@ -152,14 +153,14 @@ public class FailureDetector implements IDetector {
                 proposedResponseTimeout = maxSleepBetweenPolls - currentConnectionTimeout;
             }
             final String endpoint = entry.getKey();
-            log.trace("For {}: connection timeout {}, response timeout {}, sleep between polls {}", endpoint,
+            log.trace("For {}: connection timeout - {}, response timeout - {}, sleep between polls - {}", endpoint,
                     currentConnectionTimeout, proposedResponseTimeout, maxSleepBetweenPolls);
             return Tuple.of(endpoint, proposedResponseTimeout);
         }).collect(Collectors.toMap(tuple -> tuple.first, tuple -> tuple.second));
     }
 
 
-    PollReport pollRound(long epoch, UUID clusterID, Set<String> allServers, Map<String, NettyClientRouter> router,
+    PollReport pollRound(long epoch, UUID clusterID, Set<String> allServers, Map<String, IClientRouter> router,
                          SequencerMetrics sequencerMetrics, ImmutableList<String> layoutUnresponsiveNodes,
                          FileSystemStats fileSystemStats) {
         Map<String, Long> timeouts = getAdjustedResponseTimeouts(router, pollConfig.sleepBetweenPolls.toMillis());
@@ -221,7 +222,7 @@ public class FailureDetector implements IDetector {
      * @return a poll report
      */
     private PollReport pollIteration(
-            Set<String> allServers, Map<String, NettyClientRouter> clientRouters, long epoch, UUID clusterID,
+            Set<String> allServers, Map<String, IClientRouter> clientRouters, long epoch, UUID clusterID,
             SequencerMetrics sequencerMetrics, ImmutableList<String> layoutUnresponsiveNodes,
             FileSystemStats fileSystemStats) {
 
@@ -261,7 +262,7 @@ public class FailureDetector implements IDetector {
      * @return Map of Completable futures for the pings.
      */
     private Map<String, CompletableFuture<NodeState>> pollAsync(
-            Set<String> allServers, Map<String, NettyClientRouter> clientRouters, long epoch, UUID clusterId) {
+            Set<String> allServers, Map<String, IClientRouter> clientRouters, long epoch, UUID clusterId) {
         // Poll servers for health.  All ping activity will happen in the background.
         Map<String, CompletableFuture<NodeState>> clusterState = new HashMap<>();
         allServers.forEach(s -> {

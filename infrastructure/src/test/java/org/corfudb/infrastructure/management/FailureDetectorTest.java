@@ -2,6 +2,7 @@ package org.corfudb.infrastructure.management;
 
 import com.google.common.collect.ImmutableMap;
 import org.assertj.core.api.Assertions;
+import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.clients.NettyClientRouter;
 import org.junit.Test;
 
@@ -20,10 +21,10 @@ public class FailureDetectorTest {
 
     }
 
-    void assertRouterTimeouts(long maxSleepBetweenPolls, Map<String, NettyClientRouter> routers,
+    void assertRouterTimeouts(long maxSleepBetweenPolls, Map<String, IClientRouter> routers,
                               Map<String, Long> responseTimeouts, String endpoint) {
         long newResponseTimeout = responseTimeouts.get(endpoint);
-        NettyClientRouter router =  routers.get(endpoint);
+        IClientRouter router =  routers.get(endpoint);
         Assertions.assertThat(router.getTimeoutConnect() + newResponseTimeout)
                 .isLessThanOrEqualTo(maxSleepBetweenPolls);
     }
@@ -34,7 +35,7 @@ public class FailureDetectorTest {
         long connectionTimeout = 500;
         long maxSleepBetweenPolls = 2000;
         String server = "localhost";
-        Map<String, NettyClientRouter> routers =
+        Map<String, IClientRouter> routers =
                 ImmutableMap.of(server, getTestRouter(rpcTimeout, connectionTimeout));
         Map<String, Long> adjustedResponseTimeouts =
                 FailureDetector.getAdjustedResponseTimeouts(routers, maxSleepBetweenPolls);
@@ -66,7 +67,7 @@ public class FailureDetectorTest {
         maxSleepBetweenPolls = 900;
         routers = ImmutableMap.of(server, getTestRouter(rpcTimeout, connectionTimeout));
         final long maxSleep = maxSleepBetweenPolls;
-        final Map<String, NettyClientRouter> routers2 = routers;
+        final Map<String, IClientRouter> routers2 = routers;
         Assertions.assertThatThrownBy(() -> FailureDetector.getAdjustedResponseTimeouts(routers2, maxSleep))
                 .isInstanceOf(IllegalArgumentException.class);
 

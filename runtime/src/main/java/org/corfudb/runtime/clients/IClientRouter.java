@@ -121,4 +121,16 @@ public interface IClientRouter {
      * @param timeoutResponse Response timeout in milliseconds.
      */
     void setTimeoutResponse(long timeoutResponse);
+
+    /**
+     * Get the Connection timeout
+     * @return connection timeout
+     */
+    long getTimeoutConnect();
+
+    /**
+     * Get the Response timeout
+     * @return response timeout
+     */
+    long getTimeoutResponse();
 }
