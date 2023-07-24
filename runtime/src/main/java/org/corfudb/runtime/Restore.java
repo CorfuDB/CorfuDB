@@ -154,6 +154,9 @@ public class Restore {
         int restoredTableCount = 0;
         for (TableBackupFileName tableBackupFileName : tableBackupFileNames) {
             log.info("start restoring table {}", tableBackupFileName);
+
+            // In PARTIAL_TAGGED mode, the RegistryTable is first restored, so the isTableTagged is
+            // deduced from the restored RegistryTable.
             if (restoreMode == RestoreMode.PARTIAL_TAGGED && !isTableTagged(tableBackupFileName)) {
                 log.info("skip restoring table {} since it doesn't have requires_backup_support tag", tableBackupFileName);
                 continue;
@@ -176,7 +179,8 @@ public class Restore {
             restoredTableCount++;
         }
         long elapsedTime = System.currentTimeMillis() - startTime;
-        log.info("successfully restored {} tables, elapsed time {}ms", restoredTableCount, elapsedTime);
+        log.info("successfully restored {} tables out of {} tables from the backup, elapsed time {}ms",
+                restoredTableCount, tableBackupFileNames.size(), elapsedTime);
     }
 
     /**
