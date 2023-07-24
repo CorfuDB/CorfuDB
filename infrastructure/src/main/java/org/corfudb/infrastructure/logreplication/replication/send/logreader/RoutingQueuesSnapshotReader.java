@@ -103,7 +103,7 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
                     LogReplication.ReplicationEventInfoKey.class,
                     LogReplication.ReplicationEvent.class,
                     null,
-                    TableOptions.fromProtoSchema(LogReplication.ReplicationStatus.class));
+                    TableOptions.fromProtoSchema(LogReplication.ReplicationEvent.class));
         } catch (IllegalAccessException | InvocationTargetException | NoSuchMethodException e) {
             log.error("Failed to open the End Marker table", e);
             throw new RuntimeException(e);
