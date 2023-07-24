@@ -67,6 +67,9 @@ public final class LogReplicationEventListener implements StreamListener {
                 if (event.getType().equals(LogReplication.ReplicationEvent.ReplicationEventType.FORCE_SNAPSHOT_SYNC)) {
                     discoveryService.input(new DiscoveryServiceEvent(DiscoveryServiceEventType.ENFORCE_SNAPSHOT_SYNC,
                         key.getSession(), event.getEventId()));
+                } if (event.getType().equals(LogReplication.ReplicationEvent.ReplicationEventType.CLIENT_REQUESTED_FORCED_SNAPSHOT_SYNC)) {
+                    discoveryService.input(new DiscoveryServiceEvent(DiscoveryServiceEventType.ENFORCE_SNAPSHOT_SYNC,
+                            key.getSession(), event.getEventId()));
                 } else if (event.getType().equals(LogReplication.ReplicationEvent.ReplicationEventType.
                         UPGRADE_COMPLETION_FORCE_SNAPSHOT_SYNC)) {
                     // Note: This block will not get executed in the first version of LRv2 because in this version,
