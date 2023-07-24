@@ -77,7 +77,7 @@ public class ReconfigurationEventHandler {
         // Since the orchestrator client and the fault detector client use
         // the same configuration its reasonable to use these arguments.
         // TODO(Maithem): AddNode should use a similar mechanism to set the timeout
-        long numSections = rangeToReplicate / runtime.getParameters().getBulkReadSize();
+        long numSections = rangeToReplicate / runtime.getParameters().getStateTransferBatchSize();
         long rpcTimeout
                 = (long) (runtime.getParameters().getRequestTimeout().toMillis() * TIMEOUT_MULTIPLICATIVE_FACTOR);
         long timeoutInMs = Math.max(DEFAULT_HEAL_TIMEOUT.toMillis(), numSections * rpcTimeout);

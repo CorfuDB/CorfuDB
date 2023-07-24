@@ -656,7 +656,7 @@ public class StateTransferTest extends AbstractViewTest {
 
         final long totalWritten = 50L;
 
-        final long rangeWriteAllowedCount = (totalWritten / rt.getParameters().getBulkReadSize());
+        final long rangeWriteAllowedCount = (totalWritten / rt.getParameters().getStateTransferBatchSize());
 
         AtomicLong allowedWrites = new AtomicLong(rangeWriteAllowedCount);
 
@@ -718,7 +718,7 @@ public class StateTransferTest extends AbstractViewTest {
                 .boxed().collect(Collectors.toList()));
 
         // Only the delta is transferred
-        assertThat(deltaBatches.get() * rt.getParameters().getBulkReadSize())
+        assertThat(deltaBatches.get() * rt.getParameters().getStateTransferBatchSize())
                 .isEqualTo(totalWritten);
 
     }

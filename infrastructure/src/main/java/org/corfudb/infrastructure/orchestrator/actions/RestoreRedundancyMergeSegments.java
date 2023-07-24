@@ -462,7 +462,7 @@ public class RestoreRedundancyMergeSegments extends Action {
                 StateTransferManager
                         .builder()
                         .logUnitClient(logUnitClient)
-                        .batchSize(runtime.getParameters().getBulkReadSize())
+                        .batchSize(runtime.getParameters().getStateTransferBatchSize())
                         .basicTransferProcessor(basicTransferProcessor)
                         .parallelTransferProcessor(parallelTransferProcessor)
                         .build();

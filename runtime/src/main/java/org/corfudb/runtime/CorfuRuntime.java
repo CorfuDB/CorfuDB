@@ -210,6 +210,11 @@ public class CorfuRuntime {
          */
         int bulkReadSize = 10;
 
+        /*
+         * Number of addresses transferred in one batch
+         */
+        int stateTransferBatchSize = 10;
+
         // region Address Space Parameters
         /*
          * Number of times to attempt to read before hole filling.
@@ -425,6 +430,7 @@ public class CorfuRuntime {
         public static class CorfuRuntimeParametersBuilder extends RuntimeParametersBuilder {
             private int maxWriteSize = Integer.MAX_VALUE;
             private int bulkReadSize = 10;
+            private int stateTransferBatchSize = 10;
             private int holeFillRetry = 10;
             private Duration holeFillRetryThreshold = Duration.ofSeconds(1L);
             private Duration holeFillTimeout = Duration.ofSeconds(10);
@@ -616,6 +622,11 @@ public class CorfuRuntime {
                 return this;
             }
 
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder stateTransferBatchSize(int stateTransferBatchSize) {
+                this.stateTransferBatchSize = stateTransferBatchSize;
+                return this;
+            }
+
             public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder holeFillRetry(int holeFillRetry) {
                 this.holeFillRetry = holeFillRetry;
                 return this;
@@ -796,6 +807,7 @@ public class CorfuRuntime {
                 corfuRuntimeParameters.setBeforeRpcHandler(beforeRpcHandler);
                 corfuRuntimeParameters.setMaxWriteSize(maxWriteSize);
                 corfuRuntimeParameters.setBulkReadSize(bulkReadSize);
+                corfuRuntimeParameters.setStateTransferBatchSize(stateTransferBatchSize);
                 corfuRuntimeParameters.setHoleFillRetry(holeFillRetry);
                 corfuRuntimeParameters.setHoleFillRetryThreshold(holeFillRetryThreshold);
                 corfuRuntimeParameters.setHoleFillTimeout(holeFillTimeout);
