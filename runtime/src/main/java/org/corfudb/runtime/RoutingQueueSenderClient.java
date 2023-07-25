@@ -63,6 +63,10 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
 
     private FullSyncRequestor fullSyncRequestor;
 
+    private long lrMetadataSize = 0;
+    private long totalPayloadSize = 0;
+    private static final int INT_SIZE_IN_BYTES = 4;
+
     /**
      * Constructor for the log replication client for routing queues on sender.
      *
@@ -245,6 +249,13 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
                 .map(destination -> TableRegistry.getStreamIdForStreamTag(CORFU_SYSTEM_NAMESPACE,
                     SNAPSHOT_SYNC_QUEUE_TAG_SENDER_PREFIX + destination))
                 .collect(Collectors.toList()), corfuStore);
+
+            long metadataSize = message.getSerializedSize() -
+                    (message.getOpaquePayload().size() + message.getOpaqueMetadata().size() + INT_SIZE_IN_BYTES);
+
+            lrMetadataSize += metadataSize;
+            totalPayloadSize += message.getSerializedSize();
+
             if (!baseSnapshotSent) {
                 Queue.RoutingQSnapStartEndKeyMsg keyOfStartMarker = Queue.RoutingQSnapStartEndKeyMsg.newBuilder()
                     .setSnapshotSyncId(requestingEvent.getEventId()).build();
@@ -307,6 +318,10 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
                 log.error("Unrecoverable exception when attempting to insert an END_MARKER", e);
                 throw new UnrecoverableCorfuInterruptedError(e);
             }
+
+            log.info("Total Payload Size = {}.  LR Metadata Size = {}", totalPayloadSize, lrMetadataSize);
+            totalPayloadSize = 0;
+            lrMetadataSize = 0;
         }
 
         @Override
