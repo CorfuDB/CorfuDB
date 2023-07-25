@@ -144,7 +144,7 @@ public class FailureDetector implements IDetector {
             final IClientRouter router = entry.getValue();
             long currentConnectionTimeout = router.getTimeoutConnect();
             Preconditions.checkArgument(maxSleepBetweenPolls > currentConnectionTimeout,
-                    "Max sleep between polls:" + maxSleepBetweenPolls +
+                    "Max sleep between polls: " + maxSleepBetweenPolls +
                             " should be greater than connection timeout: " + currentConnectionTimeout);
             long currentResponseTimeout = router.getTimeoutResponse();
             long overallRouterTimeout = currentConnectionTimeout + currentResponseTimeout;
