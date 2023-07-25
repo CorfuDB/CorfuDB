@@ -19,6 +19,7 @@ import org.corfudb.infrastructure.log.statetransfer.transferprocessor.TransferPr
 import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.util.CFUtils;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -106,6 +107,31 @@ public class StateTransferManager {
                 .build();
     }
 
+    static List<List<Long>> splitNonSequentialAddresses(List<Long> batch) {
+        List<List<Long>> lists = new ArrayList<>();
+        if (batch.size() < 2) {
+            lists.add(batch);
+            return lists;
+        }
+
+        List<Long> sequentialList = new ArrayList<>();
+
+        sequentialList.add(batch.get(0));
+        for (int i = 0; i < batch.size() - 1; i++) {
+            long current = batch.get(i);
+            long next = batch.get(i + 1);
+            if (current + 1 == next) {
+                sequentialList.add(next);
+            } else {
+                lists.add(sequentialList);
+                sequentialList = new ArrayList<>();
+                sequentialList.add(next);
+            }
+        }
+        lists.add(sequentialList);
+        return lists;
+    }
+
     /**
      * Transform the given range into a stream of batch requests.
      *
@@ -113,10 +139,12 @@ public class StateTransferManager {
      *              log unit servers.
      * @return A stream of transfer batch requests.
      */
-    Stream<TransferBatchRequest> rangeToBatchRequestStream(TransferSegmentRangeSingle range) {
+    public Stream<TransferBatchRequest> rangeToBatchRequestStream(TransferSegmentRangeSingle range) {
         ImmutableList<Long> unknownAddressesInRange = range.getUnknownAddressesInRange();
         Optional<ImmutableList<String>> availableServers = range.getAvailableServers();
-        return Lists.partition(unknownAddressesInRange, batchSize).stream()
+        return StateTransferManager.splitNonSequentialAddresses(unknownAddressesInRange)
+                .stream()
+                .flatMap(list -> Lists.partition(list,batchSize).stream())
                 .map(partition -> TransferBatchRequest
                         .builder()
                         .addresses(partition)
