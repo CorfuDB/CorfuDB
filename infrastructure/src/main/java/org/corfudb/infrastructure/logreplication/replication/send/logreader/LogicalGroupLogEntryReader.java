@@ -45,9 +45,8 @@ public class LogicalGroupLogEntryReader extends BaseLogEntryReader {
     private final ISerializer protobufSerializer;
 
 
-    public LogicalGroupLogEntryReader(CorfuRuntime runtime, LogReplicationSession session,
-                                      LogReplicationContext replicationContext) {
-        super(runtime, session, replicationContext);
+    public LogicalGroupLogEntryReader(LogReplicationSession session, LogReplicationContext replicationContext) {
+        super(session, replicationContext);
         protobufSerializer = replicationContext.getProtobufSerializer();
     }
 

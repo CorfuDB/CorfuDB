@@ -105,20 +105,17 @@ public class SourceForwardingDataSender implements DataSender {
     private int numStartMsgsDropped;
 
     @SneakyThrows
-    public SourceForwardingDataSender(String destinationEndpoint, LogReplicationIT.TestConfig testConfig,
+    public SourceForwardingDataSender(LogReplicationIT.TestConfig testConfig,
                                       LogReplicationMetadataManager metadataManager,
                                       LogReplicationIT.TransitionSource function,
-                                      LogReplicationContext context) {
-        this.runtime = CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder().build())
-                .parseConfigurationString(destinationEndpoint)
-                .connect();
+                                      LogReplicationContext context, CorfuRuntime sinkRuntime) {
+        this.runtime = sinkRuntime;
         this.destinationDataSender = new AckDataSender();
         this.destinationDataControl = new DefaultDataControl(new DefaultDataControlConfig(
             false, 0));
 
         // TODO pankti: This test-only constructor can be removed
-        this.destinationLogReplicationManager = new LogReplicationSinkManager(runtime.getLayoutServers().get(0),
-            metadataManager, session, context);
+        this.destinationLogReplicationManager = new LogReplicationSinkManager(metadataManager, session, context);
 
         this.ifDropMsg = testConfig.getDropMessageLevel();
         this.delayedApplyCycles = testConfig.getDelayedApplyCycles();
@@ -127,7 +124,7 @@ public class SourceForwardingDataSender implements DataSender {
         this.dropACKLevel = testConfig.getDropAckLevel();
         this.callbackFunction = function;
         this.lastAckDropped = Long.MAX_VALUE;
-        this.sinkCorfuStore = new CorfuStore(runtime);
+        this.sinkCorfuStore = new CorfuStore(sinkRuntime);
         sinkCorfuStore.openTable(LogReplicationMetadataManager.NAMESPACE,
                 REPLICATION_STATUS_TABLE,
                 LogReplicationSession.class,
