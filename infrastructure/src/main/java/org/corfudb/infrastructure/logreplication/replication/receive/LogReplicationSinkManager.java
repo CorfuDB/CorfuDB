@@ -5,17 +5,12 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.google.protobuf.TextFormat;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.common.config.ConfigParamNames;
 import org.corfudb.common.util.ObservableValue;
-import org.corfudb.infrastructure.ServerContext;
-import org.corfudb.infrastructure.logreplication.config.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.ISnapshotSyncPlugin;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationMetadata;
-import org.corfudb.runtime.CorfuOptions;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMetadataMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
@@ -124,58 +119,20 @@ public class LogReplicationSinkManager implements DataReceiver {
      * Constructor Sink Manager
      *
      * @param metadataManager manages log replication session's metadata
-     * @param serverContext server level context
      * @param session log replication session unique identifier
      * @param replicationContext log replication context
      */
-    public LogReplicationSinkManager(LogReplicationMetadataManager metadataManager,
-                                     ServerContext serverContext, LogReplicationSession session,
+    public LogReplicationSinkManager(LogReplicationMetadataManager metadataManager, LogReplicationSession session,
                                      LogReplicationContext replicationContext) {
 
         this.replicationContext = replicationContext;
-        this.runtime = CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder()
-                .trustStore((String) serverContext.getServerConfig().get(ConfigParamNames.TRUST_STORE))
-                .tsPasswordFile((String) serverContext.getServerConfig().get(ConfigParamNames.TRUST_STORE_PASS_FILE))
-                .keyStore((String) serverContext.getServerConfig().get(ConfigParamNames.KEY_STORE))
-                .ksPasswordFile((String) serverContext.getServerConfig().get(ConfigParamNames.KEY_STORE_PASS_FILE))
-                .tlsEnabled((Boolean) serverContext.getServerConfig().get("--enable-tls"))
-                .maxCacheEntries(replicationContext.getConfig(session).getMaxCacheSize())
-                .maxWriteSize(serverContext.getMaxWriteSize())
-                .build())
-                .parseConfigurationString(replicationContext.getLocalCorfuEndpoint()).connect();
+        this.runtime = replicationContext.getCorfuRuntime();
         this.topologyConfigId = replicationContext.getTopologyConfigId();
         this.session = session;
         this.metadataManager = metadataManager;
 
         init();
     }
-
-    @VisibleForTesting
-    public LogReplicationSinkManager(String localCorfuEndpoint, LogReplicationMetadataManager metadataManager,
-                                     LogReplicationSession session,
-                                     LogReplicationContext context) {
-        this.runtime =  CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder()
-                .maxCacheEntries(context.getConfig(session).getMaxCacheSize()).build())
-                .parseConfigurationString(localCorfuEndpoint).connect();
-        this.metadataManager = metadataManager;
-        this.session = session;
-        this.replicationContext = context;
-
-        init();
-    }
-
-    @VisibleForTesting
-    public LogReplicationSinkManager(String localCorfuEndpoint, LogReplicationConfig config,
-                                     LogReplicationMetadataManager metadataManager, LogReplicationSession session) {
-            this.runtime =  CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder()
-                    .maxCacheEntries(config.getMaxCacheSize())
-                    .build())
-                    .parseConfigurationString(localCorfuEndpoint).connect();
-            this.session = session;
-            this.metadataManager = metadataManager;
-
-            init();
-        }
 
     /**
      * Initialize common parameters
@@ -630,7 +587,6 @@ public class LogReplicationSinkManager implements DataReceiver {
     }
 
     public void shutdown() {
-        this.runtime.shutdown();
         this.applyExecutor.shutdownNow();
         isSinkManagerShutdown = true;
     }

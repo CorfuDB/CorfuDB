@@ -337,6 +337,12 @@ public class CorfuRuntime {
          */
         boolean cacheWrites = true;
 
+        /**
+         * Used only by LR.
+         * On LogData.getPayload(), after deserializing the data part, the data part should not be set to null.
+         */
+        boolean nullifyDataOnGetPayload = true;
+
         // endregion
 
         /**
@@ -472,6 +478,7 @@ public class CorfuRuntime {
             private boolean cacheWrites = true;
             private String clientName = "CorfuClient";
             private long checkpointTriggerFreqMillis = 0;
+            private boolean nullifyDataOnGetPayload = true;
 
             public CorfuRuntimeParametersBuilder streamingWorkersThreadPoolSize(int streamingWorkersThreadPoolSize) {
                 this.streamingWorkersThreadPoolSize = streamingWorkersThreadPoolSize;
@@ -785,6 +792,11 @@ public class CorfuRuntime {
                 return this;
             }
 
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder nullifyDataOnGetPayload(boolean nullifyDataOnGetPayload) {
+                this.nullifyDataOnGetPayload = nullifyDataOnGetPayload;
+                return this;
+            }
+
             public CorfuRuntimeParameters build() {
                 CorfuRuntimeParameters corfuRuntimeParameters = new CorfuRuntimeParameters();
                 corfuRuntimeParameters.setTlsEnabled(tlsEnabled);
@@ -849,6 +861,7 @@ public class CorfuRuntime {
                 corfuRuntimeParameters.setCacheWrites(cacheWrites);
                 corfuRuntimeParameters.setClientName(clientName);
                 corfuRuntimeParameters.setCheckpointTriggerFreqMillis(checkpointTriggerFreqMillis);
+                corfuRuntimeParameters.setNullifyDataOnGetPayload(nullifyDataOnGetPayload);
                 return corfuRuntimeParameters;
             }
         }

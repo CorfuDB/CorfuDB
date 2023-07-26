@@ -65,12 +65,11 @@ public abstract class BaseSnapshotReader extends SnapshotReader {
     /**
      * Init runtime and streams to read
      */
-    public BaseSnapshotReader(CorfuRuntime runtime, LogReplication.LogReplicationSession session,
+    public BaseSnapshotReader(LogReplication.LogReplicationSession session,
                               LogReplicationContext replicationContext) {
-        this.rt = runtime;
+        this.rt = replicationContext.getCorfuRuntime();
         this.session = session;
         this.replicationContext = replicationContext;
-        this.rt.parseConfigurationString(runtime.getLayoutServers().get(0)).connect();
         this.maxTransferSize = replicationContext.getConfig(session).getMaxTransferSize();
         this.messageSizeDistributionSummary = configureMessageSizeDistributionSummary();
         refreshStreamsToReplicateSet();
