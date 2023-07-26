@@ -244,7 +244,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         pluginConfig = new LogReplicationPluginConfig(pluginConfigFilePath);
         metadataManager = new LogReplicationMetadataManager(dstTestRuntime,
                 new LogReplicationContext(new LogReplicationConfigManager(dstTestRuntime, LOCAL_SOURCE_CLUSTER_ID), 0,
-                "test" + SERVERS.PORT_0, true, pluginConfig));
+                "test" + SERVERS.PORT_0, true, pluginConfig, dstTestRuntime));
         metadataManager.addSession(session, 0, true);
 
         expectedAckTimestamp = new AtomicLong(Long.MAX_VALUE);
@@ -1233,7 +1233,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         TransitionSource function) throws InterruptedException {
 
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(srcTestRuntime, LOCAL_SOURCE_CLUSTER_ID);
-        LogReplicationContext context = new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT, pluginConfig);
+        LogReplicationContext context = new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT, pluginConfig, srcTestRuntime);
 
         configManager.generateConfig(Collections.singleton(session));
 

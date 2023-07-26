@@ -3,11 +3,10 @@ package org.corfudb.infrastructure.logreplication.infrastructure;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
-import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientServerRouter;
-import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
-import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientServerRouter;
+import org.corfudb.runtime.LogReplication.LogReplicationSession;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -30,13 +29,11 @@ public class CorfuReplicationManager {
 
     private final NodeDescriptor localNodeDescriptor;
 
-    @Getter
-    private final CorfuRuntime corfuRuntime;
-
     private final LogReplicationMetadataManager metadataManager;
 
     private TopologyDescriptor topology;
 
+    @Getter
     private final LogReplicationContext replicationContext;
 
     private final Map<LogReplicationSession, LogReplicationRuntimeParameters> replicationSessionToRuntimeParams;
@@ -45,10 +42,9 @@ public class CorfuReplicationManager {
      * Constructor
      */
     public CorfuReplicationManager(TopologyDescriptor topology,
-                                   LogReplicationMetadataManager metadataManager, CorfuRuntime corfuRuntime,
+                                   LogReplicationMetadataManager metadataManager,
                                    LogReplicationContext replicationContext) {
         this.metadataManager = metadataManager;
-        this.corfuRuntime = corfuRuntime;
         this.localNodeDescriptor = topology.getLocalNodeDescriptor();
         this.topology = topology;
         this.replicationContext = replicationContext;
@@ -94,12 +90,12 @@ public class CorfuReplicationManager {
                 .remoteClusterDescriptor(remoteCluster)
                 .localClusterId(localNodeDescriptor.getClusterId())
                 .topologyConfigId(topology.getTopologyConfigId())
-                .keyStore(corfuRuntime.getParameters().getKeyStore())
-                .tlsEnabled(corfuRuntime.getParameters().isTlsEnabled())
-                .ksPasswordFile(corfuRuntime.getParameters().getKsPasswordFile())
-                .trustStore(corfuRuntime.getParameters().getTrustStore())
-                .tsPasswordFile(corfuRuntime.getParameters().getTsPasswordFile())
-                .maxWriteSize(corfuRuntime.getParameters().getMaxWriteSize())
+                .keyStore(replicationContext.getCorfuRuntime().getParameters().getKeyStore())
+                .tlsEnabled(replicationContext.getCorfuRuntime().getParameters().isTlsEnabled())
+                .ksPasswordFile(replicationContext.getCorfuRuntime().getParameters().getKsPasswordFile())
+                .trustStore(replicationContext.getCorfuRuntime().getParameters().getTrustStore())
+                .tsPasswordFile(replicationContext.getCorfuRuntime().getParameters().getTsPasswordFile())
+                .maxWriteSize(replicationContext.getCorfuRuntime().getParameters().getMaxWriteSize())
                 .build();
 
         replicationSessionToRuntimeParams.put(session, parameters);
