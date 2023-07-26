@@ -103,7 +103,7 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
             log.trace("Sink manager already exists for session {}", session);
             return sessionToSinkManagerMap.get(session);
         }
-        LogReplicationSinkManager sinkManager = new LogReplicationSinkManager(metadataManager, serverContext, session,
+        LogReplicationSinkManager sinkManager = new LogReplicationSinkManager(metadataManager, session,
                 replicationContext);
         sessionToSinkManagerMap.put(session, sinkManager);
         log.info("Sink Manager created for session={}", session);
