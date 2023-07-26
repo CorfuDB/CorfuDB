@@ -1233,19 +1233,25 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         TransitionSource function) throws InterruptedException {
 
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(srcTestRuntime, LOCAL_SOURCE_CLUSTER_ID);
-        LogReplicationContext context = new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT, pluginConfig, srcTestRuntime);
-
         configManager.generateConfig(Collections.singleton(session));
+
 
         // This IT requires custom values to be set for the replication config.  Set these values so that the default
         // values are not used
-        context.getConfig(session).setMaxNumMsgPerBatch(BATCH_SIZE);
-        context.getConfig(session).setMaxMsgSize(SMALL_MSG_SIZE);
-        context.getConfig(session).setMaxDataSizePerMsg(SMALL_MSG_SIZE * LogReplicationConfig.DATA_FRACTION_PER_MSG / 100);
-
+        LogReplicationContext sinkContext = new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT, pluginConfig, dstTestRuntime);
+        sinkContext.getConfig(session).setMaxNumMsgPerBatch(BATCH_SIZE);
+        sinkContext.getConfig(session).setMaxMsgSize(SMALL_MSG_SIZE);
+        sinkContext.getConfig(session).setMaxDataSizePerMsg(SMALL_MSG_SIZE * LogReplicationConfig.DATA_FRACTION_PER_MSG / 100);
         // Data Sender
         sourceDataSender = new SourceForwardingDataSender(DESTINATION_ENDPOINT, testConfig, metadataManager,
-                function, context);
+                function, sinkContext);
+
+        LogReplicationContext srcContext = new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT, pluginConfig, srcTestRuntime);
+        // This IT requires custom values to be set for the replication config.  Set these values so that the default
+        // values are not used
+        srcContext.getConfig(session).setMaxNumMsgPerBatch(BATCH_SIZE);
+        srcContext.getConfig(session).setMaxMsgSize(SMALL_MSG_SIZE);
+        srcContext.getConfig(session).setMaxDataSizePerMsg(SMALL_MSG_SIZE * LogReplicationConfig.DATA_FRACTION_PER_MSG / 100);
 
         // Source Manager
         LogReplicationRuntimeParameters runtimeParameters = LogReplicationRuntimeParameters.builder()
@@ -1253,7 +1259,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
                 .localCorfuEndpoint(SOURCE_ENDPOINT)
                 .build();
         LogReplicationSourceManager logReplicationSourceManager = new LogReplicationSourceManager(runtimeParameters,
-                metadataManager, sourceDataSender, session, context);
+                metadataManager, sourceDataSender, session, srcContext);
 
         // Set Log Replication Source Manager so we can emulate the channel for data & control messages (required
         // for testing)

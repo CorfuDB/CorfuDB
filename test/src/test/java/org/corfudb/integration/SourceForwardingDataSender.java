@@ -113,8 +113,7 @@ public class SourceForwardingDataSender extends AbstractIT implements DataSender
             false, 0));
 
         // TODO pankti: This test-only constructor can be removed
-        this.destinationLogReplicationManager = new LogReplicationSinkManager(runtime.getLayoutServers().get(0),
-            metadataManager, session, context);
+        this.destinationLogReplicationManager = new LogReplicationSinkManager(metadataManager, session, context);
 
         this.ifDropMsg = testConfig.getDropMessageLevel();
         this.delayedApplyCycles = testConfig.getDelayedApplyCycles();
