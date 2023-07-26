@@ -52,8 +52,6 @@ import static org.corfudb.infrastructure.logreplication.replication.receive.LogR
 public class SessionManager {
     private final CorfuStore corfuStore;
 
-    private final CorfuRuntime runtime;
-
     private final String localCorfuEndpoint;
 
     private final CorfuReplicationManager replicationManager;
@@ -96,7 +94,7 @@ public class SessionManager {
                           ServerContext serverContext,
                           String localCorfuEndpoint, LogReplicationPluginConfig pluginConfig) {
         this.topology = topology;
-        this.runtime = corfuRuntime;
+        CorfuRuntime runtime = corfuRuntime;
         this.corfuStore = new CorfuStore(corfuRuntime);
 
         this.localCorfuEndpoint = localCorfuEndpoint;
@@ -106,10 +104,10 @@ public class SessionManager {
         this.clientConfigListener = new LogReplicationClientConfigListener(this,
                 configManager, corfuStore);
         this.replicationContext = new LogReplicationContext(configManager, topology.getTopologyConfigId(),
-                localCorfuEndpoint, pluginConfig);
+                localCorfuEndpoint, pluginConfig, runtime);
         this.metadataManager = new LogReplicationMetadataManager(corfuRuntime, replicationContext);
 
-        this.replicationManager = new CorfuReplicationManager(topology, metadataManager, runtime,
+        this.replicationManager = new CorfuReplicationManager(metadataManager,
                 replicationContext);
 
         this.incomingMsgHandler = new LogReplicationServer(serverContext, sessions, metadataManager,
@@ -132,7 +130,7 @@ public class SessionManager {
                           CorfuReplicationManager replicationManager, LogReplicationClientServerRouter router,
                           LogReplicationServer logReplicationServer, LogReplicationPluginConfig pluginConfig) {
         this.topology = topology;
-        this.runtime = corfuRuntime;
+        CorfuRuntime runtime = corfuRuntime;
         this.corfuStore = new CorfuStore(corfuRuntime);
 
         NodeLocator lrNodeLocator = NodeLocator.builder().host("localhost")
@@ -142,7 +140,7 @@ public class SessionManager {
         this.configManager = new LogReplicationConfigManager(runtime, topology.getLocalClusterDescriptor().getClusterId());
         this.clientConfigListener = new LogReplicationClientConfigListener(this, configManager, corfuStore);
         this.replicationContext = new LogReplicationContext(configManager, topology.getTopologyConfigId(),
-                localCorfuEndpoint, pluginConfig);
+                localCorfuEndpoint, pluginConfig, runtime);
         this.metadataManager = new LogReplicationMetadataManager(corfuRuntime, replicationContext);
         this.replicationManager = replicationManager;
         this.router = router;
@@ -247,7 +245,6 @@ public class SessionManager {
     private void updateTopology(TopologyDescriptor newTopology) {
         topology = newTopology;
         router.setTopology(topology);
-        replicationManager.updateTopology(topology);
         incomingMsgHandler.updateTopologyConfigId(topology.getTopologyConfigId());
         replicationContext.setTopologyConfigId(topology.getTopologyConfigId());
     }
