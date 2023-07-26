@@ -11,7 +11,6 @@ import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationCo
 import org.corfudb.infrastructure.logreplication.replication.send.IllegalSnapshotEntrySizeException;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
-import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.LogReplicationUtils;
@@ -75,9 +74,9 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
     // Boolean indicating if the Snapshot reader is waiting for a start marker from this snapshot sync
     private boolean waitingForStartMarker = true;
 
-    public RoutingQueuesSnapshotReader(CorfuRuntime corfuRuntime, LogReplicationSession session,
+    public RoutingQueuesSnapshotReader(LogReplicationSession session,
                                        LogReplicationContext replicationContext) {
-        super(corfuRuntime, session, replicationContext);
+        super(session, replicationContext);
         streamTagFollowed =
             LogReplicationUtils.SNAPSHOT_SYNC_QUEUE_TAG_SENDER_PREFIX + session.getSinkClusterId() + "_" +
                 session.getSubscriber().getClientName();

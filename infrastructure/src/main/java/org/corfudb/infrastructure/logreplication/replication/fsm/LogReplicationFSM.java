@@ -216,7 +216,6 @@ public class LogReplicationFSM {
     /**
      * Constructor for LogReplicationFSM, custom read processor for data transformation.
      *
-     * @param runtime           Corfu Runtime
      * @param dataSender        implementation of a data sender, both snapshot and log entry, this represents
      *                          the application callback for data transmission
      * @param readProcessor     read processor for data transformation
@@ -225,23 +224,23 @@ public class LogReplicationFSM {
      * @param session           Replication Session to the remote(Sink) cluster
      * @param replicationContext Replication context
      */
-    public LogReplicationFSM(CorfuRuntime runtime, DataSender dataSender,
+    public LogReplicationFSM(DataSender dataSender,
                              ReadProcessor readProcessor, ExecutorService workers, LogReplicationAckReader ackReader,
                              LogReplicationSession session, LogReplicationContext replicationContext) {
-        this.snapshotReader = createSnapshotReader(runtime, session, replicationContext);
-        this.logEntryReader = createLogEntryReader(runtime, session, replicationContext);
+        this.snapshotReader = createSnapshotReader(session, replicationContext);
+        this.logEntryReader = createLogEntryReader(session, replicationContext);
 
         this.ackReader = ackReader;
-        this.snapshotSender = new SnapshotSender(runtime, snapshotReader, dataSender, readProcessor,
-                replicationContext.getConfig(session).getMaxNumMsgPerBatch(), this);
+        this.session = session;
+        this.snapshotSender = new SnapshotSender(replicationContext, snapshotReader, dataSender, readProcessor, this);
         this.logEntrySender = new LogEntrySender(logEntryReader, dataSender, this);
         this.logReplicationFSMWorkers = workers;
         this.logReplicationFSMConsumer = Executors.newSingleThreadExecutor(new
             ThreadFactoryBuilder().setNameFormat("replication-fsm-consumer-" + session.hashCode())
             .build());
-        this.session = session;
 
         init(dataSender, session);
+        setTopologyConfigId(replicationContext.getTopologyConfigId());
     }
 
     /**
@@ -267,33 +266,31 @@ public class LogReplicationFSM {
         this.snapshotReader = snapshotReader;
         this.logEntryReader = logEntryReader;
         this.ackReader = ackReader;
-        this.snapshotSender = new SnapshotSender(runtime, snapshotReader, dataSender, readProcessor,
-                replicationContext.getConfig(session).getMaxNumMsgPerBatch(), this);
+        this.session = session;
+        this.snapshotSender = new SnapshotSender(replicationContext, snapshotReader, dataSender, readProcessor, this);
         this.logEntrySender = new LogEntrySender(logEntryReader, dataSender, this);
         this.logReplicationFSMWorkers = workers;
         this.logReplicationFSMConsumer = Executors.newSingleThreadExecutor(new
                 ThreadFactoryBuilder().setNameFormat("replication-fsm-consumer-" + session.hashCode())
                 .build());
-        this.session = session;
 
         init(dataSender, session);
     }
 
-    private SnapshotReader createSnapshotReader(CorfuRuntime runtime, LogReplicationSession session,
-                                                LogReplicationContext replicationContext) {
+    private SnapshotReader createSnapshotReader( LogReplicationSession session, LogReplicationContext replicationContext) {
         SnapshotReader snapshotReader;
         ReplicationModel model = session.getSubscriber().getModel();
         switch (model) {
             case FULL_TABLE:
-                snapshotReader = new StreamsSnapshotReader(runtime, session, replicationContext);
+                snapshotReader = new StreamsSnapshotReader(session, replicationContext);
                 break;
 
             case LOGICAL_GROUPS:
-                snapshotReader = new LogicalGroupSnapshotReader(runtime, session, replicationContext);
+                snapshotReader = new LogicalGroupSnapshotReader(session, replicationContext);
                 break;
 
             case ROUTING_QUEUES:
-                snapshotReader = new RoutingQueuesSnapshotReader(runtime, session, replicationContext);
+                snapshotReader = new RoutingQueuesSnapshotReader(session, replicationContext);
                 break;
 
             default:
@@ -304,21 +301,20 @@ public class LogReplicationFSM {
         return snapshotReader;
     }
 
-    private LogEntryReader createLogEntryReader(CorfuRuntime runtime, LogReplicationSession session,
-                                                LogReplicationContext replicationContext) {
+    private LogEntryReader createLogEntryReader(LogReplicationSession session, LogReplicationContext replicationContext) {
         LogEntryReader logEntryReader;
         ReplicationModel model = session.getSubscriber().getModel();
         switch(model) {
             case FULL_TABLE:
-                logEntryReader = new StreamsLogEntryReader(runtime, session, replicationContext);
+                logEntryReader = new StreamsLogEntryReader(session, replicationContext);
                 break;
 
             case LOGICAL_GROUPS:
-                logEntryReader = new LogicalGroupLogEntryReader(runtime, session, replicationContext);
+                logEntryReader = new LogicalGroupLogEntryReader(session, replicationContext);
                 break;
 
             case ROUTING_QUEUES:
-                logEntryReader = new RoutingQueuesLogEntryReader(runtime, session, replicationContext);
+                logEntryReader = new RoutingQueuesLogEntryReader(session, replicationContext);
                 break;
 
             default:
@@ -435,7 +431,7 @@ public class LogReplicationFSM {
         to.onEntry(from);
     }
 
-    public void setTopologyConfigId(long topologyConfigId) {
+    private void setTopologyConfigId(long topologyConfigId) {
         this.topologyConfigId = topologyConfigId;
         snapshotReader.setTopologyConfigId(topologyConfigId);
         logEntryReader.setTopologyConfigId(topologyConfigId);

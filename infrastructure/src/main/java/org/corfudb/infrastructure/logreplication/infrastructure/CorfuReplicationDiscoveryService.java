@@ -698,6 +698,10 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
             sessionManager.shutdown();
         }
 
+        if (!runtime.isShutdown()) {
+            runtime.shutdown();
+        }
+
         serverContext.close();
     }
 
