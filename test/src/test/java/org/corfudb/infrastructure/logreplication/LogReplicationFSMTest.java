@@ -1,7 +1,6 @@
 package org.corfudb.infrastructure.logreplication;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
->>>>>>> Fix Sync Status Initialization (#3535)
 import com.google.protobuf.ByteString;
 import com.google.protobuf.Message;
 import lombok.Getter;
