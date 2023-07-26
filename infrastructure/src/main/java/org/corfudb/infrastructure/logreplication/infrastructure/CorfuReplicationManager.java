@@ -2,14 +2,11 @@ package org.corfudb.infrastructure.logreplication.infrastructure;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
-import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientServerRouter;
-import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
-import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientServerRouter;
+import org.corfudb.runtime.LogReplication.LogReplicationSession;
 
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -28,31 +25,18 @@ public class CorfuReplicationManager {
     @Getter
     private final Map<LogReplicationSession, CorfuLogReplicationRuntime> sessionRuntimeMap = new ConcurrentHashMap<>();
 
-    private final NodeDescriptor localNodeDescriptor;
-
-    @Getter
-    private final CorfuRuntime corfuRuntime;
-
     private final LogReplicationMetadataManager metadataManager;
 
-    private TopologyDescriptor topology;
-
+    @Getter
     private final LogReplicationContext replicationContext;
-
-    private final Map<LogReplicationSession, LogReplicationRuntimeParameters> replicationSessionToRuntimeParams;
 
     /**
      * Constructor
      */
-    public CorfuReplicationManager(TopologyDescriptor topology,
-                                   LogReplicationMetadataManager metadataManager, CorfuRuntime corfuRuntime,
+    public CorfuReplicationManager(LogReplicationMetadataManager metadataManager,
                                    LogReplicationContext replicationContext) {
         this.metadataManager = metadataManager;
-        this.corfuRuntime = corfuRuntime;
-        this.localNodeDescriptor = topology.getLocalNodeDescriptor();
-        this.topology = topology;
         this.replicationContext = replicationContext;
-        this.replicationSessionToRuntimeParams = new HashMap<>();
     }
 
     /**
@@ -64,15 +48,7 @@ public class CorfuReplicationManager {
             CorfuLogReplicationRuntime replicationRuntime;
             if (!sessionRuntimeMap.containsKey(replicationSession)) {
                 log.info("Creating Log Replication Runtime for session {}", replicationSession);
-                LogReplicationRuntimeParameters parameters;
-                // parameters is null when the cluster is not the connection starter.
-                if (replicationSessionToRuntimeParams.isEmpty() || replicationSessionToRuntimeParams.get(replicationSession) == null) {
-                    parameters = createRuntimeParams(remote, replicationSession);
-                } else {
-                    parameters = replicationSessionToRuntimeParams.get(replicationSession);
-                }
-                replicationRuntime = new CorfuLogReplicationRuntime(parameters,
-                        metadataManager, replicationSession, replicationContext, router);
+                replicationRuntime = new CorfuLogReplicationRuntime(metadataManager, replicationSession, replicationContext, router);
                 sessionRuntimeMap.put(replicationSession, replicationRuntime);
                 router.addRuntimeFSM(replicationSession, replicationRuntime);
                 replicationRuntime.start();
@@ -85,26 +61,6 @@ public class CorfuReplicationManager {
             log.error("Caught exception, stop log replication runtime to {}", replicationSession, e);
             stopLogReplicationRuntime(replicationSession);
         }
-    }
-
-    // TODO (V2): we might think of unifying the info in ClusterDescriptor into session (all nodes host+port)
-    private LogReplicationRuntimeParameters createRuntimeParams(ClusterDescriptor remoteCluster, LogReplicationSession session) {
-        LogReplicationRuntimeParameters parameters = LogReplicationRuntimeParameters.builder()
-                .localCorfuEndpoint(replicationContext.getLocalCorfuEndpoint())
-                .remoteClusterDescriptor(remoteCluster)
-                .localClusterId(localNodeDescriptor.getClusterId())
-                .topologyConfigId(topology.getTopologyConfigId())
-                .keyStore(corfuRuntime.getParameters().getKeyStore())
-                .tlsEnabled(corfuRuntime.getParameters().isTlsEnabled())
-                .ksPasswordFile(corfuRuntime.getParameters().getKsPasswordFile())
-                .trustStore(corfuRuntime.getParameters().getTrustStore())
-                .tsPasswordFile(corfuRuntime.getParameters().getTsPasswordFile())
-                .maxWriteSize(corfuRuntime.getParameters().getMaxWriteSize())
-                .build();
-
-        replicationSessionToRuntimeParams.put(session, parameters);
-
-        return parameters;
     }
 
     /**
@@ -136,7 +92,6 @@ public class CorfuReplicationManager {
             try {
                 log.info("Stop log replication runtime for session {}", session);
                 logReplicationRuntime.stop();
-                replicationSessionToRuntimeParams.remove(session);
 
             } catch(Exception e) {
                 log.warn("Failed to stop log replication runtime to remote cluster id={}", session.getSinkClusterId());
@@ -144,10 +99,6 @@ public class CorfuReplicationManager {
         } else {
             log.warn("Runtime not found for session {}", session);
         }
-    }
-
-    public void updateTopology(TopologyDescriptor newTopology) {
-        this.topology = newTopology;
     }
 
     public void refreshRuntime(LogReplicationSession session, ClusterDescriptor cluster, long topologyConfigId) {

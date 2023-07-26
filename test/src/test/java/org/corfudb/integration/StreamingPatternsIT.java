@@ -45,6 +45,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 @SuppressWarnings("checkstyle:magicnumber")
 @Slf4j
+@SuppressWarnings("checkstyle:magicnumber")
 public class StreamingPatternsIT extends AbstractIT {
 
     private static String corfuSingleNodeHost;

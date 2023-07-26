@@ -190,9 +190,9 @@ public class LogReplicationSinkWriterIT extends LogReplicationAbstractIT {
                 Assert.assertEquals(corfuRecord.getMetadata().getTableOptions().getStreamTagCount(), 1);
                 Assert.assertEquals(corfuRecord.getMetadata().getTableOptions().getStreamTag(0), "test");
                 Table<StringKey, IntValueTag, Metadata> tableSink =
-                    corfuStoreSink.openTable(NAMESPACE, tableName, StringKey.class,
-                        IntValueTag.class, Metadata.class,
-                        TableOptions.fromProtoSchema(IntValueTag.class, TableOptions.builder().build()));
+                        corfuStoreSink.openTable(NAMESPACE, tableName, StringKey.class,
+                                IntValueTag.class, Metadata.class,
+                                TableOptions.fromProtoSchema(IntValueTag.class, TableOptions.builder().build()));
                 mapNameToMapSink.put(tableName, tableSink);
             }
         }
