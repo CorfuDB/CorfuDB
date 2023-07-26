@@ -3,7 +3,6 @@ package org.corfudb.infrastructure.logreplication.runtime;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
@@ -161,13 +160,12 @@ public class CorfuLogReplicationRuntime {
     /**
      * Default Constructor
      */
-    public CorfuLogReplicationRuntime(LogReplicationRuntimeParameters parameters,
-                                      LogReplicationMetadataManager metadataManager, LogReplicationSession session,
+    public CorfuLogReplicationRuntime(LogReplicationMetadataManager metadataManager, LogReplicationSession session,
                                       LogReplicationContext replicationContext, LogReplicationClientServerRouter router) {
         this.remoteClusterId = session.getSinkClusterId();
         this.session = session;
         this.router = router;
-        this.sourceManager = new LogReplicationSourceManager(parameters,router, metadataManager,
+        this.sourceManager = new LogReplicationSourceManager(router, metadataManager,
                 session, replicationContext);
         this.connectedNodes = new HashSet<>();
         this.replicationContext = replicationContext;
@@ -309,7 +307,6 @@ public class CorfuLogReplicationRuntime {
     public synchronized void refresh(ClusterDescriptor clusterDescriptor, long topologyConfigId) {
         log.warn("Update router's cluster descriptor {}", clusterDescriptor);
         router.onClusterChange(clusterDescriptor);
-        sourceManager.getLogReplicationFSM().setTopologyConfigId(topologyConfigId);
     }
 
     /**
