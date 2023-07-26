@@ -18,6 +18,8 @@ import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.RuntimeParameters;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
@@ -32,6 +34,7 @@ import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
+import org.mockito.Mockito;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
@@ -652,10 +655,14 @@ public class LogUnitServerTest {
         // Verify that the addresses [1, 7] contain the expected data
         // and that the addresses [8, 10] are empty.
         ReadResponse rr = getReadResponse(response.getPayload().getReadLogResponse());
+        CorfuRuntime mockRuntime = Mockito.mock(CorfuRuntime.class);
+        CorfuRuntime.CorfuRuntimeParameters mockParameters = Mockito.mock(CorfuRuntime.CorfuRuntimeParameters.class);
+        when(mockRuntime.getParameters()).thenReturn(mockParameters);
+        when(mockParameters.isNullifyDataOnGetPayload()).thenReturn(true);
         rr.getAddresses().forEach((address, ld) -> {
             if (address < 8L) {
                 assertEquals(DataType.DATA, ld.getType());
-                assertArrayEquals(PAYLOAD_DATA.getBytes(), (byte[]) ld.getPayload(null));
+                assertArrayEquals(PAYLOAD_DATA.getBytes(), (byte[]) ld.getPayload(mockRuntime));
                 assertEquals((Long) 1L, ld.getEpoch());
             } else {
                 assertEquals(DataType.EMPTY, ld.getType());

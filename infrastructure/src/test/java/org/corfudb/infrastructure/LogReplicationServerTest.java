@@ -4,22 +4,23 @@ import io.netty.channel.ChannelHandlerContext;
 import lombok.extern.slf4j.Slf4j;
 import org.assertj.core.api.Assertions;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
-import org.corfudb.infrastructure.logreplication.infrastructure.msghandlers.LogReplicationServer;
 import org.corfudb.infrastructure.logreplication.infrastructure.SessionManager;
+import org.corfudb.infrastructure.logreplication.infrastructure.msghandlers.LogReplicationServer;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationSinkManager;
 import org.corfudb.infrastructure.logreplication.transport.IClientServerRouter;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
-import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
-import org.corfudb.runtime.LogReplication.LogReplicationLeadershipResponseMsg;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationLeadershipRequestMsg;
+import org.corfudb.runtime.LogReplication.LogReplicationLeadershipResponseMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationMetadataRequestMsg;
+import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
+import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.proto.RpcCommon.UuidMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage;
-import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
@@ -81,7 +82,7 @@ public class LogReplicationServerTest {
         Set<LogReplicationSession> sessionSet = new HashSet<>();
         sessionSet.add(session);
         LogReplicationContext replicationContext = new LogReplicationContext(mock(LogReplicationConfigManager.class),
-                0L, SAMPLE_HOSTNAME, true, mock(LogReplicationPluginConfig.class));
+                0L, SAMPLE_HOSTNAME, true, mock(LogReplicationPluginConfig.class), mock(CorfuRuntime.class));
         lrServer = spy(new LogReplicationServer(context, sessionSet, metadataManager, SINK_NODE_ID, SINK_CLUSTER_ID,
                 replicationContext));
         lrServer.getSessionToSinkManagerMap().put(session, sinkManager);

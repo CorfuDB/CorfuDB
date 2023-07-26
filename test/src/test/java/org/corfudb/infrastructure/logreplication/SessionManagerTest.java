@@ -73,7 +73,7 @@ public class SessionManagerTest extends AbstractViewTest {
         DefaultClusterManager defaultClusterManager = new DefaultClusterManager();
         DefaultClusterConfig topologyConfig = new DefaultClusterConfig();
         defaultClusterManager.setLocalNodeId(topologyConfig.getSourceNodeUuids().get(0));
-        topology = defaultClusterManager.generateSingleSourceSinkTopolgy();
+        topology = defaultClusterManager.generateSingleSourceSinkTopology();
 
         SessionManager sessionManager = new SessionManager(topology, corfuRuntime, replicationManager, router,
                 msgHandler, pluginConfig);
@@ -96,7 +96,7 @@ public class SessionManagerTest extends AbstractViewTest {
         DefaultClusterManager defaultClusterManager = new DefaultClusterManager();
         DefaultClusterConfig topologyConfig = new DefaultClusterConfig();
         defaultClusterManager.setLocalNodeId(topologyConfig.getSinkNodeUuids().get(0));
-        topology = defaultClusterManager.generateSingleSourceSinkTopolgy();
+        topology = defaultClusterManager.generateSingleSourceSinkTopology();
 
         SessionManager sessionManager = new SessionManager(topology, corfuRuntime, replicationManager, router,
                 msgHandler, pluginConfig);
@@ -121,7 +121,7 @@ public class SessionManagerTest extends AbstractViewTest {
         DefaultClusterManager clusterManager = new DefaultClusterManager();
         DefaultClusterConfig topologyConfig = new DefaultClusterConfig();
         clusterManager.setLocalNodeId(topologyConfig.getSourceNodeUuids().get(0));
-        topology = clusterManager.generateSingleSourceSinkTopolgy();
+        topology = clusterManager.generateSingleSourceSinkTopology();
 
         SessionManager sessionManager = new SessionManager(topology, corfuRuntime, replicationManager, router,
                 msgHandler, pluginConfig);
