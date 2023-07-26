@@ -1,10 +1,10 @@
 package org.corfudb.infrastructure.logreplication.replication.send.logreader;
 
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
-import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.exceptions.TrimmedException;
+
 import java.util.UUID;
 
 
@@ -18,9 +18,8 @@ import java.util.UUID;
  */
 public class RoutingQueuesLogEntryReader extends BaseLogEntryReader {
 
-    public RoutingQueuesLogEntryReader(CorfuRuntime runtime, LogReplicationSession session,
-                                       LogReplicationContext replicationContext) {
-        super(runtime, session, replicationContext);
+    public RoutingQueuesLogEntryReader(LogReplicationSession session, LogReplicationContext replicationContext) {
+        super(session, replicationContext);
     }
 
     @Override

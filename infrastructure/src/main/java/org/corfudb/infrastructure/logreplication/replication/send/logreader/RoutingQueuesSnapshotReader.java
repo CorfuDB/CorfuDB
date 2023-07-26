@@ -1,18 +1,16 @@
 package org.corfudb.infrastructure.logreplication.replication.send.logreader;
 
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
-import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
-import java.util.UUID;
 
 /**
  * Snapshot reader implementation for Routing Queues Replication Model.
  */
 public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
 
-    public RoutingQueuesSnapshotReader(CorfuRuntime corfuRuntime, LogReplicationSession session,
+    public RoutingQueuesSnapshotReader(LogReplicationSession session,
                                        LogReplicationContext replicationContext) {
-        super(corfuRuntime, session, replicationContext);
+        super(session, replicationContext);
     }
 
     @Override
