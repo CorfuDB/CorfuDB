@@ -9,6 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.logreplication.DataSender;
+import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent.LogReplicationEventType;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationFSM;
@@ -76,11 +77,12 @@ public class SnapshotSender {
 
     private volatile AtomicBoolean stopSnapshotSync = new AtomicBoolean(false);
 
-    public SnapshotSender(CorfuRuntime runtime, SnapshotReader snapshotReader, DataSender dataSender,
-                          ReadProcessor readProcessor, int snapshotSyncBatchSize, LogReplicationFSM fsm) {
-        this.runtime = runtime;
+    public SnapshotSender(LogReplicationContext replicationContext, SnapshotReader snapshotReader, DataSender dataSender,
+                          ReadProcessor readProcessor, LogReplicationFSM fsm) {
+        this.runtime = replicationContext.getCorfuRuntime();
         this.snapshotReader = snapshotReader;
         this.fsm = fsm;
+        int snapshotSyncBatchSize = replicationContext.getConfig(fsm.getSession()).getMaxNumMsgPerBatch();
         this.maxNumSnapshotMsgPerBatch = snapshotSyncBatchSize <= 0 ? DEFAULT_MAX_NUM_MSG_PER_BATCH : snapshotSyncBatchSize;
         this.dataSenderBufferManager = new SnapshotSenderBufferManager(dataSender, fsm.getAckReader());
         this.messageCounter = MeterRegistryProvider.getInstance().map(registry ->

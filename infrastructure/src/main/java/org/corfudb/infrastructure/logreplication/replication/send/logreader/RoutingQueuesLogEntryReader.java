@@ -34,9 +34,8 @@ import static org.corfudb.runtime.LogReplicationUtils.REPLICATED_QUEUE_NAME;
 @Slf4j
 public class RoutingQueuesLogEntryReader extends BaseLogEntryReader {
 
-    public RoutingQueuesLogEntryReader(CorfuRuntime runtime, LogReplicationSession session,
-                                       LogReplicationContext replicationContext) {
-        super(runtime, session, replicationContext);
+    public RoutingQueuesLogEntryReader(LogReplicationSession session, LogReplicationContext replicationContext) {
+        super(session, replicationContext);
     }
 
     @Override

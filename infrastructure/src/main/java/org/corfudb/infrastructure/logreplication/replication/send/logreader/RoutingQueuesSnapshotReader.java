@@ -75,9 +75,9 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
     // Boolean indicating if the Snapshot reader is waiting for a start marker from this snapshot sync
     private boolean waitingForStartMarker = true;
 
-    public RoutingQueuesSnapshotReader(CorfuRuntime corfuRuntime, LogReplicationSession session,
+    public RoutingQueuesSnapshotReader(LogReplicationSession session,
                                        LogReplicationContext replicationContext) {
-        super(corfuRuntime, session, replicationContext);
+        super(session, replicationContext);
         streamTagFollowed = LogReplicationUtils.SNAPSHOT_SYNC_QUEUE_TAG_SENDER_PREFIX + session.getSinkClusterId();
 
         String snapshotSyncQueueFullyQualifiedName = TableRegistry.getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE,
