@@ -7,7 +7,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
-import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.LogReplicationUtils;
 import org.corfudb.runtime.Queue;
@@ -36,9 +35,8 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 @Slf4j
 public class RoutingQueuesLogEntryReader extends BaseLogEntryReader {
 
-    public RoutingQueuesLogEntryReader(CorfuRuntime runtime, LogReplicationSession session,
-                                       LogReplicationContext replicationContext) {
-        super(runtime, session, replicationContext);
+    public RoutingQueuesLogEntryReader(LogReplicationSession session, LogReplicationContext replicationContext) {
+        super(session, replicationContext);
     }
 
     @Override
