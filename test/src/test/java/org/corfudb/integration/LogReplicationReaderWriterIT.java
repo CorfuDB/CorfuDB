@@ -232,9 +232,9 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(rt, LOCAL_SOURCE_CLUSTER_ID);
         configManager.generateConfig(Collections.singleton(getDefaultSession()));
         LogReplicationContext context = new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT,
-                Mockito.mock(LogReplicationPluginConfig.class));
+                Mockito.mock(LogReplicationPluginConfig.class), rt);
 
-        StreamsSnapshotReader reader = new StreamsSnapshotReader(rt, getDefaultSession(), context);
+        StreamsSnapshotReader reader = new StreamsSnapshotReader(getDefaultSession(), context);
 
         reader.reset(rt.getAddressSpaceView().getLogTail());
         while (true) {
@@ -267,12 +267,12 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
         configManager.generateConfig(Collections.singleton(getDefaultSession()));
 
         LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt,
-                getReplicationContext(configManager, 0, "test", true));
+                getReplicationContext(configManager, 0, "test", true, rt));
         logReplicationMetadataManager.addSession(getDefaultSession(), 0, true);
 
         StreamsSnapshotWriter writer = new StreamsSnapshotWriter(rt, logReplicationMetadataManager,
             getDefaultSession(), new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT,
-                Mockito.mock(LogReplicationPluginConfig.class)));
+                Mockito.mock(LogReplicationPluginConfig.class), rt));
 
         if (msgQ.isEmpty()) {
             log.debug("msgQ is empty");
@@ -305,9 +305,9 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(rt, LOCAL_SOURCE_CLUSTER_ID);
         configManager.generateConfig(Collections.singleton(getDefaultSession()));
 
-        StreamsLogEntryReader reader = new StreamsLogEntryReader(rt, getDefaultSession(),
+        StreamsLogEntryReader reader = new StreamsLogEntryReader(getDefaultSession(),
                 new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT,
-                        Mockito.mock(LogReplicationPluginConfig.class)));
+                        Mockito.mock(LogReplicationPluginConfig.class), rt));
         reader.setGlobalBaseSnapshot(Address.NON_ADDRESS, Address.NON_ADDRESS);
 
         LogReplicationEntryMsg entry;
@@ -341,11 +341,11 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
         configManager.generateConfig(Collections.singleton(getDefaultSession()));
 
         LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt,
-                getReplicationContext(configManager, 0, "test", true));
+                getReplicationContext(configManager, 0, "test", true, rt));
         logReplicationMetadataManager.addSession(getDefaultSession(),0, true);
         LogEntryWriter writer = new LogEntryWriter(logReplicationMetadataManager, getDefaultSession(),
                 new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT,
-                        Mockito.mock(LogReplicationPluginConfig.class)));
+                        Mockito.mock(LogReplicationPluginConfig.class), rt));
 
         if (msgQ.isEmpty()) {
             log.debug("msgQ is EMPTY");
@@ -357,9 +357,9 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
     }
 
     private LogReplicationContext getReplicationContext(LogReplicationConfigManager configManager, long topologyConfigId,
-                                                        String localCorfuEndpoint, boolean isLeader) {
+                                                        String localCorfuEndpoint, boolean isLeader, CorfuRuntime rt) {
         return new LogReplicationContext(configManager, topologyConfigId, localCorfuEndpoint, isLeader,
-                Mockito.mock(LogReplicationPluginConfig.class));
+                Mockito.mock(LogReplicationPluginConfig.class), rt);
     }
 
     private void accessTxStream(Iterator<ILogData> iterator, int num) {

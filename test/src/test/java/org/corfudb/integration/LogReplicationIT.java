@@ -4,9 +4,7 @@ import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.CorfuTestParameters;
 import org.corfudb.common.util.ObservableValue;
-import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.config.LogReplicationConfig;
-import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
@@ -40,7 +38,6 @@ import org.junit.Test;
 
 import java.io.IOException;
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
@@ -183,7 +180,9 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
     private final Semaphore blockUntilExpectedAckTs = new Semaphore(1, true);
 
-    private LogReplicationMetadataManager metadataManager;
+    private LogReplicationMetadataManager srcMetadataManager;
+
+    private LogReplicationMetadataManager destMetadataManager;
 
     private final String t0Name = TABLE_PREFIX + 0;
     private final String t1Name = TABLE_PREFIX + 1;
@@ -247,10 +246,15 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         dstCorfuStore = new CorfuStore(dstDataRuntime);
 
         pluginConfig = new LogReplicationPluginConfig(pluginConfigFilePath);
-        metadataManager = new LogReplicationMetadataManager(dstTestRuntime,
-                new LogReplicationContext(new LogReplicationConfigManager(dstTestRuntime, LOCAL_SOURCE_CLUSTER_ID), 0,
-                "test" + SERVERS.PORT_0, true, pluginConfig));
-        metadataManager.addSession(session, 0, true);
+        destMetadataManager = new LogReplicationMetadataManager(dstTestRuntime,
+                new LogReplicationContext(new LogReplicationConfigManager(dstTestRuntime, session.getSinkClusterId()), 0,
+                "test" + SERVERS.PORT_0, true, pluginConfig, dstTestRuntime));
+        destMetadataManager.addSession(session, 0, true);
+
+        srcMetadataManager = new LogReplicationMetadataManager(srcTestRuntime,
+                new LogReplicationContext(new LogReplicationConfigManager(dstTestRuntime, session.getSinkClusterId()), 0,
+                        "test" + SERVERS.PORT_0, true, pluginConfig, dstTestRuntime));
+        destMetadataManager.addSession(session, 0, true);
 
         expectedAckTimestamp = new AtomicLong(Long.MAX_VALUE);
         testConfig.clear().setRemoteClusterId(REMOTE_CLUSTER_ID);
@@ -719,11 +723,10 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         writeCrossTableTransactions(crossTables, true);
 
         testConfig.clear();
-        testConfig.setWritingSrc(true);
         testConfig.setDeleteOP(true);
         testConfig.setWaitOn(WAIT.ON_ACK);
 
-        startLogEntrySync(Collections.singleton(WAIT.ON_ACK), false, null);
+        startLogEntrySync(Collections.singleton(WAIT.ON_ACK), true, null);
 
         // Verify Data on Destination site
         log.debug("****** Wait Data on Destination");
@@ -1164,10 +1167,8 @@ public class LogReplicationIT extends AbstractIT implements Observer {
      */
     private void startTx() {
         ScheduledExecutorService scheduledExecutorService = Executors.newScheduledThreadPool(2);
-        if (testConfig.writingSrc) {
-            expectedAckMessages += NUM_KEYS_LARGE;
-            scheduledExecutorService.submit(this::startTxAtSrc);
-        }
+        expectedAckMessages += NUM_KEYS_LARGE;
+        scheduledExecutorService.submit(this::startTxAtSrc);
     }
 
     private LogReplicationSourceManager startSnapshotSync(Set<WAIT> waitConditions) throws Exception {
@@ -1237,28 +1238,32 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     private LogReplicationSourceManager setupSourceManagerAndObservedValues(Set<WAIT> waitConditions,
         TransitionSource function) throws InterruptedException {
 
-        LogReplicationConfigManager configManager = new LogReplicationConfigManager(srcTestRuntime, LOCAL_SOURCE_CLUSTER_ID);
-        LogReplicationContext context = new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT, pluginConfig);
 
-        configManager.generateConfig(Collections.singleton(session));
-
+        LogReplicationConfigManager sinkConfigManager = new LogReplicationConfigManager(dstTestRuntime, session.getSinkClusterId());
+        sinkConfigManager.generateConfig(Collections.singleton(session));
+        LogReplicationContext sinkContext = new LogReplicationContext(sinkConfigManager, 0, DEFAULT_ENDPOINT, pluginConfig, dstTestRuntime);
         // This IT requires custom values to be set for the replication config.  Set these values so that the default
         // values are not used
-        context.getConfig(session).setMaxNumMsgPerBatch(BATCH_SIZE);
-        context.getConfig(session).setMaxMsgSize(SMALL_MSG_SIZE);
-        context.getConfig(session).setMaxDataSizePerMsg(SMALL_MSG_SIZE * LogReplicationConfig.DATA_FRACTION_PER_MSG / 100);
+        sinkContext.getConfig(session).setMaxNumMsgPerBatch(BATCH_SIZE);
+        sinkContext.getConfig(session).setMaxMsgSize(SMALL_MSG_SIZE);
+        sinkContext.getConfig(session).setMaxDataSizePerMsg(SMALL_MSG_SIZE * LogReplicationConfig.DATA_FRACTION_PER_MSG / 100);
 
         // Data Sender
-        sourceDataSender = new SourceForwardingDataSender(DESTINATION_ENDPOINT, testConfig, metadataManager,
-                function, context);
+        sourceDataSender = new SourceForwardingDataSender(testConfig, destMetadataManager,
+                function, sinkContext, dstTestRuntime);
+
+        LogReplicationConfigManager srcConfigManager = new LogReplicationConfigManager(srcTestRuntime, LOCAL_SOURCE_CLUSTER_ID);
+        srcConfigManager.generateConfig(Collections.singleton(session));
+        LogReplicationContext srcContext = new LogReplicationContext(srcConfigManager, 0, DEFAULT_ENDPOINT, pluginConfig, srcTestRuntime);
+        // This IT requires custom values to be set for the replication config.  Set these values so that the default
+        // values are not used
+        srcContext.getConfig(session).setMaxNumMsgPerBatch(BATCH_SIZE);
+        srcContext.getConfig(session).setMaxMsgSize(SMALL_MSG_SIZE);
+        srcContext.getConfig(session).setMaxDataSizePerMsg(SMALL_MSG_SIZE * LogReplicationConfig.DATA_FRACTION_PER_MSG / 100);
 
         // Source Manager
-        LogReplicationRuntimeParameters runtimeParameters = LogReplicationRuntimeParameters.builder()
-                .remoteClusterDescriptor(new ClusterDescriptor(REMOTE_CLUSTER_ID, CORFU_PORT, new ArrayList<>()))
-                .localCorfuEndpoint(SOURCE_ENDPOINT)
-                .build();
-        LogReplicationSourceManager logReplicationSourceManager = new LogReplicationSourceManager(runtimeParameters,
-                metadataManager, sourceDataSender, session, context);
+        LogReplicationSourceManager logReplicationSourceManager = new LogReplicationSourceManager(srcMetadataManager,
+                sourceDataSender, session, srcContext);
 
         // Set Log Replication Source Manager so we can emulate the channel for data & control messages (required
         // for testing)
@@ -1367,14 +1372,14 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     }
 
     private void verifyPersistedSnapshotMetadata() {
-        ReplicationMetadata metadata = metadataManager.getReplicationMetadata(session);
+        ReplicationMetadata metadata = destMetadataManager.getReplicationMetadata(session);
         long lastSnapshotStart = metadata.getLastSnapshotStarted();
         long lastSnapshotDone = metadata.getLastSnapshotApplied();
         assertThat(lastSnapshotStart).isEqualTo(lastSnapshotDone);
     }
 
     private void verifyPersistedLogEntryMetadata() {
-        long lastLogProcessed = metadataManager.getReplicationMetadata(session)
+        long lastLogProcessed = destMetadataManager.getReplicationMetadata(session)
                 .getLastLogEntryBatchProcessed();
         assertThat(expectedAckTimestamp.get() == lastLogProcessed).isTrue();
     }
@@ -1417,7 +1422,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         private int delayedApplyCycles = 0; // Represents the number of cycles for which snapshot sync apply queries
                                             // reply that it has still not completed.
         private boolean trim = false;
-        private boolean writingSrc = false;
         private boolean writingDst = false;
         private boolean deleteOP = false;
         private WAIT waitOn = WAIT.ON_ACK;
@@ -1430,7 +1434,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
             delayedApplyCycles = 0;
             timeoutMetadataResponse = false;
             trim = false;
-            writingSrc = false;
             writingDst = false;
             deleteOP = false;
             remoteClusterId = null;

@@ -1,7 +1,6 @@
 package org.corfudb.infrastructure.logreplication.replication.send.logreader;
 
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
-import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 
 
@@ -14,8 +13,7 @@ import org.corfudb.runtime.LogReplication.LogReplicationSession;
  */
 public class LogicalGroupLogEntryReader extends BaseLogEntryReader {
 
-    public LogicalGroupLogEntryReader(CorfuRuntime runtime, LogReplicationSession session,
-                                      LogReplicationContext replicationContext) {
-        super(runtime, session, replicationContext);
+    public LogicalGroupLogEntryReader(LogReplicationSession session, LogReplicationContext replicationContext) {
+        super(session, replicationContext);
     }
 }

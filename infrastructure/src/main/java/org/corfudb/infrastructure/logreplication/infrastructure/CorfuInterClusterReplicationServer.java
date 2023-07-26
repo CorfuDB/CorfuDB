@@ -370,16 +370,17 @@ public class CorfuInterClusterReplicationServer implements Runnable {
             serverContext.getCorfuServerConnectionPort()));
 
         return CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder()
-            .trustStore((String) serverContext.getServerConfig().get(ConfigParamNames.TRUST_STORE))
-            .tsPasswordFile((String) serverContext.getServerConfig().get(ConfigParamNames.TRUST_STORE_PASS_FILE))
-            .keyStore((String) serverContext.getServerConfig().get(ConfigParamNames.KEY_STORE))
-            .ksPasswordFile((String) serverContext.getServerConfig().get(ConfigParamNames.KEY_STORE_PASS_FILE))
-            .tlsEnabled((Boolean) serverContext.getServerConfig().get("--enable-tls"))
-            .systemDownHandler(() -> System.exit(SYSTEM_EXIT_ERROR_CODE))
-            .maxCacheEntries(serverContext.getLogReplicationCacheMaxSize()/2)
-            .maxWriteSize(serverContext.getMaxWriteSize())
-            .build())
-            .parseConfigurationString(localCorfuEndpoint).connect();
+                .trustStore((String) serverContext.getServerConfig().get(ConfigParamNames.TRUST_STORE))
+                .tsPasswordFile((String) serverContext.getServerConfig().get(ConfigParamNames.TRUST_STORE_PASS_FILE))
+                .keyStore((String) serverContext.getServerConfig().get(ConfigParamNames.KEY_STORE))
+                .ksPasswordFile((String) serverContext.getServerConfig().get(ConfigParamNames.KEY_STORE_PASS_FILE))
+                .tlsEnabled((Boolean) serverContext.getServerConfig().get("--enable-tls"))
+                .systemDownHandler(() -> System.exit(SYSTEM_EXIT_ERROR_CODE))
+                .maxCacheEntries(serverContext.getLogReplicationCacheMaxSize()/2)
+                .maxWriteSize(serverContext.getMaxWriteSize())
+                .nullifyDataOnGetPayload(false)
+                .build())
+                .parseConfigurationString(localCorfuEndpoint).connect();
     }
 
     private String getCorfuEndpoint(String localHostAddress, int port) {

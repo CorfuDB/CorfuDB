@@ -62,10 +62,10 @@ public class LogReplicationAckReader {
 
     private final Lock lock = new ReentrantLock();
 
-    public LogReplicationAckReader(LogReplicationMetadataManager metadataManager, CorfuRuntime runtime,
-                                   LogReplicationSession session, LogReplicationContext replicationContext) {
+    public LogReplicationAckReader(LogReplicationMetadataManager metadataManager, LogReplicationSession session,
+                                   LogReplicationContext replicationContext) {
         this.metadataManager = metadataManager;
-        this.runtime = runtime;
+        this.runtime = replicationContext.getCorfuRuntime();
         this.session = session;
         this.replicationContext = replicationContext;
     }
