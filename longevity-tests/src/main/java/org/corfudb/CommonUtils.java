@@ -63,20 +63,20 @@ public class CommonUtils {
         return (Table<ExampleKey, V, ManagedMetadata>) openedTables.get(tableName);
     }
 
-    public ExampleKey getRandomKey(int bound) {
-        return ExampleKey.newBuilder().setKey(EXAMPLE_KEY_PREFIX + ThreadLocalRandom.current().nextInt(bound)).build();
+    public ExampleKey getRandomKey(long bound) {
+        return ExampleKey.newBuilder().setKey(EXAMPLE_KEY_PREFIX + ThreadLocalRandom.current().nextLong(bound)).build();
     }
 
     public ExampleValue getRandomValue(int payloadSize) {
         return getRandomValue(100, payloadSize);
     }
 
-    public ExampleValue getRandomValue(int bound, int payloadSize) {
+    public ExampleValue getRandomValue(long bound, int payloadSize) {
         byte[] payload = new byte[payloadSize];
         ThreadLocalRandom.current().nextBytes(payload);
         return ExampleValue.newBuilder()
                 .setPayload(Arrays.toString(payload))
-                .setAnotherKey(ThreadLocalRandom.current().nextInt(bound))
+                .setAnotherKey(ThreadLocalRandom.current().nextLong(bound))
                 .build();
     }
 }

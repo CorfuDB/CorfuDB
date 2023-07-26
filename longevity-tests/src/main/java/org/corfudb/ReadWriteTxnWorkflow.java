@@ -56,7 +56,7 @@ public class ReadWriteTxnWorkflow extends Workflow {
             this.writeDistribution = Arrays.stream(properties.getProperty("write.distribution").split(","))
                     .map(Integer::parseInt)
                     .collect(Collectors.toList());
-            this.interval = Duration.ofSeconds(Long.parseLong(properties.getProperty("interval")));
+            this.interval = Duration.ofSeconds(Long.parseLong(properties.getProperty("task.interval.seconds")));
 
             for(String tableName : this.readTableNames) {
                 commonUtils.openTable(namespace, tableName);
@@ -73,7 +73,8 @@ public class ReadWriteTxnWorkflow extends Workflow {
 
     @Override
     public void start() {
-        this.executor.scheduleWithFixedDelay(this::executeTask, 1, interval.toMillis()/10, TimeUnit.MILLISECONDS);
+        this.executor.scheduleWithFixedDelay(this::executeTask,
+                1, interval.toMillis()/10, TimeUnit.MILLISECONDS);
     }
 
     private void executeTask() {
@@ -104,10 +105,5 @@ public class ReadWriteTxnWorkflow extends Workflow {
         catch (Exception e) {
             log.error("Encountered exception in ReadWriteTxnWorkflow: ", e);
         }
-    }
-
-    @Override
-    public void stop() {
-        this.executor.shutdownNow();
     }
 }

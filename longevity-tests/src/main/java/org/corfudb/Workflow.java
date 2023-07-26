@@ -18,6 +18,8 @@ public abstract class Workflow {
     }
     abstract void init(String propFilePath, CorfuRuntime corfuRuntime, CommonUtils commonUtils);
     abstract void start();
-    abstract void stop();
+    public void stop() {
+        this.executor.shutdownNow();
+    }
 
 }
