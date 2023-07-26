@@ -1,14 +1,17 @@
 package org.corfudb.runtime.view.stream;
 
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.exceptions.TrimmedException;
 
 import java.util.Collections;
 import java.util.UUID;
 import java.util.stream.Stream;
 
+@Slf4j
 public class OpaqueStream {
     /**
      * The stream view backing this adapter.
