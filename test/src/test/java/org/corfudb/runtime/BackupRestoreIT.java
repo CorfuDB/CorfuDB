@@ -245,8 +245,9 @@ public class BackupRestoreIT extends AbstractIT {
      * @param corfuStore2   the second corfuStore
      * @param tableName2    the table in the second corfuStore which is compared with tableName1
      */
-    private void compareCorfuStoreTables(CorfuStore corfuStore1, String tableName1, CorfuStore corfuStore2, String tableName2) {
-        TxnContext aTxn = corfuStore1.txn(NAMESPACE);
+    private void compareCorfuStoreTables(CorfuStore corfuStore1, String namespace,
+                                         String tableName1, CorfuStore corfuStore2, String tableName2) {
+        TxnContext aTxn = corfuStore1.txn(namespace);
         List<CorfuStoreEntry<Uuid, SampleSchema.SampleTableAMsg, Uuid>> aValueSet = new ArrayList<>();
         for (int i = 0; i < numEntries; i++) {
             uuidKey = SampleSchema.Uuid.newBuilder()
@@ -257,7 +258,7 @@ public class BackupRestoreIT extends AbstractIT {
         }
         aTxn.close();
 
-        TxnContext bTxn = corfuStore2.txn(NAMESPACE);
+        TxnContext bTxn = corfuStore2.txn(namespace);
         List<CorfuStoreEntry<Uuid, SampleSchema.SampleTableAMsg, Uuid>> bValueSet = new ArrayList<>();
         for (int i = 0; i < numEntries; i++) {
             uuidKey = SampleSchema.Uuid.newBuilder()
@@ -339,13 +340,13 @@ public class BackupRestoreIT extends AbstractIT {
         long preRestoreEntryCnt = destDataCorfuStore.getRuntime().getStreamsView().get(streamIDs.get(0)).stream().count();
 
         // Restore using backup files
-        Restore restore = new Restore(BACKUP_TAR_FILE_PATH, restoreRuntime, Restore.RestoreMode.PARTIAL);
+        Restore restore = new Restore(BACKUP_TAR_FILE_PATH, restoreRuntime, Restore.RestoreMode.PARTIAL, null);
         restore.start();
 
         // Compare data entries in CorfuStore before and after the Backup/Restore
         for (String tableName : tableNames) {
             openTableWithoutBackupTag(destDataCorfuStore, NAMESPACE, tableName);
-            compareCorfuStoreTables(srcDataCorfuStore, tableName, destDataCorfuStore, tableName);
+            compareCorfuStoreTables(srcDataCorfuStore, NAMESPACE, tableName, destDataCorfuStore, tableName);
         }
 
         long postRestoreEntryCnt = destDataCorfuStore.getRuntime().getStreamsView().get(streamIDs.get(0)).stream().count();
@@ -386,13 +387,13 @@ public class BackupRestoreIT extends AbstractIT {
         assertThat(backupTarFile).exists();
 
         // Restore using backup files
-        Restore restore = new Restore(BACKUP_TAR_FILE_PATH, restoreRuntime, Restore.RestoreMode.PARTIAL);
+        Restore restore = new Restore(BACKUP_TAR_FILE_PATH, restoreRuntime, Restore.RestoreMode.PARTIAL, null);
         restore.start();
 
         // Compare data entries in CorfuStore before and after the Backup/Restore
         for (String tableName : tableNames) {
             openTableWithBackupTag(destDataCorfuStore, NAMESPACE, tableName);
-            compareCorfuStoreTables(srcDataCorfuStore, tableName, destDataCorfuStore, tableName);
+            compareCorfuStoreTables(srcDataCorfuStore, NAMESPACE, tableName, destDataCorfuStore, tableName);
         }
 
         // Close servers and runtime before exiting
@@ -651,12 +652,12 @@ public class BackupRestoreIT extends AbstractIT {
         assertThat(streamIDs).containsAll(backupStreamIds);
 
         // Restore using backup files
-        Restore restore = new Restore(BACKUP_TAR_FILE_PATH, restoreRuntime, Restore.RestoreMode.PARTIAL);
+        Restore restore = new Restore(BACKUP_TAR_FILE_PATH, restoreRuntime, Restore.RestoreMode.PARTIAL, null);
         restore.start();
 
         // Compare data entries in CorfuStore before and after the Backup/Restore
         openTableWithoutBackupTag(destDataCorfuStore, NAMESPACE, emptyTableName);
-        compareCorfuStoreTables(srcDataCorfuStore, emptyTableName, destDataCorfuStore, emptyTableName);
+        compareCorfuStoreTables(srcDataCorfuStore, NAMESPACE, emptyTableName, destDataCorfuStore, emptyTableName);
 
         // Close servers and runtime before exiting
         cleanEnv();
@@ -697,7 +698,7 @@ public class BackupRestoreIT extends AbstractIT {
         backupTarFile.delete();
 
         // Restore using backup files
-        Restore restore = new Restore(BACKUP_TAR_FILE_PATH, restoreRuntime, Restore.RestoreMode.PARTIAL);
+        Restore restore = new Restore(BACKUP_TAR_FILE_PATH, restoreRuntime, Restore.RestoreMode.PARTIAL, null);
         Exception e = assertThrows(BackupRestoreException.class, restore::start);
         assertThat(e.getCause().getClass()).isEqualTo(FileNotFoundException.class);
 
@@ -787,13 +788,13 @@ public class BackupRestoreIT extends AbstractIT {
         }
 
         // Restore using backup files
-        Restore restore = new Restore(BACKUP_TAR_FILE_PATH, restoreRuntime, Restore.RestoreMode.FULL);
+        Restore restore = new Restore(BACKUP_TAR_FILE_PATH, restoreRuntime, Restore.RestoreMode.FULL, null);
         restore.start();
 
         // Compare data entries in CorfuStore before and after the Backup/Restore
         for (String tableName : tableNames) {
             openTableWithoutBackupTag(destDataCorfuStore, NAMESPACE, tableName);
-            compareCorfuStoreTables(srcDataCorfuStore, tableName, destDataCorfuStore, tableName);
+            compareCorfuStoreTables(srcDataCorfuStore, NAMESPACE, tableName, destDataCorfuStore, tableName);
         }
 
         Collection<CorfuStoreMetadata.TableName> allTablesBeforeBackup =
@@ -829,7 +830,7 @@ public class BackupRestoreIT extends AbstractIT {
         dir2 = Files.createTempDirectory(RESTORE_TEMP_DIR_PREFIX).toFile();
 
         // Restore using backup files
-        Restore restore = new Restore(BACKUP_TAR_FILE_PATH, restoreRuntime, Restore.RestoreMode.PARTIAL);
+        Restore restore = new Restore(BACKUP_TAR_FILE_PATH, restoreRuntime, Restore.RestoreMode.PARTIAL, null);
         restore.start();
 
         assertThat(dir1).doesNotExist();
@@ -864,7 +865,7 @@ public class BackupRestoreIT extends AbstractIT {
         backup.start();
 
         // Restore using backup files
-        Restore restore = new Restore(BACKUP_TAR_FILE_PATH, restoreRuntime, Restore.RestoreMode.PARTIAL_TAGGED);
+        Restore restore = new Restore(BACKUP_TAR_FILE_PATH, restoreRuntime, Restore.RestoreMode.PARTIAL_TAGGED, null);
         restore.start();
 
         // Compare data entries in CorfuStore before and after the Backup/Restore
@@ -873,11 +874,75 @@ public class BackupRestoreIT extends AbstractIT {
             if (i++ % 2 == 0) {
                 // tables that have requires_backup_support tag
                 openTableWithBackupTag(destDataCorfuStore, NAMESPACE, tableName);
-                compareCorfuStoreTables(srcDataCorfuStore, tableName, destDataCorfuStore, tableName);
+                compareCorfuStoreTables(srcDataCorfuStore, NAMESPACE, tableName, destDataCorfuStore, tableName);
             } else {
                 // tables that don't have requires_backup_support tag are not restored and should remain empty
                 openTableWithoutBackupTag(destDataCorfuStore, NAMESPACE, tableName);
                 assertThat(destDataCorfuStore.getTable(NAMESPACE, tableName).count()).isZero();
+            }
+        }
+
+        // Close servers and runtime before exiting
+        cleanEnv();
+    }
+
+    /**
+     * Back up all tables and test restore by namespace
+     */
+    @Test
+    public void restoreANamespaceFromFullBackupTest() throws Exception {
+
+        // Set up the test environment
+        setupEnv();
+
+        // Create Corfu Store to add entries into server
+        CorfuStore srcDataCorfuStore = new CorfuStore(srcDataRuntime);
+        CorfuStore destDataCorfuStore = new CorfuStore(destDataRuntime);
+
+        List<String> tableNames = getLongTableNames(numTables);
+
+        // Generate random entries and save into sourceServer
+        // Set half of the tables with backup tag, and the other half without backup tag
+        int i = 0;
+        for (String tableName : tableNames) {
+            if (i++ % 2 == 0) {
+                generateData(srcDataCorfuStore, NAMESPACE, tableName, false);
+            } else {
+                generateData(srcDataCorfuStore, ANOTHER_NAMESPACE, tableName, false);
+            }
+
+        }
+
+        // Backup all tables
+        Backup backup = new Backup(BACKUP_TAR_FILE_PATH, backupRuntime, false, null);
+        backup.start();
+
+        // Add pre-existing data into restore server
+        // Restore should clean up the pre-existing data before actual restoring
+        i = 0;
+        for (String tableName : tableNames) {
+            if (i++ % 2 == 0) {
+                generateData(destDataCorfuStore, NAMESPACE, tableName, false);
+            } else {
+                generateData(destDataCorfuStore, ANOTHER_NAMESPACE, tableName, false);
+            }
+        }
+
+        // Restore using backup files
+        Restore restore = new Restore(BACKUP_TAR_FILE_PATH, restoreRuntime, Restore.RestoreMode.PARTIAL_NAMESPACE, ANOTHER_NAMESPACE);
+        restore.start();
+
+        // Compare data entries in CorfuStore before and after the Backup/Restore
+        i = 0;
+        for (String tableName : tableNames) {
+            if (i++ % 2 == 0) {
+                // Tables in other namespaces should not be affected
+                openTableWithoutBackupTag(destDataCorfuStore, NAMESPACE, tableName);
+                assertThat(destDataCorfuStore.getTable(NAMESPACE, tableName).count()).isEqualTo(numEntries);
+            } else {
+                // Only tables in ANOTHER_NAMESPACE are restored
+                openTableWithoutBackupTag(destDataCorfuStore, ANOTHER_NAMESPACE, tableName);
+                compareCorfuStoreTables(srcDataCorfuStore, ANOTHER_NAMESPACE, tableName, destDataCorfuStore, tableName);
             }
         }
 
