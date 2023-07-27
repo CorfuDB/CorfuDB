@@ -3,7 +3,6 @@ package org.corfudb;
 import com.google.protobuf.Message;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuStoreMetadata;
-import org.corfudb.runtime.ExampleSchemas;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStoreEntry;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
@@ -26,6 +25,9 @@ public class DCNHandler extends NotificationListenerHandler {
             results.getEntries().forEach((schema, entries) -> {
             for (CorfuStreamEntry entry : entries) {
                 try (TxnContext txn = store.txn(namespace)) {
+                    if (schema.getTableName().contains("Queue")) {
+                        continue;
+                    }
                     int size = txn.count(schema.getTableName());
                     if (size > 5) {
                         log.debug("TableName: {} has size: {}", schema.getTableName(), size);

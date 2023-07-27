@@ -53,7 +53,7 @@ public class HighIntensityWriteWorkflow extends Workflow {
             this.writeTableNames = Arrays.asList(properties.getProperty("write.tablenames").split(","));
             this.rareUpdateTableNames = Arrays.asList(properties.getProperty("rare.update.tablenames").split(","));
             this.payloadSize = Integer.parseInt(properties.getProperty("payload.size.bytes"));
-            this.randomSleepInterval = Duration.ofMinutes(Long.parseLong(properties.getProperty("random.sleepinterval.mins")));
+            this.randomSleepInterval = Duration.ofSeconds(Long.parseLong(properties.getProperty("random.sleepinterval.seconds")));
             this.interval = Duration.ofSeconds(Long.parseLong(properties.getProperty("task.interval.seconds")));
             this.tableSize = Long.parseLong(properties.getProperty("table.size"));
             this.rareUpdateRatio = Double.parseDouble(properties.getProperty("rare.update.ratio"));
@@ -83,7 +83,7 @@ public class HighIntensityWriteWorkflow extends Workflow {
                 log.info("Put table name : {}", t);
             });
             //Random sleep to simulate non-db related work in-between a txn
-            TimeUnit.MINUTES.sleep(randomSleepInterval.toMinutes());
+            TimeUnit.MILLISECONDS.sleep(randomSleepInterval.toMillis());
             rareUpdateTableNames.forEach( (t) -> {
                 if (ThreadLocalRandom.current().nextDouble(100) < rareUpdateRatio) {
                     txn.keySet(t);

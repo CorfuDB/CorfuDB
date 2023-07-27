@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.CommonUtils.Config;
+import org.corfudb.util.NodeLocator;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -26,7 +27,8 @@ public class LongevityTesting {
         Config config = new Config();
         JCommander jCommander = new JCommander(config);
         jCommander.parse(args);
-        CorfuRuntime runtime = new CorfuRuntime(config.serverEndpoints).connect();
+        NodeLocator nodeLocator = NodeLocator.builder().host(config.host).port(Integer.parseInt(config.port)).build();
+        CorfuRuntime runtime = new CorfuRuntime().parseConfigurationString(nodeLocator.toEndpointUrl()).connect();
         CorfuStore corfuStore = new CorfuStore(runtime);
         CommonUtils commonUtils = new CommonUtils(corfuStore);
 
@@ -48,15 +50,24 @@ public class LongevityTesting {
             Properties properties = new Properties();
             properties.load(input);
             List<String> listenerClassNames = Arrays.asList(properties.getProperty("listener.handlers").split(","));
+            List<String> listenerPropFiles = Arrays.asList(properties.getProperty("listener.properties.files").split(","));
             List<String> namespaces = Arrays.asList(properties.getProperty("namespaces").split(","));
             List<String> streamTags = Arrays.asList(properties.getProperty("streamTags").split(","));
 
             for (int i=0; i<listenerClassNames.size(); i++) {
                 Class<?> listenerClass = Class.forName(listenerClassNames.get(i));
-                Constructor<?> listenerConstructor = listenerClass.getConstructor(String.class, CorfuStore.class, CommonUtils.class,
-                        String.class, String.class);
-                NotificationListenerHandler l = (NotificationListenerHandler) listenerConstructor.newInstance(
-                        listenerClassNames.get(i), corfuStore, commonUtils, namespaces.get(i), streamTags.get(i));
+                NotificationListenerHandler l;
+                if (listenerPropFiles.get(i).contains("null")) {
+                    Constructor<?> listenerConstructor = listenerClass.getConstructor(String.class, CorfuStore.class, CommonUtils.class,
+                            String.class, String.class);
+                    l = (NotificationListenerHandler) listenerConstructor.newInstance(
+                            listenerClassNames.get(i), corfuStore, commonUtils, namespaces.get(i), streamTags.get(i));
+                } else {
+                    Constructor<?> listenerConstructor = listenerClass.getConstructor(String.class, CorfuStore.class, CommonUtils.class,
+                            String.class, String.class, String.class);
+                    l = (NotificationListenerHandler) listenerConstructor.newInstance(listenerClassNames.get(i),
+                            corfuStore, commonUtils, namespaces.get(i), streamTags.get(i), listenerPropFiles.get(i));
+                }
                 corfuStore.subscribeListener(l, namespaces.get(i), streamTags.get(i));
                 notificationListeners.add(l);
             }

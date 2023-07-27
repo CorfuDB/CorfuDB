@@ -7,6 +7,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.ExampleSchemas.ExampleKey;
 import org.corfudb.runtime.ExampleSchemas.ExampleValue;
 import org.corfudb.runtime.ExampleSchemas.ManagedMetadata;
+import org.corfudb.runtime.Queue;
 import org.corfudb.runtime.collections.*;
 
 import java.lang.reflect.InvocationTargetException;
@@ -26,8 +27,11 @@ public class CommonUtils {
         @Parameter(names = "--testDuration", description = "Num of minutes to run the test")
         int testDuration;
 
-        @Parameter(names = "--serverEndpoints", description = "List of corfu server endpoints to connect to")
-        String serverEndpoints;
+        @Parameter(names = "--host", description = "Host to connect to")
+        String host;
+
+        @Parameter(names = "--port", description = "Port to connect to")
+        String port;
     }
 
     public static final String EXAMPLE_VALUE_PREFIX = "Value_";
@@ -36,6 +40,7 @@ public class CommonUtils {
     CorfuRuntime corfuRuntime;
     CorfuStore corfuStore;
     Map<String, Table<ExampleKey, ? extends Message, ManagedMetadata>> openedTables = new HashMap<>();
+    Map<String, Table<Queue.CorfuGuidMsg, ExampleValue, Queue.CorfuQueueMetadataMsg>> openedQueues = new HashMap<>();
 
     CommonUtils(CorfuStore corfuStore) {
         corfuRuntime = corfuStore.getRuntime();
@@ -57,6 +62,17 @@ public class CommonUtils {
                 vClass,
                 ManagedMetadata.class,
                 TableOptions.fromProtoSchema(ExampleValue.class)));
+    }
+
+    public void openQueue(String namespace, String queueName) throws InvocationTargetException, NoSuchMethodException, IllegalAccessException {
+        openedQueues.put(queueName, corfuStore.openQueue(namespace,
+                queueName,
+                ExampleValue.class,
+                TableOptions.fromProtoSchema(ExampleValue.class)));
+    }
+
+    public Table<Queue.CorfuGuidMsg, ExampleValue, Queue.CorfuQueueMetadataMsg> getQueue(String namespace, String tableName) {
+        return (Table<Queue.CorfuGuidMsg, ExampleValue, Queue.CorfuQueueMetadataMsg>) openedQueues.get(tableName);
     }
 
     public <V extends Message> Table<ExampleKey, V, ManagedMetadata> getTable(String namespace, String tableName) {
