@@ -27,6 +27,7 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Deque;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map.Entry;
 import java.util.NoSuchElementException;
@@ -35,6 +36,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.ForkJoinWorkerThread;
+import java.util.concurrent.atomic.LongAdder;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -57,10 +59,13 @@ public class Table<K extends Message, V extends Message, M extends Message> impl
     // gets block on parallel stream, because the pool is exhausted with threads that are trying to acquire the VLO
     // look, which creates a circular dependency. In other words, a deadlock.
 
+    public static Set<Long> workerThreads = new HashSet<>();
+
     protected static final ForkJoinPool pool = new ForkJoinPool(Math.max(Runtime.getRuntime().availableProcessors() / 2, 1),
             pool -> {
                 final ForkJoinWorkerThread worker = ForkJoinPool.defaultForkJoinWorkerThreadFactory.newThread(pool);
                 worker.setName("Table-Forkjoin-pool-" + worker.getPoolIndex());
+                workerThreads.add(worker.getId());
                 return worker;
             }, null, true);
 
@@ -105,6 +110,12 @@ public class Table<K extends Message, V extends Message, M extends Message> impl
     @Getter
     private final ISerializer serializer;
 
+    private final LongAdder kvs = new LongAdder();
+    private final LongAdder kvsRet = new LongAdder();
+
+    public final static LongAdder totalkvs = new LongAdder();
+    public final static LongAdder totalkvsRet = new LongAdder();
+
     /**
      * Returns a Table instance backed by a CorfuTable.
      *
@@ -147,6 +158,9 @@ public class Table<K extends Message, V extends Message, M extends Message> impl
         } else {
             this.guidGenerator = null;
         }
+
+        MicroMeterUtils.gauge("kvsc" + this.fullyQualifiedTableName, kvs, LongAdder::sumThenReset);
+        MicroMeterUtils.gauge("kvscret" + this.fullyQualifiedTableName, kvsRet, LongAdder::sumThenReset);
     }
 
     /**
@@ -450,6 +464,7 @@ public class Table<K extends Message, V extends Message, M extends Message> impl
     List<CorfuStoreEntry<K, V, M>> scanAndFilterByEntry(
             @Nonnull final Predicate<CorfuStoreEntry<K, V, M>> entryPredicate) {
         long startTime = System.nanoTime();
+        long num = corfuTable.size();
         try(Stream<Entry<K, CorfuRecord<V, M>>> stream = corfuTable.entryStream()) {
             List<CorfuStoreEntry<K, V, M>> res = pool.submit(() -> stream
                     .filter(recordEntry ->
@@ -465,6 +480,10 @@ public class Table<K extends Message, V extends Message, M extends Message> impl
                     .collect(Collectors.toList())).join();
             MicroMeterUtils.time(Duration.ofNanos(System.nanoTime() - startTime), "table.scan",
                     "tableName", getFullyQualifiedTableName());
+            kvs.add(num);
+            kvsRet.add(res.size());
+            totalkvs.add(num);
+            totalkvsRet.add(res.size());
             return res;
         }
     }

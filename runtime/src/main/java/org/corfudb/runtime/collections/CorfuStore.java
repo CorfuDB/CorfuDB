@@ -57,6 +57,7 @@ public class CorfuStore {
     public CorfuStore(@Nonnull final CorfuRuntime runtime) {
         this.runtime = runtime;
         this.corfuStoreMetrics = new CorfuStoreMetrics();
+
     }
 
     /**

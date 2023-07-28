@@ -9,6 +9,7 @@ import com.google.protobuf.Message;
 import com.google.protobuf.ProtocolStringList;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.runtime.CheckpointWriter;
 import org.corfudb.runtime.CorfuOptions;
@@ -28,18 +29,23 @@ import org.corfudb.runtime.collections.streaming.StreamingManager;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.SerializerException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.object.MVOCorfuCompileProxy;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.ObjectsView.StreamTagInfo;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.GitRepositoryState;
+import org.corfudb.util.Sleep;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.ProtobufSerializer;
 import org.corfudb.util.serializer.Serializers;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+import java.lang.management.ManagementFactory;
+import java.lang.management.ThreadMXBean;
 import java.lang.reflect.InvocationTargetException;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -55,6 +61,10 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.LongAdder;
+
 import java.util.stream.Collectors;
 
 import static org.corfudb.runtime.view.ObjectsView.LOG_REPLICATOR_STREAM_INFO;
@@ -123,6 +133,10 @@ public class TableRegistry {
      * Spawn the local client checkpointer
      */
 
+    ExecutorService timereporter = Executors.newSingleThreadExecutor();
+    public final static LongAdder cputime = new LongAdder();
+    public final static LongAdder usertime = new LongAdder();
+
     public TableRegistry(CorfuRuntime runtime) {
         this.runtime = runtime;
         this.tableMap = new ConcurrentHashMap<>();
@@ -180,6 +194,44 @@ public class TableRegistry {
         } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
             throw new RuntimeException(e);
         }
+
+        MicroMeterUtils.gauge("kvsc-total", Table.totalkvs, LongAdder::sumThenReset);
+        MicroMeterUtils.gauge("kvsc-total-ret", Table.totalkvsRet, LongAdder::sumThenReset);
+        MicroMeterUtils.gauge("kvsc-user", usertime, LongAdder::sumThenReset);
+        MicroMeterUtils.gauge("kvsc-cpu", cputime, LongAdder::sumThenReset);
+
+
+        MicroMeterUtils.gauge("kvsc-gets", MVOCorfuCompileProxy.gets, LongAdder::sumThenReset);
+        MicroMeterUtils.gauge("kvsc-puts", MVOCorfuCompileProxy.puts, LongAdder::sumThenReset);
+
+
+        timereporter.submit(() -> {
+            ThreadMXBean bean = ManagementFactory.getThreadMXBean( );
+            Map<Long, Long> ttimesUser = new HashMap<>();
+            Map<Long, Long> ttimesCpu = new HashMap<>();
+
+            while (true) {
+                try {
+                    for (long tId : Table.workerThreads) {
+                        long prevUser = ttimesUser.getOrDefault(tId, 0L);
+                        long prevCpu = ttimesCpu.getOrDefault(tId, 0L);
+
+                        long currCpu = bean.getThreadCpuTime(tId);
+                        long currUser = bean.getThreadUserTime(tId);
+
+                        usertime.add(currUser - prevUser);
+                        cputime.add(currCpu - prevCpu);
+
+                        ttimesUser.put(tId, currUser);
+                        ttimesCpu.put(tId, currCpu);
+                    }
+
+                    Sleep.sleepUninterruptibly(Duration.ofSeconds(5));
+                } catch (Exception e) {
+                    log.error("cputime failed ", e);
+                }
+            }
+        });
     }
 
     /**
