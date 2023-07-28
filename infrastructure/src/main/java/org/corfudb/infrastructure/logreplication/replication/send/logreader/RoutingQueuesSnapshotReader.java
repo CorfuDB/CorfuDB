@@ -203,7 +203,7 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
             IRetry.build(IntervalRetry.class, () -> {
                 try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
                     txn.putRecord(txn.getTable(REPLICATION_EVENT_TABLE_NAME), key, event, null);
-                    txn.commit();
+                    lastReadTimestamp = txn.commit().getSequence(); // set last read event to what is requested
                 } catch (TransactionAbortedException tae) {
                     log.warn("TXAbort while adding enforce snapshot sync event, retrying", tae);
                     throw new RetryNeededException();
@@ -367,6 +367,30 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
         Map<UUID, List<SMREntry>> map = new HashMap<>();
         map.put(replicatedQueueId, entryList.getSmrEntries());
         return new OpaqueEntry(version, map);
+    }
+
+    @Override
+    public String toString() {
+        return "RoutingQueuesSnapshotReader{" +
+                "corfuStore=" + corfuStore +
+                ", snapshotSyncQueueId=" + snapshotSyncQueueId +
+                ", streamTagFollowed='" + streamTagFollowed + '\'' +
+                ", dataPoller=" + dataPoller +
+                ", endMarkerReached=" + endMarkerReached +
+                ", lastReadTimestamp=" + lastReadTimestamp +
+                ", replicatedQueueId=" + replicatedQueueId +
+                ", endMarkerStreamId=" + endMarkerStreamId +
+                ", waitingForStartMarker=" + waitingForStartMarker +
+                ", maxDataSizePerMsg=" + maxDataSizePerMsg +
+                ", rt=" + rt +
+                ", snapshotTimestamp=" + snapshotTimestamp +
+                ", streams=" + streams +
+                ", currentStreamInfo=" + currentStreamInfo +
+                ", lastEntry=" + lastEntry +
+                ", observeBiggerMsg=" + observeBiggerMsg +
+                ", session=" + session +
+                ", replicationContext=" + replicationContext +
+                '}';
     }
 
     // Internal Utility class which polls for new data to be available on the Sender Routing Queue.  It uses
