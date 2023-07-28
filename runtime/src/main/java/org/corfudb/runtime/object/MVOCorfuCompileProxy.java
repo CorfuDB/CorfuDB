@@ -23,6 +23,7 @@ import org.corfudb.util.serializer.ISerializer;
 import java.lang.reflect.InvocationTargetException;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.LongAdder;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
@@ -72,8 +73,12 @@ public class MVOCorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRPr
         return null;
     }
 
+    public static final LongAdder gets = new LongAdder();
+    public static final LongAdder puts = new LongAdder();
+
     @Override
     public <R> R access(ICorfuSMRAccess<R, T> accessMethod, Object[] conflictObject) {
+        gets.increment();
         return MicroMeterUtils.time(() -> accessInner(accessMethod, conflictObject),
                 "mvo.read.timer", "streamId", streamID.toString());
     }
@@ -101,6 +106,7 @@ public class MVOCorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRPr
 
     @Override
     public long logUpdate(String smrUpdateFunction, boolean keepUpcallResult, Object[] conflictObject, Object... args) {
+        puts.increment();
         return MicroMeterUtils.time(
                 () -> logUpdateInner(smrUpdateFunction, conflictObject, args),
                 "mvo.write.timer", "streamId", streamID.toString());
