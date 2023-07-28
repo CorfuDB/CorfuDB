@@ -10,6 +10,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LRFullStateReplicationContext;
 import org.corfudb.runtime.LiteRoutingQueueListener;
 import org.corfudb.runtime.LogReplication;
+import org.corfudb.runtime.LogReplicationUtils;
 import org.corfudb.runtime.Queue;
 import org.corfudb.runtime.RoutingQueueSenderClient;
 import org.corfudb.runtime.collections.CorfuStore;
@@ -27,6 +28,7 @@ import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.runtime.LogReplicationUtils.LOG_ENTRY_SYNC_QUEUE_TAG_SENDER_PREFIX;
@@ -79,11 +81,6 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
                     Queue.RoutingTableEntryMsg.class, TableOptions.builder().schemaOptions(CorfuOptions.SchemaOptions.newBuilder()
                             .addStreamTag(REPLICATED_QUEUE_TAG).build()).build());
 
-
-            // Now request a full sync (uncomment if necessary)
-            // queueSenderClient.requestSnapshotSync(UUID.fromString(DefaultClusterConfig.getSourceClusterIds().get(0)),
-            //       UUID.fromString(DefaultClusterConfig.getSinkClusterIds().get(0)), null);
-
             startReplicationServers();
             while (!snapshotProvider.isSnapshotSent) {
                 Thread.sleep(5000);
@@ -104,6 +101,70 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
             assertThat(listener.logEntryMsgCnt).isEqualTo(10);
             assertThat(listener.snapSyncMsgCnt).isEqualTo(5);
             log.info("Sink replicated queue size: {}", listener.snapSyncMsgCnt);
+        } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    @Test
+    public void testRoutingQueueFullSyncs() throws Exception {
+
+        // Register client and setup initial group destinations mapping
+        CorfuRuntime clientRuntime = getClientRuntime();
+        CorfuStore clientCorfuStore = new CorfuStore(clientRuntime);
+        String clientName = RoutingQueueSenderClient.DEFAULT_ROUTING_QUEUE_CLIENT;
+        RoutingQueueSenderClient queueSenderClient = new RoutingQueueSenderClient(clientCorfuStore, clientName);
+        // SnapshotProvider implements RoutingQueueSenderClient.LRTransmitterReplicationModule
+        SnapshotProvider snapshotProvider = new SnapshotProvider(clientCorfuStore);
+        queueSenderClient.startLRSnapshotTransmitter(snapshotProvider); // starts a listener on event table
+
+        // Open queue on sink
+        try {
+            log.info("Sink Queue name: {}", REPLICATED_QUEUE_NAME);
+            Table<Queue.CorfuGuidMsg, Queue.RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg> replicatedQueueSink
+                    = sinkCorfuStores.get(0).openQueue(CORFU_SYSTEM_NAMESPACE, REPLICATED_QUEUE_NAME,
+                    Queue.RoutingTableEntryMsg.class, TableOptions.builder().schemaOptions(CorfuOptions.SchemaOptions.newBuilder()
+                            .addStreamTag(REPLICATED_QUEUE_TAG).build()).build());
+
+            startReplicationServers();
+            while (!snapshotProvider.isSnapshotSent) {
+                Thread.sleep(5000);
+            }
+
+            RoutingQueueListener listener = new RoutingQueueListener(sinkCorfuStores.get(0));
+            sinkCorfuStores.get(0).subscribeRoutingQListener(listener);
+
+            int numFullSyncMsgsGot = listener.snapSyncMsgCnt;
+            while (numFullSyncMsgsGot < 5) {
+                Thread.sleep(5000);
+                numFullSyncMsgsGot = listener.snapSyncMsgCnt;
+                log.info("Entries got on receiver {}", numFullSyncMsgsGot);
+            }
+            assertThat(listener.snapSyncMsgCnt).isEqualTo(5);
+
+            // Now request a full sync again for all sites!
+            snapshotProvider.isSnapshotSent = false;
+            queueSenderClient.requestGlobalSnapshotSync(UUID.fromString(DefaultClusterConfig.getSourceClusterIds().get(0)),
+                    UUID.fromString(DefaultClusterConfig.getSinkClusterIds().get(0)));
+
+            while (numFullSyncMsgsGot < 10) {
+                Thread.sleep(5000);
+                numFullSyncMsgsGot = listener.snapSyncMsgCnt;
+                log.info("Entries got on receiver after 2nd full sync {}", numFullSyncMsgsGot);
+            }
+            assertThat(listener.snapSyncMsgCnt).isEqualTo(10);
+
+            // Now request a full sync this time for just one site!
+            snapshotProvider.isSnapshotSent = false;
+            queueSenderClient.requestSnapshotSync(UUID.fromString(DefaultClusterConfig.getSourceClusterIds().get(0)),
+                    UUID.fromString(DefaultClusterConfig.getSinkClusterIds().get(0)));
+
+            while (numFullSyncMsgsGot < 15) {
+                Thread.sleep(5000);
+                numFullSyncMsgsGot = listener.snapSyncMsgCnt;
+                log.info("Entries got on receiver after 3rd full sync {}", numFullSyncMsgsGot);
+            }
+            assertThat(listener.snapSyncMsgCnt).isEqualTo(15);
         } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
             throw new RuntimeException(e);
         }
@@ -144,6 +205,7 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
 
         public final String someNamespace = "testNamespace";
         public final int numFullSyncBatches = 5;
+        private int recordId = 0;
         CorfuStore corfuStore;
         public boolean isSnapshotSent = false;
         SnapshotProvider(CorfuStore corfuStore) {
@@ -156,8 +218,9 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
                 try (TxnContext tx = corfuStore.txn(someNamespace)) {
                     Queue.RoutingTableEntryMsg message = Queue.RoutingTableEntryMsg.newBuilder()
                             .addDestinations(context.getDestinationSiteId())
-                            .setOpaquePayload(ByteString.copyFromUtf8("opaquetxn"+i))
+                            .setOpaquePayload(ByteString.copyFromUtf8("opaquetxn"+recordId))
                             .buildPartial();
+                    recordId++;
                     context.transmit(message);
                     log.info("Transmitting full sync message{}", message);
                     // For debugging Q's stream id should be "61d2fc0f-315a-3d87-a982-24fb36932050"
