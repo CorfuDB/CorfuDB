@@ -77,7 +77,7 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
      * @throws IllegalAccessException   IllegalAccessException.
      */
     public RoutingQueueSenderClient(CorfuStore corfuStore, String clientName)
-        throws NoSuchMethodException, IllegalAccessException {
+            throws NoSuchMethodException, IllegalAccessException {
         Preconditions.checkArgument(isValid(clientName), "clientName is null or empty.");
 
         this.corfuStore = corfuStore;
@@ -90,12 +90,12 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
         while ((numOpenQueueRetries--) > 0) {
             try {
                 logEntryQ_local = corfuStore.openQueue(CORFU_SYSTEM_NAMESPACE, LOG_ENTRY_SYNC_QUEUE_NAME_SENDER,
-                    RoutingTableEntryMsg.class, TableOptions.fromProtoSchema(RoutingTableEntryMsg.class));
+                        RoutingTableEntryMsg.class, TableOptions.fromProtoSchema(RoutingTableEntryMsg.class));
                 snapSyncQ_local = corfuStore.openQueue(CORFU_SYSTEM_NAMESPACE, SNAPSHOT_SYNC_QUEUE_NAME_SENDER,
-                    RoutingTableEntryMsg.class, TableOptions.fromProtoSchema(RoutingTableEntryMsg.class));
+                        RoutingTableEntryMsg.class, TableOptions.fromProtoSchema(RoutingTableEntryMsg.class));
                 snapStartEnd_local = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, SNAP_SYNC_START_END_Q_NAME,
-                    Queue.RoutingQSnapStartEndKeyMsg.class, Queue.RoutingQSnapStartEndMarkerMsg.class, null,
-                    TableOptions.fromProtoSchema(Queue.RoutingTableEntryMsg.class));
+                        Queue.RoutingQSnapStartEndKeyMsg.class, Queue.RoutingQSnapStartEndMarkerMsg.class, null,
+                        TableOptions.fromProtoSchema(Queue.RoutingTableEntryMsg.class));
 
                 break;
             } catch (InvocationTargetException e) {
@@ -110,10 +110,10 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
         while ((numOpenQueueRetries--) > 0) {
             try {
                 replicationEventTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, REPLICATION_EVENT_TABLE_NAME,
-                    LogReplication.ReplicationEventInfoKey.class,
-                    LogReplication.ReplicationEvent.class,
-                    null,
-                    TableOptions.fromProtoSchema(LogReplication.ReplicationEvent.class));
+                        LogReplication.ReplicationEventInfoKey.class,
+                        LogReplication.ReplicationEvent.class,
+                        null,
+                        TableOptions.fromProtoSchema(LogReplication.ReplicationEvent.class));
                 break;
             } catch (InvocationTargetException | IllegalArgumentException e) {
                 log.error("Failed to open the Event Table", e);
@@ -131,11 +131,11 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
 
     public void startLRSnapshotTransmitter(LRTransmitterReplicationModule snapSyncProvider) {
         this.fullSyncRequestor = new FullSyncRequestor(
-            corfuStore, snapSyncProvider, CORFU_SYSTEM_NAMESPACE,
-            LR_STREAM_TAG, Collections.singletonList(REPLICATION_EVENT_TABLE_NAME));
+                corfuStore, snapSyncProvider, CORFU_SYSTEM_NAMESPACE,
+                LR_STREAM_TAG, Collections.singletonList(REPLICATION_EVENT_TABLE_NAME));
 
         corfuStore.subscribeListener(fullSyncRequestor, CORFU_SYSTEM_NAMESPACE,
-            LR_STREAM_TAG, Collections.singletonList(REPLICATION_EVENT_TABLE_NAME));
+                LR_STREAM_TAG, Collections.singletonList(REPLICATION_EVENT_TABLE_NAME));
     }
 
     public void stopLRSnapshotTransmitter() {
@@ -168,7 +168,7 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
         public void onNext(CorfuStreamEntries results) {
             // TODO: Check for existing events. What if subscription comes later than the event is published.
             log.info("onNext[{}] :: got updates on RoutingQSender for tables {}", results.getTimestamp(),
-                results.getEntries().keySet().stream().map(TableSchema::getTableName).collect(Collectors.toList()));
+                    results.getEntries().keySet().stream().map(TableSchema::getTableName).collect(Collectors.toList()));
             LogReplication.ReplicationEvent fullSyncEvent = null;
             LogReplication.ReplicationEventInfoKey key = null;
             // Any notification here indicates a full sync request
@@ -186,13 +186,13 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
                         continue;
                     }
                     log.info("Full Sync requested due to event :: id={}, type={}, session={}, ts={}",
-                        fullSyncEvent.getEventId(), fullSyncEvent.getType(),
-                        key.getSession(), fullSyncEvent.getEventTimestamp());
+                            fullSyncEvent.getEventId(), fullSyncEvent.getType(),
+                            key.getSession(), fullSyncEvent.getEventTimestamp());
                 }
             }
             if (fullSyncEvent != null) {
                 SnapshotSyncDataTransmitter snapshotSyncDataTransmitter = new SnapshotSyncDataTransmitter(
-                    fullSyncEvent, key);
+                        fullSyncEvent, key);
                 snapSyncProvider.provideFullStateData(snapshotSyncDataTransmitter);
             }
         }
@@ -246,9 +246,9 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
         public void transmit(RoutingTableEntryMsg message, int progress) throws CancellationException {
             log.info("Enqueuing message to full sync queue, message: {}", message);
             getTxn().logUpdateEnqueue(snapSyncQ, message, message.getDestinationsList().stream()
-                .map(destination -> TableRegistry.getStreamIdForStreamTag(CORFU_SYSTEM_NAMESPACE,
-                    SNAPSHOT_SYNC_QUEUE_TAG_SENDER_PREFIX + destination))
-                .collect(Collectors.toList()), corfuStore);
+                    .map(destination -> TableRegistry.getStreamIdForStreamTag(CORFU_SYSTEM_NAMESPACE,
+                            SNAPSHOT_SYNC_QUEUE_TAG_SENDER_PREFIX + destination))
+                    .collect(Collectors.toList()), corfuStore);
 
             long metadataSize = message.getSerializedSize() -
                     (message.getOpaquePayload().size() + message.getOpaqueMetadata().size() + INT_SIZE_IN_BYTES);
@@ -258,24 +258,24 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
 
             if (!baseSnapshotSent) {
                 Queue.RoutingQSnapStartEndKeyMsg keyOfStartMarker = Queue.RoutingQSnapStartEndKeyMsg.newBuilder()
-                    .setSnapshotSyncId(requestingEvent.getEventId()).build();
+                        .setSnapshotSyncId(requestingEvent.getEventId()).build();
                 Queue.RoutingQSnapStartEndMarkerMsg startMarker = Queue.RoutingQSnapStartEndMarkerMsg.newBuilder()
                     .setSnapshotStartTimestamp(getTxn().getTxnSequence()) // This is the base snapshot timestamp
                     .setDestination(key.getSession().getSinkClusterId()).build();
 
                 CorfuRecord<Queue.RoutingQSnapStartEndMarkerMsg, Message> markerEntry =
-                    new CorfuRecord<>(startMarker, null);
+                        new CorfuRecord<>(startMarker, null);
 
                 Object[] smrArgs = new Object[2];
                 smrArgs[0] = keyOfStartMarker;
                 smrArgs[1] = markerEntry;
                 getTxn().logUpdate(LogReplicationUtils.lrSnapStartEndQId,
-                    new SMREntry("put", smrArgs,
-                        corfuStore.getRuntime().getSerializers().getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE)),
-                    message.getDestinationsList().stream()
-                        .map(destination -> TableRegistry.getStreamIdForStreamTag(CORFU_SYSTEM_NAMESPACE,
-                            SNAPSHOT_SYNC_QUEUE_TAG_SENDER_PREFIX + destination))
-                        .collect(Collectors.toList())
+                        new SMREntry("put", smrArgs,
+                                corfuStore.getRuntime().getSerializers().getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE)),
+                        message.getDestinationsList().stream()
+                                .map(destination -> TableRegistry.getStreamIdForStreamTag(CORFU_SYSTEM_NAMESPACE,
+                                        SNAPSHOT_SYNC_QUEUE_TAG_SENDER_PREFIX + destination))
+                                .collect(Collectors.toList())
                 );
                 log.info("Base snapshot marker key {}, value {}", keyOfStartMarker, startMarker);
                 baseSnapshotSent = true;
@@ -288,11 +288,11 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
             Queue.RoutingQSnapStartEndKeyMsg keyOfStartMarker = Queue.RoutingQSnapStartEndKeyMsg.newBuilder()
                 .setSnapshotSyncId(requestingEvent.getEventId()).build();
             Queue.RoutingQSnapStartEndMarkerMsg startMarker = Queue.RoutingQSnapStartEndMarkerMsg.newBuilder()
-                .setSnapshotStartTimestamp(0) // Empty snapshot timestamp signifies an end marker
-                .setDestination(key.getSession().getSinkClusterId()).build();
+                    .setSnapshotStartTimestamp(0) // Empty snapshot timestamp signifies an end marker
+                    .setDestination(key.getSession().getSinkClusterId()).build();
 
             CorfuRecord<Queue.RoutingQSnapStartEndMarkerMsg, Message> markerEntry =
-                new CorfuRecord<>(startMarker, null);
+                    new CorfuRecord<>(startMarker, null);
 
             Object[] smrArgs = new Object[2];
             smrArgs[0] = keyOfStartMarker;
@@ -330,87 +330,116 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
         }
     }
 
-        /**
-         * Enqueues message to be replicated onto the sender's delta queue.
-         * Caller must set the replication type to LOG_ENTRY_SYNC
-         *
-         * @param txn     Transaction context in which the operation will be performed
-         * @param message RoutingTableEntryMsg
-         */
-        @Override
-        public void transmitDeltaMessage(TxnContext txn, RoutingTableEntryMsg message, CorfuStore corfuStore) throws Exception {
-            log.info("Enqueuing message to delta queue, message: {}", message);
-            txn.logUpdateEnqueue(logEntryQ, message, message.getDestinationsList().stream()
+    /**
+     * Enqueues message to be replicated onto the sender's delta queue.
+     * Caller must set the replication type to LOG_ENTRY_SYNC
+     *
+     * @param txn     Transaction context in which the operation will be performed
+     * @param message RoutingTableEntryMsg
+     */
+    @Override
+    public void transmitDeltaMessage(TxnContext txn, RoutingTableEntryMsg message, CorfuStore corfuStore) throws Exception {
+        log.info("Enqueuing message to delta queue, message: {}", message);
+        txn.logUpdateEnqueue(logEntryQ, message, message.getDestinationsList().stream()
                 .map(destination -> {
                     UUID streamIdForTag = TableRegistry.getStreamIdForStreamTag(CORFU_SYSTEM_NAMESPACE,
-                    LOG_ENTRY_SYNC_QUEUE_TAG_SENDER_PREFIX + destination);
+                            LOG_ENTRY_SYNC_QUEUE_TAG_SENDER_PREFIX + destination);
                     log.info("Adding destination stream tag id = {}", streamIdForTag);
                     return streamIdForTag;
                 })
                 .collect(Collectors.toList()), corfuStore);
+    }
+
+    /**
+     * Enqueues messages to be replicated onto the sender's delta queue.
+     *
+     * @param txn      Transaction context in which the operation will be performed
+     * @param messages List of RoutingTableEntryMsg
+     */
+    @Override
+    public void transmitDeltaMessages(TxnContext txn, List<RoutingTableEntryMsg> messages, CorfuStore corfuStore) throws Exception {
+        for (RoutingTableEntryMsg message : messages) {
+            transmitDeltaMessage(txn, message, corfuStore);
         }
+    }
 
-        /**
-         * Enqueues messages to be replicated onto the sender's delta queue.
-         *
-         * @param txn      Transaction context in which the operation will be performed
-         * @param messages List of RoutingTableEntryMsg
-         */
-        @Override
-        public void transmitDeltaMessages(TxnContext txn, List<RoutingTableEntryMsg> messages, CorfuStore corfuStore) throws Exception {
-            for (RoutingTableEntryMsg message : messages) {
-                transmitDeltaMessage(txn, message, corfuStore);
-            }
-        }
+    /**
+     * Request LR to perform a forced snapshot sync for a specific remote site.
+     *
+     * @param sourceClusterId Id of the Source Cluster
+     * @param sinkClusterId   Id of the Sink Cluster
+     */
+    public void requestSnapshotSync(UUID sourceClusterId, UUID sinkClusterId) {
+        requestSnapshotSync(sourceClusterId, sinkClusterId,
+                LogReplication.ReplicationEvent.ReplicationEventType.CLIENT_REQUESTED_FORCED_SNAPSHOT_SYNC);
+    }
 
-        /**
-         * Request LR to perform a forced snapshot sync.
-         *
-         * @param sourceClusterId Id of the Source Cluster
-         * @param sinkClusterId   Id of the Sink Cluster
-         * @param timestamp       Timestamp from which recovery is possible.
-         */
-        public void requestSnapshotSync(UUID sourceClusterId, UUID sinkClusterId, Timestamp timestamp) {
-            LogReplication.LogReplicationSession session =
-                LogReplication.LogReplicationSession.newBuilder().setSourceClusterId(sourceClusterId.toString())
-                    .setSinkClusterId(sinkClusterId.toString()).build();
-            enforceSnapshotSync(session, LogReplication.ReplicationEvent.ReplicationEventType.CLIENT_REQUESTED_FORCED_SNAPSHOT_SYNC);
+    /**
+     * Request LR to perform a forced snapshot sync for ALL remote sites (To be used for testing only)
+     *
+     * @param sourceClusterId Id of the Source Cluster
+     * @param sinkClusterId   Id of the Sink Cluster
+     */
+    public void requestGlobalSnapshotSync(UUID sourceClusterId, UUID sinkClusterId) {
+        requestSnapshotSync(sourceClusterId, sinkClusterId,
+                LogReplication.ReplicationEvent.ReplicationEventType.UPGRADE_COMPLETION_FORCE_SNAPSHOT_SYNC);
+    }
 
-        }
+    /**
+     * Request LR to perform a forced snapshot sync.
+     *
+     * @param sourceClusterId Id of the Source Cluster
+     * @param sinkClusterId   Id of the Sink Cluster
+     * @param replicationEventType request one or all
+     */
+    public void requestSnapshotSync(UUID sourceClusterId, UUID sinkClusterId,
+                                    LogReplication.ReplicationEvent.ReplicationEventType replicationEventType) {
+        LogReplication.ReplicationSubscriber subscriber = LogReplication.ReplicationSubscriber.newBuilder()
+                .setClientName(this.clientName)
+                .setModel(ReplicationModel.ROUTING_QUEUES)
+                .build();
+        LogReplication.LogReplicationSession session =
+                LogReplication.LogReplicationSession.newBuilder()
+                        .setSourceClusterId(sourceClusterId.toString())
+                        .setSinkClusterId(sinkClusterId.toString())
+                        .setSubscriber(subscriber).build();
+        enforceSnapshotSync(session, replicationEventType);
 
-        // TODO pankti:  Move SnapshotSyncUtils to the 'runtime' package so that this method can be reused from there
-        private void enforceSnapshotSync(LogReplication.LogReplicationSession session,
-                                         LogReplication.ReplicationEvent.ReplicationEventType eventType) {
-            UUID forceSyncId = UUID.randomUUID();
+    }
 
-            log.info("Forced snapshot sync will be triggered, session={}, sync_id={}", session, forceSyncId);
+    // TODO pankti:  Move SnapshotSyncUtils to the 'runtime' package so that this method can be reused from there
+    private void enforceSnapshotSync(LogReplication.LogReplicationSession session,
+                                     LogReplication.ReplicationEvent.ReplicationEventType eventType) {
+        UUID forceSyncId = UUID.randomUUID();
 
-            // Write a force sync event to the logReplicationEventTable
-            LogReplication.ReplicationEventInfoKey key = LogReplication.ReplicationEventInfoKey.newBuilder()
+        log.info("Forced snapshot sync will be triggered, session={}, sync_id={}", session, forceSyncId);
+
+        // Write a force sync event to the logReplicationEventTable
+        LogReplication.ReplicationEventInfoKey key = LogReplication.ReplicationEventInfoKey.newBuilder()
                 .setSession(session)
                 .build();
 
-            LogReplication.ReplicationEvent event = LogReplication.ReplicationEvent.newBuilder()
+        LogReplication.ReplicationEvent event = LogReplication.ReplicationEvent.newBuilder()
                 .setEventId(forceSyncId.toString())
                 .setType(eventType)
                 .setEventTimestamp(com.google.protobuf.Timestamp.newBuilder().setSeconds(Instant.now().getEpochSecond()).build())
                 .build();
 
-            try {
-                IRetry.build(IntervalRetry.class, () -> {
-                    try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-                        txn.putRecord(replicationEventTable, key, event, null);
-                        txn.commit();
-                    } catch (TransactionAbortedException tae) {
-                        log.warn("TXAbort while adding enforce snapshot sync event, retrying", tae);
-                        throw new RetryNeededException();
-                    }
-                    log.debug("Added enforce snapshot sync event to the logReplicationEventTable for session={}", session);
-                    return null;
-                }).run();
-            } catch (InterruptedException e) {
-                log.error("Unrecoverable exception while adding enforce snapshot sync event", e);
-                throw new UnrecoverableCorfuInterruptedError(e);
-            }
+        try {
+            IRetry.build(IntervalRetry.class, () -> {
+                try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+                    txn.putRecord(replicationEventTable, key, event, null);
+                    txn.commit();
+                } catch (TransactionAbortedException tae) {
+                    log.warn("TXAbort while adding enforce snapshot sync event, retrying", tae);
+                    throw new RetryNeededException();
+                }
+                log.debug("Added enforce snapshot sync event to the logReplicationEventTable for session={}", session);
+                return null;
+            }).run();
+        } catch (InterruptedException e) {
+            log.error("Unrecoverable exception while adding enforce snapshot sync event", e);
+            throw new UnrecoverableCorfuInterruptedError(e);
         }
+    }
 }
