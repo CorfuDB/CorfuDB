@@ -101,13 +101,11 @@ public class SourceForwardingDataSender extends AbstractIT implements DataSender
     private LogReplicationSession session = DefaultClusterConfig.getSessions().get(0);
 
     @SneakyThrows
-    public SourceForwardingDataSender(String destinationEndpoint, LogReplicationIT.TestConfig testConfig,
+    public SourceForwardingDataSender(LogReplicationIT.TestConfig testConfig,
                                       LogReplicationMetadataManager metadataManager,
                                       LogReplicationIT.TransitionSource function,
-                                      LogReplicationContext context) {
-        this.runtime = CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder().build())
-                .parseConfigurationString(destinationEndpoint)
-                .connect();
+                                      LogReplicationContext context, CorfuRuntime sinkRuntime) {
+        this.runtime = sinkRuntime;
         this.destinationDataSender = new AckDataSender();
         this.destinationDataControl = new DefaultDataControl(new DefaultDataControlConfig(
             false, 0));
@@ -122,7 +120,7 @@ public class SourceForwardingDataSender extends AbstractIT implements DataSender
         this.dropACKLevel = testConfig.getDropAckLevel();
         this.callbackFunction = function;
         this.lastAckDropped = Long.MAX_VALUE;
-        this.sinkCorfuStore = new CorfuStore(runtime);
+        this.sinkCorfuStore = new CorfuStore(sinkRuntime);
         sinkCorfuStore.openTable(LogReplicationMetadataManager.NAMESPACE,
                 REPLICATION_STATUS_TABLE,
                 LogReplicationSession.class,
