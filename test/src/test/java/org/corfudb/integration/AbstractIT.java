@@ -827,17 +827,7 @@ public class AbstractIT extends AbstractCorfuTest {
 
             builder.directory(new File(CORFU_PROJECT_DIR));
             Process corfuReplicationServerProcess = builder.redirectErrorStream(true).start();
-            if (port == 9500) {
-//                String procname = "myProcess";
-//                String[] cmd = new String[]{"bash","-c", "ps -eaf | grep 9100"};
-//                ProcessBuilder pb = new ProcessBuilder(cmd);
-//                pb.redirectErrorStream(true);
-//                Process process = pb.start();
-//                process.getInputStream().transferTo(System.out);
 
-
-                System.out.println("=============> " + getPid(corfuReplicationServerProcess));
-            }
             StreamGobbler streamGobbler = new StreamGobbler(corfuReplicationServerProcess.getInputStream(), serverConsoleLogPath);
             Executors.newSingleThreadExecutor().submit(streamGobbler);
             return corfuReplicationServerProcess;

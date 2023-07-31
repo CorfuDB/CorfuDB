@@ -69,7 +69,7 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
     public static final ClusterUuidMsg TP_MULTI_SINK_REV_CONNECTION = ClusterUuidMsg.newBuilder().setLsb(13L).setMsb(13L).build();
     public static final ClusterUuidMsg OP_TWO_SINK_MIXED = ClusterUuidMsg.newBuilder().setLsb(14L).setMsb(14L).build();
     public static final ClusterUuidMsg TP_SINGLE_SOURCE_SINK_ROUTING_QUEUE = ClusterUuidMsg.newBuilder().setLsb(15L).setMsb(15L).build();
-    public static final ClusterUuidMsg TP_SINGLE_SOURCE_MULTI_SINK_ROUTING_QUEUE = ClusterUuidMsg.newBuilder().setLsb(16L).setMsb(16L).setValue(64).build();
+    public static final ClusterUuidMsg TP_SINGLE_SOURCE_MULTI_SINK_ROUTING_QUEUE = ClusterUuidMsg.newBuilder().setLsb(16L).setMsb(16L).setValue(32).build();
 
     @Getter
     private long configId;
