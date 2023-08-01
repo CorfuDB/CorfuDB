@@ -106,6 +106,7 @@ public class SnapshotSender {
         int messagesSent = 0;       // Limit the number of messages to maxNumSnapshotMsgPerBatch. The reason we need to limit
         // is because by design several state machines can share the same thread pool,
         // therefore, we need to hand the thread for other workers to execute.
+        long messagesSentSize = 0;
         SnapshotReadMessage snapshotReadMessage;
 
         // Skip if no data is present in the log
@@ -137,6 +138,10 @@ public class SnapshotSender {
                 }
 
                 messagesSent += processReads(snapshotReadMessage.getMessages(), snapshotSyncEventId, completed);
+                // Get the total message size read.
+                for (LogReplicationEntryMsg msg : snapshotReadMessage.getMessages()) {
+                    messagesSentSize += msg.getSerializedSize();
+                }
                 final long messagesSentSnapshot = messagesSent;
                 messageCounter.ifPresent(counter -> counter.addAndGet(messagesSentSnapshot));
                 observedCounter.setValue(messagesSent);
@@ -149,8 +154,9 @@ public class SnapshotSender {
                     if (ack.getMetadata().getSnapshotTimestamp() == baseSnapshotTimestamp &&
                             ack.getMetadata().getEntryType().equals(LogReplicationEntryType.SNAPSHOT_TRANSFER_COMPLETE)) {
                         // Snapshot Sync Transfer Completed
-                        log.info("Snapshot sync transfer completed for {} on timestamp={}, ack={}", snapshotSyncEventId,
-                                baseSnapshotTimestamp, TextFormat.shortDebugString(ack.getMetadata()));
+                        log.info("Snapshot sync transfer completed for {} on timestamp={}, ack={}, messages sent size={}",
+                                snapshotSyncEventId, baseSnapshotTimestamp, TextFormat.shortDebugString(ack.getMetadata()),
+                                messagesSentSize);
                         snapshotSyncTransferComplete(snapshotSyncEventId);
                     } else {
                         log.warn("Expected ack for {}, but received for a different snapshot {}", baseSnapshotTimestamp,
