@@ -69,7 +69,6 @@ public abstract class BaseSnapshotReader extends SnapshotReader {
         this.rt = replicationContext.getCorfuRuntime();
         this.session = session;
         this.replicationContext = replicationContext;
-        this.rt.parseConfigurationString(rt.getLayoutServers().get(0)).connect();
         this.maxDataSizePerMsg = replicationContext.getConfig(session).getMaxDataSizePerMsg();
         this.messageSizeDistributionSummary = configureMessageSizeDistributionSummary();
         refreshStreamsToReplicateSet();
