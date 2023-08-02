@@ -343,7 +343,7 @@ public class LogReplicationConfigManager {
             return IRetry.build(IntervalRetry.class, () -> {
                 try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
                     List<CorfuStoreEntry<ClientRegistrationId, ClientRegistrationInfo, Message>> registrationResults =
-                            txn.executeQuery(clientRegistrationTable, record -> true);
+                            txn.executeQuery(clientRegistrationTable, p -> true);
                     registrationResults.forEach(entry -> {
                         String clientName = entry.getKey().getClientName();
                         ReplicationModel model = entry.getPayload().getModel();
