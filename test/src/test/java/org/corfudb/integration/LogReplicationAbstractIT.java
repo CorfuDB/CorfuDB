@@ -113,6 +113,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
 
     public final String sourceEndpoint = DEFAULT_HOST + ":" + sourceSiteCorfuPort;
     public final String sinkEndpoint = DEFAULT_HOST + ":" + sinkSiteCorfuPort;
+    public final String anotherEndpoint = DEFAULT_HOST + ":" + 9003;
 
     public CorfuRuntime sourceRuntime;
     public CorfuRuntime sinkRuntime;

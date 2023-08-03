@@ -2,7 +2,6 @@ package org.corfudb.infrastructure.logreplication.replication.send.logreader;
 
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
-import org.corfudb.runtime.CorfuRuntime;
 
 import javax.annotation.concurrent.NotThreadSafe;
 
@@ -17,9 +16,9 @@ import javax.annotation.concurrent.NotThreadSafe;
  */
 public class StreamsSnapshotReader extends BaseSnapshotReader {
 
-    public StreamsSnapshotReader(CorfuRuntime runtime, LogReplicationSession session,
+    public StreamsSnapshotReader(LogReplicationSession session,
                                  LogReplicationContext replicationContext) {
-        super(runtime, session, replicationContext);
+        super(session, replicationContext);
     }
 
     @Override

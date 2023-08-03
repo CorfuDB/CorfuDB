@@ -84,8 +84,12 @@ public class OpaqueEntry implements Serializable {
     }
 
     public static OpaqueEntry unpack(ILogData logData) {
+        log.info("Shama, unpack. data == null {}", ((LogData) logData).getData() == null);
         byte[] payload = ((LogData) logData).getData();
-        if (payload == null) return empty;
+        if (payload == null) {
+            log.info("Shama, the payload is null");
+            return empty;
+        }
         // what if payload is null ?
         ByteBuf payloadBuf = Unpooled.wrappedBuffer(payload);
 
@@ -103,6 +107,7 @@ public class OpaqueEntry implements Serializable {
         }
 
         long version = logData.getGlobalAddress();
+        log.info("Shama deserialized into opaqueEntry @ version {}", version);
 
         LogEntry entry = (LogEntry) LogEntry.deserialize(payloadBuf, null, true);
         Map<UUID, List<SMREntry>> res = new HashMap<>();

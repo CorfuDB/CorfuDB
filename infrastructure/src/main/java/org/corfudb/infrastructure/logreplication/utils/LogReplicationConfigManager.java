@@ -274,6 +274,7 @@ public class LogReplicationConfigManager {
             if (isFederated || MERGE_ONLY_STREAMS.contains(streamId)) {
                 streamsToReplicate.add(tableName);
                 if (MERGE_ONLY_STREAMS.contains(streamId)) {
+                    log.info("Shama, streamId is {}, and the streamTag is {}", streamId, LOG_REPLICATOR_STREAM_INFO.getStreamId());
                     // Collect tags for merge-only stream
                     streamToTagsMap.put(streamId, Collections.singletonList(LOG_REPLICATOR_STREAM_INFO.getStreamId()));
                 } else {
@@ -462,6 +463,7 @@ public class LogReplicationConfigManager {
     public UUID getOpaqueStreamToTrack(ReplicationSubscriber subscriber) {
         switch(subscriber.getModel()) {
             case FULL_TABLE:
+                log.info("Shama....try to get stream to track {}", ObjectsView.getLogReplicatorStreamId());
                 return ObjectsView.getLogReplicatorStreamId();
             case LOGICAL_GROUPS:
                 return ObjectsView.getLogicalGroupStreamTagInfo(subscriber.getClientName()).getStreamId();

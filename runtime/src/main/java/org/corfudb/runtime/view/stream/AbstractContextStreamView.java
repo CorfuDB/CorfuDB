@@ -140,6 +140,9 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
             if (entry.isHole() && entry.getBackpointerMap().isEmpty()) {
                 return nextUpTo(maxGlobal);
             }
+            if (id.toString().equals("eb4a975c-916f-3c1c-9bec-b0b0f97b95a0")) {
+                log.info("Shama read the entry and retruning IlogData {}", entry.getLogEntry(runtime).getGlobalAddress());
+            }
         }
 
         // Return the entry.

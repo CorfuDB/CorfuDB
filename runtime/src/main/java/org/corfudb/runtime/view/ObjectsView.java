@@ -63,6 +63,7 @@ public class ObjectsView extends AbstractView {
      * @return the ID of the log replicator stream.
      */
     public static UUID getLogReplicatorStreamId() {
+        log.info("Shama, the streamId to track is {}", LOG_REPLICATOR_STREAM_INFO.getStreamId());
         return LOG_REPLICATOR_STREAM_INFO.getStreamId();
     }
 
