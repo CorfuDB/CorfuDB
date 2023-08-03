@@ -248,7 +248,10 @@ public abstract class BaseLogEntryReader extends LogEntryReader {
      */
     private OpaqueEntry filterTransactionEntry(OpaqueEntry opaqueEntry) {
         Map<UUID, List<SMREntry>> filteredTxEntryMap = opaqueEntry.getEntries().entrySet().stream()
-            .filter(entry -> getStreamUUIDs().contains(entry.getKey()))
+            .filter(entry ->  {
+                log.info("Shama the incoming entry is {}", entry.getKey());
+                return getStreamUUIDs().contains(entry.getKey());
+            })
             .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
 
         return new OpaqueEntry(opaqueEntry.getVersion(), filteredTxEntryMap);
@@ -310,8 +313,10 @@ public abstract class BaseLogEntryReader extends LogEntryReader {
 
         public ModelBasedOpaqueStream(CorfuRuntime rt) {
             this.rt = rt;
+//            opaqueStream = new OpaqueStream(rt.getStreamsView().get(replicationContext.getConfigManager()
+//                    .getOpaqueStreamToTrack(session.getSubscriber())));
             opaqueStream = new OpaqueStream(rt.getStreamsView().get(replicationContext.getConfigManager()
-                    .getOpaqueStreamToTrack(session.getSubscriber())));
+                    .getOpaqueStreamToTrack(session.getSubscriber())), rt);
             streamUpTo();
         }
 
@@ -321,7 +326,7 @@ public abstract class BaseLogEntryReader extends LogEntryReader {
          * @param snapshot
          */
         private void streamUpTo(long snapshot) {
-            log.trace("StreamUpTo {}", snapshot);
+            log.info("StreamUpTo {}", snapshot);
             iterator = opaqueStream.streamUpTo(snapshot).iterator();
         }
 
@@ -337,6 +342,7 @@ public abstract class BaseLogEntryReader extends LogEntryReader {
          */
         private boolean hasNext() {
             if (!iterator.hasNext()) {
+                log.info("Shama hasNext...stream upto tail");
                 streamUpTo();
             }
             return iterator.hasNext();
@@ -351,7 +357,7 @@ public abstract class BaseLogEntryReader extends LogEntryReader {
             }
 
             OpaqueEntry opaqueEntry = (OpaqueEntry) iterator.next();
-            log.trace("Address {} OpaqueEntry {}", opaqueEntry.getVersion(), opaqueEntry);
+            log.info("Address {} OpaqueEntry {}", opaqueEntry.getVersion(), opaqueEntry);
             return opaqueEntry;
         }
 
@@ -362,7 +368,7 @@ public abstract class BaseLogEntryReader extends LogEntryReader {
          * @param firstAddress
          */
         public void seek(long firstAddress) {
-            log.trace("seek head {}", firstAddress);
+            log.info("seek head {}", firstAddress);
             opaqueStream.seek(firstAddress);
             streamUpTo();
         }

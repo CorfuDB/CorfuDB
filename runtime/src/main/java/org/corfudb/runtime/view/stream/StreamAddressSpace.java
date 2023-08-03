@@ -111,9 +111,11 @@ final public class StreamAddressSpace {
         LongIterator iterator = this.bitmap.getLongIterator();
         while (iterator.hasNext()) {
             long current = iterator.next();
+//            log.info("Shama forEachUPto {}", current);
             if (current > trimMark && current <= max) {
                 consumer.accept(current);
             } else {
+//                log.info("Shama, break from forEachUpto {}", current);
                 break;
             }
         }

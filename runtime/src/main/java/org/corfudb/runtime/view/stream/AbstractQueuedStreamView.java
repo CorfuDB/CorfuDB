@@ -86,6 +86,9 @@ public abstract class AbstractQueuedStreamView extends
     protected void addToResolvedQueue(QueuedStreamContext context,
                                       long globalAddress) {
         context.resolvedQueue.add(globalAddress);
+//        if (id.toString().equals("eb4a975c-916f-3c1c-9bec-b0b0f97b95a0")) {
+//            log.info("Shama Resolving address {}", globalAddress);
+//        }
 
         if (context.maxResolution < globalAddress) {
             context.maxResolution = globalAddress;
@@ -119,6 +122,9 @@ public abstract class AbstractQueuedStreamView extends
             // cause this is the last address of the trimmed range.
             context.setGlobalPointer(context.checkpoint.startAddress);
         } else {
+//            if (id.toString().equals("eb4a975c-916f-3c1c-9bec-b0b0f97b95a0")) {
+//                log.info("Shama getting from readQueue {}", context.readQueue);
+//            }
             getFrom = context.readQueue;
         }
 
@@ -428,11 +434,13 @@ public abstract class AbstractQueuedStreamView extends
      */
     protected boolean fillReadQueue(final long maxGlobal,
                                     final QueuedStreamContext context) {
-        log.trace("Fill_Read_Queue[{}] Max: {}, Current: {}, Resolved: {} - {}", this,
-                maxGlobal, context.getGlobalPointer(), context.maxResolution, context.minResolution);
-        log.trace("Fill_Read_Queue[{}]: addresses in this stream Resolved queue {}" +
-                        " - ReadQueue {} - CP Queue {}", this,
-                context.resolvedQueue, context.readQueue, context.readCpQueue);
+//        if (id.toString().equals("eb4a975c-916f-3c1c-9bec-b0b0f97b95a0")) {
+//            log.info("Fill_Read_Queue[{}] Max: {}, Current: {}, Resolved: {} - {}", this,
+//                    maxGlobal, context.getGlobalPointer(), context.maxResolution, context.minResolution);
+//            log.info("Fill_Read_Queue[{}]: addresses in this stream Resolved queue {}" +
+//                            " - ReadQueue {} - CP Queue {}", this,
+//                    context.resolvedQueue, context.readQueue, context.readCpQueue);
+//        }
 
         // If the stream has just been reset and we don't have
         // any checkpoint entries, we should consult
@@ -449,8 +457,10 @@ public abstract class AbstractQueuedStreamView extends
                         Address.NEVER_READ,
                         data -> scanCheckpointStream(context, data, maxGlobal),
                         true, maxGlobal)) {
-                    log.trace("Fill_Read_Queue[{}] Get Stream Address Map using checkpoint with {} entries",
-                            this, context.readCpQueue.size());
+//                    if (id.toString().equals("eb4a975c-916f-3c1c-9bec-b0b0f97b95a0")) {
+//                        log.info("Fill_Read_Queue[{}] Get Stream Address Map using checkpoint with {} entries",
+//                            this, context.readCpQueue.size());
+//                    }
 
                     return true;
                 }
@@ -609,7 +619,9 @@ public abstract class AbstractQueuedStreamView extends
      */
     protected @Nonnull ILogData read(long nextRead, @Nonnull final NavigableSet<Long> addresses) {
         try {
-            return runtime.getAddressSpaceView().read(nextRead, addresses, readOptions);
+            ILogData data = runtime.getAddressSpaceView().read(nextRead, addresses, readOptions);
+            log.info("Shama, data is null {}", ((LogData) data).getData() == null);
+            return data;
         } catch (TrimmedException te) {
             processTrimmedException(te);
             throw te;

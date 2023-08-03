@@ -403,8 +403,10 @@ public class AddressSpaceView extends AbstractView implements AutoCloseable {
                 Map<Long, ILogData> mapAddresses = read(batch, options);
                 data = mapAddresses.get(nextRead);
             }
+            log.info("Shama, cache is disabled. the data fetched is empty {}", ((LogData)data).getData() == null);
             final ILogData finalData = data;
             recordLogSizeDist(finalData.getSizeEstimate());
+            log.info("Shama, cache is disabled. the data fetched is empty {}", ((LogData)data).getData() == null);
             return data;
         }
 

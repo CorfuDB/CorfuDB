@@ -369,6 +369,10 @@ public class CorfuInterClusterReplicationServer implements Runnable {
                 .orElseGet(() ->getCorfuEndpoint(getHostFromEndpointURL(serverContext.getLocalEndpoint()),
             serverContext.getCorfuServerConnectionPort()));
 
+        log.info("Shama, the serverContext.getLocalEndpoint() {}  serverContext.getCorfuServerConnectionPort() {}" +
+                        "localCorfuEndpoint is {}", serverContext.getLocalEndpoint(),serverContext.getCorfuServerConnectionPort(),
+                localCorfuEndpoint);
+
         return CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder()
             .trustStore((String) serverContext.getServerConfig().get(ConfigParamNames.TRUST_STORE))
             .tsPasswordFile((String) serverContext.getServerConfig().get(ConfigParamNames.TRUST_STORE_PASS_FILE))
@@ -376,7 +380,7 @@ public class CorfuInterClusterReplicationServer implements Runnable {
             .ksPasswordFile((String) serverContext.getServerConfig().get(ConfigParamNames.KEY_STORE_PASS_FILE))
             .tlsEnabled((Boolean) serverContext.getServerConfig().get("--enable-tls"))
             .systemDownHandler(() -> System.exit(SYSTEM_EXIT_ERROR_CODE))
-            .maxCacheEntries(serverContext.getLogReplicationCacheMaxSize()/2)
+                .cacheDisabled(true)
             .maxWriteSize(serverContext.getMaxWriteSize())
             .build())
             .parseConfigurationString(localCorfuEndpoint).connect();

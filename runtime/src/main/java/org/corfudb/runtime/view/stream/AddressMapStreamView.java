@@ -3,6 +3,7 @@ package org.corfudb.runtime.view.stream;
 import com.google.common.collect.Iterables;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TrimmedException;
@@ -82,6 +83,10 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
                 // batches whenever we have a cache miss. This allows next reads
                 // to be serviced immediately, rather than reading one entry at a time.
                 ld = read(currentRead, queue);
+                if (id.toString().equals("eb4a975c-916f-3c1c-9bec-b0b0f97b95a0")) {
+                    log.info("Shama Read the address {} . payload == null {} data == null {}", currentRead,
+                            ld.getPayload(runtime) == null, ((LogData) ld).getData() == null);
+                }
 
                 if (queue == getCurrentContext().readQueue) {
                     // Validate that the data entry belongs to this stream, otherwise, skip.
@@ -90,10 +95,14 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
                     if ((ld.containsStream(this.id) && ld.isData()) ||
                             (ld.isHole() && (ld.getBackpointerMap().isEmpty() || ld.containsStream(this.id)))
                     ) {
+                        if (id.toString().equals("eb4a975c-916f-3c1c-9bec-b0b0f97b95a0")) {
+                            log.info("Shama Read the address {} and resolving the same. payload == null {} data == null {}", currentRead,
+                                    ld.getPayload(runtime) == null, ((LogData) ld).getData() == null);
+                        }
                         addToResolvedQueue(getCurrentContext(), currentRead);
                         readNext = false;
                     } else {
-                        log.trace("getNextEntry[{}]: the data for address {} does not belong to this stream. Skip.",
+                        log.info("getNextEntry[{}]: the data for address {} does not belong to this stream. Skip.",
                                 this, currentRead);
                         // Invalid entry (does not belong to this stream). Read next.
                         readNext = true;
@@ -175,6 +184,10 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
         // the tail of the stream.
         Set<Long> prefix = new HashSet<>();
         streamAddressSpace.forEachUpTo(maxGlobal, prefix::add);
+        if (id.toString().equals("eb4a975c-916f-3c1c-9bec-b0b0f97b95a0")) {
+            log.info("Shama streamAddressSpace 24/26/27 {}, {}, {}", streamAddressSpace.contains(2024),
+                    streamAddressSpace.contains(2026), streamAddressSpace.contains(2027));
+        }
         queue.addAll(prefix);
 
         final long trimMark = streamAddressSpace.getTrimMark();

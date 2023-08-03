@@ -1,11 +1,15 @@
 package org.corfudb.integration;
 
+import com.google.protobuf.TextFormat;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.infrastructure.logreplication.proto.Sample.IntValue;
 import org.corfudb.infrastructure.logreplication.proto.Sample.IntValueTag;
 import org.corfudb.infrastructure.logreplication.proto.Sample.Metadata;
 import org.corfudb.infrastructure.logreplication.proto.Sample.StringKey;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.ReplicationStatus;
 import org.corfudb.runtime.CorfuStoreMetadata.TableDescriptors;
 import org.corfudb.runtime.CorfuStoreMetadata.TableMetadata;
@@ -13,14 +17,24 @@ import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.LogReplicationUtils;
 import org.corfudb.runtime.collections.CorfuRecord;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
+import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.util.retry.IRetry;
+import org.corfudb.util.retry.IntervalRetry;
+import org.corfudb.util.retry.RetryNeededException;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.lang.reflect.InvocationTargetException;
 import java.util.HashMap;
+import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.contentOf;
 
 /**
  * This suite of tests verifies snapshot writer and log entry writer could correctly
@@ -86,6 +100,29 @@ public class LogReplicationSinkWriterIT extends LogReplicationAbstractIT {
         // Also verify all the table's contents for snapshot sync
         verifyTableContentsAndRecords(1, 2, 4);
 
+        prepareTablesToVerify(10, 12, 14);
+
+        CorfuRuntime anotherRuntime = createRuntimeWithCache(sourceEndpoint);
+        //check if the opened tables are seen
+        for(int i = 1; i <= 4; ++i) {
+            String mapName = TABLE_PREFIX + i;
+            TableName tblName = TableName.newBuilder().setTableName(mapName)
+                    .setNamespace(NAMESPACE).build();
+            assertThat(anotherRuntime.getTableRegistry().getRegistryTable().keySet().contains(tblName)).isTrue();
+            assertThat(sinkRuntime.getTableRegistry().getRegistryTable().keySet().contains(tblName)).isTrue();
+        }
+        System.out.println("Shama.....verified 1-4");
+
+        //check if the opened tables are seen
+        for(int i = 10; i <= 14; ++i) {
+            String mapName = TABLE_PREFIX + i;
+            TableName tblName = TableName.newBuilder().setTableName(mapName)
+                    .setNamespace(NAMESPACE).build();
+            assertThat(anotherRuntime.getTableRegistry().getRegistryTable().keySet().contains(tblName)).isTrue();
+            assertThat(sinkRuntime.getTableRegistry().getRegistryTable().keySet().contains(tblName)).isTrue();
+        }
+        System.out.println("Shama.....verified 1-14");
+
         /* The last 4 tables are for log entry sync */
 
         // It will be verified that records already exist in Sink side registry table won't be overwritten during
@@ -99,11 +136,20 @@ public class LogReplicationSinkWriterIT extends LogReplicationAbstractIT {
 
         prepareTablesToVerify(5, 6, 8);
 
-        // Restart Source LR after opening the tables
-        startSourceLogReplicator();
-
         // Write data to Source side, note that mapNameToMapSource now only have the last 4 tables
         writeToSource(0, NUM_WRITES);
+
+        //check if the opened tables are seen
+        for(int i = 1; i <= 8; ++i) {
+            String mapName = TABLE_PREFIX + i;
+            TableName tblName = TableName.newBuilder().setTableName(mapName)
+                    .setNamespace(NAMESPACE).build();
+            assertThat(anotherRuntime.getTableRegistry().getRegistryTable().keySet().contains(tblName)).isTrue();
+        }
+        System.out.println("Shama.....verified 1-8");
+
+        // Restart Source LR after opening the tables
+        startSourceLogReplicator();
 
         // At this point mapNameToMapSink only has 1 table. This step is also used as a barrier to indicate
         // it's a good point to check records on Sink side
@@ -113,6 +159,21 @@ public class LogReplicationSinkWriterIT extends LogReplicationAbstractIT {
         // Table008 are replicated.
         // Also verify all the table's contents for log entry sync
         verifyTableContentsAndRecords(5, 6, 8);
+
+        System.out.println("open 2 more tables");
+
+        corfuStoreSource.openTable(NAMESPACE, "Shama1", StringKey.class,
+                IntValueTag.class, Metadata.class,
+                TableOptions.fromProtoSchema(IntValueTag.class));
+
+        corfuStoreSource.openTable(NAMESPACE, "Shama2", StringKey.class,
+                IntValueTag.class, Metadata.class,
+                TableOptions.fromProtoSchema(IntValueTag.class));
+
+        TimeUnit.MILLISECONDS.sleep(10);
+
+//        assertThat(sinkRuntime.getTableRegistry().getRegistryTable().keySet().contains("Shama1")).isTrue();
+//        assertThat(sinkRuntime.getTableRegistry().getRegistryTable().keySet().contains("Shama2")).isTrue();
     }
 
     /**
@@ -152,7 +213,7 @@ public class LogReplicationSinkWriterIT extends LogReplicationAbstractIT {
                             TableOptions.fromProtoSchema(IntValueTag.class));
             mapNameToMapSource.put(mapName, tableSource);
             if (i == splitter) {
-                // Open tables on Sink side with different schema options
+                // Open tables on Sink side with same schema options
                 Table<StringKey, IntValueTag, Metadata> tableSink =
                         corfuStoreSink.openTable(NAMESPACE, mapName, StringKey.class,
                                 IntValueTag.class, Metadata.class,
@@ -160,6 +221,17 @@ public class LogReplicationSinkWriterIT extends LogReplicationAbstractIT {
                 mapNameToMapSink.put(mapName, tableSink);
             }
         }
+        log.info("Shama::: {}",sourceRuntime.getAddressSpaceView().getLogTail());
+
+        Set<TableName> registryTable = corfuStoreSource.getRuntime().getTableRegistry().getRegistryTable().keySet();
+        for (int i = start; i <= end; ++i) {
+            String mapName = TABLE_PREFIX + i;
+            TableName tblName = TableName.newBuilder().setTableName(mapName)
+                    .setNamespace(NAMESPACE).build();
+            assertThat(registryTable.contains(tblName)).isTrue();
+        }
+
+
     }
 
     /**
@@ -199,6 +271,33 @@ public class LogReplicationSinkWriterIT extends LogReplicationAbstractIT {
         // Verify contents
         verifyDataOnSink(NUM_WRITES);
     }
+
+//    IRetry.build(IntervalRetry .class, () -> {
+//        try (TxnContext txn = corfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
+//            // Create out-going sessions by combing the given registered replication subscriber and topology
+//            for(ClusterDescriptor remoteSinkCluster : topology.getRemoteSinkClusters().values()) {
+//                Set<LogReplication.ReplicationModel> supportedModels =
+//                        topology.getRemoteSinkClusterToReplicationModels().get(remoteSinkCluster);
+//                if (supportedModels.contains(subscriber.getModel())) {
+//                    LogReplicationSession session =
+//                            constructSession(localClusterId, remoteSinkCluster.clusterId, subscriber);
+//                    if (!sessions.contains(session)) {
+//                        sessionsToAdd.add(session);
+//                        metadataManager.addSession(txn, session, topology.getTopologyConfigId(), false);
+//                    } else {
+//                        log.warn("Trying to create an existed session: {}", TextFormat.shortDebugString(session));
+//                    }
+//                }
+//            }
+//            txn.commit();
+//
+//            return null;
+//        } catch (TransactionAbortedException e) {
+//            log.error("Failed to create sessions. Retrying.", e);
+//            sessionsToAdd.clear();
+//            throw new RetryNeededException();
+//        }
+//    }).run();
 
     private void openLogReplicationStatusTable() throws Exception {
         corfuStoreSource.openTable(LogReplicationMetadataManager.NAMESPACE,

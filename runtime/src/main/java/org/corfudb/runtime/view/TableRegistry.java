@@ -296,7 +296,8 @@ public class TableRegistry {
                 if (oldRecord == null || protoFileChanged || tableRecordChanged(oldRecord, newRecord)) {
                     this.registryTable.insert(tableNameKey, newRecord);
                 }
-                this.runtime.getObjectsView().TXEnd();
+                long ts = this.runtime.getObjectsView().TXEnd();
+                log.info("Shama, ts for {}  is  {}", tableNameKey, ts);
                 break;
             } catch (TransactionAbortedException txAbort) {
                 if (txAbort.getAbortCause() == AbortCause.CONFLICT &&
