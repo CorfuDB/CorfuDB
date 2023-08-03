@@ -202,13 +202,9 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
             null,
             TableOptions.fromProtoSchema(LogReplication.ReplicationStatus.class));
 
-        // Wait the polling period time before verifying sync status (to make sure it was updated)
-        Sleep.sleepUninterruptibly(Duration.ofSeconds(LogReplicationAckReader.ACKED_TS_READ_INTERVAL_SECONDS + 1));
-
-        long remainingEntriesToSend = verifyReplicationStatus(LogReplication.SyncType.LOG_ENTRY,
-                LogReplication.SyncStatus.ONGOING, LogReplication.SnapshotSyncInfo.SnapshotSyncType.DEFAULT,
-                LogReplication.SyncStatus.COMPLETED);
-       assertThat(remainingEntriesToSend).isEqualTo(0L);
+        verifyReplicationStatus(LogReplication.SyncType.LOG_ENTRY, LogReplication.SyncStatus.ONGOING,
+                LogReplication.SnapshotSyncInfo.SnapshotSyncType.DEFAULT, LogReplication.SyncStatus.COMPLETED,
+                true);
 
         // (8) Keep writing data into the TX stream (but with data not intended for replication) while
         // checking the status, confirm, remainingEntriesToSend is '0'
@@ -230,7 +226,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
         // wrt. the tail of the log and this varies depending on how fast we are catching the tail of the log.
         verifyReplicationStatus(LogReplication.SyncType.LOG_ENTRY,
                 LogReplication.SyncStatus.ONGOING, LogReplication.SnapshotSyncInfo.SnapshotSyncType.DEFAULT,
-                LogReplication.SyncStatus.COMPLETED);
+                LogReplication.SyncStatus.COMPLETED, false);
 
         stopWrites.set(true);
 
@@ -242,15 +238,16 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
         // Wait the polling period time and verify sync status again (to make sure it was not erroneously updated)
         Sleep.sleepUninterruptibly(Duration.ofSeconds(LogReplicationAckReader.ACKED_TS_READ_INTERVAL_SECONDS + delta));
 
-        remainingEntriesToSend = verifyReplicationStatus(LogReplication.SyncType.LOG_ENTRY,
+        verifyReplicationStatus(LogReplication.SyncType.LOG_ENTRY,
                 LogReplication.SyncStatus.ONGOING, LogReplication.SnapshotSyncInfo.SnapshotSyncType.DEFAULT,
-                LogReplication.SyncStatus.COMPLETED);
-        assertThat(remainingEntriesToSend).isEqualTo(0L);
+                LogReplication.SyncStatus.COMPLETED, true);
     }
 
-    private long verifyReplicationStatus(LogReplication.SyncType targetSyncType, LogReplication.SyncStatus targetSyncStatus,
+    private void verifyReplicationStatus(LogReplication.SyncType targetSyncType,
+                                      LogReplication.SyncStatus targetSyncStatus,
                                          LogReplication.SnapshotSyncInfo.SnapshotSyncType targetSnapshotSyncType,
-                                         LogReplication.SyncStatus targetSnapshotSyncStatus) {
+                                         LogReplication.SyncStatus targetSnapshotSyncStatus,
+                                         boolean verifyNoMoreEntriesToSend) {
 
         LogReplicationSession session = LogReplicationSession.newBuilder()
             .setSourceClusterId(new DefaultClusterConfig().getSourceClusterIds().get(0))
@@ -281,7 +278,16 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
         assertThat(replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus()).isEqualTo(targetSnapshotSyncStatus);
         assertThat(replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getBaseSnapshot()).isGreaterThan(Address.NON_ADDRESS);
 
-        return replicationStatus.getSourceStatus().getRemainingEntriesToSend();
+        if (verifyNoMoreEntriesToSend) {
+            while (replicationStatus.getSourceStatus().getRemainingEntriesToSend() != 0L) {
+                try (TxnContext txn = corfuStoreSource.txn(LogReplicationMetadataManager.NAMESPACE)) {
+                    replicationStatus = (LogReplication.ReplicationStatus)txn.getRecord(REPLICATION_STATUS_TABLE_NAME,
+                            session).getPayload();
+                    txn.commit();
+                }
+            }
+            assertThat(replicationStatus.getSourceStatus().getRemainingEntriesToSend()).isEqualTo(0L);
+        }
     }
 
     private void openNonReplicatedTable() throws Exception {
