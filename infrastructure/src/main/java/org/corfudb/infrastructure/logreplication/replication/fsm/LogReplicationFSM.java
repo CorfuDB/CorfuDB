@@ -212,7 +212,6 @@ public class LogReplicationFSM {
     /**
      * Constructor for LogReplicationFSM, custom read processor for data transformation.
      *
-     * @param runtime           Corfu Runtime
      * @param dataSender        implementation of a data sender, both snapshot and log entry, this represents
      *                          the application callback for data transmission
      * @param readProcessor     read processor for data transformation
@@ -237,6 +236,7 @@ public class LogReplicationFSM {
             .build());
 
         init(dataSender, session);
+        setTopologyConfigId(replicationContext.getTopologyConfigId());
     }
 
     /**
@@ -427,7 +427,7 @@ public class LogReplicationFSM {
         to.onEntry(from);
     }
 
-    public void setTopologyConfigId(long topologyConfigId) {
+    private void setTopologyConfigId(long topologyConfigId) {
         this.topologyConfigId = topologyConfigId;
         snapshotReader.setTopologyConfigId(topologyConfigId);
         logEntryReader.setTopologyConfigId(topologyConfigId);

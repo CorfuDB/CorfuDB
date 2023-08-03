@@ -41,8 +41,6 @@ public class LogReplicationSourceManager {
     @VisibleForTesting
     private final LogReplicationFSM logReplicationFSM;
 
-    private final LogReplicationRuntimeParameters parameters;
-
     private final LogReplicationMetadataManager metadataManager;
 
     private final LogReplicationAckReader ackReader;
@@ -55,24 +53,16 @@ public class LogReplicationSourceManager {
 
     private boolean isShutdown = false;
 
-    /**
-     * Constructor
-     *
-     * @param params Log Replication parameters
-     * @param metadataManager Replication Metadata Manager
-     */
-    public LogReplicationSourceManager(LogReplicationRuntimeParameters params, IClientServerRouter router,
+
+    public LogReplicationSourceManager(IClientServerRouter router,
                                        LogReplicationMetadataManager metadataManager,
                                        LogReplicationSession session, LogReplicationContext replicationContext) {
-        this(params, metadataManager, new CorfuDataSender(router, session), session, replicationContext);
+        this(metadataManager, new CorfuDataSender(router, session), session, replicationContext);
     }
 
     @VisibleForTesting
-    public LogReplicationSourceManager(LogReplicationRuntimeParameters params,
-                                       LogReplicationMetadataManager metadataManager, DataSender dataSender,
+    public LogReplicationSourceManager(LogReplicationMetadataManager metadataManager, DataSender dataSender,
                                        LogReplicationSession session, LogReplicationContext replicationContext) {
-
-        this.parameters = params;
 
         Set<String> streamsToReplicate = replicationContext.getConfig(session).getStreamsToReplicate();
         if (streamsToReplicate == null || streamsToReplicate.isEmpty()) {
@@ -91,7 +81,6 @@ public class LogReplicationSourceManager {
 
         this.logReplicationFSM = new LogReplicationFSM(dataSender, readProcessor,
                 logReplicationFSMWorkers, ackReader, session, replicationContext);
-        this.logReplicationFSM.setTopologyConfigId(params.getTopologyConfigId());
         this.ackReader.setLogEntryReader(this.logReplicationFSM.getLogEntryReader());
         this.ackReader.setLogEntrySender(this.logReplicationFSM.getLogEntrySender());
     }

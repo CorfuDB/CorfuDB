@@ -60,15 +60,7 @@ public class CorfuReplicationManager {
             CorfuLogReplicationRuntime replicationRuntime;
             if (!sessionRuntimeMap.containsKey(replicationSession)) {
                 log.info("Creating Log Replication Runtime for session {}", replicationSession);
-                LogReplicationRuntimeParameters parameters;
-                // parameters is null when the cluster is not the connection starter.
-                if (replicationSessionToRuntimeParams.isEmpty() || replicationSessionToRuntimeParams.get(replicationSession) == null) {
-                    parameters = createRuntimeParams(remote, replicationSession);
-                } else {
-                    parameters = replicationSessionToRuntimeParams.get(replicationSession);
-                }
-                replicationRuntime = new CorfuLogReplicationRuntime(parameters,
-                        metadataManager, replicationSession, replicationContext, router);
+                replicationRuntime = new CorfuLogReplicationRuntime(metadataManager, replicationSession, replicationContext, router);
                 sessionRuntimeMap.put(replicationSession, replicationRuntime);
                 router.addRuntimeFSM(replicationSession, replicationRuntime);
                 replicationRuntime.start();
@@ -81,26 +73,6 @@ public class CorfuReplicationManager {
             log.error("Caught exception, stop log replication runtime to {}", replicationSession, e);
             stopLogReplicationRuntime(replicationSession);
         }
-    }
-
-    // TODO (V2): we might think of unifying the info in ClusterDescriptor into session (all nodes host+port)
-    private LogReplicationRuntimeParameters createRuntimeParams(ClusterDescriptor remoteCluster, LogReplicationSession session) {
-        LogReplicationRuntimeParameters parameters = LogReplicationRuntimeParameters.builder()
-                .localCorfuEndpoint(replicationContext.getLocalCorfuEndpoint())
-                .remoteClusterDescriptor(remoteCluster)
-                .localClusterId(localNodeDescriptor.getClusterId())
-                .topologyConfigId(topology.getTopologyConfigId())
-                .keyStore(replicationContext.getCorfuRuntime().getParameters().getKeyStore())
-                .tlsEnabled(replicationContext.getCorfuRuntime().getParameters().isTlsEnabled())
-                .ksPasswordFile(replicationContext.getCorfuRuntime().getParameters().getKsPasswordFile())
-                .trustStore(replicationContext.getCorfuRuntime().getParameters().getTrustStore())
-                .tsPasswordFile(replicationContext.getCorfuRuntime().getParameters().getTsPasswordFile())
-                .maxWriteSize(replicationContext.getCorfuRuntime().getParameters().getMaxWriteSize())
-                .build();
-
-        replicationSessionToRuntimeParams.put(session, parameters);
-
-        return parameters;
     }
 
     /**

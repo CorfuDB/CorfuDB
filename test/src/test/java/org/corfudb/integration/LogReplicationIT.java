@@ -1265,7 +1265,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
                 .remoteClusterDescriptor(new ClusterDescriptor(session.getSinkClusterId(), CORFU_PORT, new ArrayList<>()))
                 .localCorfuEndpoint(SOURCE_ENDPOINT)
                 .build();
-        LogReplicationSourceManager logReplicationSourceManager = new LogReplicationSourceManager(runtimeParameters,
+        LogReplicationSourceManager logReplicationSourceManager = new LogReplicationSourceManager(
                 srcMetadataManager, sourceDataSender, session, srcContext);
 
         // Set Log Replication Source Manager so we can emulate the channel for data & control messages (required
