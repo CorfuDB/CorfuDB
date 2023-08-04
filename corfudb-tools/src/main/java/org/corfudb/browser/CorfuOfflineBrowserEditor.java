@@ -383,6 +383,10 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
         return null;
     }
 
+    @Override
+    public void requestGlobalFullSync() {
+    }
+
     class CorfuTableDescriptor {
         @Getter
         private final UUID streamID;
