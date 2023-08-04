@@ -6,6 +6,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.LogReplicationMetadataKey;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.LogReplicationMetadataVal;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusKey;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
@@ -15,6 +17,7 @@ import org.corfudb.infrastructure.logreplication.proto.Sample.Metadata;
 import org.corfudb.infrastructure.logreplication.proto.Sample.StringKey;
 import org.corfudb.infrastructure.logreplication.replication.LogReplicationAckReader;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
+import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.LogReplicationMetadataType;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuOptions;
 import org.corfudb.runtime.CorfuRuntime;
@@ -25,6 +28,7 @@ import org.corfudb.runtime.collections.CorfuDynamicKey;
 import org.corfudb.runtime.collections.CorfuDynamicRecord;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuStore;
+import org.corfudb.runtime.collections.CorfuStoreEntry;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.collections.StreamListener;
@@ -54,6 +58,7 @@ import java.util.function.IntPredicate;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
+import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.METADATA_TABLE_PREFIX_NAME;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 
@@ -87,6 +92,9 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
     private static final String backupCorfuEndpoint = DEFAULT_HOST + ":" + backupClusterCorfuPort;
 
     private static final String REPLICATION_STATUS_TABLE = "LogReplicationStatus";
+
+    private static final String BACKUP_METADATA_TABLE = METADATA_TABLE_PREFIX_NAME +
+            DefaultClusterConfig.getBackupClusterId();
 
     private Process activeCorfuServer = null;
     private Process standbyCorfuServer = null;
@@ -1559,6 +1567,14 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         backupRuntime.parseConfigurationString(backupCorfuEndpoint).connect();
         CorfuStore backupCorfuStore = new CorfuStore(backupRuntime);
 
+        Table<LogReplicationMetadataKey, LogReplicationMetadataVal, Message> backupMetadataTable = backupCorfuStore.openTable(
+                CORFU_SYSTEM_NAMESPACE,
+                BACKUP_METADATA_TABLE,
+                LogReplicationMetadataKey.class,
+                LogReplicationMetadataVal.class,
+                null,
+                TableOptions.fromProtoSchema(LogReplicationMetadataVal.class));
+
         Table<StringKey, IntValue, Metadata> mapBackup = backupCorfuStore.openTable(
                 NAMESPACE,
                 streamName,
@@ -1628,13 +1644,21 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         // Change the topology - brings up the backup cluster
         updateTopology(activeCorfuStore, DefaultClusterManager.OP_BACKUP);
         log.info("Change the topology!!!");
-
-        TimeUnit.SECONDS.sleep(shortInterval);
-
+        // Note that the backup cluster will be the new source that drives the following forced snapshot sync.
+        CorfuStoreEntry topologyConfigRecord = null;
+        while (topologyConfigRecord == null) {
+            log.debug("Block until new topology config takes effect (persisted into metadata table)");
+            LogReplicationMetadataKey txKey = LogReplicationMetadataKey.newBuilder()
+                    .setKey(LogReplicationMetadataType.TOPOLOGY_CONFIG_ID.getVal())
+                    .build();
+            try (TxnContext txn = backupCorfuStore.txn(NAMESPACE)) {
+                topologyConfigRecord = txn.getRecord(backupMetadataTable, txKey);
+                txn.commit();
+            }
+        }
 
         // Perform an enforce full snapshot sync
         updateTopology(activeCorfuStore, DefaultClusterManager.OP_ENFORCE_SNAPSHOT_FULL_SYNC);
-        TimeUnit.SECONDS.sleep(mediumInterval);
 
         // Standby map size should be 10
         waitForReplication(size -> size == firstBatch, mapStandby, firstBatch);
