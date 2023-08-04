@@ -381,6 +381,7 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
      * @param sinkClusterId   Id of the Sink Cluster
      */
     public void requestGlobalSnapshotSync(UUID sourceClusterId, UUID sinkClusterId) {
+        log.warn("Requesting a full sync for ALL remote sites at once!");
         requestSnapshotSync(sourceClusterId, sinkClusterId,
                 LogReplication.ReplicationEvent.ReplicationEventType.UPGRADE_COMPLETION_FORCE_SNAPSHOT_SYNC);
     }

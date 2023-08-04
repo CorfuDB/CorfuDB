@@ -173,4 +173,9 @@ public interface CorfuBrowserEditorCommands {
      * @return table names with given 'streamTag'
      */
     List<CorfuStoreMetadata.TableName> listTablesForTag(@Nonnull String streamTag);
+
+    /**
+     * LR API: Request full sync for all remote sites
+     */
+    void requestGlobalFullSync();
 }
