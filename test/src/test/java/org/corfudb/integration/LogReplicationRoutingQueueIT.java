@@ -2,6 +2,7 @@ package org.corfudb.integration;
 
 import com.google.protobuf.ByteString;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.browser.CorfuStoreBrowserEditor;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
@@ -10,7 +11,6 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LRFullStateReplicationContext;
 import org.corfudb.runtime.LiteRoutingQueueListener;
 import org.corfudb.runtime.LogReplication;
-import org.corfudb.runtime.LogReplicationUtils;
 import org.corfudb.runtime.Queue;
 import org.corfudb.runtime.RoutingQueueSenderClient;
 import org.corfudb.runtime.collections.CorfuStore;
@@ -112,6 +112,7 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
         // Register client and setup initial group destinations mapping
         CorfuRuntime clientRuntime = getClientRuntime();
         CorfuStore clientCorfuStore = new CorfuStore(clientRuntime);
+        CorfuStoreBrowserEditor editor = new CorfuStoreBrowserEditor(clientRuntime, null, true);
         String clientName = RoutingQueueSenderClient.DEFAULT_ROUTING_QUEUE_CLIENT;
         RoutingQueueSenderClient queueSenderClient = new RoutingQueueSenderClient(clientCorfuStore, clientName);
         // SnapshotProvider implements RoutingQueueSenderClient.LRTransmitterReplicationModule
@@ -144,8 +145,7 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
 
             // Now request a full sync again for all sites!
             snapshotProvider.isSnapshotSent = false;
-            queueSenderClient.requestGlobalSnapshotSync(UUID.fromString(DefaultClusterConfig.getSourceClusterIds().get(0)),
-                    UUID.fromString(DefaultClusterConfig.getSinkClusterIds().get(0)));
+            editor.requestGlobalFullSync();
 
             while (numFullSyncMsgsGot < 10) {
                 Thread.sleep(5000);
