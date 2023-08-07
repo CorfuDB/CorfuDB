@@ -64,6 +64,9 @@ public class SnapshotSender {
     // The max number of message can be sent over in burst for a snapshot cycle.
     private final int maxNumSnapshotMsgPerBatch;
 
+    // The total size of the messages sent as part of snapshot sync
+    private long messagesSentSize = 0;
+
     // This flag will indicate the start of a snapshot sync, so start snapshot marker is sent once.
     private boolean startSnapshotSync = true;
 
@@ -106,7 +109,6 @@ public class SnapshotSender {
         int messagesSent = 0;       // Limit the number of messages to maxNumSnapshotMsgPerBatch. The reason we need to limit
         // is because by design several state machines can share the same thread pool,
         // therefore, we need to hand the thread for other workers to execute.
-        long messagesSentSize = 0;
         SnapshotReadMessage snapshotReadMessage;
 
         // Skip if no data is present in the log
@@ -335,6 +337,7 @@ public class SnapshotSender {
 
         stopSnapshotSync.set(false);
         startSnapshotSync = true;
+        messagesSentSize = 0;
     }
 
     private void resetBaseSnapshotTimestamp(long timestamp) {
