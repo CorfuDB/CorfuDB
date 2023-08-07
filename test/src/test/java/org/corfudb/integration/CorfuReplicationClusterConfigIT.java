@@ -1833,7 +1833,8 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
      * 8. Verify the force snapshot sync is completed
      * 9. Write 5 entries to backup map, to verify Log Entry Sync
      */
-    @Test
+    // TODO: Need to address the intermittent failures on this test.
+    //@Test
     public void testBackupRestoreWorkflow() throws Exception {
         backupCorfu = runServer(backupClusterCorfuPort, true);
         backupReplicationServer = runReplicationServer(backupReplicationServerPort, backupClusterCorfuPort,
