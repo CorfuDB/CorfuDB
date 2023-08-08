@@ -4,11 +4,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
+import org.corfudb.runtime.collections.CorfuStreamEntry;
+import org.corfudb.runtime.collections.TableSchema;
 
 import java.io.InputStream;
 import java.lang.reflect.Constructor;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.List;
 import java.util.Properties;
 import java.util.concurrent.TimeUnit;
 
@@ -51,5 +54,15 @@ public class WorkflowOnNotificationHandler extends NotificationListenerHandler {
     @Override
     protected CorfuStoreMetadata.Timestamp performFullSync() {
         return null;
+    }
+
+    @Override
+    void onEachSchema(TableSchema tableSchema, List<CorfuStreamEntry> entry) {
+        //
+    }
+
+    @Override
+    void onEachEntry(TableSchema tableSchema, CorfuStreamEntry entry) {
+        //
     }
 }

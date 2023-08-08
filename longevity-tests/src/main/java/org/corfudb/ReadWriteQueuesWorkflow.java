@@ -61,11 +61,12 @@ public class ReadWriteQueuesWorkflow extends Workflow {
 
     @Override
     void start() {
-        this.executor.scheduleWithFixedDelay(this::executeTask,
+        this.executor.scheduleWithFixedDelay(this::submitTask,
                 1, interval.toMillis()/10, TimeUnit.MILLISECONDS);
     }
 
-    private void executeTask() {
+    @Override
+    void executeTask() {
         try (TxnContext txn = corfuStore.txn(namespace)) {
             for (int i = 0; i < writeQueueNames.size(); i++) {
                 if (ThreadLocalRandom.current().nextDouble(queueSize) < writeDistribution.get(i)) {

@@ -39,7 +39,7 @@ public class WastefulTxnsWorkflow extends Workflow {
 
     @Override
     void start() {
-        this.executor.scheduleWithFixedDelay(this::executeTask,
+        this.executor.scheduleWithFixedDelay(this::submitTask,
                 1, interval.toMillis()/10, TimeUnit.MILLISECONDS);
     }
 

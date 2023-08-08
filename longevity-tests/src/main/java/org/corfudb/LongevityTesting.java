@@ -28,7 +28,8 @@ public class LongevityTesting {
         JCommander jCommander = new JCommander(config);
         jCommander.parse(args);
         NodeLocator nodeLocator = NodeLocator.builder().host(config.host).port(Integer.parseInt(config.port)).build();
-        CorfuRuntime runtime = new CorfuRuntime().parseConfigurationString(nodeLocator.toEndpointUrl()).connect();
+        CorfuRuntime runtime = CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder().build())
+                .parseConfigurationString(nodeLocator.toEndpointUrl()).connect();
         CorfuStore corfuStore = new CorfuStore(runtime);
         CommonUtils commonUtils = new CommonUtils(corfuStore);
 

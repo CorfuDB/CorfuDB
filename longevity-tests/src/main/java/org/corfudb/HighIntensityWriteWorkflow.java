@@ -6,7 +6,6 @@ import org.corfudb.runtime.ExampleSchemas;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.view.TableRegistry;
 
 import java.io.InputStream;
 import java.nio.file.Files;
@@ -17,6 +16,7 @@ import java.util.List;
 import java.util.Properties;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
+import org.apache.commons.math3.distribution.ZipfDistribution;
 
 @Slf4j
 public class HighIntensityWriteWorkflow extends Workflow {
@@ -32,8 +32,9 @@ public class HighIntensityWriteWorkflow extends Workflow {
     private Duration randomSleepInterval;
     private long tableSize;
     private double rareUpdateRatio;
-
-
+    private ZipfDistribution zipfDistribution;
+    private boolean isRunning = false;
+    private int sampleLoad;
 
     public HighIntensityWriteWorkflow(String name) {
         super(name);
@@ -71,31 +72,52 @@ public class HighIntensityWriteWorkflow extends Workflow {
 
     @Override
     void start() {
-        this.executor.scheduleWithFixedDelay(this::executeTask,
-                1, interval.toMillis()/10, TimeUnit.MILLISECONDS);
+        isRunning = true;
+        while (isRunning) {
+            this.zipfDistribution = new ZipfDistribution(1000, 4.0);
+            for (int i = 0; i < 100; i++) {
+                try {
+                    TimeUnit.MILLISECONDS.sleep(ThreadLocalRandom.current().nextLong(interval.toMillis()));
+                    sampleLoad = zipfDistribution.sample();
+                    executor.submit(this::submitTask);
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+        }
     }
 
+    @Override
     void executeTask() {
-        try (TxnContext txn = corfuStore.txn(namespace)) {
-            writeTableNames.forEach( (t) -> {
-                txn.putRecord(commonUtils.getTable(namespace, t), commonUtils.getRandomKey(tableSize),
-                        commonUtils.getRandomValue(payloadSize), ExampleSchemas.ManagedMetadata.getDefaultInstance());
-                log.info("Put table name : {}", t);
-            });
-            //Random sleep to simulate non-db related work in-between a txn
-            TimeUnit.MILLISECONDS.sleep(randomSleepInterval.toMillis());
-            rareUpdateTableNames.forEach( (t) -> {
-                if (ThreadLocalRandom.current().nextDouble(100) < rareUpdateRatio) {
-                    txn.keySet(t);
-                    log.info("Get KeySet from table: {}", t);
-                }
-            });
-            txn.commit();
-        } catch (TransactionAbortedException tae) {
-            log.error("Aborted transaction: ", tae);
-        } catch (Exception e) {
-            log.error("Encountered Exception: ", e);
-            throw new RuntimeException(e);
+        //write sampleload number of txns
+        for (int i = 0; i < sampleLoad; i++) {
+            try (TxnContext txn = corfuStore.txn(namespace)) {
+                writeTableNames.forEach((t) -> {
+                    txn.putRecord(commonUtils.getTable(namespace, t), commonUtils.getRandomKey(tableSize),
+                            commonUtils.getRandomValue(payloadSize), ExampleSchemas.ManagedMetadata.getDefaultInstance());
+                    log.info("Put table name : {}", t);
+                });
+                //Random sleep to simulate non-db related work in-between a txn
+                TimeUnit.MILLISECONDS.sleep(randomSleepInterval.toMillis());
+                rareUpdateTableNames.forEach((t) -> {
+                    if (ThreadLocalRandom.current().nextDouble(100) < rareUpdateRatio) {
+                        txn.keySet(t);
+                        log.info("Get KeySet from table: {}", t);
+                    }
+                });
+                txn.commit();
+            } catch (TransactionAbortedException tae) {
+                log.error("Aborted transaction: ", tae);
+            } catch (Exception e) {
+                log.error("Encountered Exception: ", e);
+                throw new RuntimeException(e);
+            }
         }
+    }
+
+    @Override
+    public void stop() {
+
+        this.executor.shutdownNow();
     }
 }
