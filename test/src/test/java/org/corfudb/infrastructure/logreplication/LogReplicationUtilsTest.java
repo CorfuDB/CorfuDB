@@ -17,6 +17,7 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import java.util.ArrayList;
+import java.util.concurrent.ExecutorService;
 
 /**
  * Tests the apis in LogReplicationUtils.
@@ -36,7 +37,7 @@ public class LogReplicationUtilsTest extends AbstractViewTest {
     public void setUp() throws Exception {
         corfuRuntime = getDefaultRuntime();
         corfuStore = new CorfuStore(corfuRuntime);
-        lrListener = new LogReplicationTestListener(corfuStore, namespace, client);
+        lrListener = new LogReplicationTestListener(corfuStore, namespace, client, null);
         replicationStatusTable = TestUtils.openReplicationStatusTable(corfuStore);
     }
 
@@ -72,7 +73,7 @@ public class LogReplicationUtilsTest extends AbstractViewTest {
         if (initializeTable) {
             TestUtils.setSnapshotSyncOngoing(corfuStore, replicationStatusTable, client, ongoing);
         }
-        LogReplicationUtils.attemptClientFullSync(corfuStore, lrListener, namespace);
+        LogReplicationUtils.attemptClientFullSync(corfuStore, lrListener, namespace, null);
         verifyListenerFlags((LogReplicationTestListener)lrListener, ongoing);
     }
 
@@ -110,7 +111,8 @@ public class LogReplicationUtilsTest extends AbstractViewTest {
         }
 
         String streamTag = "test_tag";
-        LogReplicationUtils.subscribe(lrListener, namespace, streamTag, new ArrayList<>(), 5, corfuStore);
+        LogReplicationUtils.subscribe(lrListener, namespace, streamTag, new ArrayList<>(), 5, corfuStore,
+            null);
         verifyListenerFlags((LogReplicationTestListener)lrListener, ongoing);
     }
 
@@ -139,16 +141,19 @@ public class LogReplicationUtilsTest extends AbstractViewTest {
 
         // Create the listener for new_client and set snapshot sync to be in progress
         String newClient = "new_client";
-        LogReplicationListener newListener = new LogReplicationTestListener(corfuStore, namespace, newClient);
+        LogReplicationListener newListener = new LogReplicationTestListener(corfuStore, namespace, newClient,
+            null);
         TestUtils.setSnapshotSyncOngoing(corfuStore, replicationStatusTable, newClient, true);
 
         if (subscribe) {
             String streamTag = "test_tag";
-            LogReplicationUtils.subscribe(lrListener, namespace, streamTag, new ArrayList<>(), 5, corfuStore);
-            LogReplicationUtils.subscribe(newListener, namespace, streamTag, new ArrayList<>(), 5, corfuStore);
+            LogReplicationUtils.subscribe(lrListener, namespace, streamTag, new ArrayList<>(), 5, corfuStore,
+                null);
+            LogReplicationUtils.subscribe(newListener, namespace, streamTag, new ArrayList<>(), 5, corfuStore,
+                null);
         } else {
-            LogReplicationUtils.attemptClientFullSync(corfuStore, lrListener, namespace);
-            LogReplicationUtils.attemptClientFullSync(corfuStore, newListener, namespace);
+            LogReplicationUtils.attemptClientFullSync(corfuStore, lrListener, namespace, null);
+            LogReplicationUtils.attemptClientFullSync(corfuStore, newListener, namespace, null);
         }
 
         // Verify that full sync finished and snapshot sync was not considered ongoing for test_client
@@ -183,8 +188,9 @@ public class LogReplicationUtilsTest extends AbstractViewTest {
 
         private String clientName;
 
-        LogReplicationTestListener(CorfuStore corfuStore, String namespace, String clientName) {
-            super(corfuStore, namespace);
+        LogReplicationTestListener(CorfuStore corfuStore, String namespace, String clientName,
+                                   ExecutorService executorService) {
+            super(corfuStore, namespace, executorService);
             this.clientName = clientName;
         }
 
