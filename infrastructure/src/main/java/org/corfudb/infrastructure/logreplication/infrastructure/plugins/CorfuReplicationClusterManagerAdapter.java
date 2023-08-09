@@ -2,8 +2,9 @@ package org.corfudb.infrastructure.logreplication.infrastructure.plugins;
 
 import org.corfudb.infrastructure.logreplication.infrastructure.CorfuReplicationDiscoveryServiceAdapter;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationDiscoveryServiceException;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.TopologyConfigurationMsg;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
+import org.corfudb.infrastructure.logreplication.infrastructure.TopologyDescriptor;
+import org.corfudb.runtime.LogReplication.LogReplicationSession;
+import org.corfudb.runtime.LogReplication.ReplicationStatus;
 
 import java.util.Map;
 import java.util.UUID;
@@ -18,45 +19,53 @@ import java.util.UUID;
 public interface CorfuReplicationClusterManagerAdapter {
 
     /**
-     *   Register the discovery service
+     * Register the discovery service
      */
-    void register(CorfuReplicationDiscoveryServiceAdapter corfuReplicationDiscoveryService);
-
-     /**
-     * Set the localEndpoint
-     */
-    void setLocalEndpoint(String endpoint);
+    void register(CorfuReplicationDiscoveryServiceAdapter corfuReplicationDiscoveryServiceAdapter);
 
     /**
      * Query the topology information.
-     * @param useCached if it is true, used the cached topology, otherwise do a query to get the most
-     *                  recent topology from the real Cluster Manager.
+     * @param useCached if it is true, use the cached topology, otherwise do a query to get the most
+     *                  recent topology from the Cluster Manager/Topology Provider.
      * @return
      */
-    TopologyConfigurationMsg queryTopologyConfig(boolean useCached);
+    TopologyDescriptor queryTopologyConfig(boolean useCached);
 
-    // This is called when get a notification of cluster config change.
-    void updateTopologyConfig(TopologyConfigurationMsg newClusterConfigMsg);
+    /**
+     * Callback to update topology on cluster changes
+     */
+    void updateTopologyConfig(TopologyDescriptor newClusterConfig);
 
-    // start to talk to the upper layer to get cluster topology information
+    /**
+     * Start cluster discovery against external topology provider
+     */
     void start();
 
-    // Stop the ClusterManager service
+    /**
+     * Shutdown cluster manager
+     */
     void shutdown();
 
     /**
-     * This API is used to query the log replication status when it is preparing a role type flip and
-     * the replicated tables should be in read-only mode.
+     * Query replication status for all ongoing sessions on source.
+     * This API is primarily used for UI display of metadata or in preparation for role switchover.
      *
-     * @return
+     * @return map of sessions to replication status
      */
-    Map<String, LogReplicationMetadata.ReplicationStatusVal> queryReplicationStatus();
+    Map<LogReplicationSession, ReplicationStatus> queryReplicationStatus();
 
     /**
-     * This API enforce a full snapshot sync on the standby cluster with the clusterId at best effort.
-     * The command can only be executed on the active cluster's node.
+     * This API enforces a full snapshot sync on a session at best effort.
+     * The command will be executed on a node in the source cluster.
      *
-     * @param clusterId
+     * @param session
      */
-    UUID forceSnapshotSync(String clusterId) throws LogReplicationDiscoveryServiceException;
+    UUID forceSnapshotSync(LogReplicationSession session) throws LogReplicationDiscoveryServiceException;
+
+    /**
+     * Get the local node ID
+     *
+     * @return node ID
+     */
+    String getLocalNodeId();
 }

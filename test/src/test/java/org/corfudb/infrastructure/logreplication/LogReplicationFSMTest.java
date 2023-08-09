@@ -1,55 +1,13 @@
 package org.corfudb.infrastructure.logreplication;
 
+import static java.lang.Thread.sleep;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig.getSessions;
+import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.NAMESPACE;
+import static org.corfudb.runtime.LogReplicationUtils.LR_STATUS_STREAM_TAG;
+import static org.corfudb.runtime.LogReplicationUtils.REPLICATION_STATUS_TABLE_NAME;
+
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import com.google.protobuf.ByteString;
-import com.google.protobuf.Message;
-import lombok.Getter;
-import lombok.extern.slf4j.Slf4j;
-import org.corfudb.common.compression.Codec;
-import org.corfudb.common.util.ObservableValue;
-import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusKey;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal.SyncType;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SyncStatus;
-import org.corfudb.infrastructure.logreplication.proto.Sample;
-import org.corfudb.infrastructure.logreplication.replication.LogReplicationAckReader;
-import org.corfudb.infrastructure.logreplication.replication.fsm.EmptyDataSender;
-import org.corfudb.infrastructure.logreplication.replication.fsm.EmptySnapshotReader;
-import org.corfudb.infrastructure.logreplication.replication.fsm.InSnapshotSyncState;
-import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent;
-import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent.LogReplicationEventType;
-import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationFSM;
-import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationState;
-import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationStateType;
-import org.corfudb.infrastructure.logreplication.replication.fsm.TestDataSender;
-import org.corfudb.infrastructure.logreplication.replication.fsm.TestLogEntryReader;
-import org.corfudb.infrastructure.logreplication.replication.fsm.TestReaderConfiguration;
-import org.corfudb.infrastructure.logreplication.replication.fsm.TestSnapshotReader;
-import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
-import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationEventMetadata;
-import org.corfudb.infrastructure.logreplication.replication.send.logreader.DefaultReadProcessor;
-import org.corfudb.infrastructure.logreplication.replication.send.logreader.LogEntryReader;
-import org.corfudb.infrastructure.logreplication.replication.send.logreader.SnapshotReader;
-import org.corfudb.infrastructure.logreplication.replication.send.logreader.StreamsSnapshotReader;
-import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
-import org.corfudb.protocols.wireprotocol.TokenResponse;
-import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
-import org.corfudb.runtime.collections.CorfuStore;
-import org.corfudb.runtime.collections.CorfuStreamEntries;
-import org.corfudb.runtime.collections.CorfuStreamEntry;
-import org.corfudb.runtime.collections.StreamListener;
-import org.corfudb.runtime.collections.Table;
-import org.corfudb.runtime.collections.TableOptions;
-import org.corfudb.runtime.collections.TxnContext;
-import org.corfudb.runtime.view.AbstractViewTest;
-import org.corfudb.runtime.view.TableRegistry;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -65,15 +23,57 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Semaphore;
 
-import static java.lang.Thread.sleep;
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_MAX_NUM_MSG_PER_BATCH;
-import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED;
-import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_CACHE_NUM_ENTRIES;
-import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_DATA_MSG_SIZE_SUPPORTED;
-import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.LR_STATUS_STREAM_TAG;
-import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.NAMESPACE;
-import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.REPLICATION_STATUS_TABLE;
+import com.google.protobuf.ByteString;
+import com.google.protobuf.Message;
+import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.compression.Codec;
+import org.corfudb.common.util.ObservableValue;
+import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
+import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
+import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
+import org.corfudb.infrastructure.logreplication.proto.Sample;
+import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
+import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationAckReader;
+import org.corfudb.infrastructure.logreplication.replication.fsm.EmptyDataSender;
+import org.corfudb.infrastructure.logreplication.replication.fsm.EmptySnapshotReader;
+import org.corfudb.infrastructure.logreplication.replication.fsm.InSnapshotSyncState;
+import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent;
+import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent.LogReplicationEventType;
+import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationFSM;
+import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationState;
+import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationStateType;
+import org.corfudb.infrastructure.logreplication.replication.fsm.TestDataSender;
+import org.corfudb.infrastructure.logreplication.replication.fsm.TestLogEntryReader;
+import org.corfudb.infrastructure.logreplication.replication.fsm.TestReaderConfiguration;
+import org.corfudb.infrastructure.logreplication.replication.fsm.TestSnapshotReader;
+import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationEventMetadata;
+import org.corfudb.infrastructure.logreplication.replication.send.logreader.DefaultReadProcessor;
+import org.corfudb.infrastructure.logreplication.replication.send.logreader.SnapshotReader;
+import org.corfudb.infrastructure.logreplication.replication.send.logreader.LogEntryReader;
+import org.corfudb.infrastructure.logreplication.replication.send.logreader.StreamsSnapshotReader;
+import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
+import org.corfudb.runtime.LogReplication.LogReplicationSession;
+import org.corfudb.runtime.LogReplication.ReplicationInfo;
+import org.corfudb.runtime.LogReplication.ReplicationStatus;
+import org.corfudb.runtime.LogReplication.SyncStatus;
+import org.corfudb.runtime.LogReplication.SyncType;
+import org.corfudb.runtime.collections.CorfuStore;
+import org.corfudb.runtime.collections.CorfuStreamEntries;
+import org.corfudb.runtime.collections.CorfuStreamEntry;
+import org.corfudb.runtime.collections.StreamListener;
+import org.corfudb.runtime.collections.Table;
+import org.corfudb.runtime.collections.TableOptions;
+import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.runtime.view.AbstractViewTest;
+import org.corfudb.runtime.view.TableRegistry;
+import org.junit.After;
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Test;
 
 @Slf4j
 /**
@@ -88,10 +88,14 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
     private static final String TEST_STREAM_NAME = "StreamA";
     private static final int BATCH_SIZE = 2;
     private static final int WAIT_TIME = 100;
-    private static final int CORFU_PORT = 9000;
     private static final int TEST_TOPOLOGY_CONFIG_ID = 1;
     private static final String TEST_LOCAL_CLUSTER_ID = "local_cluster";
-    private static final int MAX_SNAPSHOT_ENTRIES_APPLIED = 50;
+    private static final String TEST_LOCAL_ENDPOINT_PREFIX = "test:";
+
+    // Default session to used to initialize and update status table
+    private static final LogReplicationSession DEFAULT_SESSION = getSessions().get(0);
+
+    private static final String LOCAL_SOURCE_CLUSTER_ID = DefaultClusterConfig.getSourceClusterIds().get(0);
 
     // This semaphore is used to block until the triggering event causes the transition to a new state
     private final Semaphore transitionAvailable = new Semaphore(1, true);
@@ -115,6 +119,8 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
     private DataSender dataSender;
     private SnapshotReader snapshotReader;
     private LogReplicationAckReader ackReader;
+
+    private static final String pluginConfigFilePath = "src/test/resources/transport/pluginConfig.properties";
 
     @Before
     public void setRuntime() {
@@ -144,7 +150,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
     @Test
     public void testLogReplicationFSMTransitions() throws Exception {
 
-        initLogReplicationFSM(ReaderImplementation.EMPTY);
+        initLogReplicationFSM(ReaderImplementation.EMPTY, false);
 
         // Initial state: Initialized
         LogReplicationState initState = fsm.getState();
@@ -187,10 +193,10 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
     @Test
     public void testSyncStatusUpdatesForSnapshotOnInit() throws Exception {
         final int updateToStatusTableFromOnEntry = 1;
-        initLogReplicationFSM(ReaderImplementation.EMPTY);
+        initLogReplicationFSM(ReaderImplementation.EMPTY, false);
 
-        final Table<ReplicationStatusKey, ReplicationStatusVal, Message> statusTable =
-                this.corfuStore.getTable(NAMESPACE, REPLICATION_STATUS_TABLE);
+        final Table<LogReplicationSession, ReplicationStatus, Message> statusTable =
+                this.corfuStore.getTable(NAMESPACE, REPLICATION_STATUS_TABLE_NAME);
 
         CountDownLatch statusTableLatch = new CountDownLatch(updateToStatusTableFromOnEntry);
         TestStatusTableStreamListener streamListener = new TestStatusTableStreamListener(statusTableLatch);
@@ -202,18 +208,18 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
 
         transitionAvailable.acquire();
 
-        ReplicationStatusKey currentReplicationKey = ReplicationStatusKey.newBuilder().setClusterId(TEST_LOCAL_CLUSTER_ID).build();
-        ReplicationStatusVal currentReplicationVal;
+        ReplicationStatus currentReplicationVal;
         try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
-            currentReplicationVal = txn.getRecord(statusTable, currentReplicationKey).getPayload();
+            currentReplicationVal = txn.getRecord(statusTable, DEFAULT_SESSION).getPayload();
         }
+        ReplicationInfo currentReplicationInfo = currentReplicationVal.getSourceStatus().getReplicationInfo();
 
         // Default sync value is null so current syncType should not be set and default to SNAPSHOT.
-        Assert.assertFalse(currentReplicationVal.hasField(ReplicationStatusVal.getDescriptor().findFieldByName("syncType")));
+        Assert.assertFalse(currentReplicationInfo.hasField(ReplicationInfo.getDescriptor().findFieldByName("syncType")));
 
         // Current SyncStatus for ReplicationInfo and SnapshotSyncInfo should be NOT_STARTED
-        Assert.assertEquals(SyncStatus.NOT_STARTED, currentReplicationVal.getStatus());
-        Assert.assertEquals(SyncStatus.NOT_STARTED, currentReplicationVal.getSnapshotSyncInfo().getStatus());
+        Assert.assertEquals(SyncStatus.NOT_STARTED, currentReplicationVal.getSourceStatus().getReplicationInfo().getStatus());
+        Assert.assertEquals(SyncStatus.NOT_STARTED, currentReplicationVal.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus());
 
         // Transition #1: SNAPSHOT Sync Start
         transition(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST, LogReplicationStateType.IN_SNAPSHOT_SYNC);
@@ -228,11 +234,11 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         SyncStatus actualSnapshotInfoSyncStatus;
 
         ArrayList<CorfuStreamEntries> streamEntries = streamListener.getEntries();
-        ReplicationStatusVal replicationStatusVal = (ReplicationStatusVal)
+        ReplicationStatus replicationStatusVal = (ReplicationStatus)
                 streamEntries.stream().findAny().get().getEntries().values().stream().findAny().get().get(0).getPayload();
-        actualSyncTypes.add(replicationStatusVal.getSyncType());
-        actualSyncStatus = replicationStatusVal.getStatus();
-        actualSnapshotInfoSyncStatus = replicationStatusVal.getSnapshotSyncInfo().getStatus();
+        actualSyncTypes.add(replicationStatusVal.getSourceStatus().getReplicationInfo().getSyncType());
+        actualSyncStatus = replicationStatusVal.getSourceStatus().getReplicationInfo().getStatus();
+        actualSnapshotInfoSyncStatus = replicationStatusVal.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus();
 
         // replicationSyncStatus (outer) starts as NOT_STARTED by initializeReplicationStatusTable,
         // and then gets updated to ONGOING in entry of InSnapshotSyncState
@@ -254,10 +260,10 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
     @Test
     public void testSyncStatusUpdatesForLogEntryOnInit() throws Exception {
         final int updateToStatusTableFromOnEntry = 1;
-        initLogReplicationFSM(ReaderImplementation.EMPTY);
+        initLogReplicationFSM(ReaderImplementation.EMPTY, false);
 
-        final Table<ReplicationStatusKey, ReplicationStatusVal, Message> statusTable =
-                this.corfuStore.getTable(NAMESPACE, REPLICATION_STATUS_TABLE);
+        final Table<LogReplicationSession, ReplicationStatus, Message> statusTable =
+                this.corfuStore.getTable(NAMESPACE, REPLICATION_STATUS_TABLE_NAME);
 
         CountDownLatch statusTableLatch = new CountDownLatch(updateToStatusTableFromOnEntry);
         TestStatusTableStreamListener streamListener = new TestStatusTableStreamListener(statusTableLatch);
@@ -269,18 +275,18 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
 
         transitionAvailable.acquire();
 
-        ReplicationStatusKey currentReplicationKey = ReplicationStatusKey.newBuilder().setClusterId(TEST_LOCAL_CLUSTER_ID).build();
-        ReplicationStatusVal currentReplicationVal;
+        ReplicationStatus currentReplicationVal;
         try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
-            currentReplicationVal = txn.getRecord(statusTable, currentReplicationKey).getPayload();
+            currentReplicationVal = txn.getRecord(statusTable, DEFAULT_SESSION).getPayload();
         }
+        ReplicationInfo currentReplicationInfo = currentReplicationVal.getSourceStatus().getReplicationInfo();
 
         // Default sync value is null so current syncType should not be set and default to SNAPSHOT.
-        Assert.assertFalse(currentReplicationVal.hasField(ReplicationStatusVal.getDescriptor().findFieldByName("syncType")));
+        Assert.assertFalse(currentReplicationInfo.hasField(ReplicationInfo.getDescriptor().findFieldByName("syncType")));
 
         // Current SyncStatus for ReplicationInfo and SnapshotSyncInfo should be NOT_STARTED
-        Assert.assertEquals(SyncStatus.NOT_STARTED, currentReplicationVal.getStatus());
-        Assert.assertEquals(SyncStatus.NOT_STARTED, currentReplicationVal.getSnapshotSyncInfo().getStatus());
+        Assert.assertEquals(SyncStatus.NOT_STARTED, currentReplicationVal.getSourceStatus().getReplicationInfo().getStatus());
+        Assert.assertEquals(SyncStatus.NOT_STARTED, currentReplicationVal.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus());
 
         // Transition #1: Log Entry Sync Start
         transition(LogReplicationEventType.LOG_ENTRY_SYNC_REQUEST, LogReplicationStateType.IN_LOG_ENTRY_SYNC);
@@ -295,11 +301,11 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         SyncStatus actualSnapshotInfoSyncStatus;
 
         ArrayList<CorfuStreamEntries> streamEntries = streamListener.getEntries();
-        ReplicationStatusVal replicationStatusVal = (ReplicationStatusVal)
+        ReplicationStatus replicationStatusVal = (ReplicationStatus)
                 streamEntries.stream().findAny().get().getEntries().values().stream().findAny().get().get(0).getPayload();
-        actualSyncTypes.add(replicationStatusVal.getSyncType());
-        actualSyncStatus = replicationStatusVal.getStatus();
-        actualSnapshotInfoSyncStatus = replicationStatusVal.getSnapshotSyncInfo().getStatus();
+        actualSyncTypes.add(replicationStatusVal.getSourceStatus().getReplicationInfo().getSyncType());
+        actualSyncStatus = replicationStatusVal.getSourceStatus().getReplicationInfo().getStatus();
+        actualSnapshotInfoSyncStatus = replicationStatusVal.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus();
 
         // replicationSyncStatus (outer) starts as NOT_STARTED by initializeReplicationStatusTable,
         // and then gets updated to ONGOING in entry of InLogEntrySyncState
@@ -321,7 +327,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
     @Test
     public void testSyncStatusUpdatesForSnapshot() throws Exception {
         final int updateToStatusTableFromOnEntry = 3;
-        initLogReplicationFSM(ReaderImplementation.EMPTY);
+        initLogReplicationFSM(ReaderImplementation.EMPTY, false);
 
         CountDownLatch statusTableLatch = new CountDownLatch(updateToStatusTableFromOnEntry);
         TestStatusTableStreamListener streamListener = new TestStatusTableStreamListener(statusTableLatch);
@@ -353,10 +359,10 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         Iterator<CorfuStreamEntries> entriesIterator = streamListener.getEntries().iterator();
         while (entriesIterator.hasNext()) {
             for (List<CorfuStreamEntry> entry : entriesIterator.next().getEntries().values()) {
-                ReplicationStatusVal replicationStatusVal = (ReplicationStatusVal) entry.get(0).getPayload();
-                actualSyncTypes.add(replicationStatusVal.getSyncType());
-                actualSyncStatus.add(replicationStatusVal.getStatus());
-                actualSnapshotInfoSyncStatus.add(replicationStatusVal.getSnapshotSyncInfo().getStatus());
+                ReplicationStatus replicationStatusVal = (ReplicationStatus) entry.get(0).getPayload();
+                actualSyncTypes.add(replicationStatusVal.getSourceStatus().getReplicationInfo().getSyncType());
+                actualSyncStatus.add(replicationStatusVal.getSourceStatus().getReplicationInfo().getStatus());
+                actualSnapshotInfoSyncStatus.add(replicationStatusVal.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus());
             }
         }
 
@@ -373,7 +379,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
     @Test
     public void testSyncStatusUpdatesForLogEntry() throws Exception {
         final int updateToStatusTableFromOnEntry = 2;
-        initLogReplicationFSM(ReaderImplementation.EMPTY);
+        initLogReplicationFSM(ReaderImplementation.EMPTY, false);
 
         CountDownLatch statusTableLatch = new CountDownLatch(updateToStatusTableFromOnEntry);
         TestStatusTableStreamListener streamListener = new TestStatusTableStreamListener(statusTableLatch);
@@ -406,10 +412,10 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         Iterator<CorfuStreamEntries> entriesIterator = streamListener.getEntries().iterator();
         while (entriesIterator.hasNext()) {
             for (List<CorfuStreamEntry> entry : entriesIterator.next().getEntries().values()) {
-                ReplicationStatusVal replicationStatusVal = (ReplicationStatusVal) entry.get(0).getPayload();
-                actualSyncTypes.add(replicationStatusVal.getSyncType());
-                actualSyncStatus.add(replicationStatusVal.getStatus());
-                actualSnapshotInfoSyncStatus.add(replicationStatusVal.getSnapshotSyncInfo().getStatus());
+                ReplicationStatus replicationStatusVal = (ReplicationStatus) entry.get(0).getPayload();
+                actualSyncTypes.add(replicationStatusVal.getSourceStatus().getReplicationInfo().getSyncType());
+                actualSyncStatus.add(replicationStatusVal.getSourceStatus().getReplicationInfo().getStatus());
+                actualSnapshotInfoSyncStatus.add(replicationStatusVal.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus());
             }
         }
 
@@ -425,13 +431,12 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
      */
     @Test
     public void testSyncStatusUpdatesForSnapshotToLogEntryTransition() throws Exception {
-        initLogReplicationFSM(ReaderImplementation.EMPTY);
+        initLogReplicationFSM(ReaderImplementation.EMPTY, false);
 
-        final Table<ReplicationStatusKey, ReplicationStatusVal, Message> statusTable =
-                this.corfuStore.getTable(NAMESPACE, REPLICATION_STATUS_TABLE);
+        final Table<LogReplicationSession, ReplicationStatus, Message> statusTable =
+                this.corfuStore.getTable(NAMESPACE, REPLICATION_STATUS_TABLE_NAME);
 
-        ReplicationStatusKey currentReplicationKey = ReplicationStatusKey.newBuilder().setClusterId(TEST_LOCAL_CLUSTER_ID).build();
-        ReplicationStatusVal currentReplicationVal;
+        ReplicationStatus currentReplicationVal;
 
         // Initial state: Initialized
         LogReplicationState initState = fsm.getState();
@@ -444,15 +449,15 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
 
         // Get replication status after snapshot sync start
         try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
-            currentReplicationVal = txn.getRecord(statusTable, currentReplicationKey).getPayload();
+            currentReplicationVal = txn.getRecord(statusTable, DEFAULT_SESSION).getPayload();
         }
 
         // Current SyncType should be SNAPSHOT
-        Assert.assertEquals(SyncType.SNAPSHOT, currentReplicationVal.getSyncType());
+        Assert.assertEquals(SyncType.SNAPSHOT, currentReplicationVal.getSourceStatus().getReplicationInfo().getSyncType());
 
         // Current SyncStatus for ReplicationInfo and SnapshotSyncInfo should be ONGOING
-        Assert.assertEquals(SyncStatus.ONGOING, currentReplicationVal.getStatus());
-        Assert.assertEquals(SyncStatus.ONGOING, currentReplicationVal.getSnapshotSyncInfo().getStatus());
+        Assert.assertEquals(SyncStatus.ONGOING, currentReplicationVal.getSourceStatus().getReplicationInfo().getStatus());
+        Assert.assertEquals(SyncStatus.ONGOING, currentReplicationVal.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus());
 
         // Transition #2: Wait Snapshot Apply
         transition(LogReplicationEventType.SNAPSHOT_TRANSFER_COMPLETE, LogReplicationStateType.WAIT_SNAPSHOT_APPLY, snapshotSyncId, false);
@@ -462,16 +467,16 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
 
         // Get replication status after log entry sync start
         try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
-            currentReplicationVal = txn.getRecord(statusTable, currentReplicationKey).getPayload();
+            currentReplicationVal = txn.getRecord(statusTable, DEFAULT_SESSION).getPayload();
         }
 
         // Current SyncType should be LOG_ENTRY
-        Assert.assertEquals(SyncType.LOG_ENTRY, currentReplicationVal.getSyncType());
+        Assert.assertEquals(SyncType.LOG_ENTRY, currentReplicationVal.getSourceStatus().getReplicationInfo().getSyncType());
 
         // Current SyncStatus for ReplicationInfo should be ONGOING, and SyncStatus
         // for SnapshotSyncInfo should be COMPLETED
-        Assert.assertEquals(SyncStatus.ONGOING, currentReplicationVal.getStatus());
-        Assert.assertEquals(SyncStatus.COMPLETED, currentReplicationVal.getSnapshotSyncInfo().getStatus());
+        Assert.assertEquals(SyncStatus.ONGOING, currentReplicationVal.getSourceStatus().getReplicationInfo().getStatus());
+        Assert.assertEquals(SyncStatus.COMPLETED, currentReplicationVal.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus());
     }
 
     /**
@@ -481,13 +486,12 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
      */
     @Test
     public void testSyncStatusUpdatesForLogEntryToSnapshotTransition() throws Exception {
-        initLogReplicationFSM(ReaderImplementation.EMPTY);
+        initLogReplicationFSM(ReaderImplementation.EMPTY, false);
 
-        final Table<ReplicationStatusKey, ReplicationStatusVal, Message> statusTable =
-                this.corfuStore.getTable(NAMESPACE, REPLICATION_STATUS_TABLE);
+        final Table<LogReplicationSession, ReplicationStatus, Message> statusTable =
+                this.corfuStore.getTable(NAMESPACE, REPLICATION_STATUS_TABLE_NAME);
 
-        ReplicationStatusKey currentReplicationKey = ReplicationStatusKey.newBuilder().setClusterId(TEST_LOCAL_CLUSTER_ID).build();
-        ReplicationStatusVal currentReplicationVal;
+        ReplicationStatus currentReplicationVal;
 
         // Initial state: Initialized
         LogReplicationState initState = fsm.getState();
@@ -500,31 +504,31 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
 
         // Get replication status after log entry sync start
         try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
-            currentReplicationVal = txn.getRecord(statusTable, currentReplicationKey).getPayload();
+            currentReplicationVal = txn.getRecord(statusTable, DEFAULT_SESSION).getPayload();
         }
 
         // Current SyncType should be LOG_ENTRY
-        Assert.assertEquals(SyncType.LOG_ENTRY, currentReplicationVal.getSyncType());
+        Assert.assertEquals(SyncType.LOG_ENTRY, currentReplicationVal.getSourceStatus().getReplicationInfo().getSyncType());
 
         // Current SyncStatus for ReplicationInfo should be ONGOING, and SyncStatus
         // for SnapshotSyncInfo should be COMPLETED
-        Assert.assertEquals(SyncStatus.ONGOING, currentReplicationVal.getStatus());
-        Assert.assertEquals(SyncStatus.COMPLETED, currentReplicationVal.getSnapshotSyncInfo().getStatus());
+        Assert.assertEquals(SyncStatus.ONGOING, currentReplicationVal.getSourceStatus().getReplicationInfo().getStatus());
+        Assert.assertEquals(SyncStatus.COMPLETED, currentReplicationVal.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus());
 
         // Transition #2: Snapshot Sync Request
         transition(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST, LogReplicationStateType.IN_SNAPSHOT_SYNC, true);
 
         // Get replication status after snapshot sync start
         try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
-            currentReplicationVal = txn.getRecord(statusTable, currentReplicationKey).getPayload();
+            currentReplicationVal = txn.getRecord(statusTable, DEFAULT_SESSION).getPayload();
         }
 
         // Current SyncType should be SNAPSHOT
-        Assert.assertEquals(SyncType.SNAPSHOT, currentReplicationVal.getSyncType());
+        Assert.assertEquals(SyncType.SNAPSHOT, currentReplicationVal.getSourceStatus().getReplicationInfo().getSyncType());
 
         // Current SyncStatus for ReplicationInfo and SnapshotSyncInfo should be ONGOING
-        Assert.assertEquals(SyncStatus.ONGOING, currentReplicationVal.getStatus());
-        Assert.assertEquals(SyncStatus.ONGOING, currentReplicationVal.getSnapshotSyncInfo().getStatus());
+        Assert.assertEquals(SyncStatus.ONGOING, currentReplicationVal.getSourceStatus().getReplicationInfo().getStatus());
+        Assert.assertEquals(SyncStatus.ONGOING, currentReplicationVal.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus());
     }
 
     /**
@@ -540,7 +544,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
      */
     @Test
     public void testTrimExceptionFSM() throws Exception {
-        initLogReplicationFSM(ReaderImplementation.EMPTY);
+        initLogReplicationFSM(ReaderImplementation.EMPTY, false);
 
         // Initial acquire of the semaphore, so the occurrence of the transition releases it for the transition itself.
         transitionAvailable.acquire();
@@ -612,7 +616,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         observeTransitions = false;
 
         // Initialize State Machine
-        initLogReplicationFSM(ReaderImplementation.TEST);
+        initLogReplicationFSM(ReaderImplementation.TEST, false);
 
         // Modify test configuration to the specified batch size
         ((TestSnapshotReader)snapshotReader).setBatchSize(batchSize);
@@ -654,25 +658,19 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
      *
      * (1) Write NUM_ENTRIES to StreamA
      * (2) Trigger start of SNAPSHOT_SYNC
-     * (3) Interrupt/Stop snapshot sync when 2 messages have been sent to the remote site.
+     * (3) Interrupt/Stop snapshot sync when waiting for ACK for the receipt of entries
+     * (4) Verify that this causes the FSM to transition to INITIALIZED state
      * (4) Re-trigger SNAPSHOT_SYNC
      * (5) Check for completeness, i.e., that state has changed to IN_LOG_ENTRY_SYNC
      *
      * @throws Exception
      */
     @Test
-    public void cancelSnapshotSyncInProgressAndRetry() throws Exception {
-        // This test needs to observe the number of messages generated during snapshot sync to interrupt/stop it,
-        // before it completes.
-        observeSnapshotSync = true;
+    public void cancelSnapshotSyncInProgressAndRetry() {
+        observeTransitions = false;
 
-        // Initialize State Machine
-        initLogReplicationFSM(ReaderImplementation.TEST);
-
-        // Modify test configuration to the specified batch size (since we write NUM_ENTRIES = 10) and we send in
-        // batches of BATCH_SIZE = 2, we will stop snapshot sync at 2 sent messages.
-        ((TestSnapshotReader)snapshotReader).setBatchSize(BATCH_SIZE);
-        limitSnapshotMessages = 2;
+        // Initialize State Machine and data sender
+        initLogReplicationFSM(ReaderImplementation.TEST, true);
 
         // Write NUM_ENTRIES to streamA
         List<TokenResponse> writeTokens = writeToStream();
@@ -683,51 +681,39 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         // Write to Stream will write to some addresses.  SnapshotReader should only read from those addresses
         ((TestSnapshotReader) snapshotReader).setSeqNumsToRead(seqNums);
 
-        // Initial acquire of semaphore, the transition method will block until a transition occurs
-        transitionAvailable.acquire();
+        log.info("**** Transition to Snapshot Sync");
 
-        log.debug("**** Transition to Snapshot Sync");
         // Transition #1: Snapshot Sync Request
-        transition(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST, LogReplicationStateType.IN_SNAPSHOT_SYNC);
+        fsm.input(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST));
 
-        // We observe the number of transmitted messages and force a REPLICATION_STOP, when 2 messages have been sent
-        // so we verify the state moves to INITIALIZED again.
-        transitionAvailable.acquire();
-        log.debug("**** Stop Replication");
+        // Wait till the fsm reaches IN_SNAPSHOT_SYNC state
+        while (fsm.getState().getType() != LogReplicationStateType.IN_SNAPSHOT_SYNC) {
+            log.debug("Wait for the FSM to reach IN_SNAPSHOT_SYNC state");
+        }
+        assertThat(fsm.getState().getType()).isEqualTo(LogReplicationStateType.IN_SNAPSHOT_SYNC);
+
+        log.info("**** Stop Replication when in IN_SNAPSHOT_SYNC state");
         fsm.input(new LogReplicationEvent(LogReplicationEventType.REPLICATION_STOP));
 
-        transitionAvailable.acquire();
-
         while (fsm.getState().getType() != LogReplicationStateType.INITIALIZED) {
-            // Wait on a FSM transition to occur
-            transitionAvailable.acquire();
+            log.debug("Waiting for the FSM to reach INITIALIZED state");
         }
-
         assertThat(fsm.getState().getType()).isEqualTo(LogReplicationStateType.INITIALIZED);
 
         ((TestDataSender) dataSender).reset();
+        fsm.input(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST));
 
-        // Stop observing number of messages in snapshot sync, so this time it completes
-        observeSnapshotSync = false;
-
-        // Transition #2: This time the snapshot sync completes
-        UUID snapshotSyncId = transition(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST, LogReplicationStateType.IN_SNAPSHOT_SYNC, true);
-
-        while (fsm.getState().getType() != LogReplicationStateType.WAIT_SNAPSHOT_APPLY) {
-            // Block until FSM moves back to in log entry (delta) sync state
-            transitionAvailable.acquire();
+        while (fsm.getState().getType() != LogReplicationStateType.IN_LOG_ENTRY_SYNC) {
+            log.info("Waiting for the FSM to reach IN_LOG_ENTRY_SYNC state");
         }
 
-        assertThat(fsm.getState().getType()).isEqualTo(LogReplicationStateType.WAIT_SNAPSHOT_APPLY);
+        assertThat(fsm.getState().getType()).isEqualTo(LogReplicationStateType.IN_LOG_ENTRY_SYNC);
 
         Queue<LogReplicationEntryMsg> listenerQueue = ((TestDataSender) dataSender).getEntryQueue();
 
         assertThat(listenerQueue.size()).isEqualTo(NUM_ENTRIES);
 
         log.debug("**** Snapshot Sync Complete");
-        transition(LogReplicationEventType.SNAPSHOT_APPLY_COMPLETE, LogReplicationStateType.IN_LOG_ENTRY_SYNC, snapshotSyncId, true);
-
-        assertThat(fsm.getState().getType()).isEqualTo(LogReplicationStateType.IN_LOG_ENTRY_SYNC);
 
         for (int i=0; i<NUM_ENTRIES; i++) {
             assertThat(listenerQueue.poll().getData())
@@ -745,7 +731,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
     public void testSnapshotSyncStreamImplementation() throws Exception {
 
         // Initialize State Machine
-        initLogReplicationFSM(ReaderImplementation.STREAMS);
+        initLogReplicationFSM(ReaderImplementation.STREAMS, false);
 
         // Write LARGE_NUM_ENTRIES to streamA
         writeToMap();
@@ -822,7 +808,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         // Read to verify data is there
         int index = 0;
         for (TokenResponse token : writeTokens) {
-            assertThat(runtime.getAddressSpaceView().read((long)token.getSequence()).getPayload(getRuntime()))
+            assertThat(runtime.getAddressSpaceView().read(token.getSequence()).getPayload(getRuntime()))
                     .isEqualTo( String.format(PAYLOAD_FORMAT, index).getBytes());
             index++;
         }
@@ -836,16 +822,15 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
      *
      * @param readerImpl implementation to use for readers.
      */
-    private void initLogReplicationFSM(ReaderImplementation readerImpl) {
+    private void initLogReplicationFSM(ReaderImplementation readerImpl, boolean waitInSnapshotSync) {
 
         String fullyQualifiedStreamName = TableRegistry.getFullyQualifiedTableName(TEST_NAMESPACE, TEST_STREAM_NAME);
         LogEntryReader logEntryReader = new TestLogEntryReader();
-        LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(runtime, TEST_TOPOLOGY_CONFIG_ID,
-                TEST_LOCAL_CLUSTER_ID);
-        CorfuRuntime newRT = getNewRuntime(getDefaultNode()).connect();
-        LogReplicationConfigManager tableManagerPlugin = new LogReplicationConfigManager(newRT);
-        LogReplicationConfig config = new LogReplicationConfig(tableManagerPlugin, DEFAULT_MAX_NUM_MSG_PER_BATCH,
-                MAX_DATA_MSG_SIZE_SUPPORTED, MAX_CACHE_NUM_ENTRIES, DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED);
+
+        LogReplicationConfigManager configManager = new LogReplicationConfigManager(runtime, LOCAL_SOURCE_CLUSTER_ID);
+        LogReplicationPluginConfig pluginConfig = new LogReplicationPluginConfig(pluginConfigFilePath);
+        LogReplicationSession session = DefaultClusterConfig.getSessions().get(0);
+        configManager.generateConfig(Collections.singleton(session));
 
         switch(readerImpl) {
             case EMPTY:
@@ -865,26 +850,32 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
                         .batchSize(BATCH_SIZE).build();
 
                 snapshotReader = new TestSnapshotReader(testConfig);
-                dataSender = new TestDataSender();
+                dataSender = new TestDataSender(waitInSnapshotSync);
                 break;
             case STREAMS:
-                // Default implementation used for Log Replication (stream-based)
-                snapshotReader = new StreamsSnapshotReader(newRT, config);
-                dataSender = new TestDataSender();
+                CorfuRuntime runtime = getNewRuntime(getDefaultNode()).connect();
+                snapshotReader = new StreamsSnapshotReader(runtime, DEFAULT_SESSION,
+                        new LogReplicationContext(configManager, TEST_TOPOLOGY_CONFIG_ID,
+                                "test:" + SERVERS.PORT_0, pluginConfig));
+                dataSender = new TestDataSender(waitInSnapshotSync);
                 break;
             default:
                 break;
         }
 
-        // Manually initialize the replication status table
-        metadataManager.initializeReplicationStatusTable(TEST_LOCAL_CLUSTER_ID);
+        LogReplicationContext context = new LogReplicationContext(configManager, TEST_TOPOLOGY_CONFIG_ID,
+                "test:" + SERVERS.PORT_0, true, pluginConfig);
+        LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(runtime, context);
 
-        ackReader = new LogReplicationAckReader(metadataManager, config, runtime, TEST_LOCAL_CLUSTER_ID);
+        // Manually initialize the replication status table, needed for tests that check the
+        // source status so incoming needs to be set to false
+        metadataManager.addSession(DEFAULT_SESSION, 0, false);
+
+        ackReader = new LogReplicationAckReader(metadataManager, runtime, DEFAULT_SESSION, context);
         fsm = new LogReplicationFSM(runtime, snapshotReader, dataSender, logEntryReader,
-                new DefaultReadProcessor(runtime), config, new ClusterDescriptor("Cluster-Local",
-                LogReplicationClusterInfo.ClusterRole.ACTIVE, CORFU_PORT),
+                new DefaultReadProcessor(runtime),
                 Executors.newSingleThreadExecutor(new ThreadFactoryBuilder().setNameFormat("fsm-worker").build()),
-                ackReader, tableManagerPlugin);
+                ackReader, DEFAULT_SESSION, context);
         ackReader.setLogEntryReader(fsm.getLogEntryReader());
         transitionObservable = fsm.getNumTransitions();
         transitionObservable.addObserver(this);
@@ -892,7 +883,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         if (observeSnapshotSync) {
             log.debug("Observe snapshot sync");
             snapshotMessageCounterObservable = ((InSnapshotSyncState) fsm.getStates()
-                    .get(LogReplicationStateType.IN_SNAPSHOT_SYNC)).getSnapshotSender().getObservedCounter();
+                .get(LogReplicationStateType.IN_SNAPSHOT_SYNC)).getSnapshotSender().getObservedCounter();
             snapshotMessageCounterObservable.addObserver(this);
         }
     }

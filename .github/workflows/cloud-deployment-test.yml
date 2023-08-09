@@ -1,14 +1,26 @@
 name: Cloud Deployment Test
 
-on: pull_request
+on:
+  workflow_dispatch:
+  pull_request:
 
 jobs:
 
   could-deployment-test:
     runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        jdk_base_image_version: ['openjdk:8-jdk-bullseye', 'openjdk:11-jdk-bullseye']
+
     steps:
       - uses: actions/checkout@v2
-      - uses: docker/setup-buildx-action@v2
+
+      - uses: actions/setup-java@v3
+        with:
+          distribution: 'corretto'
+          java-version: '11'
+          check-latest: true
 
       - name: Cancel Previous Runs
         uses: styfle/cancel-workflow-action@0.6.0
@@ -24,7 +36,7 @@ jobs:
             ${{ runner.os }}-maven-
 
       - name: build docker image
-        run: .ci/infrastructure-docker-build.sh docker
+        run: .ci/infrastructure-docker-build.sh docker ${{ matrix.jdk_base_image }}
 
       - uses: actions/checkout@v2
         with:
@@ -54,24 +66,29 @@ jobs:
         working-directory: ./cloud/corfu
         run: |
           helm install cert-manager jetstack/cert-manager --namespace cert-manager --create-namespace --version v1.8.0 --set installCRDs=true
-          helm install corfu corfu --set persistence.enabled=true --set global.replicas=3 
+          
+          helm install corfu corfu --set persistence.enabled=true --set global.replicas=3 --set image.pullPolicy=IfNotPresent --set image.registry=""
           
           sleep 120
-          
+
+      - name: check deployment status
+        working-directory: ./cloud/corfu
+        run: |
+          echo check deployment status:
           if kubectl wait --for=condition=complete --timeout=180s job/configure-corfu | grep "job.batch/configure-corfu condition met"; then
-            echo "Successfull deployment!"
+            echo "Successful deployment!"
             exit 0
           else
             echo "Failed deployment!"
-            
+
             echo pods:
             kubectl get pods
-          
+
             echo corfu job:
             kubectl describe job/configure-corfu
-            
+
             echo corfu pod:
             kubectl describe pod corfu-0
-          
+
             exit 1
           fi

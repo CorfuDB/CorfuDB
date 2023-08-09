@@ -5,8 +5,9 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
-import org.corfudb.infrastructure.logreplication.infrastructure.TopologyDescriptor;
-import org.corfudb.infrastructure.logreplication.replication.LogReplicationSourceManager;
+import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
+import org.corfudb.runtime.LogReplication.LogReplicationSession;
+import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationSourceManager;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.IllegalTransitionException;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRuntimeEvent;
@@ -16,9 +17,8 @@ import org.corfudb.infrastructure.logreplication.runtime.fsm.NegotiatingState;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.ReplicatingState;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.StoppedState;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.UnrecoverableState;
-import org.corfudb.infrastructure.logreplication.runtime.fsm.VerifyingRemoteLeaderState;
+import org.corfudb.infrastructure.logreplication.runtime.fsm.VerifyingRemoteSinkLeaderState;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.WaitingForConnectionsState;
-import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -36,7 +36,7 @@ import java.util.concurrent.TimeUnit;
  * Runtime to connect to a remote Corfu Log Replication Cluster.
  * <p>
  * This class represents the Log Replication Runtime Finite State Machine, which defines
- * all states in which the leader node on the active cluster can be.
+ * all states in which the leader node on the source cluster can be.
  *
  *
  *                                                  R-LEADER_LOSS / NOT_FOUND
@@ -117,11 +117,6 @@ public class CorfuLogReplicationRuntime {
     public static final int DEFAULT_TIMEOUT = 5000;
 
     /**
-     * Used for checking if LR is in upgrading path
-     */
-    private final LogReplicationConfigManager replicationConfigManager;
-
-    /**
      * Current state of the FSM.
      */
     private volatile LogReplicationRuntimeState state;
@@ -147,8 +142,7 @@ public class CorfuLogReplicationRuntime {
      */
     private final LinkedBlockingQueue<LogReplicationRuntimeEvent> eventQueue = new LinkedBlockingQueue<>();
 
-    private final LogReplicationClientRouter router;
-    private final LogReplicationMetadataManager metadataManager;
+    private final LogReplicationClientServerRouter router;
 
     @Getter
     private final LogReplicationSourceManager sourceManager;
@@ -158,26 +152,37 @@ public class CorfuLogReplicationRuntime {
     @Getter
     public final String remoteClusterId;
 
+    @Getter
+    public final LogReplicationSession session;
+
+    @Getter
+    private final LogReplicationContext replicationContext;
+
     /**
      * Default Constructor
      */
-    public CorfuLogReplicationRuntime(LogReplicationRuntimeParameters parameters, LogReplicationMetadataManager metadataManager,
-                                      LogReplicationConfigManager replicationConfigManager) {
-        this.remoteClusterId = parameters.getRemoteClusterDescriptor().getClusterId();
-        this.metadataManager = metadataManager;
-        this.router = new LogReplicationClientRouter(parameters, this);
-        this.router.addClient(new LogReplicationHandler());
-        this.sourceManager = new LogReplicationSourceManager(parameters, new LogReplicationClient(router, remoteClusterId),
-                metadataManager, replicationConfigManager);
+    public CorfuLogReplicationRuntime(LogReplicationRuntimeParameters parameters,
+                                      LogReplicationMetadataManager metadataManager, LogReplicationSession session,
+                                      LogReplicationContext replicationContext, LogReplicationClientServerRouter router) {
+        this.remoteClusterId = session.getSinkClusterId();
+        this.session = session;
+        this.router = router;
+        this.sourceManager = new LogReplicationSourceManager(parameters,router, metadataManager,
+                session, replicationContext);
         this.connectedNodes = new HashSet<>();
-        ThreadFactory threadFactory = new ThreadFactoryBuilder().setNameFormat("runtime-fsm-worker").build();
-        this.communicationFSMWorkers = new ThreadPoolExecutor(1, 1, 0L,
-                TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>(), threadFactory);
-        this.communicationFSMConsumer = Executors.newSingleThreadExecutor(new
-                ThreadFactoryBuilder().setNameFormat("runtime-fsm-consumer").build());
-        this.replicationConfigManager = replicationConfigManager;
+        this.replicationContext = replicationContext;
 
-        initializeStates();
+        ThreadFactory threadFactory = new ThreadFactoryBuilder().setNameFormat("runtime-fsm-worker-"+session.hashCode())
+            .build();
+
+        this.communicationFSMWorkers = new ThreadPoolExecutor(1, 1, 0L,
+            TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>(), threadFactory);
+
+        this.communicationFSMConsumer = Executors.newSingleThreadExecutor(new
+                ThreadFactoryBuilder().setNameFormat(
+                    "runtime-fsm-consumer-"+session.hashCode()).build());
+
+        initializeStates(metadataManager);
         this.state = states.get(LogReplicationRuntimeStateType.WAITING_FOR_CONNECTIVITY);
 
         log.info("Log Replication Runtime State Machine initialized");
@@ -187,25 +192,25 @@ public class CorfuLogReplicationRuntime {
      * Start Log Replication Communication FSM
      */
     public void start() {
-        log.info("Start Log Replication Runtime to remote {}", remoteClusterId);
+        log.info("Start Log Replication Runtime to remote {}", session.getSinkClusterId());
         // Start Consumer Thread for this state machine (dedicated thread for event consumption)
         communicationFSMConsumer.submit(this::consume);
-        router.connect();
     }
 
     /**
      * Initialize all states for the Log Replication Runtime FSM.
      */
-    private void initializeStates() {
+    private void initializeStates(LogReplicationMetadataManager metadataManager) {
         /*
          * Log Replication Runtime State instances are kept in a map to be reused in transitions, avoid creating one
          * per every transition (reduce GC cycles).
          */
         states.put(LogReplicationRuntimeStateType.WAITING_FOR_CONNECTIVITY, new WaitingForConnectionsState(this));
-        states.put(LogReplicationRuntimeStateType.VERIFYING_REMOTE_LEADER, new VerifyingRemoteLeaderState(this, communicationFSMWorkers, router));
+        states.put(LogReplicationRuntimeStateType.VERIFYING_REMOTE_LEADER, new VerifyingRemoteSinkLeaderState(this,
+            communicationFSMWorkers, router));
         states.put(LogReplicationRuntimeStateType.NEGOTIATING, new NegotiatingState(this, communicationFSMWorkers,
-                router, metadataManager, replicationConfigManager));
-        states.put(LogReplicationRuntimeStateType.REPLICATING, new ReplicatingState(this, sourceManager));
+                router, metadataManager));
+        states.put(LogReplicationRuntimeStateType.REPLICATING, new ReplicatingState(this, sourceManager, router));
         states.put(LogReplicationRuntimeStateType.STOPPED, new StoppedState(sourceManager));
         states.put(LogReplicationRuntimeStateType.UNRECOVERABLE, new UnrecoverableState());
     }
@@ -274,10 +279,6 @@ public class CorfuLogReplicationRuntime {
         to.onEntry(from);
     }
 
-    public synchronized void updateFSMConfigId(TopologyDescriptor newConfig) {
-        sourceManager.getLogReplicationFSM().setTopologyConfigId(newConfig.getTopologyConfigId());
-    }
-
     public synchronized void updateConnectedNodes(String nodeId) {
         connectedNodes.add(nodeId);
     }
@@ -293,7 +294,6 @@ public class CorfuLogReplicationRuntime {
 
     public synchronized void resetRemoteLeaderNodeId() {
         log.debug("Reset remote leader node id");
-        router.resetRemoteLeader();
         leaderNodeId = Optional.empty();
     }
 
@@ -306,15 +306,17 @@ public class CorfuLogReplicationRuntime {
         return connectedNodes;
     }
 
-    public synchronized void updateRouterClusterDescriptor(ClusterDescriptor clusterDescriptor) {
-        log.warn("update router's cluster descriptor {}", clusterDescriptor);
+    public synchronized void refresh(ClusterDescriptor clusterDescriptor, long topologyConfigId) {
+        log.warn("Update router's cluster descriptor {}", clusterDescriptor);
         router.onClusterChange(clusterDescriptor);
+        sourceManager.getLogReplicationFSM().setTopologyConfigId(topologyConfigId);
     }
 
     /**
      * Stop Log Replication, regardless of current state.
      */
     public void stop() {
-        input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.LOCAL_LEADER_LOSS));
+        input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.LOCAL_LEADER_LOSS,
+                router.isConnectionStarterForSession(session)));
     }
 }
