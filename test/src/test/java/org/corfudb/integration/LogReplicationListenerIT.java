@@ -35,6 +35,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
 
 import static org.corfudb.runtime.LogReplicationUtils.REPLICATION_STATUS_TABLE_NAME;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
@@ -63,6 +64,8 @@ public class LogReplicationListenerIT extends AbstractIT {
 
     Table<SampleSchema.Uuid, SampleSchema.SampleTableAMsg, SampleSchema.Uuid> userDataTable;
     Table<LogReplicationSession, ReplicationStatus, Message> replicationStatusTable;
+
+    private ExecutorService executorService = null;
 
     public LogReplicationListenerIT() {
         corfuSingleNodeHost = PROPERTIES.getProperty("corfuSingleNodeHost");
@@ -100,6 +103,7 @@ public class LogReplicationListenerIT extends AbstractIT {
      * @throws Exception
      */
     private void testWritesToDataTable(boolean startInSnapshotSync) throws Exception {
+
         initializeCorfu();
         openAndInitializeTables(testClientName);
 
@@ -110,10 +114,10 @@ public class LogReplicationListenerIT extends AbstractIT {
 
         final int numUpdates = 10;
         CountDownLatch countDownLatch = new CountDownLatch(numUpdates);
-        lrListener = new LRTestListener(store, namespace, countDownLatch);
+        lrListener = new LRTestListener(store, namespace, countDownLatch, executorService);
 
         // Subscribe the listener
-        store.subscribeLogReplicationListener(lrListener, namespace, userTag);
+        store.subscribeLogReplicationListener(lrListener, namespace, userTag, executorService);
 
         // End snapshot sync if it had been requested
         if (startInSnapshotSync) {
@@ -174,9 +178,9 @@ public class LogReplicationListenerIT extends AbstractIT {
         // As all updates are written in the same transaction, set this countdown latch to 1
         CountDownLatch numTxLatch = new CountDownLatch(1);
 
-        lrListener = new LRTestListener(store, namespace, countDownLatch);
+        lrListener = new LRTestListener(store, namespace, countDownLatch, executorService);
         lrListener.setNumTxLatch(numTxLatch);
-        store.subscribeLogReplicationListener(lrListener, namespace, userTag);
+        store.subscribeLogReplicationListener(lrListener, namespace, userTag, executorService);
 
         // End snapshot sync if it had been requested
         if (startInSnapshotSync) {
@@ -227,10 +231,10 @@ public class LogReplicationListenerIT extends AbstractIT {
         final int numUpdates = 50;
 
         CountDownLatch countDownLatch = new CountDownLatch(numUpdates);
-        lrListener = new LRTestListener(store, namespace, countDownLatch);
+        lrListener = new LRTestListener(store, namespace, countDownLatch, executorService);
 
         // Subscribe a listener with a buffer size of 10
-        store.subscribeLogReplicationListener(lrListener, namespace, userTag, bufferSize);
+        store.subscribeLogReplicationListener(lrListener, namespace, userTag, bufferSize, executorService);
 
         // End snapshot sync if it had been requested
         if (startInSnapshotSync) {
@@ -274,8 +278,8 @@ public class LogReplicationListenerIT extends AbstractIT {
         final int numExpectedStreamingUpdates = numIterations * numWritesToDataTable;
 
         CountDownLatch countDownLatch = new CountDownLatch(numExpectedStreamingUpdates);
-        lrListener = new LRTestListener(store, namespace, countDownLatch);
-        store.subscribeLogReplicationListener(lrListener, namespace, userTag);
+        lrListener = new LRTestListener(store, namespace, countDownLatch, executorService);
+        store.subscribeLogReplicationListener(lrListener, namespace, userTag, executorService);
 
         log.info("Write data concurrently on both tables");
         writeDataAndToggleDataConsistentConcurrently(numIterations, numWritesToDataTable, testClientName);
@@ -323,10 +327,10 @@ public class LogReplicationListenerIT extends AbstractIT {
         final int newUpdates = 5;
         final int totalUpdates = numUpdates + newUpdates;
         CountDownLatch countDownLatch = new CountDownLatch(totalUpdates);
-        lrListener = new LRTestListener(store, namespace, countDownLatch);
+        lrListener = new LRTestListener(store, namespace, countDownLatch, executorService);
 
         // Subscribe the listener at the obtained timestamp
-        store.subscribeLogReplicationListener(lrListener, namespace, userTag);
+        store.subscribeLogReplicationListener(lrListener, namespace, userTag, executorService);
 
         // End snapshot sync if it had been requested
         if (startInSnapshotSync) {
@@ -363,8 +367,8 @@ public class LogReplicationListenerIT extends AbstractIT {
         initializeCorfu();
         openAndInitializeTables(testClientName);
 
-        lrListener = new LRTestListener(store, namespace, new CountDownLatch(0));
-        store.subscribeLogReplicationListener(lrListener, namespace, userTag);
+        lrListener = new LRTestListener(store, namespace, new CountDownLatch(0), executorService);
+        store.subscribeLogReplicationListener(lrListener, namespace, userTag, executorService);
 
         // Write to a redundant table to which the listener has not subscribed
         writeToNonSubscribedSystemTable();
@@ -391,10 +395,10 @@ public class LogReplicationListenerIT extends AbstractIT {
         listener = new TestListener(countDownLatch);
 
         CountDownLatch lrCountDownLatch = new CountDownLatch(numUpdates);
-        lrListener = new LRTestListener(store, namespace, lrCountDownLatch);
+        lrListener = new LRTestListener(store, namespace, lrCountDownLatch, executorService);
 
         store.subscribeListener(listener, namespace, userTag, Arrays.asList(userTableName));
-        store.subscribeLogReplicationListener(lrListener, namespace, userTag);
+        store.subscribeLogReplicationListener(lrListener, namespace, userTag, executorService);
 
         writeToDataTable(numUpdates, 0);
 
@@ -440,17 +444,17 @@ public class LogReplicationListenerIT extends AbstractIT {
         CountDownLatch countDownLatch = new CountDownLatch(numUpdates);
 
         // Create a listener for test_client
-        lrListener = new LRTestListener(store, namespace, countDownLatch);
+        lrListener = new LRTestListener(store, namespace, countDownLatch, executorService);
 
         // Create a listener for new_client
-        newListener = new LRTestListener(store, namespace, null);
+        newListener = new LRTestListener(store, namespace, null, executorService);
         newListener.setClientName(newClientName);
 
         // Subscribe both the listeners
-        store.subscribeLogReplicationListener(lrListener, namespace, userTag);
+        store.subscribeLogReplicationListener(lrListener, namespace, userTag, executorService);
 
         final String newTag = "new_tag";
-        store.subscribeLogReplicationListener(newListener, namespace, newTag);
+        store.subscribeLogReplicationListener(newListener, namespace, newTag, executorService);
 
         // Write numUpdates records
         writeToDataTable(numUpdates, 0);
@@ -728,8 +732,9 @@ public class LogReplicationListenerIT extends AbstractIT {
         private final List<CorfuStoreEntry<SampleSchema.Uuid, SampleSchema.SampleTableAMsg, SampleSchema.Uuid>>
                 existingEntries = new ArrayList<>();
 
-        LRTestListener(CorfuStore corfuStore, String namespace, CountDownLatch countDownLatch) {
-            super(corfuStore, namespace);
+        LRTestListener(CorfuStore corfuStore, String namespace, CountDownLatch countDownLatch,
+                       ExecutorService executorService) {
+            super(corfuStore, namespace, executorService);
             this.countDownLatch = countDownLatch;
         }
 
