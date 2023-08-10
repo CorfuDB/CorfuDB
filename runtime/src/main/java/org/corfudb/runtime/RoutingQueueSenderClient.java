@@ -162,9 +162,6 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
 
         @Override
         public void onNext(CorfuStreamEntries results) {
-            // TODO: Check for existing events. What if subscription comes later than the event is published.
-            log.info("onNext[{}] :: got updates on RoutingQSender for tables {}", results.getTimestamp(),
-                results.getEntries().keySet().stream().map(TableSchema::getTableName).collect(Collectors.toList()));
             LogReplication.ReplicationEvent fullSyncEvent = null;
             LogReplication.ReplicationEventInfoKey key = null;
             // Any notification here indicates a full sync request
@@ -240,7 +237,6 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
 
         @Override
         public void transmit(RoutingTableEntryMsg message, int progress) throws CancellationException {
-            log.info("Enqueuing message to full sync queue, message: {}", message);
             getTxn().logUpdateEnqueue(snapSyncQ, message, message.getDestinationsList().stream()
                 .map(destination -> TableRegistry.getStreamIdForStreamTag(CORFU_SYSTEM_NAMESPACE,
                     SNAPSHOT_SYNC_QUEUE_TAG_SENDER_PREFIX + destination))
