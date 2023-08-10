@@ -193,7 +193,8 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
     @Override
     public void send(@Nonnull String nodeId, @Nonnull RequestMsg request) {
         // Check the connection future. If connected, continue with sending the message.
-        // If timed out, return a exceptionally completed with the timeout.
+        // If timed out, return an exceptionally completed with the timeout.
+        test(nodeId, request);
         switch (request.getPayload().getPayloadCase()) {
             case LR_ENTRY:
                 replicate(nodeId, request);
@@ -377,6 +378,56 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
         // Send log replication entries across channel
         replicationReqObserverMap.get(Pair.of(sessionMsg, requestId)).onNext(request);
     }
+
+    private void test(String nodeId, RequestMsg request) {
+        LogReplicationSession sessionMsg = request.getHeader().getSession();
+        long requestId = request.getHeader().getRequestId();
+
+        if (!replicationReqObserverMap.containsKey(Pair.of(sessionMsg, requestId))) {
+            StreamObserver<ResponseMsg> responseObserver = new StreamObserver<ResponseMsg>() {
+                @Override
+                public void onNext(ResponseMsg response) {
+                    try {
+                        log.info("Received ACK for {}", response.getHeader().getRequestId());
+                        receive(response);
+                    } catch (Exception e) {
+                        log.error("Caught exception while receiving ACK", e);
+                        getRouter().completeExceptionally(sessionMsg, response.getHeader().getRequestId(), e);
+                        replicationReqObserverMap.remove(Pair.of(sessionMsg, requestId));
+                    }
+                }
+
+                @Override
+                public void onError(Throwable t) {
+                    log.error("Error from response observer", t);
+                    long requestId = request.getHeader().getRequestId();
+                    onServiceUnavailable(t, nodeId, sessionMsg);
+                    getRouter().completeExceptionally(sessionMsg, requestId, t);
+                    replicationReqObserverMap.remove(Pair.of(sessionMsg, requestId));
+                }
+
+                @Override
+                public void onCompleted() {
+                    replicationReqObserverMap.remove(Pair.of(sessionMsg, requestId));
+                }
+            };
+
+            if(sessionToAsyncStubMap.containsKey(sessionMsg)) {
+                StreamObserver<RequestMsg> requestObserver = sessionToAsyncStubMap.get(sessionMsg).test(responseObserver);
+                replicationReqObserverMap.put(Pair.of(sessionMsg, requestId), new CorfuStreamObserver<>(requestObserver));
+            } else {
+                log.error("No stub found for remote node {}. Message dropped type={}",
+                        nodeId, request.getPayload().getPayloadCase());
+            }
+        }
+
+        log.info("Send replication entry: {} to node {}", request.getHeader().getRequestId(), nodeId);
+
+        // Send log replication entries across channel
+        replicationReqObserverMap.get(Pair.of(sessionMsg, requestId)).onNext(request);
+        this.session = sessionMsg;
+    }
+
 
     @Override
     public void stop() {

@@ -279,7 +279,7 @@ public class SessionManager {
         logNewlyAddedSessionInfo();
     }
 
-    private void createOutgoingSessionsBySubscriber(ReplicationSubscriber subscriber) {
+    public void createOutgoingSessionsBySubscriber(ReplicationSubscriber subscriber) {
         Set<LogReplicationSession> sessionsToAdd = new HashSet<>();
         try {
             String localClusterId = topology.getLocalClusterDescriptor().getClusterId();

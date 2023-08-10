@@ -150,6 +150,40 @@ public class GRPCLogReplicationServerHandler extends LogReplicationGrpc.LogRepli
         };
     }
 
+    @Override
+    public StreamObserver<RequestMsg> test(StreamObserver<ResponseMsg> responseObserver) {
+
+        return new StreamObserver<RequestMsg>() {
+            @Override
+            public void onNext(RequestMsg replicationCorfuMessage) {
+                long requestId = replicationCorfuMessage.getHeader().getRequestId();
+                String name = replicationCorfuMessage.getPayload().getPayloadCase().name();
+                log.info("Received[{}]: {}", requestId, name);
+
+                // Register at the observable first.
+                try {
+                    replicationStreamObserverMap.putIfAbsent(Pair.of(replicationCorfuMessage.getHeader().getSession(), requestId),
+                            new CorfuStreamObserver<>(responseObserver));
+                } catch (Exception e) {
+                    log.error("Exception caught when unpacking log replication entry {}. Skipping message.",
+                            requestId, e);
+                }
+
+                // Forward the received message to the router
+                router.receive(replicationCorfuMessage);
+            }
+
+            @Override
+            public void onError(Throwable t) {
+                log.error("Encountered error while attempting replication.", t);
+            }
+
+            @Override
+            public void onCompleted() {
+                log.trace("Client has completed snapshot replication.");
+            }
+        };
+    }
 
 
     public void send(ResponseMsg msg) {
