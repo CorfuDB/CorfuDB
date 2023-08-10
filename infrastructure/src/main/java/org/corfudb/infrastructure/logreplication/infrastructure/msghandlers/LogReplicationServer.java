@@ -119,7 +119,6 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
     @Override
     protected void processRequest(RequestMsg req, ResponseMsg res, IClientServerRouter r) {
         // TODO V2: add metrics around the queue size
-        log.info("zzzzzz");
         executor.submit(() -> getHandlerMethods().handle(req, res, r));
     }
 
