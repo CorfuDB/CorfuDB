@@ -92,7 +92,7 @@ public class TestClientRouter implements IClientRouter {
      */
     @Getter
     @Setter
-    public long timeoutConnect = PARAMETERS.TIMEOUT_NORMAL.toMillis();
+    public long timeoutConnect = PARAMETERS.TIMEOUT_SHORT.toMillis() - 500;
     /**
      * Sync call response timeout (milliseconds)
      */

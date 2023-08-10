@@ -47,12 +47,12 @@ public class ManagementAgent {
     /**
      * Locally collected server metrics polling interval.
      */
-    private static final Duration METRICS_POLL_INTERVAL = Duration.ofSeconds(3);
+    private static final Duration METRICS_POLL_INTERVAL = Duration.ofMillis(500);
 
     /**
      * Interval in executing the failure detection policy.
      */
-    private static final Duration POLICY_EXECUTE_INTERVAL = Duration.ofSeconds(1);
+    private static final Duration POLICY_EXECUTE_INTERVAL = Duration.ofMillis(500);
 
     /**
      * Interval of executing the AutoCommitService.

@@ -28,6 +28,7 @@ import static org.corfudb.infrastructure.health.HealthReport.ComponentStatus.UP;
 import static org.corfudb.infrastructure.health.HealthReport.OVERALL_STATUS_FAILURE;
 import static org.corfudb.infrastructure.health.HealthReport.OVERALL_STATUS_UP;
 import static org.corfudb.infrastructure.health.HealthReport.builder;
+import static org.corfudb.universe.scenario.ScenarioUtils.waitForHealthReport;
 import static org.corfudb.universe.scenario.ScenarioUtils.waitForLayoutChange;
 import static org.corfudb.universe.scenario.ScenarioUtils.waitUninterruptibly;
 
@@ -120,10 +121,11 @@ public class ClusteringFailuresHealthReportIT extends GenericIntegrationTest {
             corfuServer.disconnect();
             // Wait for layout change and find the unresponsive nodes in other node's health report
             waitForLayoutChange(layout -> layout.getUnresponsiveServers().contains(corfuServer.getEndpoint()), corfuClient);
-            waitUninterruptibly(Duration.ofSeconds(4));
             final CorfuServer otherServer = allServers.remove(0);
-            HealthReport expectedHealthReport = getUnresponsiveNodeHealthReport();
-            assertThat(queryHealthReport(otherServer.getParams().getHealthPort())).isEqualTo(expectedHealthReport);
+            waitForHealthReport(
+                    report -> report.equals(getUnresponsiveNodeHealthReport()),
+                    () -> queryHealthReport(otherServer.getParams().getHealthPort())
+            );
 
             // Now trying to perform a clustering operation on a node that cant reach quorum
             try {
@@ -131,18 +133,17 @@ public class ClusteringFailuresHealthReportIT extends GenericIntegrationTest {
             } catch (Exception e) {
                 // Expected that we have error
             }
-
-            HealthReport healthReport = queryHealthReport(corfuServer.getParams().getHealthPort());
-            expectedHealthReport = getHealTaskFailedHealthReport();
-            assertThat(healthReport).isEqualTo(expectedHealthReport);
-
+            waitForHealthReport(
+                    report -> report.equals(getHealTaskFailedHealthReport()),
+                    () -> queryHealthReport(corfuServer.getParams().getHealthPort())
+            );
             // Now reconnect the node and wait for the healing to take place and the FD report that the node is healed
             corfuServer.reconnect();
             waitForLayoutChange(layout -> layout.getUnresponsiveServers().isEmpty(), corfuClient);
-            waitUninterruptibly(Duration.ofSeconds(4));
-            healthReport = queryHealthReport(corfuServer.getParams().getHealthPort());
-            expectedHealthReport = getHealthyReport();
-            assertThat(healthReport).isEqualTo(expectedHealthReport);
+            waitForHealthReport(
+                    report -> report.equals(getHealthyReport()),
+                    () -> queryHealthReport(corfuServer.getParams().getHealthPort())
+            );
         });
     }
 }
