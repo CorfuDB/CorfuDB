@@ -10,6 +10,7 @@ import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.Re
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.transport.IClientServerRouter;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
+import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationSinkManager;
 import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
@@ -32,9 +33,7 @@ import static org.corfudb.protocols.service.CorfuProtocolLogReplication.getLeade
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getHeaderMsg;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getResponseMsg;
 import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
-import static org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg.PayloadCase.LR_ENTRY;
-import static org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg.PayloadCase.LR_LEADERSHIP_QUERY;
-import static org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg.PayloadCase.LR_METADATA_REQUEST;
+import static org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg.PayloadCase.*;
 import static org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg.PayloadCase.LR_ENTRY_ACK;
 import static org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg.PayloadCase.LR_LEADERSHIP_RESPONSE;
 import static org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg.PayloadCase.LR_METADATA_RESPONSE;
@@ -120,6 +119,7 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
     @Override
     protected void processRequest(RequestMsg req, ResponseMsg res, IClientServerRouter r) {
         // TODO V2: add metrics around the queue size
+        log.info("zzzzzz");
         executor.submit(() -> getHandlerMethods().handle(req, res, r));
     }
 
@@ -312,6 +312,17 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
         router.sendResponse(response);
     }
 
+    @LogReplicationRequestHandler(requestType = LR_SINK_SESSION_INITIALIZATION)
+    private void handleSinkSideInitialization(RequestMsg request, ResponseMsg res,
+                                              @Nonnull IClientServerRouter router) {
+        log.debug("Log Replication Sink Side Session Initialization Request received by Server.");
+        ResponsePayloadMsg payload = ResponsePayloadMsg.newBuilder().
+                setLrSinkSessionInitialization(request.getPayload().getLrSinkSessionInitialization()).build();
+        HeaderMsg responseHeader = getHeaderMsg(request.getHeader());
+        ResponseMsg response = getResponseMsg(responseHeader, payload);
+        router.sendResponse(response);
+    }
+
     /**
      * Handle an ACK from Log Replication server.
      *
@@ -341,6 +352,8 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
         router.completeRequest(response.getHeader().getSession(), response.getHeader().getRequestId(),
                 response.getPayload().getLrLeadershipResponse());
     }
+
+
 
     /**
      * Send a leadership loss response.  This will re-trigger leadership discovery on the Source.

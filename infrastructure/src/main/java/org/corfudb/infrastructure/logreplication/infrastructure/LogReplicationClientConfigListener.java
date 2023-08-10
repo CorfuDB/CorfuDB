@@ -16,6 +16,7 @@ import org.corfudb.runtime.collections.CorfuStreamEntries;
 import org.corfudb.runtime.collections.CorfuStreamEntry;
 import org.corfudb.runtime.collections.StreamListenerResumeOrFullSync;
 import org.corfudb.runtime.exceptions.StreamingException;
+import org.corfudb.runtime.proto.service.CorfuMessage;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -25,6 +26,8 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.corfudb.infrastructure.logreplication.config.LogReplicationLogicalGroupConfig.CLIENT_CONFIG_TAG;
+import static org.corfudb.protocols.service.CorfuProtocolMessage.getDefaultProtocolVersionMsg;
+import static org.corfudb.protocols.service.CorfuProtocolMessage.getRequestMsg;
 import static org.corfudb.runtime.LogReplicationLogicalGroupClient.LR_MODEL_METADATA_TABLE_NAME;
 import static org.corfudb.runtime.LogReplicationLogicalGroupClient.LR_REGISTRATION_TABLE_NAME;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
@@ -136,9 +139,22 @@ public class LogReplicationClientConfigListener extends StreamListenerResumeOrFu
                 ReplicationModel model = ((ClientRegistrationInfo) entry.getPayload()).getModel();
                 // TODO (V2): Currently we add a default subscriber for logical group use case instead of listening
                 //  on client registration. Subscriber should be added upon registration after grpc stream for session
-                //  creation is added.
-                // configManager.onNewClientRegister(subscriber);
-                // sessionManager.createOutgoingSessionsBySubscriber(subscriber);
+                if (model.equals(ReplicationModel.LOGICAL_GROUPS)) {
+                    for (LogReplicationSession session : sessionManager.getOutgoingSessions()) {
+                        CorfuMessage.HeaderMsg.Builder header = CorfuMessage.HeaderMsg.newBuilder()
+                                .setSession(session)
+                                .setVersion(getDefaultProtocolVersionMsg())
+                                .setIgnoreClusterId(true)
+                                .setIgnoreEpoch(true);
+                        LogReplication.LogReplicationSinkSessionInitializationMsg msg =
+                                LogReplication.LogReplicationSinkSessionInitializationMsg.newBuilder().setSession(session).build();
+                        CorfuMessage.RequestPayloadMsg payload =
+                                CorfuMessage.RequestPayloadMsg.newBuilder().setLrSinkSessionInitialization(msg).build();
+                        sessionManager.getRouter().getServerChannelAdapter().send(getRequestMsg(header.build(), payload));
+                    }
+                }
+                configManager.onNewClientRegister(subscriber);
+                sessionManager.createOutgoingSessionsBySubscriber(subscriber);
                 log.info("New client {} registered with model {}", clientName, model);
             } else if (entry.getOperation().equals(CorfuStreamEntry.OperationType.DELETE)) {
                 // TODO (V2 / Chris/Shreay): add unregister API for clients
