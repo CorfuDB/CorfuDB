@@ -24,8 +24,7 @@ import java.util.HashSet;
 import java.util.Set;
 
 import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.any;
-
+import static org.mockito.Mockito.any;
 
 public class SessionManagerTest extends AbstractViewTest {
     private CorfuRuntime corfuRuntime;
