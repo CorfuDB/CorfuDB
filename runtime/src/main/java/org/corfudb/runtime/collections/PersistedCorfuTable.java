@@ -5,16 +5,14 @@ import com.google.common.reflect.TypeToken;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.object.ICorfuSMR;
-import org.corfudb.runtime.object.ICorfuSMRProxyMetadata;
 import org.corfudb.runtime.object.ICorfuSMRProxy;
 import org.corfudb.runtime.object.ICorfuSMRUpcallTarget;
-import org.corfudb.runtime.object.transactions.Transaction;
 
 import javax.annotation.Nonnull;
 import java.util.Map;
-import java.util.Optional;
+import org.corfudb.runtime.object.ICorfuSMRProxyMetadata;
+
 import java.util.Set;
-import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -38,6 +36,10 @@ public class PersistedCorfuTable<K, V> implements
     }
 
     public PersistedCorfuTable() {}
+
+    public PersistedCorfuTable(ICorfuSMRProxy<DiskBackedCorfuTable<K, V>> proxy) {
+        this.proxy = proxy;
+    }
 
     public PersistedCorfuTable(ICorfuSMRProxy<DiskBackedCorfuTable<K, V>> proxy,
                                ICorfuSMRProxyMetadata proxyMetadata) {

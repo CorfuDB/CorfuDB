@@ -33,6 +33,10 @@ public class PersistentCorfuTable<K, V> implements
 
     public PersistentCorfuTable() {}
 
+    public PersistentCorfuTable(ICorfuSMRProxy<ImmutableCorfuTable<K, V>> proxy) {
+        this.proxy = proxy;
+    }
+
     public PersistentCorfuTable(ICorfuSMRProxy<ImmutableCorfuTable<K, V>> proxy,
                                 ICorfuSMRProxyMetadata proxyMetadata) {
         this.proxy = proxy;

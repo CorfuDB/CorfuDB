@@ -17,8 +17,6 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
-import static org.corfudb.runtime.CorfuOptions.ConsistencyModel.READ_COMMITTED;
-
 
 /** A Corfu optimistic transaction context.
  *
