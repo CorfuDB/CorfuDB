@@ -1096,7 +1096,7 @@ public class StreamingIT extends AbstractIT {
         } // This will load up the table's map with all entries
 
         // Now run a round of checkpoint and trim (Queue's data will be purged)
-        List<String> allRegisteredTablesAndQs = runtime.getTableRegistry().listTables().stream().map(
+        List<String> allRegisteredTablesAndQs = store.getRuntime().getTableRegistry().listTables().stream().map(
                 CorfuStoreMetadata.TableName::getTableName
         ).collect(Collectors.toList());
         checkpointAndTrim(store.getRuntime(), CORFU_SYSTEM_NAMESPACE, allRegisteredTablesAndQs, false);

@@ -13,9 +13,8 @@ import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.Re
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationSinkManager;
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationSourceManager;
-import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationError;
 import org.corfudb.infrastructure.logreplication.replication.fsm.ObservableAckMsg;
-import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationError;
 import org.corfudb.integration.DefaultDataControl.DefaultDataControlConfig;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplication;
