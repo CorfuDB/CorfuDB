@@ -1,5 +1,10 @@
 package org.corfudb.runtime.object;
 
+import org.corfudb.util.serializer.ISerializer;
+
+import java.util.Set;
+import java.util.UUID;
+
 /**
  * An interface for accessing a proxy, which
  * manages an SMR object.
