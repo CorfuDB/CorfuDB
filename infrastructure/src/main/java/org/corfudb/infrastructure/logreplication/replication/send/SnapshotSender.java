@@ -64,6 +64,9 @@ public class SnapshotSender {
     // The max number of message can be sent over in burst for a snapshot cycle.
     private final int maxNumSnapshotMsgPerBatch;
 
+    // The total size of the messages sent as part of snapshot sync
+    private long messagesSentSize = 0;
+
     // This flag will indicate the start of a snapshot sync, so start snapshot marker is sent once.
     private boolean startSnapshotSync = true;
 
@@ -137,6 +140,10 @@ public class SnapshotSender {
                 }
 
                 messagesSent += processReads(snapshotReadMessage.getMessages(), snapshotSyncEventId, completed);
+                // Get the total message size read.
+                for (LogReplicationEntryMsg msg : snapshotReadMessage.getMessages()) {
+                    messagesSentSize += msg.getSerializedSize();
+                }
                 final long messagesSentSnapshot = messagesSent;
                 messageCounter.ifPresent(counter -> counter.addAndGet(messagesSentSnapshot));
                 observedCounter.setValue(messagesSent);
@@ -149,8 +156,9 @@ public class SnapshotSender {
                     if (ack.getMetadata().getSnapshotTimestamp() == baseSnapshotTimestamp &&
                             ack.getMetadata().getEntryType().equals(LogReplicationEntryType.SNAPSHOT_TRANSFER_COMPLETE)) {
                         // Snapshot Sync Transfer Completed
-                        log.info("Snapshot sync transfer completed for {} on timestamp={}, ack={}", snapshotSyncEventId,
-                                baseSnapshotTimestamp, TextFormat.shortDebugString(ack.getMetadata()));
+                        log.info("Snapshot sync transfer completed for {} on timestamp={}, ack={}, messages sent size={}",
+                                snapshotSyncEventId, baseSnapshotTimestamp, TextFormat.shortDebugString(ack.getMetadata()),
+                                messagesSentSize);
                         snapshotSyncTransferComplete(snapshotSyncEventId);
                     } else {
                         log.warn("Expected ack for {}, but received for a different snapshot {}", baseSnapshotTimestamp,
@@ -329,6 +337,7 @@ public class SnapshotSender {
 
         stopSnapshotSync.set(false);
         startSnapshotSync = true;
+        messagesSentSize = 0;
     }
 
     private void resetBaseSnapshotTimestamp(long timestamp) {
