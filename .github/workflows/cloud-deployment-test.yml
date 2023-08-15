@@ -75,7 +75,7 @@ jobs:
         working-directory: ./cloud/corfu
         run: |
           echo check deployment status:
-          if kubectl wait --for=condition=complete --timeout=180s job/configure-corfu | grep "job.batch/configure-corfu condition met"; then
+          if kubectl wait pod/corfu-0 --for=condition=Ready  --timeout=180s | grep "pod/corfu-0 condition met"; then
             echo "Successful deployment!"
             exit 0
           else
@@ -83,9 +83,6 @@ jobs:
 
             echo pods:
             kubectl get pods
-
-            echo corfu job:
-            kubectl describe job/configure-corfu
 
             echo corfu pod:
             kubectl describe pod corfu-0
