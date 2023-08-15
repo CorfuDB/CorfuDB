@@ -15,12 +15,14 @@ import org.corfudb.infrastructure.log.StreamLog.PersistenceMode;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.test.LsofSpec;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
+import org.mockito.Mockito;
 
 import java.io.File;
 import java.io.IOException;
@@ -45,6 +47,7 @@ import static org.corfudb.infrastructure.log.Segment.VERSION;
 import static org.corfudb.infrastructure.log.SegmentUtils.getByteBufferWithMetaData;
 import static org.corfudb.infrastructure.log.StreamLogFiles.RECORDS_PER_LOG_FILE;
 import static org.corfudb.infrastructure.utils.Crc32c.getChecksum;
+import static org.mockito.Mockito.when;
 
 /**
  * Created by maithem on 11/2/16.
@@ -118,7 +121,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         Serializers.CORFU.serialize(streamEntry, b);
         long address0 = 0;
         log.append(address0, new LogData(DataType.DATA, b));
-        assertThat(log.read(address0).getPayload(null)).isEqualTo(streamEntry);
+        assertThat(log.read(address0).getPayload(getRuntime())).isEqualTo(streamEntry);
 
         // Disable checksum, then append and read then same entry
         // An overwrite exception should occur, since we are writing the
@@ -127,7 +130,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         assertThatThrownBy(() -> newLog.append(address0, new LogData(DataType.DATA, b)))
                 .isInstanceOf(OverwriteException.class);
 
-        assertThat(log.read(address0).getPayload(null)).isEqualTo(streamEntry);
+        assertThat(log.read(address0).getPayload(getRuntime())).isEqualTo(streamEntry);
     }
 
     @Test
@@ -290,6 +293,14 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         assertThat(logSize2).isEqualTo(logSize);
     }
 
+    private CorfuRuntime getRuntime() {
+        CorfuRuntime mockRuntime = Mockito.mock(CorfuRuntime.class);
+        CorfuRuntime.CorfuRuntimeParameters mockParameters = Mockito.mock(CorfuRuntime.CorfuRuntimeParameters.class);
+        when(mockRuntime.getParameters()).thenReturn(mockParameters);
+        when(mockParameters.isNullifyDataOnGetPayload()).thenReturn(true);
+        return mockRuntime;
+    }
+
     /**
      * Reads the range [a, b) from a specific log
      */
@@ -355,7 +366,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         log.append(address0, new LogData(DataType.DATA, b));
         log.append(address1, new LogData(DataType.DATA, b));
 
-        assertThat(log.read(address0).getPayload(null)).isEqualTo(streamEntry);
+        assertThat(log.read(address0).getPayload(getRuntime())).isEqualTo(streamEntry);
         log.close();
 
         final int OVERWRITE_BYTES = 4;
@@ -859,7 +870,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         // Open the segment again and verify that the entry write can be read (i.e. log file can be
         // parsed correctly).
         log = new StreamLogFiles(getContext(), new BatchProcessorContext());
-        assertThat(log.read(address0).getPayload(null)).isEqualTo(streamEntry);
+        assertThat(log.read(address0).getPayload(getRuntime())).isEqualTo(streamEntry);
     }
 
     @Test
@@ -915,7 +926,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         log.close();
 
         log = new StreamLogFiles(getContext(), new BatchProcessorContext());
-        assertThat(log.read(address0).getPayload(null)).isEqualTo(streamEntry);
+        assertThat(log.read(address0).getPayload(getRuntime())).isEqualTo(streamEntry);
     }
 
     @Test
