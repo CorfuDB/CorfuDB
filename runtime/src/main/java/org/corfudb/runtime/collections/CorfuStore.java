@@ -395,7 +395,7 @@ public class CorfuStore {
     public void subscribeRoutingQListener(@Nonnull LiteRoutingQueueListener routingQueueListener) {
         Timestamp ts = routingQueueListener.performFullSync();
         this.subscribeListener(routingQueueListener, CORFU_SYSTEM_NAMESPACE, REPLICATED_QUEUE_TAG,
-                Arrays.asList(LogReplicationUtils.REPLICATED_QUEUE_NAME), ts);
+                Arrays.asList(LogReplicationUtils.REPLICATED_RECV_Q_PREFIX+routingQueueListener.getSourceSiteId()), ts);
     }
 
     /**
