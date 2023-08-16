@@ -17,6 +17,7 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import java.util.ArrayList;
+import java.util.concurrent.ExecutorService;
 
 /**
  * Tests the apis in LogReplicationUtils.
@@ -31,12 +32,14 @@ public class LogReplicationUtilsTest extends AbstractViewTest {
     private Table<LogReplication.LogReplicationSession, LogReplication.ReplicationStatus, Message> replicationStatusTable;
     private String namespace = "test_namespace";
     private String client = "test_client";
+    private String streamTag = "test_tag";
+    private ExecutorService executorService = null;
 
     @Before
     public void setUp() throws Exception {
         corfuRuntime = getDefaultRuntime();
         corfuStore = new CorfuStore(corfuRuntime);
-        lrListener = new LogReplicationTestListener(corfuStore, namespace, client);
+        lrListener = new LogReplicationTestListener(corfuStore, namespace, client, executorService);
         replicationStatusTable = TestUtils.openReplicationStatusTable(corfuStore);
     }
 
@@ -72,7 +75,7 @@ public class LogReplicationUtilsTest extends AbstractViewTest {
         if (initializeTable) {
             TestUtils.setSnapshotSyncOngoing(corfuStore, replicationStatusTable, client, ongoing);
         }
-        LogReplicationUtils.attemptClientFullSync(corfuStore, lrListener, namespace);
+        LogReplicationUtils.attemptClientFullSync(lrListener, corfuStore, namespace, streamTag, new ArrayList<>(), 5, executorService);
         verifyListenerFlags((LogReplicationTestListener)lrListener, ongoing);
     }
 
@@ -109,8 +112,7 @@ public class LogReplicationUtilsTest extends AbstractViewTest {
             TestUtils.setSnapshotSyncOngoing(corfuStore, replicationStatusTable, client, ongoing);
         }
 
-        String streamTag = "test_tag";
-        LogReplicationUtils.subscribe(lrListener, namespace, streamTag, new ArrayList<>(), 5, corfuStore);
+        LogReplicationUtils.subscribe(lrListener, namespace, streamTag, new ArrayList<>(), 5, corfuStore, executorService);
         verifyListenerFlags((LogReplicationTestListener)lrListener, ongoing);
     }
 
@@ -139,16 +141,15 @@ public class LogReplicationUtilsTest extends AbstractViewTest {
 
         // Create the listener for new_client and set snapshot sync to be in progress
         String newClient = "new_client";
-        LogReplicationListener newListener = new LogReplicationTestListener(corfuStore, namespace, newClient);
+        LogReplicationListener newListener = new LogReplicationTestListener(corfuStore, namespace, newClient, executorService);
         TestUtils.setSnapshotSyncOngoing(corfuStore, replicationStatusTable, newClient, true);
 
         if (subscribe) {
-            String streamTag = "test_tag";
-            LogReplicationUtils.subscribe(lrListener, namespace, streamTag, new ArrayList<>(), 5, corfuStore);
-            LogReplicationUtils.subscribe(newListener, namespace, streamTag, new ArrayList<>(), 5, corfuStore);
+            LogReplicationUtils.subscribe(lrListener, namespace, streamTag, new ArrayList<>(), 5, corfuStore, executorService);
+            LogReplicationUtils.subscribe(newListener, namespace, streamTag, new ArrayList<>(), 5, corfuStore, executorService);
         } else {
-            LogReplicationUtils.attemptClientFullSync(corfuStore, lrListener, namespace);
-            LogReplicationUtils.attemptClientFullSync(corfuStore, newListener, namespace);
+            LogReplicationUtils.attemptClientFullSync(lrListener, corfuStore, namespace, streamTag, new ArrayList<>(), 5, executorService);
+            LogReplicationUtils.attemptClientFullSync(newListener, corfuStore, namespace, streamTag, new ArrayList<>(), 5, executorService);
         }
 
         // Verify that full sync finished and snapshot sync was not considered ongoing for test_client
@@ -183,8 +184,8 @@ public class LogReplicationUtilsTest extends AbstractViewTest {
 
         private String clientName;
 
-        LogReplicationTestListener(CorfuStore corfuStore, String namespace, String clientName) {
-            super(corfuStore, namespace);
+        LogReplicationTestListener(CorfuStore corfuStore, String namespace, String clientName, ExecutorService executorService) {
+            super(corfuStore, namespace, executorService);
             this.clientName = clientName;
         }
 
