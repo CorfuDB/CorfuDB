@@ -71,13 +71,12 @@ public class LogReplicationSourceManager {
         ExecutorService logReplicationFSMWorkers = Executors.newFixedThreadPool(DEFAULT_FSM_WORKER_THREADS,
                 new ThreadFactoryBuilder().setNameFormat("state-machine-worker-" + session.hashCode()).build());
 
-        ReadProcessor readProcessor = new DefaultReadProcessor(replicationContext.getCorfuRuntime());
         this.metadataManager = metadataManager;
 
         // Ack Reader for Snapshot and LogEntry Sync
         this.ackReader = new LogReplicationAckReader(this.metadataManager, session, replicationContext);
 
-        this.logReplicationFSM = new LogReplicationFSM(dataSender, readProcessor,
+        this.logReplicationFSM = new LogReplicationFSM(dataSender,
                 logReplicationFSMWorkers, ackReader, session, replicationContext);
         this.ackReader.setLogEntryReader(this.logReplicationFSM.getLogEntryReader());
         this.ackReader.setLogEntrySender(this.logReplicationFSM.getLogEntrySender());
