@@ -83,7 +83,7 @@ public class SnapshotSender {
     private boolean snapshotCompleted = false;
 
     public SnapshotSender(LogReplicationContext replicationContext, SnapshotReader snapshotReader, DataSender dataSender,
-                          ReadProcessor readProcessor, LogReplicationFSM fsm) {
+                          LogReplicationFSM fsm) {
         this.runtime = replicationContext.getCorfuRuntime();
         this.snapshotReader = snapshotReader;
         this.fsm = fsm;

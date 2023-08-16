@@ -984,8 +984,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         metadataManager.addSession(DEFAULT_SESSION, 0, false);
 
         ackReader = new LogReplicationAckReader(metadataManager, DEFAULT_SESSION, context);
-        fsm = new LogReplicationFSM(runtime, snapshotReader, dataSender, logEntryReader,
-                new DefaultReadProcessor(runtime),
+        fsm = new LogReplicationFSM(snapshotReader, dataSender, logEntryReader,
                 Executors.newSingleThreadExecutor(new ThreadFactoryBuilder().setNameFormat("fsm-worker").build()),
                 ackReader, DEFAULT_SESSION, context);
         ackReader.setLogEntryReader(fsm.getLogEntryReader());
