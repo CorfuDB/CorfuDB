@@ -73,6 +73,7 @@ import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
  * reaches the destination after initiating log replication.
  */
 @Slf4j
+@SuppressWarnings("checkstyle:magicnumber")
 public class LogReplicationIT extends AbstractIT implements Observer {
 
     public static final String pluginConfigFilePath = "./test/src/test/resources/transport/pluginConfig.properties";
