@@ -108,10 +108,6 @@ public class ReplicatingState implements LogReplicationRuntimeState {
     public void onExit(LogReplicationRuntimeState to) {
         log.debug("Transition to {} from replicating state.", to.getType());
         switch (to.getType()) {
-            case STOPPED:
-                log.debug("onExit :: transition to stopped state");
-                replicationSourceManager.shutdown();
-                break;
             case VERIFYING_REMOTE_LEADER:
             case WAITING_FOR_CONNECTIVITY:
                 log.debug("onExit :: transition to {} state", to.getType());
