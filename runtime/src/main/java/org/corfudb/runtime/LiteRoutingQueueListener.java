@@ -1,5 +1,6 @@
 package org.corfudb.runtime;
 
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
@@ -15,6 +16,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -28,20 +30,31 @@ public abstract class LiteRoutingQueueListener extends StreamListenerResumeOrFul
 
     final Table<Queue.CorfuGuidMsg, Queue.RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg> recvQ;
 
-    public LiteRoutingQueueListener(CorfuStore corfuStore) {
-        super(corfuStore, CORFU_SYSTEM_NAMESPACE, REPLICATED_QUEUE_TAG, Arrays.asList(LogReplicationUtils.REPLICATED_QUEUE_NAME));
+    @Getter
+    public String sourceSiteId;
+
+    public LiteRoutingQueueListener(CorfuStore corfuStore, String sourceSiteId) {
+        super(corfuStore, CORFU_SYSTEM_NAMESPACE, REPLICATED_QUEUE_TAG,
+                Arrays.asList(LogReplicationUtils.REPLICATED_RECV_Q_PREFIX+sourceSiteId));
         this.corfuStore = corfuStore;
+        this.sourceSiteId = sourceSiteId;
         Table<Queue.CorfuGuidMsg, Queue.RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg> recvQ_lcl = null;
         int numRetries = 8;
         while (numRetries-- > 0) {
             try {
-                recvQ_lcl = corfuStore.openQueue(CORFU_SYSTEM_NAMESPACE, LogReplicationUtils.REPLICATED_QUEUE_NAME,
-                        Queue.RoutingTableEntryMsg.class,
-                        TableOptions.builder().schemaOptions(
-                                        CorfuOptions.SchemaOptions.newBuilder()
-                                                .addStreamTag(REPLICATED_QUEUE_TAG)
-                                                .build())
-                                .build());
+                try {
+                    recvQ_lcl = corfuStore.getTable(CORFU_SYSTEM_NAMESPACE,
+                            LogReplicationUtils.REPLICATED_RECV_Q_PREFIX+sourceSiteId);
+                } catch(NoSuchElementException | IllegalArgumentException e) {
+                    recvQ_lcl = corfuStore.openQueue(CORFU_SYSTEM_NAMESPACE,
+                            LogReplicationUtils.REPLICATED_RECV_Q_PREFIX+sourceSiteId,
+                            Queue.RoutingTableEntryMsg.class,
+                            TableOptions.builder().schemaOptions(
+                                            CorfuOptions.SchemaOptions.newBuilder()
+                                                    .addStreamTag(REPLICATED_QUEUE_TAG)
+                                                    .build())
+                                    .build());
+                }
                 break;
             } catch (Exception e) {
                 log.error("Failed to open replicated queue due to exception!", e);
