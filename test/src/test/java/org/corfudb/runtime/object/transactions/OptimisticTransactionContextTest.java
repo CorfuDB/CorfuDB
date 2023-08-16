@@ -81,7 +81,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
         CorfuRuntime mockRuntime = Mockito.mock(CorfuRuntime.class);
         CorfuRuntime.CorfuRuntimeParameters mockParameters = Mockito.mock(CorfuRuntime.CorfuRuntimeParameters.class);
         when(mockRuntime.getParameters()).thenReturn(mockParameters);
-        when(mockParameters.isNullifyDataOnGetPayload()).thenReturn(true);
+        when(mockParameters.isRetainSerializedDataInCache()).thenReturn(false);
         MultiObjectSMREntry committedMultiSMR = (MultiObjectSMREntry) sv.remaining().iterator().next().getPayload(mockRuntime);
         committedMultiSMR.getSMRUpdates(stream1Id);
 
