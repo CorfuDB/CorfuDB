@@ -62,6 +62,7 @@ import static org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus.STABLE;
 import static org.corfudb.test.TestUtils.setAggressiveTimeouts;
 import static org.corfudb.test.TestUtils.waitForLayoutChange;
 
+@SuppressWarnings("checkstyle:magicnumber")
 public class StateTransferTest extends AbstractViewTest {
 
     @Getter

@@ -297,7 +297,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         CorfuRuntime mockRuntime = Mockito.mock(CorfuRuntime.class);
         CorfuRuntime.CorfuRuntimeParameters mockParameters = Mockito.mock(CorfuRuntime.CorfuRuntimeParameters.class);
         when(mockRuntime.getParameters()).thenReturn(mockParameters);
-        when(mockParameters.isNullifyDataOnGetPayload()).thenReturn(true);
+        when(mockParameters.isRetainSerializedDataInCache()).thenReturn(false);
         return mockRuntime;
     }
 
