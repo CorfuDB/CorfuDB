@@ -49,7 +49,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
 import static org.corfudb.protocols.service.CorfuProtocolLogReplication.getLrEntryAckMsg;
-import static org.corfudb.runtime.LogReplicationUtils.REPLICATED_QUEUE_NAME;
+import static org.corfudb.runtime.LogReplicationUtils.REPLICATED_RECV_Q_PREFIX;
 import static org.corfudb.runtime.LogReplicationUtils.REPLICATED_QUEUE_TAG;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
@@ -242,7 +242,7 @@ public class LogReplicationSinkManager implements DataReceiver {
      */
     private void insertQInRegistryTable() {
         TableRegistry tableRegistry = runtime.getTableRegistry();
-        String replicatedQName = REPLICATED_QUEUE_NAME;
+        String replicatedQName = REPLICATED_RECV_Q_PREFIX+session.getSourceClusterId();
         if (!tableRegistry.getRegistryTable().containsKey(replicatedQName)) {
             try {
                 TableOptions tableOptions = TableOptions.builder()
@@ -258,7 +258,6 @@ public class LogReplicationSinkManager implements DataReceiver {
                 throw new RuntimeException(e);
             }
         }
-
     }
 
     private ISnapshotSyncPlugin getOnSnapshotSyncPlugin() {
