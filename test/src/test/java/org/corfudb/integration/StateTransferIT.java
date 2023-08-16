@@ -37,6 +37,7 @@ import static org.assertj.core.api.Assertions.fail;
 import static org.junit.Assert.assertEquals;
 
 @Slf4j
+@SuppressWarnings("checkstyle:magicnumber")
 public class StateTransferIT extends AbstractIT {
 
     public static final int FIRST_NODE_ID = 0;

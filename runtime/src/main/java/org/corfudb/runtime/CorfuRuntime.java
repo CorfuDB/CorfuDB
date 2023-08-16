@@ -338,10 +338,11 @@ public class CorfuRuntime {
         boolean cacheWrites = true;
 
         /**
-         * Used only by LR.
-         * On LogData.getPayload(), after deserializing the data part, the data part should not be set to null.
+         * When set to true, the serialized data in LogData will not be set to null after deserializing it in LogData.getPayload().
+         * This is needed for LR which relies on the opaqueStream to read the data to replicate. On finding the "data"
+         * of LogData set to null, the opaqueStream skips that logData. This causes a correctness issue.
          */
-        boolean retainSerializedDataInCache = true;
+        boolean retainSerializedDataInCache = false;
 
         // endregion
 
@@ -478,7 +479,7 @@ public class CorfuRuntime {
             private boolean cacheWrites = true;
             private String clientName = "CorfuClient";
             private long checkpointTriggerFreqMillis = 0;
-            private boolean nullifyDataOnGetPayload = true;
+            private boolean retainSerializedDataInCache = false;
 
             public CorfuRuntimeParametersBuilder streamingWorkersThreadPoolSize(int streamingWorkersThreadPoolSize) {
                 this.streamingWorkersThreadPoolSize = streamingWorkersThreadPoolSize;
@@ -792,8 +793,8 @@ public class CorfuRuntime {
                 return this;
             }
 
-            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder nullifyDataOnGetPayload(boolean nullifyDataOnGetPayload) {
-                this.nullifyDataOnGetPayload = nullifyDataOnGetPayload;
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder retainSerializedDataInCache(boolean retainSerializedDataInCache) {
+                this.retainSerializedDataInCache = retainSerializedDataInCache;
                 return this;
             }
 
@@ -861,7 +862,7 @@ public class CorfuRuntime {
                 corfuRuntimeParameters.setCacheWrites(cacheWrites);
                 corfuRuntimeParameters.setClientName(clientName);
                 corfuRuntimeParameters.setCheckpointTriggerFreqMillis(checkpointTriggerFreqMillis);
-                corfuRuntimeParameters.setRetainSerializedDataInCache(nullifyDataOnGetPayload);
+                corfuRuntimeParameters.setRetainSerializedDataInCache(retainSerializedDataInCache);
                 return corfuRuntimeParameters;
             }
         }
