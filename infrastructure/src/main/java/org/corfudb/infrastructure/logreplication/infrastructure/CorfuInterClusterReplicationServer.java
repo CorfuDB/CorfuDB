@@ -378,7 +378,7 @@ public class CorfuInterClusterReplicationServer implements Runnable {
                 .systemDownHandler(() -> System.exit(SYSTEM_EXIT_ERROR_CODE))
                 .maxCacheEntries(serverContext.getLogReplicationCacheMaxSize()/2)
                 .maxWriteSize(serverContext.getMaxWriteSize())
-                .nullifyDataOnGetPayload(false)
+                .retainSerializedDataInCache(true)
                 .build())
                 .parseConfigurationString(localCorfuEndpoint).connect();
     }
