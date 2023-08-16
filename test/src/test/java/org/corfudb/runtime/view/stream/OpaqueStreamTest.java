@@ -142,10 +142,10 @@ public class OpaqueStreamTest extends AbstractViewTest {
         List<Long> addressWrittenTo = new ArrayList<>();
         for (int i = 0; i < entryCount; i++) {
             Sample.StringKey stringKey = Sample.StringKey.newBuilder().setKey(String.valueOf(i)).build();
-            Sample.IntValueTag IntValueTag = Sample.IntValueTag.newBuilder().setValue(i).build();
+            Sample.IntValueTag intValueTag = Sample.IntValueTag.newBuilder().setValue(i).build();
             Sample.Metadata metadata = Sample.Metadata.newBuilder().setMetadata("Metadata_" + i).build();
             try (TxnContext txn = store.txn(NAMESPACE)) {
-                txn.putRecord(tableSource, stringKey, IntValueTag, metadata);
+                txn.putRecord(tableSource, stringKey, intValueTag, metadata);
                 addressWrittenTo.add(txn.commit().getSequence());
             }
         }
@@ -179,7 +179,7 @@ public class OpaqueStreamTest extends AbstractViewTest {
         OpaqueStream opaqueStream = new OpaqueStream(streamView);
         List<OpaqueEntry> entries = opaqueStream.streamUpTo(Integer.MAX_VALUE).collect(Collectors.toList());
 
-        Assertions.assertThat(entries.size()).isEqualTo(expected);
+        assertThat(entries.size()).isEqualTo(expected);
     }
 
     @Test
