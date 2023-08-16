@@ -307,6 +307,7 @@ public class CorfuLogReplicationRuntime {
     public synchronized void refresh(ClusterDescriptor clusterDescriptor, long topologyConfigId) {
         log.warn("Update router's cluster descriptor {}", clusterDescriptor);
         router.onClusterChange(clusterDescriptor);
+        sourceManager.getLogReplicationFSM().setTopologyConfigId(topologyConfigId);
     }
 
     /**

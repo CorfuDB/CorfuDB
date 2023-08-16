@@ -428,7 +428,7 @@ public class LogReplicationFSM {
         to.onEntry(from);
     }
 
-    private void setTopologyConfigId(long topologyConfigId) {
+    public void setTopologyConfigId(long topologyConfigId) {
         this.topologyConfigId = topologyConfigId;
         snapshotReader.setTopologyConfigId(topologyConfigId);
         logEntryReader.setTopologyConfigId(topologyConfigId);

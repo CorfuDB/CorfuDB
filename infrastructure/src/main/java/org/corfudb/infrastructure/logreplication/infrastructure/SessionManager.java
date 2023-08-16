@@ -94,17 +94,16 @@ public class SessionManager {
                           ServerContext serverContext,
                           String localCorfuEndpoint, LogReplicationPluginConfig pluginConfig) {
         this.topology = topology;
-        CorfuRuntime runtime = corfuRuntime;
         this.corfuStore = new CorfuStore(corfuRuntime);
 
         this.localCorfuEndpoint = localCorfuEndpoint;
 
-        this.configManager = new LogReplicationConfigManager(runtime, serverContext,
+        this.configManager = new LogReplicationConfigManager(corfuRuntime, serverContext,
                 topology.getLocalClusterDescriptor().getClusterId());
         this.clientConfigListener = new LogReplicationClientConfigListener(this,
                 configManager, corfuStore);
         this.replicationContext = new LogReplicationContext(configManager, topology.getTopologyConfigId(),
-                localCorfuEndpoint, pluginConfig, runtime);
+                localCorfuEndpoint, pluginConfig, corfuRuntime);
         this.metadataManager = new LogReplicationMetadataManager(corfuRuntime, replicationContext);
 
         this.replicationManager = new CorfuReplicationManager(metadataManager,
