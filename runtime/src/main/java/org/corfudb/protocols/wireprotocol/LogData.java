@@ -129,12 +129,12 @@ public class LogData implements IMetadata, ILogData {
                         } finally {
                             serializedBuf.release();
                             // LR doesn't read deserialized data. So in the few cases that the data is deserialized, LR
-                            // still reads the data part of LogData. Setting "nullifyDataOnGetPayload" param for LR will
-                            // ensure that no data is skipped from being seen by LR.
+                            // still reads the data part of LogData. Setting "isRetainSerializedDataInCache" param for
+                            // LR, will ensure that no data is skipped from being seen by LR.
                             // Required for the registry table by all the replication models and for the tables
-                            // replicated using LogicalGroups and RoutingQueue models.
+                            // replicated using the RoutingQueue models.
                             // The memory overhead of not setting data to null is bearable for LR
-                            if (runtime.getParameters().isRetainSerializedDataInCache()) {
+                            if (!runtime.getParameters().isRetainSerializedDataInCache()) {
                                 data = null;
                             }
                         }

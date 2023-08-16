@@ -658,7 +658,7 @@ public class LogUnitServerTest {
         CorfuRuntime mockRuntime = Mockito.mock(CorfuRuntime.class);
         CorfuRuntime.CorfuRuntimeParameters mockParameters = Mockito.mock(CorfuRuntime.CorfuRuntimeParameters.class);
         when(mockRuntime.getParameters()).thenReturn(mockParameters);
-        when(mockParameters.isNullifyDataOnGetPayload()).thenReturn(true);
+        when(mockParameters.isRetainSerializedDataInCache()).thenReturn(false);
         rr.getAddresses().forEach((address, ld) -> {
             if (address < 8L) {
                 assertEquals(DataType.DATA, ld.getType());
