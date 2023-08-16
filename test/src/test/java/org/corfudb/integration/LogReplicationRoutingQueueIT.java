@@ -32,7 +32,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.runtime.LogReplicationUtils.LOG_ENTRY_SYNC_QUEUE_TAG_SENDER_PREFIX;
-import static org.corfudb.runtime.LogReplicationUtils.REPLICATED_QUEUE_NAME;
+import static org.corfudb.runtime.LogReplicationUtils.REPLICATED_RECV_Q_PREFIX;
 import static org.corfudb.runtime.LogReplicationUtils.REPLICATED_QUEUE_TAG;
 import static org.corfudb.runtime.LogReplicationUtils.REPLICATION_STATUS_TABLE_NAME;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
@@ -67,28 +67,21 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
         CorfuRuntime clientRuntime = getClientRuntime();
         CorfuStore clientCorfuStore = new CorfuStore(clientRuntime);
         String clientName = "testClient";
+        String sourceSiteId = DefaultClusterConfig.getSourceClusterIds().get(0);
         RoutingQueueSenderClient queueSenderClient = new RoutingQueueSenderClient(clientCorfuStore, clientName);
         // SnapshotProvider implements RoutingQueueSenderClient.LRTransmitterReplicationModule
         SnapshotProvider snapshotProvider = new SnapshotProvider(clientCorfuStore);
         queueSenderClient.startLRSnapshotTransmitter(snapshotProvider); // starts a listener on event table
 
-
-        // Open queue on sink
         try {
-            log.info("Sink Queue name: {}", REPLICATED_QUEUE_NAME);
-            Table<Queue.CorfuGuidMsg, Queue.RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg> replicatedQueueSink
-                    = sinkCorfuStores.get(0).openQueue(CORFU_SYSTEM_NAMESPACE, REPLICATED_QUEUE_NAME,
-                    Queue.RoutingTableEntryMsg.class, TableOptions.builder().schemaOptions(CorfuOptions.SchemaOptions.newBuilder()
-                            .addStreamTag(REPLICATED_QUEUE_TAG).build()).build());
-
+            RoutingQueueListener listener = new RoutingQueueListener(sinkCorfuStores.get(0),
+                    DefaultClusterConfig.getSourceClusterIds().get(0));
+            sinkCorfuStores.get(0).subscribeRoutingQListener(listener);
             startReplicationServers();
             while (!snapshotProvider.isSnapshotSent) {
                 Thread.sleep(5000);
             }
             generateData(clientCorfuStore, queueSenderClient);
-
-            RoutingQueueListener listener = new RoutingQueueListener(sinkCorfuStores.get(0));
-            sinkCorfuStores.get(0).subscribeRoutingQListener(listener);
 
             int numLogEntriesReceived = listener.logEntryMsgCnt;
             while (numLogEntriesReceived < 10) {
@@ -112,6 +105,7 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
         // Register client and setup initial group destinations mapping
         CorfuRuntime clientRuntime = getClientRuntime();
         CorfuStore clientCorfuStore = new CorfuStore(clientRuntime);
+        String sourceSiteId = DefaultClusterConfig.getSourceClusterIds().get(0);
         CorfuStoreBrowserEditor editor = new CorfuStoreBrowserEditor(clientRuntime, null, true);
         String clientName = RoutingQueueSenderClient.DEFAULT_ROUTING_QUEUE_CLIENT;
         RoutingQueueSenderClient queueSenderClient = new RoutingQueueSenderClient(clientCorfuStore, clientName);
@@ -121,9 +115,10 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
 
         // Open queue on sink
         try {
-            log.info("Sink Queue name: {}", REPLICATED_QUEUE_NAME);
+            log.info("Sink Queue name: {}", REPLICATED_RECV_Q_PREFIX+sourceSiteId);
             Table<Queue.CorfuGuidMsg, Queue.RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg> replicatedQueueSink
-                    = sinkCorfuStores.get(0).openQueue(CORFU_SYSTEM_NAMESPACE, REPLICATED_QUEUE_NAME,
+                    = sinkCorfuStores.get(0).openQueue(CORFU_SYSTEM_NAMESPACE,
+                    REPLICATED_RECV_Q_PREFIX+sourceSiteId,
                     Queue.RoutingTableEntryMsg.class, TableOptions.builder().schemaOptions(CorfuOptions.SchemaOptions.newBuilder()
                             .addStreamTag(REPLICATED_QUEUE_TAG).build()).build());
 
@@ -132,7 +127,8 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
                 Thread.sleep(5000);
             }
 
-            RoutingQueueListener listener = new RoutingQueueListener(sinkCorfuStores.get(0));
+            RoutingQueueListener listener = new RoutingQueueListener(sinkCorfuStores.get(0),
+                    sourceSiteId);
             sinkCorfuStores.get(0).subscribeRoutingQListener(listener);
 
             int numFullSyncMsgsGot = listener.snapSyncMsgCnt;
@@ -257,8 +253,8 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
         public volatile int logEntryMsgCnt = 0;
         public volatile int snapSyncMsgCnt = 0;
 
-        public RoutingQueueListener(CorfuStore corfuStore) {
-            super(corfuStore); // performFullSync is called here
+        public RoutingQueueListener(CorfuStore corfuStore, String sourceSiteId) {
+            super(corfuStore, sourceSiteId); // performFullSync is called here
         }
 
         @Override
