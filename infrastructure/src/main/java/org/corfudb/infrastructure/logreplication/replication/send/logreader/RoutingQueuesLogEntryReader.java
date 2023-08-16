@@ -13,6 +13,7 @@ import org.corfudb.runtime.LogReplicationUtils;
 import org.corfudb.runtime.Queue;
 import org.corfudb.runtime.Queue.RoutingTableEntryMsg;
 import org.corfudb.runtime.collections.CorfuRecord;
+import org.corfudb.runtime.view.TableRegistry;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -21,7 +22,8 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
-import static org.corfudb.runtime.LogReplicationUtils.REPLICATED_QUEUE_NAME;
+import static org.corfudb.runtime.LogReplicationUtils.REPLICATED_RECV_Q_PREFIX;
+import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 
 /**
@@ -57,7 +59,9 @@ public class RoutingQueuesLogEntryReader extends BaseLogEntryReader {
             }
         }
         HashMap<UUID, List<SMREntry>> opaqueEntryMap = new HashMap<>();
-        opaqueEntryMap.put(CorfuRuntime.getStreamID(REPLICATED_QUEUE_NAME),
+        String replicatedQueueName = TableRegistry.getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE,
+                LogReplicationUtils.REPLICATED_RECV_Q_PREFIX +session.getSourceClusterId());
+        opaqueEntryMap.put(CorfuRuntime.getStreamID(replicatedQueueName),
                 filteredMsgs);
         return new OpaqueEntry(opaqueEntry.getVersion(), opaqueEntryMap);
     }
