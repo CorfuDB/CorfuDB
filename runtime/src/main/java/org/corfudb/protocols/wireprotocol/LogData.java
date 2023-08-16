@@ -135,7 +135,7 @@ public class LogData implements IMetadata, ILogData {
                             // Required for the registry table by all the replication models and for the tables
                             // replicated using LogicalGroups and RoutingQueue models.
                             // The memory overhead of not setting data to null is bearable for LR
-                            if (runtime.getParameters().isNullifyDataOnGetPayload()) {
+                            if (runtime.getParameters().isRetainSerializedDataInCache()) {
                                 data = null;
                             }
                         }

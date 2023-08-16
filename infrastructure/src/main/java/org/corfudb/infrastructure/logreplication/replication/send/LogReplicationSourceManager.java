@@ -136,11 +136,6 @@ public class LogReplicationSourceManager {
      * Termination of the Log Replication State Machine, to enable replication a JVM restart is required.
      */
     public void shutdown() {
-        // Shama check and note which aare the 2 places
-        if(isShutdown) {
-            log.debug("No-op : received a duplicate shutdown request.");
-            return;
-        }
         // Enqueue event into Log Replication FSM
         LogReplicationEvent logReplicationEvent = new LogReplicationEvent(LogReplicationEventType.REPLICATION_STOP);
         logReplicationFSM.input(logReplicationEvent);
