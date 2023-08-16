@@ -75,7 +75,7 @@ public abstract class LogReplicationRoutingQueueListener implements StreamListen
         this.corfuStore = corfuStore;
         this.namespace = namespace;
         this.routingQueue =
-                corfuStore.openQueue(namespace, LogReplicationUtils.REPLICATED_QUEUE_NAME,
+                corfuStore.openQueue(namespace, LogReplicationUtils.REPLICATED_RECV_Q_PREFIX,
                         Queue.RoutingTableEntryMsg.class,
                         TableOptions.builder().schemaOptions(
                                         CorfuOptions.SchemaOptions.newBuilder()
