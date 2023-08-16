@@ -332,7 +332,7 @@ public class CorfuRuntime {
          * Used only by LR.
          * On LogData.getPayload(), after deserializing the data part, the data part should not be set to null.
          */
-        boolean nullifyDataOnGetPayload = true;
+        boolean retainSerializedDataInCache = true;
 
         // endregion
 
@@ -842,7 +842,7 @@ public class CorfuRuntime {
                 corfuRuntimeParameters.setCacheWrites(cacheWrites);
                 corfuRuntimeParameters.setClientName(clientName);
                 corfuRuntimeParameters.setCheckpointTriggerFreqMillis(checkpointTriggerFreqMillis);
-                corfuRuntimeParameters.setNullifyDataOnGetPayload(nullifyDataOnGetPayload);
+                corfuRuntimeParameters.setRetainSerializedDataInCache(nullifyDataOnGetPayload);
                 return corfuRuntimeParameters;
             }
         }
