@@ -25,6 +25,10 @@ import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.RetryNeededException;
 
 import javax.annotation.Nonnull;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileReader;
+import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.time.Duration;
 import java.util.Arrays;
@@ -33,6 +37,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Properties;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
@@ -112,16 +117,33 @@ public final class LogReplicationUtils {
         private Map<String, String> nsToStreamTags;
         private Map<String, List<String>> nsToTableName;
         private int bufferSize;
-        private final Duration retryThreshold = Duration.ofMinutes(2);
+        private Duration retryThreshold;
 
         // Settings for the subscription retries
         Consumer<ExponentialBackoffRetry> retrySettings = settings -> {
             settings.setMaxRetryThreshold(retryThreshold);
         };
 
+        private void readConfig() {
+            String pluginConfigFilePath = "src/test/resources/transport/pluginConfig.properties";
+            File configFile = new File(pluginConfigFilePath);
+            try {
+                FileReader reader = new FileReader(configFile);
+                Properties props = new Properties();
+                props.load(reader);
+                this.retryThreshold = Duration.ofMinutes(Integer.parseInt(props.getProperty("subscribe_retry_threshold_min", "2")));
+                reader.close();
+            } catch (FileNotFoundException e) {
+                log.warn("Config file {} does not exist. Using default subscription retry threshold", pluginConfigFilePath);
+            } catch (IOException e) {
+                log.error("IO Exception when reading config file", e);
+            }
+        }
+
         ClientFullSyncAndSubscriptionTask(LogReplicationListener listener, CorfuStore corfuStore,
                                           String namespace, Map<String, String> nsToStreamTags,
                                           Map<String, List<String>> nsToTableName, int bufferSize) {
+            readConfig();
             this.listener = listener;
             this.corfuStore = corfuStore;
             this.namespace = namespace;
