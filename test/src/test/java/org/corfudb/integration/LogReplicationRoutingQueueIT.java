@@ -9,6 +9,7 @@ import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicat
 import org.corfudb.runtime.CorfuOptions;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LRFullStateReplicationContext;
+import org.corfudb.runtime.LRSiteDiscoveryListener;
 import org.corfudb.runtime.LiteRoutingQueueListener;
 import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.Queue;
@@ -26,6 +27,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.UUID;
 
@@ -61,7 +63,6 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
 
     @Test
     public void testRoutingQueueReplication() throws Exception {
-
         // Register client and setup initial group destinations mapping
         CorfuRuntime clientRuntime = getClientRuntime();
         CorfuStore clientCorfuStore = new CorfuStore(clientRuntime);
@@ -168,6 +169,74 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
         }
     }
 
+    @Test
+    public void testRoutingQueue2way() throws Exception {
+
+        // Register client and setup initial group destinations mapping
+        CorfuRuntime clientRuntime = getClientRuntime();
+        CorfuStore clientCorfuStore = new CorfuStore(clientRuntime);
+        String sourceSiteId = DefaultClusterConfig.getSourceClusterIds().get(0);
+        final String clientName = RoutingQueueSenderClient.DEFAULT_ROUTING_QUEUE_CLIENT;
+
+        RoutingQueueSenderClient queueSenderClient = new RoutingQueueSenderClient(clientCorfuStore, clientName);
+        // SnapshotProvider implements RoutingQueueSenderClient.LRTransmitterReplicationModule
+        SnapshotProvider snapshotProvider = new SnapshotProvider(clientCorfuStore);
+        queueSenderClient.startLRSnapshotTransmitter(snapshotProvider); // starts a listener on event table
+
+        // Also start a Site Discovery Service on the Source Cluster that listens for new sites & starts up
+        // RoutingQueueListeners when a sink comes up
+        RoutingQSiteDiscoverer remoteSiteDiscoverer = new RoutingQSiteDiscoverer(clientCorfuStore,
+                LogReplication.ReplicationModel.ROUTING_QUEUES);
+
+        // Start up Full Sync providers on both sink sites to test reverse replication
+        sinkCorfuStores.forEach(sinkCorfuStore -> {
+            RoutingQueueSenderClient sinkSideQsender = null;
+            try {
+                sinkSideQsender = new RoutingQueueSenderClient(sinkCorfuStore, clientName);
+            } catch (NoSuchMethodException | IllegalAccessException e) {
+                throw new RuntimeException(e);
+            }
+            // SnapshotProvider implements RoutingQueueSenderClient.LRTransmitterReplicationModule
+            SnapshotProvider sinkSideSnapProvider = new SnapshotProvider(sinkCorfuStore);
+            sinkSideQsender.startLRSnapshotTransmitter(sinkSideSnapProvider); // starts a listener on event table
+        });
+
+        // Open queue on sink
+        try {
+            log.info("Sink Queue name: {}", REPLICATED_RECV_Q_PREFIX+sourceSiteId);
+            Table<Queue.CorfuGuidMsg, Queue.RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg> replicatedQueueSink
+                    = sinkCorfuStores.get(0).openQueue(CORFU_SYSTEM_NAMESPACE,
+                    REPLICATED_RECV_Q_PREFIX+sourceSiteId,
+                    Queue.RoutingTableEntryMsg.class, TableOptions.builder().schemaOptions(CorfuOptions.SchemaOptions.newBuilder()
+                            .addStreamTag(REPLICATED_QUEUE_TAG).build()).build());
+
+            startReplicationServers();
+            while (!snapshotProvider.isSnapshotSent) {
+                Thread.sleep(5000);
+            }
+
+            // Test forward replication source -> sink
+            RoutingQueueListener listener = new RoutingQueueListener(sinkCorfuStores.get(0),
+                    sourceSiteId);
+            sinkCorfuStores.get(0).subscribeRoutingQListener(listener);
+
+            int numFullSyncMsgsGot = listener.snapSyncMsgCnt;
+            while (numFullSyncMsgsGot < 5) {
+                Thread.sleep(5000);
+                numFullSyncMsgsGot = listener.snapSyncMsgCnt;
+                log.info("Entries got on receiver {}", numFullSyncMsgsGot);
+            }
+            assertThat(listener.snapSyncMsgCnt).isEqualTo(5);
+
+            // Test reverse replication from the 2 sinks to the source
+            remoteSiteDiscoverer.iGot.values().forEach(sourceListener -> {
+                assertThat(sourceListener.snapSyncMsgCnt).isEqualTo(5);
+            });
+        } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     private void generateData(CorfuStore corfuStore, RoutingQueueSenderClient client) throws Exception {
         String namespace = CORFU_SYSTEM_NAMESPACE;
 
@@ -261,23 +330,37 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
 
         @Override
         protected boolean processUpdatesInSnapshotSync(List<Queue.RoutingTableEntryMsg> updates) {
-            log.info("LiteRoutingQueueListener::SnapshotSync:: got {} updates", updates.size());
+            log.info("RQListener got {} FULL_SYNC updates from site {}", updates.size(), sourceSiteId);
             snapSyncMsgCnt += updates.size();
 
             updates.forEach(u -> {
-                log.info("LitQListener:fullSyncMsg update {}", u);
+                log.info("RQListener got FULL_SYNC update {} from {}", u, sourceSiteId);
             });
             return true;
         }
 
         @Override
         protected boolean processUpdatesInLogEntrySync(List<Queue.RoutingTableEntryMsg> updates) {
-            log.info("LiteRoutingQueueListener::processUpdatesInLogEntrySync:: got {} updates", updates.size());
+            log.info("RQListener:: got LOG_ENTRY {} updates from site {}", updates.size(), sourceSiteId);
             logEntryMsgCnt += updates.size();
             updates.forEach(u -> {
-                log.info("LitQListener:logEntrySync update {}", u);
+                log.info("LitQListener:logEntrySync update {} from {}", u, sourceSiteId);
             });
             return true;
+        }
+    }
+
+    static class RoutingQSiteDiscoverer extends LRSiteDiscoveryListener {
+        public RoutingQSiteDiscoverer(CorfuStore corfuStore, LogReplication.ReplicationModel replicationModel) {
+            super(corfuStore, replicationModel);
+        }
+        public final Map<String, RoutingQueueListener> iGot = new HashMap<>();
+
+        @Override
+        public void onNewSiteUp(String siteId) {
+            if (!iGot.containsKey(siteId)) {
+                iGot.put(siteId, new RoutingQueueListener(corfuStore, siteId));
+            }
         }
     }
 }
