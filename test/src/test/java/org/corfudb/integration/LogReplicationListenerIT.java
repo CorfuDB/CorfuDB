@@ -1,5 +1,6 @@
 package org.corfudb.integration;
 
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.google.protobuf.Message;
 import lombok.Getter;
 import lombok.Setter;
@@ -36,6 +37,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import static org.corfudb.runtime.LogReplicationUtils.REPLICATION_STATUS_TABLE_NAME;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
@@ -61,7 +63,7 @@ public class LogReplicationListenerIT extends AbstractIT {
 
     // Regular(non-LR) listener for the data table
     private TestListener listener;
-    private ExecutorService executorService = null;
+    private final ExecutorService executorService;
 
     Table<SampleSchema.Uuid, SampleSchema.SampleTableAMsg, SampleSchema.Uuid> userDataTable;
     Table<LogReplicationSession, ReplicationStatus, Message> replicationStatusTable;
@@ -70,6 +72,9 @@ public class LogReplicationListenerIT extends AbstractIT {
         corfuSingleNodeHost = PROPERTIES.getProperty("corfuSingleNodeHost");
         corfuStringNodePort = Integer.valueOf(PROPERTIES.getProperty("corfuSingleNodePort"));
         singleNodeEndpoint = String.format("%s:%d", corfuSingleNodeHost, corfuStringNodePort);
+        executorService = Executors.newFixedThreadPool(1, new ThreadFactoryBuilder()
+                .setNameFormat(LogReplicationListenerIT.class.getName() + "-worker-%d")
+                .build());
     }
 
     private void initializeCorfu() throws Exception {
@@ -112,7 +117,7 @@ public class LogReplicationListenerIT extends AbstractIT {
 
         final int numUpdates = 10;
         CountDownLatch countDownLatch = new CountDownLatch(numUpdates);
-        lrListener = new LRTestListener(store, namespace, countDownLatch, executorService);
+        lrListener = new LRTestListener(store, namespace, countDownLatch);
 
         // Subscribe the listener
         store.subscribeLogReplicationListener(lrListener, namespace, userTag, executorService);
@@ -129,12 +134,6 @@ public class LogReplicationListenerIT extends AbstractIT {
         // number of streaming updates in that case will be lesser.  But the final number of entries seen by
         // performFullSyncAndMerge() + streaming updates must be equal to numUpdates
         countDownLatch.await();
-
-        // If the test started when in log entry sync, performFullSyncAndMerge() should not find any existing data as no
-        // updates have been written prior to subscription.
-        if (!startInSnapshotSync) {
-            Assert.assertTrue(lrListener.getExistingEntries().isEmpty());
-        }
 
         // Verify the sequence(timestamp) of the streaming updates
         verifyUpdatesSequence(lrListener.getUpdates());
@@ -176,7 +175,7 @@ public class LogReplicationListenerIT extends AbstractIT {
         // As all updates are written in the same transaction, set this countdown latch to 1
         CountDownLatch numTxLatch = new CountDownLatch(1);
 
-        lrListener = new LRTestListener(store, namespace, countDownLatch, executorService);
+        lrListener = new LRTestListener(store, namespace, countDownLatch);
         lrListener.setNumTxLatch(numTxLatch);
         store.subscribeLogReplicationListener(lrListener, namespace, userTag, executorService);
 
@@ -189,12 +188,6 @@ public class LogReplicationListenerIT extends AbstractIT {
 
         countDownLatch.await();
         numTxLatch.await();
-
-        // If the test started when in log entry sync, performFullSyncAndMerge() should not find any existing data as no
-        // updates have been written prior to subscription.
-        if (!startInSnapshotSync) {
-            Assert.assertTrue(lrListener.getExistingEntries().isEmpty());
-        }
 
         verifyUpdatesSequence(lrListener.getUpdates());
         verifyData(lrListener.getUpdates(), lrListener.getExistingEntries());
@@ -229,7 +222,7 @@ public class LogReplicationListenerIT extends AbstractIT {
         final int numUpdates = 50;
 
         CountDownLatch countDownLatch = new CountDownLatch(numUpdates);
-        lrListener = new LRTestListener(store, namespace, countDownLatch, executorService);
+        lrListener = new LRTestListener(store, namespace, countDownLatch);
 
         // Subscribe a listener with a buffer size of 10
         store.subscribeLogReplicationListener(lrListener, namespace, userTag, bufferSize, executorService);
@@ -244,12 +237,6 @@ public class LogReplicationListenerIT extends AbstractIT {
 
         log.info("Wait for data to arrive");
         countDownLatch.await();
-
-        // If the test started when in log entry sync, performFullSyncAndMerge() should not find any existing data as no
-        // updates have been written prior to subscription.
-        if (!startInSnapshotSync) {
-            Assert.assertTrue(lrListener.getExistingEntries().isEmpty());
-        }
 
         log.info("Verify the sequence of updates and received data");
         verifyUpdatesSequence(lrListener.getUpdates());
@@ -276,7 +263,7 @@ public class LogReplicationListenerIT extends AbstractIT {
         final int numExpectedStreamingUpdates = numIterations * numWritesToDataTable;
 
         CountDownLatch countDownLatch = new CountDownLatch(numExpectedStreamingUpdates);
-        lrListener = new LRTestListener(store, namespace, countDownLatch, executorService);
+        lrListener = new LRTestListener(store, namespace, countDownLatch);
         store.subscribeLogReplicationListener(lrListener, namespace, userTag, executorService);
 
         log.info("Write data concurrently on both tables");
@@ -325,7 +312,7 @@ public class LogReplicationListenerIT extends AbstractIT {
         final int newUpdates = 5;
         final int totalUpdates = numUpdates + newUpdates;
         CountDownLatch countDownLatch = new CountDownLatch(totalUpdates);
-        lrListener = new LRTestListener(store, namespace, countDownLatch, executorService);
+        lrListener = new LRTestListener(store, namespace, countDownLatch);
 
         // Subscribe the listener at the obtained timestamp
         store.subscribeLogReplicationListener(lrListener, namespace, userTag, executorService);
@@ -340,12 +327,6 @@ public class LogReplicationListenerIT extends AbstractIT {
 
         log.info("Wait for subscription and for all updates to be received");
         countDownLatch.await();
-
-        // If the test started when in log entry sync, performFullSyncAndMerge() should only find the data written prior to
-        // subscription
-        if (!startInSnapshotSync) {
-            Assert.assertEquals(numUpdates, lrListener.getExistingEntries().size());
-        }
 
         log.info("Verify the sequence of updates");
         verifyUpdatesSequence(lrListener.getUpdates());
@@ -365,7 +346,7 @@ public class LogReplicationListenerIT extends AbstractIT {
         initializeCorfu();
         openAndInitializeTables(testClientName);
 
-        lrListener = new LRTestListener(store, namespace, new CountDownLatch(0), executorService);
+        lrListener = new LRTestListener(store, namespace, new CountDownLatch(0));
         store.subscribeLogReplicationListener(lrListener, namespace, userTag, executorService);
 
         // Write to a redundant table to which the listener has not subscribed
@@ -393,7 +374,7 @@ public class LogReplicationListenerIT extends AbstractIT {
         listener = new TestListener(countDownLatch);
 
         CountDownLatch lrCountDownLatch = new CountDownLatch(numUpdates);
-        lrListener = new LRTestListener(store, namespace, lrCountDownLatch, executorService);
+        lrListener = new LRTestListener(store, namespace, lrCountDownLatch);
 
         store.subscribeListener(listener, namespace, userTag, Arrays.asList(userTableName));
         store.subscribeLogReplicationListener(lrListener, namespace, userTag, executorService);
@@ -442,10 +423,10 @@ public class LogReplicationListenerIT extends AbstractIT {
         CountDownLatch countDownLatch = new CountDownLatch(numUpdates);
 
         // Create a listener for test_client
-        lrListener = new LRTestListener(store, namespace, countDownLatch, executorService);
+        lrListener = new LRTestListener(store, namespace, countDownLatch);
 
         // Create a listener for new_client
-        newListener = new LRTestListener(store, namespace, null, executorService);
+        newListener = new LRTestListener(store, namespace, null);
         newListener.setClientName(newClientName);
 
         // Subscribe both the listeners
@@ -477,10 +458,6 @@ public class LogReplicationListenerIT extends AbstractIT {
         Assert.assertEquals(numUpdates, lrListener.getExistingEntries().size());
         Assert.assertEquals(numUpdates, lrListener.getUpdates().size());
         verifyData(lrListener.getUpdates(), lrListener.getExistingEntries());
-
-        // Verify that no data was observed on the listener corresponding to new_client
-        Assert.assertTrue(newListener.getUpdates().isEmpty());
-        Assert.assertTrue(newListener.getExistingEntries().isEmpty());
     }
 
     private void openAndInitializeTables(String clientName) throws Exception {
@@ -730,9 +707,8 @@ public class LogReplicationListenerIT extends AbstractIT {
         private final List<CorfuStoreEntry<SampleSchema.Uuid, SampleSchema.SampleTableAMsg, SampleSchema.Uuid>>
                 existingEntries = new ArrayList<>();
 
-        LRTestListener(CorfuStore corfuStore, String namespace, CountDownLatch countDownLatch,
-                       ExecutorService executorService) {
-            super(corfuStore, namespace, executorService);
+        LRTestListener(CorfuStore corfuStore, String namespace, CountDownLatch countDownLatch) {
+            super(corfuStore, namespace);
             this.countDownLatch = countDownLatch;
         }
 

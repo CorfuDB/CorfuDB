@@ -12,15 +12,12 @@ import org.corfudb.runtime.collections.CorfuStreamEntry;
 import org.corfudb.runtime.collections.StreamListener;
 import org.corfudb.runtime.collections.TableSchema;
 import org.corfudb.runtime.collections.TxnContext;
-import org.corfudb.runtime.view.Address;
 import javax.annotation.Nonnull;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 import static org.corfudb.runtime.LogReplicationUtils.REPLICATION_STATUS_TABLE_NAME;
@@ -40,24 +37,9 @@ import static org.corfudb.runtime.LogReplicationUtils.REPLICATION_STATUS_TABLE_N
  */
 @Slf4j
 public abstract class LogReplicationListener implements StreamListener {
-
-    // Indicates if a full sync on client tables was performed during subscription.  A full sync will not be
-    // performed if a snapshot sync is ongoing.
-    @Getter
-    private final AtomicBoolean clientFullSyncPending = new AtomicBoolean(true);
-
     // This variable tracks if a snapshot sync is ongoing
     @Getter
     private final AtomicBoolean snapshotSyncInProgress = new AtomicBoolean(false);
-
-    // Timestamp at which the client performed a full sync.  Any updates below this timestamp must be ignored.
-    // At the time of subscription, a full sync cannot be performed if LR Snapshot Sync is in progress.  Full Sync is
-    // performed when this ongoing snapshot sync completes.  The listener, however, can get updates before this full
-    // sync.  So we need to maintain this timestamp and ignore any updates below it.
-    @Getter
-    private final AtomicLong clientFullSyncTimestamp = new AtomicLong(Address.NON_ADDRESS);
-
-    private ExecutorService fullSyncExecutorService;
 
     private final CorfuStore corfuStore;
     private final String namespace;
@@ -66,13 +48,10 @@ public abstract class LogReplicationListener implements StreamListener {
      * Special LogReplication listener which a client creates to receive ordered updates for replicated data.
      * @param corfuStore Corfu Store used on the client
      * @param namespace Namespace of the client's tables
-     * @param fullSyncExecutorService An executor service/thread where client full sync will run
      */
-    public LogReplicationListener(CorfuStore corfuStore, @Nonnull String namespace,
-                                  @Nonnull ExecutorService fullSyncExecutorService) {
+    public LogReplicationListener(CorfuStore corfuStore, @Nonnull String namespace) {
         this.corfuStore = corfuStore;
         this.namespace = namespace;
-        this.fullSyncExecutorService = fullSyncExecutorService;
     }
 
     /**
@@ -81,16 +60,6 @@ public abstract class LogReplicationListener implements StreamListener {
      * @param results is a map of stream UUID -> list of entries of this stream.
      */
     public final void onNext(CorfuStreamEntries results) {
-        // Ignore any updates which arrive before the client's full sync completes
-        if (clientFullSyncPending.get()) {
-            return;
-        }
-
-        // If this update came before the client's full sync timestamp, ignore it.
-        if (results.getTimestamp().getSequence() <= clientFullSyncTimestamp.get()) {
-            return;
-        }
-
         Set<String> tableNames =
                 results.getEntries().keySet().stream().map(schema -> schema.getTableName()).collect(Collectors.toSet());
 

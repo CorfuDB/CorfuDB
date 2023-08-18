@@ -6,20 +6,20 @@ import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
-import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.runtime.LogReplication.LogReplicationSession;
+import org.corfudb.runtime.LogReplication.ReplicationStatus;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStoreEntry;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
-import org.corfudb.runtime.LogReplication.LogReplicationSession;
-import org.corfudb.runtime.LogReplication.ReplicationStatus;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.RetryExhaustedException;
 import org.corfudb.runtime.exceptions.StreamingException;
 import org.corfudb.runtime.exceptions.SubscribeMaxRetryException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.util.retry.ExponentialBackoffRetry;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.RetryNeededException;
@@ -27,9 +27,13 @@ import org.corfudb.util.retry.RetryNeededException;
 import javax.annotation.Nonnull;
 import java.lang.reflect.InvocationTargetException;
 import java.time.Duration;
+import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.function.Consumer;
@@ -51,21 +55,62 @@ public final class LogReplicationUtils {
     private LogReplicationUtils() { }
 
     public static void subscribe(@Nonnull LogReplicationListener listener, @Nonnull String namespace,
-                          @Nonnull String streamTag, @Nonnull List<String> tablesOfInterest, int bufferSize,
-                          CorfuStore corfuStore, ExecutorService clientExecutorService) {
-        log.info("Client subscription process has started at timestamp: {}", getTimestamp(corfuStore).getSequence());
-        attemptClientFullSync(listener, corfuStore, namespace, streamTag,
-                tablesOfInterest, bufferSize, clientExecutorService);
+                                 @Nonnull String streamTag, @Nonnull List<String> tablesOfInterest, int bufferSize,
+                                 CorfuStore corfuStore, ExecutorService clientExecutorService) {
+        log.info("Client subscription process has started.");
+
+        Map<String, List<String>> nsToTableName = new HashMap<>();
+        nsToTableName.put(namespace, tablesOfInterest);
+        nsToTableName.put(CORFU_SYSTEM_NAMESPACE, Arrays.asList(REPLICATION_STATUS_TABLE_NAME));
+
+        Map<String, String> nsToStreamTags = new HashMap<>();
+        nsToStreamTags.put(namespace, streamTag);
+        nsToStreamTags.put(CORFU_SYSTEM_NAMESPACE, LR_STATUS_STREAM_TAG);
+
+        // The namespaces in both maps should be the same
+        Preconditions.checkState(Objects.equals(nsToStreamTags.keySet(), nsToTableName.keySet()));
+
+        if (corfuStore.getRuntime().getTableRegistry().getStreamingManager().isListenerSubscribed(listener)) {
+            // Multiple subscribers subscribing to same namespace and table is allowed
+            // as long as the hashcode() and equals() method of the listeners are different.
+            throw new StreamingException("StreamingManager::subscribe: listener already registered "
+                    + listener, StreamingException.ExceptionCause.LISTENER_SUBSCRIBED);
+        }
+
+        TableRegistry registry = corfuStore.getRuntime().getTableRegistry();
+        for (Map.Entry<String, List<String>> nsToTableNamesEntry : nsToTableName.entrySet()) {
+            for (String tableName : nsToTableNamesEntry.getValue()) {
+                Table<Message, Message, Message> table;
+                try {
+                    table = registry.getTable(nsToTableNamesEntry.getKey(), tableName);
+                } catch (IllegalArgumentException e) {
+                    // The table was not opened using the client's runtime
+                    log.error("Replicated Table {} was not opened using the client runtime.  Please open the table " +
+                            "before subscribing", nsToTableNamesEntry.getKey(), tableName);
+                    throw new StreamingException(String.format("Please open the replicated table [%s:%s] using the " +
+                            "client runtime.", nsToTableNamesEntry.getKey(), tableName),
+                            StreamingException.ExceptionCause.SUBSCRIBE_ERROR);
+                }
+                String tagToValidate = nsToStreamTags.get(nsToTableNamesEntry.getKey());
+                UUID streamTagId = TableRegistry.getStreamIdForStreamTag(nsToTableNamesEntry.getKey(), tagToValidate);
+                if (!table.getStreamTags().contains(streamTagId)) {
+                    throw new IllegalArgumentException(String.format("Interested table: %s does not " +
+                            "have specified stream tag: %s", table.getFullyQualifiedTableName(), tagToValidate));
+                }
+            }
+        }
+
+        clientExecutorService.submit(new ClientFullSyncAndSubscriptionTask(listener, corfuStore,
+                namespace, nsToStreamTags, nsToTableName, bufferSize));
     }
 
-
-    private static class ClientFullSyncTask implements Callable<Void> {
+    private static class ClientFullSyncAndSubscriptionTask implements Callable<Void> {
 
         private LogReplicationListener listener;
         private CorfuStore corfuStore;
         private String namespace;
-        private String streamTag;
-        private List<String> tablesOfInterest;
+        private Map<String, String> nsToStreamTags;
+        private Map<String, List<String>> nsToTableName;
         private int bufferSize;
         private final Duration retryThreshold = Duration.ofMinutes(2);
 
@@ -74,13 +119,14 @@ public final class LogReplicationUtils {
             settings.setMaxRetryThreshold(retryThreshold);
         };
 
-        ClientFullSyncTask(LogReplicationListener listener, CorfuStore corfuStore, String namespace,
-                           @Nonnull String streamTag, @Nonnull List<String> tablesOfInterest, int bufferSize) {
+        ClientFullSyncAndSubscriptionTask(LogReplicationListener listener, CorfuStore corfuStore,
+                                          String namespace, Map<String, String> nsToStreamTags,
+                                          Map<String, List<String>> nsToTableName, int bufferSize) {
             this.listener = listener;
             this.corfuStore = corfuStore;
             this.namespace = namespace;
-            this.streamTag = streamTag;
-            this.tablesOfInterest = tablesOfInterest;
+            this.nsToStreamTags = nsToStreamTags;
+            this.nsToTableName = nsToTableName;
             this.bufferSize = bufferSize;
         }
 
@@ -91,9 +137,9 @@ public final class LogReplicationUtils {
 
             Table<LogReplicationSession, ReplicationStatus, Message> replicationStatusTable =
                     openReplicationStatusTable(corfuStore);
-
+           Long fullSyncTimestamp = null;
             try {
-                IRetry.build(ExponentialBackoffRetry.class, RetryExhaustedException.class, () -> {
+                fullSyncTimestamp = IRetry.build(ExponentialBackoffRetry.class, RetryExhaustedException.class, () -> {
 
                     try (TxnContext txnContext = corfuStore.txn(namespace)) {
                         // The transaction is started in the client's namespace and the Replication Status table resides in the
@@ -147,18 +193,7 @@ public final class LogReplicationUtils {
                             throw new RetryNeededException();
                         }
 
-                        // Subscribe from the snapshot timestamp of this transaction, i.e., log tail when the transaction started.
-                        // Subscribing from the commit address will result in missed updates which took place between the start
-                        // and end of the transaction because reads in a transaction observe updates only till the snapshot when it
-                        // started.
-                        long fullSyncTimestamp = txnContext.getTxnSequence();
-                        corfuStore.getRuntime().getTableRegistry().getStreamingManager().subscribeLogReplicationListener(
-                                listener, namespace, streamTag, tablesOfInterest, fullSyncTimestamp, bufferSize);
-
-                        // Update the flags and variables on the listener based on whether snapshot sync was in progress.
-                        // This must be done only after the transaction commits.
-                        setListenerParamsForSnapshotSync(listener, fullSyncTimestamp);
-                        return null;
+                        return txnContext.getTxnSequence();
                     } catch (TransactionAbortedException tae) {
                         if (tae.getCause() instanceof TrimmedException) {
                             // If the snapshot version where this transaction started has been evicted from the JVM's MVO
@@ -184,23 +219,28 @@ public final class LogReplicationUtils {
             } catch (RetryExhaustedException re) {
                 listener.onError(new SubscribeMaxRetryException());
             }
+
+            if (!Objects.isNull(fullSyncTimestamp)) {
+                // Subscribe from the snapshot timestamp of this transaction, i.e., log tail when the transaction started.
+                // Subscribing from the commit address will result in missed updates which took place between the start
+                // and end of the transaction because reads in a transaction observe updates only till the snapshot when it
+                // started.
+                corfuStore.getRuntime().getTableRegistry().getStreamingManager().subscribeLogReplicationListener(
+                        listener, nsToTableName, nsToStreamTags, fullSyncTimestamp, bufferSize);
+            } else {
+                // We should never reach here with unsubscribe/resubscribe implementation.
+                log.warn("Unable to subscribe listener!");
+            }
             return null;
         }
     }
 
-    private static CorfuStoreMetadata.Timestamp getTimestamp(CorfuStore corfuStore) {
-        Token token = corfuStore.getRuntime().getSequencerView().query().getToken();
-        return CorfuStoreMetadata.Timestamp.newBuilder()
-                .setEpoch(token.getEpoch())
-                .setSequence(token.getSequence())
-                .build();
-    }
-
-    public static void attemptClientFullSync(LogReplicationListener listener, CorfuStore corfuStore, String namespace,
-                                             @Nonnull String streamTag, @Nonnull List<String> tablesOfInterest,
-                                             int bufferSize, ExecutorService clientExecutorService) {
-        clientExecutorService.submit(new ClientFullSyncTask(listener, corfuStore, namespace,
-                streamTag, tablesOfInterest, bufferSize));
+    public static void attemptClientFullSync(LogReplicationListener listener, CorfuStore corfuStore,
+                                             String namespace, Map<String, String> nsToStreamTags,
+                                             Map<String, List<String>> nsToTableName, int bufferSize,
+                                             ExecutorService clientExecutorService) {
+        clientExecutorService.submit(new ClientFullSyncAndSubscriptionTask(listener, corfuStore,
+                namespace, nsToStreamTags, nsToTableName, bufferSize));
     }
 
     private static Table<LogReplicationSession, ReplicationStatus, Message> openReplicationStatusTable(CorfuStore corfuStore) {
@@ -216,10 +256,5 @@ public final class LogReplicationUtils {
 
     private static void incrementCount(Optional<Counter> counter) {
         counter.ifPresent(Counter::increment);
-    }
-
-    private static void setListenerParamsForSnapshotSync(LogReplicationListener listener, long fullSyncTimestamp) {
-        listener.getClientFullSyncTimestamp().set(fullSyncTimestamp);
-        listener.getClientFullSyncPending().set(false);
     }
 }
