@@ -30,7 +30,6 @@ import java.util.NavigableSet;
 import java.util.Optional;
 import java.util.TreeSet;
 import java.util.UUID;
-import java.util.concurrent.ExecutorService;
 
 /**
  * CorfuStore is a protobuf API layer that provides all the features of CorfuDB.
@@ -409,16 +408,15 @@ public class CorfuStore {
      * Note: If memory is a consideration, consider using the other version of this API which takes a custom buffer
      * size for updates.
      *
-     * @param streamListener log replication client listener
-     * @param namespace      namespace of the replicated tables
-     * @param streamTag      stream tag of the replicated tables
+     * @param streamListener  log replication client listener
+     * @param namespace       namespace of the replicated tables
+     * @param streamTag       stream tag of the replicated tables
      */
     public void subscribeLogReplicationListener(@Nonnull LogReplicationListener streamListener,
-                                                @Nonnull String namespace, @Nonnull String streamTag,
-                                                ExecutorService executorService) {
+                                                @Nonnull String namespace, @Nonnull String streamTag) {
         int uninitializedBufferSize = 0;
         LogReplicationUtils.subscribe(streamListener, namespace, streamTag, getTablesOfInterest(namespace, streamTag),
-                uninitializedBufferSize, this, executorService);
+                uninitializedBufferSize, this);
     }
 
     /**
@@ -437,10 +435,9 @@ public class CorfuStore {
      * @param bufferSize       maximum size of buffered transaction entries
      */
     public void subscribeLogReplicationListener(@Nonnull LogReplicationListener streamListener,
-                                                @Nonnull String namespace, @Nonnull String streamTag,
-                                                int bufferSize, ExecutorService executorService) {
+                                                @Nonnull String namespace, @Nonnull String streamTag, int bufferSize) {
         LogReplicationUtils.subscribe(streamListener, namespace, streamTag, getTablesOfInterest(namespace, streamTag),
-                bufferSize, this, executorService);
+                bufferSize, this);
     }
 
     /**

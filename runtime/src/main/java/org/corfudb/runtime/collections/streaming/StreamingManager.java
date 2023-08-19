@@ -96,10 +96,10 @@ public class StreamingManager {
      * 'streamTag' within the application namespace.
      *
      * @param streamListener   client listener for callback
-     * @param namespace       namespace of application tables on which updates should be received
-     * @param streamTag       only updates of application tables with the stream tag will be polled
-     * @param tablesOfInterest only updates from these tables will be returned
+     * @param nsToTableName    map of table namespace to list of tables of interest
+     * @param nsToStreamTags   map of table namespace to the stream tag polled
      * @param lastAddress      last processed address, new notifications start from lastAddress + 1
+     * @param bufferSize       maximum size of buffered transaction entries
      */
     public void subscribeLogReplicationListener(@Nonnull LogReplicationListener streamListener, Map<String, List<String>> nsToTableName,
                                                 Map<String, String> nsToStreamTags, long lastAddress, int bufferSize) {
@@ -143,11 +143,21 @@ public class StreamingManager {
     /**
      * Checks if a listener has already been subscribed.
      *
-     * @param streamListener client listener to validate subscription.
-     * @return true if listener has already been subscribed.
+     * @param streamListener client listener to validate subscription
+     * @return true if listener has already been subscribed
      */
     public boolean isListenerSubscribed(@Nonnull StreamListener streamListener) {
         return this.scheduler.containsTask(streamListener);
+    }
+
+    /**
+     * Validates the buffer size of a stream.
+     *
+     * @param bufferSize bufferSize
+     * @return true if stream has a sufficiently large buffer size
+     */
+    public boolean validateBufferSize(int bufferSize) {
+        return this.scheduler.hasEnoughBuffer(bufferSize == 0 ? defaultBufferSize : bufferSize);
     }
 
     /**

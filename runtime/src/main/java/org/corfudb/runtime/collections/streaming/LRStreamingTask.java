@@ -7,6 +7,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.StreamListener;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableSchema;
+import org.corfudb.runtime.exceptions.StreamingException;
 import org.corfudb.runtime.view.TableRegistry;
 import javax.annotation.Nonnull;
 import java.util.ArrayList;
@@ -56,7 +57,23 @@ public class LRStreamingTask<K extends Message, V extends Message, M extends Mes
             for (String tableName : nsToTableNamesEntry.getValue()) {
                 UUID streamId = CorfuRuntime.getStreamID(TableRegistry.getFullyQualifiedTableName(
                         nsToTableNamesEntry.getKey(), tableName));
-                Table<K, V, M> table = registry.getTable(nsToTableNamesEntry.getKey(), tableName);
+                Table<K, V, M> table;
+                try {
+                    table = registry.getTable(nsToTableNamesEntry.getKey(), tableName);
+                } catch (IllegalArgumentException e) {
+                    // The table was not opened using the client's runtime
+                    log.error("Replicated Table {} was not opened using the client runtime.  Please open the table " +
+                            "before subscribing", nsToTableNamesEntry.getKey(), tableName);
+                    throw new StreamingException(String.format("Please open the replicated table [%s:%s] using the " +
+                            "client runtime.", nsToTableNamesEntry.getKey(), tableName),
+                            StreamingException.ExceptionCause.SUBSCRIBE_ERROR);
+                }
+                String streamTag = nsToStreamTag.get(nsToTableNamesEntry.getKey());
+                UUID streamTagId = TableRegistry.getStreamIdForStreamTag(nsToTableNamesEntry.getKey(), streamTag);
+                if (!table.getStreamTags().contains(streamTagId)) {
+                    throw new IllegalArgumentException(String.format("Interested table: %s does not " +
+                            "have specified stream tag: %s", table.getFullyQualifiedTableName(), streamTag));
+                }
                 tableSchemas.put(streamId, new TableSchema<>(tableName, table.getKeyClass(), table.getValueClass(),
                         table.getMetadataClass()));
             }

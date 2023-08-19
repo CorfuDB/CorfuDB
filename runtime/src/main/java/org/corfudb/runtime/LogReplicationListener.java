@@ -1,6 +1,7 @@
 package org.corfudb.runtime;
 
 import com.google.common.base.Preconditions;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
@@ -17,6 +18,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
@@ -41,6 +44,10 @@ public abstract class LogReplicationListener implements StreamListener {
     @Getter
     private final AtomicBoolean snapshotSyncInProgress = new AtomicBoolean(false);
 
+    // Thread pool to perform client full sync asynchronously from subscription
+    @Getter
+    private final ExecutorService fullSyncExecutorService;
+
     private final CorfuStore corfuStore;
     private final String namespace;
 
@@ -52,6 +59,14 @@ public abstract class LogReplicationListener implements StreamListener {
     public LogReplicationListener(CorfuStore corfuStore, @Nonnull String namespace) {
         this.corfuStore = corfuStore;
         this.namespace = namespace;
+        this.fullSyncExecutorService = Executors.newSingleThreadExecutor(new
+                ThreadFactoryBuilder().setNameFormat("client-full-sync-worker-%d")
+                .build());
+
+        // Shutdown listener threads on JVM restarts
+        Thread shutdownThread = new Thread(fullSyncExecutorService::shutdown);
+        shutdownThread.setName("full-sync-pool-shutdown-thread");
+        Runtime.getRuntime().addShutdownHook(shutdownThread);
     }
 
     /**
