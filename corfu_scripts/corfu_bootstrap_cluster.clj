@@ -9,9 +9,10 @@
 (import java.util.UUID)
 (def usage "corfu_bootstrap_cluster, setup the Corfu cluster from nodes that have NOT been previously bootstrapped.
 Usage:
-  corfu_bootstrap_cluster -l <layout> --connection-timeout <timeout> [-e [-u <keystore> -f <keystore_password_file>] [-r <truststore> -w <truststore_password_file>] [-g -o <username_file> -j <password_file>]]
+  corfu_bootstrap_cluster -l <layout> --connection-timeout <timeout> [-e [-u <keystore> -f <keystore_password_file> -n <node>] [-r <truststore> -w <truststore_password_file>] [-g -o <username_file> -j <password_file>]]
 Options:
   -l <layout>, --layout <layout>                                                         JSON layout file to be bootstrapped.
+  -n <node>, --node <node>                                                               Particular node to bootstrap.
   --connection-timeout <timeout>                                                         Connection timeout in milliseconds.
   -e, --enable-tls                                                                       Enable TLS.
   -u <keystore>, --keystore=<keystore>                                                   Path to the key store.
@@ -35,6 +36,15 @@ Options:
 (defn create-router-map [layout]
       (into (sorted-map) (map configure-router (.getLayoutServers layout))))
 
+(defn create-router-map-for-server [server]
+      (apply hash-map (configure-router server)))
+
+(defn bootstrap-node-with-layout [layout-file server]
+      (do (let [router-map (create-router-map-for-server server)
+                new-layout (Layout/fromJSONString (str (slurp layout-file)))]
+               (BootstrapUtil/bootstrapWithRouterMap router-map new-layout retries timeout))
+          (println "New layout installed successfully for this node!")))
+
 (defn bootstrap-cluster [layout-file]
       (do ; read in the new layout
         (let [unvalidated-layout (Layout/fromJSONString (str (slurp layout-file)))]
@@ -56,5 +66,7 @@ Options:
 
 
 ; determine whether to read or write
-(cond (.. localcmd (get "--layout")) (bootstrap-cluster (.. localcmd (get "--layout")))
+(cond
+  (.. localcmd (get "--node")) (bootstrap-node-with-layout (.. localcmd (get "--layout")) (.. localcmd (get "--node")))
+  (.. localcmd (get "--layout")) (bootstrap-cluster (.. localcmd (get "--layout")))
       :else (println "Unknown arguments."))

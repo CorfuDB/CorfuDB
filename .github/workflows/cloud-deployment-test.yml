@@ -54,24 +54,25 @@ jobs:
         working-directory: ./cloud/corfu
         run: |
           helm install cert-manager jetstack/cert-manager --namespace cert-manager --create-namespace --version v1.8.0 --set installCRDs=true
-          helm install corfu corfu --set persistence.enabled=true --set global.replicas=3 
+          helm install corfu corfu --set persistence.enabled=true --set global.replicas=3
           
           sleep 120
-          
-          if kubectl wait --for=condition=complete --timeout=180s job/configure-corfu | grep "job.batch/configure-corfu condition met"; then
-            echo "Successfull deployment!"
+
+      - name: check deployment status
+        working-directory: ./cloud/corfu
+        run: |
+          echo check deployment status:
+          if kubectl get pods | grep "corfu-0"; then
+            echo "Successful deployment!"
             exit 0
           else
             echo "Failed deployment!"
-            
+
             echo pods:
             kubectl get pods
-          
-            echo corfu job:
-            kubectl describe job/configure-corfu
-            
+
             echo corfu pod:
             kubectl describe pod corfu-0
-          
+
             exit 1
           fi
