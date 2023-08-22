@@ -337,11 +337,19 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
             log.info("Total Payload Size = {}.  LR Metadata Size = {}", totalPayloadSize, lrMetadataSize);
             totalPayloadSize = 0;
             lrMetadataSize = 0;
+            if (getSnapshot() != null) {
+                getSnapshot().close();
+                setSnapshot(null);
+            }
         }
 
         @Override
         public void cancel() {
             // TODO: Need to figure out what might be LR's equivalent of a full sync cancellation?
+            if (getSnapshot() != null) {
+                getSnapshot().close();
+                setSnapshot(null);
+            }
         }
     }
 
