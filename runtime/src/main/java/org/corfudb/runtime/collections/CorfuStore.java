@@ -5,17 +5,20 @@ import com.google.protobuf.Message;
 import io.micrometer.core.instrument.Timer;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
 import org.corfudb.runtime.LiteRoutingQueueListener;
 import org.corfudb.runtime.LogReplicationListener;
 import org.corfudb.runtime.LogReplicationUtils;
 import org.corfudb.runtime.Queue;
+import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
@@ -24,6 +27,7 @@ import org.corfudb.util.Utils;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.lang.reflect.InvocationTargetException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
@@ -230,6 +234,26 @@ public class CorfuStore {
                 namespace,
                 isolationLevel,
                 tables);
+    }
+
+    public static <K extends Message, V extends Message, M extends Message>
+    ScopedTransaction snapshotFederatedTables(String namespace, CorfuRuntime runtime) {
+        ArrayList<Table> federatedTables = new ArrayList<>();
+        runtime.getTableRegistry().getAllOpenTables().forEach(t ->
+        {
+            String tableNameWithoutNs = StringUtils.substringAfter(t.getFullyQualifiedTableName(),
+                    t.getNamespace()+"$");
+            CorfuStoreMetadata.TableName tableName = CorfuStoreMetadata.TableName.newBuilder()
+                    .setNamespace(t.getNamespace())
+                    .setTableName(tableNameWithoutNs).build();
+            CorfuRecord<CorfuStoreMetadata.TableDescriptors, CorfuStoreMetadata.TableMetadata> tableRecord =
+                    runtime.getTableRegistry().getRegistryTable().get(tableName);
+            if (tableRecord.getMetadata().getTableOptions().getIsFederated()) {
+                federatedTables.add(t);
+            }
+        });
+        return new ScopedTransaction(runtime, namespace,
+                IsolationLevel.snapshot(), federatedTables.toArray(new Table[federatedTables.size()]));
     }
 
     /**
