@@ -610,8 +610,8 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
      * @return true if the session is a connection starter, false otherwise
      */
     public boolean isConnectionStarterForSession(LogReplicationSession session) {
-        return topology.getRemoteClusterEndpoints().containsKey(session.getSinkClusterId()) ||
-                topology.getRemoteClusterEndpoints().containsKey(session.getSourceClusterId());
+        return topology.getRemoteClusterEndpoints().containsKey(session.getSinkClusterId());
+        // || topology.getRemoteClusterEndpoints().containsKey(session.getSourceClusterId());
     }
 
     private void removeSessionInfo(LogReplicationSession session) {
