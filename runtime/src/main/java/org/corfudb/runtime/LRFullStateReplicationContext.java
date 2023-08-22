@@ -1,6 +1,7 @@
 package org.corfudb.runtime;
 
 import org.corfudb.runtime.LogReplication.ReplicationEvent.ReplicationEventType;
+import org.corfudb.runtime.collections.ScopedTransaction;
 import org.corfudb.runtime.collections.TxnContext;
 
 import javax.annotation.Nullable;
@@ -14,7 +15,18 @@ public interface LRFullStateReplicationContext {
      */
      TxnContext getTxn();
 
-     /**
+    /**
+     * This can be used to determine if a snapshot was already set for this context
+     * @return the snapshot if set, null if not
+     */
+     ScopedTransaction getSnapshot();
+
+    /**
+     * Caller needs to set this value in with the snapshot of all the tables to be sent
+     */
+    void setSnapshot(ScopedTransaction snapshot);
+
+    /**
       * Returns destination site ID.
       * Data is transmitted from this site.
       *
