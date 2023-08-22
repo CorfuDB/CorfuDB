@@ -4,6 +4,7 @@ package org.corfudb.infrastructure.datastore;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 
+import java.lang.reflect.Type;
 import java.util.Optional;
 
 /**
@@ -79,7 +80,7 @@ public interface KvDataStore {
         /**
          * The class of the value in a data store
          */
-        private final Class<T> dataType;
+        private final Type dataType;
 
         /**
          * Build kv record
@@ -89,7 +90,7 @@ public interface KvDataStore {
          * @param <R> class type
          * @return kv record
          */
-        public static <R> KvRecord<R> of(String prefix, String key, Class<R> dataType) {
+        public static <R> KvRecord<R> of(String prefix, String key, Type dataType) {
             return new KvRecord<>(prefix, key, dataType);
         }
 

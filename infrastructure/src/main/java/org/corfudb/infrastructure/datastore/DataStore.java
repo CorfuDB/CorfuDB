@@ -18,6 +18,7 @@ import org.corfudb.util.JsonUtils;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.io.IOException;
+import java.lang.reflect.Type;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.CopyOption;
@@ -124,7 +125,7 @@ public class DataStore implements KvDataStore {
                 .build();
     }
 
-    private <T> T load(Class<T> tClass, String key) {
+    private <T> T load(Type type, String key) {
         try {
             Path path = Paths.get(logDirPath, key + EXTENSION);
             if (!Files.isReadable(path)) {
@@ -138,7 +139,7 @@ public class DataStore implements KvDataStore {
             }
 
             String json = new String(bytes, 4, bytes.length - 4);
-            return JsonUtils.parser.fromJson(json, tClass);
+            return JsonUtils.parser.fromJson(json, type);
         } catch (IOException e) {
             throw new DataCorruptionException(e);
         }

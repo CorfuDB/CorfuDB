@@ -10,13 +10,21 @@ import org.corfudb.infrastructure.ResourceQuota;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.log.FileSystemAgent.FileSystemConfig;
 import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.runtime.exceptions.LogUnitException;
 import org.corfudb.runtime.exceptions.OverwriteCause;
 import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.exceptions.SerializerException;
 import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.view.stream.StreamAddressSpace;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileFilter;
 import java.io.IOException;
@@ -25,7 +33,9 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -151,27 +161,51 @@ public class StreamLogFiles implements StreamLog {
         log.info("initStreamLogDirectory: initialized {}", logDir);
     }
 
+    private void initializeLogMetadata() {
+        initializeLogMetadata(false);
+    }
+
     /**
-     * This method will scan the log (i.e. read all log segment files)
-     * on this LU and create a map of stream offsets and the global
-     * addresses seen.
+     * This method will scan the log (i.e. persisted log metadata and
+     * read all log segment files) on this LU and create a map of stream
+     * offsets and the global addresses seen.
      * <p>
      * consecutive segments from [startSegment, endSegment]
+     *
+     * @param reset if this part of a LU reset
      */
-    private void initializeLogMetadata() {
+
+    private void initializeLogMetadata(boolean reset) {
+        long start = System.currentTimeMillis();
+
         long startingSegment = getStartingSegment();
         long tailSegment = dataStore.getTailSegment();
+        long maxAddress = Address.MAX;
+        if (reset) {
+            // Only initialized LU can be reset, so global tail is available.
+            // In LU reset, the global tail has been rewound back to the committed tail.
+            maxAddress = logMetadata.getGlobalTail();
+        }
+        long highestTailLoaded = loadPersistedLogMetadata(maxAddress);
+        if (highestTailLoaded != Address.NON_ADDRESS) {
+            // Update global tail in case the persisted log metadata covers the entire address space
+            // of the log files, meaning that the following 'file scanning' will be skipped.
+            logMetadata.updateGlobalTail(highestTailLoaded);
 
-        long start = System.currentTimeMillis();
+            long highestSegmentLoaded = getSegmentId(highestTailLoaded);
+            startingSegment = Math.max(highestSegmentLoaded, startingSegment);
+        }
+
         // Scan the log in reverse, this will ease stream trim mark resolution (as we require the
         // END records of a checkpoint which are always the last entry in this stream)
         // Note: if a checkpoint END record is not found (i.e., incomplete) this data is not considered
         // for stream trim mark computation.
+        log.info("Scanning segment {} to {} to build the remaining address space.", startingSegment, tailSegment);
         for (long currentSegment = tailSegment; currentSegment >= startingSegment; currentSegment--) {
-            try (Segment segment = getSegmentHandleForAddress(currentSegment * RECORDS_PER_LOG_FILE + 1)) {
+            try (Segment segment = getSegmentHandleForSegment(currentSegment)) {
                 for (Long address : segment.getAddresses()) {
-                    // skip trimmed entries
-                    if (address < dataStore.getStartingAddress()) {
+                    // skip trimmed entries and loaded addresses
+                    if (address < dataStore.getStartingAddress() || address <= highestTailLoaded) {
                         continue;
                     }
                     LogData logEntry = read(address);
@@ -186,6 +220,81 @@ public class StreamLogFiles implements StreamLog {
         log.info("initializeStreamTails: took {} ms to load {}, log start {}", end - start, logMetadata, getTrimMark());
     }
 
+    /**
+     * Load log metadata (stream address space map and stream tail map) from
+     * persisted log metadata file for fast startup. Only addresses in range
+     * [startingAddress, maxAddress] are considered valid and are loaded.
+     * @param maxAddress load addresses up to this address (inclusive)
+     * @return the highest stream tail loaded
+     */
+    private Long loadPersistedLogMetadata(long maxAddress) {
+        long start = System.currentTimeMillis();
+        Map<UUID, String> streamAddressSpaceMap = sc.getLogUnitMetadata();
+        if (streamAddressSpaceMap == null) {
+            log.info("Unable to load persisted log metadata due to missing file.");
+            return Address.NON_ADDRESS;
+        }
+
+        AtomicLong numOfAddrLoaded = new AtomicLong(0L);
+        streamAddressSpaceMap.forEach((uuid, serializedAddressSpace) -> {
+            StreamAddressSpace streamAddressSpace;
+            byte[] decodedBytes = Base64.getDecoder().decode(serializedAddressSpace);;
+            ByteArrayInputStream bis = new ByteArrayInputStream(decodedBytes);
+            try (DataInputStream data = new DataInputStream(bis)) {
+                streamAddressSpace = StreamAddressSpace.deserialize(data);
+            } catch (IOException ex) {
+                throw new SerializerException("Unexpected error while deserializing StreamAddressSpaceMsg", ex);
+            }
+
+            // maxAddress: for LU reset, logs greater than maxAddress are deleted.
+            // startingAddress: in case trim happened after the last log metadata dump,
+            // skip loading the trimmed addresses in the slightly old log metadata.
+            long endAddress = dataStore.getStartingAddress() - 1; // end is exclusive
+            StreamAddressRange validRange = new StreamAddressRange(uuid, maxAddress, endAddress);
+            StreamAddressSpace validAddressSpace = streamAddressSpace.getAddressesInRange(validRange);
+
+            logMetadata.getStreamsAddressSpaceMap().put(uuid, validAddressSpace);
+            logMetadata.getStreamTails().put(uuid, validAddressSpace.getTail());
+
+            numOfAddrLoaded.addAndGet(validAddressSpace.size());
+        });
+
+        long highestTail = Collections.max(logMetadata.getStreamTails().values());
+        long end = System.currentTimeMillis();
+        log.info("Loaded {} valid addresses from persisted log metadata in {} ms. Highest stream tail loaded is {}",
+                numOfAddrLoaded, end-start, highestTail);
+
+        return highestTail;
+    }
+
+    /**
+     * Persist the current stream address space map on disk.
+     */
+    @Override
+    public void persistLogMetadata() {
+        log.info("Start persisting log metadata.");
+        long start = System.currentTimeMillis();
+
+        Map<UUID, String> streamAddressSpaceMap = new HashMap<>();
+        logMetadata.getStreamsAddressSpaceMap().forEach((uuid, streamAddressSpace) -> {
+            if (streamAddressSpace.size() > 0) {
+                try (ByteArrayOutputStream bos = new ByteArrayOutputStream()) {
+                    try (DataOutputStream dos = new DataOutputStream(bos)) {
+                        streamAddressSpace.serialize(dos);
+                        String base64Encoded = Base64.getEncoder().encodeToString(bos.toByteArray());
+                        streamAddressSpaceMap.put(uuid, base64Encoded);
+                    }
+                } catch (IOException ex) {
+                    throw new SerializerException("Unexpected error while serializing StreamAddressSpace", ex);
+                }
+            }
+        });
+        sc.setLogUnitMetadata(streamAddressSpaceMap);
+
+        long end = System.currentTimeMillis();
+        log.info("Persisted log metadata of {} streams in {} ms.}",
+                streamAddressSpaceMap.size(), end-start);
+    }
 
     @Override
     public boolean quotaExceeded() {
@@ -414,6 +523,14 @@ public class StreamLogFiles implements StreamLog {
         return address / RECORDS_PER_LOG_FILE;
     }
 
+    private long getFirstAddressInSegment(long segmentId) {
+        return segmentId * RECORDS_PER_LOG_FILE;
+    }
+
+    private long getLastAddressInSegment(long segmentId) {
+        return getFirstAddressInSegment(segmentId + 1) - 1;
+    }
+
     @Override
     public void append(List<LogData> range) {
 
@@ -618,27 +735,36 @@ public class StreamLogFiles implements StreamLog {
 
         try {
             long committedTail = getCommittedTail();
-            long latestSegment = getSegmentId(getLogTail());
-            long committedTailSegment = getSegmentId(committedTail);
-            for (long currSegmentId = committedTailSegment; currSegmentId <= latestSegment; currSegmentId++) {
-                // Close segments before deleting their corresponding log files
-                String segmentFilePath;
-                try (Segment sh = getSegmentHandleForSegment(currSegmentId)) {
-                    openSegments.remove(sh.id);
-                    segmentFilePath = sh.segmentFilePath;
+            long globalTail = getLogTail();
+            long newTailAddress = StreamLogDataStore.ZERO_ADDRESS;
+
+            if (committedTail < globalTail) {
+                // Delete all segments up to the committed tail's segment
+                long latestSegment = getSegmentId(globalTail);
+                long committedTailSegment = getSegmentId(committedTail);
+
+                for (long currSegmentId = committedTailSegment; currSegmentId <= latestSegment; currSegmentId++) {
+                    // Close segments before deleting their corresponding log files
+                    String segmentFilePath;
+                    try (Segment sh = getSegmentHandleForSegment(currSegmentId)) {
+                        openSegments.remove(sh.id);
+                        segmentFilePath = sh.segmentFilePath;
+                    }
+                    deleteFilesMatchingFilter(file -> file.getAbsolutePath().equals(segmentFilePath));
+                }
+                if (committedTailSegment > 0) {
+                    newTailAddress = getLastAddressInSegment(committedTailSegment - 1);
                 }
 
-                deleteFilesMatchingFilter(file -> file.getAbsolutePath().equals(segmentFilePath));
-            }
-
-            long newTailAddress = StreamLogDataStore.ZERO_ADDRESS;
-            if (committedTailSegment > 0) {
-                newTailAddress = committedTailSegment * RECORDS_PER_LOG_FILE + 1;
+            } else {
+                // Do not need to delete any segment
+                newTailAddress = globalTail;
             }
 
             logMetadata = new LogMetadata(dataStore);
-            logMetadata.syncTailSegment(newTailAddress);
-            initializeLogMetadata();
+            // Set force to true to regress the tail segment if needed
+            logMetadata.syncTailSegment(newTailAddress, true);
+            initializeLogMetadata(true);
             // would this lose the gauges pre-reset?
             removeLocalGauges();
         } finally {
