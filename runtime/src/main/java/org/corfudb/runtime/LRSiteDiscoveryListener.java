@@ -1,7 +1,6 @@
 package org.corfudb.runtime;
 
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.StringUtils;
 import org.corfudb.runtime.collections.CorfuStore;
 
 import java.util.HashSet;
@@ -49,8 +48,7 @@ public abstract class LRSiteDiscoveryListener {
     public void pollForNewSites() {
         corfuStore.getRuntime().getTableRegistry().listTables().forEach(tableName -> {
             if (tableName.getTableName().startsWith(LogReplicationUtils.REPLICATED_RECV_Q_PREFIX)) {
-                String siteId = StringUtils.substringAfter(tableName.getTableName(),
-                        LogReplicationUtils.REPLICATED_RECV_Q_PREFIX);
+                String siteId = tableName.getTableName().substring(LogReplicationUtils.REPLICATED_RECV_Q_PREFIX.length());
                 if (!knownSites.contains(siteId)) {
                     try {
                         log.info("Discovered new site {}", siteId);
