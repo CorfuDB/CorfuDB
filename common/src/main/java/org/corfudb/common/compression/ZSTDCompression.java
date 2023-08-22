@@ -1,15 +1,20 @@
 package org.corfudb.common.compression;
 
 import com.github.luben.zstd.Zstd;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 
 import java.nio.ByteBuffer;
 import java.util.Objects;
 
 import static com.google.common.base.Preconditions.checkArgument;
 
+@Slf4j
 public class ZSTDCompression implements Codec {
 
     private static final int DEFAULT_COMPRESSION_LEVEL = 3;
+    private static final int EXPECTED_COMPRESSION_RATIO = 4;
+    private static final int EXPECTED_MAX_PAYLOAD_SIZE = 100_000_000;
 
     private static ZSTDCompression INSTANCE = new ZSTDCompression();
 
@@ -27,6 +32,7 @@ public class ZSTDCompression implements Codec {
         checkArgument(uncompressed.hasRemaining());
 
         final int decompressedLength = uncompressed.remaining();
+        MicroMeterUtils.measure(decompressedLength, "logdata.decompressed.size");
         final int maxCompressedLength = (int) Zstd.compressBound(decompressedLength);
 
         byte[] compressed = new byte[maxCompressedLength + Integer.BYTES];
@@ -39,6 +45,12 @@ public class ZSTDCompression implements Codec {
 
         if (Zstd.isError(compressedLen)) {
             throw new IllegalStateException("Compression failed with error code " + compressedLen);
+        }
+
+        double compressionRatio = (double) decompressedLength/compressedLen;
+        MicroMeterUtils.measure(compressionRatio, "logdata.compression.ratio");
+        if (compressionRatio > EXPECTED_COMPRESSION_RATIO) {
+            log.warn("High compression ratio: {}", compressionRatio);
         }
 
         wrappedBuf.position((int) compressedLen + Integer.BYTES);
@@ -56,6 +68,9 @@ public class ZSTDCompression implements Codec {
         checkArgument(compressed.remaining() > Integer.BYTES);
 
         int decompressedSize = compressed.getInt();
+        if (decompressedSize > EXPECTED_MAX_PAYLOAD_SIZE) {
+            log.warn("Decompressed size of payload in bytes: {}", decompressedSize);
+        }
         byte[] restored = new byte[decompressedSize];
         ByteBuffer wrappedBuf = ByteBuffer.wrap(restored);
 
@@ -65,7 +80,6 @@ public class ZSTDCompression implements Codec {
         if (Zstd.isError(restoredBytes)) {
             throw new IllegalStateException("Decompression failed with error code " + restoredBytes);
         }
-
         wrappedBuf.position((int) restoredBytes);
         wrappedBuf.flip();
         return wrappedBuf;
