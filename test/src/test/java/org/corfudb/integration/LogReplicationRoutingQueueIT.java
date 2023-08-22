@@ -1,6 +1,7 @@
 package org.corfudb.integration;
 
 import com.google.protobuf.ByteString;
+import com.google.protobuf.Message;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.browser.CorfuStoreBrowserEditor;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
@@ -8,6 +9,7 @@ import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultC
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.runtime.CorfuOptions;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.ExampleSchemas;
 import org.corfudb.runtime.LRFullStateReplicationContext;
 import org.corfudb.runtime.LRSiteDiscoveryListener;
 import org.corfudb.runtime.LiteRoutingQueueListener;
@@ -15,11 +17,14 @@ import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.Queue;
 import org.corfudb.runtime.RoutingQueueSenderClient;
 import org.corfudb.runtime.collections.CorfuStore;
+import org.corfudb.runtime.collections.CorfuStoreEntry;
+import org.corfudb.runtime.collections.IsolationLevel;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
+import org.corfudb.runtime.proto.RpcCommon;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -265,6 +270,44 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
         }
     }
 
+    @Test
+    public void testRoutingQueueReplicationWithScopedTxn() throws Exception {
+        // Register client and setup initial group destinations mapping
+        CorfuRuntime clientRuntime = getClientRuntime();
+        CorfuStore clientCorfuStore = new CorfuStore(clientRuntime);
+        String clientName = "testClient";
+        String sourceSiteId = DefaultClusterConfig.getSourceClusterIds().get(0);
+        RoutingQueueSenderClient queueSenderClient = new RoutingQueueSenderClient(clientCorfuStore, clientName);
+        // SnapshotProvider implements RoutingQueueSenderClient.LRTransmitterReplicationModule
+        ScopedSnapshotProvider snapshotProvider = new ScopedSnapshotProvider(clientCorfuStore);
+        queueSenderClient.startLRSnapshotTransmitter(snapshotProvider); // starts a listener on event table
+
+        try {
+            RoutingQueueListener listener = new RoutingQueueListener(sinkCorfuStores.get(0),
+                    DefaultClusterConfig.getSourceClusterIds().get(0));
+            sinkCorfuStores.get(0).subscribeRoutingQListener(listener);
+            startReplicationServers();
+            while (!snapshotProvider.isSnapshotSent) {
+                Thread.sleep(5000);
+            }
+            generateData(clientCorfuStore, queueSenderClient);
+
+            int numLogEntriesReceived = listener.logEntryMsgCnt;
+            while (numLogEntriesReceived < 10) {
+                Thread.sleep(5000);
+                numLogEntriesReceived = listener.logEntryMsgCnt;
+                log.info("Entries got on receiver {}", numLogEntriesReceived);
+            }
+
+            log.info("Expected num entries on the Sink Received");
+            assertThat(listener.logEntryMsgCnt).isEqualTo(10);
+            assertThat(listener.snapSyncMsgCnt).isEqualTo(5);
+            log.info("Sink replicated queue size: {}", listener.snapSyncMsgCnt);
+        } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     /**
      * Provide a full sync or snapshot
      */
@@ -304,6 +347,65 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
             context.cancel();
         }
     }
+
+    public class ScopedSnapshotProvider extends SnapshotProvider {
+        Table<RpcCommon.UuidMsg, ExampleSchemas.ExampleValue, Message> someTable;
+        public ScopedSnapshotProvider(CorfuStore corfuStore) {
+            super(corfuStore);
+            Table<RpcCommon.UuidMsg, ExampleSchemas.ExampleValue, Message> someTable_lcl = null;
+            try {
+                someTable_lcl = corfuStore.openTable(someNamespace,
+                        "testSnapshotProvider",
+                        RpcCommon.UuidMsg.class,
+                        ExampleSchemas.ExampleValue.class, null,
+                        TableOptions.fromProtoSchema(ExampleSchemas.ExampleValue.class));
+            } catch (Exception e) {
+                assertThat(e).isNull();
+            }
+            this.someTable = someTable_lcl;
+            // Now insert some data into it
+            try (TxnContext tx = corfuStore.txn(someNamespace)) {
+                for (int i = 0; i < numFullSyncBatches; i++) {
+                    tx.putRecord(someTable, RpcCommon.UuidMsg.newBuilder().setMsb(i).build(),
+                            ExampleSchemas.ExampleValue.newBuilder()
+                                    .setPayload("opaque_payload" + i)
+                                    .build(), null);
+                }
+                tx.commit();
+            }
+        }
+
+        @Override
+        public void provideFullStateData(LRFullStateReplicationContext context) {
+            RpcCommon.UuidMsg key = RpcCommon.UuidMsg.newBuilder()
+                    .setMsb(0).setLsb(numFullSyncBatches).build();
+            for (int i = 0; i < numFullSyncBatches; i++) {
+                try (TxnContext tx = corfuStore.txn(someNamespace)) {
+                    if (context.getSnapshot() == null) {
+                        context.setSnapshot(
+                                corfuStore.scopedTxn(someNamespace, IsolationLevel.snapshot(),
+                                        (Table<?, ?, ?>) corfuStore.getRuntime().getTableRegistry().getAllOpenTables())
+                        );
+                    }
+                    CorfuStoreEntry<RpcCommon.UuidMsg, ExampleSchemas.ExampleValue, Message> record = context.getSnapshot()
+                            .getRecord(someTable, RpcCommon.UuidMsg.newBuilder().setMsb(i).build());
+                    Queue.RoutingTableEntryMsg message = Queue.RoutingTableEntryMsg.newBuilder()
+                            .addDestinations(context.getDestinationSiteId())
+                            .setOpaquePayload(ByteString.copyFromUtf8(record.getPayload().getPayload()))
+                            .buildPartial();
+                    context.transmit(message);
+                    log.info("Transmitting full sync message{}", message);
+                    // For debugging Q's stream id should be "61d2fc0f-315a-3d87-a982-24fb36932050"
+                    AbstractTransactionalContext txCtx = TransactionalContext.getRootContext();
+                    log.info("FS Committed at {}", tx.commit());
+                }
+            }
+            context.markCompleted();
+            assertThat(context.getSnapshot()).isNull();
+            super.isSnapshotSent = true;
+        }
+    }
+
     /**
      * Open replication status table on each Sink for verify replication status.
      */
