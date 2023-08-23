@@ -9,6 +9,7 @@ import org.corfudb.infrastructure.logreplication.proto.Sample;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.ExampleSchemas;
+import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.LogReplication.ReplicationStatus;
 import org.corfudb.runtime.collections.CorfuStore;
@@ -36,6 +37,7 @@ import static org.corfudb.runtime.LogReplicationUtils.REPLICATION_STATUS_TABLE_N
 import static org.corfudb.integration.LogReplicationAbstractIT.NAMESPACE;
 import static org.corfudb.integration.LogReplicationAbstractIT.runCommandForOutput;
 
+@SuppressWarnings("checkstyle:magicnumber")
 @Slf4j
 public class CorfuReplicationMultiSourceSinkIT extends AbstractIT {
     protected final List<Integer> sourceCorfuPorts = Arrays.asList(9000, 9002, 9004);
@@ -60,6 +62,7 @@ public class CorfuReplicationMultiSourceSinkIT extends AbstractIT {
     protected final List<String> sinkEndpoints = new ArrayList<>();
 
     private int numSourceClusters;
+    @Getter
     private int numSinkClusters;
 
     private static final String TABLE_1 = "Table001";
@@ -90,6 +93,7 @@ public class CorfuReplicationMultiSourceSinkIT extends AbstractIT {
     // Listens to incoming data on streams/tables on a Sink cluster
     private List<ReplicatedStreamsListener> dataListeners = new ArrayList<>();
 
+    @Getter
     // Listens to replication status updates on a Sink cluster
     private List<ReplicationStatusListener> replicationStatusListeners = new ArrayList<>();
 
@@ -118,18 +122,22 @@ public class CorfuReplicationMultiSourceSinkIT extends AbstractIT {
     private void setupSourceAndSinkCorfu(int numSourceClusters, int numSinkClusters) throws Exception {
         Process process;
         String endpoint;
+        int sourceCorfuPortStart = 9000;
         for (int i = 0; i < numSourceClusters; i++) {
-            process = runServer(sourceCorfuPorts.get(i), true);
+            process = runServer(sourceCorfuPortStart, true);
             sourceCorfuProcesses.add(process);
-            endpoint = DEFAULT_HOST + ":" + sourceCorfuPorts.get(i).toString();
+            endpoint = DEFAULT_HOST + ":" + String.valueOf(sourceCorfuPortStart);
             sourceEndpoints.add(endpoint);
+            sourceCorfuPortStart += 2;
         }
 
+        int sinkCorfuPortStart = 9001;
         for (int i = 0; i < numSinkClusters; i++) {
-            process = runServer(sinkCorfuPorts.get(i), true);
+            process = runServer(sinkCorfuPortStart, true);
             sinkCorfuProcesses.add(process);
-            endpoint = DEFAULT_HOST + ":" + sinkCorfuPorts.get(i).toString();
+            endpoint = DEFAULT_HOST + ":" + String.valueOf(sinkCorfuPortStart);
             sinkEndpoints.add(endpoint);
+            sinkCorfuPortStart += 2;
         }
 
         // Setup the runtimes to each Corfu server
@@ -158,14 +166,22 @@ public class CorfuReplicationMultiSourceSinkIT extends AbstractIT {
     }
 
     protected void startReplicationServers() throws Exception {
+        int sourceLrPortStart = 9500;
+        int sourceCorfuPortStart = 9000;
         for (int i = 0; i < numSourceClusters; i++) {
-            sourceReplicationServers.add(runReplicationServer(sourceReplicationPorts.get(i), sourceCorfuPorts.get(i),
+            sourceReplicationServers.add(runReplicationServer(sourceLrPortStart, sourceCorfuPortStart,
                     pluginConfigFilePath, transportType));
+            sourceLrPortStart += 2;
+            sourceCorfuPortStart += 2;
         }
 
+        int sinkLrPortStart = 9501;
+        int sinkCorfuPortStart = 9001;
         for (int i = 0; i < numSinkClusters; i++) {
-            sinkReplicationServers.add(runReplicationServer(sinkReplicationPorts.get(i), sinkCorfuPorts.get(i),
+            sinkReplicationServers.add(runReplicationServer(sinkLrPortStart, sinkCorfuPortStart,
                     pluginConfigFilePath, transportType));
+            sinkLrPortStart += 2;
+            sinkCorfuPortStart += 2;
         }
     }
 
@@ -496,10 +512,19 @@ public class CorfuReplicationMultiSourceSinkIT extends AbstractIT {
 
     protected class ReplicationStatusListener implements StreamListener {
 
+        @Getter
         private final CountDownLatch countDownLatch;
+
+        private final boolean isSource;
 
         public ReplicationStatusListener(CountDownLatch countdownLatch) {
             this.countDownLatch = countdownLatch;
+            this.isSource = false;
+        }
+
+        public ReplicationStatusListener(CountDownLatch countdownLatch, boolean source) {
+            this.countDownLatch = countdownLatch;
+            this.isSource = source;
         }
 
         @Override
@@ -507,10 +532,16 @@ public class CorfuReplicationMultiSourceSinkIT extends AbstractIT {
             // Only consider updates where data consistent changed to 'true' for counting the latch down.
             // Ignore 'clear' and 'delete' operations which get sent on a role change and have no payload (to avoid NPE)
             results.getEntries().forEach((schema, entries) -> entries.forEach(e -> {
-                if (e.getOperation() != CorfuStreamEntry.OperationType.CLEAR &&
+                if (isSource) {
+                    if (((ReplicationStatus)e.getPayload()).getSourceStatus().getReplicationInfo()
+                            .getSnapshotSyncInfo().getStatus().equals(LogReplication.SyncStatus.COMPLETED)) {
+                        countDownLatch.countDown();
+                    }
+                } else if (e.getOperation() != CorfuStreamEntry.OperationType.CLEAR &&
                     e.getOperation() != CorfuStreamEntry.OperationType.DELETE &&
                     ((ReplicationStatus)e.getPayload()).getSinkStatus().getDataConsistent()) {
                     countDownLatch.countDown();
+                    System.out.println("Latch count down to " + countDownLatch.getCount());
                 }
             }));
         }

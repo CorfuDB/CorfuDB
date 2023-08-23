@@ -25,13 +25,20 @@ import org.junit.Test;
 
 import java.lang.reflect.InvocationTargetException;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager.getDefaultRoutingQueueSubscriber;
+import static org.corfudb.integration.LogReplicationAbstractIT.NAMESPACE;
 import static org.corfudb.runtime.LogReplicationUtils.LOG_ENTRY_SYNC_QUEUE_TAG_SENDER_PREFIX;
+import static org.corfudb.runtime.LogReplicationUtils.LR_STATUS_STREAM_TAG;
 import static org.corfudb.runtime.LogReplicationUtils.REPLICATED_QUEUE_NAME;
 import static org.corfudb.runtime.LogReplicationUtils.REPLICATED_QUEUE_TAG;
 import static org.corfudb.runtime.LogReplicationUtils.REPLICATION_STATUS_TABLE_NAME;
@@ -40,6 +47,8 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 @SuppressWarnings("checkstyle:magicnumber")
 @Slf4j
 public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSinkIT {
+
+    final int numDeltaMsgs = 50;
 
     private int numSource = 1;
 
@@ -56,12 +65,14 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
 
     @Before
     public void setUp() throws Exception {
-        super.setUp(1, 1, DefaultClusterManager.TP_SINGLE_SOURCE_SINK_ROUTING_QUEUE);
+        super.setUp(1, DefaultClusterManager.TP_SINGLE_SOURCE_MULTI_SINK_ROUTING_QUEUE.getValue(),
+                DefaultClusterManager.TP_SINGLE_SOURCE_MULTI_SINK_ROUTING_QUEUE);
         openLogReplicationStatusTable();
     }
 
     @Test
     public void testRoutingQueueReplication() throws Exception {
+        System.out.println();
 
         // Register client and setup initial group destinations mapping
         CorfuRuntime clientRuntime = getClientRuntime();
@@ -80,29 +91,61 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
                     = sinkCorfuStores.get(0).openQueue(CORFU_SYSTEM_NAMESPACE, REPLICATED_QUEUE_NAME,
                     Queue.RoutingTableEntryMsg.class, TableOptions.builder().schemaOptions(CorfuOptions.SchemaOptions.newBuilder()
                             .addStreamTag(REPLICATED_QUEUE_TAG).build()).build());
+            System.out.println("Starting LR..so starting full sync");
 
             startReplicationServers();
             while (!snapshotProvider.isSnapshotSent) {
                 Thread.sleep(5000);
             }
+
+            CountDownLatch latch = new CountDownLatch(getNumSinkClusters());
+            ReplicationStatusListener listener = new ReplicationStatusListener(latch, true);
+            sourceCorfuStores.get(0).subscribeListener(listener, LogReplicationMetadataManager.NAMESPACE,
+                    LR_STATUS_STREAM_TAG);
+
+            latch.await();
+
+            System.out.println("Generating deltas");
             generateData(clientCorfuStore, queueSenderClient);
 
-            RoutingQueueListener listener = new RoutingQueueListener(sinkCorfuStores.get(0));
-            sinkCorfuStores.get(0).subscribeRoutingQListener(listener);
+            List<Table<Queue.CorfuGuidMsg, Queue.RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg>> sinkReplicatedQueues = new ArrayList<>();
+            openSinkReplicatedQueues(sinkReplicatedQueues);
 
-            int numLogEntriesReceived = listener.logEntryMsgCnt;
-            while (numLogEntriesReceived < 10) {
-                Thread.sleep(5000);
-                numLogEntriesReceived = listener.logEntryMsgCnt;
-                log.info("Entries got on receiver {}", numLogEntriesReceived);
+            for (int i = 0; i < sinkReplicatedQueues.size(); ++i) {
+                int expectedCount = i == 0 ? SnapshotProvider.numFullSyncBatches + numDeltaMsgs :
+                        SnapshotProvider.numFullSyncBatches + (numDeltaMsgs * 2);
+                while(sinkReplicatedQueues.get(i).count() != expectedCount) {
+                    // wait
+//                System.out.println("count is {}"+ sinkReplicatedQueues.get(i).count());
+                }
+                System.out.println("table is " + i);
             }
 
-            log.info("Expected num entries on the Sink Received");
-            assertThat(listener.logEntryMsgCnt).isEqualTo(10);
-            assertThat(listener.snapSyncMsgCnt).isEqualTo(5);
-            log.info("Sink replicated queue size: {}", listener.snapSyncMsgCnt);
         } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
             throw new RuntimeException(e);
+        }
+    }
+
+    private void openSinkReplicatedQueues(
+            List<Table<Queue.CorfuGuidMsg, Queue.RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg>> sinkReplicatedQueues) {
+
+        log.info("Sink Queue name: {}", REPLICATED_QUEUE_NAME);
+        for(int i = 0; i < getNumSinkClusters(); ++i) {
+            try {
+                sinkReplicatedQueues.add(sinkCorfuStores.get(i).openQueue(CORFU_SYSTEM_NAMESPACE, REPLICATED_QUEUE_NAME,
+                        Queue.RoutingTableEntryMsg.class, TableOptions.builder().schemaOptions(CorfuOptions.SchemaOptions.newBuilder()
+                                .addStreamTag(REPLICATED_QUEUE_TAG).build()).build()));
+            } catch(NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
+                throw new RuntimeException(e);
+            }
+        }
+    }
+
+    private void subscribeSinkListeners(Map<Integer, RoutingQueueListener> sinkCounterToListener) {
+        for(int i = 0; i < getNumSinkClusters(); ++i) {
+            RoutingQueueListener listener = new RoutingQueueListener(sinkCorfuStores.get(i));
+            sinkCorfuStores.get(i).subscribeRoutingQListener(listener);
+            sinkCounterToListener.put(i, listener);
         }
     }
 
@@ -136,65 +179,76 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
             sinkCorfuStores.get(0).subscribeRoutingQListener(listener);
 
             int numFullSyncMsgsGot = listener.snapSyncMsgCnt;
-            while (numFullSyncMsgsGot < 5) {
+            while (numFullSyncMsgsGot < SnapshotProvider.numFullSyncBatches) {
                 Thread.sleep(5000);
                 numFullSyncMsgsGot = listener.snapSyncMsgCnt;
                 log.info("Entries got on receiver {}", numFullSyncMsgsGot);
             }
-            assertThat(listener.snapSyncMsgCnt).isEqualTo(5);
+            assertThat(listener.snapSyncMsgCnt).isEqualTo(SnapshotProvider.numFullSyncBatches);
 
             // Now request a full sync again for all sites!
             snapshotProvider.isSnapshotSent = false;
             editor.requestGlobalFullSync();
 
-            while (numFullSyncMsgsGot < 10) {
+            while (numFullSyncMsgsGot < SnapshotProvider.numFullSyncBatches * 2) {
                 Thread.sleep(5000);
                 numFullSyncMsgsGot = listener.snapSyncMsgCnt;
                 log.info("Entries got on receiver after 2nd full sync {}", numFullSyncMsgsGot);
             }
-            assertThat(listener.snapSyncMsgCnt).isEqualTo(10);
+            assertThat(listener.snapSyncMsgCnt).isEqualTo(SnapshotProvider.numFullSyncBatches * 2);
 
             // Now request a full sync this time for just one site!
             snapshotProvider.isSnapshotSent = false;
-            queueSenderClient.requestSnapshotSync(UUID.fromString(DefaultClusterConfig.getSourceClusterIds().get(0)),
-                    UUID.fromString(DefaultClusterConfig.getSinkClusterIds().get(0)));
+            queueSenderClient.requestSnapshotSync(UUID.fromString(DefaultClusterConfig.getClusterId(true, 0)),
+                    UUID.fromString(DefaultClusterConfig.getClusterId(false, 0)));
 
-            while (numFullSyncMsgsGot < 15) {
+            while (numFullSyncMsgsGot < SnapshotProvider.numFullSyncBatches * 3) {
                 Thread.sleep(5000);
                 numFullSyncMsgsGot = listener.snapSyncMsgCnt;
                 log.info("Entries got on receiver after 3rd full sync {}", numFullSyncMsgsGot);
             }
-            assertThat(listener.snapSyncMsgCnt).isEqualTo(15);
+            assertThat(listener.snapSyncMsgCnt).isEqualTo(SnapshotProvider.numFullSyncBatches * 3);
         } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
             throw new RuntimeException(e);
         }
     }
 
+
     private void generateData(CorfuStore corfuStore, RoutingQueueSenderClient client) throws Exception {
         String namespace = CORFU_SYSTEM_NAMESPACE;
 
-        String streamTagFollowed =
-            LOG_ENTRY_SYNC_QUEUE_TAG_SENDER_PREFIX + DefaultClusterConfig.getSinkClusterIds().get(0);
-        log.info("Stream UUID: {}", TableRegistry.getStreamIdForStreamTag(CORFU_SYSTEM_NAMESPACE, streamTagFollowed));
+        int clusterCounter = 0;
+        for(int j = 0; j < getNumSinkClusters(); ++j) {
+            String currSinkClusterId = DefaultClusterConfig.getClusterId(false, clusterCounter);
+            List<String> destinationList = new ArrayList<>();
+            destinationList.add(currSinkClusterId);
 
-        for (int i = 0; i < 10; i++) {
-            ByteBuffer buffer = ByteBuffer.allocate(Integer.SIZE);
-            buffer.putInt(i);
-            Queue.RoutingTableEntryMsg val =
-                Queue.RoutingTableEntryMsg.newBuilder()
-                        .setSourceClusterId(DefaultClusterConfig.getSourceClusterIds().get(0))
-                        .addAllDestinations(Arrays.asList(DefaultClusterConfig.getSinkClusterIds().get(0),
-                                DefaultClusterConfig.getSinkClusterIds().get(1)))
+            if (j < getNumSinkClusters() - 1) {
+                String nextSinkClusterId = DefaultClusterConfig.getClusterId(false, clusterCounter + 2);
+                destinationList.add(nextSinkClusterId);
+            }
+
+            for (int i = 0; i < numDeltaMsgs; i++) {
+                ByteBuffer buffer = ByteBuffer.allocate(Integer.SIZE);
+                buffer.putInt(i);
+                Queue.RoutingTableEntryMsg val = Queue.RoutingTableEntryMsg.newBuilder()
+                        .setSourceClusterId(DefaultClusterConfig.getClusterId(true, 0))
+                        .addAllDestinations(destinationList)
                         .setOpaquePayload(ByteString.copyFrom(buffer.array()))
                         .setReplicationType(Queue.ReplicationType.LOG_ENTRY_SYNC)
                         .build();
 
-            try (TxnContext txnContext = corfuStore.txn(namespace)) {
-                client.transmitDeltaMessages(txnContext, Collections.singletonList(val), corfuStore);
-                log.info("Committed at {}", txnContext.commit());
-            } catch (Exception e) {
-                log.error("Failed to add data to the queue", e);
+                try (TxnContext txnContext = corfuStore.txn(namespace)) {
+                    client.transmitDeltaMessages(txnContext, Collections.singletonList(val), corfuStore);
+                    long commitedTs = txnContext.commit().getSequence();
+                    log.info("Committed at {}", commitedTs);
+//                    System.out.println("commited to " + commitedTs);
+                } catch (Exception e) {
+                    log.error("Failed to add data to the queue", e);
+                }
             }
+//            System.out.println("====> "+j);
+            clusterCounter += 2;
         }
     }
 
@@ -204,7 +258,7 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
     public static class SnapshotProvider implements RoutingQueueSenderClient.LRTransmitterReplicationModule {
 
         public final String someNamespace = "testNamespace";
-        public final int numFullSyncBatches = 5;
+        public static final int numFullSyncBatches = 20;
         private int recordId = 0;
         CorfuStore corfuStore;
         public boolean isSnapshotSent = false;

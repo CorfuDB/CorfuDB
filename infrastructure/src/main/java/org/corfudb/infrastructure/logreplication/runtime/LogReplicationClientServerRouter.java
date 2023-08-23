@@ -189,7 +189,7 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
                                             LogReplicationServer msgHandler,
                                             ServerContext serverContext,
                                             LogReplicationPluginConfig pluginConfig) {
-        this.timeoutResponse = replicationManager.getCorfuRuntime().getParameters().getRequestTimeout().toMillis();
+        this.timeoutResponse = replicationManager.getReplicationContext().getCorfuRuntime().getParameters().getRequestTimeout().toMillis();
         this.localClusterId = localClusterId;
         this.localNodeId = localNodeId;
         this.sessionToRuntimeFSM = replicationManager.getSessionRuntimeMap();

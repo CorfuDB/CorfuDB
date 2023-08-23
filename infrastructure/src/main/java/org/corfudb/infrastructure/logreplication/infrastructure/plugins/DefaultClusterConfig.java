@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure.logreplication.infrastructure.plugins;
 
 import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import java.util.Arrays;
@@ -8,9 +9,11 @@ import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
+import java.util.UUID;
 
 import static org.corfudb.common.util.URLUtils.getPortFromEndpointURL;
 
+@Slf4j
 public final class DefaultClusterConfig {
 
     @Getter
@@ -30,6 +33,19 @@ public final class DefaultClusterConfig {
 
     @Getter
     private final String defaultHost = "localhost";
+
+    @Getter
+    private final int corfuSourcePortBegin = 9000;
+
+    @Getter
+    private final int corfuSinkPortBegin = 9001;
+
+    @Getter
+    private final int lrSourcePortBegin = 9500;
+
+    @Getter
+    private final int lrSinkPortBegin = 9501;
+
 
     @Getter
     private final List<String> sourceNodeUuids =
@@ -88,7 +104,7 @@ public final class DefaultClusterConfig {
         Arrays.asList("9020", "9021", "9022");
 
     @Getter
-    private final String backupLogReplicationPort = "9030";
+    private final String backupLogReplicationPort = "9800";
 
     @Getter
     private final int logSinkBufferSize = 40;
@@ -133,15 +149,21 @@ public final class DefaultClusterConfig {
             return backupNodesUuid.get(0);
         }
 
-        int index = sourceLogReplicationPorts.indexOf(port);
-        if (index != -1) {
-            return sourceNodeUuids.get(index);
-        } else {
-            index = sinkLogReplicationPorts.indexOf(port);
-            if (index != -1) {
-                return sinkNodeUuids.get(index);
-            }
+        int portCounter;
+        //TODO: current assumption is that there is only 1 node. We need to overcome this constraint/assumption
+        if (Integer.parseInt(port) % 2 == 0) {
+            portCounter = Integer.parseInt(port) - 9500;
+            return UUID.nameUUIDFromBytes(("Source" + portCounter + "Node" +  String.valueOf(0)).getBytes()).toString();
         }
-        return null;
+        portCounter = Integer.parseInt(port) - 9501;
+
+        return UUID.nameUUIDFromBytes(("Sink" + portCounter + "Node" + String.valueOf(0)).getBytes()).toString();
+    }
+
+    public static String getClusterId(boolean isSource, int clusterCounter) {
+        if (isSource) {
+            return UUID.nameUUIDFromBytes(("Source" + clusterCounter).getBytes()).toString();
+        }
+        return UUID.nameUUIDFromBytes(("Sink" + clusterCounter).getBytes()).toString();
     }
 }
