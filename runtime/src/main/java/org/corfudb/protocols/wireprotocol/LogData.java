@@ -80,6 +80,7 @@ public class LogData implements IMetadata, ILogData {
     public Object getPayload(CorfuRuntime runtime) {
         Object value = payload.get();
 
+
         // This is only needed for unit test framework to work. Since unit
         // tests do not serialize payload to byte array, the address will
         // not be set in the following codes, so doing here instead.
@@ -128,7 +129,11 @@ public class LogData implements IMetadata, ILogData {
                             throw throwable;
                         } finally {
                             serializedBuf.release();
-                            data = null;
+                            // nullifyDataOnGetPayload is set to false for LR, because LR reads the "data" even if it
+                            // has been deserialized
+                            if (runtime.getParameters().isNullifyDataOnGetPayload()) {
+                                data = null;
+                            }
                         }
                     }
                 }

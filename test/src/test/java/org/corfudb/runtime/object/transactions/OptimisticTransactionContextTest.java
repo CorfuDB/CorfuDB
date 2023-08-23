@@ -24,6 +24,7 @@ import org.corfudb.util.serializer.Serializers;
 import org.junit.Assert;
 import org.junit.Ignore;
 import org.junit.Test;
+import org.mockito.Mockito;
 
 import java.nio.ByteBuffer;
 import java.time.Duration;
@@ -34,6 +35,7 @@ import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.mockito.Mockito.when;
 
 
 /**
@@ -77,7 +79,12 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
 
         MultiObjectSMREntry expected = new MultiObjectSMREntry();
         expected.addTo(stream1Id, smrEntry1);
-        MultiObjectSMREntry committedMultiSMR = (MultiObjectSMREntry) sv.remaining().iterator().next().getPayload(null);
+
+        CorfuRuntime mockRuntime = Mockito.mock(CorfuRuntime.class);
+        CorfuRuntime.CorfuRuntimeParameters mockParameters = Mockito.mock(CorfuRuntime.CorfuRuntimeParameters.class);
+        when(mockRuntime.getParameters()).thenReturn(mockParameters);
+        when(mockParameters.isNullifyDataOnGetPayload()).thenReturn(true);
+        MultiObjectSMREntry committedMultiSMR = (MultiObjectSMREntry) sv.remaining().iterator().next().getPayload(mockRuntime);
         committedMultiSMR.getSMRUpdates(stream1Id);
 
         assertThat(committedMultiSMR.getSMRUpdates(stream1Id)).containsExactly(smrEntry1);

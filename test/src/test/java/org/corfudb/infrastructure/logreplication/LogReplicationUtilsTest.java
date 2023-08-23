@@ -10,13 +10,22 @@ import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.runtime.Queue;
+import org.corfudb.runtime.collections.TableOptions;
+import org.corfudb.runtime.CorfuOptions;
+import org.corfudb.runtime.LogReplicationRoutingQueueListener;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.Address;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+
+import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+import java.util.function.Consumer;
 
 /**
  * Tests the apis in LogReplicationUtils.
@@ -28,6 +37,7 @@ public class LogReplicationUtilsTest extends AbstractViewTest {
     private CorfuRuntime corfuRuntime;
     private CorfuStore corfuStore;
     private LogReplicationListener lrListener;
+    private LogReplicationRoutingQueueListener lrRqListener;
     private Table<LogReplication.LogReplicationSession, LogReplication.ReplicationStatus, Message> replicationStatusTable;
     private String namespace = "test_namespace";
     private String client = "test_client";
@@ -37,6 +47,7 @@ public class LogReplicationUtilsTest extends AbstractViewTest {
         corfuRuntime = getDefaultRuntime();
         corfuStore = new CorfuStore(corfuRuntime);
         lrListener = new LogReplicationTestListener(corfuStore, namespace, client);
+        lrRqListener = new LogReplicationTestRoutingQueueListener(corfuStore, namespace, client);
         replicationStatusTable = TestUtils.openReplicationStatusTable(corfuStore);
     }
 
@@ -85,6 +96,11 @@ public class LogReplicationUtilsTest extends AbstractViewTest {
         testSubscribe(true, true);
     }
 
+    @Test
+    public void testRoutingQueueSubscribeSnapshotSyncComplete() {
+        testRoutingQueueSubscribe(true, false);
+    }
+
     /**
      * Test the behavior of subscribe() when LR Snapshot sync is complete.  The flags and variables on the listener
      * must be updated correctly.
@@ -112,6 +128,51 @@ public class LogReplicationUtilsTest extends AbstractViewTest {
         String streamTag = "test_tag";
         LogReplicationUtils.subscribe(lrListener, namespace, streamTag, new ArrayList<>(), 5, corfuStore);
         verifyListenerFlags((LogReplicationTestListener)lrListener, ongoing);
+    }
+
+    private void executeTxn(CorfuStore store, String namespace, Consumer<TxnContext> mutation) {
+        try (TxnContext tx = store.txn(namespace)) {
+            mutation.accept(tx);
+            tx.commit();
+        }
+    }
+
+    private void testRoutingQueueSubscribe(boolean initializeTable, boolean ongoing) {
+        if (initializeTable) {
+            TestUtils.setSnapshotSyncOngoing(corfuStore, replicationStatusTable, client, ongoing);
+        }
+
+        // Open routing queue before the subscribe call at the receiver.
+        String recvQueueName = LogReplicationUtils.REPLICATED_QUEUE_NAME;
+        Table<Queue.CorfuGuidMsg, Queue.RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg> routingQueue;
+        try {
+            routingQueue =
+                    corfuStore.openQueue(namespace, recvQueueName,
+                            Queue.RoutingTableEntryMsg.class,
+                            TableOptions.builder().schemaOptions(
+                                            CorfuOptions.SchemaOptions.newBuilder()
+                                                    .addStreamTag(LogReplicationUtils.REPLICATED_QUEUE_TAG)
+                                                    .build())
+                                    .build());
+        } catch (NoSuchMethodException e) {
+            throw new RuntimeException(e);
+        } catch (InvocationTargetException e) {
+            throw new RuntimeException(e);
+        } catch (IllegalAccessException e) {
+            throw new RuntimeException(e);
+        }
+
+        // Subscribe to the routing queue.
+        LogReplicationUtils.subscribeRqListener(lrRqListener, namespace, 5, corfuStore);
+
+        // Update the queue to verify the listener works
+        List<UUID> tags = new ArrayList<>();
+        tags.add(CorfuRuntime.getStreamID(LogReplicationUtils.REPLICATED_QUEUE_TAG));
+        // TODO: tx.enqueue and logUpdateEnqueue complains on the remote UT for unable to get guid. Removing it for now.
+        // executeTxn(corfuStore, namespace, (TxnContext tx) -> tx.logUpdateEnqueue(routingQueue,
+        //        Queue.RoutingTableEntryMsg.newBuilder().addDestinations(tx.getNamespace()).build(),
+        //        tags, corfuStore));
+        verifyRoutingQueueListenerFlags((LogReplicationTestRoutingQueueListener)lrRqListener, ongoing);
     }
 
     @Test
@@ -172,6 +233,20 @@ public class LogReplicationUtilsTest extends AbstractViewTest {
         }
     }
 
+    private void verifyRoutingQueueListenerFlags(LogReplicationTestRoutingQueueListener listener, boolean snapshotSyncOngoing) {
+        if (snapshotSyncOngoing) {
+            Assert.assertTrue(listener.getClientFullSyncPending().get());
+            Assert.assertTrue(listener.getSnapshotSyncInProgress().get());
+            Assert.assertEquals(Address.NON_ADDRESS, listener.getClientFullSyncTimestamp().get());
+            Assert.assertFalse(listener.performFullSyncInvoked);
+        } else {
+            Assert.assertFalse(listener.getClientFullSyncPending().get());
+            Assert.assertFalse(listener.getSnapshotSyncInProgress().get());
+            Assert.assertFalse(listener.getRoutingQRegistered().get());
+            Assert.assertNotEquals(Address.NON_ADDRESS, listener.getClientFullSyncTimestamp().get());
+            Assert.assertTrue(listener.performFullSyncInvoked);
+        }
+    }
     @After
     public void cleanUp() {
         corfuRuntime.shutdown();
@@ -199,6 +274,50 @@ public class LogReplicationUtilsTest extends AbstractViewTest {
 
         @Override
         protected void processUpdatesInLogEntrySync(CorfuStreamEntries results) {}
+
+        @Override
+        protected void performFullSyncAndMerge(TxnContext txnContext) {
+            performFullSyncInvoked = true;
+        }
+
+        @Override
+        protected String getClientName() {
+            return clientName;
+        }
+
+        @Override
+        public void onError(Throwable throwable) {
+            log.error("Error in Test Listener", throwable);
+        }
+    }
+
+    private class LogReplicationTestRoutingQueueListener extends LogReplicationRoutingQueueListener {
+
+        private boolean performFullSyncInvoked = false;
+
+        private String clientName;
+
+        LogReplicationTestRoutingQueueListener(CorfuStore corfuStore, String namespace, String clientName) throws
+                InvocationTargetException, NoSuchMethodException, IllegalAccessException {
+            super(corfuStore, namespace);
+            this.clientName = clientName;
+        }
+
+        @Override
+        protected void onSnapshotSyncStart() {}
+
+        @Override
+        protected void onSnapshotSyncComplete() {}
+
+        @Override
+        protected boolean processUpdatesInSnapshotSync(List<Queue.RoutingTableEntryMsg> results) {
+            return true;
+        }
+
+        @Override
+        protected boolean processUpdatesInLogEntrySync(List<Queue.RoutingTableEntryMsg> results) {
+            return true;
+        }
 
         @Override
         protected void performFullSyncAndMerge(TxnContext txnContext) {

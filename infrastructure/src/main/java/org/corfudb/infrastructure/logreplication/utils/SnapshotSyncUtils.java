@@ -3,9 +3,9 @@ package org.corfudb.infrastructure.logreplication.utils;
 import com.google.protobuf.Message;
 import com.google.protobuf.Timestamp;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEvent;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEvent.ReplicationEventType;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEventInfoKey;
+import org.corfudb.runtime.LogReplication.ReplicationEvent;
+import org.corfudb.runtime.LogReplication.ReplicationEvent.ReplicationEventType;
+import org.corfudb.runtime.LogReplication.ReplicationEventInfoKey;
 import org.corfudb.infrastructure.logreplication.replication.receive.ReplicationWriterException;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.collections.CorfuStore;
@@ -46,10 +46,11 @@ public final class SnapshotSyncUtils {
      * @param session Session for which the snapshot sync will be enforced.
      * @param corfuStore Caller of this method should provide a corfuStore instance for executing the transaction.
      */
-    public static void enforceSnapshotSync(LogReplicationSession session, CorfuStore corfuStore) {
+    public static void enforceSnapshotSync(LogReplicationSession session, CorfuStore corfuStore,
+                                           ReplicationEventType eventType) {
         UUID forceSyncId = UUID.randomUUID();
 
-        log.info("Forced snapshot sync will be triggered because of group destination change, session={}, sync_id={}",
+        log.info("Forced snapshot sync will be triggered, session={}, sync_id={}",
                 session, forceSyncId);
 
         // Write a force sync event to the logReplicationEventTable
@@ -59,7 +60,7 @@ public final class SnapshotSyncUtils {
 
         ReplicationEvent event = ReplicationEvent.newBuilder()
                 .setEventId(forceSyncId.toString())
-                .setType(ReplicationEventType.FORCE_SNAPSHOT_SYNC)
+                .setType(eventType)
                 .setEventTimestamp(Timestamp.newBuilder().setSeconds(Instant.now().getEpochSecond()).build())
                 .build();
 

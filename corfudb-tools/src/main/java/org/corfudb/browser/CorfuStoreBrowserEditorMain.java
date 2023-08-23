@@ -41,7 +41,9 @@ public class CorfuStoreBrowserEditorMain {
         listTagsForTable,
         listTagsMap,
         printMetadataMap,
-        addRecord
+        addRecord,
+
+        lrRequestGlobalFullSync
     }
 
     private static final String USAGE = "Usage: corfu-browser "+
@@ -66,7 +68,8 @@ public class CorfuStoreBrowserEditorMain {
         + "--port=<port>   Port\n"
         + "--operation=<listTables|infoTable|showTable|clearTable"
         + "|editTable|deleteRecord|loadTable|listenOnTable|listTags|listTagsMap"
-        + "|listTablesForTag|listTagsForTable|listAllProtos> Operation\n"
+        + "|listTablesForTag|listTagsForTable|listAllProtos"
+        + "|lrRequestGlobalFullSync> Operation\n"
         + "--namespace=<namespace>   Namespace\n"
         + "--tablename=<tablename>   Table Name\n"
         + "--tag=<tag>  Stream tag of interest\n"
@@ -194,12 +197,12 @@ public class CorfuStoreBrowserEditorMain {
             runtime.connect();
             log.info("Successfully connected to {}", singleNodeEndpoint);
 
+            boolean skipDynamicProtoSerializer = operation.startsWith("lr");
+            String diskPath = null;
             if (opts.get("--diskPath") != null) {
-                browser = new CorfuStoreBrowserEditor(runtime, opts.get(
-                        "--diskPath").toString());
-            } else {
-                browser = new CorfuStoreBrowserEditor(runtime);
+                diskPath = opts.get("--diskPath").toString();
             }
+            browser = new CorfuStoreBrowserEditor(runtime, diskPath, skipDynamicProtoSerializer);
         } else if (offlineDbDir != null) {
             browser = new CorfuOfflineBrowserEditor(offlineDbDir);
         } else {
@@ -378,6 +381,9 @@ public class CorfuStoreBrowserEditorMain {
                 } else {
                     log.error("Print metadata map for a specific address. Specify using tag --address");
                 }
+            case lrRequestGlobalFullSync:
+                browser.requestGlobalFullSync();
+                return 0;
             default:
                 break;
         }

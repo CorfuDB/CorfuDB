@@ -65,6 +65,8 @@
     <logger name="io.netty.util" level="INFO"/>
     <logger name="io.netty.util.internal" level="INFO"/>
     <logger name="io.netty.buffer" level="INFO"/>
+    <logger name="org.corfudb.runtime" level="INFO"/>
+    <logger name="org.corfudb.integration" level="DEBUG"/>
     <!--<logger name="org.corfudb.client.metricsdata" level="DEBUG"/>-->
 
     <logger name="org.corfudb.metricsdata" level="INFO">
@@ -77,8 +79,8 @@
 
 
     <root level="INFO">
-        <!--<appender-ref ref="FILE" />-->
-        <!--<appender-ref ref="STDOUT" />-->
+<!--        <appender-ref ref="FILE" />-->
+<!--        <appender-ref ref="STDOUT" />-->
         <!--<appender-ref ref="MetricsRollingFile" />-->
     </root>
 </configuration>

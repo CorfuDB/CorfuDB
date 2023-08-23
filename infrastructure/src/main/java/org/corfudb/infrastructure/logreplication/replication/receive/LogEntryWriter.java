@@ -3,15 +3,20 @@ package org.corfudb.infrastructure.logreplication.replication.receive;
 import com.google.protobuf.TextFormat;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.logreplication.config.LogReplicationRoutingQueueConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.service.CorfuProtocolLogReplication;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMetadataMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
+import org.corfudb.runtime.LogReplicationUtils;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalRetry;
 import org.corfudb.util.retry.RetryNeededException;
@@ -19,6 +24,7 @@ import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.Re
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import javax.annotation.concurrent.NotThreadSafe;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -155,10 +161,19 @@ public class LogEntryWriter extends SinkWriter {
                             }
 
                             for (SMREntry smrEntry : smrEntries) {
-                                // If stream tags exist for the current stream, it means its intended for streaming
+                                // If stream tags exist for the current stream, it means it's intended for streaming
                                 // on the Sink (receiver)
-                                txnContext.logUpdate(streamId, smrEntry,
-                                    replicationContext.getConfig(session).getDataStreamToTagsMap().get(streamId));
+                                if (session.getSubscriber().getModel().equals(LogReplication.ReplicationModel.ROUTING_QUEUES)) {
+                                    String replicatedQueueName = ((LogReplicationRoutingQueueConfig) replicationContext
+                                            .getConfig(session)).getSinkQueueName();
+                                    streamId = CorfuRuntime.getStreamID(replicatedQueueName);
+                                    UUID replicatedQueueTag = ((LogReplicationRoutingQueueConfig) replicationContext
+                                            .getConfig(session)).getSinkQueueStreamTag();
+                                    txnContext.logUpdate(streamId, smrEntry, Collections.singletonList(replicatedQueueTag));
+                                } else {
+                                    txnContext.logUpdate(streamId, smrEntry,
+                                            replicationContext.getConfig(session).getDataStreamToTagsMap().get(streamId));
+                                }
                             }
                         }
                         txnContext.commit();

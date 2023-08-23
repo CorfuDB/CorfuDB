@@ -200,7 +200,8 @@ public class TableRegistry {
      * @throws InvocationTargetException If this is not a protobuf message.
      * @throws IllegalAccessException    If this is not a protobuf message.
      */
-    private <K extends Message, V extends Message, M extends Message>
+    // Exposing for PoC
+    public <K extends Message, V extends Message, M extends Message>
     void registerTable(@Nonnull String namespace,
                        @Nonnull String tableName,
                        @Nonnull Class<K> keyClass,
@@ -553,7 +554,17 @@ public class TableRegistry {
      * @return stream Id in UUID
      */
     public static UUID getStreamIdForStreamTag(String namespace, String streamTag) {
-        return CorfuRuntime.getStreamID(STREAM_TAG_PREFIX + namespace + streamTag);
+        return CorfuRuntime.getStreamID(getFullStreamTagStreamName(namespace, streamTag));
+    }
+
+    /**
+     *
+     * @param namespace namespace of this stream tag
+     * @param streamTag the tag without the namespace
+     * @return the fully qualified stream name of this stream tag
+     */
+    public static String getFullStreamTagStreamName(String namespace, String streamTag) {
+        return STREAM_TAG_PREFIX + namespace + streamTag;
     }
 
     /**
