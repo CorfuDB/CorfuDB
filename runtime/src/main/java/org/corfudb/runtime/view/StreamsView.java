@@ -2,6 +2,7 @@ package org.corfudb.runtime.view;
 
 import com.google.common.annotations.VisibleForTesting;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
@@ -160,6 +161,8 @@ public class StreamsView extends AbstractView {
                 payloadSize = ld.checkMaxWriteSize(runtime.getParameters().getMaxWriteSize());
             }
 
+            MicroMeterUtils.measure(payloadSize, "logdata.payload.bytes", "clientId",
+                    runtime.getParameters().getClientId().toString());
             for (int retry = 0; retry < runtime.getParameters().getWriteRetry(); retry++) {
                 // Go to the sequencer, grab a token to write.
                 tokenResponse = conflictInfo == null

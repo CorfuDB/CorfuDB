@@ -62,6 +62,10 @@
 *   **stream\_sub.queueDuration.timer**: Time in microseconds(mean, max, sum, 0.50p, 0.99p) it takes to wait in the queue.
 *   **corfu\_table.read.timer**: Time in microseconds(mean, max, sum, 0.50p, 0.99p) it takes to read from the corfu table's map.
 *   **corfu\_table.write.timer**: Time in microseconds(mean, max, sum, 0.50p, 0.99p) it takes to write to the corfu table's map.
+*   **logdata.decompress.timer**: Time in microseconds(mean, max, sum, 0.50p, 0.99p) it takes to decompress the payload.
+*   **logdata.compress.timer**: Time in microseconds(mean, max, sum, 0.50p, 0.99p) it takes to compress the payload.
+*   **logdata.compression.ratio**: A distribution summary (mean, max, 0.50p, 0.99p) of the payload's compression ratio.
+*   **logdata.decompressed.size**: A size estimate distribution (mean, max, 0.5p, 0.99p) of the decompressed payload.
 
 ### Current metrics collected for Corfu Server:
 
