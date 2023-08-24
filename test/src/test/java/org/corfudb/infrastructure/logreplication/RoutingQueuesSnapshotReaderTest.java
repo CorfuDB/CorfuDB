@@ -66,9 +66,13 @@ public class RoutingQueuesSnapshotReaderTest extends AbstractViewTest {
         snapshotReader = new RoutingQueuesSnapshotReader(lrRuntime, session, replicationContext);
         snapshotReader.reset(lrRuntime.getAddressSpaceView().getLogTail());
 
-        streamTagFollowed = LogReplicationUtils.SNAPSHOT_SYNC_QUEUE_TAG_SENDER_PREFIX + session.getSinkClusterId();
+        streamTagFollowed = TableRegistry.getStreamTagFullStreamName(namespace, LogReplicationUtils.SNAPSHOT_SYNC_QUEUE_TAG_SENDER_PREFIX + session.getSinkClusterId());
     }
 
+    /**
+     *
+     * @throws Exception
+     */
     @Test
     public void testRead() throws Exception {
         generateData();
@@ -78,8 +82,7 @@ public class RoutingQueuesSnapshotReaderTest extends AbstractViewTest {
 
     private void generateData() throws Exception {
 
-        Table<Queue.RoutingQSnapStartEndKeyMsg, Queue.RoutingQSnapStartEndMarkerMsg, Message> endMarkerTable =
-            corfuStore.openTable(namespace, SNAP_SYNC_START_END_Q_NAME,
+        corfuStore.openTable(namespace, SNAP_SYNC_START_END_Q_NAME,
                 Queue.RoutingQSnapStartEndKeyMsg.class, Queue.RoutingQSnapStartEndMarkerMsg.class, null,
                 TableOptions.fromProtoSchema(Queue.RoutingQSnapStartEndMarkerMsg.class));
 
@@ -89,7 +92,7 @@ public class RoutingQueuesSnapshotReaderTest extends AbstractViewTest {
             corfuStore.openQueue(namespace, tableName, Queue.RoutingTableEntryMsg.class,
                 TableOptions.fromProtoSchema(Queue.RoutingTableEntryMsg.class));
 
-        log.info("Stream UUID: {}", CorfuRuntime.getStreamID(streamTagFollowed));
+        log.info("Stream UUID: {}, name: {}", CorfuRuntime.getStreamID(streamTagFollowed), streamTagFollowed);
 
         for (int i = 0; i < 10; i++) {
             ByteBuffer buffer = ByteBuffer.allocate(Integer.SIZE);
