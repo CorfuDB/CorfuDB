@@ -126,7 +126,8 @@ public class CompleteGraphAdvisor implements ClusterAdvisor {
         ClusterGraph symmetric = ClusterGraph
                 .toClusterGraph(clusterState)
                 .toSymmetric();
-
-        return symmetric.getDecisionMaker(healthyNodes);
+        final Optional<NodeRank> decisionMaker = symmetric.getDecisionMaker(healthyNodes);
+        log.info("Decision maker: {}", decisionMaker);
+        return decisionMaker;
     }
 }

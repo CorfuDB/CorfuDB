@@ -60,7 +60,7 @@ public class FailuresAgent {
 
             DecisionMakerAgent decisionMakerAgent = new DecisionMakerAgent(clusterState, advisor);
             Optional<String> maybeDecisionMaker = decisionMakerAgent.findDecisionMaker();
-
+            log.info("Final DM: {}", maybeDecisionMaker);
             if (maybeDecisionMaker.isPresent()) {
                 String decisionMaker = maybeDecisionMaker.get();
 

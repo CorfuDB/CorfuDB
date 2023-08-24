@@ -2,6 +2,7 @@ package org.corfudb.integration;
 
 import com.google.common.collect.ContiguousSet;
 import com.google.common.collect.DiscreteDomain;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Range;
 import lombok.AllArgsConstructor;
 import lombok.ToString;
@@ -23,6 +24,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -115,6 +117,60 @@ public class StateTransferIT extends AbstractIT {
         verifyStateTransferWithNodeRestart(SECOND_NODE_ID);
     }
 
+
+    int getPort(String server) {
+        return Integer.parseInt(server.split(":")[1]);
+    }
+
+    @Test
+    public void testFD() throws Exception {
+        final int PORT_0 = 9000;
+        final int PORT_1 = 9001;
+        final int PORT_2 = 9002;
+        Process corfuServer_1 = runPersistentServer(corfuSingleNodeHost, PORT_0, false);
+        Process corfuServer_2 = runPersistentServer(corfuSingleNodeHost, PORT_1, false);
+        Process corfuServer_3 = runPersistentServer(corfuSingleNodeHost, PORT_2, false);
+        Map<String, Process> map =
+                ImmutableMap.of(
+                        getServerEndpoint(PORT_0), corfuServer_1,
+                        getServerEndpoint(PORT_1), corfuServer_2,
+                        getServerEndpoint(PORT_2), corfuServer_3);
+        Map<String, Process> mutableMap = new HashMap<>();
+
+        map.keySet().stream().forEach(x -> mutableMap.put(x, map.get(x)));
+        final Layout twoNodeLayout = getLayout(3);
+        BootstrapUtil.bootstrap(twoNodeLayout, retries, PARAMETERS.TIMEOUT_SHORT);
+        firstRuntime = createDefaultRuntime();
+        Predicate<Layout> check = layout -> {
+            boolean twoNodeCluster = layout.getAllServers().size() == 3;
+            boolean oneSegment = layout.getSegments().size() == 1;
+
+            return twoNodeCluster && oneSegment;
+        };
+        waitForLayoutChange(check, firstRuntime);
+
+        for (int i = 0; i < 100; i++) {
+            final Layout layout1 = firstRuntime.getLayoutView().getRuntimeLayout().getLayout();
+            final String primarySequencer = layout1.getPrimarySequencer();
+            final Process primarySequencerProcess = mutableMap.get(primarySequencer);
+            log.info("SHUTTING DOWN SEQUENCER SERVER: {} try: {}", primarySequencer, i);
+            shutdownCorfuServer(primarySequencerProcess);
+            Predicate<Layout> check2 = layout -> !layout.getUnresponsiveServers().isEmpty();
+            waitForLayoutChange(check2, firstRuntime);
+            log.info("NODE IS DOWN. BRING UP. START COUNTDOWN");
+            final int port = getPort(primarySequencer);
+            final Process newPrimarySequencerProcess = runPersistentServer(corfuSingleNodeHost, port, false);
+            mutableMap.put(primarySequencer, newPrimarySequencerProcess);
+            final long start = System.currentTimeMillis();
+            Predicate<Layout> check3 = layout -> layout.getUnresponsiveServers().isEmpty();
+            waitForLayoutChange(check3, firstRuntime);
+            log.info("LAYOUT RESTORED took: {}", System.currentTimeMillis() - start);
+        }
+        for (Process server: mutableMap.values()) {
+            shutdownCorfuServer(server);
+        }
+
+    }
 
     /**
      * A cluster of two nodes is started - 9000, 9001.
