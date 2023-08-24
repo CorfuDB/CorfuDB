@@ -117,7 +117,7 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
     // Create an opaque stream and iterator for the stream of interest, starting from lastReadTimestamp+1 to the global
     // log tail
     private void buildOpaqueStreamIterator() {
-        String streamOfStreamTag = TableRegistry.getFullStreamTagStreamName(CORFU_SYSTEM_NAMESPACE, streamTagFollowed);
+        String streamOfStreamTag = TableRegistry.getStreamTagFullStreamName(CORFU_SYSTEM_NAMESPACE, streamTagFollowed);
         UUID uuidOfStreamTagFollowed = CorfuRuntime.getStreamID(streamOfStreamTag);
 
         OpaqueStream opaqueStream = new OpaqueStream(rt.getStreamsView().get(uuidOfStreamTagFollowed));
@@ -170,7 +170,7 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
 
         LogReplication.LogReplicationEntryMsg msg;
 
-        String streamNameOfTag = TableRegistry.getFullStreamTagStreamName(CORFU_SYSTEM_NAMESPACE, streamTagFollowed);
+        String streamNameOfTag = TableRegistry.getStreamTagFullStreamName(CORFU_SYSTEM_NAMESPACE, streamTagFollowed);
         log.info("Start Snapshot Sync replication for stream name={}, id={}", streamNameOfTag,
                 CorfuRuntime.getStreamID(streamNameOfTag));
 
