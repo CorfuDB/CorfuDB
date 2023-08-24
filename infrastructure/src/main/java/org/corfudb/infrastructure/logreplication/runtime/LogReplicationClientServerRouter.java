@@ -611,6 +611,11 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
      */
     public boolean isConnectionStarterForSession(LogReplicationSession session) {
         return topology.getRemoteClusterEndpoints().containsKey(session.getSinkClusterId());
+        // TODO: this line breaks all LogReplicationLogicalGroupIT tests, basically because
+        //  LogReplicationClientServerRouter.onConnectionUp() for incoming sessions hits a NPE
+        // because sessionToRemoteSourceLeaderManager is not populated due to this method only returning
+        // true when a sink is the starter but not the source. OK for DEMO where bi-directional is needed
+        // but needs to be re-visited and fixed
         // || topology.getRemoteClusterEndpoints().containsKey(session.getSourceClusterId());
     }
 

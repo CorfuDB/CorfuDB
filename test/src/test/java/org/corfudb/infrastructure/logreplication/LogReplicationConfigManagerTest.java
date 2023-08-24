@@ -139,6 +139,12 @@ public class LogReplicationConfigManagerTest extends AbstractViewTest {
                 .get(sampleSession));
     }
 
+    /**
+     * This test verifies a replication configuration is properly updated, i.e., that it reflects the latest
+     * state (streams to replicate) as new tables are opened during execution.
+     *
+     * @throws Exception
+     */
     @Test
     public void testConfigUpdate() throws Exception {
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(runtime, LOCAL_SOURCE_CLUSTER_ID);
