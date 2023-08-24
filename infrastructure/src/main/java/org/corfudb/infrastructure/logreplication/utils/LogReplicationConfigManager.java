@@ -161,13 +161,6 @@ public class LogReplicationConfigManager {
         registeredSubscribers.add(getDefaultRoutingQueueSubscriber());
         openClientConfigTables();
         syncWithRegistryTable();
-
-        try {
-            corfuStore.openQueue(CORFU_SYSTEM_NAMESPACE, LOG_ENTRY_SYNC_QUEUE_NAME_SENDER, Queue.RoutingTableEntryMsg.class,
-                TableOptions.fromProtoSchema(Queue.RoutingTableEntryMsg.class));
-        } catch (Exception e) {
-            log.error("Failed to open the Log Entry Sync Queue", e);
-        }
     }
 
     private void openClientConfigTables() {
