@@ -90,9 +90,10 @@ public class CompleteGraphAdvisor implements ClusterAdvisor {
     @Override
     public Optional<NodeRank> healedServer(ClusterState clusterState, String localEndpoint) {
 
-        log.trace("Detecting the healed nodes for: ClusterState: {}", clusterState);
+        log.info("Detecting the healed nodes for: ClusterState: {}", clusterState);
 
         ImmutableList<String> unresponsiveNodes = clusterState.getUnresponsiveNodes();
+        log.info("Unresponsive: {}", unresponsiveNodes);
         if (unresponsiveNodes.isEmpty()) {
             log.trace("All nodes responsive. Nothing to heal");
             return Optional.empty();
@@ -103,9 +104,11 @@ public class CompleteGraphAdvisor implements ClusterAdvisor {
             return Optional.empty();
         }
 
+        final ClusterGraph clusterGraph = ClusterGraph.toClusterGraph(clusterState);
+        log.info("Original graph: {}", clusterGraph);
         //Transform a ClusterState to the ClusterGraph and make it symmetric (symmetric failures)
         ClusterGraph symmetricGraph = ClusterGraph.toClusterGraph(clusterState).toSymmetric();
-
+        log.info("Symmetric graph: {}", symmetricGraph);
         //See if local node is healed.
         return symmetricGraph.findFullyConnectedNode(localEndpoint);
     }
@@ -126,6 +129,7 @@ public class CompleteGraphAdvisor implements ClusterAdvisor {
         ClusterGraph symmetric = ClusterGraph
                 .toClusterGraph(clusterState)
                 .toSymmetric();
+        log.info("Symmetric: {}", symmetric);
         final Optional<NodeRank> decisionMaker = symmetric.getDecisionMaker(healthyNodes);
         log.info("Decision maker: {}", decisionMaker);
         return decisionMaker;

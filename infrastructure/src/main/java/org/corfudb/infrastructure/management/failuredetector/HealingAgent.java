@@ -72,11 +72,11 @@ public class HealingAgent {
      * @param layout     current layout
      */
     public CompletableFuture<DetectorTask> detectAndHandleHealing(PollReport pollReport, Layout layout, String localEndpoint) {
-        log.trace("Handle healing, layout: {}", layout);
+        log.info("Handle healing, layout: {}", layout);
 
         Optional<NodeRankByPartitionAttributes> fsHealth = fsAdvisor.healedServer(pollReport.getClusterState());
         if (!fsHealth.isPresent()) {
-            log.trace("Unhealthy node. Read only partition");
+            log.info("Unhealthy node. Read only partition");
             return skippedTask;
         }
 
@@ -96,7 +96,7 @@ public class HealingAgent {
                             });
                 })
                 .orElseGet(() -> {
-                    log.trace("Nothing to heal");
+                    log.info("Nothing to heal");
                     return skippedTask;
                 });
     }

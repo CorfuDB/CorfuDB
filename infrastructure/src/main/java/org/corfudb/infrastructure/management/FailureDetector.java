@@ -239,7 +239,7 @@ public class FailureDetector implements IDetector {
 
         //Cluster state internal map.
         ClusterState clusterState = clusterCollector
-                .collectClusterState(layoutUnresponsiveNodes, sequencerMetrics);
+                .collectClusterState(layoutUnresponsiveNodes, sequencerMetrics, epoch);
 
         Duration elapsedTime = Duration.ofNanos(System.nanoTime() - start);
 

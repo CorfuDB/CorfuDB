@@ -127,6 +127,15 @@ public class NodeConnectivity implements Comparable<NodeConnectivity> {
                 .build();
     }
 
+    public static NodeConnectivity connectivity(String endpoint, ImmutableMap<String, ConnectionStatus> connectivity, long epoch) {
+        return NodeConnectivity.builder()
+                .endpoint(endpoint)
+                .type(NodeConnectivityType.CONNECTED)
+                .connectivity(connectivity)
+                .epoch(epoch)
+                .build();
+    }
+
     /**
      * Builds a new connectivity with unavailable state
      * @param endpoint node name
