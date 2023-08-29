@@ -24,15 +24,13 @@ public class DecisionMakerAgent {
      * @return a decision maker
      */
     public Optional<String> findDecisionMaker() {
-        log.info("Find a decision maker");
+        log.trace("Find a decision maker");
 
         if (!clusterState.getLocalNode().isPresent()) {
-            log.info("Local node is empty");
             return Optional.empty();
         }
 
         Set<String> healthyNodes = healthyNodes();
-        log.info("Healthy nodes: {}", healthyNodes);
         return clusterAdvisor
                 .findDecisionMaker(clusterState, healthyNodes)
                 .map(NodeRank::getEndpoint)
@@ -43,7 +41,7 @@ public class DecisionMakerAgent {
                     boolean isDmALocalNode = decisionMaker.equals(clusterState.getLocalEndpoint());
                     if (!isDmALocalNode) {
                         String message = "The node can't be a decision maker, skip operation. Decision maker node is: {}";
-                        log.info(message, decisionMaker);
+                        log.trace(message, decisionMaker);
                     }
 
                     return isDmALocalNode;

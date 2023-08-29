@@ -125,19 +125,19 @@ public class ClusterGraph {
                         ConnectionStatus currentNodeConnection = getConnectionStatus(node, adjNode);
                         //Get connection status for opposite node
                         ConnectionStatus oppositeNodeConnection = getConnectionStatus(adjNode, node);
-
+                        //Get epoch for the current node
                         long currentNodeEpoch = node.getEpoch();
+                        //Get epoch for the opposite node
                         long oppositeNodeEpoch = adjNode.getEpoch();
-                        //Whichever node has a newer view on the cluster graph, it's connectivity is a right one, otherwise
-                        //connection successful only if both nodes connected status is true
-                        //in the other case - make the failure symmetric
+                        //If the epochs are different, the connectivity of the node
+                        //with a higher epoch is chosen.
+                        //If epochs are the same, the connection is successful only if both nodes'
+                        //connected status is true, otherwise, make a failure symmetric.
                         if (currentNodeEpoch > oppositeNodeEpoch) {
                             newConnectivity.put(adjNodeName, currentNodeConnection);
-                        }
-                        else if (currentNodeEpoch < oppositeNodeEpoch) {
+                        } else if (currentNodeEpoch < oppositeNodeEpoch) {
                             newConnectivity.put(adjNodeName, oppositeNodeConnection);
-                        }
-                        else {
+                        } else {
                             ConnectionStatus status = ConnectionStatus.OK;
                             if (EnumSet.of(currentNodeConnection, oppositeNodeConnection).contains(ConnectionStatus.FAILED)) {
                                 status = ConnectionStatus.FAILED;
@@ -271,14 +271,12 @@ public class ClusterGraph {
      * @return local node rank
      */
     public Optional<NodeRank> findFullyConnectedNode(String endpoint) {
-        log.info("Find responsive node. Unresponsive nodes: {}", unresponsiveNodes);
+        log.trace("Find responsive node. Unresponsive nodes: {}", unresponsiveNodes);
 
         NodeConnectivity node = getNodeConnectivity(endpoint);
-        log.info("Connectivity: {}", node);
         switch (node.getType()) {
             case NOT_READY:
             case UNAVAILABLE:
-                log.info("Not connected node: {}", endpoint);
                 return Optional.empty();
             case CONNECTED:
                 for (String adjacent : node.getConnectivity().keySet()) {
@@ -295,7 +293,7 @@ public class ClusterGraph {
                     }
 
                     if (adjacentNode.getConnectionStatus(endpoint) != ConnectionStatus.OK) {
-                        log.info("Fully connected node not found");
+                        log.trace("Fully connected node not found");
                         return Optional.empty();
                     }
                 }
