@@ -3,7 +3,6 @@ package org.corfudb.runtime.collections;
 import com.google.common.reflect.TypeToken;
 import io.micrometer.core.instrument.Counter;
 import io.vavr.Tuple2;
-import io.vavr.collection.HashSet;
 import io.vavr.control.Option;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;

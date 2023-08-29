@@ -22,14 +22,13 @@ import io.vavr.Tuple2;
 import io.vavr.collection.Iterator;
 import io.vavr.control.Option;
 
-import java.io.Serializable;
 import java.util.Arrays;
 import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.function.Function;
 
 interface HashArrayMappedTrieModule<K, V> {
-    public static final class ArrayNode<K, V> extends AbstractNode<K, V> implements Serializable {
+    public static final class ArrayNode<K, V> extends AbstractNode<K, V> {
         private static final long serialVersionUID = 1L;
         private final Object[] subNodes;
         private final int count;
@@ -47,16 +46,16 @@ interface HashArrayMappedTrieModule<K, V> {
             return child.lookup(shift + 5, keyHash, key);
         }
 
-        Option<LeafSingleton<K, V>> lookupNode(int shift, int keyHash, K key) {
-            int frag = hashFragment(shift, keyHash);
-            AbstractNode<K, V> child = (AbstractNode)this.subNodes[frag];
-            return child.lookupNode(shift + 5, keyHash, key);
-        }
-
         V lookup(int shift, int keyHash, K key, V defaultValue) {
             int frag = hashFragment(shift, keyHash);
             AbstractNode<K, V> child = (AbstractNode)this.subNodes[frag];
             return child.lookup(shift + 5, keyHash, key, defaultValue);
+        }
+
+        Option<LeafSingleton<K, V>> lookupNode(int shift, int keyHash, K key) {
+            int frag = hashFragment(shift, keyHash);
+            AbstractNode<K, V> child = (AbstractNode)this.subNodes[frag];
+            return child.lookupNode(shift + 5, keyHash, key);
         }
 
         AbstractNode<K, V> modify(int shift, int keyHash, K key, V value, Action action) {
@@ -74,7 +73,7 @@ interface HashArrayMappedTrieModule<K, V> {
             if (child.isEmpty() && !newChild.isEmpty()) {
                 return new ArrayNode<>(this.count + 1, this.size + newChild.size(), update(this.subNodes, frag, newChild));
             } else if (!child.isEmpty() && newChild.isEmpty()) {
-                return (AbstractNode <K, V>)(this.count - 1 <= 8 ? this.pack(frag, this.subNodes) : new ArrayNode<>(this.count - 1, this.size - child.size(), update(this.subNodes, frag, EmptyNode.instance())));
+                return (AbstractNode<K, V>)(this.count - 1 <= 8 ? this.pack(frag, this.subNodes) : new ArrayNode<>(this.count - 1, this.size - child.size(), update(this.subNodes, frag, EmptyNode.instance())));
             } else {
                 return new ArrayNode<>(this.count, this.size - child.size() + newChild.size(), update(this.subNodes, frag, newChild));
             }
@@ -105,13 +104,9 @@ interface HashArrayMappedTrieModule<K, V> {
         public int size() {
             return this.size;
         }
-
-        public int hashCode() {
-            return Objects.hash(this.subNodes);
-        }
     }
 
-    public static final class IndexedNode<K, V> extends AbstractNode<K, V> implements Serializable {
+    public static final class IndexedNode<K, V> extends AbstractNode<K, V> {
         private static final long serialVersionUID = 1L;
         private final int bitmap;
         private final int size;
@@ -216,13 +211,9 @@ interface HashArrayMappedTrieModule<K, V> {
         public int size() {
             return this.size;
         }
-
-        public int hashCode() {
-            return Objects.hash(this.subNodes);
-        }
     }
 
-    public static final class LeafList<K, V> extends LeafNode<K, V> implements Serializable {
+    public static final class LeafList<K, V> extends LeafNode<K, V> {
         private static final long serialVersionUID = 1L;
         private final int hash;
         private final K key;
@@ -239,14 +230,8 @@ interface HashArrayMappedTrieModule<K, V> {
         }
 
         Option<V> lookup(int shift, int keyHash, K key) {
-            return this.hash != keyHash ? Option.none() : this.nodes().find((node) -> {
-                return Objects.equals(node.key(), key);
-            }).map(LeafNode::value);
-        }
-
-        //Don't support lookupNode of LeafList. Use lookup instead
-        Option<LeafSingleton<K, V>> lookupNode(int shift, int keyHash, K key) {
-            return Option.none();
+            return this.hash != keyHash ? Option.none() : this.nodes()
+                    .find(node -> Objects.equals(node.key(), key)).map(LeafNode::value);
         }
 
         V lookup(int shift, int keyHash, K key, V defaultValue) {
@@ -266,6 +251,11 @@ interface HashArrayMappedTrieModule<K, V> {
 
                 return result;
             }
+        }
+
+        //Don't support lookupNode of LeafList. Use lookup instead
+        Option<LeafSingleton<K, V>> lookupNode(int shift, int keyHash, K key) {
+            return Option.none();
         }
 
         AbstractNode<K, V> modify(int shift, int keyHash, K key, V value, Action action) {
@@ -350,18 +340,6 @@ interface HashArrayMappedTrieModule<K, V> {
             };
         }
 
-        public int hashCode() {
-            Iterator<LeafNode<K, V>> it = this.nodes();
-
-            int hashCode;
-            LeafNode node;
-            for(hashCode = 0; it.hasNext(); hashCode += Objects.hash(new Object[]{node.key(), node.value()})) {
-                node = (LeafNode)it.next();
-            }
-
-            return hashCode;
-        }
-
         int hash() {
             return this.hash;
         }
@@ -375,7 +353,7 @@ interface HashArrayMappedTrieModule<K, V> {
         }
     }
 
-    public static final class LeafSingleton<K, V> extends LeafNode<K, V> implements Serializable {
+    public static final class LeafSingleton<K, V> extends LeafNode<K, V> {
         private static final long serialVersionUID = 1L;
         private final int hash;
         private final K key;
@@ -395,12 +373,12 @@ interface HashArrayMappedTrieModule<K, V> {
             return Option.when(this.equals(keyHash, key), this.value);
         }
 
-        Option<LeafSingleton<K, V>> lookupNode(int shift, int keyHash, K key) {
-            return Option.when(this.equals(keyHash, key), this);
-        }
-
         V lookup(int shift, int keyHash, K key, V defaultValue) {
             return this.equals(keyHash, key) ? this.value : defaultValue;
+        }
+
+        Option<LeafSingleton<K, V>> lookupNode(int shift, int keyHash, K key) {
+            return Option.when(this.equals(keyHash, key), this);
         }
 
         AbstractNode<K, V> modify(int shift, int keyHash, K key, V value, Action action) {
@@ -427,10 +405,6 @@ interface HashArrayMappedTrieModule<K, V> {
             return Iterator.of(this);
         }
 
-        public int hashCode() {
-            return Objects.hash(new Object[]{this.hash, this.value});
-        }
-
         int hash() {
             return this.hash;
         }
@@ -445,9 +419,6 @@ interface HashArrayMappedTrieModule<K, V> {
     }
 
     public abstract static class LeafNode<K, V> extends AbstractNode<K, V> {
-        public LeafNode() {
-        }
-
         abstract K key();
 
         abstract V value();
@@ -477,7 +448,7 @@ interface HashArrayMappedTrieModule<K, V> {
         }
     }
 
-    public static final class EmptyNode<K, V> extends AbstractNode<K, V> implements Serializable {
+    public static final class EmptyNode<K, V> extends AbstractNode<K, V> {
         private static final long serialVersionUID = 1L;
         private static final EmptyNode<?, ?> INSTANCE = new EmptyNode();
 
@@ -519,25 +490,9 @@ interface HashArrayMappedTrieModule<K, V> {
         public Iterator<LeafNode<K, V>> nodes() {
             return Iterator.empty();
         }
-
-        public int hashCode() {
-            return 1;
-        }
-
-        private Object readResolve() {
-            return INSTANCE;
-        }
     }
 
     public abstract static class AbstractNode<K, V> implements HashArrayMappedTrie<K, V> {
-        static final int SIZE = 5;
-        static final int BUCKET_SIZE = 32;
-        static final int MAX_INDEX_NODE = 16;
-        static final int MIN_ARRAY_NODE = 8;
-
-        public AbstractNode() {
-        }
-
         static int hashFragment(int shift, int hash) {
             return hash >>> shift & 31;
         }
@@ -563,6 +518,10 @@ interface HashArrayMappedTrieModule<K, V> {
             return newArr;
         }
 
+        public HashArrayMappedTrie<K, V> remove(K key) {
+            return this.modify(0, Objects.hashCode(key), key, null, Action.REMOVE);
+        }
+
         static Object[] insert(Object[] arr, int index, Object newElem) {
             Object[] newArr = new Object[arr.length + 1];
             System.arraycopy(arr, 0, newArr, 0, index);
@@ -572,11 +531,10 @@ interface HashArrayMappedTrieModule<K, V> {
         }
 
         abstract Option<V> lookup(int var1, int var2, K var3);
-        abstract Option<LeafSingleton<K, V>> lookupNode(int var1, int var2, K var3);
 
         abstract V lookup(int var1, int var2, K var3, V var4);
 
-//        abstract LeafSingleton<K, V> lookup(int var1, int var2, K var3);
+        abstract Option<LeafSingleton<K, V>> lookupNode(int var1, int var2, K var3);
 
         abstract AbstractNode<K, V> modify(int var1, int var2, K var3, V var4, Action var5);
 
@@ -587,13 +545,7 @@ interface HashArrayMappedTrieModule<K, V> {
         }
 
         public Iterator<Tuple2<K, V>> iterator() {
-            return this.nodes().map((node) -> {
-                return Tuple.of(node.key(), node.value());
-            });
-        }
-
-        public Iterator<K> keysIterator() {
-            return this.nodes().map(LeafNode::key);
+            return this.nodes().map(node -> Tuple.of(node.key(), node.value()));
         }
 
         public Option<V> get(K key) {
@@ -620,49 +572,13 @@ interface HashArrayMappedTrieModule<K, V> {
             return this.modify(0, leafSingleton, Action.PUT);
         }
 
-        public HashArrayMappedTrie<K, V> remove(K key) {
-            return (HashArrayMappedTrie<K, V>) this.modify(0, Objects.hashCode(key), key, null, Action.REMOVE);
-        }
-
-        public final boolean equals(Object o) {
-            if (o == this) {
-                return true;
-            } else if (!(o instanceof HashArrayMappedTrie)) {
-                return false;
-            } else {
-                HashArrayMappedTrie<Object, ?> that = (HashArrayMappedTrie)o;
-                if (this.size() != that.size()) {
-                    return false;
-                } else {
-                    java.util.Iterator<Tuple2<K, V>> it = this.iterator();
-
-                    Tuple2 thisEntry;
-                    Option thatValue;
-                    do {
-                        if (!it.hasNext()) {
-                            return true;
-                        }
-
-                        thisEntry = (Tuple2)it.next();
-                        thatValue = that.get(thisEntry._1);
-                    } while(thatValue.isDefined() && thatValue.get().equals(thisEntry._2));
-
-                    return false;
-                }
-            }
-        }
-
-        public abstract int hashCode();
-
         public final String toString() {
-            return this.iterator().map((t) -> {
-                return t._1 + " -> " + t._2;
-            }).mkString("HashArrayMappedTrie(", ", ", ")");
+            return this.iterator().map(t -> t._1 + " -> " + t._2)
+                    .mkString("HashArrayMappedTrie(", ", ", ")");
         }
     }
 
     public static class LeafNodeIterator<K, V> extends AbstractIterator<LeafNode<K, V>> {
-        private static final int MAX_LEVELS = 8;
         private final int total;
         private final Object[] nodes = new Object[8];
         private final int[] indexes = new int[8];
@@ -699,7 +615,7 @@ interface HashArrayMappedTrieModule<K, V> {
 
             while(this.level > 0) {
                 --this.level;
-                int var10002 = this.indexes[this.level]++;
+                this.indexes[this.level]++;
                 node = getChild((AbstractNode)this.nodes[this.level], this.indexes[this.level]);
                 if (node != null) {
                     break;
@@ -710,7 +626,9 @@ interface HashArrayMappedTrieModule<K, V> {
             return this.nodes[this.level];
         }
 
-        private static <K, V> int downstairs(Object[] nodes, int[] indexes, AbstractNode<K, V> root, int level) {
+        private static <K, V> int downstairs(Object[] nodes, int[] indexes, AbstractNode<K, V> rootNode, int l) {
+            AbstractNode<K, V> root = rootNode;
+            int level = l;
             while(true) {
                 nodes[level] = root;
                 indexes[level] = 0;
@@ -718,7 +636,6 @@ interface HashArrayMappedTrieModule<K, V> {
                 if (root == null) {
                     return level;
                 }
-
                 ++level;
             }
         }
@@ -738,16 +655,10 @@ interface HashArrayMappedTrieModule<K, V> {
 
     public static enum Action {
         PUT,
-        REMOVE;
-
-        private Action() {
-        }
+        REMOVE
     }
 
     abstract class AbstractIterator<T> implements Iterator<T> {
-        AbstractIterator() {
-        }
-
         public String toString() {
             return this.stringPrefix() + "(" + (this.isEmpty() ? "" : "?") + ")";
         }
@@ -762,6 +673,4 @@ interface HashArrayMappedTrieModule<K, V> {
             }
         }
     }
-
 }
-

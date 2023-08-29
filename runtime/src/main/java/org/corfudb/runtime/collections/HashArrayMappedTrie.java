@@ -43,6 +43,4 @@ interface HashArrayMappedTrie<K, V> extends Iterable<Tuple2<K, V>> {
     HashArrayMappedTrie<K, V> remove(K var1);
 
     Iterator<Tuple2<K, V>> iterator();
-
-    Iterator<K> keysIterator();
 }

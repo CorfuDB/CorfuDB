@@ -10,13 +10,14 @@ import java.util.Set;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
 
 @SuppressWarnings("checkstyle:magicnumber")
 public class HashArrayMappedTrieTest {
-    private final int SMALL_TREE_ELEMENTS = 100;
-    private final int LARGE_TREE_ELEMENTS = 1000;
-    private final String PAYLOAD_PREFIX = "payload_";
-    private final String KEY_PREFIX = "key_";
+    private static final int SMALL_TREE_ELEMENTS = 100;
+    private static final int LARGE_TREE_ELEMENTS = 1000;
+    private static final String PAYLOAD_PREFIX = "payload_";
+    private static final String KEY_PREFIX = "key_";
 
     @Test
     public void testCollision() {
@@ -31,7 +32,7 @@ public class HashArrayMappedTrieTest {
         assertEquals(hamt.get(key1).get(), value1);
         assertEquals(hamt.get(key2).get(), value2);
         //LeafList doesn't support getNode
-        assert(hamt.getNode(key1).isEmpty());
+        assertTrue(hamt.getNode(key1).isEmpty());
     }
 
     @Test
@@ -68,9 +69,9 @@ public class HashArrayMappedTrieTest {
     public void testRemoveNonExistentKey() {
         HashArrayMappedTrie<IntWithHashCode, ExampleValue> hamt = buildHamt(SMALL_TREE_ELEMENTS);
         IntWithHashCode hamtKey = new IntWithHashCode(101);
-        assert(hamt.get(hamtKey).isEmpty());
+        assertTrue(hamt.get(hamtKey).isEmpty());
         hamt = hamt.remove(hamtKey);
-        assert(hamt.get(hamtKey).isEmpty());
+        assertTrue(hamt.get(hamtKey).isEmpty());
     }
 
     @Test
@@ -79,7 +80,7 @@ public class HashArrayMappedTrieTest {
         IntWithHashCode hamtKey = new IntWithHashCode(1);
         assertEquals(hamt.get(hamtKey).get(), ExampleValue.newBuilder().setPayload(PAYLOAD_PREFIX + 1).build());
         hamt = hamt.remove(hamtKey);
-        assert(hamt.get(hamtKey).isEmpty());
+        assertTrue(hamt.get(hamtKey).isEmpty());
     }
 
     @Test
@@ -88,7 +89,7 @@ public class HashArrayMappedTrieTest {
         String hamtKey = KEY_PREFIX + 1;
         assertEquals(hamt.get(hamtKey).get(), ExampleValue.newBuilder().setPayload(PAYLOAD_PREFIX + 1).build());
         hamt = hamt.remove(hamtKey);
-        assert(hamt.get(hamtKey).isEmpty());
+        assertTrue(hamt.get(hamtKey).isEmpty());
     }
 
     @Test
@@ -99,7 +100,7 @@ public class HashArrayMappedTrieTest {
             expectedKeySet.add(new IntWithHashCode(i));
         }
         Set<IntWithHashCode> actualKeySet = hamt.iterator().map(Tuple2::_1).toJavaSet();
-        assert(actualKeySet.equals(expectedKeySet));
+        assertTrue(actualKeySet.equals(expectedKeySet));
     }
 
     HashArrayMappedTrie<IntWithHashCode, ExampleValue> buildHamt(int numElements) {
