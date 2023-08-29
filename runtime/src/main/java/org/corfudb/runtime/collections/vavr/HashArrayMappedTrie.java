@@ -14,13 +14,13 @@
  * copies or substantial portions of the Software.
  */
 
-package org.corfudb.runtime.collections;
+package org.corfudb.runtime.collections.vavr;
 
 import io.vavr.Tuple2;
 import io.vavr.collection.Iterator;
 import io.vavr.control.Option;
 
-interface HashArrayMappedTrie<K, V> extends Iterable<Tuple2<K, V>> {
+public interface HashArrayMappedTrie<K, V> extends Iterable<Tuple2<K, V>> {
     static <K, V> HashArrayMappedTrieModule.EmptyNode<K, V> empty() {
         return HashArrayMappedTrieModule.EmptyNode.instance();
     }

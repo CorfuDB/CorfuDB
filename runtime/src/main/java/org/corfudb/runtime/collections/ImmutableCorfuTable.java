@@ -9,6 +9,8 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
+import org.corfudb.runtime.collections.vavr.HashArrayMappedTrie;
+import org.corfudb.runtime.collections.vavr.HashArrayMappedTrieModule;
 import org.corfudb.runtime.collections.vavr.TupleIterableWrapper;
 import org.corfudb.runtime.object.ConsistencyView;
 import org.corfudb.runtime.object.InMemorySMRSnapshot;

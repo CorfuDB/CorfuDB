@@ -1,4 +1,4 @@
-package org.corfudb.runtime.collections;
+package org.corfudb.runtime.collections.vavr;
 
 import io.vavr.Tuple2;
 import org.corfudb.runtime.ExampleSchemas.ExampleValue;

@@ -14,7 +14,7 @@
  * copies or substantial portions of the Software.
  */
 
-package org.corfudb.runtime.collections;
+package org.corfudb.runtime.collections.vavr;
 
 import io.vavr.Function0;
 import io.vavr.Tuple;
@@ -27,9 +27,8 @@ import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.function.Function;
 
-interface HashArrayMappedTrieModule<K, V> {
+public interface HashArrayMappedTrieModule<K, V> {
     public static final class ArrayNode<K, V> extends AbstractNode<K, V> {
-        private static final long serialVersionUID = 1L;
         private final Object[] subNodes;
         private final int count;
         private final int size;
@@ -107,7 +106,6 @@ interface HashArrayMappedTrieModule<K, V> {
     }
 
     public static final class IndexedNode<K, V> extends AbstractNode<K, V> {
-        private static final long serialVersionUID = 1L;
         private final int bitmap;
         private final int size;
         private final Object[] subNodes;
@@ -214,7 +212,6 @@ interface HashArrayMappedTrieModule<K, V> {
     }
 
     public static final class LeafList<K, V> extends LeafNode<K, V> {
-        private static final long serialVersionUID = 1L;
         private final int hash;
         private final K key;
         private final V value;
@@ -354,7 +351,6 @@ interface HashArrayMappedTrieModule<K, V> {
     }
 
     public static final class LeafSingleton<K, V> extends LeafNode<K, V> {
-        private static final long serialVersionUID = 1L;
         private final int hash;
         private final K key;
         private final V value;
@@ -449,7 +445,6 @@ interface HashArrayMappedTrieModule<K, V> {
     }
 
     public static final class EmptyNode<K, V> extends AbstractNode<K, V> {
-        private static final long serialVersionUID = 1L;
         private static final EmptyNode<?, ?> INSTANCE = new EmptyNode();
 
         private EmptyNode() {
