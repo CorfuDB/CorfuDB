@@ -54,6 +54,8 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
     // TODO (V2): This field should be removed after the rpc stream is added for Sink side session creation.
     public static final String DEFAULT_ROUTING_QUEUE_CLIENT = "00000000-0000-0000-0000-0000000000002";
 
+    public static final String DEFAULT_ROUTING_QUEUE_CONFIG_CLIENT = "00000000-0000-0000-0000-0000000000003";
+
     // TODO: Find a way to use these from a common location (they are in infrastructure currently)
     private static final String REPLICATION_EVENT_TABLE_NAME = "LogReplicationEventTable";
 
@@ -254,7 +256,7 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
             log.info("Enqueuing message to full sync queue, message: {}", message);
             getTxn().logUpdateEnqueue(snapSyncQ, message, message.getDestinationsList().stream()
                     .map(destination -> TableRegistry.getStreamIdForStreamTag(CORFU_SYSTEM_NAMESPACE,
-                            SNAPSHOT_SYNC_QUEUE_TAG_SENDER_PREFIX + destination))
+                            SNAPSHOT_SYNC_QUEUE_TAG_SENDER_PREFIX + destination + "_" + clientName))
                     .collect(Collectors.toList()), corfuStore);
 
             long metadataSize = message.getSerializedSize() -
@@ -289,7 +291,7 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
                                 corfuStore.getRuntime().getSerializers().getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE)),
                         message.getDestinationsList().stream()
                                 .map(destination -> TableRegistry.getStreamIdForStreamTag(CORFU_SYSTEM_NAMESPACE,
-                                        SNAPSHOT_SYNC_QUEUE_TAG_SENDER_PREFIX + destination))
+                                        SNAPSHOT_SYNC_QUEUE_TAG_SENDER_PREFIX + destination + "_" + clientName))
                                 .collect(Collectors.toList())
                 );
                 log.info("Base snapshot marker key {}, value {}", keyOfStartMarker, startMarker);
@@ -320,7 +322,8 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
                                 new SMREntry("put", smrArgs,
                                         corfuStore.getRuntime().getSerializers().getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE)),
                                 Arrays.asList(TableRegistry.getStreamIdForStreamTag(CORFU_SYSTEM_NAMESPACE,
-                                        SNAPSHOT_SYNC_QUEUE_TAG_SENDER_PREFIX + key.getSession().getSinkClusterId()))
+                                        SNAPSHOT_SYNC_QUEUE_TAG_SENDER_PREFIX +
+                                            key.getSession().getSinkClusterId() + "_" + clientName))
                         );
                         txnContext.commit();
                     } catch (TransactionAbortedException tae) {
@@ -366,7 +369,7 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
         txn.logUpdateEnqueue(logEntryQ, message, message.getDestinationsList().stream()
                 .map(destination -> {
                     UUID streamIdForTag = TableRegistry.getStreamIdForStreamTag(CORFU_SYSTEM_NAMESPACE,
-                            LOG_ENTRY_SYNC_QUEUE_TAG_SENDER_PREFIX + destination);
+                            LOG_ENTRY_SYNC_QUEUE_TAG_SENDER_PREFIX + destination + "_" + clientName);
                     log.info("Adding destination stream tag id = {}", streamIdForTag);
                     return streamIdForTag;
                 })

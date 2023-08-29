@@ -60,6 +60,7 @@ import static org.corfudb.runtime.LogReplicationLogicalGroupClient.LR_MODEL_META
 import static org.corfudb.runtime.LogReplicationLogicalGroupClient.LR_REGISTRATION_TABLE_NAME;
 import static org.corfudb.runtime.LogReplicationUtils.LOG_ENTRY_SYNC_QUEUE_NAME_SENDER;
 import static org.corfudb.runtime.RoutingQueueSenderClient.DEFAULT_ROUTING_QUEUE_CLIENT;
+import static org.corfudb.runtime.RoutingQueueSenderClient.DEFAULT_ROUTING_QUEUE_CONFIG_CLIENT;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 /**
@@ -143,6 +144,13 @@ public class LogReplicationConfigManager {
                 .build();
     }
 
+    public static ReplicationSubscriber getDefaultRoutingQueueConfigSubscriber() {
+        return ReplicationSubscriber.newBuilder()
+            .setClientName(DEFAULT_ROUTING_QUEUE_CONFIG_CLIENT)
+            .setModel(ReplicationModel.ROUTING_QUEUES)
+            .build();
+    }
+
     public static ReplicationSubscriber getDefaultSubscriber() {
         return ReplicationSubscriber.newBuilder()
                 .setClientName(DEFAULT_CLIENT)
@@ -162,6 +170,7 @@ public class LogReplicationConfigManager {
         //  and logical group subscribers should come from client registration.
         registeredSubscribers.add(getDefaultLogicalGroupSubscriber());
         registeredSubscribers.add(getDefaultRoutingQueueSubscriber());
+        registeredSubscribers.add(getDefaultRoutingQueueConfigSubscriber());
         openClientConfigTables();
         syncWithRegistryTable();
         syncWithClientConfigTable();
