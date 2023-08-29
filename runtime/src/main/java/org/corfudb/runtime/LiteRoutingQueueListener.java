@@ -33,21 +33,25 @@ public abstract class LiteRoutingQueueListener extends StreamListenerResumeOrFul
     @Getter
     public String sourceSiteId;
 
-    public LiteRoutingQueueListener(CorfuStore corfuStore, String sourceSiteId) {
+    @Getter
+    private String clientName;
+
+    public LiteRoutingQueueListener(CorfuStore corfuStore, String sourceSiteId, String clientName) {
         super(corfuStore, CORFU_SYSTEM_NAMESPACE, REPLICATED_QUEUE_TAG,
-                Arrays.asList(LogReplicationUtils.REPLICATED_RECV_Q_PREFIX+sourceSiteId));
+                Arrays.asList(LogReplicationUtils.REPLICATED_RECV_Q_PREFIX + sourceSiteId + "_" + clientName));
         this.corfuStore = corfuStore;
         this.sourceSiteId = sourceSiteId;
+        this.clientName = clientName;
         Table<Queue.CorfuGuidMsg, Queue.RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg> recvQ_lcl = null;
         int numRetries = 8;
         while (numRetries-- > 0) {
             try {
                 try {
                     recvQ_lcl = corfuStore.getTable(CORFU_SYSTEM_NAMESPACE,
-                            LogReplicationUtils.REPLICATED_RECV_Q_PREFIX+sourceSiteId);
+                            LogReplicationUtils.REPLICATED_RECV_Q_PREFIX + sourceSiteId + "_" + clientName);
                 } catch(NoSuchElementException | IllegalArgumentException e) {
                     recvQ_lcl = corfuStore.openQueue(CORFU_SYSTEM_NAMESPACE,
-                            LogReplicationUtils.REPLICATED_RECV_Q_PREFIX+sourceSiteId,
+                            LogReplicationUtils.REPLICATED_RECV_Q_PREFIX + sourceSiteId + "_" + clientName,
                             Queue.RoutingTableEntryMsg.class,
                             TableOptions.builder().schemaOptions(
                                             CorfuOptions.SchemaOptions.newBuilder()
