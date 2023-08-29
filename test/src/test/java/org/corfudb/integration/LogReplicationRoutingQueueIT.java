@@ -83,7 +83,7 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
 
         try {
             RoutingQueueListener listener = new RoutingQueueListener(sinkCorfuStores.get(0),
-                    DefaultClusterConfig.getSourceClusterIds().get(0));
+                    DefaultClusterConfig.getSourceClusterIds().get(0), clientName);
             sinkCorfuStores.get(0).subscribeRoutingQListener(listener);
             startReplicationServers();
             while (!snapshotProvider.isSnapshotSent) {
@@ -136,7 +136,7 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
             }
 
             RoutingQueueListener listener = new RoutingQueueListener(sinkCorfuStores.get(0),
-                    sourceSiteId);
+                    sourceSiteId, clientName);
             sinkCorfuStores.get(0).subscribeRoutingQListener(listener);
 
             int numFullSyncMsgsGot = listener.snapSyncMsgCnt;
@@ -191,7 +191,7 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
         // Also start a Site Discovery Service on the Source Cluster that listens for new sites & starts up
         // RoutingQueueListeners when a sink comes up
         RoutingQSiteDiscoverer remoteSiteDiscoverer = new RoutingQSiteDiscoverer(clientCorfuStore,
-                LogReplication.ReplicationModel.ROUTING_QUEUES);
+                LogReplication.ReplicationModel.ROUTING_QUEUES, clientName);
 
         // Start up Full Sync providers on both sink sites to test reverse replication
         sinkCorfuStores.forEach(sinkCorfuStore -> {
@@ -222,7 +222,7 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
 
             // Test forward replication source -> sink
             RoutingQueueListener listener = new RoutingQueueListener(sinkCorfuStores.get(0),
-                    sourceSiteId);
+                    sourceSiteId, clientName);
             sinkCorfuStores.get(0).subscribeRoutingQListener(listener);
 
             int numFullSyncMsgsGot = listener.snapSyncMsgCnt;
@@ -284,7 +284,7 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
 
         try {
             RoutingQueueListener listener = new RoutingQueueListener(sinkCorfuStores.get(0),
-                    DefaultClusterConfig.getSourceClusterIds().get(0));
+                    DefaultClusterConfig.getSourceClusterIds().get(0), clientName);
             sinkCorfuStores.get(0).subscribeRoutingQListener(listener);
             startReplicationServers();
             while (!snapshotProvider.isSnapshotSent) {
@@ -424,8 +424,8 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
         public volatile int logEntryMsgCnt = 0;
         public volatile int snapSyncMsgCnt = 0;
 
-        public RoutingQueueListener(CorfuStore corfuStore, String sourceSiteId) {
-            super(corfuStore, sourceSiteId); // performFullSync is called here
+        public RoutingQueueListener(CorfuStore corfuStore, String sourceSiteId, String clientName) {
+            super(corfuStore, sourceSiteId, clientName); // performFullSync is called here
         }
 
         @Override
@@ -451,15 +451,18 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
     }
 
     static class RoutingQSiteDiscoverer extends LRSiteDiscoveryListener {
-        public RoutingQSiteDiscoverer(CorfuStore corfuStore, LogReplication.ReplicationModel replicationModel) {
-            super(corfuStore, replicationModel);
+        private final String clientName;
+        public RoutingQSiteDiscoverer(CorfuStore corfuStore, LogReplication.ReplicationModel replicationModel,
+                                      String clientName) {
+            super(corfuStore, replicationModel, clientName);
+            this.clientName = clientName;
         }
         public final Map<String, RoutingQueueListener> iGot = new HashMap<>();
 
         @Override
         public void onNewSiteUp(String siteId) {
             if (!iGot.containsKey(siteId)) {
-                iGot.put(siteId, new RoutingQueueListener(corfuStore, siteId));
+                iGot.put(siteId, new RoutingQueueListener(corfuStore, siteId, clientName));
             }
         }
     }
