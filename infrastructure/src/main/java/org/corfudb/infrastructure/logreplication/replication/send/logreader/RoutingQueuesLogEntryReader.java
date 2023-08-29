@@ -60,7 +60,8 @@ public class RoutingQueuesLogEntryReader extends BaseLogEntryReader {
         }
         HashMap<UUID, List<SMREntry>> opaqueEntryMap = new HashMap<>();
         String replicatedQueueName = TableRegistry.getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE,
-                LogReplicationUtils.REPLICATED_RECV_Q_PREFIX +session.getSourceClusterId());
+                LogReplicationUtils.REPLICATED_RECV_Q_PREFIX + session.getSourceClusterId() + "_" +
+                    session.getSubscriber().getClientName());
         opaqueEntryMap.put(CorfuRuntime.getStreamID(replicatedQueueName),
                 filteredMsgs);
         return new OpaqueEntry(opaqueEntry.getVersion(), opaqueEntryMap);
