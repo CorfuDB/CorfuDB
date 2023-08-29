@@ -89,7 +89,7 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
             while (!snapshotProvider.isSnapshotSent) {
                 Thread.sleep(5000);
             }
-            generateData(clientCorfuStore, queueSenderClient);
+            generateData(clientCorfuStore, queueSenderClient, clientName);
 
             int numLogEntriesReceived = listener.logEntryMsgCnt;
             while (numLogEntriesReceived < 10) {
@@ -242,11 +242,11 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
         }
     }
 
-    private void generateData(CorfuStore corfuStore, RoutingQueueSenderClient client) throws Exception {
+    private void generateData(CorfuStore corfuStore, RoutingQueueSenderClient client, String clientName) throws Exception {
         String namespace = CORFU_SYSTEM_NAMESPACE;
 
         String streamTagFollowed =
-            LOG_ENTRY_SYNC_QUEUE_TAG_SENDER_PREFIX + DefaultClusterConfig.getSinkClusterIds().get(0);
+            LOG_ENTRY_SYNC_QUEUE_TAG_SENDER_PREFIX + DefaultClusterConfig.getSinkClusterIds().get(0) + "_" + clientName;
         log.info("Stream UUID: {}", TableRegistry.getStreamIdForStreamTag(CORFU_SYSTEM_NAMESPACE, streamTagFollowed));
 
         for (int i = 0; i < 10; i++) {
@@ -290,7 +290,7 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
             while (!snapshotProvider.isSnapshotSent) {
                 Thread.sleep(5000);
             }
-            generateData(clientCorfuStore, queueSenderClient);
+            generateData(clientCorfuStore, queueSenderClient, clientName);
 
             int numLogEntriesReceived = listener.logEntryMsgCnt;
             while (numLogEntriesReceived < 10) {

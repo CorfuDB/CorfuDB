@@ -78,7 +78,9 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
     public RoutingQueuesSnapshotReader(CorfuRuntime corfuRuntime, LogReplicationSession session,
                                        LogReplicationContext replicationContext) {
         super(corfuRuntime, session, replicationContext);
-        streamTagFollowed = LogReplicationUtils.SNAPSHOT_SYNC_QUEUE_TAG_SENDER_PREFIX + session.getSinkClusterId();
+        streamTagFollowed =
+            LogReplicationUtils.SNAPSHOT_SYNC_QUEUE_TAG_SENDER_PREFIX + session.getSinkClusterId() + "_" +
+                session.getSubscriber().getClientName();
 
         String snapshotSyncQueueFullyQualifiedName = TableRegistry.getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE,
                 SNAPSHOT_SYNC_QUEUE_NAME_SENDER);
