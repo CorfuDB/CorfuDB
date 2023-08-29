@@ -242,7 +242,8 @@ public class LogReplicationSinkManager implements DataReceiver {
      */
     private void insertQInRegistryTable() {
         TableRegistry tableRegistry = runtime.getTableRegistry();
-        String replicatedQName = REPLICATED_RECV_Q_PREFIX+session.getSourceClusterId();
+        String replicatedQName =
+            REPLICATED_RECV_Q_PREFIX + session.getSourceClusterId() + "_" + session.getSubscriber().getClientName();
         if (!tableRegistry.getRegistryTable().containsKey(replicatedQName)) {
             try {
                 TableOptions tableOptions = TableOptions.builder()
