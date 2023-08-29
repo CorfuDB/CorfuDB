@@ -272,7 +272,7 @@ interface HashArrayMappedTrieModule<K, V> {
                 AbstractNode<K, V> filtered = this.removeElement(key);
                 return (AbstractNode<K, V>)(action == Action.REMOVE ? filtered : new LeafList(this.hash, key, value, (LeafNode)filtered));
             } else {
-                return (AbstractNode<K, V>)(action == Action.REMOVE ? this : mergeLeaves(shift, this, leafSingletonFn.apply()));
+                return action == Action.REMOVE ? this : mergeLeaves(shift, this, leafSingletonFn.apply());
             }
         }
 
@@ -463,12 +463,12 @@ interface HashArrayMappedTrieModule<K, V> {
             return Option.none();
         }
 
-        Option<LeafSingleton<K, V>> lookupNode(int var1, int var2, K var3) {
-            return Option.none();
-        }
-
         V lookup(int shift, int keyHash, K key, V defaultValue) {
             return defaultValue;
+        }
+
+        Option<LeafSingleton<K, V>> lookupNode(int var1, int var2, K var3) {
+            return Option.none();
         }
 
         AbstractNode<K, V> modify(int shift, int keyHash, K key, V value, Action action) {

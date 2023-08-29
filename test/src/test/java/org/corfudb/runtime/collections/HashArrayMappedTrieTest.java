@@ -7,6 +7,7 @@ import org.junit.Test;
 import java.util.HashSet;
 import java.util.Set;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertSame;
@@ -19,20 +20,59 @@ public class HashArrayMappedTrieTest {
     private static final String PAYLOAD_PREFIX = "payload_";
     private static final String KEY_PREFIX = "key_";
 
+    private static final IntWithHashCode key1 = new IntWithHashCode(1);
+    private static final IntWithHashCode key2 = new IntWithHashCode(2);
+    private static final IntWithHashCode key101 = new IntWithHashCode(101);
+    private static final ExampleValue value1 = ExampleValue.newBuilder().setPayload(PAYLOAD_PREFIX + 1).build();
+    private static final ExampleValue value2 = ExampleValue.newBuilder().setPayload(PAYLOAD_PREFIX + 2).build();
+    private static final ExampleValue value101 = ExampleValue.newBuilder().setPayload(PAYLOAD_PREFIX + 101).build();
+
     @Test
     public void testCollision() {
-        IntWithHashCode key1 = new IntWithHashCode(1);
-        IntWithHashCode key2 = new IntWithHashCode(101);
-        ExampleValue value1 = ExampleValue.newBuilder().setPayload(PAYLOAD_PREFIX + 1).build();
-        ExampleValue value2 = ExampleValue.newBuilder().setPayload(PAYLOAD_PREFIX + 2).build();
-
         HashArrayMappedTrie<IntWithHashCode, ExampleValue> hamt = HashArrayMappedTrie.empty();
         hamt = hamt.put(key1, value1);
-        hamt = hamt.put(key2, value2);
+        hamt = hamt.put(key101, value101);
         assertEquals(hamt.get(key1).get(), value1);
-        assertEquals(hamt.get(key2).get(), value2);
-        //LeafList doesn't support getNode
-        assertTrue(hamt.getNode(key1).isEmpty());
+        assertEquals(hamt.get(key101).get(), value101);
+        assertThat(hamt instanceof HashArrayMappedTrieModule.LeafList);
+    }
+
+    @Test
+    public void testGetAndPutNodeBasic() {
+        HashArrayMappedTrie<IntWithHashCode, ExampleValue> hamt1 = HashArrayMappedTrie.empty();
+        HashArrayMappedTrie<IntWithHashCode, ExampleValue> hamt2 = HashArrayMappedTrie.empty();
+        assertTrue(hamt1.getNode(key1).isEmpty());
+
+        hamt1 = hamt1.put(key1, value1);
+        hamt2 = hamt2.putNode(hamt1.getNode(key1).get());
+        assertSame(hamt1.getNode(key1).get(), hamt2.getNode(key1).get());
+
+        hamt1 = hamt1.put(key2, value2);
+        hamt2 = hamt2.put(key2, value2);
+        assertNotSame(hamt1.getNode(key2).get(), hamt2.getNode(key2).get());
+    }
+
+    @Test
+    public void testGetAndPutNodeFromLeafList() {
+        IntWithHashCode key2 = new IntWithHashCode(2);
+        IntWithHashCode key201 = new IntWithHashCode(201);
+        ExampleValue value2 = ExampleValue.newBuilder().setPayload(PAYLOAD_PREFIX + 2).build();
+        ExampleValue value201 = ExampleValue.newBuilder().setPayload(PAYLOAD_PREFIX + 201).build();
+
+        HashArrayMappedTrie<IntWithHashCode, ExampleValue> hamt1 = HashArrayMappedTrie.empty();
+        hamt1 = hamt1.put(key1, value1);
+        hamt1 = hamt1.put(key101, value101); //hamt1 is a LeafListNode now
+
+        HashArrayMappedTrie<IntWithHashCode, ExampleValue> hamt2 = HashArrayMappedTrie.empty();
+        hamt2 = hamt2.put(key2, value2);
+        hamt2 = hamt2.put(key201, value201);
+
+        hamt1 = hamt1.putNode(hamt2.getNode(key2).get()); //key2 will not be added to the existing LeafList
+        assertSame(hamt1.getNode(key2).get(), hamt2.getNode(key2).get());
+
+        hamt1 = hamt1.putNode(hamt2.getNode(key201).get()); //key201 will be added to the existing LeafList
+        assertEquals(hamt1.get(key201).get(), value201); //key201 is found
+        assertTrue(hamt1.getNode(key201).isEmpty()); //LeafList doesn't support getNode
     }
 
     @Test
@@ -85,9 +125,9 @@ public class HashArrayMappedTrieTest {
 
     @Test
     public void testRemoveKeyFromArrayNode() {
-        HashArrayMappedTrie<String, ExampleValue> hamt = buildHamtWithStringKey(SMALL_TREE_ELEMENTS);
-        String hamtKey = KEY_PREFIX + 1;
-        assertEquals(hamt.get(hamtKey).get(), ExampleValue.newBuilder().setPayload(PAYLOAD_PREFIX + 1).build());
+        HashArrayMappedTrie<String, ExampleValue> hamt = buildHamtWithStringKey(LARGE_TREE_ELEMENTS);
+        String hamtKey = KEY_PREFIX + 100;
+        assertEquals(hamt.get(hamtKey).get(), ExampleValue.newBuilder().setPayload(PAYLOAD_PREFIX + 100).build());
         hamt = hamt.remove(hamtKey);
         assertTrue(hamt.get(hamtKey).isEmpty());
     }
