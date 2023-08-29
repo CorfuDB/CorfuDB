@@ -27,6 +27,8 @@ import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.function.Function;
 
+import static org.corfudb.runtime.collections.vavr.HashArrayMappedTrieModule.AbstractNode.BUCKET_SIZE;
+
 public interface HashArrayMappedTrieModule<K, V> {
     public static final class ArrayNode<K, V> extends AbstractNode<K, V> {
         private final Object[] subNodes;
@@ -42,27 +44,27 @@ public interface HashArrayMappedTrieModule<K, V> {
         Option<V> lookup(int shift, int keyHash, K key) {
             int frag = hashFragment(shift, keyHash);
             AbstractNode<K, V> child = (AbstractNode)this.subNodes[frag];
-            return child.lookup(shift + 5, keyHash, key);
+            return child.lookup(shift + CHUNK_SIZE, keyHash, key);
         }
 
         V lookup(int shift, int keyHash, K key, V defaultValue) {
             int frag = hashFragment(shift, keyHash);
             AbstractNode<K, V> child = (AbstractNode)this.subNodes[frag];
-            return child.lookup(shift + 5, keyHash, key, defaultValue);
+            return child.lookup(shift + CHUNK_SIZE, keyHash, key, defaultValue);
         }
 
         Option<LeafSingleton<K, V>> lookupNode(int shift, int keyHash, K key) {
             int frag = hashFragment(shift, keyHash);
             AbstractNode<K, V> child = (AbstractNode)this.subNodes[frag];
-            return child.lookupNode(shift + 5, keyHash, key);
+            return child.lookupNode(shift + CHUNK_SIZE, keyHash, key);
         }
 
         AbstractNode<K, V> modify(int shift, int keyHash, K key, V value, Action action) {
-            return modifyHelper(shift, keyHash, child -> child.modify(shift + 5, keyHash, key, value, action));
+            return modifyHelper(shift, keyHash, child -> child.modify(shift + CHUNK_SIZE, keyHash, key, value, action));
         }
 
         AbstractNode<K, V> modify(int shift, LeafSingleton<K, V> leafSingleton, Action action) {
-            return modifyHelper(shift, leafSingleton.hash(), child -> child.modify(shift + 5, leafSingleton, action));
+            return modifyHelper(shift, leafSingleton.hash(), child -> child.modify(shift + CHUNK_SIZE, leafSingleton, action));
         }
 
         AbstractNode<K, V> modifyHelper(int shift, int keyHash, Function<AbstractNode<K, V>, AbstractNode<K, V>> modifyFn) {
@@ -72,7 +74,7 @@ public interface HashArrayMappedTrieModule<K, V> {
             if (child.isEmpty() && !newChild.isEmpty()) {
                 return new ArrayNode<>(this.count + 1, this.size + newChild.size(), update(this.subNodes, frag, newChild));
             } else if (!child.isEmpty() && newChild.isEmpty()) {
-                return (AbstractNode<K, V>)(this.count - 1 <= 8 ? this.pack(frag, this.subNodes) : new ArrayNode<>(this.count - 1, this.size - child.size(), update(this.subNodes, frag, EmptyNode.instance())));
+                return (AbstractNode<K, V>)(this.count - 1 <= MIN_ARRAY_NODE ? this.pack(frag, this.subNodes) : new ArrayNode<>(this.count - 1, this.size - child.size(), update(this.subNodes, frag, EmptyNode.instance())));
             } else {
                 return new ArrayNode<>(this.count, this.size - child.size() + newChild.size(), update(this.subNodes, frag, newChild));
             }
@@ -84,7 +86,7 @@ public interface HashArrayMappedTrieModule<K, V> {
             int size = 0;
             int ptr = 0;
 
-            for(int i = 0; i < 32; ++i) {
+            for(int i = 0; i < BUCKET_SIZE; ++i) {
                 AbstractNode<K, V> elem = (AbstractNode)elements[i];
                 if (i != idx && !elem.isEmpty()) {
                     size += elem.size();
@@ -121,7 +123,7 @@ public interface HashArrayMappedTrieModule<K, V> {
             int bit = toBitmap(frag);
             if ((this.bitmap & bit) != 0) {
                 AbstractNode<K, V> n = (AbstractNode)this.subNodes[fromBitmap(this.bitmap, bit)];
-                return n.lookup(shift + 5, keyHash, key);
+                return n.lookup(shift + CHUNK_SIZE, keyHash, key);
             } else {
                 return Option.none();
             }
@@ -132,7 +134,7 @@ public interface HashArrayMappedTrieModule<K, V> {
             int bit = toBitmap(frag);
             if ((this.bitmap & bit) != 0) {
                 AbstractNode<K, V> n = (AbstractNode)this.subNodes[fromBitmap(this.bitmap, bit)];
-                return n.lookup(shift + 5, keyHash, key, defaultValue);
+                return n.lookup(shift + CHUNK_SIZE, keyHash, key, defaultValue);
             } else {
                 return defaultValue;
             }
@@ -143,17 +145,17 @@ public interface HashArrayMappedTrieModule<K, V> {
             int bit = toBitmap(frag);
             if ((this.bitmap & bit) != 0) {
                 AbstractNode<K, V> n = (AbstractNode)this.subNodes[fromBitmap(this.bitmap, bit)];
-                return n.lookupNode(shift + 5, keyHash, key);
+                return n.lookupNode(shift + CHUNK_SIZE, keyHash, key);
             } else {
                 return Option.none();
             }
         }
         AbstractNode<K, V> modify(int shift, int keyHash, K key, V value, Action action) {
-            return modifyHelper(shift, keyHash, atIndx -> atIndx.modify(shift + 5, keyHash, key, value, action));
+            return modifyHelper(shift, keyHash, atIndx -> atIndx.modify(shift + CHUNK_SIZE, keyHash, key, value, action));
         }
 
         AbstractNode<K, V> modify(int shift, LeafSingleton<K, V> leafSingleton, Action action) {
-            return modifyHelper(shift, leafSingleton.hash(), atIndx -> atIndx.modify(shift + 5, leafSingleton, action));
+            return modifyHelper(shift, leafSingleton.hash(), atIndx -> atIndx.modify(shift + CHUNK_SIZE, leafSingleton, action));
         }
 
         AbstractNode<K, V> modifyHelper(int shift, int keyHash, Function<AbstractNode<K, V>, AbstractNode<K, V>> modifyFn) {
@@ -172,7 +174,7 @@ public interface HashArrayMappedTrieModule<K, V> {
             } else if (removed) {
                 return (AbstractNode)(this.subNodes.length <= 2 && this.subNodes[index ^ 1] instanceof LeafNode ? (AbstractNode)this.subNodes[index ^ 1] : new IndexedNode(newBitmap, this.size - atIndx.size(), remove(this.subNodes, index)));
             } else if (added) {
-                return (AbstractNode)(this.subNodes.length >= 16 ? this.expand(frag, child, mask, this.subNodes) : new IndexedNode(newBitmap, this.size + child.size(), insert(this.subNodes, index, child)));
+                return (AbstractNode)(this.subNodes.length >= MAX_INDEX_NODE ? this.expand(frag, child, mask, this.subNodes) : new IndexedNode(newBitmap, this.size + child.size(), insert(this.subNodes, index, child)));
             } else {
                 return !exists ? this : new IndexedNode(newBitmap, this.size - atIndx.size() + child.size(), update(this.subNodes, index, child));
             }
@@ -183,9 +185,9 @@ public interface HashArrayMappedTrieModule<K, V> {
             int bit = mask;
             int count = 0;
             int ptr = 0;
-            Object[] arr = new Object[32];
+            Object[] arr = new Object[BUCKET_SIZE];
 
-            for(int i = 0; i < 32; ++i) {
+            for(int i = 0; i < BUCKET_SIZE; ++i) {
                 if ((bit & 1) != 0) {
                     arr[i] = subNodes[ptr++];
                     ++count;
@@ -431,7 +433,7 @@ public interface HashArrayMappedTrieModule<K, V> {
                 int subH2 = hashFragment(shift, h2);
                 int newBitmap = toBitmap(subH1) | toBitmap(subH2);
                 if (subH1 == subH2) {
-                    AbstractNode<K, V> newLeaves = mergeLeaves(shift + 5, leaf1, leaf2);
+                    AbstractNode<K, V> newLeaves = mergeLeaves(shift + CHUNK_SIZE, leaf1, leaf2);
                     return new IndexedNode(newBitmap, newLeaves.size(), new Object[]{newLeaves});
                 } else {
                     return new IndexedNode(newBitmap, leaf1.size() + leaf2.size(), subH1 < subH2 ? new Object[]{leaf1, leaf2} : new Object[]{leaf2, leaf1});
@@ -488,6 +490,10 @@ public interface HashArrayMappedTrieModule<K, V> {
     }
 
     public abstract static class AbstractNode<K, V> implements HashArrayMappedTrie<K, V> {
+        static final int CHUNK_SIZE = 5;
+        static final int BUCKET_SIZE = 32;
+        static final int MAX_INDEX_NODE = 16;
+        static final int MIN_ARRAY_NODE = 8;
         static int hashFragment(int shift, int hash) {
             return hash >>> shift & 31;
         }
@@ -574,9 +580,10 @@ public interface HashArrayMappedTrieModule<K, V> {
     }
 
     public static class LeafNodeIterator<K, V> extends AbstractIterator<LeafNode<K, V>> {
+        private static final int MAX_LEVELS = 8;
         private final int total;
-        private final Object[] nodes = new Object[8];
-        private final int[] indexes = new int[8];
+        private final Object[] nodes = new Object[MAX_LEVELS];
+        private final int[] indexes = new int[MAX_LEVELS];
         private int level;
         private int ptr = 0;
 
@@ -641,7 +648,7 @@ public interface HashArrayMappedTrieModule<K, V> {
                 return index < subNodes.length ? (AbstractNode)subNodes[index] : null;
             } else if (node instanceof ArrayNode) {
                 ArrayNode<K, V> arrayNode = (ArrayNode)node;
-                return index < 32 ? (AbstractNode)arrayNode.subNodes[index] : null;
+                return index < BUCKET_SIZE ? (AbstractNode)arrayNode.subNodes[index] : null;
             } else {
                 return null;
             }
