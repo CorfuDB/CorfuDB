@@ -66,7 +66,9 @@ public class RoutingQueuesSnapshotReaderTest extends AbstractViewTest {
         snapshotReader = new RoutingQueuesSnapshotReader(lrRuntime, session, replicationContext);
         snapshotReader.reset(lrRuntime.getAddressSpaceView().getLogTail());
 
-        streamTagFollowed = TableRegistry.getStreamTagFullStreamName(namespace, LogReplicationUtils.SNAPSHOT_SYNC_QUEUE_TAG_SENDER_PREFIX + session.getSinkClusterId());
+        streamTagFollowed = TableRegistry.getStreamTagFullStreamName(namespace,
+            LogReplicationUtils.SNAPSHOT_SYNC_QUEUE_TAG_SENDER_PREFIX + session.getSinkClusterId() + "_" +
+            session.getSubscriber().getClientName());
     }
 
     /**
