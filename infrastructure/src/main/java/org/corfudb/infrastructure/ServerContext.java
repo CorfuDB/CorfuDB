@@ -9,7 +9,6 @@ import static org.corfudb.common.util.URLUtils.getVersionFormattedHostAddress;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.google.gson.reflect.TypeToken;
-import com.google.protobuf.ByteString;
 import io.netty.channel.EventLoopGroup;
 import lombok.AccessLevel;
 import lombok.Getter;

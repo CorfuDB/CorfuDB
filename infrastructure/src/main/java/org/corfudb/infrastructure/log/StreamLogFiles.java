@@ -238,7 +238,7 @@ public class StreamLogFiles implements StreamLog {
         AtomicLong numOfAddrLoaded = new AtomicLong(0L);
         streamAddressSpaceMap.forEach((uuid, serializedAddressSpace) -> {
             StreamAddressSpace streamAddressSpace;
-            byte[] decodedBytes = Base64.getDecoder().decode(serializedAddressSpace);;
+            byte[] decodedBytes = Base64.getDecoder().decode(serializedAddressSpace);
             ByteArrayInputStream bis = new ByteArrayInputStream(decodedBytes);
             try (DataInputStream data = new DataInputStream(bis)) {
                 streamAddressSpace = StreamAddressSpace.deserialize(data);
@@ -259,11 +259,14 @@ public class StreamLogFiles implements StreamLog {
             numOfAddrLoaded.addAndGet(validAddressSpace.size());
         });
 
-        long highestTail = Collections.max(logMetadata.getStreamTails().values());
         long end = System.currentTimeMillis();
+
+        long highestTail = Address.NON_ADDRESS;
+        if (!logMetadata.getStreamTails().isEmpty()) {
+            highestTail = Collections.max(logMetadata.getStreamTails().values());
+        }
         log.info("Loaded {} valid addresses from persisted log metadata in {} ms. Highest stream tail loaded is {}",
                 numOfAddrLoaded, end-start, highestTail);
-
         return highestTail;
     }
 

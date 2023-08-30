@@ -767,7 +767,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         log.updateCommittedTail(RECORDS_PER_LOG_FILE * 2 - 1);
 
         // Perform prefixTrim at 15K and delete the first log segment
-        long trimAddress = (long) (1.5 * RECORDS_PER_LOG_FILE  - 1); // inclusive
+        long trimAddress = (long) (1.5 * RECORDS_PER_LOG_FILE - 1); // inclusive
         log.prefixTrim(trimAddress);
         log.compact();
 
