@@ -180,18 +180,17 @@ public class StreamLogFiles implements StreamLog {
 
         long startingSegment = getStartingSegment();
         long tailSegment = dataStore.getTailSegment();
-        long maxAddress = Address.MAX;
-        if (reset) {
-            // Only initialized LU can be reset, so global tail is available.
-            // In LU reset, the global tail has been rewound back to the committed tail.
-            maxAddress = logMetadata.getGlobalTail();
-        }
-        long highestTailLoaded = loadPersistedLogMetadata(maxAddress);
-        if (highestTailLoaded != Address.NON_ADDRESS) {
-            // Update global tail in case the persisted log metadata covers the entire address space
-            // of the log files, meaning that the following 'file scanning' will be skipped.
-            logMetadata.updateGlobalTail(highestTailLoaded);
 
+        long highestTailLoaded = Address.NON_ADDRESS;
+        try {
+            // 1. For reset, load up to the rewound global tail.
+            // 2. For fresh startup, load all metadata.
+            highestTailLoaded = loadPersistedLogMetadata(reset ? getCommittedTail() : Address.MAX);
+        } catch (Exception e) {
+            log.warn("Failed to load persisted log metadata.");
+        }
+
+        if (highestTailLoaded != Address.NON_ADDRESS) {
             long highestSegmentLoaded = getSegmentId(highestTailLoaded);
             startingSegment = Math.max(highestSegmentLoaded, startingSegment);
         }
@@ -235,7 +234,6 @@ public class StreamLogFiles implements StreamLog {
             return Address.NON_ADDRESS;
         }
 
-        AtomicLong numOfAddrLoaded = new AtomicLong(0L);
         streamAddressSpaceMap.forEach((uuid, serializedAddressSpace) -> {
             StreamAddressSpace streamAddressSpace;
             byte[] decodedBytes = Base64.getDecoder().decode(serializedAddressSpace);
@@ -255,8 +253,6 @@ public class StreamLogFiles implements StreamLog {
 
             logMetadata.getStreamsAddressSpaceMap().put(uuid, validAddressSpace);
             logMetadata.getStreamTails().put(uuid, validAddressSpace.getTail());
-
-            numOfAddrLoaded.addAndGet(validAddressSpace.size());
         });
 
         long end = System.currentTimeMillis();
@@ -265,8 +261,9 @@ public class StreamLogFiles implements StreamLog {
         if (!logMetadata.getStreamTails().isEmpty()) {
             highestTail = Collections.max(logMetadata.getStreamTails().values());
         }
-        log.info("Loaded {} valid addresses from persisted log metadata in {} ms. Highest stream tail loaded is {}",
-                numOfAddrLoaded, end-start, highestTail);
+        logMetadata.updateGlobalTail(highestTail);
+        log.info("Loaded persisted log metadata in {} ms. Valid address is {} - {}. Highest stream tail loaded is {}.",
+                end-start, dataStore.getStartingAddress(), maxAddress, highestTail);
         return highestTail;
     }
 
@@ -725,8 +722,8 @@ public class StreamLogFiles implements StreamLog {
      * through instantiation not by clearing this class' state
      * <p>
      * Resets the Stream log.
-     * Clears all data and resets the handlers.
-     * Usage: To heal a recovering node, we require to wipe off existing data.
+     * Clears all data after the committed tail segment (inclusive) and resets the handlers.
+     * Usage: To heal a recovering node, we require to wipe off existing uncommitted data.
      */
     @Override
     public void reset() {
@@ -742,7 +739,7 @@ public class StreamLogFiles implements StreamLog {
             long newTailAddress = StreamLogDataStore.ZERO_ADDRESS;
 
             if (committedTail < globalTail) {
-                // Delete all segments up to the committed tail's segment
+                // Delete all segments from the committed tail (including the committed tail segment)
                 long latestSegment = getSegmentId(globalTail);
                 long committedTailSegment = getSegmentId(committedTail);
 
