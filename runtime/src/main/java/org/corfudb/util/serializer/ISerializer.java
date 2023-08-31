@@ -1,6 +1,7 @@
 package org.corfudb.util.serializer;
 
 import com.esotericsoftware.kryo.Kryo;
+import com.esotericsoftware.kryo.util.DefaultInstantiatorStrategy;
 import com.google.common.collect.ImmutableMap;
 
 import java.nio.ByteBuffer;
@@ -34,7 +35,7 @@ public interface ISerializer {
         protected Kryo initialValue() {
             Kryo kryo = new Kryo();
             // Use an instantiator that does not require no-args
-            kryo.setInstantiatorStrategy(new Kryo.DefaultInstantiatorStrategy(
+            kryo.setInstantiatorStrategy(new DefaultInstantiatorStrategy(
                     new StdInstantiatorStrategy()));
             ImmutableListSerializer.registerSerializers(kryo);
             ImmutableSetSerializer.registerSerializers(kryo);

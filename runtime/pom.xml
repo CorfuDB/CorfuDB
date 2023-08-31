@@ -15,8 +15,8 @@
         <maven.deploy.skip>false</maven.deploy.skip>
 
         <rocksdb.version>7.9.2</rocksdb.version>
-        <kryo.version>4.0.0</kryo.version>
-        <kryo.serializers.version>0.41</kryo.serializers.version>
+        <kryo.version>5.5.0</kryo.version>
+        <kryo.serializers.version>0.45</kryo.serializers.version>
         <plexus.version>3.0.24</plexus.version>
         <javassist.version>3.21.0-GA</javassist.version>
         <commons.lang3.version>3.9</commons.lang3.version>
