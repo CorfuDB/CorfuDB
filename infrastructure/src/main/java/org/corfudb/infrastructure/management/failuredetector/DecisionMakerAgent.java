@@ -31,7 +31,6 @@ public class DecisionMakerAgent {
         }
 
         Set<String> healthyNodes = healthyNodes();
-
         return clusterAdvisor
                 .findDecisionMaker(clusterState, healthyNodes)
                 .map(NodeRank::getEndpoint)

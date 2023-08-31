@@ -163,6 +163,7 @@ public class FailureDetector implements IDetector {
     PollReport pollRound(long epoch, UUID clusterID, Set<String> allServers, Map<String, IClientRouter> router,
                          SequencerMetrics sequencerMetrics, ImmutableList<String> layoutUnresponsiveNodes,
                          FileSystemStats fileSystemStats) {
+        log.debug("Starting poll round");
         Map<String, Long> timeouts = getAdjustedResponseTimeouts(router, pollConfig.sleepBetweenPolls.toMillis());
         for (String server : allServers) {
             final Long adjustedTimeout = timeouts.get(server);
@@ -238,7 +239,7 @@ public class FailureDetector implements IDetector {
 
         //Cluster state internal map.
         ClusterState clusterState = clusterCollector
-                .collectClusterState(layoutUnresponsiveNodes, sequencerMetrics);
+                .collectClusterState(layoutUnresponsiveNodes, sequencerMetrics, epoch);
 
         Duration elapsedTime = Duration.ofNanos(System.nanoTime() - start);
 

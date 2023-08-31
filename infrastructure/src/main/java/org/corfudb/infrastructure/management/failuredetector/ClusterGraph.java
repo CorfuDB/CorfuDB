@@ -122,17 +122,28 @@ public class ClusterGraph {
                         }
 
                         //Get connection status for current node
-                        ConnectionStatus nodeConnection = getConnectionStatus(node, adjNode);
+                        ConnectionStatus currentNodeConnection = getConnectionStatus(node, adjNode);
                         //Get connection status for opposite node
                         ConnectionStatus oppositeNodeConnection = getConnectionStatus(adjNode, node);
-
-                        //Symmetric failure - connection successful only if both nodes connected status is true
-                        //in the other case - make the failure symmetric
-                        ConnectionStatus status = ConnectionStatus.OK;
-                        if (EnumSet.of(nodeConnection, oppositeNodeConnection).contains(ConnectionStatus.FAILED)) {
-                            status = ConnectionStatus.FAILED;
+                        //Get epoch for the current node
+                        long currentNodeEpoch = node.getEpoch();
+                        //Get epoch for the opposite node
+                        long oppositeNodeEpoch = adjNode.getEpoch();
+                        //If the epochs are different, the connectivity of the node
+                        //with a higher epoch is chosen.
+                        //If epochs are the same, the connection is successful only if both nodes'
+                        //connected status is true, otherwise, make a failure symmetric.
+                        if (currentNodeEpoch > oppositeNodeEpoch) {
+                            newConnectivity.put(adjNodeName, currentNodeConnection);
+                        } else if (currentNodeEpoch < oppositeNodeEpoch) {
+                            newConnectivity.put(adjNodeName, oppositeNodeConnection);
+                        } else {
+                            ConnectionStatus status = ConnectionStatus.OK;
+                            if (EnumSet.of(currentNodeConnection, oppositeNodeConnection).contains(ConnectionStatus.FAILED)) {
+                                status = ConnectionStatus.FAILED;
+                            }
+                            newConnectivity.put(adjNodeName, status);
                         }
-                        newConnectivity.put(adjNodeName, status);
                     });
 
             NodeConnectivity symmetricConnectivity = NodeConnectivity.builder()
@@ -263,11 +274,9 @@ public class ClusterGraph {
         log.trace("Find responsive node. Unresponsive nodes: {}", unresponsiveNodes);
 
         NodeConnectivity node = getNodeConnectivity(endpoint);
-
         switch (node.getType()) {
             case NOT_READY:
             case UNAVAILABLE:
-                log.trace("Not connected node: {}", endpoint);
                 return Optional.empty();
             case CONNECTED:
                 for (String adjacent : node.getConnectivity().keySet()) {
@@ -370,6 +379,8 @@ public class ClusterGraph {
 
         return sourceNode.getConnectionStatus(targetNode.getEndpoint());
     }
+
+
 
     /**
      * Helper provides methods to build cluster graph
