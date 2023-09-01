@@ -2,6 +2,7 @@ package org.corfudb.runtime.collections;
 
 import com.google.protobuf.Message;
 import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
@@ -53,6 +54,13 @@ public class TxnContext
 
     @Getter
     private final String namespace;
+
+    /**
+     * A transaction id to be embedded into Queue's id for parallel unique id generation.
+     */
+    @Getter
+    @Setter
+    private long txnIdForQueues = 0;
 
     /**
      * Creates a new TxnContext.
