@@ -97,6 +97,10 @@ public class TableRegistry {
     private volatile StreamingManager streamingManager;
 
     /**
+     * Corfu Guid generator to create globally unique short Ids with very high concurrency.
+     */
+    private volatile CorfuGuidGenerator corfuGuidGenerator;
+    /**
      * Cache of tables allowing the user to fetch a table by fullyQualified table name without the other options.
      */
     private final ConcurrentMap<String, Table<Message, Message, Message>> tableMap;
@@ -877,6 +881,15 @@ public class TableRegistry {
                 new HashSet<>(Collections.singletonList(LOG_REPLICATOR_STREAM_INFO.getStreamId())));
     }
 
+    /**
+     * Create a new guid generator specific to this corfu cluster
+     */
+    public synchronized CorfuGuidGenerator getCorfuGuidGenerator() {
+        if (corfuGuidGenerator == null) {
+            corfuGuidGenerator = new CorfuGuidGenerator(runtime);
+        }
+        return corfuGuidGenerator;
+    }
     /**
      * Register a streaming subscription manager as a singleton.
      */

@@ -29,6 +29,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.TreeMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
@@ -240,6 +241,48 @@ public class CorfuQueueTxTest extends AbstractTransactionsTest {
             Long order = ((ExampleSchemas.ExampleValue)records.get(i).getEntry()).getAnotherKey();
             assertThat(order).isEqualTo(validator.get(i));
         }
+    }
+
+    @Test
+    public void queueHighThroughputPerfTest() throws Exception {
+        final int numThreads = Runtime.getRuntime().availableProcessors();
+        final int numQrecordsInTxn = 1000;
+        final int numIterations = 8;
+        // Get a Corfu Runtime instance.
+        CorfuRuntime corfuRuntime = getRuntime();
+
+        // Creating Corfu Store using a connected corfu client.
+        CorfuStoreShim shimStore = new CorfuStoreShim(corfuRuntime);
+
+        // Define a namespace for the table.
+        final String someNamespace = "some-namespace";
+        // Define table name.
+        final String someQ = "SomeQ";
+
+        Table<Queue.CorfuGuidMsg, Queue.CorfuQueueIdMsg, Queue.CorfuQueueMetadataMsg> myQ =
+                shimStore.openQueue(someNamespace, someQ, Queue.CorfuQueueIdMsg.class,
+                        TableOptions.fromProtoSchema(Queue.CorfuQueueIdMsg.class));
+        final Map<Long, Long> threadTimes = new ConcurrentHashMap<>();
+        scheduleConcurrently(numThreads, t ->
+        {
+            long startTime = System.nanoTime();
+            for (int j = 0; j < numIterations; j++) {
+                try (ManagedTxnContext txn = shimStore.tx(someNamespace)) {
+                    for (int i = 0; i < numQrecordsInTxn; i++) {
+                        txn.enqueue(myQ, Queue.CorfuQueueIdMsg.newBuilder()
+                                .setTxSequence(j)
+                                .setEntryId(i).build());
+                    }
+                    txn.txAbort(); // no need to commit anything!
+                }
+            }
+            long endTime = System.nanoTime();
+            threadTimes.put(Thread.currentThread().getId(), endTime - startTime);
+        });
+        executeScheduled(numThreads, PARAMETERS.TIMEOUT_LONG);
+        threadTimes.forEach((t, v) -> {
+            System.out.println("Thread "+t+" took "+v/1000000+"ms");
+        });
     }
 
     //Assist the test that the log address values are not in the same order of enqueue.
