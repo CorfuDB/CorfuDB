@@ -44,6 +44,7 @@ import static org.corfudb.runtime.LogReplicationUtils.LOG_ENTRY_SYNC_QUEUE_TAG_S
 import static org.corfudb.runtime.LogReplicationUtils.REPLICATED_RECV_Q_PREFIX;
 import static org.corfudb.runtime.LogReplicationUtils.REPLICATED_QUEUE_TAG;
 import static org.corfudb.runtime.LogReplicationUtils.REPLICATION_STATUS_TABLE_NAME;
+import static org.corfudb.runtime.RoutingQueueSenderClient.DEFAULT_ROUTING_QUEUE_CLIENT;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 @SuppressWarnings("checkstyle:magicnumber")
@@ -74,7 +75,7 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
         // Register client and setup initial group destinations mapping
         CorfuRuntime clientRuntime = getClientRuntime();
         CorfuStore clientCorfuStore = new CorfuStore(clientRuntime);
-        String clientName = RoutingQueueSenderClient.DEFAULT_ROUTING_QUEUE_CLIENT;
+        String clientName = DEFAULT_ROUTING_QUEUE_CLIENT;
         String sourceSiteId = DefaultClusterConfig.getSourceClusterIds().get(0);
         RoutingQueueSenderClient queueSenderClient = new RoutingQueueSenderClient(clientCorfuStore, clientName);
         // SnapshotProvider implements RoutingQueueSenderClient.LRTransmitterReplicationModule
@@ -114,7 +115,7 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
         CorfuStore clientCorfuStore = new CorfuStore(clientRuntime);
         String sourceSiteId = DefaultClusterConfig.getSourceClusterIds().get(0);
         CorfuStoreBrowserEditor editor = new CorfuStoreBrowserEditor(clientRuntime, null, true);
-        String clientName = RoutingQueueSenderClient.DEFAULT_ROUTING_QUEUE_CLIENT;
+        String clientName = DEFAULT_ROUTING_QUEUE_CLIENT;
         RoutingQueueSenderClient queueSenderClient = new RoutingQueueSenderClient(clientCorfuStore, clientName);
         // SnapshotProvider implements RoutingQueueSenderClient.LRTransmitterReplicationModule
         SnapshotProvider snapshotProvider = new SnapshotProvider(clientCorfuStore);
@@ -180,7 +181,7 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
         CorfuRuntime clientRuntime = getClientRuntime();
         CorfuStore clientCorfuStore = new CorfuStore(clientRuntime);
         String sourceSiteId = DefaultClusterConfig.getSourceClusterIds().get(0);
-        final String clientName = RoutingQueueSenderClient.DEFAULT_ROUTING_QUEUE_CLIENT;
+        final String clientName = DEFAULT_ROUTING_QUEUE_CLIENT;
 
         RoutingQueueSenderClient queueSenderClient = new RoutingQueueSenderClient(clientCorfuStore, clientName);
         // SnapshotProvider implements RoutingQueueSenderClient.LRTransmitterReplicationModule
@@ -274,7 +275,7 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
         // Register client and setup initial group destinations mapping
         CorfuRuntime clientRuntime = getClientRuntime();
         CorfuStore clientCorfuStore = new CorfuStore(clientRuntime);
-        String clientName = "testClient";
+        String clientName = DEFAULT_ROUTING_QUEUE_CLIENT;
         String sourceSiteId = DefaultClusterConfig.getSourceClusterIds().get(0);
         RoutingQueueSenderClient queueSenderClient = new RoutingQueueSenderClient(clientCorfuStore, clientName);
         // SnapshotProvider implements RoutingQueueSenderClient.LRTransmitterReplicationModule
@@ -289,6 +290,7 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
             while (!snapshotProvider.isSnapshotSent) {
                 Thread.sleep(5000);
             }
+            log.info("Snapshot Sent");
             generateData(clientCorfuStore, queueSenderClient, clientName);
 
             int numLogEntriesReceived = listener.logEntryMsgCnt;
@@ -382,9 +384,7 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
                 try (TxnContext tx = corfuStore.txn(someNamespace)) {
                     if (context.getSnapshot() == null) {
                         context.setSnapshot(
-                                corfuStore.scopedTxn(someNamespace, IsolationLevel.snapshot(),
-                                        (Table<?, ?, ?>) corfuStore.getRuntime().getTableRegistry().getAllOpenTables())
-                        );
+                            CorfuStore.snapshotFederatedTables(someNamespace, corfuStore.getRuntime()));
                     }
                     CorfuStoreEntry<RpcCommon.UuidMsg, ExampleSchemas.ExampleValue, Message> record = context.getSnapshot()
                             .getRecord(someTable, RpcCommon.UuidMsg.newBuilder().setMsb(i).build());
