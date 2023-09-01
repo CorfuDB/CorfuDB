@@ -165,12 +165,16 @@ public class LogMetadata {
     }
 
     public void syncTailSegment(long address) {
+        syncTailSegment(address, false);
+    }
+
+    public void syncTailSegment(long address, boolean force) {
         // TODO(Maithem) since writing a record and setting the tail segment is not
         // an atomic operation, it is possible to set an incorrect tail segment. In
         // that case we will need to scan more than one segment
         updateGlobalTail(address);
         long segment = address / RECORDS_PER_LOG_FILE;
 
-        dataStore.updateTailSegment(segment);
+        dataStore.updateTailSegment(segment, force);
     }
 }

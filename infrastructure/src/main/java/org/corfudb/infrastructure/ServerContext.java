@@ -8,6 +8,7 @@ import static org.corfudb.common.util.URLUtils.getVersionFormattedHostAddress;
 
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import com.google.gson.reflect.TypeToken;
 import io.netty.channel.EventLoopGroup;
 import java.io.File;
 import java.nio.file.Files;
@@ -85,6 +86,8 @@ public class ServerContext implements AutoCloseable {
     // LogUnit Server
     private static final String PREFIX_LOGUNIT = "LOGUNIT";
     private static final String EPOCH_WATER_MARK = "EPOCH_WATER_MARK";
+    private static final String PREFIX_LOG_METADATA = "LOGUNIT_METADATA";
+    private static final String KEY_LOG_METADATA = "CURRENT";
 
     // Corfu Replication Server
     public static final String PLUGIN_CONFIG_FILE_PATH = "../resources/corfu_plugin_config.properties";
@@ -113,6 +116,10 @@ public class ServerContext implements AutoCloseable {
 
     private static final KvRecord<Long> LOG_UNIT_WATERMARK_RECORD = KvRecord.of(
             PREFIX_LOGUNIT, EPOCH_WATER_MARK, Long.class
+    );
+
+    private static final KvRecord<Map> LOG_UNIT_METADATA_RECORD = KvRecord.of(
+            PREFIX_LOG_METADATA, KEY_LOG_METADATA, new TypeToken<Map<UUID, String>>(){}.getType()
     );
 
 
@@ -650,6 +657,14 @@ public class ServerContext implements AutoCloseable {
     public synchronized long getLogUnitEpochWaterMark() {
         Long resetEpoch = dataStore.get(LOG_UNIT_WATERMARK_RECORD);
         return resetEpoch == null ? Layout.INVALID_EPOCH : resetEpoch;
+    }
+
+    public synchronized void setLogUnitMetadata(Map<UUID, String> streamAddressSpace) {
+        dataStore.put(LOG_UNIT_METADATA_RECORD, streamAddressSpace);
+    }
+
+    public synchronized Map<UUID, String> getLogUnitMetadata() {
+        return (Map<UUID, String>)dataStore.get(LOG_UNIT_METADATA_RECORD);
     }
 
     /**

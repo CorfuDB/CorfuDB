@@ -11,6 +11,7 @@ import org.corfudb.infrastructure.health.Component;
 import org.corfudb.infrastructure.health.HealthMonitor;
 import org.corfudb.infrastructure.health.Issue;
 import org.corfudb.infrastructure.log.InMemoryStreamLog;
+import org.corfudb.infrastructure.log.LogMetadataRecorder;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.log.StreamLogCompaction;
 import org.corfudb.infrastructure.log.StreamLogFiles;
@@ -121,6 +122,7 @@ public class LogUnitServer extends AbstractServer {
     private final StreamLogCompaction logCleaner;
     private final BatchProcessor batchProcessor;
     private final ExecutorService executor;
+    private final LogMetadataRecorder metadataRecorder;
 
     /**
      * Returns a new LogUnitServer.
@@ -161,6 +163,7 @@ public class LogUnitServer extends AbstractServer {
         dataCache = serverInitializer.buildLogUnitServerCache(config, streamLog);
         batchProcessor = serverInitializer.buildBatchProcessor(config, streamLog, serverContext, batchProcessorContext);
         logCleaner = serverInitializer.buildStreamLogCompaction(streamLog);
+        metadataRecorder = serverInitializer.buildLogMetadataRecorder(batchProcessor);
     }
 
     @Override
@@ -549,6 +552,7 @@ public class LogUnitServer extends AbstractServer {
         log.info("Shutdown LogUnit server. Current epoch: {}, ", serverContext.getServerEpoch());
         super.shutdown();
         executor.shutdown();
+        metadataRecorder.shutdown();
         logCleaner.shutdown();
         batchProcessor.close();
         streamLog.close();
@@ -636,6 +640,10 @@ public class LogUnitServer extends AbstractServer {
 
         StreamLogCompaction buildStreamLogCompaction(@Nonnull StreamLog streamLog) {
             return new StreamLogCompaction(streamLog, 10, 45, TimeUnit.MINUTES, ServerContext.SHUTDOWN_TIMER);
+        }
+
+        LogMetadataRecorder buildLogMetadataRecorder(@Nonnull BatchProcessor batchProcessor) {
+            return new LogMetadataRecorder(batchProcessor);
         }
     }
 }

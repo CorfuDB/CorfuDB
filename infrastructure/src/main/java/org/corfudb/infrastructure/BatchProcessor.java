@@ -3,6 +3,7 @@ package org.corfudb.infrastructure;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.google.protobuf.TextFormat;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.infrastructure.BatchWriterOperation.Type;
@@ -57,6 +58,7 @@ public class BatchProcessor implements AutoCloseable {
      * is completed exceptionally with a WrongEpochException.
      * This is persisted in the ServerContext by the LogUnitServer to withstand restarts.
      */
+    @Getter
     private long sealEpoch;
 
     private final BatchProcessorContext context;
@@ -196,6 +198,9 @@ public class BatchProcessor implements AutoCloseable {
                                 break;
                             case RESET:
                                 streamLog.reset();
+                                break;
+                            case DUMP_LOG_METADATA:
+                                streamLog.persistLogMetadata();
                                 break;
                             case TAILS_QUERY:
                                 final TailsResponse tails;
