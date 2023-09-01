@@ -148,7 +148,7 @@ public class Table<K extends Message, V extends Message, M extends Message> impl
 
         if (keyClass == Queue.CorfuGuidMsg.class &&
                 metadataClass == Queue.CorfuQueueMetadataMsg.class) { // Really a Queue
-            this.guidGenerator = CorfuGuidGenerator.getInstance(corfuRuntime);
+            this.guidGenerator = corfuRuntime.getTableRegistry().getCorfuGuidGenerator();
         } else {
             this.guidGenerator = null;
         }
@@ -306,7 +306,8 @@ public class Table<K extends Message, V extends Message, M extends Message> impl
         }
 
         // Obtain a cluster-wide unique 64-bit id to identify this entry in the queue.
-        long entryId = guidGenerator.nextLong();
+        // long entryId = guidGenerator.nextLong();
+        long entryId = guidGenerator.nextLong(TransactionalContext.getRootContext().getTxnContext(), this);
         // Embed this key into a protobuf.
         K keyOfQueueEntry = (K) Queue.CorfuGuidMsg.newBuilder().setInstanceId(entryId).build();
 
@@ -356,7 +357,7 @@ public class Table<K extends Message, V extends Message, M extends Message> impl
         }
 
         // Obtain a cluster-wide unique 64-bit id to identify this entry in the queue.
-        long entryId = guidGenerator.nextLong();
+        long entryId = guidGenerator.nextLong(TransactionalContext.getRootContext().getTxnContext(), this);
         // Embed this key into a protobuf.
         K keyOfQueueEntry = (K) Queue.CorfuGuidMsg.newBuilder().setInstanceId(entryId).build();
 
