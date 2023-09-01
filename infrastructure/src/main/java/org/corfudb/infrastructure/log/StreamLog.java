@@ -124,6 +124,8 @@ public interface StreamLog {
      */
     void reset();
 
+    void persistLogMetadata();
+
     /**
      * Get overwrite cause for a given address.
      *
