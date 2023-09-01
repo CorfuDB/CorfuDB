@@ -12,14 +12,20 @@ import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 
 import java.lang.reflect.InvocationTargetException;
+import java.util.NoSuchElementException;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Supplier;
 
 @Slf4j
 public class CorfuGuidGenerator implements OrderedGuidGenerator {
-    private final String GUID_STREAM_NAME = "CORFU_GUID_COUNTER_STREAM";
+    public static final String GUID_STREAM_NAME = "CORFU_GUID_COUNTER_STREAM";
 
     private Table<CorfuGuidMsg, CorfuGuidMsg, Message> distributedCounter;
 
@@ -32,34 +38,87 @@ public class CorfuGuidGenerator implements OrderedGuidGenerator {
     private int driftCorrection = CorfuGuid.MAX_CORRECTION;
     private int resolutionCorrection = CorfuGuid.MAX_CORRECTION;
     private long previousTimestamp = Long.MAX_VALUE;
-    private long instanceId = 0L;
+    private volatile long instanceId = 0L;
+    private AtomicLong txnCounter = new AtomicLong();
 
     private static CorfuGuidGenerator singletonCorfuGuidGenerator;
 
-    private CorfuGuidGenerator(CorfuRuntime rt) {
+    private CompletableFuture<Void> instanceIdGetterFuture;
+
+    public CorfuGuidGenerator(CorfuRuntime rt) {
         corfuStore = new CorfuStore((rt));
-        ExecutorService executorService = Executors.newSingleThreadExecutor();
-        boolean success;
+        instanceIdGetterFuture = CompletableFuture.runAsync(this::generateNewInstanceId);
+
         try {
-            success = executorService.submit(() -> {
+            instanceIdGetterFuture.get(5, TimeUnit.SECONDS);
+        } catch (InterruptedException | ExecutionException e) {
+            throw new RuntimeException("Failed to get instance id", e);
+        } catch (TimeoutException e) {
+            log.warn("Not going to wait more than 5 seconds for a new instance id");
+        }
+    }
+
+    private void generateNewInstanceId() {
+        long reasonableNumberOfRetries = 64;
+        long newInstanceId;
+        Table<CorfuGuidMsg, CorfuGuidMsg, Message> distributedCounterTable = null;
+        while (reasonableNumberOfRetries-- > 0) {
+            try {
+                distributedCounterTable = corfuStore.getTable(
+                        TableRegistry.CORFU_SYSTEM_NAMESPACE, GUID_STREAM_NAME);
+            } catch (IllegalArgumentException | NoSuchElementException e) {
                 try {
-                    distributedCounter = corfuStore.openTable(TableRegistry.CORFU_SYSTEM_NAMESPACE, GUID_STREAM_NAME,
+                    distributedCounterTable = corfuStore.openTable(
+                            TableRegistry.CORFU_SYSTEM_NAMESPACE, GUID_STREAM_NAME,
                             CorfuGuidMsg.class,
                             CorfuGuidMsg.class,
                             null,
                             TableOptions.builder().build());
-                } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
+                } catch (InvocationTargetException | NoSuchMethodException | IllegalAccessException ee) {
                     log.error("CorfuGuidGenerator: failed to open the instanceId table", e);
-                    return false;
+                    continue;
                 }
-                return true;
-            }).get();
-        } catch (InterruptedException | ExecutionException e) {
-            log.error("CorfuGuidGenerator: failed to initialize", e);
-            success = false;
+            }
+
+            try (TxnContext txn = corfuStore.txn(TableRegistry.CORFU_SYSTEM_NAMESPACE)) {
+                final int GUID_INSTANCE_ID_KEY = 0xdeadbeef;
+                CorfuGuidMsg key = CorfuGuidMsg.newBuilder()
+                        .setInstanceId(GUID_INSTANCE_ID_KEY).build();
+
+                CorfuStoreEntry<CorfuGuidMsg, CorfuGuidMsg, Message> prevEntry;
+                prevEntry = txn.getRecord(distributedCounterTable, key);
+                if (prevEntry.getPayload() == null) {
+                    newInstanceId = 1L; // Starting value should not be zero
+                    txn.putRecord(distributedCounterTable, key,
+                            CorfuGuidMsg.newBuilder().setInstanceId(newInstanceId).build(),
+                            null);
+                    txn.commit();
+                    this.instanceId = newInstanceId;
+                    return;
+                }
+                newInstanceId = (prevEntry.getPayload().getInstanceId() + 1) % MAX_INSTANCE_ID;
+                txn.putRecord(distributedCounterTable, key,
+                        CorfuGuidMsg.newBuilder().setInstanceId(newInstanceId)
+                                .build(),
+                        null);
+                txn.commit();
+                this.instanceId = newInstanceId;
+                return;
+            } catch (TransactionAbortedException e) {
+                log.error("updateInstanceId: Transaction aborted while updating GUID counter", e);
+            }
         }
-        if (!success) {
-            throw new RuntimeException("Unable to initialize the Guid Generator");
+    }
+
+    public long getInstanceId() {
+        if (instanceId != 0) {
+            return instanceId;
+        }
+        try {
+            instanceIdGetterFuture.get();
+            return instanceId;
+        } catch (InterruptedException | ExecutionException e) {
+            throw new RuntimeException("CorfuGuidGenerator unable to get Id ", e);
         }
     }
 
@@ -135,6 +194,49 @@ public class CorfuGuidGenerator implements OrderedGuidGenerator {
     @Override
     public long nextLong() {
         return getCorrectedTimestamp().getLong();
+    }
+
+    public long nextLong(TxnContext txnContext, Table queue) {
+        long txnIdForQueue = txnContext.getTxnIdForQueues();
+        if (txnContext.getTxnIdForQueues() == 0) {
+            txnIdForQueue = generateIdOncePerTxn(getInstanceId());
+            log.trace("Generating new txn id for queue {}: {}", queue.getFullyQualifiedTableName(), txnIdForQueue);
+        } else {
+            txnIdForQueue = generateNextIdInTxn(txnIdForQueue);
+            log.trace("Generating incremental id for queue {}: {}", queue.getFullyQualifiedTableName(), txnIdForQueue);
+        }
+        txnContext.setTxnIdForQueues(txnIdForQueue);
+        return txnIdForQueue;
+    }
+
+
+    // 8388608 (~8.3M) new transactions involving Q writes while an old txn is still running before overflow can occur
+    public static final long MAX_TXN_ID = 1L << 23;
+    // 1048576 (~1M) new jvms restarts while the oldest is still operational before overflow can occur
+    public static final long MAX_INSTANCE_ID = 1L << 20;
+    public static final long TXN_ID_SHIFT = 40;
+    public static final long TXN_ID_MASK      = 0x7fFFff0000000000L;
+    public static final long INSTANCE_ID_MASK = 0x000000FffFF00000L;
+    public static final long TXN_COUNTER_MASK = 0x00000000000FffFFL;
+    public static final long INSTANCE_ID_SHIFT = 20;
+    // 1048576 (~1M) write operations per transaction before an error is thrown
+    public static final long MAX_TXN_Q_ELEMENTS = 1L << 20;
+    // SIGN bit|23 bits of txn id| 20 bits instance id| 20 bits local counter
+    private long generateIdOncePerTxn(long instId) {
+        long newTxnId = txnCounter.incrementAndGet();
+        newTxnId = (newTxnId<<TXN_ID_SHIFT) & TXN_ID_MASK;
+        newTxnId = newTxnId | ((instId<< INSTANCE_ID_SHIFT )&INSTANCE_ID_MASK);
+        return newTxnId;
+    }
+
+    private long generateNextIdInTxn(long lastQId) {
+        long nextQId = lastQId & TXN_COUNTER_MASK;
+        nextQId = nextQId + 1;
+        if (nextQId >= MAX_TXN_Q_ELEMENTS) {
+            throw new UnsupportedOperationException("More than "+MAX_TXN_Q_ELEMENTS+" not supported in 1 txn");
+        }
+        nextQId = (lastQId & (~TXN_COUNTER_MASK)) | nextQId;
+        return nextQId;
     }
 
     /**
