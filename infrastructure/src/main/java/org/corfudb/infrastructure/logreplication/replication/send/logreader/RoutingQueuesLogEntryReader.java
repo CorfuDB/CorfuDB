@@ -4,16 +4,21 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.checkerframework.checker.units.qual.C;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.LogReplicationUtils;
 import org.corfudb.runtime.Queue;
 import org.corfudb.runtime.Queue.RoutingTableEntryMsg;
 import org.corfudb.runtime.collections.CorfuRecord;
+import org.corfudb.runtime.collections.CorfuStore;
+import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.view.TableRegistry;
 
+import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -21,6 +26,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
+import static org.corfudb.runtime.LogReplicationUtils.LOG_ENTRY_SYNC_QUEUE_NAME_SENDER;
 import static org.corfudb.runtime.LogReplicationUtils.REPLICATED_RECV_Q_PREFIX;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
@@ -37,6 +43,15 @@ public class RoutingQueuesLogEntryReader extends BaseLogEntryReader {
 
     public RoutingQueuesLogEntryReader(LogReplicationSession session, LogReplicationContext replicationContext) {
         super(session, replicationContext);
+
+        try {
+            CorfuStore corfuStore = new CorfuStore(replicationContext.getCorfuRuntime());
+            corfuStore.openQueue(CORFU_SYSTEM_NAMESPACE, LOG_ENTRY_SYNC_QUEUE_NAME_SENDER,
+                RoutingTableEntryMsg.class, TableOptions.fromProtoSchema(RoutingTableEntryMsg.class));
+        } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
+            log.error("Failed to open log entry sync queue", e);
+            throw new RuntimeException(e);
+        }
     }
 
     @Override

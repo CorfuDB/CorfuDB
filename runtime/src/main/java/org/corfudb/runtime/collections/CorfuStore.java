@@ -236,6 +236,26 @@ public class CorfuStore {
                 tables);
     }
 
+    public static <K extends Message, V extends Message, M extends Message>
+    ScopedTransaction snapshotFederatedTables(String namespace, CorfuRuntime runtime) {
+        ArrayList<Table> federatedTables = new ArrayList<>();
+        runtime.getTableRegistry().getAllOpenTables().forEach(t ->
+        {
+            String tableNameWithoutNs = StringUtils.substringAfter(t.getFullyQualifiedTableName(),
+                t.getNamespace()+"$");
+            CorfuStoreMetadata.TableName tableName = CorfuStoreMetadata.TableName.newBuilder()
+                .setNamespace(t.getNamespace())
+                .setTableName(tableNameWithoutNs).build();
+            CorfuRecord<CorfuStoreMetadata.TableDescriptors, CorfuStoreMetadata.TableMetadata> tableRecord =
+                runtime.getTableRegistry().getRegistryTable().get(tableName);
+            if (tableRecord.getMetadata().getTableOptions().getIsFederated()) {
+                federatedTables.add(t);
+            }
+        });
+        return new ScopedTransaction(runtime, namespace,
+            IsolationLevel.snapshot(), federatedTables.toArray(new Table[federatedTables.size()]));
+    }
+
     /**
      * Return the address of the latest update made in this table.
      * <p>
