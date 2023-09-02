@@ -58,8 +58,10 @@ public abstract class LRSiteDiscoveryListener {
     public void pollForNewSites() {
         corfuStore.getRuntime().getTableRegistry().listTables().forEach(tableName -> {
             if (tableName.getTableName().startsWith(LogReplicationUtils.REPLICATED_RECV_Q_PREFIX)) {
-                String siteId = StringUtils.substringBetween(tableName.getTableName(), "_");
-                String client = StringUtils.substringAfterLast(tableName.getTableName(), "_");
+                String[] substrs = tableName.getTableName().split("_");
+                // The last 2 substrings are of interest
+                String siteId = substrs[substrs.length - 2];
+                String client = substrs[substrs.length - 1];
                 if (!Objects.equals(client, clientName)) {
                     return;
                 }
