@@ -186,7 +186,8 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
                     key = (LogReplication.ReplicationEventInfoKey) entry.getKey();
                     fullSyncEvent = (LogReplication.ReplicationEvent) entry.getPayload();
                     if (fullSyncEvent.getType() !=
-                            LogReplication.ReplicationEvent.ReplicationEventType.SERVER_REQUESTED_SNAPSHOT_SYNC) {
+                            LogReplication.ReplicationEvent.ReplicationEventType.SERVER_REQUESTED_SNAPSHOT_SYNC
+                            || !clientName.equals(key.getSession().getSubscriber().getClientName())) {
                         fullSyncEvent = null;
                         continue;
                     }
@@ -253,7 +254,7 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
 
         @Override
         public void transmit(RoutingTableEntryMsg message, int progress) throws CancellationException {
-            log.info("Enqueuing message to full sync queue, message: {}", message);
+            log.trace("Enqueuing message to full sync queue, message: {}", message);
             getTxn().logUpdateEnqueue(snapSyncQ, message, message.getDestinationsList().stream()
                     .map(destination -> TableRegistry.getStreamIdForStreamTag(CORFU_SYSTEM_NAMESPACE,
                             SNAPSHOT_SYNC_QUEUE_TAG_SENDER_PREFIX + destination + "_" + clientName))
@@ -365,7 +366,7 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
      */
     @Override
     public void transmitDeltaMessage(TxnContext txn, RoutingTableEntryMsg message, CorfuStore corfuStore) throws Exception {
-        log.info("Enqueuing message to delta queue, message: {}", message);
+        log.trace("Enqueuing message to delta queue, message: {}", message);
         txn.logUpdateEnqueue(logEntryQ, message, message.getDestinationsList().stream()
                 .map(destination -> {
                     UUID streamIdForTag = TableRegistry.getStreamIdForStreamTag(CORFU_SYSTEM_NAMESPACE,
