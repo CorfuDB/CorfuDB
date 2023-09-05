@@ -59,6 +59,17 @@ public class ClusterGraphTest {
         assertEquals(graph.size(), nodes.size());
     }
 
+    @Test(expected = IllegalStateException.class)
+    public void testToSymmetricForOneNode() {
+        NodeConnectivity a = connectivity(A, ImmutableMap.of(A, OK, B, FAILED));
+
+        ClusterGraph graph = cluster(A, ImmutableList.of(), a);
+        ClusterGraph symmetric = graph.toSymmetric();
+
+        assertEquals(FAILED, graph.getNodeConnectivity(A).getConnectionStatus(B));
+        assertEquals(FAILED, symmetric.getNodeConnectivity(A).getConnectionStatus(B));
+    }
+
     @Test
     public void testToSymmetricForTwoNodes() {
         NodeConnectivity a = connectivity(A, ImmutableMap.of(A, OK, B, FAILED));
