@@ -13,8 +13,7 @@ import java.util.stream.Collectors;
 
 /**
  * Represents a degree of a node (the number of connections it has to other nodes)
- * https://en.wikipedia.org/wiki/Degree_distribution
- *
+ * <a href="https://en.wikipedia.org/wiki/Degree_distribution">Degree Distribution</a>
  */
 @Builder
 @AllArgsConstructor

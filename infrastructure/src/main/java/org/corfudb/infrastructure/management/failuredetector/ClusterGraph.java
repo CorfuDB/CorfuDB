@@ -112,6 +112,10 @@ public class ClusterGraph {
                     .keySet()
                     // For all adjacent nodes figure out if the node is connected to current node
                     .forEach(adjNodeName -> {
+                        if (!graph.containsKey(adjNodeName)) {
+                            return;
+                        }
+
                         NodeConnectivity adjNode = graph.get(adjNodeName);
 
                         // If current node is not the local node and another node is unavailable we don't change
