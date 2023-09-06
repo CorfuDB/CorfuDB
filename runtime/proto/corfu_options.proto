@@ -23,6 +23,7 @@ message SchemaOptions {
     optional ReplicationLogicalGroup replication_group = 7;
 }
 
+// Test
 enum ConsistencyModel {
     READ_YOUR_WRITES = 0;
     READ_COMMITTED = 1;
