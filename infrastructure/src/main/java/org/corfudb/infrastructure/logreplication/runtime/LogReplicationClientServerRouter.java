@@ -705,6 +705,11 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
      * @param session session information
      */
     public void connect(ClusterDescriptor remoteClusterDescriptor, LogReplicationSession session) {
+        if (!isConnectionStarterForSession(session)) {
+            log.error("Not the connection starter for session: {}", session);
+            return;
+        }
+
         log.info("Connect asynchronously to remote cluster {} and session {} ", remoteClusterDescriptor.getClusterId(),
                 session);
 
@@ -761,7 +766,21 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
         }
 
         if (isConnectionStarterForSession(session)) {
-            this.clientChannelAdapter.connectAsync(sessionToRemoteClusterDescriptor.get(session), nodeId, session);
+            log.info("Reconnect to remote cluster for session {}", session);
+            try {
+                IRetry.build(IntervalRetry.class, () -> {
+                    try {
+                        this.clientChannelAdapter.connectAsync(sessionToRemoteClusterDescriptor.get(session), session);
+                    } catch (Exception e) {
+                        log.error("Failed to connect to remote cluster for session {}. Retry after 1 second. Exception {}.",
+                                session, e);
+                        throw new RetryNeededException();
+                    }
+                    return null;
+                }).run();
+            } catch (InterruptedException e) {
+                log.error("Unrecoverable exception when attempting to connect to remote session.", e);
+            }
         }
     }
 
