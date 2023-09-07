@@ -156,12 +156,12 @@ public class InSnapshotSyncState implements LogReplicationState {
             if (from != this) {
                 fsm.getAckReader().setSyncType(SyncType.SNAPSHOT);
                 snapshotSender.reset();
-                if (fsm.getSnapshotReader() instanceof RoutingQueuesSnapshotReader) {
-                    RoutingQueuesSnapshotReader reader = (RoutingQueuesSnapshotReader) fsm.getSnapshotReader();
-                    reader.requestClientForSnapshotData(transitionEventId);
-                }
                 fsm.getAckReader().markSnapshotSyncInfoOngoing(forcedSnapshotSync, transitionEventId);
                 snapshotSyncTransferTimerSample = MeterRegistryProvider.getInstance().map(Timer::start);
+            }
+            if (fsm.getSnapshotReader() instanceof RoutingQueuesSnapshotReader) {
+                RoutingQueuesSnapshotReader reader = (RoutingQueuesSnapshotReader) fsm.getSnapshotReader();
+                reader.requestClientForSnapshotData(transitionEventId);
             }
             transmitFuture = fsm.getLogReplicationFSMWorkers()
                     .submit(() -> snapshotSender.transmit(transitionEventId));
