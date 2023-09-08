@@ -2,8 +2,6 @@ package org.corfudb.runtime.collections;
 
 import com.google.common.reflect.TypeToken;
 import io.micrometer.core.instrument.Counter;
-import io.vavr.Tuple2;
-import io.vavr.control.Option;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -20,8 +18,7 @@ import org.corfudb.runtime.object.VersionedObjectIdentifier;
 import org.corfudb.runtime.view.ObjectOpenOption;
 
 import javax.annotation.Nonnull;
-import java.util.Collections;
-import java.util.Optional;
+import java.util.*;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
@@ -115,7 +112,7 @@ public class ImmutableCorfuTable<K, V> implements
      * if no such mapping exists.
      */
     public V get(@Nonnull K key) {
-        return mainMap.get(key).getOrNull();
+        return mainMap.get(key).orElse(null);
     }
 
     /**
@@ -128,10 +125,10 @@ public class ImmutableCorfuTable<K, V> implements
     public ImmutableCorfuTable<K, V> put(@Nonnull K key, @Nonnull V value) {
         SecondaryIndexesWrapper<K, V> newSecondaryIndexesWrapper = mainMap.get(key)
                 .map(prev -> secondaryIndexesWrapper.unmapSecondaryIndexes(key, prev))
-                .getOrElse(secondaryIndexesWrapper);
+                .orElse(secondaryIndexesWrapper);
 
         HashArrayMappedTrie<K, V> newMainMap = mainMap.put(key, value);
-        Option<HashArrayMappedTrieModule.LeafSingleton<K, V>> leafSingleton = newMainMap.getNode(key);
+        Optional<HashArrayMappedTrieModule.LeafSingleton<K, V>> leafSingleton = newMainMap.getNode(key);
         newSecondaryIndexesWrapper = newSecondaryIndexesWrapper.mapSecondaryIndexes(key, value, leafSingleton);
         return new ImmutableCorfuTable<>(newMainMap, newSecondaryIndexesWrapper);
     }
@@ -146,7 +143,7 @@ public class ImmutableCorfuTable<K, V> implements
         SecondaryIndexesWrapper<K, V> newSecondaryIndexesWrapper = mainMap
                 .get(key)
                 .map(prev -> secondaryIndexesWrapper.unmapSecondaryIndexes(key, prev))
-                .getOrElse(secondaryIndexesWrapper);
+                .orElse(secondaryIndexesWrapper);
 
         return new ImmutableCorfuTable<>(mainMap.remove(key), newSecondaryIndexesWrapper);
     }
@@ -184,7 +181,7 @@ public class ImmutableCorfuTable<K, V> implements
      * @return A set containing all keys present in this ImmutableCorfuTable.
      */
     public java.util.Set<K> keySet() {
-        return mainMap.iterator().map(Tuple2::_1).toJavaSet();
+        return mainMap.getKeySet();
     }
 
     /**
@@ -203,8 +200,8 @@ public class ImmutableCorfuTable<K, V> implements
      * @return An Iterable of map entries satisfying this index query.
      */
     public <I> Iterable<java.util.Map.Entry<K, V>> getByIndex(@Nonnull final Index.Name indexName, I indexKey) {
-        Option<HashArrayMappedTrie<K, V>> trie = secondaryIndexesWrapper.contains(indexName.get(), indexKey);
-        if (trie.isEmpty()) {
+        Optional<HashArrayMappedTrie<K, V>> trie = secondaryIndexesWrapper.contains(indexName.get(), indexKey);
+        if (!trie.isPresent()) {
             return Collections.emptySet();
         }
         return new TupleIterableWrapper<>(trie.get().iterator());
@@ -225,9 +222,9 @@ public class ImmutableCorfuTable<K, V> implements
             Iterable<?> mappedValues = index.getMultiValueIndexFunction().apply(key, value);
 
             for (Object indexKey: mappedValues) {
-                HashArrayMappedTrie<K, V> slot = updatedMapping.get(indexKey).getOrNull();
+                HashArrayMappedTrie<K, V> slot = updatedMapping.get(indexKey).orElse(null);
                 if (slot != null) {
-                    boolean valuePresented = slot.get(key).contains(value);
+                    boolean valuePresented = slot.get(key).filter((v) -> value.equals(v)).isPresent();
                     if (valuePresented) {
                         slot = slot.remove(key);
                     }
@@ -246,14 +243,14 @@ public class ImmutableCorfuTable<K, V> implements
         }
 
         public IndexMapping<K, V> update(@Nonnull K key, @Nonnull V value,
-                                         Option<HashArrayMappedTrieModule.LeafSingleton<K, V>> leafNode) {
+                                         Optional<HashArrayMappedTrieModule.LeafSingleton<K, V>> leafNode) {
             HashArrayMappedTrie<Object, HashArrayMappedTrie<K, V>> updatedMapping = mapping;
 
             Iterable<?> mappedValues = index.getMultiValueIndexFunction().apply(key, value);
             for (Object indexKey: mappedValues) {
                 //do mainmap.get(key) to get the leafSingleton class
                 HashArrayMappedTrie<K, V> slot;
-                if (!leafNode.isEmpty()) {
+                if (leafNode.isPresent()) {
                     slot = updatedMapping.getOrElse(indexKey, HashArrayMappedTrie.empty()).putNode(leafNode.get());
                     cacheReuseCounter.ifPresent(Counter::increment);
                 } else {
@@ -292,12 +289,12 @@ public class ImmutableCorfuTable<K, V> implements
             if (!isEmpty()) {
                 log.info(
                         "ImmutableCorfuTable: creating PersistentCorfuTable with the following indexes: {}",
-                        secondaryIndexes.iterator().map(Tuple2::_1)
+                        secondaryIndexes.getKeySet()
                 );
             }
         }
 
-        private <I> Option<HashArrayMappedTrie<K, V>> contains(@Nonnull final String index, I indexKey) {
+        private <I> Optional<HashArrayMappedTrie<K, V>> contains(@Nonnull final String index, I indexKey) {
             if (secondaryIndexes.containsKey(index)) {
                 return secondaryIndexes.get(index).get().getMapping().get(indexKey);
             }
@@ -321,9 +318,10 @@ public class ImmutableCorfuTable<K, V> implements
 
         private SecondaryIndexesWrapper<K, V> clear() {
             HashArrayMappedTrie<String, IndexMapping<K, V>> clearedIndexes = HashArrayMappedTrie.empty();
-            for (Tuple2<String, IndexMapping<K, V>> index : secondaryIndexes.iterator()) {
-                clearedIndexes = clearedIndexes.put(index._1(),
-                        new IndexMapping<>(HashArrayMappedTrie.empty(), index._2().getIndex()));
+            for (Iterator<AbstractMap.SimpleEntry<String, IndexMapping<K, V>>> it = secondaryIndexes.iterator(); it.hasNext(); ) {
+                AbstractMap.SimpleEntry<String, IndexMapping<K, V>> index = it.next();
+                clearedIndexes = clearedIndexes.put(index.getKey(),
+                        new IndexMapping<>(HashArrayMappedTrie.empty(), index.getValue().getIndex()));
             }
 
             return new SecondaryIndexesWrapper<>(clearedIndexes, secondaryIndexesAliasToPath);
@@ -333,8 +331,9 @@ public class ImmutableCorfuTable<K, V> implements
             try {
                 HashArrayMappedTrie<String, IndexMapping<K, V>> unmappedSecondaryIndexes = secondaryIndexes;
 
-                for (Tuple2<String, IndexMapping<K, V>> secondaryIndex : secondaryIndexes) {
-                    final IndexMapping<K, V> currentMapping = secondaryIndex._2();
+                for (Iterator<AbstractMap.SimpleEntry<String, IndexMapping<K, V>>> it = secondaryIndexes.iterator(); it.hasNext(); ) {
+                    AbstractMap.SimpleEntry<String, IndexMapping<K, V>> index = it.next();
+                    final IndexMapping<K, V> currentMapping = index.getValue();
                     final String indexName = currentMapping.getIndex().getName().get();
                     unmappedSecondaryIndexes = unmappedSecondaryIndexes.put(indexName, currentMapping.cleanUp(key, value));
                 }
@@ -351,14 +350,15 @@ public class ImmutableCorfuTable<K, V> implements
         }
 
         private SecondaryIndexesWrapper<K, V> mapSecondaryIndexes(@Nonnull K key, @Nonnull V value,
-                                                                  Option<HashArrayMappedTrieModule.LeafSingleton<K, V>> leafNode) {
+                                                                  Optional<HashArrayMappedTrieModule.LeafSingleton<K, V>> leafNode) {
             try {
                 HashArrayMappedTrie<String, IndexMapping<K, V>> mappedSecondaryIndexes = secondaryIndexes;
 
                 // Map entry into secondary indexes
-                for (Tuple2<String, IndexMapping<K, V>> secondaryIndexTuple : secondaryIndexes) {
-                    final IndexMapping<K, V> updatedSecondaryIndex = secondaryIndexTuple._2().update(key, value, leafNode);
-                    final String indexName = secondaryIndexTuple._2().getIndex().getName().get();
+                for (Iterator<AbstractMap.SimpleEntry<String, IndexMapping<K, V>>> it = secondaryIndexes.iterator(); it.hasNext(); ) {
+                    AbstractMap.SimpleEntry<String, IndexMapping<K, V>> indexTuple = it.next();
+                    final IndexMapping<K, V> updatedSecondaryIndex = indexTuple.getValue().update(key, value, leafNode);
+                    final String indexName = indexTuple.getValue().getIndex().getName().get();
                     mappedSecondaryIndexes = mappedSecondaryIndexes.put(indexName, updatedSecondaryIndex);
                 }
 

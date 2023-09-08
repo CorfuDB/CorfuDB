@@ -1,7 +1,5 @@
 package org.corfudb.runtime.collections.vavr;
 
-import io.vavr.Tuple2;
-
 import javax.annotation.Nonnull;
 import java.util.AbstractMap;
 import java.util.Iterator;
@@ -18,9 +16,9 @@ import java.util.NoSuchElementException;
  */
 public class TupleIteratorWrapper<K, V> implements Iterator<Map.Entry<K, V>> {
 
-    private final io.vavr.collection.Iterator<Tuple2<K, V>> iterator;
+    private final Iterator<AbstractMap.SimpleEntry<K, V>> iterator;
 
-    public TupleIteratorWrapper(@Nonnull io.vavr.collection.Iterator<Tuple2<K, V>> iterator) {
+    public TupleIteratorWrapper(@Nonnull Iterator<AbstractMap.SimpleEntry<K, V>> iterator) {
         this.iterator = iterator;
     }
 
@@ -32,8 +30,8 @@ public class TupleIteratorWrapper<K, V> implements Iterator<Map.Entry<K, V>> {
     @Override
     public Map.Entry<K, V> next() {
         if (hasNext()) {
-            Tuple2<K, V> tuple2 = iterator.next();
-            return new AbstractMap.SimpleEntry<>(tuple2._1, tuple2._2);
+            AbstractMap.SimpleEntry<K, V> tuple2 = iterator.next();
+            return new AbstractMap.SimpleEntry<>(tuple2.getKey(), tuple2.getValue());
         }
         throw new NoSuchElementException();
     }

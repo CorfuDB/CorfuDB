@@ -1,8 +1,5 @@
 package org.corfudb.runtime.collections.vavr;
 
-import io.vavr.Tuple2;
-import io.vavr.collection.Traversable;
-
 import javax.annotation.Nonnull;
 import java.util.AbstractMap;
 import java.util.Iterator;
@@ -21,44 +18,29 @@ import java.util.function.Consumer;
  */
 public class TupleIterableWrapper<K, V> implements Iterable<Map.Entry<K, V>> {
 
-    private final Traversable<Tuple2<K, V>> traversable;
+    private final Iterator<AbstractMap.SimpleEntry<K, V>> iterator;
 
-    public TupleIterableWrapper(@Nonnull Traversable<Tuple2<K, V>> traversable) {
-        this.traversable = traversable;
+    public TupleIterableWrapper(@Nonnull Iterator<AbstractMap.SimpleEntry<K, V>> iterator) {
+        this.iterator = iterator;
     }
 
     @Override
     public void forEach(Consumer<? super Map.Entry<K, V>> action) {
-        traversable.forEach(tuple2 ->
-                action.accept(new AbstractMap.SimpleEntry<>(tuple2._1, tuple2._2)));
+        iterator.forEachRemaining(entry -> action.accept(entry));
     }
 
     @Override
     public Iterator<Map.Entry<K, V>> iterator() {
-        return new TupleIteratorWrapper<>(traversable.iterator());
+        return new TupleIteratorWrapper<>(iterator);
     }
 
     @Override
     public Spliterator<Map.Entry<K, V>> spliterator() {
-        return spliterator(traversable);
+        return spliterator(iterator);
     }
 
-    public static <K, V> Spliterator<Map.Entry<K, V>> spliterator(@Nonnull Traversable<Tuple2<K, V>> traversable){
+    public static <K, V> Spliterator<Map.Entry<K, V>> spliterator(@Nonnull Iterator<AbstractMap.SimpleEntry<K, V>> iterator){
         int characteristics = Spliterator.IMMUTABLE;
-        if (traversable.isDistinct()) {
-            characteristics |= Spliterator.DISTINCT;
-        }
-        if (traversable.isOrdered()) {
-            characteristics |= (Spliterator.SORTED | Spliterator.ORDERED);
-        }
-        if (traversable.isSequential()) {
-            characteristics |= Spliterator.ORDERED;
-        }
-        if (traversable.hasDefiniteSize()) {
-            characteristics |= (Spliterator.SIZED | Spliterator.SUBSIZED);
-            return Spliterators.spliterator(new TupleIteratorWrapper<>(traversable.iterator()), traversable.length(), characteristics);
-        } else {
-            return Spliterators.spliteratorUnknownSize(new TupleIteratorWrapper<>(traversable.iterator()), characteristics);
-        }
+        return Spliterators.spliteratorUnknownSize(new TupleIteratorWrapper<>(iterator), characteristics);
     }
 }

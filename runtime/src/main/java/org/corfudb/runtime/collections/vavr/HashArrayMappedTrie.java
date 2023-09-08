@@ -16,11 +16,12 @@
 
 package org.corfudb.runtime.collections.vavr;
 
-import io.vavr.Tuple2;
-import io.vavr.collection.Iterator;
-import io.vavr.control.Option;
+import java.util.AbstractMap;
+import java.util.Iterator;
+import java.util.Optional;
+import java.util.Set;
 
-public interface HashArrayMappedTrie<K, V> extends Iterable<Tuple2<K, V>> {
+public interface HashArrayMappedTrie<K, V> {
     static <K, V> HashArrayMappedTrieModule.EmptyNode<K, V> empty() {
         return HashArrayMappedTrieModule.EmptyNode.instance();
     }
@@ -29,8 +30,8 @@ public interface HashArrayMappedTrie<K, V> extends Iterable<Tuple2<K, V>> {
 
     int size();
 
-    Option<V> get(K var1);
-    Option<HashArrayMappedTrieModule.LeafSingleton<K, V>> getNode(K var1);
+    Optional<V> get(K var1);
+    Optional<HashArrayMappedTrieModule.LeafSingleton<K, V>> getNode(K var1);
 
     V getOrElse(K var1, V var2);
 
@@ -42,5 +43,7 @@ public interface HashArrayMappedTrie<K, V> extends Iterable<Tuple2<K, V>> {
 
     HashArrayMappedTrie<K, V> remove(K var1);
 
-    Iterator<Tuple2<K, V>> iterator();
+    Iterator<AbstractMap.SimpleEntry<K, V>> iterator();
+
+    Set<K> getKeySet();
 }

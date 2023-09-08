@@ -1,6 +1,5 @@
 package org.corfudb.runtime.collections.vavr;
 
-import io.vavr.Tuple2;
 import org.corfudb.runtime.ExampleSchemas.ExampleValue;
 import org.junit.Test;
 
@@ -41,7 +40,7 @@ public class HashArrayMappedTrieTest {
     public void testGetAndPutNodeBasic() {
         HashArrayMappedTrie<IntWithHashCode, ExampleValue> hamt1 = HashArrayMappedTrie.empty();
         HashArrayMappedTrie<IntWithHashCode, ExampleValue> hamt2 = HashArrayMappedTrie.empty();
-        assertTrue(hamt1.getNode(key1).isEmpty());
+        assertTrue(!hamt1.getNode(key1).isPresent());
 
         hamt1 = hamt1.put(key1, value1);
         hamt2 = hamt2.putNode(hamt1.getNode(key1).get());
@@ -72,7 +71,7 @@ public class HashArrayMappedTrieTest {
 
         hamt1 = hamt1.putNode(hamt2.getNode(key201).get()); //key201 will be added to the existing LeafList
         assertEquals(hamt1.get(key201).get(), value201); //key201 is found
-        assertTrue(hamt1.getNode(key201).isEmpty()); //LeafList doesn't support getNode
+        assertTrue(!hamt1.getNode(key201).isPresent()); //LeafList doesn't support getNode
     }
 
     @Test
@@ -109,9 +108,9 @@ public class HashArrayMappedTrieTest {
     public void testRemoveNonExistentKey() {
         HashArrayMappedTrie<IntWithHashCode, ExampleValue> hamt = buildHamt(SMALL_TREE_ELEMENTS);
         IntWithHashCode hamtKey = new IntWithHashCode(101);
-        assertTrue(hamt.get(hamtKey).isEmpty());
+        assertTrue(!hamt.get(hamtKey).isPresent());
         hamt = hamt.remove(hamtKey);
-        assertTrue(hamt.get(hamtKey).isEmpty());
+        assertTrue(!hamt.get(hamtKey).isPresent());
     }
 
     @Test
@@ -120,7 +119,7 @@ public class HashArrayMappedTrieTest {
         IntWithHashCode hamtKey = new IntWithHashCode(1);
         assertEquals(hamt.get(hamtKey).get(), ExampleValue.newBuilder().setPayload(PAYLOAD_PREFIX + 1).build());
         hamt = hamt.remove(hamtKey);
-        assertTrue(hamt.get(hamtKey).isEmpty());
+        assertTrue(!hamt.get(hamtKey).isPresent());
     }
 
     @Test
@@ -129,7 +128,7 @@ public class HashArrayMappedTrieTest {
         String hamtKey = KEY_PREFIX + 100;
         assertEquals(hamt.get(hamtKey).get(), ExampleValue.newBuilder().setPayload(PAYLOAD_PREFIX + 100).build());
         hamt = hamt.remove(hamtKey);
-        assertTrue(hamt.get(hamtKey).isEmpty());
+        assertTrue(!hamt.get(hamtKey).isPresent());
     }
 
     @Test
@@ -139,7 +138,7 @@ public class HashArrayMappedTrieTest {
         for (int i = 0; i < SMALL_TREE_ELEMENTS; i++) {
             expectedKeySet.add(new IntWithHashCode(i));
         }
-        Set<IntWithHashCode> actualKeySet = hamt.iterator().map(Tuple2::_1).toJavaSet();
+        Set<IntWithHashCode> actualKeySet = hamt.getKeySet();
         assertTrue(actualKeySet.equals(expectedKeySet));
     }
 

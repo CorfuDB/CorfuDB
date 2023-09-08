@@ -16,16 +16,13 @@
 
 package org.corfudb.runtime.collections.vavr;
 
-import io.vavr.Function0;
-import io.vavr.Tuple;
-import io.vavr.Tuple2;
-import io.vavr.collection.Iterator;
-import io.vavr.control.Option;
+import com.google.common.collect.Iterators;
+import org.corfudb.runtime.collections.ImmutableCorfuTable;
 
-import java.util.Arrays;
-import java.util.NoSuchElementException;
-import java.util.Objects;
+import java.util.*;
 import java.util.function.Function;
+import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 import static org.corfudb.runtime.collections.vavr.HashArrayMappedTrieModule.AbstractNode.BUCKET_SIZE;
 
@@ -41,7 +38,7 @@ public interface HashArrayMappedTrieModule<K, V> {
             this.size = size;
         }
 
-        Option<V> lookup(int shift, int keyHash, K key) {
+        Optional<V> lookup(int shift, int keyHash, K key) {
             int frag = hashFragment(shift, keyHash);
             AbstractNode<K, V> child = (AbstractNode)this.subNodes[frag];
             return child.lookup(shift + CHUNK_SIZE, keyHash, key);
@@ -53,7 +50,7 @@ public interface HashArrayMappedTrieModule<K, V> {
             return child.lookup(shift + CHUNK_SIZE, keyHash, key, defaultValue);
         }
 
-        Option<LeafSingleton<K, V>> lookupNode(int shift, int keyHash, K key) {
+        Optional<LeafSingleton<K, V>> lookupNode(int shift, int keyHash, K key) {
             int frag = hashFragment(shift, keyHash);
             AbstractNode<K, V> child = (AbstractNode)this.subNodes[frag];
             return child.lookupNode(shift + CHUNK_SIZE, keyHash, key);
@@ -118,14 +115,14 @@ public interface HashArrayMappedTrieModule<K, V> {
             this.subNodes = subNodes;
         }
 
-        Option<V> lookup(int shift, int keyHash, K key) {
+        Optional<V> lookup(int shift, int keyHash, K key) {
             int frag = hashFragment(shift, keyHash);
             int bit = toBitmap(frag);
             if ((this.bitmap & bit) != 0) {
                 AbstractNode<K, V> n = (AbstractNode)this.subNodes[fromBitmap(this.bitmap, bit)];
                 return n.lookup(shift + CHUNK_SIZE, keyHash, key);
             } else {
-                return Option.none();
+                return Optional.empty();
             }
         }
 
@@ -140,14 +137,14 @@ public interface HashArrayMappedTrieModule<K, V> {
             }
         }
 
-        Option<LeafSingleton<K, V>> lookupNode(int shift, int keyHash, K key) {
+        Optional<LeafSingleton<K, V>> lookupNode(int shift, int keyHash, K key) {
             int frag = hashFragment(shift, keyHash);
             int bit = toBitmap(frag);
             if ((this.bitmap & bit) != 0) {
                 AbstractNode<K, V> n = (AbstractNode)this.subNodes[fromBitmap(this.bitmap, bit)];
                 return n.lookupNode(shift + CHUNK_SIZE, keyHash, key);
             } else {
-                return Option.none();
+                return Optional.empty();
             }
         }
         AbstractNode<K, V> modify(int shift, int keyHash, K key, V value, Action action) {
@@ -228,8 +225,8 @@ public interface HashArrayMappedTrieModule<K, V> {
             this.tail = tail;
         }
 
-        Option<V> lookup(int shift, int keyHash, K key) {
-            return this.hash != keyHash ? Option.none() : this.nodes()
+        Optional<V> lookup(int shift, int keyHash, K key) {
+            return this.hash != keyHash ? Optional.empty() : this.nodes()
                     .find(node -> Objects.equals(node.key(), key)).map(LeafNode::value);
         }
 
@@ -253,8 +250,8 @@ public interface HashArrayMappedTrieModule<K, V> {
         }
 
         //Don't support lookupNode of LeafList. Use lookup instead
-        Option<LeafSingleton<K, V>> lookupNode(int shift, int keyHash, K key) {
-            return Option.none();
+        Optional<LeafSingleton<K, V>> lookupNode(int shift, int keyHash, K key) {
+            return Optional.empty();
         }
 
         AbstractNode<K, V> modify(int shift, int keyHash, K key, V value, Action action) {
@@ -266,12 +263,12 @@ public interface HashArrayMappedTrieModule<K, V> {
         }
 
         AbstractNode<K, V> modifyHelper(int shift, int keyHash, K key, V value,
-                                        Function0<LeafSingleton<K, V>> leafSingletonFn, Action action) {
+                                        Supplier<LeafSingleton<K, V>> leafSingletonSupplier, Action action) {
             if (keyHash == this.hash) {
                 AbstractNode<K, V> filtered = this.removeElement(key);
                 return (AbstractNode<K, V>)(action == Action.REMOVE ? filtered : new LeafList(this.hash, key, value, (LeafNode)filtered));
             } else {
-                return action == Action.REMOVE ? this : mergeLeaves(shift, this, leafSingletonFn.apply());
+                return action == Action.REMOVE ? this : mergeLeaves(shift, this, leafSingletonSupplier.get());
             }
         }
 
@@ -319,7 +316,7 @@ public interface HashArrayMappedTrieModule<K, V> {
             return this.size;
         }
 
-        public Iterator<LeafNode<K, V>> nodes() {
+        public AbstractIterator<LeafNode<K, V>> nodes() {
             return new AbstractIterator<LeafNode<K, V>>() {
                 LeafNode<K, V> node = LeafList.this;
 
@@ -367,16 +364,16 @@ public interface HashArrayMappedTrieModule<K, V> {
             return keyHash == this.hash && Objects.equals(key, this.key);
         }
 
-        Option<V> lookup(int shift, int keyHash, K key) {
-            return Option.when(this.equals(keyHash, key), this.value);
+        Optional<V> lookup(int shift, int keyHash, K key) {
+            return this.equals(keyHash, key) ? Optional.of(this.value) : Optional.empty();
         }
 
         V lookup(int shift, int keyHash, K key, V defaultValue) {
             return this.equals(keyHash, key) ? this.value : defaultValue;
         }
 
-        Option<LeafSingleton<K, V>> lookupNode(int shift, int keyHash, K key) {
-            return Option.when(this.equals(keyHash, key), this);
+        Optional<LeafSingleton<K, V>> lookupNode(int shift, int keyHash, K key) {
+            return this.equals(keyHash, key) ? Optional.of(this) : Optional.empty();
         }
 
         AbstractNode<K, V> modify(int shift, int keyHash, K key, V value, Action action) {
@@ -387,11 +384,11 @@ public interface HashArrayMappedTrieModule<K, V> {
             return modifyHelper(shift, leafSingleton.hash(), leafSingleton.key(), () -> leafSingleton, action);
         }
 
-        AbstractNode<K, V> modifyHelper(int shift, int keyHash, K key, Function0<LeafSingleton<K, V>> leafSingletonFn, Action action) {
+        AbstractNode<K, V> modifyHelper(int shift, int keyHash, K key, Supplier<LeafSingleton<K, V>> leafSingletonSupplier, Action action) {
             if (keyHash == this.hash && Objects.equals(key, this.key)) {
-                return (AbstractNode)(action == Action.REMOVE ? EmptyNode.instance() : leafSingletonFn.apply());
+                return (AbstractNode)(action == Action.REMOVE ? EmptyNode.instance() : leafSingletonSupplier.get());
             } else {
-                return (AbstractNode)(action == Action.REMOVE ? this : mergeLeaves(shift, this, leafSingletonFn.apply()));
+                return (AbstractNode)(action == Action.REMOVE ? this : mergeLeaves(shift, this, leafSingletonSupplier.get()));
             }
         }
 
@@ -400,7 +397,7 @@ public interface HashArrayMappedTrieModule<K, V> {
         }
 
         public Iterator<LeafNode<K, V>> nodes() {
-            return Iterator.of(this);
+            return Iterators.singletonIterator(this);
         }
 
         int hash() {
@@ -456,16 +453,16 @@ public interface HashArrayMappedTrieModule<K, V> {
             return (EmptyNode<K, V>) INSTANCE;
         }
 
-        Option<V> lookup(int shift, int keyHash, K key) {
-            return Option.none();
+        Optional<V> lookup(int shift, int keyHash, K key) {
+            return Optional.empty();
         }
 
         V lookup(int shift, int keyHash, K key, V defaultValue) {
             return defaultValue;
         }
 
-        Option<LeafSingleton<K, V>> lookupNode(int var1, int var2, K var3) {
-            return Option.none();
+        Optional<LeafSingleton<K, V>> lookupNode(int var1, int var2, K var3) {
+            return Optional.empty();
         }
 
         AbstractNode<K, V> modify(int shift, int keyHash, K key, V value, Action action) {
@@ -485,7 +482,7 @@ public interface HashArrayMappedTrieModule<K, V> {
         }
 
         public Iterator<LeafNode<K, V>> nodes() {
-            return Iterator.empty();
+            return Collections.emptyIterator();
         }
     }
 
@@ -531,11 +528,11 @@ public interface HashArrayMappedTrieModule<K, V> {
             return newArr;
         }
 
-        abstract Option<V> lookup(int var1, int var2, K var3);
+        abstract Optional<V> lookup(int var1, int var2, K var3);
 
         abstract V lookup(int var1, int var2, K var3, V var4);
 
-        abstract Option<LeafSingleton<K, V>> lookupNode(int var1, int var2, K var3);
+        abstract Optional<LeafSingleton<K, V>> lookupNode(int var1, int var2, K var3);
 
         abstract AbstractNode<K, V> modify(int var1, int var2, K var3, V var4, Action var5);
 
@@ -545,15 +542,25 @@ public interface HashArrayMappedTrieModule<K, V> {
             return new LeafNodeIterator(this);
         }
 
-        public Iterator<Tuple2<K, V>> iterator() {
-            return this.nodes().map(node -> Tuple.of(node.key(), node.value()));
+        public Iterator<AbstractMap.SimpleEntry<K, V>> iterator() {
+            return Iterators.transform(this.nodes(), kvLeafNode -> new AbstractMap.SimpleEntry<>(kvLeafNode.key(), kvLeafNode.value()));
         }
 
-        public Option<V> get(K key) {
+        public Set<K> getKeySet() {
+            Set<K> keySet = new HashSet<>();
+            Iterator<LeafNode<K, V>> it = this.nodes();
+            while(it.hasNext()) {
+                LeafNode<K, V> node = (LeafNode)it.next();
+                keySet.add(node.key());
+            }
+            return keySet;
+        }
+
+        public Optional<V> get(K key) {
             return this.lookup(0, Objects.hashCode(key), key);
         }
 
-        public Option<LeafSingleton<K, V>> getNode(K key) {
+        public Optional<LeafSingleton<K, V>> getNode(K key) {
             return this.lookupNode(0, Objects.hashCode(key), key);
         }
 
@@ -562,7 +569,7 @@ public interface HashArrayMappedTrieModule<K, V> {
         }
 
         public boolean containsKey(K key) {
-            return this.get(key).isDefined();
+            return this.get(key).isPresent();
         }
 
         public HashArrayMappedTrie<K, V> put(K key, V value) {
@@ -574,8 +581,9 @@ public interface HashArrayMappedTrieModule<K, V> {
         }
 
         public final String toString() {
-            return this.iterator().map(t -> t._1 + " -> " + t._2)
-                    .mkString("HashArrayMappedTrie(", ", ", ")");
+            return "";
+//            return this.iterator().map(t -> t._1 + " -> " + t._2)
+//                    .mkString("HashArrayMappedTrie(", ", ", ")");
         }
     }
 
@@ -660,10 +668,10 @@ public interface HashArrayMappedTrieModule<K, V> {
         REMOVE
     }
 
-    abstract class AbstractIterator<T> implements Iterator<T> {
-        public String toString() {
-            return this.stringPrefix() + "(" + (this.isEmpty() ? "" : "?") + ")";
-        }
+    public abstract class AbstractIterator<T> implements Iterator<T>{
+//        public String toString() {
+//            return this.stringPrefix() + "(" + (this.isEmpty() ? "" : "?") + ")";
+//        }
 
         protected abstract T getNext();
 
@@ -673,6 +681,18 @@ public interface HashArrayMappedTrieModule<K, V> {
             } else {
                 return this.getNext();
             }
+        }
+
+        public final Optional<T> find(Predicate<? super T> predicate) {
+            Objects.requireNonNull(predicate, "predicate is null");
+
+            while(this.hasNext()) {
+                T elem = this.next();
+                if (predicate.test(elem)) {
+                    return Optional.of(elem);
+                }
+            }
+            return Optional.empty();
         }
     }
 }
