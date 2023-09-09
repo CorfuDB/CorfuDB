@@ -17,9 +17,16 @@
 package org.corfudb.runtime.collections.vavr;
 
 import com.google.common.collect.Iterators;
-import org.corfudb.runtime.collections.ImmutableCorfuTable;
 
-import java.util.*;
+import java.util.Arrays;
+import java.util.AbstractMap.SimpleEntry;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.NoSuchElementException;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
@@ -542,8 +549,8 @@ public interface HashArrayMappedTrieModule<K, V> {
             return new LeafNodeIterator(this);
         }
 
-        public Iterator<AbstractMap.SimpleEntry<K, V>> iterator() {
-            return Iterators.transform(this.nodes(), kvLeafNode -> new AbstractMap.SimpleEntry<>(kvLeafNode.key(), kvLeafNode.value()));
+        public Iterator<SimpleEntry<K, V>> iterator() {
+            return Iterators.transform(this.nodes(), kvLeafNode -> new SimpleEntry<>(kvLeafNode.key(), kvLeafNode.value()));
         }
 
         public Set<K> getKeySet() {
@@ -581,9 +588,9 @@ public interface HashArrayMappedTrieModule<K, V> {
         }
 
         public final String toString() {
-            return "";
-//            return this.iterator().map(t -> t._1 + " -> " + t._2)
-//                    .mkString("HashArrayMappedTrie(", ", ", ")");
+            StringBuilder sb = new StringBuilder();
+            this.iterator().forEachRemaining(element -> sb.append(element.toString()));
+            return sb.toString();
         }
     }
 
@@ -668,11 +675,7 @@ public interface HashArrayMappedTrieModule<K, V> {
         REMOVE
     }
 
-    public abstract class AbstractIterator<T> implements Iterator<T>{
-//        public String toString() {
-//            return this.stringPrefix() + "(" + (this.isEmpty() ? "" : "?") + ")";
-//        }
-
+    public abstract class AbstractIterator<T> implements Iterator<T> {
         protected abstract T getNext();
 
         public final T next() {
