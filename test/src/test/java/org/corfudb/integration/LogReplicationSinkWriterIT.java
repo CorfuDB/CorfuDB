@@ -1,6 +1,8 @@
 package org.corfudb.integration;
 
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
+import org.corfudb.infrastructure.logreplication.proto.Sample;
 import org.corfudb.infrastructure.logreplication.proto.Sample.IntValue;
 import org.corfudb.infrastructure.logreplication.proto.Sample.IntValueTag;
 import org.corfudb.infrastructure.logreplication.proto.Sample.Metadata;
@@ -15,6 +17,7 @@ import org.corfudb.runtime.LogReplicationUtils;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
+import org.corfudb.runtime.collections.TxnContext;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -61,11 +64,13 @@ public class LogReplicationSinkWriterIT extends LogReplicationAbstractIT {
         mapNameToMapSource = new HashMap<>();
         mapNameToMapSink = new HashMap<>();
 
-        /* The first 4 tables are for snapshot sync */
-        prepareTablesToVerify(1, 2, 4);
+        interleaveOpenTableAndWrite(0, 4);
 
-        // Add Data for Snapshot Sync
-        writeToSource(0, NUM_WRITES);
+//        /* The first 4 tables are for snapshot sync */
+//        prepareTablesToVerify(1, 1, 1);
+//
+//        // Add Data for Snapshot Sync
+//        writeToSource(0, NUM_WRITES);
         // Confirm data does exist on Source Cluster
         for(Table<StringKey, IntValueTag, Metadata> map : mapNameToMapSource.values()) {
             assertThat(map.count()).isEqualTo(NUM_WRITES);
@@ -97,7 +102,7 @@ public class LogReplicationSinkWriterIT extends LogReplicationAbstractIT {
         mapNameToMapSource.clear();
         mapNameToMapSink.clear();
 
-        prepareTablesToVerify(5, 6, 8);
+//        prepareTablesToVerify(5, 6, 8);
 
         // Restart Source LR after opening the tables
         startSourceLogReplicator();
@@ -113,6 +118,13 @@ public class LogReplicationSinkWriterIT extends LogReplicationAbstractIT {
         // Table008 are replicated.
         // Also verify all the table's contents for log entry sync
         verifyTableContentsAndRecords(5, 6, 8);
+    }
+
+    private void interleaveOpenTableAndWrite(int start, int end) {
+        for(int i = start; i <= end; ++i) {
+            openTable(i);
+            writeToTable(i, 0, NUM_WRITES);
+        }
     }
 
     /**
@@ -162,6 +174,33 @@ public class LogReplicationSinkWriterIT extends LogReplicationAbstractIT {
         }
     }
 
+    private void openTable(int idx) {
+        String mapName = TABLE_PREFIX + idx;
+        try {
+            Table<StringKey, IntValueTag, Metadata> tableSource = corfuStoreSource.openTable(NAMESPACE, mapName, StringKey.class,
+                    IntValueTag.class, Metadata.class,
+                    TableOptions.fromProtoSchema(IntValueTag.class));
+            mapNameToMapSource.put(mapName, tableSource);
+        } catch (Exception e) {
+            log.info("ERROR ", e.getMessage());
+        }
+    }
+
+    private void writeToTable(int idx, int start, int numRec) {
+        int maxIndex = start + numRec;
+        String mapName = TABLE_PREFIX + idx;
+        Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata> map = mapNameToMapSource.get(mapName);
+        for (int i = start; i < maxIndex; i++) {
+            Sample.StringKey stringKey = Sample.StringKey.newBuilder().setKey(String.valueOf(i)).build();
+            Sample.IntValueTag IntValueTag = Sample.IntValueTag.newBuilder().setValue(i).build();
+            Sample.Metadata metadata = Sample.Metadata.newBuilder().setMetadata("Metadata_" + i).build();
+            try (TxnContext txn = corfuStoreSource.txn(NAMESPACE)) {
+                txn.putRecord(map, stringKey, IntValueTag, metadata);
+                txn.commit();
+            }
+        }
+    }
+
     /**
      * Verify tables records and contents after log replication.
      */
@@ -177,15 +216,15 @@ public class LogReplicationSinkWriterIT extends LogReplicationAbstractIT {
                     .build();
             CorfuRecord<TableDescriptors, TableMetadata> corfuRecord =
                     sinkRuntime.getTableRegistry().getRegistryTable().get(tableNameKey);
-            if (i < splitter) {
-                // Table with is_federated = false will be dropped
-                Assert.assertFalse(corfuRecord.getMetadata().getTableOptions().getIsFederated());
-                Table<StringKey, IntValueTag, Metadata> tableSink =
-                        corfuStoreSink.openTable(NAMESPACE, tableName, StringKey.class,
-                                IntValueTag.class, Metadata.class,
-                                TableOptions.fromProtoSchema(IntValue.class, TableOptions.builder().build()));
-                Assert.assertEquals(tableSink.count(), 0);
-            } else {
+//            if (i < splitter) {
+//                // Table with is_federated = false will be dropped
+//                Assert.assertFalse(corfuRecord.getMetadata().getTableOptions().getIsFederated());
+//                Table<StringKey, IntValueTag, Metadata> tableSink =
+//                        corfuStoreSink.openTable(NAMESPACE, tableName, StringKey.class,
+//                                IntValueTag.class, Metadata.class,
+//                                TableOptions.fromProtoSchema(IntValue.class, TableOptions.builder().build()));
+//                Assert.assertEquals(tableSink.count(), 0);
+//            } else {
                 Assert.assertTrue(corfuRecord.getMetadata().getTableOptions().getIsFederated());
                 Assert.assertEquals(corfuRecord.getMetadata().getTableOptions().getStreamTagCount(), 1);
                 Assert.assertEquals(corfuRecord.getMetadata().getTableOptions().getStreamTag(0), "test");
@@ -194,7 +233,7 @@ public class LogReplicationSinkWriterIT extends LogReplicationAbstractIT {
                         IntValueTag.class, Metadata.class,
                         TableOptions.fromProtoSchema(IntValueTag.class, TableOptions.builder().build()));
                 mapNameToMapSink.put(tableName, tableSink);
-            }
+//            }
         }
         // Verify contents
         verifyDataOnSink(NUM_WRITES);

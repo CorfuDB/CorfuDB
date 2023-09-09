@@ -9,6 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.logreplication.DataSender;
+import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent.LogReplicationEventType;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationFSM;
@@ -22,6 +23,7 @@ import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.Address;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -75,11 +77,12 @@ public class SnapshotSender {
 
     private volatile AtomicBoolean stopSnapshotSync = new AtomicBoolean(false);
 
-    public SnapshotSender(CorfuRuntime runtime, SnapshotReader snapshotReader, DataSender dataSender,
-                          ReadProcessor readProcessor, int snapshotSyncBatchSize, LogReplicationFSM fsm) {
-        this.runtime = runtime;
+    public SnapshotSender(LogReplicationContext replicationContext, SnapshotReader snapshotReader, DataSender dataSender,
+                          ReadProcessor readProcessor, LogReplicationFSM fsm) {
+        this.runtime = replicationContext.getCorfuRuntime();
         this.snapshotReader = snapshotReader;
         this.fsm = fsm;
+        int snapshotSyncBatchSize = replicationContext.getConfig(fsm.getSession()).getMaxNumMsgPerBatch();
         this.maxNumSnapshotMsgPerBatch = snapshotSyncBatchSize <= 0 ? DEFAULT_MAX_NUM_MSG_PER_BATCH : snapshotSyncBatchSize;
         this.dataSenderBufferManager = new SnapshotSenderBufferManager(dataSender, fsm.getAckReader());
         this.messageCounter = MeterRegistryProvider.getInstance().map(registry ->
@@ -129,6 +132,7 @@ public class SnapshotSender {
                     break;
                 } catch (Exception e) {
                     log.error("Caught exception during snapshot sync", e);
+                    log.error("Print stacktrace from thread {}", Arrays.toString(Thread.currentThread().getStackTrace()));
                     snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.UNKNOWN);
                     cancel = true;
                     break;
@@ -197,6 +201,10 @@ public class SnapshotSender {
 
         // If we are starting a snapshot sync, send a start marker.
         if (startSnapshotSync) {
+            if (fsm.getSession().getSubscriber().getModel() == LogReplication.ReplicationModel.ROUTING_QUEUES) {
+                resetBaseSnapshotTimestamp(logReplicationEntries.get(0).getMetadata().getSnapshotTimestamp());
+            }
+
             dataSenderBufferManager.sendWithBuffering(getSnapshotSyncStartMarker(snapshotSyncEventId));
             startSnapshotSync = false;
             numMessages++;
@@ -240,6 +248,19 @@ public class SnapshotSender {
         return getLrEntryAckMsg(metadata);
     }
 
+    private LogReplicationEntryMsg getSnapshotSyncStartMarker(long timestamp, UUID snapshotSyncEventId) {
+        LogReplication.LogReplicationEntryMetadataMsg metadata = LogReplication.LogReplicationEntryMetadataMsg.newBuilder()
+            .setEntryType(LogReplicationEntryType.SNAPSHOT_START)
+            .setTopologyConfigID(fsm.getTopologyConfigId())
+            .setSyncRequestId(getUuidMsg(snapshotSyncEventId))
+            .setTimestamp(Address.NON_ADDRESS)
+            .setPreviousTimestamp(Address.NON_ADDRESS)
+            .setSnapshotTimestamp(timestamp)
+            .setSnapshotSyncSeqNum(Address.NON_ADDRESS)
+            .build();
+        return getLrEntryAckMsg(metadata);
+    }
+
     private LogReplicationEntryMsg getSnapshotSyncEndMarker(UUID snapshotSyncEventId) {
         LogReplication.LogReplicationEntryMetadataMsg metadata = LogReplication.LogReplicationEntryMetadataMsg.newBuilder()
                 .setEntryType(LogReplicationEntryType.SNAPSHOT_END)
@@ -250,6 +271,19 @@ public class SnapshotSender {
                 .setSnapshotTimestamp(baseSnapshotTimestamp)
                 .setSnapshotSyncSeqNum(Address.NON_ADDRESS)
                 .build();
+        return getLrEntryAckMsg(metadata);
+    }
+
+    private LogReplicationEntryMsg getSnapshotSyncEndMarker(long timestamp, UUID snapshotSyncEventId) {
+        LogReplication.LogReplicationEntryMetadataMsg metadata = LogReplication.LogReplicationEntryMetadataMsg.newBuilder()
+            .setEntryType(LogReplicationEntryType.SNAPSHOT_END)
+            .setTopologyConfigID(fsm.getTopologyConfigId())
+            .setSyncRequestId(getUuidMsg(snapshotSyncEventId))
+            .setTimestamp(Address.NON_ADDRESS)
+            .setPreviousTimestamp(Address.NON_ADDRESS)
+            .setSnapshotTimestamp(timestamp)
+            .setSnapshotSyncSeqNum(Address.NON_ADDRESS)
+            .build();
         return getLrEntryAckMsg(metadata);
     }
 
@@ -297,6 +331,12 @@ public class SnapshotSender {
 
         stopSnapshotSync.set(false);
         startSnapshotSync = true;
+    }
+
+    private void resetBaseSnapshotTimestamp(long timestamp) {
+        baseSnapshotTimestamp = timestamp;
+        fsm.setBaseSnapshot(timestamp);
+        fsm.getAckReader().setBaseSnapshot(timestamp);
     }
 
     /**

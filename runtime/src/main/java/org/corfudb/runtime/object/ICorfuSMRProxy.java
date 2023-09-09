@@ -12,7 +12,8 @@ import java.util.UUID;
  * @param <S> The type of the SMR object which must extend
  *            {@link SnapshotGenerator} and {@link ConsistencyView}
  */
-public interface ICorfuSMRProxy<S extends SnapshotGenerator<S> & ConsistencyView> {
+public interface ICorfuSMRProxy<
+        S extends SnapshotGenerator<S> & ConsistencyView> {
 
     /**
      * Access the state of the object.
@@ -35,39 +36,5 @@ public interface ICorfuSMRProxy<S extends SnapshotGenerator<S> & ConsistencyView
     long logUpdate(String smrUpdateFunction,
                    Object[] conflictObject, Object... args);
 
-    /**
-     * Get the ID of the stream this proxy is subscribed to.
-     *
-     * @return The UUID of the stream this proxy is subscribed to.
-     */
-    UUID getStreamID();
-
-    /**
-     * Get the stream tags on of the object the proxy is managing.
-     *
-     * @return stream tags on of the object the proxy is managing
-     */
-    Set<UUID> getStreamTags();
-
-    /**
-     * Is object cached? The definition of cached depends on the
-     * underlying implementation.
-     *
-     * @return true if object is cached
-     */
-    boolean isObjectCached();
-
-    /**
-     * Return the MultiVersionObject associated with this SMR object.
-     *
-     * @return the MultiVersionObject associated with this SMR object.
-     */
     MultiVersionObject<S> getUnderlyingMVO();
-
-    /**
-     * Return the serializer associated with this SMR object.
-     *
-     * @return the serializer associated with this SMR object.
-     */
-    ISerializer getSerializer();
 }

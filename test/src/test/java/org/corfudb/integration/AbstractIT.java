@@ -53,6 +53,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Any IT test should inherit this test.
  */
 @Slf4j
+@SuppressWarnings("checkstyle:magicnumber")
 public class AbstractIT extends AbstractCorfuTest {
 
     static {
@@ -817,7 +818,7 @@ public class AbstractIT extends AbstractCorfuTest {
             }
             ProcessBuilder builder = new ProcessBuilder();
 
-            builder.command(SH, HYPHEN_C, getCodeCoverageCmd() + getMetricsCmd(metricsConfigFile) +
+            builder.command(SH, HYPHEN_C, getCodeCoverageCmd() +getMetricsCmd(metricsConfigFile) +
                     " bin/corfu_replication_server " + getOptionsString());
 
             builder.directory(new File(CORFU_PROJECT_DIR));

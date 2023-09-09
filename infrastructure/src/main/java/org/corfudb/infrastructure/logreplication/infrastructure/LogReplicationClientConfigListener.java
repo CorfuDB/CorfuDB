@@ -5,23 +5,14 @@ import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManag
 import org.corfudb.infrastructure.logreplication.utils.SnapshotSyncUtils;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.LogReplication;
-import org.corfudb.runtime.LogReplication.ClientDestinationInfoKey;
-import org.corfudb.runtime.LogReplication.ClientRegistrationId;
-import org.corfudb.runtime.LogReplication.ClientRegistrationInfo;
-import org.corfudb.runtime.LogReplication.DestinationInfoVal;
-import org.corfudb.runtime.LogReplication.LogReplicationSession;
-import org.corfudb.runtime.LogReplication.ReplicationModel;
+import org.corfudb.runtime.LogReplication.*;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
 import org.corfudb.runtime.collections.CorfuStreamEntry;
 import org.corfudb.runtime.collections.StreamListenerResumeOrFullSync;
 import org.corfudb.runtime.exceptions.StreamingException;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.corfudb.infrastructure.logreplication.config.LogReplicationLogicalGroupConfig.CLIENT_CONFIG_TAG;
@@ -176,7 +167,8 @@ public class LogReplicationClientConfigListener extends StreamListenerResumeOrFu
             if (impactedSessions != null) {
                 log.info("Sessions that a forced snapshot sync will be triggered: {}", impactedSessions);
                 impactedSessions.forEach(session -> {
-                    SnapshotSyncUtils.enforceSnapshotSync(session, corfuStore);
+                    SnapshotSyncUtils.enforceSnapshotSync(session, corfuStore,
+                            LogReplication.ReplicationEvent.ReplicationEventType.FORCE_SNAPSHOT_SYNC);
                 });
             }
         }
@@ -211,7 +203,8 @@ public class LogReplicationClientConfigListener extends StreamListenerResumeOrFu
         CorfuStoreMetadata.Timestamp timestamp = configManager.onClientListenerResume();
         configManager.generateConfig(sessionManager.getSessions());
         sessionManager.getSessions().forEach(session -> {
-            SnapshotSyncUtils.enforceSnapshotSync(session, corfuStore);
+            SnapshotSyncUtils.enforceSnapshotSync(session, corfuStore,
+                    LogReplication.ReplicationEvent.ReplicationEventType.FORCE_SNAPSHOT_SYNC);
         });
         return timestamp;
     }

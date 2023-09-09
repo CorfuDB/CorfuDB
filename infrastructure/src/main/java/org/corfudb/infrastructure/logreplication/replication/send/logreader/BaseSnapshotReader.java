@@ -43,20 +43,20 @@ public abstract class BaseSnapshotReader extends SnapshotReader {
     /**
      * The max size of data for SMR entries in data message.
      */
-    private final int maxDataSizePerMsg;
+    protected final int maxDataSizePerMsg;
     private final Optional<DistributionSummary> messageSizeDistributionSummary;
-    private final CorfuRuntime rt;
-    private long snapshotTimestamp;
+    protected final CorfuRuntime rt;
+    protected long snapshotTimestamp;
     protected Set<String> streams;
     private PriorityQueue<String> streamsToSend;
     private long preMsgTs;
     private long currentMsgTs;
-    private OpaqueStreamIterator currentStreamInfo;
+    protected OpaqueStreamIterator currentStreamInfo;
     private long sequence;
-    private OpaqueEntry lastEntry = null;
+    protected OpaqueEntry lastEntry = null;
 
     @Getter
-    private ObservableValue<Integer> observeBiggerMsg = new ObservableValue(0);
+    protected ObservableValue<Integer> observeBiggerMsg = new ObservableValue(0);
 
     protected final LogReplication.LogReplicationSession session;
     protected final LogReplicationContext replicationContext;
@@ -64,12 +64,11 @@ public abstract class BaseSnapshotReader extends SnapshotReader {
     /**
      * Init runtime and streams to read
      */
-    public BaseSnapshotReader(CorfuRuntime runtime, LogReplication.LogReplicationSession session,
+    public BaseSnapshotReader(LogReplication.LogReplicationSession session,
                               LogReplicationContext replicationContext) {
-        this.rt = runtime;
+        this.rt = replicationContext.getCorfuRuntime();
         this.session = session;
         this.replicationContext = replicationContext;
-        this.rt.parseConfigurationString(runtime.getLayoutServers().get(0)).connect();
         this.maxDataSizePerMsg = replicationContext.getConfig(session).getMaxDataSizePerMsg();
         this.messageSizeDistributionSummary = configureMessageSizeDistributionSummary();
         refreshStreamsToReplicateSet();
@@ -86,7 +85,7 @@ public abstract class BaseSnapshotReader extends SnapshotReader {
      * @param entryList
      * @return
      */
-    private OpaqueEntry generateOpaqueEntry(long version, UUID streamID, SMREntryList entryList) {
+    protected OpaqueEntry generateOpaqueEntry(long version, UUID streamID, SMREntryList entryList) {
         Map<UUID, List<SMREntry>> map = new HashMap<>();
         map.put(streamID, entryList.getSmrEntries());
         return new OpaqueEntry(version, map);
@@ -124,7 +123,7 @@ public abstract class BaseSnapshotReader extends SnapshotReader {
         preMsgTs = currentMsgTs;
         sequence++;
 
-        log.trace("txMsg {} deepsize sizeInBytes {} entryList.sizeInByres {}  with numEntries {} deepSize sizeInBytes {}",
+        log.info("txMsg {} deepsize sizeInBytes {} entryList.sizeInByres {}  with numEntries {} deepSize sizeInBytes {}",
             TextFormat.printToString(txMsg.getMetadata()), Memory.sizeOf.deepSizeOf(txMsg), entryList.getSizeInBytes(),
             entryList.getSmrEntries().size(), Memory.sizeOf.deepSizeOf(entryList.smrEntries));
         return txMsg;
@@ -135,7 +134,7 @@ public abstract class BaseSnapshotReader extends SnapshotReader {
      * @param stream
      * @return
      */
-    private SMREntryList next(OpaqueStreamIterator stream) {
+    protected SMREntryList next(OpaqueStreamIterator stream) {
         List<SMREntry> smrList = new ArrayList<>();
         int currentMsgSize = 0;
 
@@ -192,7 +191,7 @@ public abstract class BaseSnapshotReader extends SnapshotReader {
      * @param stream bookkeeping of the current stream information.
      * @return
      */
-    private LogReplication.LogReplicationEntryMsg read(OpaqueStreamIterator stream, UUID syncRequestId) {
+    protected LogReplication.LogReplicationEntryMsg read(OpaqueStreamIterator stream, UUID syncRequestId) {
         SMREntryList entryList = next(stream);
         LogReplication.LogReplicationEntryMsg txMsg = generateMessage(stream, entryList, syncRequestId);
         log.info("Successfully generate a snapshot message for stream {} with snapshotTimestamp={}, numEntries={}, " +
@@ -257,7 +256,8 @@ public abstract class BaseSnapshotReader extends SnapshotReader {
         return new SnapshotReadMessage(messages, endSnapshotSync);
     }
 
-    private boolean currentStreamHasNext() {
+    protected boolean currentStreamHasNext() {
+        log.info("Iterator hasNext = {}", currentStreamInfo.iterator.hasNext());
         return currentStreamInfo.iterator.hasNext() || lastEntry != null;
     }
 
@@ -282,8 +282,8 @@ public abstract class BaseSnapshotReader extends SnapshotReader {
     public static class OpaqueStreamIterator {
         private String name;
         private UUID uuid;
-        private Iterator iterator;
-        private long maxVersion; // the max address of the log entries processed for this stream.
+        Iterator iterator;
+        protected long maxVersion; // the max address of the log entries processed for this stream.
 
         OpaqueStreamIterator(String name, CorfuRuntime rt, long snapshot) {
             this.name = name;
@@ -295,6 +295,12 @@ public abstract class BaseSnapshotReader extends SnapshotReader {
             Stream stream = (new OpaqueStream(rt.getStreamsView().get(uuid, options))).streamUpTo(snapshot);
             iterator = stream.iterator();
             maxVersion = 0;
+        }
+
+        OpaqueStreamIterator(OpaqueStream opaqueStream, String name, long snapshot) {
+            this.name = name;
+            uuid = CorfuRuntime.getStreamID(name);
+            iterator = opaqueStream.streamUpTo(snapshot).iterator();
         }
     }
 
@@ -309,7 +315,7 @@ public abstract class BaseSnapshotReader extends SnapshotReader {
     /**
      * Record a list of SMR entries
      */
-    private static class SMREntryList {
+    public static class SMREntryList {
 
         // The total sizeInBytes of smrEntries in bytes.
         @Getter

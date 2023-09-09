@@ -6,6 +6,7 @@ import lombok.Setter;
 import org.corfudb.infrastructure.logreplication.config.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.util.serializer.ISerializer;
 
@@ -41,26 +42,32 @@ public class LogReplicationContext {
     @Getter
     private final LogReplicationPluginConfig pluginConfig;
 
+    @Getter
+    private final CorfuRuntime corfuRuntime;
+
     /**
      * Constructor
      **/
     public LogReplicationContext(LogReplicationConfigManager configManager, long topologyConfigId,
-                                 String localCorfuEndpoint, LogReplicationPluginConfig pluginConfig) {
+                                 String localCorfuEndpoint, LogReplicationPluginConfig pluginConfig, CorfuRuntime runtime) {
         this.configManager = configManager;
         this.topologyConfigId = topologyConfigId;
         this.localCorfuEndpoint = localCorfuEndpoint;
         this.pluginConfig = pluginConfig;
         this.isLeader = new AtomicBoolean(false);
+        this.corfuRuntime = runtime;
     }
 
     @VisibleForTesting
     public LogReplicationContext(LogReplicationConfigManager configManager, long topologyConfigId,
-                                 String localCorfuEndpoint, boolean isLeader, LogReplicationPluginConfig pluginConfig) {
+                                 String localCorfuEndpoint, boolean isLeader, LogReplicationPluginConfig pluginConfig,
+                                 CorfuRuntime runtime) {
         this.configManager = configManager;
         this.topologyConfigId = topologyConfigId;
         this.localCorfuEndpoint = localCorfuEndpoint;
         this.pluginConfig = pluginConfig;
         this.isLeader = new AtomicBoolean(isLeader);
+        this.corfuRuntime = runtime;
     }
 
     public void setIsLeader(boolean newValue) {
