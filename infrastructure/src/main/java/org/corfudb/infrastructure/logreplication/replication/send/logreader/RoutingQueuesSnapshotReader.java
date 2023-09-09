@@ -233,7 +233,7 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
         try {
             queryFuture.get(DATA_WAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
         } catch (TimeoutException e) {
-            throw new RuntimeException("Timed out waiting for data or end marker for Snapshot Sync");
+            throw new RuntimeException("Timed out waiting for data or end marker for Snapshot Sync", e);
         } catch (Exception e) {
             // Handle all other types of exceptions
             log.error("Caught exception in WaitForData ", e);
