@@ -171,8 +171,6 @@ public class InSnapshotSyncState implements LogReplicationState {
     }
 
     private void requestSnapshotSyncDataForRoutingQModel() {
-        // TODO pankti: Check for cancellation cause being timeout exception(waiting for data).  Cancel cause
-        //  (exception type) is available in SnapshotSender but propagating it here needs more changes.
         if (fsm.getSnapshotReader() instanceof RoutingQueuesSnapshotReader) {
             RoutingQueuesSnapshotReader reader = (RoutingQueuesSnapshotReader) fsm.getSnapshotReader();
             reader.requestClientForSnapshotData(transitionEventId);
