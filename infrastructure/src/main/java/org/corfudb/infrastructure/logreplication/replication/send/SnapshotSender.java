@@ -29,6 +29,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -139,12 +140,19 @@ public class SnapshotSender {
                 } catch (TrimmedException te) {
                     log.warn("Cancel snapshot sync due to trimmed exception.", te);
                     dataSenderBufferManager.reset(Address.NON_ADDRESS);
-                    snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.TRIM_SNAPSHOT_SYNC, forcedSnapshotSync);
+                    snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.TRIM_SNAPSHOT_SYNC, false, forcedSnapshotSync);
                     cancel = true;
                     break;
                 } catch (Exception e) {
                     log.error("Caught exception during snapshot sync", e);
-                    snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.UNKNOWN, forcedSnapshotSync);
+                    log.error("Print stacktrace from thread {}", Arrays.toString(Thread.currentThread().getStackTrace()));
+
+                    boolean timeoutException = false;
+                    if (e instanceof RuntimeException && e.getCause() instanceof TimeoutException) {
+                        log.info("Snapshot sync timed out waiting for data.  Will request a new snapshot sync");
+                        timeoutException = true;
+                    }
+                    snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.UNKNOWN, timeoutException, forcedSnapshotSync);
                     cancel = true;
                     break;
                 }
@@ -178,7 +186,7 @@ public class SnapshotSender {
                     if (snapshotSyncAck.isCompletedExceptionally()) {
                         log.error("Snapshot Sync completed exceptionally", e);
                     }
-                    snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.UNKNOWN, forcedSnapshotSync);
+                    snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.UNKNOWN, false, forcedSnapshotSync);
                 } finally {
                     snapshotSyncAck = null;
                 }
@@ -202,7 +210,7 @@ public class SnapshotSender {
                 snapshotSyncTransferComplete(snapshotSyncEventId);
             } catch (Exception e) {
                 log.warn("Caught exception while sending data to sink.", e);
-                snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.UNKNOWN, forcedSnapshotSync);
+                snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.UNKNOWN, false, forcedSnapshotSync);
             }
         }
     }
@@ -317,16 +325,19 @@ public class SnapshotSender {
      *
      * @param snapshotSyncEventId unique identifier for the snapshot sync task
      * @param error               specific error cause
+     * @param timeoutException    flag indicating if the failure was due to a timeout
+     * @param forcedSnapshotSync  flag indicating if the snapshot sync was forced
      */
-    private void snapshotSyncCancel(UUID snapshotSyncEventId, LogReplicationError error, boolean forcedSnapshotSync) {
+    private void snapshotSyncCancel(UUID snapshotSyncEventId, LogReplicationError error, boolean timeoutException, boolean forcedSnapshotSync) {
         // Report error to the application through the dataSender
         dataSenderBufferManager.onError(error);
 
         log.error("SNAPSHOT SYNC is being CANCELED for {}, due to {}", snapshotSyncEventId, error.getDescription());
 
+        LogReplicationEventMetadata metadata = new LogReplicationEventMetadata(snapshotSyncEventId, forcedSnapshotSync);
+        metadata.setTimeoutException(timeoutException);
         // Enqueue cancel event, this will cause re-entrance to snapshot sync to start a new cycle
-        fsm.input(new LogReplicationEvent(LogReplicationEventType.SYNC_CANCEL,
-                new LogReplicationEventMetadata(snapshotSyncEventId, forcedSnapshotSync)));
+        fsm.input(new LogReplicationEvent(LogReplicationEventType.SYNC_CANCEL, metadata));
     }
 
     /**
