@@ -1,7 +1,7 @@
 package org.corfudb.runtime.collections.vavr;
 
-import javax.annotation.Nonnull;
-import java.util.AbstractMap;
+import lombok.NonNull;
+
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Spliterator;
@@ -9,18 +9,18 @@ import java.util.Spliterators;
 import java.util.function.Consumer;
 
 /**
- * A thin utility wrapper to help efficiently convert from VAVR's
- * Tuple2 Iterable to Java's Map.Entry Iterable.
+ * A thin utility wrapper to help create
+ * Java's Map.Entry Iterable.
  * @param <K> The type of the key.
  * @param <V> The type of the value.
  *
  * Created by jielu, munshedm, and zfrenette.
  */
-public class TupleIterableWrapper<K, V> implements Iterable<Map.Entry<K, V>> {
+public class IterableWrapper<K, V> implements Iterable<Map.Entry<K, V>> {
 
-    private final Iterator<AbstractMap.SimpleEntry<K, V>> iterator;
+    private final Iterator<Map.Entry<K, V>> iterator;
 
-    public TupleIterableWrapper(@Nonnull Iterator<AbstractMap.SimpleEntry<K, V>> iterator) {
+    public IterableWrapper(@NonNull Iterator<Map.Entry<K, V>> iterator) {
         this.iterator = iterator;
     }
 
@@ -31,7 +31,7 @@ public class TupleIterableWrapper<K, V> implements Iterable<Map.Entry<K, V>> {
 
     @Override
     public Iterator<Map.Entry<K, V>> iterator() {
-        return new TupleIteratorWrapper<>(iterator);
+        return iterator;
     }
 
     @Override
@@ -39,8 +39,8 @@ public class TupleIterableWrapper<K, V> implements Iterable<Map.Entry<K, V>> {
         return spliterator(iterator);
     }
 
-    public static <K, V> Spliterator<Map.Entry<K, V>> spliterator(@Nonnull Iterator<AbstractMap.SimpleEntry<K, V>> iterator){
+    public static <K, V> Spliterator<Map.Entry<K, V>> spliterator(@NonNull Iterator<Map.Entry<K, V>> iterator){
         int characteristics = Spliterator.IMMUTABLE;
-        return Spliterators.spliteratorUnknownSize(new TupleIteratorWrapper<>(iterator), characteristics);
+        return Spliterators.spliteratorUnknownSize(iterator, characteristics);
     }
 }

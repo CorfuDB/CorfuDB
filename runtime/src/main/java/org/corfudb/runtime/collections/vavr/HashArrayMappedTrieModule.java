@@ -19,7 +19,8 @@ package org.corfudb.runtime.collections.vavr;
 import com.google.common.collect.Iterators;
 
 import java.util.Arrays;
-import java.util.AbstractMap.SimpleEntry;
+import java.util.Map.Entry;
+import java.util.AbstractMap;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -33,6 +34,11 @@ import java.util.function.Supplier;
 
 import static org.corfudb.runtime.collections.vavr.HashArrayMappedTrieModule.AbstractNode.BUCKET_SIZE;
 
+/**
+ * An implementation of the Hash Array Mapped Trie data structure
+ * @param <K> The type of the key
+ * @param <V> The type of the value
+ */
 public interface HashArrayMappedTrieModule<K, V> {
     public static final class ArrayNode<K, V> extends AbstractNode<K, V> {
         private final Object[] subNodes;
@@ -468,7 +474,7 @@ public interface HashArrayMappedTrieModule<K, V> {
             return defaultValue;
         }
 
-        Optional<LeafSingleton<K, V>> lookupNode(int var1, int var2, K var3) {
+        Optional<LeafSingleton<K, V>> lookupNode(int shift, int keyHash, K key) {
             return Optional.empty();
         }
 
@@ -493,6 +499,13 @@ public interface HashArrayMappedTrieModule<K, V> {
         }
     }
 
+    /**
+     * An abstract class that forms the basis of the HAMT implementation
+     * AbstractNode class defines methods to do CRUD operations. There are
+     * five types of nodes that extends from this class to form the HAMT
+     * @param <K> The type of the key
+     * @param <V> The type of the value
+     */
     public abstract static class AbstractNode<K, V> implements HashArrayMappedTrie<K, V> {
         static final int CHUNK_SIZE = 5;
         static final int BUCKET_SIZE = 32;
@@ -535,22 +548,22 @@ public interface HashArrayMappedTrieModule<K, V> {
             return newArr;
         }
 
-        abstract Optional<V> lookup(int var1, int var2, K var3);
+        abstract Optional<V> lookup(int shift, int keyHash, K key);
 
-        abstract V lookup(int var1, int var2, K var3, V var4);
+        abstract V lookup(int shift, int keyHash, K key, V defaultValue);
 
-        abstract Optional<LeafSingleton<K, V>> lookupNode(int var1, int var2, K var3);
+        abstract Optional<LeafSingleton<K, V>> lookupNode(int shift, int keyHash, K key);
 
-        abstract AbstractNode<K, V> modify(int var1, int var2, K var3, V var4, Action var5);
+        abstract AbstractNode<K, V> modify(int shift, int keyHash, K key, V value, Action action);
 
-        abstract AbstractNode<K, V> modify(int var1, LeafSingleton<K, V> var2, Action var3);
+        abstract AbstractNode<K, V> modify(int shift, LeafSingleton<K, V> leafSingleton, Action action);
 
         Iterator<LeafNode<K, V>> nodes() {
             return new LeafNodeIterator(this);
         }
 
-        public Iterator<SimpleEntry<K, V>> iterator() {
-            return Iterators.transform(this.nodes(), kvLeafNode -> new SimpleEntry<>(kvLeafNode.key(), kvLeafNode.value()));
+        public Iterator<Entry<K, V>> iterator() {
+            return Iterators.transform(this.nodes(), kvLeafNode -> new AbstractMap.SimpleEntry<>(kvLeafNode.key(), kvLeafNode.value()));
         }
 
         public Set<K> getKeySet() {
