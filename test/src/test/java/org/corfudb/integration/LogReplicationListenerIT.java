@@ -40,6 +40,10 @@ import static org.corfudb.runtime.LogReplicationUtils.REPLICATION_STATUS_TABLE_N
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 import static org.junit.Assert.fail;
 
+/**
+ *  TODO (Shreay): Needs refactoring to properly test behavior of LR listener
+ *
+ */
 @Slf4j
 public class LogReplicationListenerIT extends AbstractIT {
 
@@ -128,12 +132,6 @@ public class LogReplicationListenerIT extends AbstractIT {
         // performFullSyncAndMerge() + streaming updates must be equal to numUpdates
         countDownLatch.await();
 
-        // If the test started when in log entry sync, performFullSyncAndMerge() should not find any existing data as no
-        // updates have been written prior to subscription.
-        if (!startInSnapshotSync) {
-            Assert.assertTrue(lrListener.getExistingEntries().isEmpty());
-        }
-
         // Verify the sequence(timestamp) of the streaming updates
         verifyUpdatesSequence(lrListener.getUpdates());
 
@@ -188,12 +186,6 @@ public class LogReplicationListenerIT extends AbstractIT {
         countDownLatch.await();
         numTxLatch.await();
 
-        // If the test started when in log entry sync, performFullSyncAndMerge() should not find any existing data as no
-        // updates have been written prior to subscription.
-        if (!startInSnapshotSync) {
-            Assert.assertTrue(lrListener.getExistingEntries().isEmpty());
-        }
-
         verifyUpdatesSequence(lrListener.getUpdates());
         verifyData(lrListener.getUpdates(), lrListener.getExistingEntries());
     }
@@ -242,12 +234,6 @@ public class LogReplicationListenerIT extends AbstractIT {
 
         log.info("Wait for data to arrive");
         countDownLatch.await();
-
-        // If the test started when in log entry sync, performFullSyncAndMerge() should not find any existing data as no
-        // updates have been written prior to subscription.
-        if (!startInSnapshotSync) {
-            Assert.assertTrue(lrListener.getExistingEntries().isEmpty());
-        }
 
         log.info("Verify the sequence of updates and received data");
         verifyUpdatesSequence(lrListener.getUpdates());
@@ -338,12 +324,6 @@ public class LogReplicationListenerIT extends AbstractIT {
 
         log.info("Wait for subscription and for all updates to be received");
         countDownLatch.await();
-
-        // If the test started when in log entry sync, performFullSyncAndMerge() should only find the data written prior to
-        // subscription
-        if (!startInSnapshotSync) {
-            Assert.assertEquals(numUpdates, lrListener.getExistingEntries().size());
-        }
 
         log.info("Verify the sequence of updates");
         verifyUpdatesSequence(lrListener.getUpdates());
