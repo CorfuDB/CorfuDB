@@ -14,8 +14,8 @@ import static org.junit.Assert.assertTrue;
 
 @SuppressWarnings("checkstyle:magicnumber")
 public class HashArrayMappedTrieTest {
-    private static final int SMALL_TREE_ELEMENTS = 100;
-    private static final int LARGE_TREE_ELEMENTS = 1000;
+    private static final int INDEX_NODE_ELEMENTS = 15;
+    private static final int ARRAY_NODE_ELEMENTS = 1000;
     private static final String PAYLOAD_PREFIX = "payload_";
     private static final String KEY_PREFIX = "key_";
 
@@ -27,32 +27,29 @@ public class HashArrayMappedTrieTest {
     private static final ExampleValue value101 = ExampleValue.newBuilder().setPayload(PAYLOAD_PREFIX + 101).build();
 
     @Test
-    public void testCollision() {
-        HashArrayMappedTrie<IntWithHashCode, ExampleValue> hamt = HashArrayMappedTrie.empty();
-        hamt = hamt.put(key1, value1);
-        hamt = hamt.put(key101, value101);
-        assertEquals(hamt.get(key1).get(), value1);
-        assertEquals(hamt.get(key101).get(), value101);
-        assertThat(hamt instanceof HashArrayMappedTrieModule.LeafList);
-    }
-
-    @Test
-    public void testGetAndPutNodeBasic() {
+    public void testLeafSingleton() {
         HashArrayMappedTrie<IntWithHashCode, ExampleValue> hamt1 = HashArrayMappedTrie.empty();
         HashArrayMappedTrie<IntWithHashCode, ExampleValue> hamt2 = HashArrayMappedTrie.empty();
         assertTrue(!hamt1.getNode(key1).isPresent());
 
+        //Get and Put
         hamt1 = hamt1.put(key1, value1);
         hamt2 = hamt2.putNode(hamt1.getNode(key1).get());
         assertSame(hamt1.getNode(key1).get(), hamt2.getNode(key1).get());
+        assertSame(hamt1.get(key1).get(), hamt2.get(key1).get());
 
-        hamt1 = hamt1.put(key2, value2);
-        hamt2 = hamt2.put(key2, value2);
-        assertNotSame(hamt1.getNode(key2).get(), hamt2.getNode(key2).get());
+        //Remove
+        hamt1 = hamt1.remove(key1);
+        assertThat(!hamt1.get(key1).isPresent());
+        assertSame(hamt2.get(key1).get(), value1);
+
+        //Remove non-existent key
+        hamt1 = hamt1.remove(key1);
+        assertThat(!hamt1.get(key1).isPresent());
     }
 
     @Test
-    public void testGetAndPutNodeFromLeafList() {
+    public void testLeafList() {
         IntWithHashCode key2 = new IntWithHashCode(2);
         IntWithHashCode key201 = new IntWithHashCode(201);
         ExampleValue value2 = ExampleValue.newBuilder().setPayload(PAYLOAD_PREFIX + 2).build();
@@ -60,7 +57,10 @@ public class HashArrayMappedTrieTest {
 
         HashArrayMappedTrie<IntWithHashCode, ExampleValue> hamt1 = HashArrayMappedTrie.empty();
         hamt1 = hamt1.put(key1, value1);
-        hamt1 = hamt1.put(key101, value101); //hamt1 is a LeafListNode now
+        hamt1 = hamt1.put(key101, value101);
+        //hamt1 is a LeafListNode
+        assertEquals(hamt1.get(key1).get(), value1);
+        assertEquals(hamt1.get(key101).get(), value101);
 
         HashArrayMappedTrie<IntWithHashCode, ExampleValue> hamt2 = HashArrayMappedTrie.empty();
         hamt2 = hamt2.put(key2, value2);
@@ -72,74 +72,78 @@ public class HashArrayMappedTrieTest {
         hamt1 = hamt1.putNode(hamt2.getNode(key201).get()); //key201 will be added to the existing LeafList
         assertEquals(hamt1.get(key201).get(), value201); //key201 is found
         assertTrue(!hamt1.getNode(key201).isPresent()); //LeafList doesn't support getNode
+
+        //Remove existing key
+        hamt1 = hamt1.remove(key1);
+        assertTrue(!hamt1.get(key1).isPresent());
+
+        //Remove non-existent key
+        hamt1 = hamt1.remove(key1);
+        assertTrue(!hamt1.get(key1).isPresent());
     }
 
     @Test
-    public void testGetAndPutNodeFromIndexNode() {
-        HashArrayMappedTrie<IntWithHashCode, ExampleValue> hamt1 = buildHamt(SMALL_TREE_ELEMENTS);
-        HashArrayMappedTrie<IntWithHashCode, ExampleValue> hamt2 = buildHamt(SMALL_TREE_ELEMENTS);
+    public void testIndexNode() {
+        HashArrayMappedTrie<IntWithHashCode, ExampleValue> hamt1 = buildHamt(INDEX_NODE_ELEMENTS);
+        HashArrayMappedTrie<IntWithHashCode, ExampleValue> hamt2 = buildHamt(INDEX_NODE_ELEMENTS);
         IntWithHashCode hamtKey = new IntWithHashCode(1);
 
+        //Get and Put
         HashArrayMappedTrie<IntWithHashCode, ExampleValue> hamt3 = hamt2.putNode(hamt1.getNode(hamtKey).get());
-
         HashArrayMappedTrieModule.LeafSingleton<IntWithHashCode, ExampleValue> l1 = hamt1.getNode(hamtKey).get();
         HashArrayMappedTrieModule.LeafSingleton<IntWithHashCode, ExampleValue> l2 = hamt2.getNode(hamtKey).get();
         HashArrayMappedTrieModule.LeafSingleton<IntWithHashCode, ExampleValue> l3 = hamt3.getNode(hamtKey).get();
         assertNotSame(l1, l2);
         assertSame(l1, l3);
+
+        //Remove key
+        assertEquals(hamt1.get(hamtKey).get(), value1);
+        hamt1 = hamt1.remove(hamtKey);
+        assertTrue(!hamt1.get(hamtKey).isPresent());
+        assertEquals(hamt3.get(hamtKey).get(), value1);
+
+        //Remove non-existent key
+        hamt1 = hamt1.remove(hamtKey);
+        assertTrue(!hamt1.get(hamtKey).isPresent());
     }
 
     @Test
-    public void testGetAndPutNodeFromArrayNode() {
-        HashArrayMappedTrie<String, ExampleValue> hamt1 = buildHamtWithStringKey(LARGE_TREE_ELEMENTS);
-        HashArrayMappedTrie<String, ExampleValue> hamt2 = buildHamtWithStringKey(LARGE_TREE_ELEMENTS);
+    public void testArrayNode() {
+        HashArrayMappedTrie<String, ExampleValue> hamt1 = buildHamtWithStringKey(ARRAY_NODE_ELEMENTS);
+        HashArrayMappedTrie<String, ExampleValue> hamt2 = buildHamtWithStringKey(ARRAY_NODE_ELEMENTS);
         String hamtKey = KEY_PREFIX + 100;
 
+        //Get and Put
         HashArrayMappedTrie<String, ExampleValue> hamt3 = hamt2.putNode(hamt1.getNode(hamtKey).get());
-
         HashArrayMappedTrieModule.LeafSingleton<String, ExampleValue> l1 = hamt1.getNode(hamtKey).get();
         HashArrayMappedTrieModule.LeafSingleton<String, ExampleValue> l2 = hamt2.getNode(hamtKey).get();
         HashArrayMappedTrieModule.LeafSingleton<String, ExampleValue> l3 = hamt3.getNode(hamtKey).get();
         assertNotSame(l1, l2);
         assertSame(l1, l3);
-    }
 
-    @Test
-    public void testRemoveNonExistentKey() {
-        HashArrayMappedTrie<IntWithHashCode, ExampleValue> hamt = buildHamt(SMALL_TREE_ELEMENTS);
-        IntWithHashCode hamtKey = new IntWithHashCode(101);
-        assertTrue(!hamt.get(hamtKey).isPresent());
-        hamt = hamt.remove(hamtKey);
-        assertTrue(!hamt.get(hamtKey).isPresent());
-    }
+        //Remove existing key
+        ExampleValue hamtValue = ExampleValue.newBuilder().setPayload(PAYLOAD_PREFIX + 100).build();
+        assertEquals(hamt1.get(hamtKey).get(), hamtValue);
+        hamt1 = hamt1.remove(hamtKey);
+        assertTrue(!hamt1.get(hamtKey).isPresent());
+        assertEquals(hamt3.get(hamtKey).get(), hamtValue);
 
-    @Test
-    public void testRemoveKey() {
-        HashArrayMappedTrie<IntWithHashCode, ExampleValue> hamt = buildHamt(SMALL_TREE_ELEMENTS);
-        IntWithHashCode hamtKey = new IntWithHashCode(1);
-        assertEquals(hamt.get(hamtKey).get(), ExampleValue.newBuilder().setPayload(PAYLOAD_PREFIX + 1).build());
-        hamt = hamt.remove(hamtKey);
-        assertTrue(!hamt.get(hamtKey).isPresent());
-    }
-
-    @Test
-    public void testRemoveKeyFromArrayNode() {
-        HashArrayMappedTrie<String, ExampleValue> hamt = buildHamtWithStringKey(LARGE_TREE_ELEMENTS);
-        String hamtKey = KEY_PREFIX + 100;
-        assertEquals(hamt.get(hamtKey).get(), ExampleValue.newBuilder().setPayload(PAYLOAD_PREFIX + 100).build());
-        hamt = hamt.remove(hamtKey);
-        assertTrue(!hamt.get(hamtKey).isPresent());
+        //Remove non-existent key
+        hamt1 = hamt1.remove(hamtKey);
+        assertTrue(!hamt1.get(hamtKey).isPresent());
     }
 
     @Test
     public void testIterator() {
-        HashArrayMappedTrie<IntWithHashCode, ExampleValue> hamt = buildHamt(SMALL_TREE_ELEMENTS);
+        HashArrayMappedTrie<IntWithHashCode, ExampleValue> hamt = buildHamt(ARRAY_NODE_ELEMENTS);
         Set<IntWithHashCode> expectedKeySet = new HashSet<>();
-        for (int i = 0; i < SMALL_TREE_ELEMENTS; i++) {
+        for (int i = 0; i < ARRAY_NODE_ELEMENTS; i++) {
             expectedKeySet.add(new IntWithHashCode(i));
         }
         Set<IntWithHashCode> actualKeySet = hamt.getKeySet();
         assertTrue(actualKeySet.equals(expectedKeySet));
+
+        System.out.println(hamt.toString());
     }
 
     HashArrayMappedTrie<IntWithHashCode, ExampleValue> buildHamt(int numElements) {
