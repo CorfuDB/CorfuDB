@@ -1132,8 +1132,14 @@ public class CorfuRuntime {
             List<String> servers = Optional.ofNullable(latestLayout)
                     .map(Layout::getLayoutServers)
                     .orElse(bootstrapLayoutServers);
-
-            layout = fetchLayout(servers);
+            final List<String> responsiveServer =
+                    servers.stream().filter(server -> !latestLayout.getUnresponsiveServers()
+                            .contains(server))
+                            .collect(Collectors.toList());
+            if (responsiveServer.isEmpty()) {
+                throw new IllegalStateException("All servers are unresponsive");
+            }
+            layout = fetchLayout(responsiveServer);
         }
 
         return layout;
