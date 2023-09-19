@@ -75,6 +75,8 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
     // Boolean indicating if the Snapshot reader is waiting for a start marker from this snapshot sync
     private boolean waitingForStartMarker = true;
 
+    private OpaqueStream opaqueStream = null;
+
     public RoutingQueuesSnapshotReader(LogReplicationSession session,
                                        LogReplicationContext replicationContext) {
         super(session, replicationContext);
@@ -123,7 +125,9 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
         String streamOfStreamTag = TableRegistry.getStreamTagFullStreamName(CORFU_SYSTEM_NAMESPACE, streamTagFollowed);
         UUID uuidOfStreamTagFollowed = CorfuRuntime.getStreamID(streamOfStreamTag);
 
-        OpaqueStream opaqueStream = new OpaqueStream(rt.getStreamsView().get(uuidOfStreamTagFollowed));
+        if (opaqueStream == null) {
+            opaqueStream = new OpaqueStream(rt.getStreamsView().get(uuidOfStreamTagFollowed));
+        }
 
         // On first snapshot sync, lastReadTs will be 0. Change it to the latest trim mark
         long trimMark = rt.getAddressSpaceView().getTrimMark().getSequence();
