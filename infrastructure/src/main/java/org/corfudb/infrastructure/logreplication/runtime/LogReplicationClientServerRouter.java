@@ -423,7 +423,7 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
     }
 
     @Override
-    public <T> void completeRequest(LogReplicationSession session, long requestID, T completion) {
+    public synchronized <T> void completeRequest(LogReplicationSession session, long requestID, T completion) {
         try {
             log.trace("Complete request: {}...outstandingRequests {}", requestID, sessionToOutstandingRequests.get(session));
             CompletableFuture<T> cf = (CompletableFuture<T>) sessionToOutstandingRequests.get(session).remove(requestID);
