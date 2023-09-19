@@ -242,6 +242,35 @@ public class TransactionCrud<T extends StoreTransaction<T>>
     }
 
     // ************************** Queue API ***************************************/
+    class QueueEntryAddressGetter<V extends Message, M extends Message>
+            implements TransactionalContext.PreCommitListener {
+        final int smrIndexOfValue = 1;
+        public QueueEntryAddressGetter() {}
+        /**
+         * If we are in a transaction, determine the commit address and fix it up in
+         * the queue entry's metadata.
+         * @param tokenResponse - the sequencer's token response returned.
+         */
+        @Override
+        public void preCommitCallback(TokenResponse tokenResponse) {
+            tablesUpdated.entrySet().forEach(e -> {
+                if (e.getValue().getGuidGenerator() == null) {
+                    return; // Transaction has an update to a table which is not a Queue, so ignore.
+                }
+                TransactionalContext.getRootContext().getWriteSetInfo().getWriteSet().getSMRUpdates(e.getKey())
+                        .forEach(smrEntry -> {
+                            if (smrEntry.getSMRArguments().length > smrIndexOfValue) {
+                                CorfuRecord<V, M> queueRecord =
+                                        (CorfuRecord<V, M>) smrEntry.getSMRArguments()[smrIndexOfValue];
+                                queueRecord.setMetadata((M)
+                                        Queue.CorfuQueueMetadataMsg
+                                                .newBuilder().setTxSequence(tokenResponse.getSequence())
+                                                .build());
+                            }
+                        });
+            });
+        }
+    }
 
     /**
      * Enqueue a message object into the CorfuQueue.
@@ -259,6 +288,9 @@ public class TransactionCrud<T extends StoreTransaction<T>>
     K enqueue(@Nonnull Table<K, V, M> table,
               @Nonnull final V record) {
         validateWrite(table);
+        if (TransactionalContext.getRootContext().getPreCommitListeners().isEmpty()) {
+            TransactionalContext.getCurrentContext().addPreCommitListener(new QueueEntryAddressGetter());
+        }
         K ret = table.enqueue(record);
         tablesUpdated.putIfAbsent(table.getStreamUUID(), table);
         return ret;
@@ -280,34 +312,7 @@ public class TransactionCrud<T extends StoreTransaction<T>>
     public <K extends Message, V extends Message, M extends Message>
     K logUpdateEnqueue(@Nonnull Table<K, V, M> table,
                        @Nonnull final V record, List<UUID> streamTags, CorfuStore corfuStore) {
-        class QueueEntryAddressGetter implements TransactionalContext.PreCommitListener {
-            final int smrIndexOfValue = 1;
-            public QueueEntryAddressGetter() {}
-            /**
-             * If we are in a transaction, determine the commit address and fix it up in
-             * the queue entry's metadata.
-             * @param tokenResponse - the sequencer's token response returned.
-             */
-            @Override
-            public void preCommitCallback(TokenResponse tokenResponse) {
-                tablesUpdated.entrySet().forEach(e -> {
-                    if (e.getValue().getGuidGenerator() == null) {
-                        return; // Transaction has an update to a table which is not a Queue, so ignore.
-                    }
-                    TransactionalContext.getRootContext().getWriteSetInfo().getWriteSet().getSMRUpdates(e.getKey())
-                            .forEach(smrEntry -> {
-                                if (smrEntry.getSMRArguments().length > smrIndexOfValue) {
-                                    CorfuRecord<V, M> queueRecord =
-                                            (CorfuRecord<V, M>) smrEntry.getSMRArguments()[smrIndexOfValue];
-                                    queueRecord.setMetadata((M)
-                                            Queue.CorfuQueueMetadataMsg
-                                                    .newBuilder().setTxSequence(tokenResponse.getSequence())
-                                                    .build());
-                                }
-                            });
-                });
-            }
-        }
+
         if (TransactionalContext.getRootContext().getPreCommitListeners().isEmpty()) {
             TransactionalContext.getCurrentContext().addPreCommitListener(new QueueEntryAddressGetter());
         }
