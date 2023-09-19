@@ -372,7 +372,7 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
                 topologyConfig.getAllClustersInTopology(), connectionEndPoints, localNodeId);
     }
 
-    private void createSingleSourceMultiSinkTopology() {
+    public void createSingleSourceMultiSinkTopology() {
         topologyConfig = initConfig();
 
         Map<ClusterDescriptor, Set<LogReplication.ReplicationModel>> remoteSourceToReplicationModels = new HashMap<>();
