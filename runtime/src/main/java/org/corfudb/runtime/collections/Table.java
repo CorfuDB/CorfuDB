@@ -8,7 +8,6 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.protocols.logprotocol.SMREntry;
-import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CheckpointWriter;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.Queue;
@@ -105,6 +104,7 @@ public class Table<K extends Message, V extends Message, M extends Message> impl
     /**
      * In case this table is opened as a Queue, we need the Guid generator to support enqueue operations.
      */
+    @Getter
     private final CorfuGuidGenerator guidGenerator;
 
     @Getter
@@ -286,28 +286,6 @@ public class Table<K extends Message, V extends Message, M extends Message> impl
      *                                  element prevents it from being added to this queue
      */
     public K enqueue(V e) {
-        /**
-         * This is a callback that is placed into the root transaction's context on
-         * the thread local stack which will be invoked right after this transaction
-         * is deemed successful and has obtained a final sequence number to write.
-         */
-        @AllArgsConstructor
-        class QueueEntryAddressGetter implements TransactionalContext.PreCommitListener {
-            private CorfuRecord<V, M> record;
-
-            /**
-             * If we are in a transaction, determine the commit address and fix it up in
-             * the queue entry's metadata.
-             * @param tokenResponse - the sequencer's token response returned.
-             */
-            @Override
-            public void preCommitCallback(TokenResponse tokenResponse) {
-                record.setMetadata((M) Queue.CorfuQueueMetadataMsg.newBuilder()
-                        .setTxSequence(tokenResponse.getSequence()).build());
-                log.trace("preCommitCallback for Queue: " + tokenResponse);
-            }
-        }
-
         // Obtain a cluster-wide unique 64-bit id to identify this entry in the queue.
         // long entryId = guidGenerator.nextLong();
         long entryId = guidGenerator.nextLong(TransactionalContext.getRootContext().getTxnContext(), this);
@@ -316,13 +294,7 @@ public class Table<K extends Message, V extends Message, M extends Message> impl
 
         // Prepare a partial record with the queue's payload and temporary metadata that will be overwritten
         // by the QueueEntryAddressGetter callback above when the transaction finally commits.
-        CorfuRecord<V, M> queueEntry = new CorfuRecord<>(e,
-                (M) Queue.CorfuQueueMetadataMsg.newBuilder().setTxSequence(0).build());
-
-        QueueEntryAddressGetter addressGetter = new QueueEntryAddressGetter(queueEntry);
-        log.trace("enqueue: Adding preCommitListener for Queue: " + e.toString());
-        TransactionalContext.getRootContext().addPreCommitListener(addressGetter);
-
+        CorfuRecord<V, M> queueEntry = new CorfuRecord<>(e, (M) null);
         corfuTable.insert(keyOfQueueEntry, queueEntry);
         return keyOfQueueEntry;
     }
@@ -342,23 +314,6 @@ public class Table<K extends Message, V extends Message, M extends Message> impl
          * the thread local stack which will be invoked right after this transaction
          * is deemed successful and has obtained a final sequence number to write.
          */
-        @AllArgsConstructor
-        class QueueEntryAddressGetter implements TransactionalContext.PreCommitListener {
-            private CorfuRecord<V, M> record;
-
-            /**
-             * If we are in a transaction, determine the commit address and fix it up in
-             * the queue entry's metadata.
-             * @param tokenResponse - the sequencer's token response returned.
-             */
-            @Override
-            public void preCommitCallback(TokenResponse tokenResponse) {
-                record.setMetadata((M) Queue.CorfuQueueMetadataMsg.newBuilder()
-                        .setTxSequence(tokenResponse.getSequence()).build());
-                log.trace("preCommitCallback for Queue: " + tokenResponse);
-            }
-        }
-
         // Obtain a cluster-wide unique 64-bit id to identify this entry in the queue.
         long entryId = guidGenerator.nextLong(TransactionalContext.getRootContext().getTxnContext(), this);
         // Embed this key into a protobuf.
@@ -366,12 +321,7 @@ public class Table<K extends Message, V extends Message, M extends Message> impl
 
         // Prepare a partial record with the queue's payload and temporary metadata that will be overwritten
         // by the QueueEntryAddressGetter callback above when the transaction finally commits.
-        CorfuRecord<V, M> queueEntry = new CorfuRecord<>(e,
-                (M) Queue.CorfuQueueMetadataMsg.newBuilder().setTxSequence(0).build());
-
-        QueueEntryAddressGetter addressGetter = new QueueEntryAddressGetter(queueEntry);
-        log.trace("enqueue: Adding preCommitListener for Queue: " + e.toString());
-        TransactionalContext.getRootContext().addPreCommitListener(addressGetter);
+        CorfuRecord<V, M> queueEntry = new CorfuRecord<>(e, (M) null);
 
         Object[] smrArgs = new Object[2];
         smrArgs[0] = keyOfQueueEntry;
