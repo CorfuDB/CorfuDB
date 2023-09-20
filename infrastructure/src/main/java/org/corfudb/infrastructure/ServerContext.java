@@ -288,7 +288,7 @@ public class ServerContext implements AutoCloseable {
      *
      * @return max data message size
      */
-    public int getLogReplicationMaxDataMessageSize() {
+    public long getLogReplicationMaxDataMessageSize() {
         String val = getServerConfig(String.class, "--max-replication-data-message-size");
         return val == null ? DEFAULT_MAX_DATA_MSG_SIZE : Integer.parseInt(val);
     }
