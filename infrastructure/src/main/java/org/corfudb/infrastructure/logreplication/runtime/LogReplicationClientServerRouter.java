@@ -806,6 +806,7 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
             }
         } catch (NullPointerException npe) {
             log.info("The replication components are already stopped for session {}", session);
+            return;
         }
 
         if (isConnectionStarterForSession(session)) {
