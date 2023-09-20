@@ -18,11 +18,14 @@ import org.corfudb.runtime.LiteRoutingQueueListener;
 import org.corfudb.runtime.LogReplicationListener;
 import org.corfudb.runtime.LogReplicationUtils;
 import org.corfudb.runtime.Queue;
-import org.corfudb.runtime.object.transactions.TransactionalContext;
+import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.Utils;
+import org.corfudb.util.retry.IRetry;
+import org.corfudb.util.retry.IntervalRetry;
+import org.corfudb.util.retry.RetryNeededException;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -229,11 +232,22 @@ public class CorfuStore {
     public ScopedTransaction scopedTxn(
             @Nonnull final String namespace, IsolationLevel isolationLevel,
             Table<?, ?, ?>... tables) {
-        return new ScopedTransaction(
-                this.runtime,
-                namespace,
-                isolationLevel,
-                tables);
+        try {
+            return IRetry.build(IntervalRetry.class, () -> {
+                try {
+                    return new ScopedTransaction(
+                            this.runtime,
+                            namespace,
+                            isolationLevel,
+                            tables);
+                } catch (TrimmedException e) {
+                    log.error("Error while attempting to snapshot tables {}.", tables, e);
+                    throw new RetryNeededException();
+                }
+            }).run();
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     public static <K extends Message, V extends Message, M extends Message>
