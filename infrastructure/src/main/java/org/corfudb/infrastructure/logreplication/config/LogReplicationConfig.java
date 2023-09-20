@@ -32,7 +32,7 @@ public abstract class LogReplicationConfig {
 
     // Max message size supported by protocol buffers is 64MB. Log Replication uses this limit as the default message
     // size to batch and send data across over to the other side.
-    public static final int DEFAULT_MAX_DATA_MSG_SIZE = 64 << 20;
+    public static final long DEFAULT_MAX_DATA_MSG_SIZE = 64 << 20;
 
     // Log Replication default max cache number of entries
     // Note: if we want to improve performance for large scale this value should be tuned as it
@@ -61,7 +61,7 @@ public abstract class LogReplicationConfig {
     private int maxNumMsgPerBatch;
 
     // Max Size of Log Replication Data Message
-    private int maxMsgSize;
+    private long maxMsgSize;
 
     // Max Cache number of entries
     private int maxCacheSize;
@@ -69,7 +69,7 @@ public abstract class LogReplicationConfig {
     /**
      * The max size of data payload for the log replication message.
      */
-    private int maxDataSizePerMsg;
+    private long maxDataSizePerMsg;
 
     /**
      * Max number of entries to be applied during a snapshot sync.  For special tables only.
