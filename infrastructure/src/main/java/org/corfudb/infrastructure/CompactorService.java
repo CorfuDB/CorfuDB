@@ -3,6 +3,7 @@ package org.corfudb.infrastructure;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.NonNull;
+import lombok.Setter;
 import org.corfudb.infrastructure.health.Component;
 import org.corfudb.infrastructure.health.HealthMonitor;
 import org.corfudb.infrastructure.health.Issue;
@@ -49,7 +50,9 @@ public class CompactorService implements ManagementService {
     private volatile Optional<CorfuRuntime> corfuRuntimeOptional = Optional.empty();
     private volatile ScheduledFuture<?> scheduledFuture;
     private final Logger log;
-    private static final Duration LIVENESS_TIMEOUT = Duration.ofMinutes(1);
+
+    @Setter
+    private Duration LivenessTimeout = Duration.ofMinutes(5);
     private static final int SYSTEM_DOWN_HANDLER_TRIGGER_LIMIT = 60;
 
     public CompactorService(@NonNull ServerContext serverContext,
@@ -149,7 +152,7 @@ public class CompactorService implements ManagementService {
             try {
                 optionalCompactorLeaderServices = Optional.of(new CompactorLeaderServices(getCorfuRuntime(),
                         serverContext.getLocalEndpoint(), getCorfuStore(),
-                        new LivenessValidator(getCorfuRuntime(), getCorfuStore(), LIVENESS_TIMEOUT)));
+                        new LivenessValidator(getCorfuRuntime(), getCorfuStore(), LivenessTimeout)));
             } catch (Exception ex) {
                 log.error("Unable to create CompactorLeaderServices object. Will retry on next attempt. Exception: ", ex);
                 throw ex;

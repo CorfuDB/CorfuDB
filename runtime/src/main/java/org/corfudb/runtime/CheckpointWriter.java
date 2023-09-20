@@ -72,6 +72,13 @@ public class CheckpointWriter<T extends ICorfuTable<?, ?>> {
     @Setter
     private int batchSize;
 
+    /**
+     *  Max uncompressed checkpoint entry size: Maximum uncompressed size of a single Checkpoint CONTINUATION Entry.
+     */
+    @Getter
+    @Setter
+    private long maxUncompressedCpEntrySize;
+
     @SuppressWarnings("checkstyle:abbreviation")
     private final UUID checkpointStreamID;
     private final Map<CheckpointEntry.CheckpointDictKey, String> mdkv = new HashMap<>();
@@ -128,6 +135,7 @@ public class CheckpointWriter<T extends ICorfuTable<?, ?>> {
         checkpointId = UUID.randomUUID();
         checkpointStreamID = CorfuRuntime.getCheckpointStreamIdFromId(streamId);
         sv = rt.getStreamsView();
+        maxUncompressedCpEntrySize = rt.getParameters().getMaxUncompressedCpEntrySize();
         batchSize = rt.getParameters().getCheckpointBatchSize();
     }
 
@@ -320,8 +328,8 @@ public class CheckpointWriter<T extends ICorfuTable<?, ?>> {
 
         int totalEntryCount = 0;
         int numBytesPerCheckpointEntry = 0;
+        int numBytesPerUncompressedCheckpointEntry = 0;
 
-        ByteBuf inputBuffer = Unpooled.buffer();
         MultiSMREntry smrEntries = new MultiSMREntry();
 
         Iterator<? extends Map.Entry<?, ?>> iterator = entryStream.iterator();
@@ -335,32 +343,31 @@ public class CheckpointWriter<T extends ICorfuTable<?, ?>> {
             /* Need to check the size of the compressed buffer. inputByteBuffer and
                inputBuffer are the same buffer.
              */
+            ByteBuf inputBuffer = Unpooled.buffer();
             smrPutEntry.serialize(inputBuffer);
-            ByteBuffer compressedBuffer =
-                    rt.getParameters()
-                            .getCodecType()
-                            .getInstance().compress(ByteBuffer.wrap(inputBuffer.array(),
-                            inputBuffer.readerIndex(), inputBuffer.writerIndex()));
-
-            numBytesPerCheckpointEntry += compressedBuffer.limit();
+            numBytesPerUncompressedCheckpointEntry += smrPutEntry.getSerializedSize();
+            int compressedBufferSize = getCompressedBufferSize(inputBuffer);
+            numBytesPerCheckpointEntry += compressedBufferSize;
+            inputBuffer.clear();
 
             /* CheckpointEntry has some metadata and make the total size larger than the actual size
              * of SMR entries. Its a safeguard against the smr entries amounting to the actual
              * boundary limit.
              */
-            if (numBytesPerCheckpointEntry > maxWriteSizeLimit || smrEntries.getUpdates().size() >= batchSize) {
+            if (numBytesPerUncompressedCheckpointEntry > maxUncompressedCpEntrySize
+                    || numBytesPerCheckpointEntry > maxWriteSizeLimit || smrEntries.getUpdates().size() >= batchSize) {
                 convertAndAppendCheckpointEntry(smrEntries, kvCopy);
                 log.trace("Batched size of checkpoint log entry consists {} smr entries",
                         smrEntries.getUpdates().size());
                 /* reset the num of bytes and the new batch size entries below
                 also, reset the smr entry to add the newly read SMR:each from the stream. */
-                numBytesPerCheckpointEntry = compressedBuffer.limit();
+                numBytesPerCheckpointEntry = compressedBufferSize;
+                numBytesPerUncompressedCheckpointEntry = smrPutEntry.getSerializedSize();
                 smrEntries = new MultiSMREntry();
             }
             smrEntries.addTo(smrPutEntry);
             // maintain current batch size only for test purposes.
             totalEntryCount++;
-            inputBuffer.clear();
         }
 
         // the entries which are left behind for a final flush.
@@ -370,6 +377,15 @@ public class CheckpointWriter<T extends ICorfuTable<?, ?>> {
                     smrEntries.getUpdates().size());
         }
         return totalEntryCount;
+    }
+
+    private int getCompressedBufferSize(ByteBuf inputBuffer) {
+        ByteBuffer compressedBuffer =
+                rt.getParameters()
+                        .getCodecType()
+                        .getInstance().compress(ByteBuffer.wrap(inputBuffer.array(),
+                                inputBuffer.readerIndex(), inputBuffer.writerIndex()));
+        return compressedBuffer.limit();
     }
 
     /** Append a checkpoint END record to this object's stream.
