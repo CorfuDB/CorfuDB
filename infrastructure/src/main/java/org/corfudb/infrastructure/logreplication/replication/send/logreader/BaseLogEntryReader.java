@@ -56,7 +56,7 @@ public abstract class BaseLogEntryReader extends LogEntryReader {
     // the sequence number of the message based on the globalBaseSnapshot
     private long sequence;
 
-    private final int maxDataSizePerMsg;
+    private final long maxDataSizePerMsg;
 
     private final Optional<DistributionSummary> messageSizeDistributionSummary;
     private final Optional<Counter> deltaCounter;
