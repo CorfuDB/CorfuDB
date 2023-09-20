@@ -44,7 +44,7 @@ public abstract class BaseSnapshotReader extends SnapshotReader {
     /**
      * The max size of data for SMR entries in data message.
      */
-    protected final int maxDataSizePerMsg;
+    protected final long maxDataSizePerMsg;
     private final Optional<DistributionSummary> messageSizeDistributionSummary;
     protected final CorfuRuntime rt;
     protected long snapshotTimestamp;
