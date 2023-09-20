@@ -507,7 +507,9 @@ public class SessionManager {
             return;
         }
 
-        newSessionsDiscovered.stream()
+        // Connect to all the discovered sessions on becoming a leader. Connection for an already connected session is
+        // skipped in the router.
+        sessions.stream()
                 .filter(session -> topology.getRemoteClusterEndpoints().containsKey(session.getSourceClusterId()) ||
                         topology.getRemoteClusterEndpoints().containsKey(session.getSinkClusterId()))
                 .forEach(session -> {

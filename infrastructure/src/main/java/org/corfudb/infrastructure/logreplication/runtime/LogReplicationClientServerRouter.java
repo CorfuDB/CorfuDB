@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure.logreplication.runtime;
 
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import lombok.Getter;
 import lombok.Setter;
@@ -170,6 +171,16 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
      */
     private Map<LogReplicationSession, CorfuMessage.ResponseMsg> reverseReplicateInitMsgBuffer;
 
+    /**
+     * Keeps track of sessions connection has been established once the local node became the leader. This is for the
+     * optimization that connection is not retriggered for sessions where there is a quick leadership loass and acquire.
+     *
+     * This data structure does not track any transient failure in connection. That is handled by the state machine's
+     * retry logic.
+     */
+    @Getter
+    private Set<LogReplicationSession> connectedSessions = ConcurrentHashMap.newKeySet();
+
 
 
     /**
@@ -205,6 +216,32 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
         this.reverseReplicateInitMsgBuffer = new ConcurrentHashMap<>();
         createTransportServerAdapter(serverContext, pluginConfig);
         createTransportClientAdapter(pluginConfig);
+    }
+
+    @VisibleForTesting
+    public LogReplicationClientServerRouter(long timeout,
+                                            String localClusterId, String localNodeId,
+                                            Set<LogReplicationSession> incomingSession,
+                                            Set<LogReplicationSession> outgoingSession,
+                                            LogReplicationServer msgHandler,
+                                            IClientChannelAdapter clientChannelAdapter,
+                                            IServerChannelAdapter serverChannelAdapter) {
+        this.timeoutResponse = timeout;
+        this.localClusterId = localClusterId;
+        this.localNodeId = localNodeId;
+        this.incomingSession = incomingSession;
+        this.outgoingSession = outgoingSession;
+        this.msgHandler = msgHandler;
+
+        this.sessionToRemoteClusterDescriptor = new ConcurrentHashMap<>();
+        this.sessionToRequestIdCounter = new ConcurrentHashMap<>();
+        this.sessionToOutstandingRequests = new ConcurrentHashMap<>();
+        this.sessionToLeaderConnectionFuture = new ConcurrentHashMap<>();
+        this.sessionToRemoteSourceLeaderManager = new ConcurrentHashMap<>();
+        this.reverseReplicateInitMsgBuffer = new ConcurrentHashMap<>();
+        this.sessionToRuntimeFSM = new ConcurrentHashMap<>();
+        this.clientChannelAdapter = clientChannelAdapter;
+        this.serverChannelAdapter = serverChannelAdapter;
     }
 
     /**
@@ -621,6 +658,7 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
         sessionToRemoteClusterDescriptor.remove(session);
         sessionToRequestIdCounter.remove(session);
         sessionToLeaderConnectionFuture.remove(session);
+        connectedSessions.remove(session);
     }
 
     public void shutDownMsgHandlerServer() {
@@ -707,6 +745,10 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
     public void connect(ClusterDescriptor remoteClusterDescriptor, LogReplicationSession session) {
         if (!isConnectionStarterForSession(session)) {
             log.error("Not the connection starter for session: {}", session);
+        }
+
+        if (connectedSessions.contains(session)) {
+            log.trace("Skipping as connection is already established for session {}", session);
             return;
         }
 
@@ -717,6 +759,7 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
             IRetry.build(IntervalRetry.class, () -> {
                 try {
                     this.clientChannelAdapter.connectAsync(remoteClusterDescriptor, session);
+                    connectedSessions.add(session);
                 } catch (Exception e) {
                     log.error("Failed to connect to remote cluster for session {}. Retry after 1 second. Exception {}.",
                             session, e);
