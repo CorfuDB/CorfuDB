@@ -10,7 +10,6 @@ import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicat
 import org.corfudb.runtime.CorfuOptions;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.ExampleSchemas;
-import org.corfudb.runtime.LogReplicationUtils;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.runtime.LRFullStateReplicationContext;
 import org.corfudb.runtime.LRSiteDiscoveryListener;
@@ -20,7 +19,6 @@ import org.corfudb.runtime.Queue;
 import org.corfudb.runtime.RoutingQueueSenderClient;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStoreEntry;
-import org.corfudb.runtime.collections.IsolationLevel;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
@@ -52,6 +50,8 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSinkIT {
 
     private int numSource = 1;
+
+    private int numLogEntryUpdates = 10;
 
     /**
      * Get the client runtime that connects to Source cluster node.
@@ -92,14 +92,14 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
             }
             generateData(clientCorfuStore, queueSenderClient, clientName);
             int numLogEntriesReceived = listener.logEntryMsgCnt;
-            while (numLogEntriesReceived < 10) {
+            while (numLogEntriesReceived < numLogEntryUpdates + 1) {
                 Thread.sleep(5000);
                 numLogEntriesReceived = listener.logEntryMsgCnt;
                 log.info("Entries got on receiver {}", numLogEntriesReceived);
             }
 
             log.info("Expected num entries on the Sink Received");
-            assertThat(listener.logEntryMsgCnt).isEqualTo(10);
+            assertThat(listener.logEntryMsgCnt).isEqualTo(numLogEntryUpdates + 1);
             assertThat(listener.snapSyncMsgCnt).isEqualTo(5);
             log.info("Sink replicated queue size: {}", listener.snapSyncMsgCnt);
         } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
@@ -249,7 +249,7 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
             LOG_ENTRY_SYNC_QUEUE_TAG_SENDER_PREFIX + DefaultClusterConfig.getSinkClusterIds().get(0);
         log.info("Stream UUID: {}", TableRegistry.getStreamIdForStreamTag(CORFU_SYSTEM_NAMESPACE, streamTagFollowed));
 
-        for (int i = 0; i < 10; i++) {
+        for (int i = 0; i < numLogEntryUpdates; i++) {
             ByteBuffer buffer = ByteBuffer.allocate(Integer.SIZE);
             buffer.putInt(i);
             Queue.RoutingTableEntryMsg val =
@@ -301,7 +301,7 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
             }
 
             log.info("Expected num entries on the Sink Received");
-            assertThat(listener.logEntryMsgCnt).isEqualTo(10);
+            assertThat(listener.logEntryMsgCnt).isEqualTo(numLogEntryUpdates + 1);
             assertThat(listener.snapSyncMsgCnt).isEqualTo(5);
             log.info("Sink replicated queue size: {}", listener.snapSyncMsgCnt);
         } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
