@@ -1,12 +1,15 @@
 package org.corfudb.infrastructure.logreplication.replication.receive;
 
+import com.google.protobuf.Message;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.logreplication.config.LogReplicationRoutingQueueConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationMetadata;
-import org.corfudb.runtime.LogReplication;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.protocols.CorfuProtocolCommon;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
@@ -14,12 +17,12 @@ import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.service.CorfuProtocolLogReplication;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
-import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMetadataMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
 import org.corfudb.runtime.LogReplicationUtils;
+import org.corfudb.runtime.Queue;
+import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
@@ -446,6 +449,53 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
         if (sequenceNumber != Address.NON_ADDRESS) {
             log.debug("Start applying shadow streams, seqNum={}", sequenceNumber);
             applyShadowStreams();
+
+            if (session.getSubscriber().getModel().equals(ROUTING_QUEUES)) {
+                writeDummyEntryToLogEntrySyncQueue();
+            }
+        }
+    }
+
+    private void writeDummyEntryToLogEntrySyncQueue() {
+        try {
+            // For ROUTING_QUEUES model, write a dummy entry with type LOG_ENTRY_SYNC to indicate
+            // subscribers to complete snapshot sync.
+            IRetry.build(IntervalRetry.class, () -> {
+                try {
+                    try (TxnContext txnContext = metadataManager.getTxnContext()) {
+                        String replicatedQueueName = ((LogReplicationRoutingQueueConfig) replicationContext
+                                .getConfig(session)).getSinkQueueName();
+                        UUID streamId = CorfuRuntime.getStreamID(replicatedQueueName);
+                        UUID replicatedQueueTag = ((LogReplicationRoutingQueueConfig) replicationContext
+                                .getConfig(session)).getSinkQueueStreamTag();
+
+
+                        long dummyEntryId = 0;
+                        // Embed this key into a protobuf.
+                        Queue.CorfuGuidMsg keyOfQueueEntry = Queue.CorfuGuidMsg.newBuilder().setInstanceId(dummyEntryId).build();
+                        Queue.RoutingTableEntryMsg dummyQueueMsg = Queue.RoutingTableEntryMsg.newBuilder()
+                                .setSourceClusterId(session.getSourceClusterId())
+                                .addAllDestinations(Collections.singleton(session.getSinkClusterId()))
+                                .setReplicationType(Queue.ReplicationType.LOG_ENTRY_SYNC).build();
+
+                        CorfuRecord<Queue.RoutingTableEntryMsg, Message> dummyEntry = new CorfuRecord<>(dummyQueueMsg, null);
+                        Object[] smrArgs = new Object[2];
+                        smrArgs[0] = keyOfQueueEntry;
+                        smrArgs[1] = dummyEntry;
+
+                        SMREntry smrEntry = new SMREntry("put", smrArgs, replicationContext.getProtobufSerializer());
+                        txnContext.logUpdate(streamId, smrEntry, Collections.singletonList(replicatedQueueTag));
+                        txnContext.commit();
+                    }
+                } catch (Exception e) {
+                    log.error("Error while attempting to connect to cluster manager. Retry.", e);
+                    throw new RetryNeededException();
+                }
+                return null;
+            }).run();
+        } catch (InterruptedException e) {
+            log.error("Unrecoverable Error when writing dummy entry to log entry queue", e);
+            throw new RuntimeException(e);
         }
     }
 
