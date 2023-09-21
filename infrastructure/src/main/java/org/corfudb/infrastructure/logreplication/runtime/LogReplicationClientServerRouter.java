@@ -743,8 +743,10 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
      * @param session session information
      */
     public void connect(ClusterDescriptor remoteClusterDescriptor, LogReplicationSession session) {
+        //TODO v2: check if this if condition is needed.
         if (!isConnectionStarterForSession(session)) {
             log.error("Not the connection starter for session: {}", session);
+            return;
         }
 
         if (connectedSessions.contains(session)) {
