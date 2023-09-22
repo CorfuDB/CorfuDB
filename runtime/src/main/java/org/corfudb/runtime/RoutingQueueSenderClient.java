@@ -469,5 +469,25 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
             log.error("Unrecoverable exception while adding enforce snapshot sync event", e);
             throw new UnrecoverableCorfuInterruptedError(e);
         }
+        // Immediately delete this event since we are not doing an upgrade, just re-using that mechanism
+        // to trigger a global full sync. Without deleting the event, LR server upon restarts will assume
+        // that full sync needs to be triggered once again and keep triggering full syncs even when
+        // other new sites are on-boarded.
+        try {
+            IRetry.build(IntervalRetry.class, () -> {
+                try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+                    txn.delete(replicationEventTable, key);
+                    txn.commit();
+                } catch (TransactionAbortedException tae) {
+                    log.warn("TXAbort while adding enforce snapshot sync event, retrying", tae);
+                    throw new RetryNeededException();
+                }
+                log.debug("Delete the request session={}", session);
+                return null;
+            }).run();
+        } catch (InterruptedException e) {
+            log.error("Unrecoverable exception while adding enforce snapshot sync event", e);
+            throw new UnrecoverableCorfuInterruptedError(e);
+        }
     }
 }
