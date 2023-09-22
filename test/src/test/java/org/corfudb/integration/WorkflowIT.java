@@ -1,8 +1,10 @@
 package org.corfudb.integration;
 
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.management.FailureDetector;
 import org.corfudb.integration.cluster.Harness.Node;
 import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.runtime.BootstrapUtil;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
@@ -12,8 +14,14 @@ import org.corfudb.util.Sleep;
 import org.junit.Test;
 
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
+import java.util.function.Predicate;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.integration.Harness.run;
@@ -705,5 +713,100 @@ public class WorkflowIT extends AbstractIT {
 
         // (10) Normal read
         assertThat(table.get(0)).isEqualTo(String.valueOf(0));
+    }
+
+    private String getServerEndpoint(int port) {
+        return PROPERTIES.get("corfuSingleNodeHost") + ":" + port;
+    }
+
+    private Layout getLayout(int numNodes) {
+        int basePort = 9000;
+        List<String> servers = new ArrayList<>();
+
+        for (int x = 0; x < numNodes; x++) {
+            String serverAddress = getServerEndpoint(basePort + x);
+            servers.add(serverAddress);
+        }
+
+        return new Layout(
+                new ArrayList<>(servers),
+                new ArrayList<>(servers),
+                Collections.singletonList(new Layout.LayoutSegment(
+                        Layout.ReplicationMode.CHAIN_REPLICATION,
+                        0L,
+                        -1L,
+                        Collections.singletonList(new Layout.LayoutStripe(servers)))),
+                0L,
+                UUID.randomUUID());
+    }
+
+    int getPort(String server) {
+        return Integer.parseInt(server.split(":")[1]);
+    }
+
+    private long getMaxLatency() {
+        // Half cycle to update cluster state
+        // One cycle to get a report where Sequencer information might be different between the two nodes
+        // One cycle to get an accurate report
+        // Max 5 seconds on Layout reconfiguration
+        // 1 Second for Sequencer startup/random short latencies
+        // No latency in FD due to pinging the dead node
+
+        long fullLength = FailureDetector.getMAX_POLL_ROUNDS() *
+                FailureDetector.getMAX_SLEEP_BETWEEN_RETRIES().toMillis();
+        long halfLength = fullLength / 2;
+        long reconfigurationMaxDuration = 5000L;
+        long randomFactor = 1000L;
+        return fullLength + fullLength + halfLength +
+                reconfigurationMaxDuration + randomFactor;
+    }
+
+    @Test
+    public void testSequencerFailOverLatency() throws Exception {
+        String corfuSingleNodeHost = (String) PROPERTIES.get("corfuSingleNodeHost");
+        final int PORT_0 = 9000;
+        final int PORT_1 = 9001;
+        final int PORT_2 = 9002;
+        final int runs = 2;
+        final int retries = 10;
+        Process corfuServer_1 = runPersistentServer(corfuSingleNodeHost, PORT_0, false);
+        Process corfuServer_2 = runPersistentServer(corfuSingleNodeHost, PORT_1, false);
+        Process corfuServer_3 = runPersistentServer(corfuSingleNodeHost, PORT_2, false);
+        Map<Integer, Process> processMap = new HashMap<>();
+
+        processMap.put(PORT_0, corfuServer_1);
+        processMap.put(PORT_1, corfuServer_2);
+        processMap.put(PORT_2, corfuServer_3);
+        final Layout twoNodeLayout = getLayout(3);
+        BootstrapUtil.bootstrap(twoNodeLayout, retries, PARAMETERS.TIMEOUT_SHORT);
+        CorfuRuntime firstRuntime = createDefaultRuntime();
+        Predicate<Layout> check = layout -> {
+            boolean twoNodeCluster = layout.getAllServers().size() == 3;
+            boolean oneSegment = layout.getSegments().size() == 1;
+
+            return twoNodeCluster && oneSegment;
+        };
+        waitForLayoutChange(check, firstRuntime);
+
+        for (int i = 0; i < runs; i++) {
+            Layout layout = firstRuntime.getLayoutView().getRuntimeLayout().getLayout();
+            String primarySequencer = layout.getPrimarySequencer();
+            int primarySequencerPort = getPort(primarySequencer);
+            log.info("Shutting down sequencer: {}", primarySequencerPort);
+            Process process = processMap.get(primarySequencerPort);
+            shutdownCorfuServer(process);
+            final long start = System.currentTimeMillis();
+            firstRuntime.getSequencerView().query();
+            long reconfigDuration = System.currentTimeMillis() - start;
+            log.info("Reconfig took: {}", System.currentTimeMillis() - start);
+            processMap.put(primarySequencerPort,
+                    runPersistentServer(corfuSingleNodeHost, primarySequencerPort, false));
+            assertThat(reconfigDuration).isLessThanOrEqualTo(getMaxLatency());
+        }
+
+        for (Process p: processMap.values()) {
+            shutdownCorfuServer(p);
+        }
+
     }
 }
