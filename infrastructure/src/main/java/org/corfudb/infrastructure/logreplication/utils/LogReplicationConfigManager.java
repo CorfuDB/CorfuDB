@@ -9,6 +9,7 @@ import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.logreplication.config.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.config.LogReplicationFullTableConfig;
 import org.corfudb.infrastructure.logreplication.config.LogReplicationLogicalGroupConfig;
+import org.corfudb.infrastructure.logreplication.config.LogReplicationRoutingQueueConfig;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
@@ -22,6 +23,7 @@ import org.corfudb.runtime.LogReplication.DestinationInfoVal;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.LogReplication.ReplicationModel;
 import org.corfudb.runtime.LogReplication.ReplicationSubscriber;
+import org.corfudb.runtime.Queue;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStoreEntry;
@@ -56,6 +58,8 @@ import static org.corfudb.infrastructure.logreplication.config.LogReplicationCon
 import static org.corfudb.runtime.LogReplicationLogicalGroupClient.DEFAULT_LOGICAL_GROUP_CLIENT;
 import static org.corfudb.runtime.LogReplicationLogicalGroupClient.LR_MODEL_METADATA_TABLE_NAME;
 import static org.corfudb.runtime.LogReplicationLogicalGroupClient.LR_REGISTRATION_TABLE_NAME;
+import static org.corfudb.runtime.LogReplicationUtils.LOG_ENTRY_SYNC_QUEUE_NAME_SENDER;
+import static org.corfudb.runtime.RoutingQueueSenderClient.DEFAULT_ROUTING_QUEUE_CLIENT;
 import static org.corfudb.runtime.view.ObjectsView.LOG_REPLICATOR_STREAM_INFO;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
@@ -101,8 +105,6 @@ public class LogReplicationConfigManager {
     private List<Map.Entry<TableName, CorfuRecord<TableDescriptors, TableMetadata>>> registryTableEntries =
             new ArrayList<>();
 
-
-
     /**
      * Used for non-upgrade testing purpose only. Note that this constructor will keep the version table in
      * uninitialized state, in which case LR will be constantly considered to be not upgraded.
@@ -131,6 +133,13 @@ public class LogReplicationConfigManager {
                 .build();
     }
 
+    public static ReplicationSubscriber getDefaultRoutingQueueSubscriber() {
+        return ReplicationSubscriber.newBuilder()
+                .setClientName(DEFAULT_ROUTING_QUEUE_CLIENT)
+                .setModel(ReplicationModel.ROUTING_QUEUES)
+                .build();
+    }
+
     public static ReplicationSubscriber getDefaultSubscriber() {
         return ReplicationSubscriber.newBuilder()
                 .setClientName(DEFAULT_CLIENT)
@@ -149,8 +158,16 @@ public class LogReplicationConfigManager {
         // TODO (V2): This builder should be removed after the rpc stream is added for Sink side session creation.
         //  and logical group subscribers should come from client registration.
         registeredSubscribers.add(getDefaultLogicalGroupSubscriber());
+        registeredSubscribers.add(getDefaultRoutingQueueSubscriber());
         openClientConfigTables();
         syncWithRegistryTable();
+
+        try {
+            corfuStore.openQueue(CORFU_SYSTEM_NAMESPACE, LOG_ENTRY_SYNC_QUEUE_NAME_SENDER, Queue.RoutingTableEntryMsg.class,
+                TableOptions.fromProtoSchema(Queue.RoutingTableEntryMsg.class));
+        } catch (Exception e) {
+            log.error("Failed to open the Log Entry Sync Queue", e);
+        }
     }
 
     private void openClientConfigTables() {
@@ -199,9 +216,24 @@ public class LogReplicationConfigManager {
                                 TextFormat.shortDebugString(session));
                         generateLogicalGroupConfig(session);
                         break;
+                    case ROUTING_QUEUES:
+                        log.debug("Generating ROUTING_QUEUE config for session {}",
+                                TextFormat.shortDebugString(session));
+                        generateRoutingQueueConfig(session);
                     default: break;
                 }
         });
+    }
+
+    private void generateRoutingQueueConfig(LogReplicationSession session) {
+        if (!sessionToConfigMap.containsKey(session)) {
+            LogReplicationRoutingQueueConfig routingQueueConfig =
+                    new LogReplicationRoutingQueueConfig(session, serverContext);
+            sessionToConfigMap.put(session, routingQueueConfig);
+            log.info("Routing queue session {} config generated.", session);
+        } else {
+            log.warn("Routing queue config for session {} already exists!", session);
+        }
     }
 
     private void generateLogicalGroupConfig(LogReplicationSession session) {
@@ -343,7 +375,7 @@ public class LogReplicationConfigManager {
             return IRetry.build(IntervalRetry.class, () -> {
                 try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
                     List<CorfuStoreEntry<ClientRegistrationId, ClientRegistrationInfo, Message>> registrationResults =
-                            txn.executeQuery(clientRegistrationTable, p -> true);
+                            txn.executeQuery(clientRegistrationTable, record -> true);
                     registrationResults.forEach(entry -> {
                         String clientName = entry.getKey().getClientName();
                         ReplicationModel model = entry.getPayload().getModel();
@@ -358,7 +390,7 @@ public class LogReplicationConfigManager {
                     });
 
                     List<CorfuStoreEntry<ClientDestinationInfoKey, DestinationInfoVal, Message>> groupConfigResults =
-                            txn.executeQuery(clientConfigTable, p -> true);
+                            txn.executeQuery(clientConfigTable, record -> true);
                     groupConfigResults.forEach(entry -> {
                         String clientName = entry.getKey().getClientName();
                         ReplicationModel model = entry.getKey().getModel();
@@ -459,14 +491,18 @@ public class LogReplicationConfigManager {
         return preprocessAndGetTail();
     }
 
-    public UUID getOpaqueStreamToTrack(ReplicationSubscriber subscriber) {
-        switch(subscriber.getModel()) {
+    public UUID getLogEntrySyncOpaqueStream(LogReplicationSession session) {
+        switch(session.getSubscriber().getModel()) {
             case FULL_TABLE:
                 return ObjectsView.getLogReplicatorStreamId();
             case LOGICAL_GROUPS:
-                return ObjectsView.getLogicalGroupStreamTagInfo(subscriber.getClientName()).getStreamId();
+                return ObjectsView.getLogicalGroupStreamTagInfo(session.getSubscriber().getClientName()).getStreamId();
+            case ROUTING_QUEUES:
+                String logEntrySyncStreamTag = ((LogReplicationRoutingQueueConfig) sessionToConfigMap.get(session))
+                        .getLogEntrySyncStreamTag();
+                return TableRegistry.getStreamIdForStreamTag(CORFU_SYSTEM_NAMESPACE, logEntrySyncStreamTag);
             default:
-                log.error("Unsupported replication model received: {}", subscriber.getModel());
+                log.error("Unsupported replication model received: {}", session.getSubscriber().getModel());
                 return null;
         }
     }

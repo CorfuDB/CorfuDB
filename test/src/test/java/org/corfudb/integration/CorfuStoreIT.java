@@ -367,7 +367,7 @@ public class CorfuStoreIT extends AbstractIT {
         }
         final int TEN = 10;
         try (TxnContext txn = store.txn(namespace)) {
-            Set<Uuid> keys = txn.entryStream(table).map(CorfuStoreEntry::getKey).collect(Collectors.toSet());
+            Set<Uuid> keys = txn.keySet(tableName);
             Iterables.partition(keys, TEN);
             txn.commit();
         }

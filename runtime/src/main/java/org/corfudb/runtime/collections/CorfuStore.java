@@ -12,6 +12,7 @@ import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
+import org.corfudb.runtime.LiteRoutingQueueListener;
 import org.corfudb.runtime.LogReplicationListener;
 import org.corfudb.runtime.LogReplicationUtils;
 import org.corfudb.runtime.Queue;
@@ -23,6 +24,7 @@ import org.corfudb.util.Utils;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.lang.reflect.InvocationTargetException;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -30,6 +32,9 @@ import java.util.NavigableSet;
 import java.util.Optional;
 import java.util.TreeSet;
 import java.util.UUID;
+
+import static org.corfudb.runtime.LogReplicationUtils.REPLICATED_QUEUE_TAG;
+import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 /**
  * CorfuStore is a protobuf API layer that provides all the features of CorfuDB.
@@ -374,6 +379,15 @@ public class CorfuStore {
     }
 
     /**
+     * Subscribe to the routing queue notifications arriving from a remote cluster.
+     */
+    public void subscribeRoutingQListener(@Nonnull LiteRoutingQueueListener routingQueueListener) {
+        Timestamp ts = routingQueueListener.performFullSync();
+        this.subscribeListener(routingQueueListener, CORFU_SYSTEM_NAMESPACE, REPLICATED_QUEUE_TAG,
+                Arrays.asList(LogReplicationUtils.REPLICATED_QUEUE_NAME), ts);
+    }
+
+    /**
      * Subscribe to transaction updates on all tables with the specified streamTag and namespace.
      * Objects returned will honor transactional boundaries.
      * <p>
@@ -408,9 +422,9 @@ public class CorfuStore {
      * Note: If memory is a consideration, consider using the other version of this API which takes a custom buffer
      * size for updates.
      *
-     * @param streamListener  log replication client listener
-     * @param namespace       namespace of the replicated tables
-     * @param streamTag       stream tag of the replicated tables
+     * @param streamListener log replication client listener
+     * @param namespace      namespace of the replicated tables
+     * @param streamTag      stream tag of the replicated tables
      */
     public void subscribeLogReplicationListener(@Nonnull LogReplicationListener streamListener,
                                                 @Nonnull String namespace, @Nonnull String streamTag) {
@@ -447,7 +461,7 @@ public class CorfuStore {
      * @param streamTag
      * @return table names (without namespace prefix)
      */
-    private List<String> getTablesOfInterest(@Nonnull String namespace, @Nonnull String streamTag) {
+    public List<String> getTablesOfInterest(@Nonnull String namespace, @Nonnull String streamTag) {
         List<String> tablesOfInterest = runtime.getTableRegistry().listTables(namespace, streamTag);
         log.info("Tag[{}${}] :: Subscribing to {} tables - {}", namespace, streamTag, tablesOfInterest.size(), tablesOfInterest);
         return tablesOfInterest;

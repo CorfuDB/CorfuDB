@@ -27,13 +27,6 @@ public class TestDataSender implements DataSender {
 
     private long snapshotSyncBaseSnapshot = 0;
 
-    // Flag which prevents this sender from replying with ACKs so that the test can wait in IN_SNAPSHOT_SYNC state
-    // for any operation or validation
-    private boolean waitInSnapshotSync;
-
-    public TestDataSender(boolean waitInSnapshotSync) {
-        this.waitInSnapshotSync = waitInSnapshotSync;
-    }
 
     @Override
     public CompletableFuture<LogReplicationEntryMsg> send(LogReplicationEntryMsg message) {
@@ -46,10 +39,6 @@ public class TestDataSender implements DataSender {
 
         CompletableFuture<LogReplicationEntryMsg> cf = new CompletableFuture<>();
 
-        // Do not send an ACK if the test needs to wait in IN_SNAPSHOT_SYNC state.
-        if (waitInSnapshotSync) {
-            return cf;
-        }
 
         LogReplicationEntryMetadataMsg.Builder ackMetadata =
                 LogReplicationEntryMetadataMsg.newBuilder().mergeFrom(message.getMetadata());
@@ -111,7 +100,6 @@ public class TestDataSender implements DataSender {
 
     public void reset() {
         entryQueue.clear();
-        waitInSnapshotSync = false;
     }
 
     @Override

@@ -80,6 +80,7 @@ public class LogData implements IMetadata, ILogData {
     public Object getPayload(CorfuRuntime runtime) {
         Object value = payload.get();
 
+
         // This is only needed for unit test framework to work. Since unit
         // tests do not serialize payload to byte array, the address will
         // not be set in the following codes, so doing here instead.
@@ -107,7 +108,7 @@ public class LogData implements IMetadata, ILogData {
                             Supplier<ByteBuf> bufSupplier = () -> Unpooled.wrappedBuffer(getPayloadCodecType()
                                     .getInstance().decompress(ByteBuffer.wrap(compressedArrayBuf)));
                             serializedBuf = MicroMeterUtils.time(bufSupplier,
-                                    "logdata.decompress.timer");
+                                    "logdata.decompress");
                         }
 
                         final Object actualValue;
@@ -128,7 +129,11 @@ public class LogData implements IMetadata, ILogData {
                             throw throwable;
                         } finally {
                             serializedBuf.release();
-                            data = null;
+                            // nullifyDataOnGetPayload is set to false for LR, because LR reads the "data" even if it
+                            // has been deserialized
+                            if (runtime.getParameters().isNullifyDataOnGetPayload()) {
+                                data = null;
+                            }
                         }
                     }
                 }
@@ -344,7 +349,7 @@ public class LogData implements IMetadata, ILogData {
     private void doCompressInternal(ByteBuf bufData, ByteBuf buf) {
         ByteBuffer wrappedByteBuf = ByteBuffer.wrap(bufData.array(), 0, bufData.readableBytes());
         Supplier<ByteBuffer> compressSupplier = () -> getPayloadCodecType().getInstance().compress(wrappedByteBuf);
-        ByteBuffer compressedBuf = MicroMeterUtils.time(compressSupplier, "logdata.compress.timer");
+        ByteBuffer compressedBuf = MicroMeterUtils.time(compressSupplier, "logdata.compress");
         CorfuProtocolCommon.serialize(buf, Unpooled.wrappedBuffer(compressedBuf));
     }
 

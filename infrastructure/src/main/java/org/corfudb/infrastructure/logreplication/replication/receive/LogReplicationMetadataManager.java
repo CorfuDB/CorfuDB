@@ -11,8 +11,9 @@ import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationMetadata;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEvent;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEventInfoKey;
+import org.corfudb.runtime.LogReplication;
+import org.corfudb.runtime.LogReplication.ReplicationEvent;
+import org.corfudb.runtime.LogReplication.ReplicationEventInfoKey;
 import org.corfudb.runtime.LogReplication.ReplicationStatus;
 import org.corfudb.runtime.LogReplication.ReplicationInfo;
 import org.corfudb.runtime.LogReplication.SyncType;
@@ -598,8 +599,10 @@ public class LogReplicationMetadataManager {
      * Get all replication events from the Event table.
      * @return list of all replication events
      */
-    public List<CorfuStoreEntry<ReplicationEventInfoKey, ReplicationEvent, Message>> getReplicationEvents() {
-        List<CorfuStoreEntry<ReplicationEventInfoKey, ReplicationEvent, Message>> events = new ArrayList<>();
+    public List<CorfuStoreEntry<LogReplication.ReplicationEventInfoKey, LogReplication.ReplicationEvent,
+            Message>> getReplicationEvents() {
+        List<CorfuStoreEntry<LogReplication.ReplicationEventInfoKey, LogReplication.ReplicationEvent,
+                Message>> events = new ArrayList<>();
 
         try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
              events = txn.executeQuery(REPLICATION_EVENT_TABLE_NAME, p -> true);
@@ -784,8 +787,8 @@ public class LogReplicationMetadataManager {
             ReplicationStatus previous = entry.getPayload();
             SnapshotSyncInfo previousSnapshotSyncInfo = previous.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo();
 
-            if (previous.getSourceStatus().getReplicationInfo().getStatus().equals(SyncStatus.NOT_STARTED) &&
-                    previousSnapshotSyncInfo.getStatus().equals(SyncStatus.NOT_STARTED) ||
+            if ((previous.getSourceStatus().getReplicationInfo().getStatus().equals(SyncStatus.NOT_STARTED) &&
+                    previousSnapshotSyncInfo.getStatus().equals(SyncStatus.NOT_STARTED)) ||
                     (previous.getSourceStatus().getReplicationInfo().getStatus().equals(SyncStatus.STOPPED) ||
                             previousSnapshotSyncInfo.getStatus().equals(SyncStatus.STOPPED))) {
                 // Skip update of sync status, it will be updated once replication is resumed or started
