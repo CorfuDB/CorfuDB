@@ -32,16 +32,13 @@ public abstract class LogReplicationConfig {
 
     // Max message size supported by protocol buffers is 64MB. Log Replication uses this limit as the default message
     // size to batch and send data across over to the other side.
-    public static final long DEFAULT_MAX_DATA_MSG_SIZE = 64 << 20;
+    public static final long DEFAULT_MAX_DATA_MSG_SIZE = 31457280;
 
     // Log Replication default max cache number of entries
     // Note: if we want to improve performance for large scale this value should be tuned as it
     // used in snapshot sync to quickly access shadow stream entries, written locally.
     // This value is exposed as a configuration parameter for LR.
     public static final int DEFAULT_MAX_CACHE_NUM_ENTRIES = 200;
-
-    // Percentage of log data per log replication message
-    public static final int DATA_FRACTION_PER_MSG = 90;
 
     public static final UUID REGISTRY_TABLE_ID = CorfuRuntime.getStreamID(
         TableRegistry.getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, TableRegistry.REGISTRY_TABLE_NAME));
@@ -60,16 +57,13 @@ public abstract class LogReplicationConfig {
     // Snapshot Sync Batch Size(number of messages)
     private int maxNumMsgPerBatch;
 
-    // Max Size of Log Replication Data Message
-    private long maxMsgSize;
-
     // Max Cache number of entries
     private int maxCacheSize;
 
     /**
-     * The max size of data payload for the log replication message.
+     * Max Size of Log Replication Data Message
      */
-    private long maxDataSizePerMsg;
+    private long maxMsgSize;
 
     /**
      * Max number of entries to be applied during a snapshot sync.  For special tables only.
@@ -103,6 +97,5 @@ public abstract class LogReplicationConfig {
             this.maxCacheSize = serverContext.getLogReplicationCacheMaxSize();
             this.maxSnapshotEntriesApplied = serverContext.getMaxSnapshotEntriesApplied();
         }
-        this.maxDataSizePerMsg = maxMsgSize * DATA_FRACTION_PER_MSG / 100;
     }
 }

@@ -740,9 +740,7 @@ public class AbstractIT extends AbstractCorfuTest {
             StringBuilder command = new StringBuilder();
             command.append("-a ").append(host);
 
-            if (msg_size != 0) {
-                command.append(" --max-replication-data-message-size=").append(msg_size);
-            }
+            command.append(" --max-replication-data-message-size=").append("30000000");
 
             if (logPath != null) {
                 command.append(" -l ").append(logPath);
