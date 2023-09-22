@@ -472,13 +472,16 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
 
                         long dummyEntryId = 0;
                         // Embed this key into a protobuf.
-                        Queue.CorfuGuidMsg keyOfQueueEntry = Queue.CorfuGuidMsg.newBuilder().setInstanceId(dummyEntryId).build();
+                        Queue.CorfuGuidMsg keyOfQueueEntry =
+                            Queue.CorfuGuidMsg.newBuilder().setInstanceId(dummyEntryId).build();
                         Queue.RoutingTableEntryMsg dummyQueueMsg = Queue.RoutingTableEntryMsg.newBuilder()
                                 .setSourceClusterId(session.getSourceClusterId())
                                 .addAllDestinations(Collections.singleton(session.getSinkClusterId()))
                                 .setReplicationType(Queue.ReplicationType.LOG_ENTRY_SYNC).build();
 
-                        CorfuRecord<Queue.RoutingTableEntryMsg, Message> dummyEntry = new CorfuRecord<>(dummyQueueMsg, null);
+                        CorfuRecord<Queue.RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg> dummyEntry =
+                                new CorfuRecord<>(dummyQueueMsg,
+                                    Queue.CorfuQueueMetadataMsg.newBuilder().setTxSequence(Address.MAX).build());
                         Object[] smrArgs = new Object[2];
                         smrArgs[0] = keyOfQueueEntry;
                         smrArgs[1] = dummyEntry;
