@@ -1288,7 +1288,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         // values are not used
         srcContext.getConfig(session).setMaxNumMsgPerBatch(BATCH_SIZE);
         srcContext.getConfig(session).setMaxMsgSize(SMALL_MSG_SIZE);
-        srcContext.getConfig(session).setMaxDataSizePerMsg(SMALL_MSG_SIZE * LogReplicationConfig.DATA_FRACTION_PER_MSG / 100);
 
         // Source Manager
         LogReplicationSourceManager logReplicationSourceManager = new LogReplicationSourceManager(srcMetadataManager,
