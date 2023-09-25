@@ -33,7 +33,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.UUID;
 
-import static org.corfudb.runtime.LogReplicationUtils.SNAP_SYNC_START_END_Q_NAME;
+import static org.corfudb.runtime.LogReplicationUtils.SNAP_SYNC_TXN_ENVELOPE_TABLE;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 @SuppressWarnings("checkstyle:magicnumber")
@@ -84,9 +84,9 @@ public class RoutingQueuesSnapshotReaderTest extends AbstractViewTest {
 
     private void generateData() throws Exception {
 
-        corfuStore.openTable(namespace, SNAP_SYNC_START_END_Q_NAME,
-                Queue.RoutingQSnapStartEndKeyMsg.class, Queue.RoutingQSnapStartEndMarkerMsg.class, null,
-                TableOptions.fromProtoSchema(Queue.RoutingQSnapStartEndMarkerMsg.class));
+        corfuStore.openTable(namespace, SNAP_SYNC_TXN_ENVELOPE_TABLE,
+                Queue.RoutingQSnapSyncHeaderKeyMsg.class, Queue.RoutingQSnapSyncHeaderMsg.class, null,
+                TableOptions.fromProtoSchema(Queue.RoutingQSnapSyncHeaderMsg.class));
 
         String tableName = LogReplicationUtils.SNAPSHOT_SYNC_QUEUE_NAME_SENDER;
 
@@ -121,24 +121,20 @@ public class RoutingQueuesSnapshotReaderTest extends AbstractViewTest {
     }
 
     private void writeMarker(boolean start, long timestamp, TxnContext txnContext) {
-        Queue.RoutingQSnapStartEndKeyMsg snapshotSyncId =
-            Queue.RoutingQSnapStartEndKeyMsg.newBuilder().setSnapshotSyncId(syncRequestId.toString()).build();
+        Queue.RoutingQSnapSyncHeaderKeyMsg snapshotSyncId =
+            Queue.RoutingQSnapSyncHeaderKeyMsg.newBuilder().setDestination(session.getSinkClusterId()).build();
 
-        Queue.RoutingQSnapStartEndMarkerMsg marker =
-            Queue.RoutingQSnapStartEndMarkerMsg.newBuilder().setDestination(session.getSinkClusterId()).build();
+        Queue.RoutingQSnapSyncHeaderMsg marker =
+            Queue.RoutingQSnapSyncHeaderMsg.newBuilder().setSnapshotStartTimestamp(timestamp).build();
 
-        if (start) {
-            marker.toBuilder().setSnapshotStartTimestamp(timestamp).build();
-        }
-
-        CorfuRecord<Queue.RoutingQSnapStartEndMarkerMsg, Message> record = new CorfuRecord<>(marker, null);
+        CorfuRecord<Queue.RoutingQSnapSyncHeaderMsg, Message> record = new CorfuRecord<>(marker, null);
 
         Object[] smrArgs = new Object[2];
         smrArgs[0] = snapshotSyncId;
         smrArgs[1] = record;
 
         UUID endMarkerStreamId = CorfuRuntime.getStreamID(TableRegistry.getFullyQualifiedTableName(
-            namespace, SNAP_SYNC_START_END_Q_NAME));
+            namespace, SNAP_SYNC_TXN_ENVELOPE_TABLE));
 
         // Start marker is written in the same transaction as the data.  So reuse the transaction which was passed
         if (start) {
