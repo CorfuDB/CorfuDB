@@ -3,6 +3,7 @@ package org.corfudb.runtime;
 import org.corfudb.runtime.LogReplication.ReplicationEvent.ReplicationEventType;
 import org.corfudb.runtime.collections.ScopedTransaction;
 import org.corfudb.runtime.collections.TxnContext;
+import static org.corfudb.runtime.Queue.RoutingTableEntryMsg;
 
 import javax.annotation.Nullable;
 import java.util.UUID;
@@ -50,7 +51,7 @@ public interface LRFullStateReplicationContext {
      * Transmits one message for full sync.
      *
      */
-    void transmit(Queue.RoutingTableEntryMsg message) throws CancellationException;
+    void transmit(RoutingTableEntryMsg message) throws CancellationException;
 
     /**
      * Transmits one message for full sync.
@@ -58,7 +59,7 @@ public interface LRFullStateReplicationContext {
      * @param message message to transmit.
      * @param progress indicates progress of transmission, value between 0 and 100.
      */
-    void transmit(Queue.RoutingTableEntryMsg message, int progress) throws CancellationException;
+    void transmit(RoutingTableEntryMsg message, int progress) throws CancellationException;
 
     /**
      * Indicates that all data was transmitted from application to client.
