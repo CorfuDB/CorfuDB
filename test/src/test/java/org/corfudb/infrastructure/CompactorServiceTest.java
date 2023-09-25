@@ -512,6 +512,7 @@ public class CompactorServiceTest extends AbstractViewTest {
         testSetup(logSizeLimitPercentageFull);
 
         CompactorService compactorService0 = spy(new CompactorService(sc0, Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL), mockInvokeJvm0, dynamicTriggerPolicy0));
+        compactorService0.setLivenessTimeout(Duration.ofMinutes(1));
         doReturn(runtime0).when(compactorService0).getNewCorfuRuntime();
         when(dynamicTriggerPolicy0.shouldTrigger(anyLong(), any(), any())).thenReturn(true).thenReturn(false);
         compactorService0.start(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
