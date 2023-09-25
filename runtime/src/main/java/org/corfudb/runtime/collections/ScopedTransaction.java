@@ -35,7 +35,7 @@ public class ScopedTransaction implements StoreTransaction<TxnContext>,
             Table<? extends Message, ? extends Message, ? extends Message>,
             Table> mapping;
 
-    ScopedTransaction(
+    public ScopedTransaction(
             @Nonnull final CorfuRuntime runtime,
             @Nonnull final String namespace,
             @Nonnull final IsolationLevel isolationLevel,

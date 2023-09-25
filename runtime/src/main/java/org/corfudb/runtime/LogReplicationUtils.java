@@ -37,6 +37,7 @@ import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.function.Consumer;
 
+import static org.corfudb.runtime.LogReplication.*;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 /**
@@ -73,7 +74,7 @@ public final class LogReplicationUtils {
     // Stream tag applied to the replicated queue on the receiver
     public static final String REPLICATED_QUEUE_TAG = "lrq_recv";
 
-    public static final String SNAP_SYNC_START_END_Q_NAME = "LRQ_SNAPSHOT_START_END_MARKER";
+    public static final String SNAP_SYNC_TXN_ENVELOPE_TABLE = "LRQ_SnapSyncHeader";
 
     // ---- End RoutingQueue Model constants -------/
 
@@ -82,12 +83,12 @@ public final class LogReplicationUtils {
     public static final UUID lrFullSyncSendQId = CorfuRuntime.getStreamID(TableRegistry
             .getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, SNAPSHOT_SYNC_QUEUE_NAME_SENDER));
 
-    public static final UUID lrSnapStartEndQId = CorfuRuntime.getStreamID(TableRegistry
-            .getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, SNAP_SYNC_START_END_Q_NAME));
+    public static final UUID lrSnapSyncTxnEnvelopeStreamId = CorfuRuntime.getStreamID(TableRegistry
+            .getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, SNAP_SYNC_TXN_ENVELOPE_TABLE));
 
     public static boolean skipCheckpointFor(UUID streamId) {
         return streamId.equals(lrLogEntrySendQId) || streamId.equals(lrFullSyncSendQId)
-                || streamId.equals(lrSnapStartEndQId);
+                || streamId.equals(lrSnapSyncTxnEnvelopeStreamId);
     }
 
     private LogReplicationUtils() { }
@@ -172,7 +173,7 @@ public final class LogReplicationUtils {
                     List<CorfuStoreEntry<LogReplicationSession, ReplicationStatus, Message>> entries =
                             txnContext.executeQuery(replicationStatusTable,
                                     entry -> entry.getKey().getSubscriber().getModel()
-                                            .equals(LogReplication.ReplicationModel.ROUTING_QUEUES) &&
+                                            .equals(ReplicationModel.ROUTING_QUEUES) &&
                                             Objects.equals(entry.getKey().getSubscriber().getClientName(),
                                                     clientListener.getClientName()));
 
