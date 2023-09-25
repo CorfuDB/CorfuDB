@@ -77,7 +77,7 @@ public abstract class BaseLogEntryReader extends LogEntryReader {
     public BaseLogEntryReader(LogReplication.LogReplicationSession replicationSession,
                               LogReplicationContext replicationContext) {
         CorfuRuntime runtime = replicationContext.getCorfuRuntime();
-        this.maxDataSizePerMsg = replicationContext.getConfig(replicationSession).getMaxDataSizePerMsg();
+        this.maxDataSizePerMsg = replicationContext.getConfig(replicationSession).getMaxMsgSize();
         this.currentProcessedEntryMetadata = new StreamIteratorMetadata(Address.NON_ADDRESS, false);
         this.messageSizeDistributionSummary = configureMessageSizeDistributionSummary();
         this.deltaCounter = configureDeltaCounter();
