@@ -367,6 +367,11 @@ public class LogReplicationMetadataManager {
 
             txn.commit();
 
+            metadataMap = queryMetadata(txn, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID,
+                    LogReplicationMetadataType.LAST_SNAPSHOT_STARTED);
+            persistedTopologyConfigID = metadataMap.get(LogReplicationMetadataType.TOPOLOGY_CONFIG_ID);
+            persistedSnapshotStart = metadataMap.get(LogReplicationMetadataType.LAST_SNAPSHOT_STARTED);
+
             log.debug("Commit. Set snapshotStart topologyConfigId={}, ts={}, persistedTopologyConfigID={}, " +
                             "persistedSnapshotStart={}",
                     topologyConfigId, ts, persistedTopologyConfigID, persistedSnapshotStart);
