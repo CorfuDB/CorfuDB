@@ -50,7 +50,7 @@ public class ZSTDCompression implements Codec {
         double compressionRatio = (double) decompressedLength/compressedLen;
         MicroMeterUtils.measure(compressionRatio, "logdata.compression.ratio");
         if (compressionRatio > EXPECTED_COMPRESSION_RATIO) {
-            log.warn("High compression ratio: {}", compressionRatio);
+            log.debug("High compression ratio: {}", compressionRatio);
         }
 
         wrappedBuf.position((int) compressedLen + Integer.BYTES);
