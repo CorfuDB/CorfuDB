@@ -80,6 +80,8 @@ public class SourceForwardingDataSender extends AbstractIT implements DataSender
 
     private int msgCnt = 0;
 
+    private int numTimesLastAckDropped = 0;
+
     // Represents the number of cycles for which we reply that snapshot sync apply has not completed
     private int delayedApplyCycles;
     private int countDelayedApplyCycles = 0;
@@ -161,6 +163,13 @@ public class SourceForwardingDataSender extends AbstractIT implements DataSender
         //check is_data_consistent flag is set to false on snapshot_start
         if (message.getMetadata().getEntryType().equals(LogReplicationEntryType.SNAPSHOT_START)) {
             checkStatusOnSink(false);
+        }
+
+        if (dropACKLevel == 3 && message.getMetadata().getEntryType() == LogReplicationEntryType.SNAPSHOT_END &&
+                numTimesLastAckDropped < 2) {
+            log.info("****** Drop msg for snapshot sync, entry type {}", message.getMetadata().getEntryType());
+            ++numTimesLastAckDropped;
+            return cf;
         }
 
         if (dropAck(ack, message)) {
@@ -285,7 +294,7 @@ public class SourceForwardingDataSender extends AbstractIT implements DataSender
     }
 
     private boolean dropAck(LogReplicationEntryMsg ack, LogReplicationEntryMsg message){
-        if (dropACKLevel > 0 && msgCnt == droppingAcksNum) {
+        if (dropACKLevel > 0 && dropACKLevel < 3 && msgCnt == droppingAcksNum) {
             log.info("****** Drop ACK {} for log entry ts {}", ack, message.getMetadata().getTimestamp());
             if (dropACKLevel == DROP_MSG_ONCE) {
                 droppingAcksNum += DROP_INCREMENT;
