@@ -160,8 +160,8 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
 
             // Now request a full sync this time for just one site!
             snapshotProvider.isSnapshotSent = false;
-            queueSenderClient.requestSnapshotSync(UUID.fromString(DefaultClusterConfig.getSourceClusterIds().get(0)),
-                    UUID.fromString(DefaultClusterConfig.getSinkClusterIds().get(0)));
+            queueSenderClient.requestSnapshotSync(DefaultClusterConfig.getSourceClusterIds().get(0),
+                    DefaultClusterConfig.getSinkClusterIds().get(0));
 
             while (numFullSyncMsgsGot < 15) {
                 Thread.sleep(5000);
