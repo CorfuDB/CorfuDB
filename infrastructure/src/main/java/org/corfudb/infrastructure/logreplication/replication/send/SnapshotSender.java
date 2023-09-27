@@ -69,6 +69,8 @@ public class SnapshotSender {
     // This flag will indicate the start of a snapshot sync, so start snapshot marker is sent once.
     private boolean startSnapshotSync = true;
 
+    private boolean completed = false;
+
     @Getter
     @VisibleForTesting
     // For testing purposes, used to count the number of messages sent in order to interrupt snapshot sync
@@ -104,7 +106,6 @@ public class SnapshotSender {
         log.info("Running snapshot sync for {} on baseSnapshot {}", snapshotSyncEventId,
                 baseSnapshotTimestamp);
 
-        boolean completed = false;  // Flag indicating the snapshot sync is completed
         boolean cancel = false;     // Flag indicating snapshot sync needs to be canceled
         int messagesSent = 0;       // Limit the number of messages to maxNumSnapshotMsgPerBatch. The reason we need to limit
         // is because by design several state machines can share the same thread pool,
@@ -151,31 +152,12 @@ public class SnapshotSender {
                 observedCounter.setValue(messagesSent);
             }
 
-            if (completed) {
-                // Block until ACK from last sent message is received
-                try {
-                    LogReplicationEntryMsg ack = snapshotSyncAck.get(DEFAULT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
-                    if (ack.getMetadata().getSnapshotTimestamp() == baseSnapshotTimestamp &&
-                            ack.getMetadata().getEntryType().equals(LogReplicationEntryType.SNAPSHOT_TRANSFER_COMPLETE)) {
-                        // Snapshot Sync Transfer Completed
-                        log.info("Snapshot sync transfer completed for {} on timestamp={}, ack={}", snapshotSyncEventId,
-                                baseSnapshotTimestamp, TextFormat.shortDebugString(ack.getMetadata()));
-                        snapshotSyncTransferComplete(snapshotSyncEventId);
-                    } else {
-                        log.warn("Expected ack for {}, but received for a different snapshot {}", baseSnapshotTimestamp,
-                                ack.getMetadata());
-                        throw new Exception("Wrong base snapshot ack");
-                    }
-                } catch (Exception e) {
-                    log.error("Exception caught while blocking on snapshot sync {}, ack for {}",
-                            snapshotSyncEventId, baseSnapshotTimestamp, e);
-                    if (snapshotSyncAck.isCompletedExceptionally()) {
-                        log.error("Snapshot Sync completed exceptionally", e);
-                    }
-                    snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.UNKNOWN, false);
-                } finally {
-                    snapshotSyncAck = null;
-                }
+            if (completed && dataSenderBufferManager.pendingMessages.isEmpty()) {
+                // Snapshot Sync Transfer Completed
+                log.info("Snapshot sync transfer completed for {} on timestamp={}", snapshotSyncEventId,
+                        baseSnapshotTimestamp);
+                snapshotSyncTransferComplete(snapshotSyncEventId);
+                completed = false;
             } else if (!cancel && !stopSnapshotSync.get()) {
                 // Maximum number of batch messages sent. This snapshot sync needs to continue.
 
