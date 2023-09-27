@@ -1,11 +1,13 @@
 package org.corfudb.infrastructure.logreplication.replication.send.logreader;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.google.protobuf.Message;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.infrastructure.logreplication.replication.send.IllegalSnapshotEntrySizeException;
@@ -67,6 +69,8 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
     // UUID of the stream which contains snapshot end markers
     private final UUID snapSyncHeaderStreamId;
 
+    @VisibleForTesting
+    @Setter
     private long requestSnapSyncId = 0;
 
     private OpaqueStream opaqueStream = null;
