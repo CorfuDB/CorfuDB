@@ -21,7 +21,6 @@ import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.view.AbstractViewTest;
-import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.util.serializer.ProtobufSerializer;
 import org.junit.After;
@@ -96,6 +95,10 @@ public class RoutingQueuesSnapshotReaderTest extends AbstractViewTest {
 
         log.info("Stream UUID: {}, name: {}", CorfuRuntime.getStreamID(streamTagFollowed), streamTagFollowed);
 
+        // Corfu log tail which represents the timestamp at which snapshot sync was requested
+        long snapshotReqTimestamp = lrRuntime.getAddressSpaceView().getLogTail();
+        ((RoutingQueuesSnapshotReader) snapshotReader).setRequestSnapSyncId(snapshotReqTimestamp);
+
         for (int i = 0; i < 10; i++) {
             ByteBuffer buffer = ByteBuffer.allocate(Integer.SIZE);
             buffer.putInt(i);
@@ -106,9 +109,7 @@ public class RoutingQueuesSnapshotReaderTest extends AbstractViewTest {
             try (TxnContext txnContext = corfuStore.txn(namespace)) {
                 txnContext.logUpdateEnqueue(q, val, Arrays.asList(CorfuRuntime.getStreamID(streamTagFollowed)),
                     corfuStore);
-                if (i == 0) {
-                    writeMarker(true, txnContext.getTxnSequence(), txnContext);
-                }
+                writeMarker(true, snapshotReqTimestamp, txnContext);
                 txnContext.commit();
             } catch (Exception e) {
                 log.error("Failed to add data to the queue", e);
@@ -117,36 +118,42 @@ public class RoutingQueuesSnapshotReaderTest extends AbstractViewTest {
         log.info("Queue Size = {}.  Stream tags = {}", q.count(), q.getStreamTags());
 
         // Write the End Marker
-        writeMarker(false, Address.NON_ADDRESS, null);
+        writeMarker(false, snapshotReqTimestamp, null);
     }
 
     private void writeMarker(boolean start, long timestamp, TxnContext txnContext) {
         Queue.RoutingQSnapSyncHeaderKeyMsg snapshotSyncId =
-            Queue.RoutingQSnapSyncHeaderKeyMsg.newBuilder().setDestination(session.getSinkClusterId()).build();
+            Queue.RoutingQSnapSyncHeaderKeyMsg.newBuilder().setDestination(session.getSinkClusterId())
+                .setSnapSyncRequestId(timestamp).build();
 
-        Queue.RoutingQSnapSyncHeaderMsg marker =
-            Queue.RoutingQSnapSyncHeaderMsg.newBuilder().setSnapshotStartTimestamp(timestamp).build();
-
-        CorfuRecord<Queue.RoutingQSnapSyncHeaderMsg, Message> record = new CorfuRecord<>(marker, null);
+        Queue.RoutingQSnapSyncHeaderMsg marker;
 
         Object[] smrArgs = new Object[2];
         smrArgs[0] = snapshotSyncId;
-        smrArgs[1] = record;
 
-        UUID endMarkerStreamId = CorfuRuntime.getStreamID(TableRegistry.getFullyQualifiedTableName(
-            namespace, SNAP_SYNC_TXN_ENVELOPE_TABLE));
+        CorfuRecord<Queue.RoutingQSnapSyncHeaderMsg, Message> record;
 
-        // Start marker is written in the same transaction as the data.  So reuse the transaction which was passed
+        UUID markerStreamId = CorfuRuntime.getStreamID(TableRegistry.getFullyQualifiedTableName(
+                namespace, SNAP_SYNC_TXN_ENVELOPE_TABLE));
+
         if (start) {
-            txnContext.logUpdate(endMarkerStreamId, new SMREntry("put", smrArgs,
+            marker = Queue.RoutingQSnapSyncHeaderMsg.newBuilder().setSnapshotStartTimestamp(txnContext.getTxnSequence())
+                .build();
+            record = new CorfuRecord<>(marker, null);
+            smrArgs[1] = record;
+            // Start marker is written in the same transaction as the data.  So reuse the transaction which was passed
+            txnContext.logUpdate(markerStreamId, new SMREntry("put", smrArgs,
                     corfuStore.getRuntime().getSerializers().getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE)),
                 Arrays.asList(CorfuRuntime.getStreamID(streamTagFollowed)));
             return;
         }
 
-        // End marker is written in a separate transaction
+        // End marker is written in a separate transaction and with different data
+        marker = Queue.RoutingQSnapSyncHeaderMsg.newBuilder().setSnapshotStartTimestamp(-timestamp).build();
+        record = new CorfuRecord<>(marker, null);
+        smrArgs[1] = record;
         try (TxnContext txn = corfuStore.txn(namespace)) {
-            txn.logUpdate(endMarkerStreamId, new SMREntry("put", smrArgs,
+            txn.logUpdate(markerStreamId, new SMREntry("put", smrArgs,
                     corfuStore.getRuntime().getSerializers().getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE)),
                 Arrays.asList(CorfuRuntime.getStreamID(streamTagFollowed)));
             txn.commit();
