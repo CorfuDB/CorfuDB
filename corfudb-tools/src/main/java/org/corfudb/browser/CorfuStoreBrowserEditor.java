@@ -868,7 +868,7 @@ public class CorfuStoreBrowserEditor implements CorfuBrowserEditorCommands {
         CorfuStore corfuStore = new CorfuStore(runtime);
         try {
             RoutingQueueSenderClient routingQueueSenderClient = new RoutingQueueSenderClient(corfuStore, RoutingQueueSenderClient.DEFAULT_ROUTING_QUEUE_CLIENT);
-            routingQueueSenderClient.requestGlobalSnapshotSync(UUID.randomUUID(), UUID.randomUUID());
+            routingQueueSenderClient.requestGlobalSnapshotSync("any", "any");
             System.out.println("Full Sync requested for ALL remote sites");
         } catch (NoSuchMethodException | IllegalAccessException e) {
             System.out.println("Hit exception on requestGlobalFullSync"+e);

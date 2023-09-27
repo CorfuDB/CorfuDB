@@ -57,7 +57,7 @@ public final class LogReplicationEventListener implements StreamListener {
         for (List<CorfuStreamEntry> entryList : results.getEntries().values()) {
             for (CorfuStreamEntry entry : entryList) {
                 if (entry.getOperation() == CorfuStreamEntry.OperationType.CLEAR ||
-                entry.getOperation() == CorfuStreamEntry.OperationType.DELETE) {
+                        entry.getOperation() == CorfuStreamEntry.OperationType.DELETE) {
                     log.warn("LREventListener ignoring a {} operation", entry.getOperation());
                     continue;
                 }
