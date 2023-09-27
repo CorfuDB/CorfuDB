@@ -1147,6 +1147,12 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         testSnapshotSyncAndLogEntrySync(0, false, 1);
     }
 
+    @Test
+    public void testSnapshotSyncWithLastAckDrop() throws Exception {
+        testSnapshotSyncAndLogEntrySync(0, false, 3);
+        cleanEnv();
+    }
+
 
     /* ********************** AUXILIARY METHODS ********************** */
 
@@ -1463,6 +1469,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
          * 0 : No ACKs dropped
          * 1 : Arbitrarily ACKs are dropped
          * 2 : An ACK dropped and further messages dropped at Source.
+         * 3 : Drop the last ACK in snapshot sync 2 times.
          * */
         private int dropAckLevel = 0;
         private int delayedApplyCycles = 0; // Represents the number of cycles for which snapshot sync apply queries

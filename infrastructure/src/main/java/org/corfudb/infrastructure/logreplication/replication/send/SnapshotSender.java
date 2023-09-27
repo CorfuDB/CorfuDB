@@ -69,6 +69,8 @@ public class SnapshotSender {
     // This flag will indicate the start of a snapshot sync, so start snapshot marker is sent once.
     private boolean startSnapshotSync = true;
 
+    private boolean completed = false;
+
     @Getter
     @VisibleForTesting
     // For testing purposes, used to count the number of messages sent in order to interrupt snapshot sync
