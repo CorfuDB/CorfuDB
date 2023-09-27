@@ -60,15 +60,14 @@ message RoutingTableEntryMsg {
 
     // Operation type that marks the table content is being created or removed.
     OperationType operation_type = 7;
-
 }
 
 // One entry is placed in this stream once per full sync transaction batch from client.
 // This helps identify which full sync request the client is responding to and helps ignore
 // older full sync messages.
 message RoutingQSnapSyncHeaderKeyMsg {
-    // Stamp every full sync request with a unique request id from lr server.
-    int64 full_sync_request_id = 1;
+    // Stamp every full snapshot sync request with a unique request id from lr server.
+    int64 snap_sync_request_id = 1;
     // Destination corresponding to this snapshot sync.
     string destination = 2;
 }

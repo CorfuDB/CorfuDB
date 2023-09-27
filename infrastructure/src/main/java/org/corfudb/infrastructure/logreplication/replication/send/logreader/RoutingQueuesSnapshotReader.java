@@ -49,10 +49,10 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
     private final CorfuStore corfuStore;
 
     // UUID of the global queue which contains snapshot sync data
-    private UUID snapshotSyncQueueId;
+    private final UUID snapshotSyncQueueId;
 
     // Stream tag which will be followed to fetch any writes to the snapshot sync queue for this destination
-    private String streamTagFollowed;
+    private final String streamTagFollowed;
 
     private final ExecutorService dataPoller;
 
@@ -67,7 +67,7 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
     // UUID of the stream which contains snapshot end markers
     private final UUID snapSyncHeaderStreamId;
 
-    private long requestFullSyncId = 0;
+    private long requestSnapSyncId = 0;
 
     private OpaqueStream opaqueStream = null;
 
@@ -156,7 +156,7 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
         endMarkerReached = false;
         currentStreamInfo = null;
         lastEntry = null;
-        requestFullSyncId = 0;
+        requestSnapSyncId = 0;
     }
 
     /**
@@ -187,9 +187,9 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
     }
 
     /**
-     * If LR server for any reason requested multiple full syncs from client then it is possible that
-     * the client is providing multiple full syncs in the same stream at the same time.
-     * To disambiguate one full sync response from another, stamp each full sync message
+     * If LR server for any reason requested multiple snapshot syncs from client then it is possible that
+     * the client is providing multiple snapshot syncs in the same stream at the same time.
+     * To disambiguate one snapshot sync response from another, stamp each snapshot sync message
      * with the LR Server's request (Destination+logTail at time of request)
      * @param snapshotRequestId
      */
@@ -201,13 +201,13 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
         try {
             IRetry.build(IntervalRetry.class, () -> {
                 try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-                    this.requestFullSyncId = txn.getTxnSequence();
-                    log.info("RQSnapReader asking sender for full sync data session={}, sync_id={}", session,
-                            requestFullSyncId);
+                    this.requestSnapSyncId = txn.getTxnSequence();
+                    log.info("RQSnapReader asking sender for snapshot sync data session={}, sync_id={}", session,
+                            requestSnapSyncId);
                     LogReplication.ReplicationEvent event = LogReplication.ReplicationEvent.newBuilder()
                             .setEventId(snapshotRequestId.toString())
                             .setType(LogReplication.ReplicationEvent.ReplicationEventType.SERVER_REQUESTED_SNAPSHOT_SYNC)
-                            .setEventTimestamp(com.google.protobuf.Timestamp.newBuilder().setSeconds(requestFullSyncId).build())
+                            .setEventTimestamp(com.google.protobuf.Timestamp.newBuilder().setSeconds(requestSnapSyncId).build())
                             .build();
                     txn.putRecord(txn.getTable(REPLICATION_EVENT_TABLE_NAME), key, event, null);
                     lastReadTimestamp = txn.commit().getSequence(); // set last read event to what is requested
@@ -241,7 +241,7 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
     }
 
     private CorfuStoreEntry<Queue.RoutingQSnapSyncHeaderKeyMsg, Queue.RoutingQSnapSyncHeaderMsg, Message>
-    getFullSyncTxnHeader(OpaqueEntry opaqueEntry) {
+    getSnapSyncTxnHeader(OpaqueEntry opaqueEntry) {
         Preconditions.checkState(opaqueEntry.getEntries().get(snapSyncHeaderStreamId).size() == 1);
         SMREntry smrEntry = opaqueEntry.getEntries().get(snapSyncHeaderStreamId).get(0);
 
@@ -253,9 +253,9 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
                 replicationContext.getProtobufSerializer().deserialize(rawBuf, null);
         Preconditions.checkState(Objects.equals(key.getDestination(), session.getSinkClusterId()));
 
-        if (key.getFullSyncRequestId() != requestFullSyncId) {
-            log.warn("Ignoring an older full sync request {} for destination {}. Looking for {}",
-                    key.getFullSyncRequestId(), key.getDestination(), requestFullSyncId);
+        if (key.getSnapSyncRequestId() != requestSnapSyncId) {
+            log.warn("Ignoring an older snapshot sync request {} for destination {}. Looking for {}",
+                    key.getSnapSyncRequestId(), key.getDestination(), requestSnapSyncId);
             return null;
         }
 
@@ -269,24 +269,24 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
     // Check if the Opaque Entry contains an End Marker, denoting the end of snapshot sync data
     private boolean isEndMarker(OpaqueEntry opaqueEntry) {
         CorfuStoreEntry<Queue.RoutingQSnapSyncHeaderKeyMsg, Queue.RoutingQSnapSyncHeaderMsg, Message> entry =
-                getFullSyncTxnHeader(opaqueEntry);
+                getSnapSyncTxnHeader(opaqueEntry);
         if (entry == null) {
             return false;
         }
 
-        log.info("isEndMarker is called from next of snapshot reader. full sync request {} {}", entry.getKey(), entry.getPayload());
+        log.info("isEndMarker is called from next of snapshot reader. snapshot sync request {} {}", entry.getKey(), entry.getPayload());
         // The protocol is the end marker is represented by the Full Sync Request Id but negated.
-        return (entry.getPayload().getSnapshotStartTimestamp() == -requestFullSyncId);
+        return (entry.getPayload().getSnapshotStartTimestamp() == -requestSnapSyncId);
     }
 
-    private boolean validateFullSyncEntry(OpaqueEntry opaqueEntry) {
+    private boolean validateSnapSyncEntry(OpaqueEntry opaqueEntry) {
         CorfuStoreEntry<Queue.RoutingQSnapSyncHeaderKeyMsg, Queue.RoutingQSnapSyncHeaderMsg, Message> entry =
-                getFullSyncTxnHeader(opaqueEntry);
+                getSnapSyncTxnHeader(opaqueEntry);
         if (entry == null) {
             return false;
         }
 
-        log.info("Processing full sync request {} {}", entry.getKey(), entry.getPayload());
+        log.info("Processing snapshot sync request {} {}", entry.getKey(), entry.getPayload());
         // Update the base snapshot timestamp
         snapshotTimestamp = entry.getPayload().getSnapshotStartTimestamp();
         return true;
@@ -317,7 +317,7 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
                         break;
                     }
 
-                    if (validateFullSyncEntry(lastEntry)) { // returns true if entry belongs to current full sync data
+                    if (validateSnapSyncEntry(lastEntry)) { // returns true if entry belongs to current snapshot sync
                         endMarkerReached = false;
                         log.info("RQSnapReader validated entry address {}", lastEntry.getVersion());
                         List<SMREntry> smrEntries = lastEntry.getEntries().get(snapshotSyncQueueId);
@@ -346,7 +346,7 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
                         }
                         lastEntry = null;
                     }
-                } // else this full sync message possibly belongs to an older request made to the client, so ignore
+                } // else this snapshot sync message possibly belongs to an older request made to the client, so ignore
 
                 if (stream.iterator.hasNext()) {
                     lastEntry = (OpaqueEntry) stream.iterator.next();
