@@ -38,7 +38,8 @@ public abstract class LogReplicationConfig {
     // Note: if we want to improve performance for large scale this value should be tuned as it
     // used in snapshot sync to quickly access shadow stream entries, written locally.
     // This value is exposed as a configuration parameter for LR.
-    public static final int DEFAULT_MAX_CACHE_NUM_ENTRIES = 200;
+    // TODO: Tune this better.
+    public static final int DEFAULT_MAX_CACHE_NUM_ENTRIES = 10;
 
     // Corfu runtime's max uncompressed write size is used to calculate the payload transfer and apply sizes in
     // LR.  To account for extra bytes added in logData.serialize(), consider a fraction of this max write size.
