@@ -38,7 +38,8 @@ public abstract class LogReplicationConfig {
     // Note: if we want to improve performance for large scale this value should be tuned as it
     // used in snapshot sync to quickly access shadow stream entries, written locally.
     // This value is exposed as a configuration parameter for LR.
-    public static final int DEFAULT_MAX_CACHE_NUM_ENTRIES = 200;
+    // TODO: Tune this better.
+    public static final int DEFAULT_MAX_CACHE_NUM_ENTRIES = 10;
 
     public static final UUID REGISTRY_TABLE_ID = CorfuRuntime.getStreamID(
         TableRegistry.getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, TableRegistry.REGISTRY_TABLE_NAME));

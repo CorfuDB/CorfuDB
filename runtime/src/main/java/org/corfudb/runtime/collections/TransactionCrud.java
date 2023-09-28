@@ -14,6 +14,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import org.corfudb.runtime.Queue;
+import org.corfudb.runtime.view.TableRegistry;
+
 import java.util.function.BiFunction;
 import java.util.function.BiPredicate;
 import java.util.function.Function;
@@ -89,7 +91,8 @@ public class TransactionCrud<T extends StoreTransaction<T>>
 
     private <K extends Message, V extends Message, M extends Message>
     void baseValidateWrite(@Nonnull Table<K, V, M> table, K key, boolean validateKey) {
-        if (!table.getNamespace().equals(namespace)) {
+        if (!table.getNamespace().equals(TableRegistry.CORFU_SYSTEM_NAMESPACE) &&
+                !table.getNamespace().equals(namespace)) {
             throw new IllegalArgumentException("TxnContext can't apply table from namespace "
                     + table.getNamespace() + " to transaction on namespace " + namespace);
         }
