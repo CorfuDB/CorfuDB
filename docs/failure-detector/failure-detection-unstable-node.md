@@ -41,7 +41,8 @@ LAYOUTS_CURRENT.ds:
     "03:08:59",
     "03:09:55",
     "03:11:37"
-  ]
+  ],
+  "status": "RED"
 }
 ```
 
@@ -49,7 +50,7 @@ failureProbes - is a parameter that we take from previous layout updates for fai
 and we ignore state transfer updates.
 
 To calculate a cool-off timeout for the layout we are using exponential backoff: T = interval * Math.pow(rate, iteration) 
- - for last 5 updates: up to 31-min cool-off period
+ - for last 3 updates: up to 7-min cool-off period
  - rate: 2 times
  - 1 minute interval: 2x of an average failure detection, which is 30 sec, including client updates
 
@@ -58,5 +59,10 @@ To calculate a cool-off timeout for the layout we are using exponential backoff:
 | 1         | 1       |
 | 2         | 3       |
 | 3         | 7       |
-| 4         | 15      |
-| 5         | 31      |
+
+Those 3 states will be represented as: GREEN, YELLOW, RED.
+
+In case of multiple failures we will increase the timeout of healing node and prevent cluster from being constantly get updated.
+The price for that possible unavailability of the cluster, since essentially we slow down failure detection mechanism,
+but in case of if the network is unstable there is nothing much to do, no reason for frequent updates of the layout too.
+
