@@ -150,14 +150,21 @@ public class GRPCLogReplicationServerHandler extends LogReplicationGrpc.LogRepli
         };
     }
 
+
     @Override
-    public StreamObserver<RequestMsg> test(StreamObserver<ResponseMsg> responseObserver) {
+    public StreamObserver<RequestMsg> sinkSideSessionInitialize(StreamObserver<ResponseMsg> responseObserver) {
 
         return new StreamObserver<RequestMsg>() {
+
+            LogReplicationSession session;
+
+            long requestId;
+
             @Override
             public void onNext(RequestMsg replicationCorfuMessage) {
                 long requestId = replicationCorfuMessage.getHeader().getRequestId();
                 String name = replicationCorfuMessage.getPayload().getPayloadCase().name();
+                session = replicationCorfuMessage.getHeader().getSession();
                 log.info("Received[{}]: {}", requestId, name);
 
                 // Register at the observable first.
@@ -169,7 +176,7 @@ public class GRPCLogReplicationServerHandler extends LogReplicationGrpc.LogRepli
                             requestId, e);
                 }
 
-                // Forward the received message to the router
+                // Forward the received message to the routerReceive
                 router.receive(replicationCorfuMessage);
             }
 
@@ -184,6 +191,7 @@ public class GRPCLogReplicationServerHandler extends LogReplicationGrpc.LogRepli
             }
         };
     }
+
 
 
     public void send(ResponseMsg msg) {
@@ -230,6 +238,7 @@ public class GRPCLogReplicationServerHandler extends LogReplicationGrpc.LogRepli
             unaryCallStreamObserverMap.remove(Pair.of(session, requestId));
         }
     }
+
 
     public void send(RequestMsg msg) {
 

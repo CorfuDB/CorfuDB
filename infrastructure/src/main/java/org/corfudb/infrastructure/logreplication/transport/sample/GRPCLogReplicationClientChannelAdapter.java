@@ -194,7 +194,6 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
     public void send(@Nonnull String nodeId, @Nonnull RequestMsg request) {
         // Check the connection future. If connected, continue with sending the message.
         // If timed out, return an exceptionally completed with the timeout.
-        test(nodeId, request);
         switch (request.getPayload().getPayloadCase()) {
             case LR_ENTRY:
                 replicate(nodeId, request);
@@ -204,6 +203,9 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
                 break;
             case LR_METADATA_REQUEST:
                 requestMetadata(nodeId, request);
+                break;
+            case LR_SINK_SESSION_INITIALIZATION:
+                sinkSideSessionInitialize(nodeId, request);
                 break;
             default:
                 break;
@@ -379,7 +381,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
         replicationReqObserverMap.get(Pair.of(sessionMsg, requestId)).onNext(request);
     }
 
-    private void test(String nodeId, RequestMsg request) {
+    private void sinkSideSessionInitialize(String nodeId, RequestMsg request) {
         LogReplicationSession sessionMsg = request.getHeader().getSession();
         long requestId = request.getHeader().getRequestId();
 
@@ -413,7 +415,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
             };
 
             if(sessionToAsyncStubMap.containsKey(sessionMsg)) {
-                StreamObserver<RequestMsg> requestObserver = sessionToAsyncStubMap.get(sessionMsg).test(responseObserver);
+                StreamObserver<RequestMsg> requestObserver = sessionToAsyncStubMap.get(sessionMsg).sinkSideSessionInitialize(responseObserver);
                 replicationReqObserverMap.put(Pair.of(sessionMsg, requestId), new CorfuStreamObserver<>(requestObserver));
             } else {
                 log.error("No stub found for remote node {}. Message dropped type={}",
