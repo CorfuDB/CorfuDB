@@ -305,7 +305,7 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
 
         @Override
         public void markCompleted() throws CancellationException {
-            log.info("Got completion marker");
+            log.info("Got completion marker sinkId={} requestID={}", key.getSession().getSinkClusterId(), requestingEvent.getEventTimestamp().getSeconds());
             RoutingQSnapSyncHeaderKeyMsg keyOfStartMarker = RoutingQSnapSyncHeaderKeyMsg.newBuilder()
                     .setDestination(key.getSession().getSinkClusterId())
                     .setSnapSyncRequestId(requestingEvent.getEventTimestamp().getSeconds())
