@@ -40,8 +40,6 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
  */
 @Slf4j
 public class LogReplicationLogicalGroupClient {
-    // TODO (V2): This field should be removed after the rpc stream is added for Sink side session creation.
-    //public static final String DEFAULT_LOGICAL_GROUP_CLIENT = "00000000-0000-0000-0000-0000000000001";
 
     /**
      * Key: ClientRegistrationId
@@ -77,11 +75,8 @@ public class LogReplicationLogicalGroupClient {
      */
     public LogReplicationLogicalGroupClient(CorfuRuntime runtime, String clientName)
             throws InvocationTargetException, NoSuchMethodException, IllegalAccessException {
-        log.info("xyz");
         Preconditions.checkArgument(isValid(clientName), "clientName is null or empty.");
-        log.info("xx");
         this.corfuStore = new CorfuStore(runtime);
-        // TODO (V2): client name cannot be customized as Sink side does not have a way to create sessions for now
         this.clientName = clientName;
         this.clientKey = ClientRegistrationId.newBuilder()
                 .setClientName(clientName)
@@ -94,13 +89,10 @@ public class LogReplicationLogicalGroupClient {
                 .setModel(model)
                 .setRegistrationTime(timestamp)
                 .build();
-        log.info("xxx");
 
         try {
-            log.info("try");
             this.replicationRegistrationTable = corfuStore.getTable(CORFU_SYSTEM_NAMESPACE, LR_REGISTRATION_TABLE_NAME);
         } catch (NoSuchElementException | IllegalArgumentException e) {
-            log.info("fail");
             log.warn("Failed getTable operation, opening table.", e);
             this.replicationRegistrationTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, LR_REGISTRATION_TABLE_NAME,
                     ClientRegistrationId.class,
@@ -112,7 +104,6 @@ public class LogReplicationLogicalGroupClient {
         try {
             this.sourceMetadataTable = corfuStore.getTable(CORFU_SYSTEM_NAMESPACE, LR_MODEL_METADATA_TABLE_NAME);
         } catch (NoSuchElementException | IllegalArgumentException e) {
-            log.info("can't");
             log.warn("Failed getTable operation, opening table.", e);
             this.sourceMetadataTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, LR_MODEL_METADATA_TABLE_NAME,
                     ClientDestinationInfoKey.class,
@@ -120,7 +111,6 @@ public class LogReplicationLogicalGroupClient {
                     null,
                     TableOptions.fromProtoSchema(DestinationInfoVal.class));
         }
-        log.info("next step is register");
         register();
     }
 
@@ -135,25 +125,19 @@ public class LogReplicationLogicalGroupClient {
                     ClientRegistrationInfo clientRegistrationInfo = txn.getRecord(replicationRegistrationTable, clientKey).getPayload();
 
                     if (clientRegistrationInfo != null) {
-                        log.info(String.format("Client already registered.\n--- ClientRegistrationId ---\n%s" +
+                        log.warn(String.format("Client already registered.\n--- ClientRegistrationId ---\n%s" +
                                 "--- ClientRegistrationInfo ---\n%s", clientKey, clientRegistrationInfo));
                     } else {
-                        log.info("going to put");
                         txn.putRecord(replicationRegistrationTable, clientKey, clientInfo, null);
                     }
-
-                    CorfuStoreMetadata.Timestamp ts = txn.commit();
-                    log.info("new client register timestamp {}", ts.getSequence());
                 } catch (TransactionAbortedException tae) {
-                    log.info("no");
-                    log.info(String.format("[%s] Unable to register client.", clientName), tae);
+                    log.warn(String.format("[%s] Unable to register client.", clientName), tae);
                     throw new RetryNeededException();
                 }
-                log.info("null");
                 return null;
             }).run();
         } catch (InterruptedException e) {
-            log.info(String.format("[%s] Client registration failed.", clientName), e);
+            log.warn(String.format("[%s] Client registration failed.", clientName), e);
             throw new UnrecoverableCorfuInterruptedError(e);
         }
     }
