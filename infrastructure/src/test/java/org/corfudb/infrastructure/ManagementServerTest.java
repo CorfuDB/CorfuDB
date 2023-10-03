@@ -6,6 +6,7 @@ import io.netty.channel.ChannelHandlerContext;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.management.ClusterStateContext;
+import org.corfudb.infrastructure.management.ManagementAgent;
 import org.corfudb.infrastructure.management.ReconfigurationEventHandler;
 import org.corfudb.infrastructure.orchestrator.Orchestrator;
 import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;

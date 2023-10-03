@@ -8,7 +8,7 @@ import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.result.Result;
-import org.corfudb.infrastructure.RemoteMonitoringService.DetectorTask;
+import org.corfudb.infrastructure.management.failuredetector.RemoteMonitoringService.DetectorTask;
 import org.corfudb.infrastructure.management.ClusterStateContext;
 import org.corfudb.infrastructure.management.PollReport;
 import org.corfudb.protocols.wireprotocol.ClusterState;

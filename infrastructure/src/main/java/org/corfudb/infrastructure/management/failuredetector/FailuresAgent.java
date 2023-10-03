@@ -3,7 +3,7 @@ package org.corfudb.infrastructure.management.failuredetector;
 import lombok.Builder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.RemoteMonitoringService.DetectorTask;
+import org.corfudb.infrastructure.management.failuredetector.RemoteMonitoringService.DetectorTask;
 import org.corfudb.infrastructure.management.ClusterAdvisor;
 import org.corfudb.infrastructure.management.FileSystemAdvisor;
 import org.corfudb.infrastructure.management.PollReport;

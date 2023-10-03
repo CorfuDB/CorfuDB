@@ -46,8 +46,8 @@ LAYOUTS_CURRENT.ds:
 }
 ```
 
-failureProbes - is a parameter that we take from previous layout updates for failures and heals, 
-and we ignore state transfer updates.
+failureProbes - is a parameter that we take from previous layout updates ONLY for FAILURES and HEALING, 
+and we ignore any other layout and epoch updates, including state transfer updates.
 
 To calculate a cool-off timeout for the layout we are using exponential backoff: T = interval * Math.pow(rate, iteration) 
  - for last 3 updates: up to 7-min cool-off period
@@ -66,3 +66,89 @@ In case of multiple failures we will increase the timeout of healing node and pr
 The price for that possible unavailability of the cluster, since essentially we slow down failure detection mechanism,
 but in case of if the network is unstable there is nothing much to do, no reason for frequent updates of the layout too.
 
+The algorithm is applied only during "HEAL" operation, we check the timeouts (see the table) and if the layout was 
+updated more times than it allowed then failure detector is not allowed to continue and remove the node from the unresponsive list
+and needs to wait for: X = "Cool-off Timeout" - time passed by last 3 updates.
+
+#### Scenario 1:
+Notes: 
+ - update - means healing operation
+```
+00:00:30 -> 
+{
+    cluster: unresponsive[NodeA],
+    
+    // Latest updates of the layout. 
+      - timeout: 1,3,7 minutes, 
+      - count: how many time the updates happened, 
+      - limit: allowed number of updates 
+    probes: [
+        { timeout: 1, time: 00:00:30}
+        { timeout: 3, time: None}
+        { timeout: 7, time: None}
+    ]
+    
+    status: OK,
+    note: starting point, empty counters
+}
+
+00:00:47 -> 
+{
+    cluster: unresponsive[],
+    probes: [
+        { timeout: 1, count: 1, limit: 1, time: 00:00:47} // 00:00:47-00:00:30=17 sec -> less than a minute, increment all counters 
+        { timeout: 3, count: 1, limit: 2, time: 00:00:30}
+        { timeout: 7, count: 1, limit: 3, time: 00:00:30}
+    ]
+    status: OK,
+    note: first healing
+}
+
+00:01:03 ->
+{
+    cluster: unresponsive[NodeA],
+    probes: [
+        { timeout: 1, count: 1, limit: 1, time: 00:00:47 } // 00:00:47-00:00:30=17 sec -> less than a minute, increment all counters 
+        { timeout: 3, count: 1, limit: 2, time: 00:00:30 }
+        { timeout: 7, count: 1, limit: 3, time: 00:00:30 }
+    ]
+    status: OK,
+    note: starting point, empty counters
+}
+{
+    cluster: ,
+    probes: [
+        { timeout: 1, count: 1, limit: 1}
+        { timeout: 3, count: 1, limit: 2}
+        { timeout: 7, count: 1, limit: 3}
+    ]
+    status: OK,
+    note: failure detection, NodeA again. We let it go, we handle only healing
+}
+
+00:01:15 ->
+{
+    iteration: 2, 
+    cluster: unresponsive[], 
+    status: REJECTED
+    note: time diff between previous heal and the current one is: 00:01:15-00:00:47=28 seconds.
+          The allowed time out is 1 minute.
+}
+
+00:01:50 ->
+{
+    iteration: 2, 
+    cluster: unresponsive[], 
+    status: OK
+    note: the timeout is more than a minute, we are ok to heal. Next iteration is allowed after 3 min timeout
+}
+
+00:01:50 ->
+{
+    iteration: 2, 
+    cluster: unresponsive[], 
+    status: OK
+    note: the timeout is more than a minute, we are ok to heal
+} 
+
+```

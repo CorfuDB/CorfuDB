@@ -5,7 +5,7 @@ import com.google.common.collect.ImmutableSet;
 import lombok.Builder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.RemoteMonitoringService.DetectorTask;
+import org.corfudb.infrastructure.management.failuredetector.RemoteMonitoringService.DetectorTask;
 import org.corfudb.infrastructure.management.ClusterAdvisor;
 import org.corfudb.infrastructure.management.FileSystemAdvisor;
 import org.corfudb.infrastructure.management.PollReport;
@@ -25,7 +25,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.function.Supplier;
 
-import static org.corfudb.infrastructure.RemoteMonitoringService.DetectorTask.SKIPPED;
+import static org.corfudb.infrastructure.management.failuredetector.RemoteMonitoringService.DetectorTask.SKIPPED;
 
 /**
  * Healing algorithm

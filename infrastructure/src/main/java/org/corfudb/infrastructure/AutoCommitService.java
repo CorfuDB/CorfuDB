@@ -46,7 +46,7 @@ public class AutoCommitService implements ManagementService {
     // Cached committed tail so that we do not need to fetch every cycle.
     private long committedTail = Address.NON_ADDRESS;
 
-    AutoCommitService(@NonNull ServerContext serverContext,
+    public AutoCommitService(@NonNull ServerContext serverContext,
                       @NonNull SingletonResource<CorfuRuntime> runtimeSingletonResource) {
         this.serverContext = serverContext;
         this.runtimeSingletonResource = runtimeSingletonResource;
