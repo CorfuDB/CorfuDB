@@ -1,20 +1,22 @@
-
 ### Failure Detector to detect an unstable node
 
-In certain operational scenarios, we encounter situations where a node within a cluster repeatedly connects to and disconnects from the cluster. 
+In certain operational scenarios, we encounter situations where a node within a cluster repeatedly connects to and
+disconnects from the cluster.
 This behavior can point to potential issues when too many updates make a cluster unstable.
 
-One proposed way to enhance the Failure Detector mechanism in Corfu is by introducing rules 
-that control how often individual nodes can update the layout. 
-This enhancement involves a dynamic scoring system that keeps track of each node's activity regarding layout updates. 
-When a node starts making frequent layout changes, its score gradually increases. 
+One proposed way to enhance the Failure Detector mechanism in Corfu is by introducing rules
+that control how often individual nodes can update the layout.
+This enhancement involves a dynamic scoring system that keeps track of each node's activity regarding layout updates.
+When a node starts making frequent layout changes, its score gradually increases.
 The higher the score, the less frequently the node is allowed to make further layout updates.
 
-The underlying idea behind this approach is to limit the undesirable outcome of constant changes to the database layout. 
-By assigning penalties to nodes with high scores, the system effectively limits their ability to carry out frequent layout modifications. 
+The underlying idea behind this approach is to limit the undesirable outcome of constant changes to the database layout.
+By assigning penalties to nodes with high scores, the system effectively limits their ability to carry out frequent
+layout modifications.
 As a result, this contributes to improving the overall stability of the Corfu db.
 
-In practice, this scoring-based constraint mechanism represents an approach to addressing a particular scenario of an erratic node behavior, 
+In practice, this scoring-based constraint mechanism represents an approach to addressing a particular scenario of an
+erratic node behavior,
 aligning the cluster more closely with the desired operational reliability and stability.
 
 #### The Solution
@@ -33,24 +35,19 @@ LAYOUTS_CURRENT.ds:
 
 ```json
 {
-  "unresponsiveServers": ["B"],
-  "status": {
-    "node":"A", 
-    "clusterStabilityStatus": "GREEN",
-    "healProbes":[
-        { "iteration": 1, "time": 123 },
-        { "iteration": 2, "time": 567 }
-    ]
-  }
+  "failureProbes": [
+    "03:08:00",
+    "03:08:27",
+    "03:08:59",
+    "03:09:55",
+    "03:11:37"
+  ],
+  "status": "RED"
 }
 ```
 
-healProbes - is a parameter that we take from previous layout updates ONLY for HEALING, 
+failureProbes - is a parameter that we take from previous layout updates ONLY for FAILURES and HEALING, 
 and we ignore any other layout and epoch updates, including state transfer updates.
-
-healProbes is a Pair of iteration number, Timestamp when that heal request was allowed.
-The iteration number increases exponentially after every allowed heal request.
-The iteration number decreases/resets when the next query happens after 1.5 times or 2 times the timeout for that iteration respectively.
 
 To calculate a cool-off timeout for the layout we are using exponential backoff: T = interval * Math.pow(rate, iteration) 
  - for last 3 updates: up to 7-min cool-off period
@@ -73,3 +70,85 @@ The algorithm is applied only during "HEAL" operation, we check the timeouts (se
 updated more times than it allowed then failure detector is not allowed to continue and remove the node from the unresponsive list
 and needs to wait for: X = "Cool-off Timeout" - time passed by last 3 updates.
 
+#### Scenario 1:
+Notes: 
+ - update - means healing operation
+```
+00:00:30 -> 
+{
+    cluster: unresponsive[NodeA],
+    
+    // Latest updates of the layout. 
+      - timeout: 1,3,7 minutes, 
+      - count: how many time the updates happened, 
+      - limit: allowed number of updates 
+    probes: [
+        { timeout: 1, time: 00:00:30}
+        { timeout: 3, time: None}
+        { timeout: 7, time: None}
+    ]
+    
+    status: OK,
+    note: starting point, empty counters
+}
+
+00:00:47 -> 
+{
+    cluster: unresponsive[],
+    probes: [
+        { timeout: 1, count: 1, limit: 1, time: 00:00:47} // 00:00:47-00:00:30=17 sec -> less than a minute, increment all counters 
+        { timeout: 3, count: 1, limit: 2, time: 00:00:30}
+        { timeout: 7, count: 1, limit: 3, time: 00:00:30}
+    ]
+    status: OK,
+    note: first healing
+}
+
+00:01:03 ->
+{
+    cluster: unresponsive[NodeA],
+    probes: [
+        { timeout: 1, count: 1, limit: 1, time: 00:00:47 } // 00:00:47-00:00:30=17 sec -> less than a minute, increment all counters 
+        { timeout: 3, count: 1, limit: 2, time: 00:00:30 }
+        { timeout: 7, count: 1, limit: 3, time: 00:00:30 }
+    ]
+    status: OK,
+    note: starting point, empty counters
+}
+{
+    cluster: ,
+    probes: [
+        { timeout: 1, count: 1, limit: 1}
+        { timeout: 3, count: 1, limit: 2}
+        { timeout: 7, count: 1, limit: 3}
+    ]
+    status: OK,
+    note: failure detection, NodeA again. We let it go, we handle only healing
+}
+
+00:01:15 ->
+{
+    iteration: 2, 
+    cluster: unresponsive[], 
+    status: REJECTED
+    note: time diff between previous heal and the current one is: 00:01:15-00:00:47=28 seconds.
+          The allowed time out is 1 minute.
+}
+
+00:01:50 ->
+{
+    iteration: 2, 
+    cluster: unresponsive[], 
+    status: OK
+    note: the timeout is more than a minute, we are ok to heal. Next iteration is allowed after 3 min timeout
+}
+
+00:01:50 ->
+{
+    iteration: 2, 
+    cluster: unresponsive[], 
+    status: OK
+    note: the timeout is more than a minute, we are ok to heal
+} 
+
+```
