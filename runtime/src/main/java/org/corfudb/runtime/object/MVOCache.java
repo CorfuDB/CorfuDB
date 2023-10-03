@@ -10,6 +10,8 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.runtime.CorfuRuntime;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nonnull;
 import java.util.List;
@@ -31,7 +33,9 @@ public class MVOCache<T extends ICorfuSMR<T>> {
      * A collection of strong references to all versioned objects and their state.
      */
     @Getter
-    private final Cache<VersionedObjectIdentifier, T> objectCache;
+    private final Cache<VersionedObjectIdentifier, InstrumentedSMRSnapshot<T>> objectCache;
+
+    private final Logger statsLogger = LoggerFactory.getLogger("org.corfudb.client.cachemetrics");
 
     public MVOCache(@Nonnull CorfuRuntime corfuRuntime) {
 
@@ -53,14 +57,20 @@ public class MVOCache<T extends ICorfuSMR<T>> {
                 .map(registry -> GuavaCacheMetrics.monitor(registry, objectCache, "mvo_cache"));
     }
 
-    private void handleEviction(RemovalNotification<VersionedObjectIdentifier, T> notification) {
+    private void handleEviction(RemovalNotification<VersionedObjectIdentifier, InstrumentedSMRSnapshot<T>> notification) {
         log.trace("handleEviction: evicting {} cause {}", notification.getKey(), notification.getCause());
+
+        if(statsLogger.isDebugEnabled()) {
+            statsLogger.debug("handleEviction: {},{},{},{}", notification.getKey().getObjectId(),
+                    notification.getKey().getVersion(), notification.getValue().getMetrics(), System.nanoTime());
+        }
     }
 
     /**
      * Shutdown the MVOCache and perform any necessary cleanup.
      */
     public void shutdown() {
+        objectCache.invalidateAll();
     }
 
     /**
@@ -68,7 +78,7 @@ public class MVOCache<T extends ICorfuSMR<T>> {
      * @param voId The desired object version.
      * @return An optional containing the corresponding versioned object, if present.
      */
-    public Optional<T> get(@Nonnull VersionedObjectIdentifier voId) {
+    public Optional<InstrumentedSMRSnapshot<T>> get(@Nonnull VersionedObjectIdentifier voId) {
         if (log.isTraceEnabled()) {
             log.trace("MVOCache: performing a get for {}", voId.toString());
         }
@@ -81,11 +91,12 @@ public class MVOCache<T extends ICorfuSMR<T>> {
      * @param voId   The version of the object being placed into the cache.
      * @param object The actual underlying object corresponding to this voId.
      */
-    public void put(@Nonnull VersionedObjectIdentifier voId, @Nonnull T object) {
+    public void put(@Nonnull VersionedObjectIdentifier voId, @Nonnull InstrumentedSMRSnapshot<T> object) {
         if (log.isTraceEnabled()) {
             log.trace("MVOCache: performing a put for {}", voId.toString());
         }
 
+        object.getMetrics().setCacheEntryTs(System.nanoTime());
         objectCache.put(voId, object);
     }
 
