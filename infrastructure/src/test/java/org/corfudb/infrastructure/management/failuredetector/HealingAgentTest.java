@@ -1,7 +1,7 @@
 package org.corfudb.infrastructure.management.failuredetector;
 
 import org.corfudb.infrastructure.NodeNames;
-import org.corfudb.infrastructure.RemoteMonitoringService.DetectorTask;
+import org.corfudb.infrastructure.management.failuredetector.RemoteMonitoringService.DetectorTask;
 import org.corfudb.infrastructure.datastore.DataStore;
 import org.corfudb.infrastructure.management.PollReport;
 import org.corfudb.protocols.wireprotocol.ClusterState;
