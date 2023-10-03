@@ -2,6 +2,7 @@ package org.corfudb.runtime.object;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.protocols.logprotocol.SMREntry;
@@ -73,6 +74,8 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
      */
     private volatile T currentObject;
 
+    private volatile InstrumentedSMRSnapshot<T> currentInstrumentedObject;
+
     /**
      * All versions up to (and including) materializedUpTo have had their versions
      * materialized in the MVOCache. This value is always in sync with currentObject,
@@ -100,6 +103,8 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
     private final MVOCache<T> mvoCache;
 
     private final Logger correctnessLogger = LoggerFactory.getLogger("correctness");
+
+    private final Logger statsLogger = LoggerFactory.getLogger("org.corfudb.client.cachemetrics");
 
     /**
      * Number of times to retry a sync when a TrimmedException is encountered.
@@ -130,6 +135,8 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
 
         this.newInstanceObject = newObjectFn.get();
         this.currentObject = newObjectFn.get();
+        this.currentInstrumentedObject = new InstrumentedSMRSnapshot<>(currentObject);
+
         this.mvoCache = corfuRuntime.getObjectsView().getMvoCache();
         this.trimRetry = corfuRuntime.getParameters().getTrimRetry();
         wrapperObject.closeWrapper();
@@ -188,6 +195,8 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
                 return snapshot.get();
             }
 
+            long originalMaterializedUpTo = materializedUpTo;
+
             // If not, perform a sync on the stream.
             for (int x = 0; x < trimRetry; x++) {
                 try {
@@ -218,11 +227,27 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
                 log.trace("SnapshotProxy[{}] write lock request at {}", Utils.toReadableId(getID()), streamTs);
             }
 
+            if (streamTs != originalMaterializedUpTo && statsLogger.isDebugEnabled()) {
+                statsLogger.debug("Sync: {},{},{}", getID(), originalMaterializedUpTo, streamTs);
+            }
+
+            updateSMRSnapshotMetrics(currentInstrumentedObject, false);
+
             correctnessLogger.trace(CORRECTNESS_LOG_MSG, streamTs);
-            return new SnapshotProxy<>(currentObject, streamTs, upcallTargetMap);
+            return new SnapshotProxy<>(currentInstrumentedObject.getSnapshot(), streamTs, upcallTargetMap);
         } finally {
             lock.unlock(lockTs);
         }
+    }
+
+    private void updateSMRSnapshotMetrics(@NonNull InstrumentedSMRSnapshot<T> snapshot, boolean fromCache) {
+        if (fromCache) {
+            snapshot.getMetrics().requestedWhileCached();
+        } else {
+            snapshot.getMetrics().requestedWhileGenerated();
+        }
+
+        snapshot.getMetrics().setLastAccessedTs(System.nanoTime());
     }
 
     /**
@@ -265,14 +290,16 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
                     log.trace("SnapshotProxy[{}] optimistic request at {}", Utils.toReadableId(getID()), streamTs);
                 }
 
-                T versionedObject;
+                InstrumentedSMRSnapshot<T> versionedObject;
+                boolean fromCache = true;
 
                 // The latest visible version for the provided timestamp is equal to what is maintained
                 // by the MVO. In this case, there is no need to query the cache. This check is required
                 // since the MVOCache might have evicted all versions associated with this object, even
                 // though streamTs is the most recent tail for this stream.
                 if (streamTs == materializedUpTo) {
-                    versionedObject = currentObject;
+                    versionedObject = currentInstrumentedObject;
+                    fromCache = false;
                 } else {
                     versionedObject = mvoCache.get(voId).orElseThrow(() -> new TrimmedException(streamTs,
                             String.format("Trimmed address %s has been evicted from MVOCache. StreamAddressSpace: %s.",
@@ -281,7 +308,8 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
 
                 if (lock.validate(lockTs)) {
                     correctnessLogger.trace(CORRECTNESS_LOG_MSG, streamTs);
-                    return Optional.of(new SnapshotProxy<>(versionedObject, streamTs, upcallTargetMap));
+                    updateSMRSnapshotMetrics(versionedObject, fromCache);
+                    return Optional.of(new SnapshotProxy<>(versionedObject.getSnapshot(), streamTs, upcallTargetMap));
                 }
             }
 
@@ -327,13 +355,14 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
                         // If we observe a new version, place the previous one into the MVOCache.
                         if (globalAddress > materializedUpTo && objectOpenOption == ObjectOpenOption.CACHE) {
                             final VersionedObjectIdentifier voId = new VersionedObjectIdentifier(getID(), materializedUpTo);
-                            mvoCache.put(voId, currentObject);
+                            mvoCache.put(voId, currentInstrumentedObject);
                         }
 
                         // In the case where addressUpdates corresponds to a HOLE, getSmrEntryList() will
                         // produce an empty list and the below will be a no-op. This means that there can
                         // be multiple versions that correspond to the same exact object.
                         addressUpdates.getSmrEntryList().forEach(this::applyUpdateUnsafe);
+                        currentInstrumentedObject = new InstrumentedSMRSnapshot<>(currentObject);
                         addressSpace.addAddress(globalAddress);
                         materializedUpTo = globalAddress;
                         resolvedUpTo = globalAddress;
@@ -422,6 +451,7 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
         log.debug("Reset[{}] MVO", Utils.toReadableId(getID()));
         currentObject.close();
         currentObject = newObjectFn.get();
+        currentInstrumentedObject = new InstrumentedSMRSnapshot<>(currentObject);
         addressSpace = new StreamAddressSpace();
         materializedUpTo = Address.NON_ADDRESS;
         resolvedUpTo = Address.NON_ADDRESS;
