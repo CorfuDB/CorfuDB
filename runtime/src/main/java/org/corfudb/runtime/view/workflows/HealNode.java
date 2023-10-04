@@ -7,9 +7,11 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.BaseClient;
 import org.corfudb.runtime.clients.ManagementClient;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.runtime.view.Layout.LayoutSegment;
 
 import java.time.Duration;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeoutException;
 
@@ -29,20 +31,26 @@ public class HealNode extends WorkflowRequest {
 
     @Override
     protected UUID sendRequest(@NonNull ManagementClient managementClient) throws TimeoutException {
-        CreateWorkflowResponse resp = managementClient.healNodeRequest(nodeForWorkflow,
-                true, true, true, 0);
+        CreateWorkflowResponse resp = managementClient
+                .healNodeRequest(nodeForWorkflow, true, true, true, 0);
+
         log.info("sendRequest: requested to heal {} on {}:{}",
                 nodeForWorkflow, managementClient.getRouter().getHost(),
-                managementClient.getRouter().getPort());
+                managementClient.getRouter().getPort()
+        );
+
         return resp.getWorkflowId();
     }
 
     @Override
     protected boolean verifyRequest(@NonNull Layout layout) {
         log.info("verifyRequest: {} in {}", this, layout);
-        return layout.getAllServers().contains(nodeForWorkflow)
-                && layout.getSegmentsForEndpoint(nodeForWorkflow).size()
-                == layout.getSegments().size();
+        Set<LayoutSegment> nodeSegments = layout.getSegmentsForEndpoint(nodeForWorkflow);
+
+        boolean isNodeInTheLayout = layout.getAllServers().contains(nodeForWorkflow);
+        boolean segmentConsistency = nodeSegments.size() == layout.getSegments().size();
+
+        return isNodeInTheLayout && segmentConsistency;
     }
 
     @Override

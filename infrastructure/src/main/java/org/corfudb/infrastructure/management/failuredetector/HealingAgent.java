@@ -5,6 +5,9 @@ import com.google.common.collect.ImmutableSet;
 import lombok.Builder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.management.failuredetector.LayoutRateLimit.LayoutProbe;
+import org.corfudb.infrastructure.management.failuredetector.LayoutRateLimit.ProbeCalc;
+import org.corfudb.infrastructure.management.failuredetector.LayoutRateLimit.ProbeStatus;
 import org.corfudb.infrastructure.management.failuredetector.RemoteMonitoringService.DetectorTask;
 import org.corfudb.infrastructure.management.ClusterAdvisor;
 import org.corfudb.infrastructure.management.FileSystemAdvisor;
@@ -84,6 +87,16 @@ public class HealingAgent {
                 .healedServer(pollReport.getClusterState(), localEndpoint)
                 .map(healedNode -> {
                     Set<String> healedNodes = ImmutableSet.of(healedNode.getEndpoint());
+
+                    ProbeCalc probeCalc = ProbeCalc.builder().build();
+                    for (Long probeTime : layout.getProbes()) {
+                        probeCalc.update(new LayoutProbe(probeTime));
+                    }
+                    ProbeStatus probeStats = probeCalc.calcStats(LayoutProbe.current());
+                    if (probeStats.isAllowed()) {
+                        log.warn("Healing disabled due to timeout: {}", probeStats);
+                        return skippedTask;
+                    }
 
                     return handleHealing(pollReport, layout, healedNodes, localEndpoint)
                             .thenApply(healingResult -> {

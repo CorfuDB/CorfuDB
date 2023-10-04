@@ -37,49 +37,49 @@ class LayoutRateLimitTest {
         assertEquals(1, calc.size());
 
         LayoutProbe update = new LayoutProbe(startTime + Duration.ofSeconds(59).toMillis());
-        ProbeStatus probeStatus = calc.isAllowed(update);
+        ProbeStatus probeStatus = calc.calcStats(update);
         assertFalse(probeStatus.isAllowed);
         assertEquals(1, probeStatus.deniedOnIteration.get());
         calc.update(update);
         assertEquals(1, calc.size());
 
         update = new LayoutProbe(startTime + Duration.ofSeconds(60).toMillis());
-        assertTrue(calc.isAllowed(update));
+        assertTrue(calc.calcStats(update).isAllowed);
         calc.update(update);
         assertEquals(2, calc.size());
 
         update = new LayoutProbe(startTime + Duration.ofSeconds(61).toMillis());
-        assertFalse(calc.isAllowed(update));
+        assertFalse(calc.calcStats(update).isAllowed);
         calc.update(update);
         assertEquals(2, calc.size());
 
         update = new LayoutProbe(startTime + Duration.ofMinutes(3).toMillis());
-        assertTrue(calc.isAllowed(update));
+        assertTrue(calc.calcStats(update).isAllowed);
         calc.update(update);
         assertEquals(3, calc.size());
 
         update = new LayoutProbe(startTime + Duration.ofMinutes(4).toMillis());
-        assertFalse(calc.isAllowed(update));
+        assertFalse(calc.calcStats(update).isAllowed);
         calc.update(update);
         assertEquals(3, calc.size());
 
         update = new LayoutProbe(startTime + Duration.ofMinutes(7).toMillis());
-        assertTrue(calc.isAllowed(update));
+        assertTrue(calc.calcStats(update).isAllowed);
         calc.update(update);
         assertEquals(4, calc.size());
 
         update = new LayoutProbe(startTime + Duration.ofMinutes(15).toMillis());
-        assertTrue(calc.isAllowed(update));
+        assertTrue(calc.calcStats(update).isAllowed);
         calc.update(update);
         assertEquals(4, calc.size());
 
         update = new LayoutProbe(startTime + Duration.ofMinutes(16).toMillis());
-        assertTrue(calc.isAllowed(update));
+        assertTrue(calc.calcStats(update).isAllowed);
         calc.update(update);
         assertEquals(4, calc.size());
 
         update = new LayoutProbe(startTime + Duration.ofMinutes(17).toMillis());
-        assertTrue(calc.isAllowed(update));
+        assertTrue(calc.calcStats(update).isAllowed);
         calc.update(update);
         assertEquals(4, calc.size());
     }

@@ -125,8 +125,9 @@ public final class CorfuProtocolWorkflows {
      * @param isLogUnit     true if the node is a LogUnit server
      * @return              a HealNodeWorkflowMsg to be used in an OrchestratorRequestMsg
      */
-    public static HealNodeWorkflowMsg getHealNodeWorkflowMsg(String endpoint, int stripeIndex,
-                                                             boolean isLayout, boolean isSequencer, boolean isLogUnit) {
+    public static HealNodeWorkflowMsg getHealNodeWorkflowMsg(
+            String endpoint, int stripeIndex, boolean isLayout, boolean isSequencer, boolean isLogUnit
+    ) {
         return HealNodeWorkflowMsg.newBuilder()
                 .setEndpoint(endpoint)
                 .setStripeIndex(stripeIndex)

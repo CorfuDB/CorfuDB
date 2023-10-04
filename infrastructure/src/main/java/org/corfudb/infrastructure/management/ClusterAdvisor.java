@@ -54,7 +54,7 @@ public interface ClusterAdvisor {
     /**
      * Provides a cluster graph generated from the {@link ClusterState}
      *
-     * @return
+     * @return ClusterGraph
      */
     ClusterGraph getGraph(ClusterState clusterState);
 

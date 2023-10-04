@@ -75,6 +75,10 @@ public class Layout {
      */
     @Getter
     List<String> unresponsiveServers;
+
+    @Getter
+    List<Long> probes;
+
     /**
      * The epoch of this layout.
      */

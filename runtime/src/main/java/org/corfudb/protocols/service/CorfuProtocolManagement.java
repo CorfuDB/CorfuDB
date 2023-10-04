@@ -304,12 +304,15 @@ public final class CorfuProtocolManagement {
      * @param isLogUnit   true if the node is a LogUnit server
      * @return a RequestPayloadMsg containing the ORCHESTRATOR request
      */
-    public static RequestPayloadMsg getHealNodeRequestMsg(String endpoint, int stripeIndex, boolean isLayout,
-                                                          boolean isSequencer, boolean isLogUnit) {
+    public static RequestPayloadMsg getHealNodeRequestMsg(
+            String endpoint, int stripeIndex, boolean isLayout, boolean isSequencer, boolean isLogUnit
+    ) {
+        OrchestratorRequestMsg requestMsg = OrchestratorRequestMsg.newBuilder()
+                .setHealNode(getHealNodeWorkflowMsg(endpoint, stripeIndex, isLayout, isSequencer, isLogUnit))
+                .build();
+
         return RequestPayloadMsg.newBuilder()
-                .setOrchestratorRequest(OrchestratorRequestMsg.newBuilder()
-                        .setHealNode(getHealNodeWorkflowMsg(endpoint, stripeIndex, isLayout, isSequencer, isLogUnit))
-                        .build())
+                .setOrchestratorRequest(requestMsg)
                 .build();
     }
 
