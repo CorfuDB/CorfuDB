@@ -2,6 +2,9 @@ package org.corfudb.infrastructure.orchestrator.workflows;
 
 import com.google.common.collect.ImmutableList;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.management.failuredetector.LayoutRateLimit.LayoutProbe;
+import org.corfudb.infrastructure.management.failuredetector.LayoutRateLimit.ProbeCalc;
+import org.corfudb.infrastructure.management.failuredetector.LayoutRateLimit.ProbeStatus;
 import org.corfudb.infrastructure.orchestrator.Action;
 import org.corfudb.infrastructure.orchestrator.actions.RestoreRedundancyMergeSegments;
 import org.corfudb.infrastructure.redundancy.RedundancyCalculator;
@@ -30,11 +33,13 @@ public class HealNodeWorkflow extends AddNodeWorkflow {
     public HealNodeWorkflow(HealNodeRequest healNodeRequest) {
         super(new AddNodeRequest(healNodeRequest.getEndpoint()));
         this.request = healNodeRequest;
-        this.actions = ImmutableList.of(new HealNodeToLayout(),
-                RestoreRedundancyMergeSegments.builder()
-                        .currentNode(request.getEndpoint())
-                        .redundancyCalculator(new RedundancyCalculator(request.getEndpoint()))
-                        .build());
+
+        RestoreRedundancyMergeSegments mergeSegmentsAction = RestoreRedundancyMergeSegments.builder()
+                .currentNode(request.getEndpoint())
+                .redundancyCalculator(new RedundancyCalculator(request.getEndpoint()))
+                .build();
+
+        this.actions = ImmutableList.of(new HealNodeToLayout(), mergeSegmentsAction);
     }
 
     @Override
@@ -57,9 +62,22 @@ public class HealNodeWorkflow extends AddNodeWorkflow {
         @Override
         public void impl(@Nonnull CorfuRuntime runtime) throws Exception {
             Layout currentLayout = new Layout(runtime.getLayoutView().getLayout());
-            runtime.getLayoutManagementView().healNode(currentLayout, request.getEndpoint());
-            runtime.invalidateLayout();
-            newLayout = new Layout(runtime.getLayoutView().getLayout());
+
+            ProbeCalc probeCalc = ProbeCalc.builder().build();
+            for (long probeTime : currentLayout.getProbes()) {
+                probeCalc.update(new LayoutProbe(probeTime));
+            }
+
+            ProbeStatus stats = probeCalc.calcStatsForNewUpdate();
+            if (stats.isAllowed()) {
+                currentLayout.setProbes(probeCalc.getProbeTimes());
+
+                runtime.getLayoutManagementView().healNode(currentLayout, request.getEndpoint());
+                runtime.invalidateLayout();
+                newLayout = new Layout(runtime.getLayoutView().getLayout());
+            } else {
+                log.warn("Healing disabled: {}", probeCalc);
+            }
         }
     }
 }
