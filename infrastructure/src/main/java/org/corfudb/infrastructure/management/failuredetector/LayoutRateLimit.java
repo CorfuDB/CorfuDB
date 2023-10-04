@@ -103,6 +103,7 @@ public class LayoutRateLimit {
     }
 
     @Builder
+    @AllArgsConstructor
     public static class LayoutProbe implements Comparable<LayoutProbe> {
         //UTC time
         private final long time;
