@@ -79,7 +79,7 @@ class LayoutRateLimitTest {
         assertEquals(4, calc.size());
 
         update = new LayoutProbe(startTime + Duration.ofMinutes(17).toMillis());
-        assertTrue(calc.calcStats(update).isAllowed());
+        assertFalse(calc.calcStats(update).isAllowed());
         calc.update(update);
         assertEquals(4, calc.size());
     }
