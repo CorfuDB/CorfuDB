@@ -3,19 +3,21 @@ package org.corfudb.infrastructure.management.failuredetector;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Builder.Default;
+import lombok.Getter;
+import lombok.ToString;
 
 import java.time.Duration;
-import java.util.Comparator;
 import java.util.Deque;
 import java.util.LinkedList;
+import java.util.List;
 import java.util.Optional;
-import java.util.PriorityQueue;
 import java.util.Queue;
+import java.util.stream.Collectors;
 
 public class LayoutRateLimit {
 
     @Builder
-    static class ProbeCalc {
+    public static class ProbeCalc {
         /**
          * Number of updates that we keep. Must be equal to the max amount of iterations
          */
@@ -24,7 +26,7 @@ public class LayoutRateLimit {
         private final Queue<LayoutProbe> probes = new LinkedList<>();
 
         public void update(LayoutProbe update) {
-            if (isAllowed(update).isAllowed) {
+            if (calcStats(update).isAllowed) {
                 probes.add(update);
             }
 
@@ -33,13 +35,23 @@ public class LayoutRateLimit {
             }
         }
 
-        public ProbeStatus isAllowed(LayoutProbe update) {
-            Deque<LayoutProbe> tmpProbes = new LinkedList<>(probes);
-            tmpProbes.add(update);
-            return isAllowed(new LinkedList<>(tmpProbes));
+        public List<Long> getProbeTimes() {
+            return probes.stream()
+                    .map(probe -> probe.time)
+                    .collect(Collectors.toList());
         }
 
-        private ProbeStatus isAllowed(Deque<LayoutProbe> tmpProbes) {
+        public ProbeStatus calcStatsForNewUpdate() {
+            return calcStats(LayoutProbe.current());
+        }
+
+        public ProbeStatus calcStats(LayoutProbe update) {
+            Deque<LayoutProbe> tmpProbes = new LinkedList<>(probes);
+            tmpProbes.add(update);
+            return calcStats(new LinkedList<>(tmpProbes));
+        }
+
+        private ProbeStatus calcStats(Deque<LayoutProbe> tmpProbes) {
             if (tmpProbes.isEmpty()) {
                 return new ProbeStatus(true, Optional.empty());
             }
@@ -55,7 +67,7 @@ public class LayoutRateLimit {
                 Duration diff = Duration.ofMillis(latestUpdate.time - currProbe.time);
 
                 if (timeout.getSeconds() > diff.getSeconds()) {
-                    return new ProbeStatus(false, Optional.of(timeoutCalc.iteration));
+                    return new ProbeStatus(false, Optional.of(timeoutCalc));
                 }
 
                 timeoutCalc = timeoutCalc.next();
@@ -91,7 +103,8 @@ public class LayoutRateLimit {
     }
 
     @Builder
-    static class LayoutProbe implements Comparable<LayoutProbe> {
+    public static class LayoutProbe implements Comparable<LayoutProbe> {
+        //UTC time
         private final long time;
 
         public static LayoutProbe current() {
@@ -105,8 +118,10 @@ public class LayoutRateLimit {
     }
 
     @AllArgsConstructor
+    @Getter
+    @ToString
     public static class ProbeStatus {
-        public final boolean isAllowed;
-        public final Optional<Integer> deniedOnIteration;
+        private final boolean isAllowed;
+        private final Optional<TimeoutCalc> timeout;
     }
 }

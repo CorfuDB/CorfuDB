@@ -2,6 +2,7 @@ package org.corfudb.infrastructure.orchestrator.workflows;
 
 import com.google.common.collect.ImmutableList;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.management.failuredetector.LayoutRateLimit.LayoutProbe;
 import org.corfudb.infrastructure.management.failuredetector.LayoutRateLimit.ProbeCalc;
 import org.corfudb.infrastructure.management.failuredetector.LayoutRateLimit.ProbeStatus;
 import org.corfudb.infrastructure.orchestrator.Action;
@@ -11,8 +12,6 @@ import org.corfudb.protocols.wireprotocol.orchestrator.AddNodeRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.HealNodeRequest;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Layout;
-import org.corfudb.runtime.view.LayoutProbe;
-import org.corfudb.runtime.view.LayoutProbe.LayoutStatus;
 
 import javax.annotation.Nonnull;
 
@@ -65,20 +64,19 @@ public class HealNodeWorkflow extends AddNodeWorkflow {
             Layout currentLayout = new Layout(runtime.getLayoutView().getLayout());
 
             ProbeCalc probeCalc = ProbeCalc.builder().build();
-            for (LayoutProbe probe : currentLayout.getStatus().getHealProbes()) {
-                probeCalc.update(new LayoutProbe(probe.getIteration(), probe.getTime()));
+            for (long probeTime : currentLayout.getProbes()) {
+                probeCalc.update(new LayoutProbe(probeTime));
             }
 
-            ProbeStatus probeStatus = probeCalc.calcStatsForNewUpdate();
-            if (probeStatus.isAllowed()) {
-                LayoutStatus newLayoutStatus = new LayoutStatus(probeStatus.getStatus(), probeCalc.printToLayout());
-                currentLayout.setStatus(newLayoutStatus);
+            ProbeStatus stats = probeCalc.calcStatsForNewUpdate();
+            if (stats.isAllowed()) {
+                currentLayout.setProbes(probeCalc.getProbeTimes());
 
                 runtime.getLayoutManagementView().healNode(currentLayout, request.getEndpoint());
                 runtime.invalidateLayout();
                 newLayout = new Layout(runtime.getLayoutView().getLayout());
             } else {
-                log.warn("Healing disabled (layout update limit reached): probCalc {}, status {}", probeCalc, probeStatus);
+                log.warn("Healing disabled: {}", probeCalc);
             }
         }
     }

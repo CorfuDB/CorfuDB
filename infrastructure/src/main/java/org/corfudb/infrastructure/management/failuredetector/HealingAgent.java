@@ -5,6 +5,7 @@ import com.google.common.collect.ImmutableSet;
 import lombok.Builder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.management.failuredetector.LayoutRateLimit.LayoutProbe;
 import org.corfudb.infrastructure.management.failuredetector.LayoutRateLimit.ProbeCalc;
 import org.corfudb.infrastructure.management.failuredetector.LayoutRateLimit.ProbeStatus;
 import org.corfudb.infrastructure.management.failuredetector.RemoteMonitoringService.DetectorTask;
@@ -18,7 +19,6 @@ import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank.NodeRankByPartitionAttributes;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Layout;
-import org.corfudb.runtime.view.LayoutProbe;
 import org.corfudb.util.concurrent.SingletonResource;
 
 import java.time.Duration;
@@ -89,12 +89,12 @@ public class HealingAgent {
                     Set<String> healedNodes = ImmutableSet.of(healedNode.getEndpoint());
 
                     ProbeCalc probeCalc = ProbeCalc.builder().build();
-                    for (LayoutProbe probe : layout.getStatus().getHealProbes()) {
-                        probeCalc.update(new LayoutProbe(probe.getIteration(), probe.getTime()));
+                    for (Long probeTime : layout.getProbes()) {
+                        probeCalc.update(new LayoutProbe(probeTime));
                     }
-                    ProbeStatus status = probeCalc.calcStatsForNewUpdate();
-                    if (!status.isAllowed()) {
-                        log.warn("Healing disabled due to timeout: probCalc {}, status {}", probeCalc, status);
+                    ProbeStatus probeStats = probeCalc.calcStats(LayoutProbe.current());
+                    if (probeStats.isAllowed()) {
+                        log.warn("Healing disabled due to timeout: {}", probeStats);
                         return skippedTask;
                     }
 
