@@ -7,7 +7,6 @@ import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEvent;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEvent.ReplicationEventType;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEventInfoKey;
-import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStoreEntry;
@@ -23,6 +22,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.ExecutorService;
 
 import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.REPLICATION_EVENT_TABLE_NAME;
 import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.tryOpenTable;
@@ -117,7 +117,7 @@ public final class SnapshotSyncUtils {
         txnContext.putRecord(replicationEventTable, key, event, null);
     }
 
-    public static void removeUpgradeSnapshotSyncEvent(LogReplicationEvent event, CorfuStore corfuStore) {
+    public static void removeUpgradeSnapshotSyncEvent(UUID eventId, CorfuStore corfuStore, ExecutorService executor) {
         replicationEventTable = tryOpenTable(corfuStore, CORFU_SYSTEM_NAMESPACE, REPLICATION_EVENT_TABLE_NAME,
                 ReplicationEventInfoKey.class, ReplicationEvent.class, null);
 
@@ -129,7 +129,7 @@ public final class SnapshotSyncUtils {
                 boolean entryFound = false;
                 try (TxnContext txnContext = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
                     for (CorfuStoreEntry<ReplicationEventInfoKey, ReplicationEvent, Message> entry : events) {
-                        if (entry.getPayload().getEventId().equals(String.valueOf(event.getMetadata().getRequestId()))) {
+                        if (entry.getPayload().getEventId().equals(String.valueOf(eventId))) {
                             txnContext.delete(replicationEventTable, entry.getKey());
                             entryFound = true;
                             break;
@@ -141,15 +141,17 @@ public final class SnapshotSyncUtils {
                     throw new RetryNeededException();
                 }
                 if (entryFound) {
-                    log.info("Upgrade forced sync event removed, request id: {}", event.getMetadata().getRequestId());
+                    log.info("Upgrade forced sync event removed, request id: {}", eventId);
                 } else {
-                    log.info("No force sync event found with matching request id: {}", event.getMetadata().getRequestId());
+                    log.info("No force sync event found with matching request id: {}", eventId);
                 }
                 return null;
             }).run();
         } catch (InterruptedException e) {
             log.error("Unrecoverable exception while removing enforce snapshot sync event", e);
             throw new UnrecoverableCorfuInterruptedError(e);
+        } finally {
+            executor.shutdown();
         }
     }
 
