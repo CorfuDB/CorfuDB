@@ -89,11 +89,11 @@ public class HealingAgent {
                     Set<String> healedNodes = ImmutableSet.of(healedNode.getEndpoint());
 
                     ProbeCalc probeCalc = ProbeCalc.builder().build();
-                    for (Long probeTime : layout.getProbes()) {
+                    for (long probeTime : layout.getProbes()) {
                         probeCalc.update(new LayoutProbe(probeTime));
                     }
                     ProbeStatus probeStats = probeCalc.calcStats(LayoutProbe.current());
-                    if (probeStats.isAllowed()) {
+                    if (!probeStats.isAllowed()) {
                         log.warn("Healing disabled due to timeout: {}", probeStats);
                         return skippedTask;
                     }
