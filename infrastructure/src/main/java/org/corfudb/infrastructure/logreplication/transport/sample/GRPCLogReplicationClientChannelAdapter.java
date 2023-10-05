@@ -429,7 +429,6 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
 
         // Send log replication entries across channel
         replicationReqObserverMap.get(Pair.of(sessionMsg, requestId)).onNext(request);
-        this.session = sessionMsg;
     }
 
 
