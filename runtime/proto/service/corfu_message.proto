@@ -153,7 +153,7 @@ message ResponsePayloadMsg {
     LogReplicationLeadershipLossMsg lr_leadership_loss = 73;
     ReverseReplicateMsg lr_reverse_replicate_msg = 74;
 
-    LogReplicationSinkSessionInitializationMsg lr_sink_session_initialization = 75;
+    LogReplicationSinkSessionInitializationAck lr_sink_session_initialization_ack = 75;
 
 
     // Server Error
