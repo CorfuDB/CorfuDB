@@ -32,9 +32,6 @@ public abstract class IClientChannelAdapter {
     @Getter
     private IChannelContext channelContext;
 
-    @Getter
-    public LogReplicationSession session;
-
     /**
      * Default Constructor
      *
