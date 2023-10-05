@@ -32,11 +32,9 @@ import org.corfudb.util.serializer.ProtobufSerializer;
 import javax.annotation.Nullable;
 import java.lang.reflect.InvocationTargetException;
 import java.time.Instant;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.CancellationException;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 import static org.corfudb.runtime.LogReplication.*;
@@ -163,11 +161,13 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
     private class SnapSyncRequestor extends StreamListenerResumeOrDefault {
 
         private final LRTransmitterReplicationModule snapSyncProvider;
+        private final ConcurrentHashMap<String, SnapshotSyncDataTransmitter> pendingFullSyncsPerDestination;
 
         public SnapSyncRequestor(CorfuStore store, LRTransmitterReplicationModule snapSyncProvider,
                                  String namespace, String streamTag, List<String> tablesOfInterest) {
             super(store, namespace, streamTag, tablesOfInterest);
             this.snapSyncProvider = snapSyncProvider;
+            this.pendingFullSyncsPerDestination = new ConcurrentHashMap<>();
         }
 
         @Override
@@ -201,163 +201,181 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
             if (fullSyncEvent != null) {
                 SnapshotSyncDataTransmitter snapshotSyncDataTransmitter = new SnapshotSyncDataTransmitter(
                         fullSyncEvent, key);
+
+                SnapshotSyncDataTransmitter previousRequestForSameDestination =
+                        pendingFullSyncsPerDestination.get(key.getSession().getSinkClusterId());
+                if (previousRequestForSameDestination != null) {
+                    log.info("Cancelling prior full sync request for destination {} ",
+                            snapshotSyncDataTransmitter.getFullSyncRequestIdFromLR());
+                    snapSyncProvider.cancel(previousRequestForSameDestination);
+                    pendingFullSyncsPerDestination.remove(key.getSession().getSinkClusterId());
+                    previousRequestForSameDestination.cancel();
+                }
+                pendingFullSyncsPerDestination.put(key.getSession().getSinkClusterId(), snapshotSyncDataTransmitter);
                 snapSyncProvider.provideFullStateData(snapshotSyncDataTransmitter);
             }
         }
-    }
 
-    private class SnapshotSyncDataTransmitter implements LRFullStateReplicationContext {
+        /**
+         * This class contains methods that are invoked by the RoutingQueueSender's full sync provider to transmit
+         * batches of full sync data via Log Replicator.
+         */
+        private class SnapshotSyncDataTransmitter implements LRFullStateReplicationContext {
 
-        @Getter
-        @Setter
-        ScopedTransaction snapshot = null;
+            @Getter
+            @Setter
+            ScopedTransaction snapshot = null;
 
-        private long baseSnapshotTimestamp;
+            private long baseSnapshotTimestamp;
 
-        private final ReplicationEvent requestingEvent;
+            private final ReplicationEvent requestingEvent;
 
-        ReplicationEventInfoKey key;
+            ReplicationEventInfoKey key;
 
-        public SnapshotSyncDataTransmitter(ReplicationEvent requestingEvent,
-                                           ReplicationEventInfoKey key) {
-            this.requestingEvent = requestingEvent;
-            this.baseSnapshotTimestamp = 0L;
-            this.key = key;
-        }
+            // destination cluster Id + log tail at time of LR Server's full sync request
+            // this forms the key to distinguish different full sync data requests from routing queue client.
+            @Getter
+            RoutingQSnapSyncHeaderKeyMsg fullSyncRequestIdFromLR;
 
-        @Override
-        public TxnContext getTxn() {
-            if (TransactionalContext.isInTransaction()) {
-                return TransactionalContext.getRootContext().getTxnContext();
-            }
-            return null;
-        }
-
-        @Override
-        public String getDestinationSiteId() {
-            return key.getSession().getSinkClusterId();
-        }
-
-        @Override
-        public UUID getRequestId() {
-            return UUID.fromString(requestingEvent.getEventId());
-        }
-
-        @Nullable
-        @Override
-        public ReplicationEvent.ReplicationEventType getReason() {
-            return requestingEvent.getType();
-        }
-
-        @Override
-        public void transmit(RoutingTableEntryMsg message) throws CancellationException {
-            transmit(message, 0);
-        }
-
-        @Override
-        public void transmit(RoutingTableEntryMsg message, int progress) throws CancellationException {
-            log.trace("Enqueuing message to snapshot sync queue, message: {}", message);
-            getTxn().logUpdateEnqueue(snapSyncQ, message, message.getDestinationsList().stream()
-                    .map(destination -> TableRegistry.getStreamIdForStreamTag(CORFU_SYSTEM_NAMESPACE,
-                            SNAPSHOT_SYNC_QUEUE_TAG_SENDER_PREFIX + destination + "_" + clientName))
-                    .collect(Collectors.toList()), corfuStore);
-
-            long metadataSize = message.getSerializedSize() -
-                    (message.getOpaquePayload().size() + message.getOpaqueMetadata().size() + INT_SIZE_IN_BYTES);
-
-            lrMetadataSize += metadataSize;
-            totalPayloadSize += message.getSerializedSize();
-
-            // Only once per transaction we set up the header to identify the request from LR server
-            if (TransactionalContext.getRootContext().getWriteSetInfo().getWriteSet().getSMRUpdates(lrSnapSyncTxnEnvelopeStreamId).isEmpty()) {
-                if (baseSnapshotTimestamp == 0) {
-                    if (snapshot != null) {
-                        baseSnapshotTimestamp = snapshot.getTxnSnapshot().getSequence();
-                        log.info("SnapSync base snapshot from Scoped Transaction = {}", baseSnapshotTimestamp);
-                    } else {
-                        baseSnapshotTimestamp = getTxn().getTxnSequence();
-                        log.info("SnapSync base snapshot from first snapshot sync transaction = {}", baseSnapshotTimestamp);
-                    }
-                }
-                RoutingQSnapSyncHeaderKeyMsg keyOfStartMarker = RoutingQSnapSyncHeaderKeyMsg.newBuilder()
+            public SnapshotSyncDataTransmitter(ReplicationEvent requestingEvent,
+                                               ReplicationEventInfoKey key) {
+                this.requestingEvent = requestingEvent;
+                this.baseSnapshotTimestamp = 0L;
+                this.fullSyncRequestIdFromLR = RoutingQSnapSyncHeaderKeyMsg.newBuilder()
                         .setSnapSyncRequestId(requestingEvent.getEventTimestamp().getSeconds())
                         .setDestination(key.getSession().getSinkClusterId()).build();
+                this.key = key;
+            }
+
+            @Override
+            public TxnContext getTxn() {
+                if (TransactionalContext.isInTransaction()) {
+                    return TransactionalContext.getRootContext().getTxnContext();
+                }
+                return null;
+            }
+
+            @Override
+            public String getDestinationSiteId() {
+                return key.getSession().getSinkClusterId();
+            }
+
+            @Override
+            public UUID getRequestId() {
+                return UUID.fromString(requestingEvent.getEventId());
+            }
+
+            @Nullable
+            @Override
+            public ReplicationEvent.ReplicationEventType getReason() {
+                return requestingEvent.getType();
+            }
+
+            @Override
+            public void transmit(RoutingTableEntryMsg message) throws CancellationException {
+                transmit(message, 0);
+            }
+
+            @Override
+            public void transmit(RoutingTableEntryMsg message, int progress) throws CancellationException {
+                log.trace("Enqueuing message to snapshot sync queue, message: {}", message);
+                getTxn().logUpdateEnqueue(snapSyncQ, message, message.getDestinationsList().stream()
+                        .map(destination -> TableRegistry.getStreamIdForStreamTag(CORFU_SYSTEM_NAMESPACE,
+                                SNAPSHOT_SYNC_QUEUE_TAG_SENDER_PREFIX + destination + "_" + clientName))
+                        .collect(Collectors.toList()), corfuStore);
+
+                long metadataSize = message.getSerializedSize() -
+                        (message.getOpaquePayload().size() + message.getOpaqueMetadata().size() + INT_SIZE_IN_BYTES);
+
+                lrMetadataSize += metadataSize;
+                totalPayloadSize += message.getSerializedSize();
+
+                // Only once per transaction we set up the header to identify the request from LR server
+                if (TransactionalContext.getRootContext().getWriteSetInfo().getWriteSet().getSMRUpdates(lrSnapSyncTxnEnvelopeStreamId).isEmpty()) {
+                    if (baseSnapshotTimestamp == 0) {
+                        if (snapshot != null) {
+                            baseSnapshotTimestamp = snapshot.getTxnSnapshot().getSequence();
+                            log.info("SnapSync base snapshot from Scoped Transaction = {}", baseSnapshotTimestamp);
+                        } else {
+                            baseSnapshotTimestamp = getTxn().getTxnSequence();
+                            log.info("SnapSync base snapshot from first snapshot sync transaction = {}", baseSnapshotTimestamp);
+                        }
+                    }
+                    RoutingQSnapSyncHeaderMsg startMarker = RoutingQSnapSyncHeaderMsg.newBuilder()
+                            .setSnapshotStartTimestamp(baseSnapshotTimestamp) // This is the base snapshot timestamp
+                            .build();
+
+                    CorfuRecord<RoutingQSnapSyncHeaderMsg, Message> markerEntry =
+                            new CorfuRecord<>(startMarker, null);
+
+                    Object[] smrArgs = new Object[2];
+                    smrArgs[0] = fullSyncRequestIdFromLR;
+                    smrArgs[1] = markerEntry;
+                    getTxn().logUpdate(LogReplicationUtils.lrSnapSyncTxnEnvelopeStreamId,
+                            new SMREntry("put", smrArgs,
+                                    corfuStore.getRuntime().getSerializers().getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE)),
+                            message.getDestinationsList().stream()
+                                    .map(destination -> TableRegistry.getStreamIdForStreamTag(CORFU_SYSTEM_NAMESPACE,
+                                            SNAPSHOT_SYNC_QUEUE_TAG_SENDER_PREFIX + destination + "_" + clientName))
+                                    .collect(Collectors.toList())
+                    );
+                }
+            }
+
+            @Override
+            public void markCompleted() throws CancellationException {
+                log.info("Got completion marker sinkId={} requestID={}", key.getSession().getSinkClusterId(), requestingEvent.getEventTimestamp().getSeconds());
                 RoutingQSnapSyncHeaderMsg startMarker = RoutingQSnapSyncHeaderMsg.newBuilder()
-                        .setSnapshotStartTimestamp(baseSnapshotTimestamp) // This is the base snapshot timestamp
+                        .setSnapshotStartTimestamp(-requestingEvent.getEventTimestamp().getSeconds())
                         .build();
 
                 CorfuRecord<RoutingQSnapSyncHeaderMsg, Message> markerEntry =
                         new CorfuRecord<>(startMarker, null);
 
                 Object[] smrArgs = new Object[2];
-                smrArgs[0] = keyOfStartMarker;
+                smrArgs[0] = fullSyncRequestIdFromLR;
                 smrArgs[1] = markerEntry;
-                getTxn().logUpdate(LogReplicationUtils.lrSnapSyncTxnEnvelopeStreamId,
-                        new SMREntry("put", smrArgs,
-                                corfuStore.getRuntime().getSerializers().getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE)),
-                        message.getDestinationsList().stream()
-                                .map(destination -> TableRegistry.getStreamIdForStreamTag(CORFU_SYSTEM_NAMESPACE,
-                                        SNAPSHOT_SYNC_QUEUE_TAG_SENDER_PREFIX + destination + "_" + clientName))
-                                .collect(Collectors.toList())
-                );
-            }
-        }
 
-        @Override
-        public void markCompleted() throws CancellationException {
-            log.info("Got completion marker sinkId={} requestID={}", key.getSession().getSinkClusterId(), requestingEvent.getEventTimestamp().getSeconds());
-            RoutingQSnapSyncHeaderKeyMsg keyOfStartMarker = RoutingQSnapSyncHeaderKeyMsg.newBuilder()
-                    .setDestination(key.getSession().getSinkClusterId())
-                    .setSnapSyncRequestId(requestingEvent.getEventTimestamp().getSeconds())
-                    .build();
-            RoutingQSnapSyncHeaderMsg startMarker = RoutingQSnapSyncHeaderMsg.newBuilder()
-                    .setSnapshotStartTimestamp(-requestingEvent.getEventTimestamp().getSeconds())
-                    .build();
+                try {
+                    IRetry.build(IntervalRetry.class, () -> {
+                        try (TxnContext txnContext = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+                            txnContext.logUpdate(LogReplicationUtils.lrSnapSyncTxnEnvelopeStreamId,
+                                    new SMREntry("put", smrArgs,
+                                            corfuStore.getRuntime().getSerializers().getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE)),
+                                    Arrays.asList(TableRegistry.getStreamIdForStreamTag(CORFU_SYSTEM_NAMESPACE,
+                                            SNAPSHOT_SYNC_QUEUE_TAG_SENDER_PREFIX +
+                                                    key.getSession().getSinkClusterId() + "_" + clientName))
+                            );
+                            txnContext.commit();
+                        } catch (TransactionAbortedException tae) {
+                            log.error("Error while attempting to insert an END_MARKER", tae);
+                            throw new RetryNeededException();
+                        }
+                        return null;
+                    }).run();
+                } catch (InterruptedException e) {
+                    log.error("Unrecoverable exception when attempting to insert an END_MARKER", e);
+                    throw new UnrecoverableCorfuInterruptedError(e);
+                }
 
-            CorfuRecord<RoutingQSnapSyncHeaderMsg, Message> markerEntry =
-                    new CorfuRecord<>(startMarker, null);
-
-            Object[] smrArgs = new Object[2];
-            smrArgs[0] = keyOfStartMarker;
-            smrArgs[1] = markerEntry;
-
-            try {
-                IRetry.build(IntervalRetry.class, () -> {
-                    try (TxnContext txnContext = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-                        txnContext.logUpdate(LogReplicationUtils.lrSnapSyncTxnEnvelopeStreamId,
-                                new SMREntry("put", smrArgs,
-                                        corfuStore.getRuntime().getSerializers().getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE)),
-                                Arrays.asList(TableRegistry.getStreamIdForStreamTag(CORFU_SYSTEM_NAMESPACE,
-                                        SNAPSHOT_SYNC_QUEUE_TAG_SENDER_PREFIX +
-                                            key.getSession().getSinkClusterId() + "_" + clientName))
-                        );
-                        txnContext.commit();
-                    } catch (TransactionAbortedException tae) {
-                        log.error("Error while attempting to insert an END_MARKER", tae);
-                        throw new RetryNeededException();
-                    }
-                    return null;
-                }).run();
-            } catch (InterruptedException e) {
-                log.error("Unrecoverable exception when attempting to insert an END_MARKER", e);
-                throw new UnrecoverableCorfuInterruptedError(e);
+                log.info("Total Payload Size = {}.  LR Metadata Size = {}", totalPayloadSize, lrMetadataSize);
+                totalPayloadSize = 0;
+                lrMetadataSize = 0;
+                if (getSnapshot() != null) {
+                    getSnapshot().close();
+                    setSnapshot(null);
+                }
+                pendingFullSyncsPerDestination.remove(key.getSession().getSinkClusterId());
             }
 
-            log.info("Total Payload Size = {}.  LR Metadata Size = {}", totalPayloadSize, lrMetadataSize);
-            totalPayloadSize = 0;
-            lrMetadataSize = 0;
-            if (getSnapshot() != null) {
-                getSnapshot().close();
-                setSnapshot(null);
-            }
-        }
-
-        @Override
-        public void cancel() {
-            // TODO: Need to figure out what might be LR's equivalent of a snapshot sync cancellation?
-            if (getSnapshot() != null) {
-                getSnapshot().close();
-                setSnapshot(null);
+            @Override
+            public void cancel() {
+                // TODO: Need to figure out what might be LR's equivalent of a snapshot sync cancellation?
+                if (getSnapshot() != null) {
+                    getSnapshot().close();
+                    setSnapshot(null);
+                }
+                pendingFullSyncsPerDestination.remove(key.getSession().getSinkClusterId());
             }
         }
     }
