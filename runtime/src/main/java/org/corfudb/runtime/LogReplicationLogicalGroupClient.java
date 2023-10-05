@@ -128,7 +128,6 @@ public class LogReplicationLogicalGroupClient {
                         log.info(String.format("Client already registered.\n--- ClientRegistrationId ---\n%s" +
                                 "--- ClientRegistrationInfo ---\n%s", clientKey, clientRegistrationInfo));
                     } else {
-                        log.info("going to put");
                         txn.putRecord(replicationRegistrationTable, clientKey, clientInfo, null);
                     }
 

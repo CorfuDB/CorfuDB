@@ -155,16 +155,10 @@ public class GRPCLogReplicationServerHandler extends LogReplicationGrpc.LogRepli
     public StreamObserver<RequestMsg> sinkSideSessionInitialize(StreamObserver<ResponseMsg> responseObserver) {
 
         return new StreamObserver<RequestMsg>() {
-
-            LogReplicationSession session;
-
-            long requestId;
-
             @Override
             public void onNext(RequestMsg replicationCorfuMessage) {
                 long requestId = replicationCorfuMessage.getHeader().getRequestId();
                 String name = replicationCorfuMessage.getPayload().getPayloadCase().name();
-                session = replicationCorfuMessage.getHeader().getSession();
                 log.info("Received[{}]: {}", requestId, name);
 
                 // Register at the observable first.

@@ -253,8 +253,8 @@ public class LogReplicationConfigManager {
                                 .collect(Collectors.toList()));
                         streamToTagsMap.put(streamId, tags);
                     }
-                //}
-            }
+                    //}
+                }
         });
 
         LogReplicationLogicalGroupConfig logicalGroupConfig = new LogReplicationLogicalGroupConfig(session,
@@ -354,10 +354,8 @@ public class LogReplicationConfigManager {
                         ReplicationModel model = entry.getPayload().getModel();
                         ReplicationSubscriber subscriber = ReplicationSubscriber.newBuilder()
                                 .setClientName(clientName).setModel(model).build();
-                        log.info("registering subscriber {}", subscriber);
                         registeredSubscribers.add(subscriber);
                     });
-
 
                     List<CorfuStoreEntry<ClientDestinationInfoKey, DestinationInfoVal, Message>> groupConfigResults =
                             txn.executeQuery(clientConfigTable, p -> true);
@@ -367,7 +365,6 @@ public class LogReplicationConfigManager {
                         ReplicationSubscriber subscriber = ReplicationSubscriber.newBuilder()
                                 .setClientName(clientName).setModel(model).build();
                         String groupName = entry.getKey().getGroupName();
-
                         if (registeredSubscribers.contains(subscriber)) {
                             groupSinksMap.put(groupName, new HashSet<>(entry.getPayload().getDestinationIdsList()));
                         } else {
