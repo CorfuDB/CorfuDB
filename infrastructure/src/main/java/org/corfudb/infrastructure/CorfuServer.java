@@ -18,6 +18,8 @@ import java.io.IOException;
 import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import static org.corfudb.util.NetworkUtils.getAddressFromInterfaceName;
 
@@ -187,6 +189,7 @@ public class CorfuServer {
                     + " --version                                                                "
                     + "              Show version\n";
 
+    private static volatile CountDownLatch resetLatch;
     // Active Corfu Server.
     private static volatile CorfuServerNode activeServer;
 
@@ -206,7 +209,7 @@ public class CorfuServer {
      *
      * @param args command line argument strings
      */
-    public static void main(String[] args) {
+    public static void main(String[] args) throws Exception {
         try {
             // Parse the options given, using docopt.
             Map<String, Object> opts = new Docopt(USAGE)
@@ -245,7 +248,7 @@ public class CorfuServer {
         }
     }
 
-    private static void startServer(Map<String, Object> opts) {
+    private static void startServer(Map<String, Object> opts) throws Exception {
 
         // Print a nice welcome message.
         printStartupMsg(opts);
@@ -283,6 +286,7 @@ public class CorfuServer {
         // Manages the lifecycle of the Corfu Server.
         while (!shutdownServer) {
             final ServerContext serverContext = new ServerContext(opts);
+            resetLatch = new CountDownLatch(1);
             try {
                 configureMetrics(opts, serverContext.getLocalEndpoint());
                 activeServer = new CorfuServerNode(serverContext);
@@ -298,7 +302,9 @@ public class CorfuServer {
             }
 
             if (!shutdownServer) {
-                log.info("main: Server restarting.");
+                log.info("main: Waiting until restart is complete.");
+                resetLatch.await();
+                log.info("main: Server restarted.");
             }
         }
 
@@ -379,6 +385,7 @@ public class CorfuServer {
 
         log.info("RestartServer: Shutting down corfu server");
         activeServer.close();
+        resetLatch.countDown();
         log.info("RestartServer: Starting corfu server");
     }
 
