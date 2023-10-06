@@ -19,6 +19,7 @@ public class TestLayoutBuilder {
     List<String> sequencerServers;
     List<String> layoutServers;
     List<String> unresponsiveServers;
+    List<Long> probes;
     List<TestSegmentBuilder> segments;
 
     @Getter
@@ -33,6 +34,7 @@ public class TestLayoutBuilder {
         sequencerServers = new ArrayList<>();
         layoutServers = new ArrayList<>();
         unresponsiveServers = new ArrayList<>();
+        probes = new ArrayList<>();
         segments = new ArrayList<>();
         clusterId = Layout.INVALID_CLUSTER_ID;
     }
@@ -83,11 +85,14 @@ public class TestLayoutBuilder {
                 .map(TestSegmentBuilder::build)
                 .collect(Collectors.toList());
 
-        return new Layout(layoutServers,
+        return new Layout(
+                layoutServers,
                 sequencerServers,
                 segmentList,
                 unresponsiveServers,
-                epoch, clusterId);
+                probes,
+                epoch, clusterId
+        );
     }
 
     @Accessors(chain = true)
