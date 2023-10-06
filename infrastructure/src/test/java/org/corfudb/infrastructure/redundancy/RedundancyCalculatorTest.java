@@ -579,7 +579,7 @@ public class RedundancyCalculatorTest extends LayoutBasedTestHelper implements T
                 ImmutableList.of(layoutStripe2));
         List<String> allServers = ImmutableList.of(A, B, C);
         Layout layout = new Layout(allServers, allServers,
-                ImmutableList.of(segment1, segment2), ImmutableList.of(), 1L,
+                ImmutableList.of(segment1, segment2), ImmutableList.of(), ImmutableList.of(), 1L,
                 UUID.randomUUID());
         long trimMark = 101L;
 

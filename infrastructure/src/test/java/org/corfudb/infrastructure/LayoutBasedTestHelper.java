@@ -28,7 +28,7 @@ public class LayoutBasedTestHelper {
 
         long epoch = 0L;
         UUID uuid = UUID.randomUUID();
-        return new Layout(ABC_NODES, ABC_NODES, segments, new ArrayList<>(), epoch, uuid);
+        return new Layout(ABC_NODES, ABC_NODES, segments, new ArrayList<>(), new ArrayList<>(), epoch, uuid);
     }
 
     @AllArgsConstructor

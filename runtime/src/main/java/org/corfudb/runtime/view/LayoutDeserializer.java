@@ -29,13 +29,16 @@ public class LayoutDeserializer implements JsonDeserializer {
             unsafeLayout.unresponsiveServers = new ArrayList<>();
         }
 
+        if (unsafeLayout.probes == null){
+            unsafeLayout.probes = new ArrayList<>();
+        }
+
         /* Similar to a copy constructor. This constructor holds all the validation for
         constructing a layout. */
-        Layout safeLayout = new Layout(unsafeLayout.layoutServers, unsafeLayout.sequencers,
-                unsafeLayout.segments, unsafeLayout.unresponsiveServers, unsafeLayout.epoch,
-                unsafeLayout.clusterId);
 
-        return safeLayout;
+        return new Layout(unsafeLayout.layoutServers, unsafeLayout.sequencers,
+                unsafeLayout.segments, unsafeLayout.unresponsiveServers, unsafeLayout.probes, unsafeLayout.epoch,
+                unsafeLayout.clusterId);
 
     }
 }
