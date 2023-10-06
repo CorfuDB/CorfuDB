@@ -144,7 +144,7 @@ public class ManagementServerTest {
         );
 
         return new Layout(layoutServers, sequencers,
-                Collections.singletonList(segment), unresponsiveServers, epoch, clusterId);
+                Collections.singletonList(segment), unresponsiveServers, Collections.emptyList(), epoch, clusterId);
     }
 
     /**
