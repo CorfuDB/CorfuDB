@@ -13,7 +13,6 @@ import lombok.ToString;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
-import org.corfudb.runtime.view.LayoutProbe.LayoutStatus;
 import org.corfudb.runtime.view.replication.ChainReplicationProtocol;
 import org.corfudb.runtime.view.replication.IReplicationProtocol;
 import org.corfudb.runtime.view.replication.NeverHoleFillPolicy;
@@ -78,7 +77,7 @@ public class Layout {
     List<String> unresponsiveServers;
 
     @Getter
-    LayoutStatus status;
+    List<Long> probes;
 
     /**
      * The epoch of this layout.
@@ -112,14 +111,14 @@ public class Layout {
      */
     public Layout(@NonNull List<String> layoutServers, @NonNull List<String> sequencers,
                   @NonNull List<LayoutSegment> segments, @NonNull List<String> unresponsiveServers,
-                  @NonNull LayoutStatus status,
+                  @NonNull List<Long> probes,
                   long epoch, @Nullable UUID clusterId) {
 
         this.layoutServers = layoutServers;
         this.sequencers = sequencers;
         this.segments = segments;
         this.unresponsiveServers = unresponsiveServers;
-        this.status = status;
+        this.probes = probes;
         this.epoch = epoch;
         this.clusterId = clusterId;
 
@@ -141,20 +140,9 @@ public class Layout {
         }
     }
 
-    /**
-     * Overloaded old Constructor for backward compatibility.
-     * @deprecated "Use the new constructor with all the arguments"
-     */
-    public Layout(@NonNull List<String> layoutServers, @NonNull List<String> sequencers,
-                  @NonNull List<LayoutSegment> segments, @NonNull List<String> unresponsiveServers,
-                  long epoch, @Nullable UUID clusterId) {
-        this(layoutServers, sequencers, segments, unresponsiveServers, LayoutStatus.empty(),
-                epoch, clusterId);
-    }
-
     public Layout(List<String> layoutServers, List<String> sequencers, List<LayoutSegment> segments,
                   long epoch, UUID clusterId) {
-        this(layoutServers, sequencers, segments, new ArrayList<>(), LayoutStatus.empty(), epoch, clusterId);
+        this(layoutServers, sequencers, segments, new ArrayList<>(), new ArrayList<>(), epoch, clusterId);
     }
 
     /**
@@ -350,7 +338,7 @@ public class Layout {
         this.sequencers = layoutCopy.getSequencers();
         this.segments = layoutCopy.getSegments();
         this.unresponsiveServers = layoutCopy.getUnresponsiveServers();
-        this.status = layoutCopy.getStatus();
+        this.probes = layoutCopy.getProbes();
         this.epoch = layoutCopy.getEpoch();
         this.clusterId = layoutCopy.clusterId;
     }

@@ -11,7 +11,6 @@ import org.corfudb.infrastructure.log.statetransfer.segment.TransferSegmentRange
 import org.corfudb.infrastructure.log.statetransfer.segment.TransferSegmentStatus;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.Layout.LayoutSegment;
-import org.corfudb.runtime.view.LayoutProbe.LayoutStatus;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -580,7 +579,7 @@ public class RedundancyCalculatorTest extends LayoutBasedTestHelper implements T
                 ImmutableList.of(layoutStripe2));
         List<String> allServers = ImmutableList.of(A, B, C);
         Layout layout = new Layout(allServers, allServers,
-                ImmutableList.of(segment1, segment2), ImmutableList.of(), LayoutStatus.empty(), 1L,
+                ImmutableList.of(segment1, segment2), ImmutableList.of(), ImmutableList.of(), 1L,
                 UUID.randomUUID());
         long trimMark = 101L;
 

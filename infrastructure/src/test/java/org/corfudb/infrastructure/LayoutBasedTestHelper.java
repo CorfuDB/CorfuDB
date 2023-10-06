@@ -10,7 +10,6 @@ import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.Layout.LayoutSegment;
 import org.corfudb.runtime.view.Layout.LayoutStripe;
 import org.corfudb.runtime.view.Layout.ReplicationMode;
-import org.corfudb.runtime.view.LayoutProbe.LayoutStatus;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -29,7 +28,7 @@ public class LayoutBasedTestHelper {
 
         long epoch = 0L;
         UUID uuid = UUID.randomUUID();
-        return new Layout(ABC_NODES, ABC_NODES, segments, new ArrayList<>(), LayoutStatus.empty(), epoch, uuid);
+        return new Layout(ABC_NODES, ABC_NODES, segments, new ArrayList<>(), new ArrayList<>(), epoch, uuid);
     }
 
     @AllArgsConstructor
