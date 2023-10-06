@@ -27,7 +27,6 @@ import org.corfudb.runtime.proto.service.Management.QueryNodeResponseMsg;
 import org.corfudb.runtime.view.IReconfigurationHandlerPolicy;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.Layout.ReplicationMode;
-import org.corfudb.runtime.view.LayoutProbe.LayoutStatus;
 import org.corfudb.util.concurrent.SingletonResource;
 import org.junit.Before;
 import org.junit.Rule;
@@ -145,7 +144,7 @@ public class ManagementServerTest {
         );
 
         return new Layout(layoutServers, sequencers,
-                Collections.singletonList(segment), unresponsiveServers, LayoutStatus.empty(), epoch, clusterId);
+                Collections.singletonList(segment), unresponsiveServers, Collections.emptyList(), epoch, clusterId);
     }
 
     /**
