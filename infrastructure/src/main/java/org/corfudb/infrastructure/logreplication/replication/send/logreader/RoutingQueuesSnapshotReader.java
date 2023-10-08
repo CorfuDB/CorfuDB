@@ -45,7 +45,8 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 @Slf4j
 public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
 
-    private static final long DATA_WAIT_TIMEOUT_MS = 120000;
+    // Set timeout to 40 minutes for DEMO or until batching is fixed up.
+    private static final long DATA_WAIT_TIMEOUT_MS = 2400000;
 
     @Getter
     private final CorfuStore corfuStore;
