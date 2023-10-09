@@ -29,15 +29,15 @@ public class LayoutDeserializer implements JsonDeserializer {
             unsafeLayout.unresponsiveServers = new ArrayList<>();
         }
 
-        if (unsafeLayout.probes == null){
-            unsafeLayout.probes = new ArrayList<>();
+        if (unsafeLayout.healProbes == null){
+            unsafeLayout.healProbes = new ArrayList<>();
         }
 
         /* Similar to a copy constructor. This constructor holds all the validation for
         constructing a layout. */
 
         return new Layout(unsafeLayout.layoutServers, unsafeLayout.sequencers,
-                unsafeLayout.segments, unsafeLayout.unresponsiveServers, unsafeLayout.probes, unsafeLayout.epoch,
+                unsafeLayout.segments, unsafeLayout.unresponsiveServers, unsafeLayout.healProbes, unsafeLayout.epoch,
                 unsafeLayout.clusterId);
 
     }

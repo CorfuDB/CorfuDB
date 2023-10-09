@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure;
 
+import javafx.util.Pair;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.experimental.Accessors;
@@ -19,7 +20,7 @@ public class TestLayoutBuilder {
     List<String> sequencerServers;
     List<String> layoutServers;
     List<String> unresponsiveServers;
-    List<Long> probes;
+    List<Pair<Integer,Long>> healProbes;
     List<TestSegmentBuilder> segments;
 
     @Getter
@@ -34,7 +35,7 @@ public class TestLayoutBuilder {
         sequencerServers = new ArrayList<>();
         layoutServers = new ArrayList<>();
         unresponsiveServers = new ArrayList<>();
-        probes = new ArrayList<>();
+        healProbes = new ArrayList<>();
         segments = new ArrayList<>();
         clusterId = Layout.INVALID_CLUSTER_ID;
     }
@@ -90,7 +91,7 @@ public class TestLayoutBuilder {
                 sequencerServers,
                 segmentList,
                 unresponsiveServers,
-                probes,
+                healProbes,
                 epoch, clusterId
         );
     }

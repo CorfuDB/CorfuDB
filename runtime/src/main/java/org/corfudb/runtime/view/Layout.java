@@ -112,14 +112,14 @@ public class Layout {
      */
     public Layout(@NonNull List<String> layoutServers, @NonNull List<String> sequencers,
                   @NonNull List<LayoutSegment> segments, @NonNull List<String> unresponsiveServers,
-                  @NonNull List<Long> probes,
+                  @NonNull List<Pair<Integer,Long>> healProbes,
                   long epoch, @Nullable UUID clusterId) {
 
         this.layoutServers = layoutServers;
         this.sequencers = sequencers;
         this.segments = segments;
         this.unresponsiveServers = unresponsiveServers;
-        this.probes = probes;
+        this.healProbes = healProbes;
         this.epoch = epoch;
         this.clusterId = clusterId;
 
@@ -339,7 +339,7 @@ public class Layout {
         this.sequencers = layoutCopy.getSequencers();
         this.segments = layoutCopy.getSegments();
         this.unresponsiveServers = layoutCopy.getUnresponsiveServers();
-        this.probes = layoutCopy.getProbes();
+        this.healProbes = layoutCopy.getHealProbes();
         this.epoch = layoutCopy.getEpoch();
         this.clusterId = layoutCopy.clusterId;
     }
