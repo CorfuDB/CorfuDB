@@ -8,7 +8,9 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class LayoutRateLimitTest {
 
@@ -18,15 +20,15 @@ class LayoutRateLimitTest {
         assertEquals(Duration.ofMinutes(1), calc.getTimeout());
 
         LayoutProbe probe = new LayoutProbe(1,System.currentTimeMillis());
-        probe = probe.increaseIteration();
+        probe.increaseIteration();
         assertEquals(2, probe.getIteration());
 
-        probe = probe.decreaseIteration();
+        probe.decreaseIteration();
         assertEquals(1, probe.getIteration());
 
-        probe = probe.increaseIteration();
-        probe = probe.increaseIteration();
-        probe = probe.resetIteration();
+        probe.increaseIteration();
+        probe.increaseIteration();
+        probe.resetIteration();
         assertEquals(1, probe.getIteration());
     }
 
@@ -98,6 +100,8 @@ class LayoutRateLimitTest {
         assertEquals(2, probeStatus.getNewProbe().get().getIteration());
         assertEquals(4, calc.size());
 
+        // Trying after 100 minutes should reset the iteration number
+        // as it is greater than 2 * timeout (=7)
         update = new LayoutProbe(1,startTime + Duration.ofMinutes(100).toMillis());
         probeStatus = calc.calcStats(update);
         assertTrue(probeStatus.isAllowed());

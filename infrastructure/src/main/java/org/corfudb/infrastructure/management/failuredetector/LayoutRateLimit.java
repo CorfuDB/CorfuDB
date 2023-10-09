@@ -77,15 +77,15 @@ public class LayoutRateLimit {
                     // reset iteration number to 1 as the new probe was done
                     // after 2 times the timeout
                     // this multiplier can be configured in future as required
-                    newProbe = newProbe.resetIteration();
+                    newProbe.resetIteration();
                 } else if (diff.getSeconds() > (long) (1.5 * timeout.getSeconds())) {
                     // decrease iteration number as the new probe was done
                     // after 1.5 times the timeout
                     // this multiplier can be configured in future as required
-                    newProbe = newProbe.decreaseIteration();
+                    newProbe.decreaseIteration();
                 } else {
                     // increase iteration number so that next probes are delayed exponentially
-                    newProbe = newProbe.increaseIteration();
+                    newProbe.increaseIteration();
                 }
                 // add to the existing probes
                 update(newProbe);
@@ -126,6 +126,22 @@ public class LayoutRateLimit {
         private int iteration;
         private long time;
 
+        /**
+         * Maximum iterations possible
+         */
+        private static final int MAX_ITERATIONS = 3;
+
+        /**
+         * Minimum iterations possible
+         */
+        private static final int MIN_ITERATIONS = 1;
+
+        /**
+         * Iteration increment or decrement value (diff between each increase or decrease operation)
+         */
+        private static final int ITERATION_DIFF = 1;
+
+
         public static LayoutProbe current() {
             return new LayoutProbe(1, System.currentTimeMillis());
         }
@@ -135,22 +151,22 @@ public class LayoutRateLimit {
             return Long.compare(time, other.time);
         }
 
-        public LayoutProbe increaseIteration() {
-            if (this.iteration >= 3){
-                return new LayoutProbe(3, time);
+        public void increaseIteration() {
+            if (this.iteration >= MAX_ITERATIONS){
+                this.iteration = MAX_ITERATIONS;
             }
-            return new LayoutProbe(this.iteration + 1, time);
+            this.iteration += ITERATION_DIFF;
         }
 
-        public LayoutProbe decreaseIteration() {
+        public void decreaseIteration() {
             if (this.iteration <= 1) {
-                return new LayoutProbe(1, time);
+                this.iteration = 1;
             }
-            return new LayoutProbe(this.iteration - 1, time);
+            this.iteration -= ITERATION_DIFF;
         }
 
-        public LayoutProbe resetIteration() {
-            return new LayoutProbe(1, time);
+        public void resetIteration() {
+            this.iteration = MIN_ITERATIONS;
         }
     }
 
