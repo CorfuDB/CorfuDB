@@ -1,10 +1,12 @@
 package org.corfudb.infrastructure.management.failuredetector;
 
+import javafx.util.Pair;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Builder.Default;
 import lombok.Getter;
 import lombok.ToString;
+import lombok.extern.slf4j.Slf4j;
 
 import java.time.Duration;
 import java.util.Deque;
@@ -14,6 +16,7 @@ import java.util.Optional;
 import java.util.Queue;
 import java.util.stream.Collectors;
 
+@Slf4j
 public class LayoutRateLimit {
 
     @Builder
@@ -23,21 +26,22 @@ public class LayoutRateLimit {
          */
         @Default
         private final int limit = 4;
+
         private final Queue<LayoutProbe> probes = new LinkedList<>();
 
         public void update(LayoutProbe update) {
-            if (calcStats(update).isAllowed) {
-                probes.add(update);
-            }
+            // add it to the end of the probes queue
+            probes.add(update);
 
             if (probes.size() > limit) {
+                // remove the first item from the queue
                 probes.remove();
             }
         }
 
-        public List<Long> getProbeTimes() {
-            return probes.stream()
-                    .map(probe -> probe.time)
+        public List<Pair<Integer,Long>> printToLayout() {
+            return probes.stream().sorted()
+                    .map(probe -> new Pair<>(probe.iteration, probe.time))
                     .collect(Collectors.toList());
         }
 
@@ -45,35 +49,50 @@ public class LayoutRateLimit {
             return calcStats(LayoutProbe.current());
         }
 
-        public ProbeStatus calcStats(LayoutProbe update) {
+        public ProbeStatus calcStats(LayoutProbe newProbe) {
             Deque<LayoutProbe> tmpProbes = new LinkedList<>(probes);
-            tmpProbes.add(update);
-            return calcStats(new LinkedList<>(tmpProbes));
-        }
 
-        private ProbeStatus calcStats(Deque<LayoutProbe> tmpProbes) {
             if (tmpProbes.isEmpty()) {
                 return new ProbeStatus(true, Optional.empty());
             }
 
-            LayoutProbe latestUpdate = tmpProbes.pollLast();
+            // Get the latest (already existing) entry in the probes list
+            LayoutProbe existingProbe = tmpProbes.pollLast();
 
-            TimeoutCalc timeoutCalc = TimeoutCalc.builder().build();
+            TimeoutCalc timeoutCalc = TimeoutCalc.builder().iteration(existingProbe.iteration).build();
+            Duration timeout = timeoutCalc.getTimeout();
+            // diff between the new probe's time and latest one's before that
+            // should be greater than timeout
+            Duration diff = Duration.ofMillis(newProbe.time - existingProbe.time);
 
-            while (!tmpProbes.isEmpty()) {
-                LayoutProbe currProbe = tmpProbes.pollLast();
-                Duration timeout = timeoutCalc.getTimeout();
+            // Copy the latest iteration, to use as a reference for next steps
+            newProbe.iteration = existingProbe.getIteration();
 
-                Duration diff = Duration.ofMillis(latestUpdate.time - currProbe.time);
-
-                if (timeout.getSeconds() > diff.getSeconds()) {
-                    return new ProbeStatus(false, Optional.of(timeoutCalc));
+            if (timeout.getSeconds() > diff.getSeconds()) {
+                log.info("Returning false ProbeStatus for probe {}, existingProbe: {}",
+                        newProbe, existingProbe);
+                return new ProbeStatus(false, Optional.of(newProbe));
+            } else {
+                if (diff.getSeconds() > 2 * timeout.getSeconds()) {
+                    // reset iteration number to 1 as the new probe was done
+                    // after 2 times the timeout
+                    // this multiplier can be configured in future as required
+                    newProbe = newProbe.resetIteration();
+                } else if (diff.getSeconds() > (long) (1.5 * timeout.getSeconds())) {
+                    // decrease iteration number as the new probe was done
+                    // after 1.5 times the timeout
+                    // this multiplier can be configured in future as required
+                    newProbe = newProbe.decreaseIteration();
+                } else {
+                    // increase iteration number so that next probes are delayed exponentially
+                    newProbe = newProbe.increaseIteration();
                 }
-
-                timeoutCalc = timeoutCalc.next();
+                // add to the existing probes
+                update(newProbe);
+                log.info("Returning true ProbeStatus for probe {}, existingProbe: {}",
+                        newProbe, existingProbe);
+                return new ProbeStatus(true, Optional.of(newProbe));
             }
-
-            return new ProbeStatus(true, Optional.empty());
         }
 
         public int size() {
@@ -96,25 +115,42 @@ public class LayoutRateLimit {
 
             return Duration.ofMinutes(timeout);
         }
-
-        public TimeoutCalc next() {
-            return new TimeoutCalc(this.interval, this.iteration + 1);
-        }
     }
 
     @Builder
+    @Getter
     @AllArgsConstructor
+    @ToString
     public static class LayoutProbe implements Comparable<LayoutProbe> {
         //UTC time
-        private final long time;
+        private int iteration;
+        private long time;
 
         public static LayoutProbe current() {
-            return new LayoutProbe(System.currentTimeMillis());
+            return new LayoutProbe(1, System.currentTimeMillis());
         }
 
         @Override
         public int compareTo(LayoutProbe other) {
             return Long.compare(time, other.time);
+        }
+
+        public LayoutProbe increaseIteration() {
+            if (this.iteration >= 3){
+                return new LayoutProbe(3, time);
+            }
+            return new LayoutProbe(this.iteration + 1, time);
+        }
+
+        public LayoutProbe decreaseIteration() {
+            if (this.iteration <= 1) {
+                return new LayoutProbe(1, time);
+            }
+            return new LayoutProbe(this.iteration - 1, time);
+        }
+
+        public LayoutProbe resetIteration() {
+            return new LayoutProbe(1, time);
         }
     }
 
@@ -123,6 +159,6 @@ public class LayoutRateLimit {
     @ToString
     public static class ProbeStatus {
         private final boolean isAllowed;
-        private final Optional<TimeoutCalc> timeout;
+        private final Optional<LayoutProbe> newProbe;
     }
 }

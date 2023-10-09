@@ -2,6 +2,7 @@ package org.corfudb.infrastructure.management.failuredetector;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableSet;
+import javafx.util.Pair;
 import lombok.Builder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -89,12 +90,12 @@ public class HealingAgent {
                     Set<String> healedNodes = ImmutableSet.of(healedNode.getEndpoint());
 
                     ProbeCalc probeCalc = ProbeCalc.builder().build();
-                    for (long probeTime : layout.getProbes()) {
-                        probeCalc.update(new LayoutProbe(probeTime));
+                    for (Pair<Integer, Long> probe : layout.getHealProbes()) {
+                        probeCalc.update(new LayoutProbe(probe.getKey(), probe.getValue()));
                     }
-                    ProbeStatus probeStats = probeCalc.calcStats(LayoutProbe.current());
-                    if (!probeStats.isAllowed()) {
-                        log.warn("Healing disabled due to timeout: {}", probeStats);
+                    ProbeStatus status = probeCalc.calcStatsForNewUpdate();
+                    if (!status.isAllowed()) {
+                        log.warn("Healing disabled due to timeout: probCalc {}, status {}", probeCalc, status);
                         return skippedTask;
                     }
 
