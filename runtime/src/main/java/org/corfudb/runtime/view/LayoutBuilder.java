@@ -523,7 +523,7 @@ public class LayoutBuilder {
                 layout.getSequencers(),
                 layout.getSegments(),
                 layout.getUnresponsiveServers(),
-                layout.getProbes(),
+                layout.getHealProbes(),
                 this.epoch,
                 layout.getClusterId());
     }
