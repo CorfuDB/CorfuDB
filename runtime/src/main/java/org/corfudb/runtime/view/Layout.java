@@ -4,6 +4,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Sets;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import javafx.util.Pair;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
@@ -77,7 +78,7 @@ public class Layout {
     List<String> unresponsiveServers;
 
     @Getter
-    List<Long> probes;
+    List<Pair<Integer, Long>> healProbes;
 
     /**
      * The epoch of this layout.

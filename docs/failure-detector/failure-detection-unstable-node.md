@@ -35,18 +35,22 @@ LAYOUTS_CURRENT.ds:
 
 ```json
 {
-  "probes": [
-    1, "03:08:00",
-    2, "03:08:27",
-    3, "03:08:59",
-    3, "03:09:55",
+  "healProbes": [
+    "03:08:00",
+    "03:08:27",
+    "03:08:59",
+    "03:09:55",
   ],
   "status": "RED"
 }
 ```
 
-failureProbes - is a parameter that we take from previous layout updates ONLY for FAILURES and HEALING, 
+healProbes - is a parameter that we take from previous layout updates ONLY for FAILURES and HEALING, 
 and we ignore any other layout and epoch updates, including state transfer updates.
+
+healProbes is a Pair of iteration number, Timestamp when that heal request was allowed.
+The iteration number increases exponentially after every allowed heal request.
+The iteration number decreases/resets when the next query happens after 1.5 times or 2 times the timeout for that iteration respectively.
 
 To calculate a cool-off timeout for the layout we are using exponential backoff: T = interval * Math.pow(rate, iteration) 
  - for last 3 updates: up to 7-min cool-off period

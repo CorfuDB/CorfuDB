@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure.orchestrator.workflows;
 
 import com.google.common.collect.ImmutableList;
+import javafx.util.Pair;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.management.failuredetector.LayoutRateLimit.LayoutProbe;
 import org.corfudb.infrastructure.management.failuredetector.LayoutRateLimit.ProbeCalc;
@@ -64,19 +65,19 @@ public class HealNodeWorkflow extends AddNodeWorkflow {
             Layout currentLayout = new Layout(runtime.getLayoutView().getLayout());
 
             ProbeCalc probeCalc = ProbeCalc.builder().build();
-            for (long probeTime : currentLayout.getProbes()) {
-                probeCalc.update(new LayoutProbe(probeTime));
+            for (Pair<Integer, Long> probe : currentLayout.getHealProbes()) {
+                probeCalc.update(new LayoutProbe(probe.getKey(), probe.getValue()));
             }
 
-            ProbeStatus stats = probeCalc.calcStatsForNewUpdate();
-            if (stats.isAllowed()) {
-                currentLayout.setProbes(probeCalc.getProbeTimes());
+            ProbeStatus status = probeCalc.calcStatsForNewUpdate();
+            if (status.isAllowed()) {
+                currentLayout.setHealProbes(probeCalc.printToLayout());
 
                 runtime.getLayoutManagementView().healNode(currentLayout, request.getEndpoint());
                 runtime.invalidateLayout();
                 newLayout = new Layout(runtime.getLayoutView().getLayout());
             } else {
-                log.warn("Healing disabled: {}", probeCalc);
+                log.warn("Healing disabled: probCalc {}, status {}", probeCalc, status);
             }
         }
     }
