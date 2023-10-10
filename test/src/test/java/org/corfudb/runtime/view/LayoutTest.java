@@ -2,13 +2,20 @@ package org.corfudb.runtime.view;
 
 import com.google.common.collect.Sets;
 import groovy.util.logging.Slf4j;
+import org.corfudb.runtime.view.Layout.LayoutSegment;
+import org.corfudb.runtime.view.Layout.LayoutStripe;
+import org.corfudb.runtime.view.Layout.ReplicationMode;
 import org.junit.Test;
 
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.List;
+import java.util.UUID;
 
 import static java.lang.reflect.Modifier.TRANSIENT;
 import static org.assertj.core.api.Assertions.assertThat;

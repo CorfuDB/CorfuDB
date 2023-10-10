@@ -4,7 +4,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Sets;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-import javafx.util.Pair;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
@@ -78,7 +77,7 @@ public class Layout {
     List<String> unresponsiveServers;
 
     @Getter
-    List<Pair<Integer, Long>> healProbes;
+    List<LayoutProbe> healProbes;
 
     /**
      * The epoch of this layout.
@@ -112,7 +111,7 @@ public class Layout {
      */
     public Layout(@NonNull List<String> layoutServers, @NonNull List<String> sequencers,
                   @NonNull List<LayoutSegment> segments, @NonNull List<String> unresponsiveServers,
-                  @NonNull List<Pair<Integer,Long>> healProbes,
+                  @NonNull List<LayoutProbe> healProbes,
                   long epoch, @Nullable UUID clusterId) {
 
         this.layoutServers = layoutServers;
