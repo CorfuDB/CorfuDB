@@ -62,7 +62,7 @@ import static org.junit.Assert.fail;
 /**
  * Basic smoke tests for checkpoint-in-stream PoC.
  */
-
+@SuppressWarnings("checkstyle:magicnumber")
 public class CheckpointSmokeTest extends AbstractViewTest {
     private final byte serilizerByte = (byte) 20;
     private final ISerializer serializer = new CPSerializer(serilizerByte);
