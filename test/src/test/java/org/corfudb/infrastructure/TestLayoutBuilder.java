@@ -1,10 +1,10 @@
 package org.corfudb.infrastructure;
 
-import javafx.util.Pair;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.experimental.Accessors;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.runtime.view.LayoutProbe;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -20,7 +20,7 @@ public class TestLayoutBuilder {
     List<String> sequencerServers;
     List<String> layoutServers;
     List<String> unresponsiveServers;
-    List<Pair<Integer,Long>> healProbes;
+    List<LayoutProbe> healProbes;
     List<TestSegmentBuilder> segments;
 
     @Getter

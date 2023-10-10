@@ -1,9 +1,9 @@
 package org.corfudb.infrastructure.management.failuredetector;
 
-import org.corfudb.infrastructure.management.failuredetector.LayoutRateLimit.LayoutProbe;
 import org.corfudb.infrastructure.management.failuredetector.LayoutRateLimit.ProbeCalc;
 import org.corfudb.infrastructure.management.failuredetector.LayoutRateLimit.ProbeStatus;
 import org.corfudb.infrastructure.management.failuredetector.LayoutRateLimit.TimeoutCalc;
+import org.corfudb.runtime.view.LayoutProbe;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;

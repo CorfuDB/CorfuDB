@@ -1,9 +1,7 @@
 package org.corfudb.infrastructure.orchestrator.workflows;
 
 import com.google.common.collect.ImmutableList;
-import javafx.util.Pair;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.management.failuredetector.LayoutRateLimit.LayoutProbe;
 import org.corfudb.infrastructure.management.failuredetector.LayoutRateLimit.ProbeCalc;
 import org.corfudb.infrastructure.management.failuredetector.LayoutRateLimit.ProbeStatus;
 import org.corfudb.infrastructure.orchestrator.Action;
@@ -13,6 +11,7 @@ import org.corfudb.protocols.wireprotocol.orchestrator.AddNodeRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.HealNodeRequest;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.runtime.view.LayoutProbe;
 
 import javax.annotation.Nonnull;
 
@@ -65,8 +64,8 @@ public class HealNodeWorkflow extends AddNodeWorkflow {
             Layout currentLayout = new Layout(runtime.getLayoutView().getLayout());
 
             ProbeCalc probeCalc = ProbeCalc.builder().build();
-            for (Pair<Integer, Long> probe : currentLayout.getHealProbes()) {
-                probeCalc.update(new LayoutProbe(probe.getKey(), probe.getValue()));
+            for (LayoutProbe probe : currentLayout.getHealProbes()) {
+                probeCalc.update(new LayoutProbe(probe.getIteration(), probe.getTime()));
             }
 
             ProbeStatus status = probeCalc.calcStatsForNewUpdate();
