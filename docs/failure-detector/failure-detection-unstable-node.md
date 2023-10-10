@@ -35,13 +35,10 @@ LAYOUTS_CURRENT.ds:
 
 ```json
 {
-  "healProbes": [
-    "03:08:00",
-    "03:08:27",
-    "03:08:59",
-    "03:09:55",
-  ],
-  "status": "RED"
+  "healProbes":[
+    { "iteration": 1, "time": 123 },
+    { "iteration": 2, "time": 567 }
+  ]
 }
 ```
 
@@ -73,85 +70,3 @@ The algorithm is applied only during "HEAL" operation, we check the timeouts (se
 updated more times than it allowed then failure detector is not allowed to continue and remove the node from the unresponsive list
 and needs to wait for: X = "Cool-off Timeout" - time passed by last 3 updates.
 
-#### Scenario 1:
-Notes: 
- - update - means healing operation
-```
-00:00:30 -> 
-{
-    cluster: unresponsive[NodeA],
-    
-    // Latest updates of the layout. 
-      - timeout: 1,3,7 minutes, 
-      - count: how many time the updates happened, 
-      - limit: allowed number of updates 
-    probes: [
-        { timeout: 1, time: 00:00:30}
-        { timeout: 3, time: None}
-        { timeout: 7, time: None}
-    ]
-    
-    status: OK,
-    note: starting point, empty counters
-}
-
-00:00:47 -> 
-{
-    cluster: unresponsive[],
-    probes: [
-        { timeout: 1, count: 1, limit: 1, time: 00:00:47} // 00:00:47-00:00:30=17 sec -> less than a minute, increment all counters 
-        { timeout: 3, count: 1, limit: 2, time: 00:00:30}
-        { timeout: 7, count: 1, limit: 3, time: 00:00:30}
-    ]
-    status: OK,
-    note: first healing
-}
-
-00:01:03 ->
-{
-    cluster: unresponsive[NodeA],
-    probes: [
-        { timeout: 1, count: 1, limit: 1, time: 00:00:47 } // 00:00:47-00:00:30=17 sec -> less than a minute, increment all counters 
-        { timeout: 3, count: 1, limit: 2, time: 00:00:30 }
-        { timeout: 7, count: 1, limit: 3, time: 00:00:30 }
-    ]
-    status: OK,
-    note: starting point, empty counters
-}
-{
-    cluster: ,
-    probes: [
-        { timeout: 1, count: 1, limit: 1}
-        { timeout: 3, count: 1, limit: 2}
-        { timeout: 7, count: 1, limit: 3}
-    ]
-    status: OK,
-    note: failure detection, NodeA again. We let it go, we handle only healing
-}
-
-00:01:15 ->
-{
-    iteration: 2, 
-    cluster: unresponsive[], 
-    status: REJECTED
-    note: time diff between previous heal and the current one is: 00:01:15-00:00:47=28 seconds.
-          The allowed time out is 1 minute.
-}
-
-00:01:50 ->
-{
-    iteration: 2, 
-    cluster: unresponsive[], 
-    status: OK
-    note: the timeout is more than a minute, we are ok to heal. Next iteration is allowed after 3 min timeout
-}
-
-00:01:50 ->
-{
-    iteration: 2, 
-    cluster: unresponsive[], 
-    status: OK
-    note: the timeout is more than a minute, we are ok to heal
-} 
-
-```
