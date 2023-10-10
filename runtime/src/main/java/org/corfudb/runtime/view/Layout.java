@@ -141,6 +141,17 @@ public class Layout {
         }
     }
 
+    /**
+     * Overloaded old Constructor for backward compatibility.
+     * @deprecated "Use the new constructor with all the arguments"
+     */
+    public Layout(@NonNull List<String> layoutServers, @NonNull List<String> sequencers,
+                  @NonNull List<LayoutSegment> segments, @NonNull List<String> unresponsiveServers,
+                  long epoch, @Nullable UUID clusterId) {
+        this(layoutServers, sequencers, segments, unresponsiveServers, Collections.emptyList(),
+                epoch, clusterId);
+    }
+
     public Layout(List<String> layoutServers, List<String> sequencers, List<LayoutSegment> segments,
                   long epoch, UUID clusterId) {
         this(layoutServers, sequencers, segments, new ArrayList<>(), new ArrayList<>(), epoch, clusterId);
