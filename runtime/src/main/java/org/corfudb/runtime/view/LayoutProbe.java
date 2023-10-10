@@ -43,15 +43,17 @@ public class LayoutProbe implements Comparable<LayoutProbe> {
     public void increaseIteration() {
         if (this.iteration >= MAX_ITERATIONS){
             this.iteration = MAX_ITERATIONS;
+        } else {
+            this.iteration += ITERATION_DIFF;
         }
-        this.iteration += ITERATION_DIFF;
     }
 
     public void decreaseIteration() {
-        if (this.iteration <= 1) {
-            this.iteration = 1;
+        if (this.iteration <= MIN_ITERATIONS) {
+            this.iteration = MIN_ITERATIONS;
+        } else {
+            this.iteration -= ITERATION_DIFF;
         }
-        this.iteration -= ITERATION_DIFF;
     }
 
     public void resetIteration() {
