@@ -40,10 +40,6 @@ public class RepeatingFailureIT extends GenericIntegrationTest {
     public void repeatingNodeFailreTest() {
 
         workflow(wf -> {
-            wf.setupDocker(fixture -> {
-                fixture.getUniverse().cleanUpEnabled(false);
-            });
-
             wf.deploy();
 
             try {
@@ -71,11 +67,7 @@ public class RepeatingFailureIT extends GenericIntegrationTest {
         for (int i = 0; i < 3; i++) {
             corfuServerRestart(corfuCluster, corfuClient);
         }
-        assertEquals(
-                1,
-                corfuClient.getLayout().getStatus().getHealProbes().size(),
-                () -> "Wrong probes section. Layout: " + corfuClient.getLayout()
-        );
+        assertEquals(1, corfuClient.getLayout().getHealProbes().size());
 
         ClusterStatusReport clusterStatusReport;
 
