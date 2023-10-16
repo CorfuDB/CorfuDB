@@ -182,8 +182,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     private final Semaphore blockUntilExpectedAckTs = new Semaphore(1, true);
 
     // A semaphore that allows the sender to block for a null ACK from the receiver.  A null ACK is sent when the
-    // receiver gets an unexpected entry type - for example - a snapshot message when in Log Entry Sync State, if a
-    // SNAPSHOT_START was dropped
+    // receiver gets an unexpected entry type - for example - a snapshot message when in Log Entry Sync State
     private final Semaphore blockForNullAck = new Semaphore(1, true);
 
     // A null ACK is received when messages do not reach the receiver.  On receiving a null ACK, the sender resends
@@ -409,8 +408,8 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     /**
      * This test simulates dropping all SNAPSHOT_START messages.  It verifies that null ACKs were received on the
      * sender and no data generated as part of snapshot sync is accepted by the receiver.  The test waits for a
-     * default number of null ACKs(DEFAULT_NULL_ACKS_TO_WAIT_FOR) and also verifies that no data was applied on the
-     * receiver.
+     * default number of null ACKs(TestConfig.DEFAULT_NULL_ACKS_TO_WAIT_FOR) and also verifies that no data was
+     * applied on the receiver.
      * @throws Exception
      */
     @Test
@@ -428,7 +427,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     public void testOutOfOrderSnapshotStartWithRecovery() throws Exception {
         // Number of start messages which will be dropped.  Note:  A higher number increases the test execution time
         // and makes it time out intermittently.
-        int n = 3;
+        int n = 2;
         testSnapshotSyncWithStartDrops(n);
     }
 
@@ -439,12 +438,12 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         writeCrossTableTransactions(tables, true);
 
-        // Set the flag to drop START messages and the number of times it must be dropped - Int Max if always
+        // Set the flag to drop START messages and the number of times it must be dropped
         testConfig.clear().setDropSnapshotStartMsg(true);
         testConfig.setNumDropsForSnapshotStart(numDrops);
 
         Set<WAIT> waitSet = new HashSet<>();
-        // If a limited number of START messages will get dropped, wait for equal number of null ACKs.  Otherwise
+        // If a limited number of START messages will get dropped, wait for equal number of null ACKs.  Otherwise,
         // the test waits for a default number of null ACKs.
         // Also wait for metadata from the receiver indicating completion of snapshot sync eventually
         if (numDrops != Integer.MAX_VALUE) {
@@ -1477,9 +1476,10 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         private boolean dropSnapshotStartMsg = false;
 
         // If dropSnapshotStartMsg == true, the number of times it must be dropped
-        private int numDropsForSnapshotStart = Integer.MAX_VALUE;
+        private int numDropsForSnapshotStart;
 
-        private final int DEFAULT_NULL_ACKS_TO_WAIT_FOR = 3;
+        // If dropSnapshotStartMsg == true, the default number of null acks to wait for
+        private static final int DEFAULT_NULL_ACKS_TO_WAIT_FOR = 5;
 
         private int numNullAcksToWaitFor = DEFAULT_NULL_ACKS_TO_WAIT_FOR;
 

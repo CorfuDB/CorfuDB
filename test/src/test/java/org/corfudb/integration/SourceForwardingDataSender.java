@@ -101,9 +101,7 @@ public class SourceForwardingDataSender implements DataSender {
 
     private LogReplicationSession session = DefaultClusterConfig.getSessions().get(0);
 
-    private boolean dropSnapshotStartMsg;
-
-    private int numSnapshotStartDrops;
+    private LogReplicationIT.TestConfig testConfig;
 
     private int numStartMsgsDropped;
 
@@ -137,18 +135,18 @@ public class SourceForwardingDataSender implements DataSender {
                 ReplicationStatus.class,
                 null,
                 TableOptions.fromProtoSchema(ReplicationStatus.class));
-        this.dropSnapshotStartMsg = testConfig.isDropSnapshotStartMsg();
-        this.numSnapshotStartDrops = testConfig.getNumDropsForSnapshotStart();
+        this.testConfig = testConfig;
     }
 
     @Override
     public CompletableFuture<LogReplicationEntryMsg> send(LogReplicationEntryMsg message) {
         // Check if the SNAPSHOT_START message must be dropped
-        if (dropSnapshotStartMsg && message.getMetadata().getEntryType() == LogReplicationEntryType.SNAPSHOT_START) {
-            if (numSnapshotStartDrops != Integer.MAX_VALUE) {
+        if (testConfig.isDropSnapshotStartMsg() && message.getMetadata().getEntryType() ==
+                LogReplicationEntryType.SNAPSHOT_START) {
+            if (testConfig.getNumDropsForSnapshotStart() != Integer.MAX_VALUE) {
                 // If a limited number of START messages must be dropped, drop them only if the number is yet to be
                 // reached
-                if (numStartMsgsDropped < numSnapshotStartDrops) {
+                if (numStartMsgsDropped < testConfig.getNumDropsForSnapshotStart()) {
                     numStartMsgsDropped++;
                     return new CompletableFuture<>();
                 }
