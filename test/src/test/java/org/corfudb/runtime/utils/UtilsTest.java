@@ -9,6 +9,7 @@ import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.Layout.LayoutSegment;
 import org.corfudb.runtime.view.Layout.LayoutStripe;
+import org.corfudb.runtime.view.LayoutProbe.LayoutStatus;
 import org.corfudb.runtime.view.RuntimeLayout;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.Utils;
@@ -59,7 +60,7 @@ public class UtilsTest {
             Arrays.asList(nodeA, nodeB, nodeC),
             Collections.singletonList(segment),
             Collections.emptyList(),
-            Collections.emptyList(),
+            LayoutStatus.empty(),
             epoch,
             uuid
     );
@@ -87,7 +88,7 @@ public class UtilsTest {
             Arrays.asList(nodeA, nodeB, nodeC),
             Arrays.asList(segment1, segment2, segment3),
             Collections.singletonList(nodeC),
-            Collections.emptyList(),
+            LayoutStatus.empty(),
             epoch,
             uuid);
   }
