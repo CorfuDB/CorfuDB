@@ -73,7 +73,7 @@ public class RepeatingFailureIT extends GenericIntegrationTest {
         }
         assertEquals(
                 1,
-                corfuClient.getLayout().getHealProbes().size(),
+                corfuClient.getLayout().getStatus().getHealProbes().size(),
                 () -> "Wrong probes section. Layout: " + corfuClient.getLayout()
         );
 
