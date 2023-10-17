@@ -7,6 +7,7 @@ import lombok.Getter;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.view.LayoutProbe;
+import org.corfudb.runtime.view.LayoutProbe.ClusterStabilityStatus;
 
 import java.time.Duration;
 import java.util.Deque;
@@ -25,7 +26,7 @@ public class LayoutRateLimit {
          * Number of updates that we keep. Must be equal to the max amount of iterations
          */
         @Default
-        private final int limit = 4;
+        private final int limit = 3;
 
         private final Queue<LayoutProbe> probes = new LinkedList<>();
 
@@ -53,7 +54,7 @@ public class LayoutRateLimit {
             Deque<LayoutProbe> tmpProbes = new LinkedList<>(probes);
 
             if (tmpProbes.isEmpty()) {
-                return new ProbeStatus(true, Optional.empty());
+                return ProbeStatus.GREEN;
             }
 
             // Get the latest (already existing) entry in the probes list
@@ -69,9 +70,12 @@ public class LayoutRateLimit {
             newProbe.setIteration(existingProbe.getIteration());
 
             if (timeout.getSeconds() > diff.getSeconds()) {
-                log.info("Returning false ProbeStatus for probe {}, existingProbe: {}",
-                        newProbe, existingProbe);
-                return new ProbeStatus(false, Optional.of(newProbe));
+                String msg = "Returning false ProbeStatus for probe {}, existingProbe: {}";
+                log.info(msg, newProbe, existingProbe);
+
+                ClusterStabilityStatus status = ClusterStabilityStatusCalc.calc(limit, newProbe.getIteration());
+
+                return new ProbeStatus(false, Optional.of(newProbe), status);
             } else {
                 if (diff.getSeconds() > 2 * timeout.getSeconds()) {
                     // reset iteration number to 1 as the new probe was done
@@ -89,14 +93,56 @@ public class LayoutRateLimit {
                 }
                 // add to the existing probes
                 update(newProbe);
-                log.info("Returning true ProbeStatus for probe {}, existingProbe: {}",
-                        newProbe, existingProbe);
-                return new ProbeStatus(true, Optional.of(newProbe));
+                String msg = "Returning true ProbeStatus for probe {}, existingProbe: {}";
+                log.info(msg, newProbe, existingProbe);
+
+                ClusterStabilityStatus status = ClusterStabilityStatusCalc.calc(limit, newProbe.getIteration());
+                return new ProbeStatus(true, Optional.of(newProbe), status);
             }
         }
 
         public int size() {
             return probes.size();
+        }
+    }
+
+    public static class ClusterStabilityStatusCalc {
+        public static ClusterStabilityStatus calc(int limit, int iteration) {
+
+            // We divide the total limit of allowed layout updates by 3 possible statuses (green, yellow, red) and
+            // then we find which interval current iteration falls. For instance:
+            //3 -> 1,2,3
+            //4 -> [1],[2][3,4]
+            //5 -> [1],[2,3][4,5]
+            //6 -> [1,2],[3,4],[5,6]
+            //7 -> [1,2],[3,4],[5,6,7]
+            //8 -> [1,2],[3,4,5],[6,7,8]
+            //9 -> [1,2,3],[4,5,6],[7,8,9]
+            int reminder = limit % 3;
+            int step = limit / 3;
+            int secondStep = 2 * step;
+
+            if (reminder == 0 || reminder == 1) {
+                if (iteration <= step) {
+                    return ClusterStabilityStatus.GREEN;
+                }
+
+                if (iteration <= secondStep) {
+                    return ClusterStabilityStatus.YELLOW;
+                }
+            }
+
+            if (reminder == 2) {
+                if (iteration <= step) {
+                    return ClusterStabilityStatus.GREEN;
+                }
+
+                if (iteration <= secondStep + 1) {
+                    return ClusterStabilityStatus.YELLOW;
+                }
+            }
+
+            return ClusterStabilityStatus.RED;
         }
     }
 
@@ -121,7 +167,10 @@ public class LayoutRateLimit {
     @Getter
     @ToString
     public static class ProbeStatus {
+        public static final ProbeStatus GREEN = new ProbeStatus(true, Optional.empty(), ClusterStabilityStatus.GREEN);
+
         private final boolean isAllowed;
         private final Optional<LayoutProbe> newProbe;
+        private final ClusterStabilityStatus status;
     }
 }

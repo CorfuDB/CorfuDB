@@ -2,9 +2,14 @@ package org.corfudb.runtime.view;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
+import lombok.Builder.Default;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.Setter;
 import lombok.ToString;
+
+import java.util.ArrayList;
+import java.util.List;
 
 @Builder
 @Getter
@@ -58,5 +63,22 @@ public class LayoutProbe implements Comparable<LayoutProbe> {
 
     public void resetIteration() {
         this.iteration = MIN_ITERATIONS;
+    }
+
+    public enum ClusterStabilityStatus {
+        GREEN, YELLOW, RED
+    }
+
+    @AllArgsConstructor
+    @Getter
+    public static class LayoutStatus {
+        @NonNull
+        private final ClusterStabilityStatus clusterStabilityStatus;
+        @NonNull
+        private final List<LayoutProbe> healProbes;
+
+        public static LayoutStatus empty() {
+            return new LayoutStatus(ClusterStabilityStatus.GREEN, new ArrayList<>());
+        }
     }
 }

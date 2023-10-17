@@ -12,6 +12,7 @@ import org.corfudb.protocols.wireprotocol.orchestrator.HealNodeRequest;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.LayoutProbe;
+import org.corfudb.runtime.view.LayoutProbe.LayoutStatus;
 
 import javax.annotation.Nonnull;
 
@@ -64,19 +65,20 @@ public class HealNodeWorkflow extends AddNodeWorkflow {
             Layout currentLayout = new Layout(runtime.getLayoutView().getLayout());
 
             ProbeCalc probeCalc = ProbeCalc.builder().build();
-            for (LayoutProbe probe : currentLayout.getHealProbes()) {
+            for (LayoutProbe probe : currentLayout.getStatus().getHealProbes()) {
                 probeCalc.update(new LayoutProbe(probe.getIteration(), probe.getTime()));
             }
 
-            ProbeStatus status = probeCalc.calcStatsForNewUpdate();
-            if (status.isAllowed()) {
-                currentLayout.setHealProbes(probeCalc.printToLayout());
+            ProbeStatus probeStatus = probeCalc.calcStatsForNewUpdate();
+            if (probeStatus.isAllowed()) {
+                LayoutStatus newLayoutStatus = new LayoutStatus(probeStatus.getStatus(), probeCalc.printToLayout());
+                currentLayout.setStatus(newLayoutStatus);
 
                 runtime.getLayoutManagementView().healNode(currentLayout, request.getEndpoint());
                 runtime.invalidateLayout();
                 newLayout = new Layout(runtime.getLayoutView().getLayout());
             } else {
-                log.warn("Healing disabled: probCalc {}, status {}", probeCalc, status);
+                log.warn("Healing disabled (layout update limit reached): probCalc {}, status {}", probeCalc, probeStatus);
             }
         }
     }

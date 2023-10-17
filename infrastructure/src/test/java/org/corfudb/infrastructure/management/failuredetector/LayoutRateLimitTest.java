@@ -1,9 +1,11 @@
 package org.corfudb.infrastructure.management.failuredetector;
 
+import org.corfudb.infrastructure.management.failuredetector.LayoutRateLimit.ClusterStabilityStatusCalc;
 import org.corfudb.infrastructure.management.failuredetector.LayoutRateLimit.ProbeCalc;
 import org.corfudb.infrastructure.management.failuredetector.LayoutRateLimit.ProbeStatus;
 import org.corfudb.infrastructure.management.failuredetector.LayoutRateLimit.TimeoutCalc;
 import org.corfudb.runtime.view.LayoutProbe;
+import org.corfudb.runtime.view.LayoutProbe.ClusterStabilityStatus;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
@@ -107,5 +109,34 @@ class LayoutRateLimitTest {
         assertTrue(probeStatus.isAllowed());
         assertEquals(1, probeStatus.getNewProbe().get().getIteration());
         assertEquals(4, calc.size());
+    }
+
+    @Test
+    public void testStabilityStatusCalc() {
+        final int threeIterationLimit = 3;
+        assertEquals(ClusterStabilityStatus.GREEN, ClusterStabilityStatusCalc.calc(threeIterationLimit, 1));
+        assertEquals(ClusterStabilityStatus.YELLOW, ClusterStabilityStatusCalc.calc(threeIterationLimit, 2));
+        assertEquals(ClusterStabilityStatus.RED, ClusterStabilityStatusCalc.calc(threeIterationLimit, 3));
+
+        final int fourIterationLimit = 4;
+        assertEquals(ClusterStabilityStatus.GREEN, ClusterStabilityStatusCalc.calc(fourIterationLimit, 1));
+        assertEquals(ClusterStabilityStatus.YELLOW, ClusterStabilityStatusCalc.calc(fourIterationLimit, 2));
+        assertEquals(ClusterStabilityStatus.RED, ClusterStabilityStatusCalc.calc(fourIterationLimit, 3));
+        assertEquals(ClusterStabilityStatus.RED, ClusterStabilityStatusCalc.calc(fourIterationLimit, 4));
+
+        final int fiveIterationLimit = 5;
+        assertEquals(ClusterStabilityStatus.GREEN, ClusterStabilityStatusCalc.calc(fiveIterationLimit, 1));
+        assertEquals(ClusterStabilityStatus.YELLOW, ClusterStabilityStatusCalc.calc(fiveIterationLimit, 2));
+        assertEquals(ClusterStabilityStatus.YELLOW, ClusterStabilityStatusCalc.calc(fiveIterationLimit, 3));
+        assertEquals(ClusterStabilityStatus.RED, ClusterStabilityStatusCalc.calc(fiveIterationLimit, 4));
+        assertEquals(ClusterStabilityStatus.RED, ClusterStabilityStatusCalc.calc(fiveIterationLimit, 5));
+
+        final int sixIterationLimit = 6;
+        assertEquals(ClusterStabilityStatus.GREEN, ClusterStabilityStatusCalc.calc(sixIterationLimit, 1));
+        assertEquals(ClusterStabilityStatus.GREEN, ClusterStabilityStatusCalc.calc(sixIterationLimit, 2));
+        assertEquals(ClusterStabilityStatus.YELLOW, ClusterStabilityStatusCalc.calc(sixIterationLimit, 3));
+        assertEquals(ClusterStabilityStatus.YELLOW, ClusterStabilityStatusCalc.calc(sixIterationLimit, 4));
+        assertEquals(ClusterStabilityStatus.RED, ClusterStabilityStatusCalc.calc(sixIterationLimit, 5));
+        assertEquals(ClusterStabilityStatus.RED, ClusterStabilityStatusCalc.calc(sixIterationLimit, 6));
     }
 }
