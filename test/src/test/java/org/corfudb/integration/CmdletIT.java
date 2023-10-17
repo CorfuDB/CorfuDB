@@ -7,6 +7,7 @@ import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.Layout.LayoutSegment;
 import org.corfudb.runtime.view.Layout.LayoutStripe;
 import org.corfudb.runtime.view.Layout.ReplicationMode;
+import org.corfudb.runtime.view.LayoutProbe.LayoutStatus;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -45,7 +46,7 @@ public class CmdletIT extends AbstractIT {
                 Collections.singletonList(ENDPOINT),
                 Collections.singletonList(segment),
                 Collections.emptyList(),
-                Collections.emptyList(),
+                LayoutStatus.empty(),
                 0L,
                 UUID.randomUUID()
         );
