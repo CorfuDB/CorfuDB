@@ -89,7 +89,7 @@ public class HealingAgent {
                     Set<String> healedNodes = ImmutableSet.of(healedNode.getEndpoint());
 
                     ProbeCalc probeCalc = ProbeCalc.builder().build();
-                    for (LayoutProbe probe : layout.getHealProbes()) {
+                    for (LayoutProbe probe : layout.getStatus().getHealProbes()) {
                         probeCalc.update(new LayoutProbe(probe.getIteration(), probe.getTime()));
                     }
                     ProbeStatus status = probeCalc.calcStatsForNewUpdate();
