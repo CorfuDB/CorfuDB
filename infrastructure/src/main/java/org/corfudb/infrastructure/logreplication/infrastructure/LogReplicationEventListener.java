@@ -7,7 +7,12 @@ import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicat
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
-import org.corfudb.runtime.collections.*;
+import org.corfudb.runtime.collections.CorfuStore;
+import org.corfudb.runtime.collections.CorfuStoreEntry;
+import org.corfudb.runtime.collections.CorfuStreamEntries;
+import org.corfudb.runtime.collections.CorfuStreamEntry;
+import org.corfudb.runtime.collections.StreamListener;
+import org.corfudb.runtime.collections.TableSchema;
 
 import java.util.Collections;
 import java.util.List;
