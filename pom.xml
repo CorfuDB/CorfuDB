@@ -97,6 +97,11 @@
             <name>libs-snapshot</name>
             <url>https://oss.jfrog.org/artifactory/libs-snapshot</url>
         </repository>
+
+        <repository>
+            <id>ossrh-staging</id>
+            <url>https://s01.oss.sonatype.org/content/repositories/orgcorfudb-1009</url>
+        </repository>
     </repositories>
 
     <reporting>
