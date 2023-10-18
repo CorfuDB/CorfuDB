@@ -200,7 +200,7 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
             //  connection.
             //  To resolve this, we need to have a long living RPC from the connectionInitiator cluster which will query
             //  for sessions from the other cluster
-            if (sinkManager == null || sinkManager.getIsShutdown().get()) {
+            if (sinkManager == null || sinkManager.isShutdown()) {
                 if(!allSessions.contains(session)) {
                     log.error("SessionManager does not know about incoming session {}, total={}, current sessions={}",
                             session, sessionToSinkManagerMap.size(), sessionToSinkManagerMap.keySet());
