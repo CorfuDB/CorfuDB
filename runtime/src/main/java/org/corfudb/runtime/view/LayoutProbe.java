@@ -3,6 +3,7 @@ package org.corfudb.runtime.view;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Builder.Default;
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
@@ -71,6 +72,8 @@ public class LayoutProbe implements Comparable<LayoutProbe> {
 
     @AllArgsConstructor
     @Getter
+    @ToString
+    @EqualsAndHashCode
     public static class LayoutStatus {
         @NonNull
         private final ClusterStabilityStatus clusterStabilityStatus;
