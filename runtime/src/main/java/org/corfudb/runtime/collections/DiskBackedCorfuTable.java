@@ -147,6 +147,7 @@ public class DiskBackedCorfuTable<K, V> implements
             this.statistics = new Statistics();
             this.statistics.setStatsLevel(StatsLevel.ALL);
             rocksDbOptions.setStatistics(statistics);
+            persistenceOptions.getWriteBufferSize().map(rocksDbOptions::setWriteBufferSize);
 
             final RocksDbStore<DiskBackedCorfuTable<K, V>> rocksDbStore = new RocksDbStore<>(
                     persistenceOptions.getDataPath(), rocksDbOptions, writeOptions);

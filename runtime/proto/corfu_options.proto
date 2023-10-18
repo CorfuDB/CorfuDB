@@ -37,6 +37,7 @@ message PersistenceOptions {
     optional string dataPath = 1;
     optional ConsistencyModel consistencyModel = 2;
     optional SizeComputationModel sizeComputationModel = 3;
+    optional int64 writeBufferSize = 4; // In bytes.
 }
 
 message ReplicationLogicalGroup {
