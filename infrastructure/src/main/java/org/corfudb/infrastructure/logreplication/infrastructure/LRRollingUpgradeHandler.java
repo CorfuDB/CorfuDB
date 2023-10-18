@@ -4,13 +4,11 @@ import com.google.protobuf.Message;
 import com.google.protobuf.Timestamp;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.ILogReplicationVersionAdapter;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplicationUtils;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.Table;
-import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
 
 import java.time.Instant;
@@ -75,7 +73,7 @@ public class LRRollingUpgradeHandler {
         // Open the event table, which is used to log the intent for triggering a forced snapshot sync upon upgrade
         // completion
         LogReplicationMetadataManager.tryOpenTable(corfuStore, NAMESPACE, REPLICATION_EVENT_TABLE_NAME,
-                LogReplicationMetadata.ReplicationEventInfoKey.class, LogReplicationMetadata.ReplicationEvent.class, null);
+                LogReplication.ReplicationEventInfoKey.class, LogReplication.ReplicationEvent.class, null);
     }
 
     public boolean isLRUpgradeInProgress(TxnContext txnContext) {
@@ -141,16 +139,16 @@ public class LRRollingUpgradeHandler {
         UUID rollingUpgradeForceSyncId = UUID.randomUUID();
 
         // Write a rolling upgrade force snapshot sync event to the logReplicationEventTable
-        LogReplicationMetadata.ReplicationEventInfoKey key = LogReplicationMetadata.ReplicationEventInfoKey.newBuilder()
+        LogReplication.ReplicationEventInfoKey key = LogReplication.ReplicationEventInfoKey.newBuilder()
                 .build();
 
-        LogReplicationMetadata.ReplicationEvent event = LogReplicationMetadata.ReplicationEvent.newBuilder()
+        LogReplication.ReplicationEvent event = LogReplication.ReplicationEvent.newBuilder()
                 .setEventId(rollingUpgradeForceSyncId.toString())
-                .setType(LogReplicationMetadata.ReplicationEvent.ReplicationEventType.UPGRADE_COMPLETION_FORCE_SNAPSHOT_SYNC)
+                .setType(LogReplication.ReplicationEvent.ReplicationEventType.UPGRADE_COMPLETION_FORCE_SNAPSHOT_SYNC)
                 .setEventTimestamp(Timestamp.newBuilder().setSeconds(Instant.now().getEpochSecond()).build())
                 .build();
 
-        Table<LogReplicationMetadata.ReplicationEventInfoKey, LogReplicationMetadata.ReplicationEvent, Message> replicationEventTable =
+        Table<LogReplication.ReplicationEventInfoKey, LogReplication.ReplicationEvent, Message> replicationEventTable =
                 txnContext.getTable(REPLICATION_EVENT_TABLE_NAME);
 
         log.info("Forced snapshot sync will be triggered due to completion of rolling upgrade");
