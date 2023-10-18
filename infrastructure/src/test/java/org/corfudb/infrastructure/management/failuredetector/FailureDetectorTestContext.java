@@ -18,6 +18,7 @@ import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats.Partit
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.runtime.view.LayoutProbe.LayoutStatus;
 import org.corfudb.util.concurrent.SingletonResource;
 
 import java.util.Arrays;
@@ -109,7 +110,9 @@ public class FailureDetectorTestContext {
     }
 
     public Layout getLayoutMock() {
-        return mock(Layout.class);
+        Layout layoutMock = mock(Layout.class);
+        when(layoutMock.getStatus()).thenReturn(LayoutStatus.empty());
+        return layoutMock;
     }
 
     public static class ClusterStateTestContext {
