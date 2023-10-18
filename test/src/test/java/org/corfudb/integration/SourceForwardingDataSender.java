@@ -36,7 +36,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * (for processing).
  */
 @Slf4j
-public class SourceForwardingDataSender extends AbstractIT implements DataSender {
+public class SourceForwardingDataSender implements DataSender {
 
     private final static int DROP_INCREMENT = 4;
 
@@ -91,9 +91,13 @@ public class SourceForwardingDataSender extends AbstractIT implements DataSender
 
     private CorfuStore standbyCorfuStore;
 
-    private final String destinationClusterID;
+    private final String destinationClusterId;
 
     private static final String REPLICATION_STATUS_TABLE = "LogReplicationStatus";
+
+    private LogReplicationIT.TestConfig testConfig;
+
+    private int numStartMsgsDropped;
 
     @SneakyThrows
     public SourceForwardingDataSender(String destinationEndpoint, LogReplicationConfig config, LogReplicationIT.TestConfig testConfig,
@@ -119,11 +123,27 @@ public class SourceForwardingDataSender extends AbstractIT implements DataSender
                 LogReplicationMetadata.ReplicationStatusVal.class,
                 null,
                 TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
-        this.destinationClusterID = testConfig.getRemoteClusterId();
+        this.destinationClusterId = testConfig.getRemoteClusterId();
+        this.testConfig = testConfig;
     }
 
     @Override
     public CompletableFuture<LogReplicationEntryMsg> send(LogReplicationEntryMsg message) {
+        // Check if the SNAPSHOT_START message must be dropped
+        if (testConfig.isDropSnapshotStartMsg() && message.getMetadata().getEntryType() ==
+                LogReplicationEntryType.SNAPSHOT_START) {
+            if (testConfig.getNumDropsForSnapshotStart() != Integer.MAX_VALUE) {
+                // If a limited number of START messages must be dropped, drop them only if the number is yet to be
+                // reached
+                if (numStartMsgsDropped < testConfig.getNumDropsForSnapshotStart()) {
+                    numStartMsgsDropped++;
+                    return new CompletableFuture<>();
+                }
+            } else {
+                return new CompletableFuture<>();
+            }
+        }
+
         log.trace("Send message: " + message.getMetadata().getEntryType() + " for:: " + message.getMetadata().getTimestamp());
         if (ifDropMsg > 0 && msgCnt == droppingNum || dropACKLevel == 2 && message.getMetadata().getTimestamp() >= lastAckDropped) {
             log.info("****** Drop msg {} log entry ts {}",  msgCnt, message.getMetadata().getTimestamp());
@@ -313,11 +333,11 @@ public class SourceForwardingDataSender extends AbstractIT implements DataSender
     }
 
     public void checkStatusOnStandby(boolean expectedDataConsistent) {
-        if (destinationClusterID == null) {
+        if (destinationClusterId == null) {
             return;
         }
         LogReplicationMetadata.ReplicationStatusKey standbyClusterId = LogReplicationMetadata.ReplicationStatusKey.newBuilder()
-                .setClusterId(destinationClusterID)
+                .setClusterId(destinationClusterId)
                 .build();
         try (TxnContext txn = standbyCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
             LogReplicationMetadata.ReplicationStatusVal standbyStatus = (LogReplicationMetadata.ReplicationStatusVal)txn.getRecord(REPLICATION_STATUS_TABLE, standbyClusterId).getPayload();
