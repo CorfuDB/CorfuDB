@@ -4,6 +4,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.google.protobuf.TextFormat;
 import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
@@ -114,7 +115,6 @@ public class LogReplicationSinkManager implements DataReceiver {
     @Getter
     private final AtomicBoolean ongoingApply = new AtomicBoolean(false);
 
-    @Getter
     private AtomicBoolean isShutdown = new AtomicBoolean(false);
 
     /**
@@ -573,6 +573,15 @@ public class LogReplicationSinkManager implements DataReceiver {
     public void shutdown() {
         this.applyExecutor.shutdownNow();
         isShutdown.set(true);
+    }
+
+    public boolean isShutdown() {
+        // If this class was mocked, instance variables will not be initialized.  Initialize the shutdown boolean and
+        // return false
+        if (isShutdown == null) {
+            isShutdown = new AtomicBoolean(false);
+        }
+        return isShutdown.get();
     }
 
     /**
