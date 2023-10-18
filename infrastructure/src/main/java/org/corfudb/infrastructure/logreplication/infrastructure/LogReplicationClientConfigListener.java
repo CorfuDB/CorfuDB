@@ -138,7 +138,7 @@ public class LogReplicationClientConfigListener extends StreamListenerResumeOrFu
                 ReplicationModel model = ((ClientRegistrationInfo) entry.getPayload()).getModel();
                 LogReplication.ReplicationSubscriber subscriber = LogReplication.ReplicationSubscriber.newBuilder()
                         .setClientName(clientName).setModel(model).build();
-                if (model.equals(ReplicationModel.LOGICAL_GROUPS)) {
+                if (model.equals(ReplicationModel.LOGICAL_GROUPS) && model.equals(ReplicationModel.ROUTING_QUEUES)) {
                     configManager.onNewClientRegister(subscriber);
                     sessionManager.sendOutSessionToSinkSide(subscriber);
                 }

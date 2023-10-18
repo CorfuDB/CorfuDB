@@ -206,7 +206,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
                 requestMetadata(nodeId, request);
                 break;
             case LR_SINK_SESSION_INITIALIZATION:
-                sinkSideSessionInitialize(nodeId, request);
+                remoteSessionRegister(nodeId, request);
                 break;
             default:
                 break;
@@ -383,52 +383,43 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
         replicationReqObserverMap.get(Pair.of(sessionMsg, requestId)).onNext(request);
     }
 
-    private void sinkSideSessionInitialize(String nodeId, RequestMsg request) {
-        LogReplicationSession sessionMsg = request.getHeader().getSession();
-        long requestId = request.getHeader().getRequestId();
+    private void remoteSessionRegister(String nodeId, RequestMsg request) {
+        LogReplicationSession session = request.getHeader().getSession();
 
-        if (!replicationReqObserverMap.containsKey(Pair.of(sessionMsg, requestId))) {
-            StreamObserver<ResponseMsg> responseObserver = new StreamObserver<ResponseMsg>() {
-                @Override
-                public void onNext(ResponseMsg response) {
-                    try {
-                        log.info("Received ACK for {}", response.getHeader().getRequestId());
-                        receive(response);
-                    } catch (Exception e) {
-                        log.error("Caught exception while receiving ACK", e);
-                        getRouter().completeExceptionally(sessionMsg, response.getHeader().getRequestId(), e);
-                        replicationReqObserverMap.remove(Pair.of(sessionMsg, requestId));
-                    }
-                }
-
-                @Override
-                public void onError(Throwable t) {
-                    log.error("Error from response observer", t);
-                    long requestId = request.getHeader().getRequestId();
-                    onServiceUnavailable(t, nodeId, sessionMsg);
-                    getRouter().completeExceptionally(sessionMsg, requestId, t);
-                    replicationReqObserverMap.remove(Pair.of(sessionMsg, requestId));
-                }
-
-                @Override
-                public void onCompleted() {
-                    replicationReqObserverMap.remove(Pair.of(sessionMsg, requestId));
-                }
-            };
-
-            if(sessionToAsyncStubMap.containsKey(sessionMsg)) {
-                StreamObserver<RequestMsg> requestObserver = sessionToAsyncStubMap.get(sessionMsg).sinkSideSessionInitialize(responseObserver);
-                replicationReqObserverMap.put(Pair.of(sessionMsg, requestId), new CorfuStreamObserver<>(requestObserver));
-            } else {
-                log.error("No stub found for remote node {}. Message dropped type={}",
-                        nodeId, request.getPayload().getPayloadCase());
+        // StreamObserver which will observe the async response
+        StreamObserver<ResponseMsg> responseObserver = new StreamObserver<ResponseMsg>() {
+            @Override
+            public void onNext(ResponseMsg responseMsg) {
+                log.info("Received leadership response from node {}", nodeId);
+                receive(responseMsg);
             }
+
+            @Override
+            public void onError(Throwable throwable) {
+                log.warn("Error encountered while receiving leadership response msg {}", throwable);
+            }
+
+            @Override
+            public void onCompleted() {
+                log.info("Finished queryLeadership RPC");
+            }
+        };
+
+        try {
+            log.info("queryLeadership for session {}", session);
+            if (sessionToAsyncStubMap.containsKey(session)) {
+                sessionToAsyncStubMap.get(session).withDeadlineAfter(10, TimeUnit.SECONDS)
+                        .queryLeadership(request, responseObserver);
+            } else {
+                log.warn("Stub not found for session {}. Dropping message of type {}",
+                        session, request.getPayload().getPayloadCase());
+            }
+        } catch (Exception e) {
+            log.error("Caught exception while sending message to query leadership status id {} on channel {}",
+                    request.getHeader().getRequestId(), nodeIdToChannelMap.get(nodeId).hashCode(), e);
+            onServiceUnavailable(e, nodeId, session);
+            getRouter().completeExceptionally(session, request.getHeader().getRequestId(), e);
         }
-
-        log.info("Send replication entry: {} to node {}", request.getHeader().getRequestId(), nodeId);
-
-        // Send log replication entries across channel
-        replicationReqObserverMap.get(Pair.of(sessionMsg, requestId)).onNext(request);
     }
 
 

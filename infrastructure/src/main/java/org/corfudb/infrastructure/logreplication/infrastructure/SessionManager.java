@@ -35,6 +35,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
@@ -246,7 +247,6 @@ public class SessionManager {
         sessions.add(sessionFromSource);
 
         Set<String> currentRemoteSources = topology.getRemoteSourceClusters().keySet();
-        Set<String> remoteSourceClustersUnchanged = currentRemoteSources;
 
         Set<String> currentRemoteSinks = topology.getRemoteSinkClusters().keySet();
 
@@ -259,7 +259,7 @@ public class SessionManager {
                     sessions.forEach(session -> {
                             sessionsUnchanged.add(session);
                             //update topologyId for sink sessions
-                            if (remoteSourceClustersUnchanged.contains(session.getSourceClusterId())) {
+                            if (currentRemoteSources.contains(session.getSourceClusterId())) {
                                 log.info("contains topo");
                                 metadataManager.updateReplicationMetadataField(txn, session,
                                         ReplicationMetadata.TOPOLOGYCONFIGID_FIELD_NUMBER, topology.getTopologyConfigId());
@@ -333,7 +333,7 @@ public class SessionManager {
         logNewlyAddedSessionInfo();
     }
 
-    public Set<LogReplicationSession> createOutgoingSessionsBySubscriber(ReplicationSubscriber subscriber) {
+    private Set<LogReplicationSession> createOutgoingSessionsBySubscriber(ReplicationSubscriber subscriber) {
         Set<LogReplicationSession> sessionsToAdd = new HashSet<>();
         try {
             String localClusterId = topology.getLocalClusterDescriptor().getClusterId();
@@ -627,21 +627,27 @@ public class SessionManager {
         incomingMsgHandler.leadershipChanged();
     }
 
-
     public void sendOutSessionToSinkSide(LogReplication.ReplicationSubscriber subscriber) {
         Set<LogReplicationSession> sessionForSinkSide = this.createOutgoingSessionsBySubscriber(subscriber);
         for (LogReplicationSession session : sessionForSinkSide) {
-            LogReplication.LogReplicationSinkSessionInitializationMsg msg =
-                    LogReplication.LogReplicationSinkSessionInitializationMsg.newBuilder().setSession(session).build();
-            CorfuMessage.RequestPayloadMsg payload =
-                    CorfuMessage.RequestPayloadMsg.newBuilder().setLrSinkSessionInitialization(msg).build();
+            LogReplication.LogReplicationSinkSessionInitializationMsg msg = LogReplication.LogReplicationSinkSessionInitializationMsg.newBuilder().setSession(session).build();
+            CorfuMessage.RequestPayloadMsg payload = CorfuMessage.RequestPayloadMsg.newBuilder().setLrSinkSessionInitialization(msg).build();
 
             updateRouterWithNewSessions();
             createSourceFSMs();
             logNewlyAddedSessionInfo();
-            topology.getRemoteClusterEndpoints().put(session.getSourceClusterId(), topology.getRemoteSourceClusters().get(session.getSourceClusterId()));
-            router.connect(router.getSessionToRemoteClusterDescriptor().get(session), session);
-            CompletableFuture<LogReplication.LogReplicationMetadataResponseMsg> cf = router.sendRequestAndGetCompletable(session, payload, router.getSessionToRemoteClusterDescriptor().get(session).getClusterId());
+            if (topology.getRemoteClusterEndpoints().containsKey(session.getSourceClusterId())) {
+                // initiate connection to remote Sink cluster
+                router.connect(topology.getAllClustersInTopology().get(session.getSinkClusterId()), session);
+            } else {
+                // initiate connection to remote Source cluster
+                router.connect(topology.getAllClustersInTopology().get(session.getSourceClusterId()), session);
+            }
+            try {
+                CompletableFuture<LogReplication.LogReplicationMetadataResponseMsg> cf = router.sendRequestAndGetCompletable(session, payload, router.getSessionToRemoteClusterDescriptor().get(session).getClusterId());
+            } catch(Exception e) {
+                router.sendRequestAndGetCompletable(session, payload, router.getSessionToRemoteClusterDescriptor().get(session).getClusterId());
+            }
         }
         }
 }

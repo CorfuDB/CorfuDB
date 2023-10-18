@@ -130,7 +130,7 @@ public class LogReplicationLogicalGroupClient {
                     } else {
                         txn.putRecord(replicationRegistrationTable, clientKey, clientInfo, null);
                     }
-
+                    txn.commit();
                 } catch (TransactionAbortedException tae) {
                     log.info(String.format("[%s] Unable to register client.", clientName), tae);
                     throw new RetryNeededException();

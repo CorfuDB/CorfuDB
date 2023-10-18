@@ -314,7 +314,7 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
     }
 
     @LogReplicationRequestHandler(requestType = LR_SINK_SESSION_INITIALIZATION)
-    private void handleSinkSideInitialization(RequestMsg request, ResponseMsg res,
+    private void handleSinkSessionCreationRequest(RequestMsg request, ResponseMsg res,
                                               @Nonnull IClientServerRouter router) {
         log.debug("Log Replication Sink Side Session Initialization Request received by Server.");
         LogReplicationSession session = request.getPayload().getLrSinkSessionInitialization().getSession();
@@ -359,7 +359,7 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
     }
 
     @LogReplicationResponseHandler(responseType = LR_SINK_SESSION_INITIALIZATION_ACK)
-    private void handleSinkSessionInitialization(RequestMsg req, ResponseMsg response,
+    private void handleSinkSessionCreationResponse(RequestMsg req, ResponseMsg response,
                                           @Nonnull IClientServerRouter router) {
         log.debug("Handle log replication sink side session initialization response msg {}", TextFormat.shortDebugString(response));
         router.completeRequest(response.getHeader().getSession(), response.getHeader().getRequestId(),

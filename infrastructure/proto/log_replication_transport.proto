@@ -24,5 +24,6 @@ service LogReplication {
     // sink exchange negotiation-msg/replication-msg/ACKs
     rpc reverseReplicate(stream org.corfudb.runtime.ResponseMsg) returns (stream org.corfudb.runtime.RequestMsg) {}
 
-    rpc sinkSideSessionInitialize(stream org.corfudb.runtime.RequestMsg) returns (org.corfudb.runtime.ResponseMsg) {}
+    // Used only by Source when connection initiator: RPC method to send a session registration request
+    rpc remoteSessionRegister(org.corfudb.runtime.RequestMsg) returns (org.corfudb.runtime.ResponseMsg) {}
 }
