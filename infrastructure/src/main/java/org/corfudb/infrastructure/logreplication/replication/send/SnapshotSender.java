@@ -170,7 +170,7 @@ public class SnapshotSender {
                 // a round robin fashion.
                 log.trace("Snapshot sync continue for {} on timestamp {}", snapshotSyncEventId, baseSnapshotTimestamp);
                 fsm.input(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_CONTINUE,
-                        new LogReplicationEventMetadata(snapshotSyncEventId)));
+                        new LogReplicationEventMetadata(snapshotSyncEventId), fsm));
             }
         } else {
             log.info("Snapshot sync completed for {} as there is no data in the log.", snapshotSyncEventId);
@@ -266,7 +266,7 @@ public class SnapshotSender {
         // We need to bind the internal event (COMPLETE) to the snapshotSyncEventId that originated it, this way
         // the state machine can correlate to the corresponding state (in case of delayed events)
         fsm.input(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_TRANSFER_COMPLETE,
-                new LogReplicationEventMetadata(snapshotSyncEventId, baseSnapshotTimestamp, baseSnapshotTimestamp)));
+                new LogReplicationEventMetadata(snapshotSyncEventId, baseSnapshotTimestamp, baseSnapshotTimestamp), fsm));
     }
 
     /**
@@ -284,7 +284,8 @@ public class SnapshotSender {
         LogReplicationEventMetadata metadata = new LogReplicationEventMetadata(snapshotSyncEventId);
         metadata.setTimeoutException(timeoutException);
         // Enqueue cancel event, this will cause re-entrance to snapshot sync to start a new cycle
-        fsm.input(new LogReplicationEvent(LogReplicationEventType.SYNC_CANCEL, metadata));
+        fsm.input(new LogReplicationEvent(LogReplicationEventType.SYNC_CANCEL,
+                new LogReplicationEventMetadata(snapshotSyncEventId), fsm));
     }
 
     /**
