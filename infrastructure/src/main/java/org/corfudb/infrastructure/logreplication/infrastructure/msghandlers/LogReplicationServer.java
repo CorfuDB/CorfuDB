@@ -6,10 +6,12 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
+import org.corfudb.infrastructure.logreplication.infrastructure.SessionManager;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.transport.IClientServerRouter;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
+import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationSinkManager;
 import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
@@ -35,9 +37,12 @@ import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
 import static org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg.PayloadCase.LR_ENTRY;
 import static org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg.PayloadCase.LR_LEADERSHIP_QUERY;
 import static org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg.PayloadCase.LR_METADATA_REQUEST;
+import static org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg.PayloadCase.LR_SINK_SESSION_INITIALIZATION;
 import static org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg.PayloadCase.LR_ENTRY_ACK;
 import static org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg.PayloadCase.LR_LEADERSHIP_RESPONSE;
 import static org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg.PayloadCase.LR_METADATA_RESPONSE;
+import static org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg.PayloadCase.LR_SINK_SESSION_INITIALIZATION_ACK;
+
 
 /**
  * This class represents the Log Replication Server, which is responsible of providing Log Replication across sites.
@@ -72,6 +77,8 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
 
     private final ServerContext serverContext;
 
+    private final SessionManager sessionManager;
+
     private final Set<LogReplicationSession> allSessions;
 
     private final LogReplicationMetadataManager metadataManager;
@@ -87,13 +94,14 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
 
     public LogReplicationServer(@Nonnull ServerContext context, Set<LogReplicationSession> sessions,
                                 LogReplicationMetadataManager metadataManager, String localNodeId, String localClusterId,
-                                LogReplicationContext replicationContext) {
+                                LogReplicationContext replicationContext, SessionManager sessionManager) {
         this.serverContext = context;
         this.allSessions = sessions;
         this.metadataManager = metadataManager;
         this.localNodeId = localNodeId;
         this.localClusterId = localClusterId;
         this.replicationContext = replicationContext;
+        this.sessionManager = sessionManager;
         // TODO V2: the number of threads will change in the follow up PR.
         this.executor = context.getExecutorService(1, EXECUTOR_NAME_PREFIX);
     }
@@ -196,18 +204,11 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
             // Since the two events are async, we wait to receive a new session in the incoming request.
             // If the incoming session is not known to sessionManager drop the message (until session is discovered by
             // local cluster), otherwise create a corresponding sinkManager.
-            // TODO[V2] : We still have a case where the cluster does not ever discover a session on its own, like in
-            //  the logical_group use case where only the source knows about the session even when sink starts the
-            //  connection.
-            //  To resolve this, we need to have a long living RPC from the connectionInitiator cluster which will query
-            //  for sessions from the other cluster
             if (sinkManager == null || sinkManager.isSinkManagerShutdown()) {
                 if(!allSessions.contains(session)) {
                     log.error("SessionManager does not know about incoming session {}, total={}, current sessions={}",
                             session, sessionToSinkManagerMap.size(), sessionToSinkManagerMap.keySet());
                     return;
-                } else {
-                    sinkManager = createSinkManager(session);
                 }
             }
 
@@ -312,6 +313,21 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
         router.sendResponse(response);
     }
 
+    @LogReplicationRequestHandler(requestType = LR_SINK_SESSION_INITIALIZATION)
+    private void handleSinkSessionCreationRequest(RequestMsg request, ResponseMsg res,
+                                              @Nonnull IClientServerRouter router) {
+        log.debug("Log Replication Sink Side Session Initialization Request received by Server.");
+        LogReplicationSession session = request.getPayload().getLrSinkSessionInitialization().getSession();
+        createSinkManager(session);
+        this.sessionManager.refreshForSinkSideInitialization(session);
+        LogReplication.LogReplicationSinkSessionInitializationAck ack =
+                LogReplication.LogReplicationSinkSessionInitializationAck.newBuilder().build();
+        ResponsePayloadMsg payload = ResponsePayloadMsg.newBuilder().setLrSinkSessionInitializationAck(ack).build();
+        HeaderMsg responseHeader = getHeaderMsg(request.getHeader());
+        ResponseMsg response = getResponseMsg(responseHeader, payload);
+        router.sendResponse(response);
+    }
+
     /**
      * Handle an ACK from Log Replication server.
      *
@@ -341,6 +357,15 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
         router.completeRequest(response.getHeader().getSession(), response.getHeader().getRequestId(),
                 response.getPayload().getLrLeadershipResponse());
     }
+
+    @LogReplicationResponseHandler(responseType = LR_SINK_SESSION_INITIALIZATION_ACK)
+    private void handleSinkSessionCreationResponse(RequestMsg req, ResponseMsg response,
+                                          @Nonnull IClientServerRouter router) {
+        log.debug("Handle log replication sink side session initialization response msg {}", TextFormat.shortDebugString(response));
+        router.completeRequest(response.getHeader().getSession(), response.getHeader().getRequestId(),
+                response.getPayload().getLrSinkSessionInitializationAck());
+    }
+
 
     /**
      * Send a leadership loss response.  This will re-trigger leadership discovery on the Source.

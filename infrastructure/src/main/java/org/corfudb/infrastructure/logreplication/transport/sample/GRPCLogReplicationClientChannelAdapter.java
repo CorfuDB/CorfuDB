@@ -194,7 +194,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
     @Override
     public void send(@Nonnull String nodeId, @Nonnull RequestMsg request) {
         // Check the connection future. If connected, continue with sending the message.
-        // If timed out, return a exceptionally completed with the timeout.
+        // If timed out, return an exceptionally completed with the timeout.
         switch (request.getPayload().getPayloadCase()) {
             case LR_ENTRY:
                 replicate(nodeId, request);
@@ -204,6 +204,9 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
                 break;
             case LR_METADATA_REQUEST:
                 requestMetadata(nodeId, request);
+                break;
+            case LR_SINK_SESSION_INITIALIZATION:
+                remoteSessionRegister(nodeId, request);
                 break;
             default:
                 break;
@@ -379,6 +382,46 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
         // Send log replication entries across channel
         replicationReqObserverMap.get(Pair.of(sessionMsg, requestId)).onNext(request);
     }
+
+    private void remoteSessionRegister(String nodeId, RequestMsg request) {
+        LogReplicationSession session = request.getHeader().getSession();
+
+        // StreamObserver which will observe the async response
+        StreamObserver<ResponseMsg> responseObserver = new StreamObserver<ResponseMsg>() {
+            @Override
+            public void onNext(ResponseMsg responseMsg) {
+                log.info("Received leadership response from node {}", nodeId);
+                receive(responseMsg);
+            }
+
+            @Override
+            public void onError(Throwable throwable) {
+                log.warn("Error encountered while receiving leadership response msg {}", throwable);
+            }
+
+            @Override
+            public void onCompleted() {
+                log.info("Finished queryLeadership RPC");
+            }
+        };
+
+        try {
+            log.info("queryLeadership for session {}", session);
+            if (sessionToAsyncStubMap.containsKey(session)) {
+                sessionToAsyncStubMap.get(session).withDeadlineAfter(10, TimeUnit.SECONDS)
+                        .queryLeadership(request, responseObserver);
+            } else {
+                log.warn("Stub not found for session {}. Dropping message of type {}",
+                        session, request.getPayload().getPayloadCase());
+            }
+        } catch (Exception e) {
+            log.error("Caught exception while sending message to query leadership status id {} on channel {}",
+                    request.getHeader().getRequestId(), nodeIdToChannelMap.get(nodeId).hashCode(), e);
+            onServiceUnavailable(e, nodeId, session);
+            getRouter().completeExceptionally(session, request.getHeader().getRequestId(), e);
+        }
+    }
+
 
     @Override
     public void stop() {

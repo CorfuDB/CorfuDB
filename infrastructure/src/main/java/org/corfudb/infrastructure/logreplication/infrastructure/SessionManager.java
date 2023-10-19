@@ -14,6 +14,7 @@ import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientSer
 import org.corfudb.infrastructure.logreplication.runtime.fsm.sink.RemoteSourceLeadershipManager;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.LogReplication.ReplicationModel;
 import org.corfudb.runtime.LogReplication.ReplicationStatus;
@@ -22,6 +23,7 @@ import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
+import org.corfudb.runtime.proto.service.CorfuMessage;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalRetry;
@@ -33,6 +35,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
@@ -114,7 +117,7 @@ public class SessionManager {
 
         this.incomingMsgHandler = new LogReplicationServer(serverContext, sessions, metadataManager,
                 topology.getLocalNodeDescriptor().getNodeId(), topology.getLocalNodeDescriptor().getClusterId(),
-                replicationContext);
+                replicationContext, this);
 
         this.router = new LogReplicationClientServerRouter(replicationManager,
                 topology.getLocalNodeDescriptor().getClusterId(), topology.getLocalNodeDescriptor().getNodeId(),
@@ -240,6 +243,47 @@ public class SessionManager {
         }
     }
 
+    public synchronized void refreshForSinkSideInitialization(LogReplicationSession sessionFromSource) {
+        sessions.add(sessionFromSource);
+
+        Set<String> currentRemoteSources = topology.getRemoteSourceClusters().keySet();
+
+        Set<String> currentRemoteSinks = topology.getRemoteSinkClusters().keySet();
+
+        Set<LogReplicationSession> sessionsToRemove = new HashSet<>();
+        Set<LogReplicationSession> sessionsUnchanged = new HashSet<>();
+
+        try {
+            IRetry.build(IntervalRetry.class, () -> {
+                try (TxnContext txn = corfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
+                    sessions.forEach(session -> {
+                            sessionsUnchanged.add(session);
+                            //update topologyId for sink sessions
+                            if (currentRemoteSources.contains(session.getSourceClusterId())) {
+                                log.info("contains topo");
+                                metadataManager.updateReplicationMetadataField(txn, session,
+                                        ReplicationMetadata.TOPOLOGYCONFIGID_FIELD_NUMBER, topology.getTopologyConfigId());
+                            }
+
+                    });
+                    txn.commit();
+                } catch (TransactionAbortedException e) {
+                    throw new RetryNeededException();
+                }
+                stopReplication(sessionsToRemove);
+                updateTopology(topology);
+                updateReplicationParameters(Sets.intersection(sessionsUnchanged, outgoingSessions));
+                createSessions();
+                return null;
+            }).run();
+        } catch (InterruptedException e) {
+            log.error("Unrecoverable exception while refreshing sessions", e);
+            throw new UnrecoverableCorfuInterruptedError(e);
+        }
+
+    }
+
+
     /**
      * Update in-memory topology and topologyId
      * @param newTopology new topology
@@ -289,7 +333,7 @@ public class SessionManager {
         logNewlyAddedSessionInfo();
     }
 
-    private void createOutgoingSessionsBySubscriber(ReplicationSubscriber subscriber) {
+    private Set<LogReplicationSession> createOutgoingSessionsBySubscriber(ReplicationSubscriber subscriber) {
         Set<LogReplicationSession> sessionsToAdd = new HashSet<>();
         try {
             String localClusterId = topology.getLocalClusterDescriptor().getClusterId();
@@ -330,6 +374,7 @@ public class SessionManager {
                 subscriber, sessionsToAdd);
 
         configManager.generateConfig(sessionsToAdd);
+        return sessionsToAdd;
     }
 
     private void createIncomingSessionsBySubscriber(ReplicationSubscriber subscriber) {
@@ -581,5 +626,29 @@ public class SessionManager {
     public void notifyLeadershipChange() {
         incomingMsgHandler.leadershipChanged();
     }
+
+    public void sendOutSessionToSinkSide(LogReplication.ReplicationSubscriber subscriber) {
+        Set<LogReplicationSession> sessionForSinkSide = this.createOutgoingSessionsBySubscriber(subscriber);
+        for (LogReplicationSession session : sessionForSinkSide) {
+            LogReplication.LogReplicationSinkSessionInitializationMsg msg = LogReplication.LogReplicationSinkSessionInitializationMsg.newBuilder().setSession(session).build();
+            CorfuMessage.RequestPayloadMsg payload = CorfuMessage.RequestPayloadMsg.newBuilder().setLrSinkSessionInitialization(msg).build();
+
+            updateRouterWithNewSessions();
+            createSourceFSMs();
+            logNewlyAddedSessionInfo();
+            if (topology.getRemoteClusterEndpoints().containsKey(session.getSourceClusterId())) {
+                // initiate connection to remote Sink cluster
+                router.connect(topology.getAllClustersInTopology().get(session.getSinkClusterId()), session);
+            } else {
+                // initiate connection to remote Source cluster
+                router.connect(topology.getAllClustersInTopology().get(session.getSourceClusterId()), session);
+            }
+            try {
+                CompletableFuture<LogReplication.LogReplicationMetadataResponseMsg> cf = router.sendRequestAndGetCompletable(session, payload, router.getSessionToRemoteClusterDescriptor().get(session).getClusterId());
+            } catch(Exception e) {
+                router.sendRequestAndGetCompletable(session, payload, router.getSessionToRemoteClusterDescriptor().get(session).getClusterId());
+            }
+        }
+        }
 }
 

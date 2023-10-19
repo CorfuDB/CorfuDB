@@ -87,7 +87,7 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
     @Getter
     private String corfuEndpoint = "localhost:9000";
 
-    private DefaultClusterConfig topology;
+    public DefaultClusterConfig topology;
 
     @Getter
     public CorfuReplicationDiscoveryServiceAdapter corfuReplicationDiscoveryServiceAdapter;
@@ -98,7 +98,7 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
     public String localEndpoint;
 
     @Setter
-    private String localNodeId;
+    public String localNodeId;
 
     // since creating the topology and LR bootstrap is async to each other, wait until clusterManger is ready with the
     // desired topology

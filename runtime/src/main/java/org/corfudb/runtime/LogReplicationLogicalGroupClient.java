@@ -40,8 +40,6 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
  */
 @Slf4j
 public class LogReplicationLogicalGroupClient {
-    // TODO (V2): This field should be removed after the rpc stream is added for Sink side session creation.
-    public static final String DEFAULT_LOGICAL_GROUP_CLIENT = "00000000-0000-0000-0000-0000000000001";
 
     /**
      * Key: ClientRegistrationId
@@ -78,10 +76,8 @@ public class LogReplicationLogicalGroupClient {
     public LogReplicationLogicalGroupClient(CorfuRuntime runtime, String clientName)
             throws InvocationTargetException, NoSuchMethodException, IllegalAccessException {
         Preconditions.checkArgument(isValid(clientName), "clientName is null or empty.");
-
         this.corfuStore = new CorfuStore(runtime);
-        // TODO (V2): client name cannot be customized as Sink side does not have a way to create sessions for now
-        this.clientName = DEFAULT_LOGICAL_GROUP_CLIENT;
+        this.clientName = clientName;
         this.clientKey = ClientRegistrationId.newBuilder()
                 .setClientName(clientName)
                 .build();
@@ -115,7 +111,6 @@ public class LogReplicationLogicalGroupClient {
                     null,
                     TableOptions.fromProtoSchema(DestinationInfoVal.class));
         }
-
         register();
     }
 
@@ -130,21 +125,20 @@ public class LogReplicationLogicalGroupClient {
                     ClientRegistrationInfo clientRegistrationInfo = txn.getRecord(replicationRegistrationTable, clientKey).getPayload();
 
                     if (clientRegistrationInfo != null) {
-                        log.warn(String.format("Client already registered.\n--- ClientRegistrationId ---\n%s" +
+                        log.info(String.format("Client already registered.\n--- ClientRegistrationId ---\n%s" +
                                 "--- ClientRegistrationInfo ---\n%s", clientKey, clientRegistrationInfo));
                     } else {
                         txn.putRecord(replicationRegistrationTable, clientKey, clientInfo, null);
                     }
-
                     txn.commit();
                 } catch (TransactionAbortedException tae) {
-                    log.error(String.format("[%s] Unable to register client.", clientName), tae);
+                    log.info(String.format("[%s] Unable to register client.", clientName), tae);
                     throw new RetryNeededException();
                 }
                 return null;
             }).run();
         } catch (InterruptedException e) {
-            log.error(String.format("[%s] Client registration failed.", clientName), e);
+            log.info(String.format("[%s] Client registration failed.", clientName), e);
             throw new UnrecoverableCorfuInterruptedError(e);
         }
     }

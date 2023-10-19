@@ -294,7 +294,6 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
     }
 
 
-    @Override
     public <T> CompletableFuture<T> sendRequestAndGetCompletable(
             @Nonnull LogReplicationSession session,
             @Nonnull CorfuMessage.RequestPayloadMsg payload,
@@ -321,17 +320,13 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
         try {
             // Get the next request ID.
             requestId = sessionToRequestIdCounter.getOrDefault(session, new AtomicLong(0)).getAndIncrement();
-
             sessionToOutstandingRequests.putIfAbsent(session, new HashMap<>());
             sessionToOutstandingRequests.get(session).put(requestId, cf);
-
             header.setRequestId(requestId);
             header.setClusterId(getUuidMsg(UUID.fromString(this.localClusterId)));
-
             // If no endpoint is specified, the message is to be sent to the remote leader node.
             // We should block until a connection to the leader is established.
             if (nodeId.equals(REMOTE_LEADER)) {
-
                 if (isConnectionStarterForSession(session)) {
                     // Check the connection future. If connected, continue with sending the message.
                     // If timed out, return a exceptionally completed with the timeout.
@@ -346,7 +341,6 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
                         return cf;
                     }
                 }
-
                 if(outgoingSession.contains(session)) {
                     CorfuLogReplicationRuntime runtimeFSM = sessionToRuntimeFSM.get(session);
                     // Get Remote Leader
@@ -365,7 +359,6 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
                     nodeId = sessionToRemoteSourceLeaderManager.get(session).getRemoteLeaderNodeId().get();
                 }
             }
-
             // In the case the message is intended for a specific endpoint, we do not
             // block on connection future, this is the case of leader verification.
             if(isConnectionStarterForSession(session)) {
@@ -380,7 +373,6 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
                         payload.getPayloadCase(), session);
                 serverChannelAdapter.send(getRequestMsg(header.build(), payload));
             }
-
             // Generate a timeout future, which will complete exceptionally
             // if the main future is not completed.
             final CompletableFuture<T> cfTimeout =
@@ -394,7 +386,6 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
                 }
                 return null;
             });
-
             return cfTimeout;
 
         } catch (NetworkException ne) {
@@ -535,7 +526,13 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
                 completeRequest(msg.getHeader().getSession(), msg.getHeader().getRequestId(), null);
                 return;
 
-            } else {
+            } else if (msg.getPayload().getPayloadCase().equals(CorfuMessage.ResponsePayloadMsg.PayloadCase.LR_SINK_SESSION_INITIALIZATION_ACK)){
+                log.debug("Received an ACK for sink side session initialization {}/{}", msg.getHeader().getRequestId(),
+                        msg.getPayload().getPayloadCase());
+                completeRequest(msg.getHeader().getSession(), msg.getHeader().getRequestId(), null);
+                return;
+            }
+            else {
                 // Route the message to the handler.
                 if (log.isTraceEnabled()) {
                     log.trace("Message routed to {}}: {}", msgHandler.getClass().getSimpleName(), msg);
@@ -665,7 +662,8 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
         return message.getPayloadCase().equals(CorfuMessage.RequestPayloadMsg.PayloadCase.LR_ENTRY) ||
                 message.getPayloadCase().equals(CorfuMessage.RequestPayloadMsg.PayloadCase.LR_METADATA_REQUEST) ||
                 message.getPayloadCase().equals(CorfuMessage.RequestPayloadMsg.PayloadCase.LR_LEADERSHIP_QUERY) ||
-                message.getPayloadCase().equals(CorfuMessage.RequestPayloadMsg.PayloadCase.LR_LEADERSHIP_LOSS);
+                message.getPayloadCase().equals(CorfuMessage.RequestPayloadMsg.PayloadCase.LR_LEADERSHIP_LOSS) ||
+                message.getPayloadCase().equals(CorfuMessage.RequestPayloadMsg.PayloadCase.LR_SINK_SESSION_INITIALIZATION);
     }
 
     /**

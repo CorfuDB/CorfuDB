@@ -23,4 +23,7 @@ service LogReplication {
     // Used only by Sink when connection starter. This RPC creates a long living stream, on which the source and
     // sink exchange negotiation-msg/replication-msg/ACKs
     rpc reverseReplicate(stream org.corfudb.runtime.ResponseMsg) returns (stream org.corfudb.runtime.RequestMsg) {}
+
+    // Used only by Source when connection initiator: RPC method to send a session registration request
+    rpc remoteSessionRegister(org.corfudb.runtime.RequestMsg) returns (org.corfudb.runtime.ResponseMsg) {}
 }

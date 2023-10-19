@@ -78,6 +78,9 @@ public class LogReplicationClientConfigListener extends StreamListenerResumeOrFu
     public void start() {
         CorfuStoreMetadata.Timestamp timestamp = configManager.preprocessAndGetTail();
         configManager.generateConfig(sessionManager.getSessions());
+        // TODO: A workaround for the timestamp, since current implementation will not listen to the client update due
+        //  to the timestamp.
+        timestamp = CorfuStoreMetadata.Timestamp.newBuilder().setEpoch(0).setSequence(0).build();
 
         log.info("Start log replication listener for client config tables from {}", timestamp);
         try {
@@ -129,16 +132,16 @@ public class LogReplicationClientConfigListener extends StreamListenerResumeOrFu
             log.warn("No client registration table entries found!");
             return;
         }
-
         for (CorfuStreamEntry entry : registrationTableEntries) {
             if (entry.getOperation().equals(CorfuStreamEntry.OperationType.UPDATE)) {
                 String clientName = ((ClientRegistrationId) entry.getKey()).getClientName();
                 ReplicationModel model = ((ClientRegistrationInfo) entry.getPayload()).getModel();
-                // TODO (V2): Currently we add a default subscriber for logical group use case instead of listening
-                //  on client registration. Subscriber should be added upon registration after grpc stream for session
-                //  creation is added.
-                // configManager.onNewClientRegister(subscriber);
-                // sessionManager.createOutgoingSessionsBySubscriber(subscriber);
+                LogReplication.ReplicationSubscriber subscriber = LogReplication.ReplicationSubscriber.newBuilder()
+                        .setClientName(clientName).setModel(model).build();
+                if (model.equals(ReplicationModel.LOGICAL_GROUPS) && model.equals(ReplicationModel.ROUTING_QUEUES)) {
+                    configManager.onNewClientRegister(subscriber);
+                    sessionManager.sendOutSessionToSinkSide(subscriber);
+                }
                 log.info("New client {} registered with model {}", clientName, model);
             } else if (entry.getOperation().equals(CorfuStreamEntry.OperationType.DELETE)) {
                 // TODO (V2 / Chris/Shreay): add unregister API for clients

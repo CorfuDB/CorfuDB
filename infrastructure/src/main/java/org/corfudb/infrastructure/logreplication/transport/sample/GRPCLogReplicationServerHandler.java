@@ -151,6 +151,16 @@ public class GRPCLogReplicationServerHandler extends LogReplicationGrpc.LogRepli
     }
 
 
+    @Override
+    public void remoteSessionRegister(RequestMsg request, StreamObserver<ResponseMsg> responseObserver) {
+        log.info("Received[{}]: {}", request.getHeader().getRequestId(),
+                request.getPayload().getPayloadCase().name());
+        unaryCallStreamObserverMap.put(Pair.of(request.getHeader().getSession(), request.getHeader().getRequestId()),
+                new CorfuStreamObserver<>(responseObserver));
+        router.receive(request);
+    }
+
+
 
     public void send(ResponseMsg msg) {
         long requestId = msg.getHeader().getRequestId();
@@ -196,6 +206,7 @@ public class GRPCLogReplicationServerHandler extends LogReplicationGrpc.LogRepli
             unaryCallStreamObserverMap.remove(Pair.of(session, requestId));
         }
     }
+
 
     public void send(RequestMsg msg) {
 

@@ -94,6 +94,7 @@ message RequestPayloadMsg {
     LogReplicationMetadataRequestMsg lr_metadata_request = 71;
     LogReplicationLeadershipRequestMsg lr_leadership_query = 72;
     LogReplicationLeadershipLossMsg lr_leadership_loss = 73;
+    LogReplicationSinkSessionInitializationMsg lr_sink_session_initialization = 74;
   }
 }
 
@@ -151,6 +152,9 @@ message ResponsePayloadMsg {
 
     LogReplicationLeadershipLossMsg lr_leadership_loss = 73;
     ReverseReplicateMsg lr_reverse_replicate_msg = 74;
+
+    LogReplicationSinkSessionInitializationAck lr_sink_session_initialization_ack = 75;
+
 
     // Server Error
     ServerErrorMsg server_error = 200;

@@ -46,6 +46,14 @@ message LogReplicationLeadershipResponseMsg {
   string nodeId = 3;
 }
 
+message LogReplicationSinkSessionInitializationMsg {
+  LogReplicationSession session = 1;
+}
+
+message LogReplicationSinkSessionInitializationAck {
+
+}
+
 enum LogReplicationEntryType {
   LOG_ENTRY_MESSAGE = 0;
   SNAPSHOT_MESSAGE = 1;
