@@ -104,7 +104,7 @@ public class LogReplicationFsmUtil {
             clazz.getMethod("input", LogReplicationRuntimeEvent.class).invoke(fsm,
                     new LogReplicationRuntimeEvent(
                             LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.REMOTE_LEADER_FOUND,
-                            leader));
+                            leader, (CorfuLogReplicationRuntime) fsm));
         } else {
             clazz.getMethod("input", LogReplicationSinkEvent.class).invoke(fsm,
                     new LogReplicationSinkEvent(
@@ -120,7 +120,7 @@ public class LogReplicationFsmUtil {
             clazz.getMethod("input", LogReplicationRuntimeEvent.class).invoke(fsm,
                     new LogReplicationRuntimeEvent(
                             LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.REMOTE_LEADER_NOT_FOUND,
-                            leader));
+                            leader, (CorfuLogReplicationRuntime) fsm));
         } else {
             clazz.getMethod("input", LogReplicationSinkEvent.class).invoke(fsm,
                     new LogReplicationSinkEvent(
@@ -169,7 +169,8 @@ public class LogReplicationFsmUtil {
             return true;
         } catch(TimeoutException | ExecutionException | InterruptedException ex) {
             log.error("Retry sending leadership loss msg until an ACK is received ", ex);
-            fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.LOCAL_LEADER_LOSS, false));
+            fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.LOCAL_LEADER_LOSS,
+                    false,fsm));
         } catch (Exception ex) {
             // error occurring due to transport/network layer failure can be ignored as the remote will be notified. The
             // remote will then initiate a new connection. In this case, its safe to transition FSM to STOPPED state

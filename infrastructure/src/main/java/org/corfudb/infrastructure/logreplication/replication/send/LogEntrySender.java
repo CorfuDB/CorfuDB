@@ -86,7 +86,9 @@ public class LogEntrySender {
             LogReplicationEntryMsg ack = dataSenderBufferManager.resend();
             if (ack != null) {
                 logReplicationFSM.input(new LogReplicationEvent(LogReplicationEventType.LOG_ENTRY_SYNC_REPLICATED,
-                        new LogReplicationEventMetadata(getUUID(ack.getMetadata().getSyncRequestId()), ack.getMetadata().getTimestamp())));
+                        new LogReplicationEventMetadata(getUUID(ack.getMetadata().getSyncRequestId()),
+                                ack.getMetadata().getTimestamp()),
+                        logReplicationFSM));
             }
         } catch (LogEntrySyncTimeoutException te) {
             log.error("LogEntrySyncTimeoutException after several retries.", te);
@@ -140,7 +142,7 @@ public class LogEntrySender {
         }
 
         logReplicationFSM.input(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.LOG_ENTRY_SYNC_CONTINUE,
-                new LogReplicationEventMetadata(logEntrySyncEventId)));
+                new LogReplicationEventMetadata(logEntrySyncEventId), logReplicationFSM));
     }
 
     /**
@@ -152,7 +154,8 @@ public class LogEntrySender {
      */
     private void cancelLogEntrySync(LogReplicationError error, LogReplicationEventType transition, UUID logEntrySyncEventId) {
         dataSenderBufferManager.onError(error);
-        logReplicationFSM.input(new LogReplicationEvent(transition, new LogReplicationEventMetadata(logEntrySyncEventId)));
+        logReplicationFSM.input(new LogReplicationEvent(transition, new LogReplicationEventMetadata(logEntrySyncEventId),
+                logReplicationFSM));
     }
 
     /**

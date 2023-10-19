@@ -356,7 +356,7 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
                         log.error("Leader not found to remote cluster {}",
                                 sessionToRemoteClusterDescriptor.get(session).getClusterId());
                         runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent
-                                .LogReplicationRuntimeEventType.REMOTE_LEADER_LOSS));
+                                .LogReplicationRuntimeEventType.REMOTE_LEADER_LOSS, runtimeFSM));
                         throw new ChannelAdapterException(
                                 String.format("Leader not found to remote cluster %s",
                                         sessionToRemoteClusterDescriptor.get(session).getClusterId()));
@@ -400,8 +400,9 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
         } catch (NetworkException ne) {
             log.error("Caught Network Exception while trying to send message to remote leader {}", nodeId);
             if(outgoingSession.contains(session)) {
-                sessionToRuntimeFSM.get(session).input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent
-                        .LogReplicationRuntimeEventType.ON_CONNECTION_DOWN, nodeId));
+                CorfuLogReplicationRuntime runtimeFsm = sessionToRuntimeFSM.get(session);
+                runtimeFsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent
+                        .LogReplicationRuntimeEventType.ON_CONNECTION_DOWN, nodeId, runtimeFsm));
             } else {
                 sessionToRemoteSourceLeaderManager.get(session).input(new LogReplicationSinkEvent(
                         LogReplicationSinkEvent.LogReplicationSinkEventType.ON_CONNECTION_DOWN, nodeId));
@@ -503,9 +504,10 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
             if (msg.getPayload().getPayloadCase() == CorfuMessage.ResponsePayloadMsg.PayloadCase.LR_LEADERSHIP_LOSS) {
                 String nodeId = msg.getPayload().getLrLeadershipLoss().getNodeId();
                 if (outgoingSession.contains(session)) {
+                    CorfuLogReplicationRuntime runtimeFsm = sessionToRuntimeFSM.get(session);
                     this.sessionToRuntimeFSM.get(session)
                             .input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent
-                                    .LogReplicationRuntimeEventType.REMOTE_LEADER_LOSS, nodeId));
+                                    .LogReplicationRuntimeEventType.REMOTE_LEADER_LOSS, nodeId, runtimeFsm));
                 } else {
                     sessionToRemoteSourceLeaderManager.get(session)
                             .input(new LogReplicationSinkEvent(LogReplicationSinkEvent
@@ -650,8 +652,9 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
      */
     public synchronized void onError(Throwable t, LogReplicationSession session) {
         try {
+            CorfuLogReplicationRuntime runtimeFsm = sessionToRuntimeFSM.get(session);
             sessionToRuntimeFSM.get(session).input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent
-                    .LogReplicationRuntimeEventType.ERROR, t));
+                    .LogReplicationRuntimeEventType.ERROR, t, runtimeFsm));
         } catch (NullPointerException npe) {
             log.info("RuntimeFSM not found for session {}", session);
         }
@@ -676,9 +679,9 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
     private void addConnectionUpEvent(LogReplicationSession session, String nodeId) {
         try {
             log.debug("Input Connection Up event for session {}", session);
-            sessionToRuntimeFSM.get(session)
-                    .input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent
-                            .LogReplicationRuntimeEventType.ON_CONNECTION_UP, nodeId));
+            CorfuLogReplicationRuntime runtimeFsm = sessionToRuntimeFSM.get(session);
+            runtimeFsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent
+                            .LogReplicationRuntimeEventType.ON_CONNECTION_UP, nodeId, runtimeFsm));
         } catch (NullPointerException npe) {
             log.info("runtimeFsm is not present for session {}", session);
         }
@@ -750,8 +753,9 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
         try {
             log.info("Connection lost to remote node {} for session {}", nodeId, session);
             if (outgoingSession.contains(session)) {
-                sessionToRuntimeFSM.get(session).input(new LogReplicationRuntimeEvent(
-                        LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.ON_CONNECTION_DOWN, nodeId));
+                CorfuLogReplicationRuntime runtimeFsm = sessionToRuntimeFSM.get(session);
+                runtimeFsm.input(new LogReplicationRuntimeEvent(
+                        LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.ON_CONNECTION_DOWN, nodeId, runtimeFsm));
             } else if (incomingSession.contains(session)){
                 sessionToRemoteSourceLeaderManager.get(session).input(new LogReplicationSinkEvent(
                         LogReplicationSinkEvent.LogReplicationSinkEventType.ON_CONNECTION_DOWN, nodeId));
