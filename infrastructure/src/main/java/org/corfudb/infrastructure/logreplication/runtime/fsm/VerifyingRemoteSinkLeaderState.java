@@ -21,14 +21,10 @@ public class VerifyingRemoteSinkLeaderState implements LogReplicationRuntimeStat
 
     private CorfuLogReplicationRuntime fsm;
 
-    private ThreadPoolExecutor worker;
-
     private LogReplicationClientServerRouter router;
 
-    public VerifyingRemoteSinkLeaderState(CorfuLogReplicationRuntime fsm, ThreadPoolExecutor worker,
-                                          LogReplicationClientServerRouter router) {
+    public VerifyingRemoteSinkLeaderState(CorfuLogReplicationRuntime fsm, LogReplicationClientServerRouter router) {
         this.fsm = fsm;
-        this.worker = worker;
         this.router = router;
     }
 
@@ -75,21 +71,19 @@ public class VerifyingRemoteSinkLeaderState implements LogReplicationRuntimeStat
     @Override
     public void onEntry(LogReplicationRuntimeState from) {
         log.debug("onEntry :: Verifying Remote Leader, transition from {}", from.getType());
-        log.trace("Submitted tasks to worker :: size={} activeCount={} taskCount={}", worker.getQueue().size(),
-                worker.getActiveCount(), worker.getTaskCount());
 
         // Proceed if remoteLeader is known. Only if local is connection starter for the session and the remoteLeader is
         // not known, verify Leadership on connected nodes
         if (fsm.getRemoteLeaderNodeId().isPresent()) {
             fsm.input(new LogReplicationRuntimeEvent(
                     LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.REMOTE_LEADER_FOUND,
-                    fsm.getRemoteLeaderNodeId().get())
+                    fsm.getRemoteLeaderNodeId().get(), fsm)
             );
             log.debug("Exit :: leadership verification");
         } else if (router.isConnectionStarterForSession(fsm.session)){
             // Leadership verification is done only if connection starter.
-            this.worker.submit(() -> verifyRemoteLeader(fsm, fsm.getConnectedNodes(), fsm.getRemoteClusterId(), router,
-                    CorfuLogReplicationRuntime.class));
+            verifyRemoteLeader(fsm, fsm.getConnectedNodes(), fsm.getRemoteClusterId(), router,
+                    CorfuLogReplicationRuntime.class);
         }
     }
 }
