@@ -37,17 +37,14 @@ public class NegotiatingState implements LogReplicationRuntimeState {
 
     private Optional<String> leaderNodeId;
 
-    private final ThreadPoolExecutor worker;
-
     private final LogReplicationClientServerRouter router;
 
     private final LogReplicationMetadataManager metadataManager;
 
-    public NegotiatingState(CorfuLogReplicationRuntime fsm, ThreadPoolExecutor worker,
+    public NegotiatingState(CorfuLogReplicationRuntime fsm,
                             LogReplicationClientServerRouter router, LogReplicationMetadataManager metadataManager) {
         this.fsm = fsm;
         this.metadataManager = metadataManager;
-        this.worker = worker;
         this.router = router;
     }
 
@@ -109,9 +106,7 @@ public class NegotiatingState implements LogReplicationRuntimeState {
     @Override
     public void onEntry(LogReplicationRuntimeState from) {
         log.debug("OnEntry :: negotiating state from {}", from.getType());
-        log.trace("Submitted tasks to worker :: size={} activeCount={} taskCount={}", worker.getQueue().size(),
-                worker.getActiveCount(), worker.getTaskCount());
-        worker.submit(this::negotiate);
+        negotiate();
     }
 
     private void negotiate() {
@@ -141,14 +136,14 @@ public class NegotiatingState implements LogReplicationRuntimeState {
             } else {
                 log.debug("No leader found during negotiation.");
                 // No leader found at the time of negotiation
-                fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.REMOTE_LEADER_LOSS));
+                fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.REMOTE_LEADER_LOSS, fsm));
             }
         } catch (LogReplicationNegotiationException | TimeoutException ex) {
             log.error("Negotiation failed. Retry, until negotiation succeeds or connection is marked as down.", ex);
-            fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.NEGOTIATION_FAILED));
+            fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.NEGOTIATION_FAILED, fsm));
         } catch (Exception e) {
             log.error("Unexpected exception during negotiation, retry.", e);
-            fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.NEGOTIATION_FAILED));
+            fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.NEGOTIATION_FAILED, fsm));
         } finally {
             log.debug("Exit :: negotiate");
         }
@@ -260,7 +255,8 @@ public class NegotiatingState implements LogReplicationRuntimeState {
             fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.NEGOTIATION_COMPLETE,
                     new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_TRANSFER_COMPLETE,
                             new LogReplicationEventMetadata(LogReplicationEventMetadata.getNIL_UUID(), negotiationResponse.getSnapshotStart(),
-                                    negotiationResponse.getSnapshotTransferred()))));
+                                    negotiationResponse.getSnapshotTransferred()),
+                            fsm.getSourceManager().getLogReplicationFSM()), fsm));
             return;
         }
 
@@ -289,8 +285,10 @@ public class NegotiatingState implements LogReplicationRuntimeState {
                         "logHead={}, lastLogProcessed={}", logHead, negotiationResponse.getLastLogEntryTimestamp());
                 fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.NEGOTIATION_COMPLETE,
                         new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.LOG_ENTRY_SYNC_REQUEST,
-                                new LogReplicationEventMetadata(LogReplicationEventMetadata.getNIL_UUID(), negotiationResponse.getLastLogEntryTimestamp(),
-                                        negotiationResponse.getSnapshotApplied()))));
+                                new LogReplicationEventMetadata(LogReplicationEventMetadata.getNIL_UUID(),
+                                        negotiationResponse.getLastLogEntryTimestamp(),
+                                        negotiationResponse.getSnapshotApplied()),
+                                fsm.getSourceManager().getLogReplicationFSM()), fsm));
             } else {
                 // TODO: it is OK for a first phase, but this might not be efficient/accurate, as the next (+1)
                 //  might not really be the next entry (as that is a globalAddress and the +1 might not even belong to
@@ -313,11 +311,13 @@ public class NegotiatingState implements LogReplicationRuntimeState {
         log.warn("Could not recognize the sink cluster state according to the response {}, will restart with a snapshot full sync event" ,
                 negotiationResponse);
         fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.NEGOTIATION_COMPLETE,
-                new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_SYNC_REQUEST)));
+                new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_SYNC_REQUEST,
+                        fsm.getSourceManager().getLogReplicationFSM()), fsm));
     }
 
     private void startSnapshotSync() {
         fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.NEGOTIATION_COMPLETE,
-            new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_SYNC_REQUEST)));
+                new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_SYNC_REQUEST,
+                        fsm.getSourceManager().getLogReplicationFSM()), fsm));
     }
 }

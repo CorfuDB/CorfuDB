@@ -87,7 +87,8 @@ public class LogReplicationSourceManager {
      * @return unique identifier for this snapshot sync request.
      */
     public UUID startSnapshotSync() {
-        return startSnapshotSync(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST), false);
+        return startSnapshotSync(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST,
+                logReplicationFSM), false);
     }
 
     private UUID startSnapshotSync(LogReplicationEvent snapshotSyncRequest, boolean forced) {
@@ -103,7 +104,8 @@ public class LogReplicationSourceManager {
      * @param snapshotSyncRequestId unique identifier of the forced snapshot sync (already provided to the caller)
      */
     public void startForcedSnapshotSync(UUID snapshotSyncRequestId) {
-        startSnapshotSync(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST, snapshotSyncRequestId), true);
+        startSnapshotSync(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST, snapshotSyncRequestId,
+                logReplicationFSM), true);
     }
 
 
@@ -124,7 +126,7 @@ public class LogReplicationSourceManager {
      */
     public void stopLogReplication() {
         log.info("Stop Log Replication");
-        logReplicationFSM.input(new LogReplicationEvent(LogReplicationEventType.REPLICATION_STOP));
+        logReplicationFSM.input(new LogReplicationEvent(LogReplicationEventType.REPLICATION_STOP, logReplicationFSM));
     }
 
     /**
@@ -134,7 +136,7 @@ public class LogReplicationSourceManager {
      */
     public void shutdown() {
         // Enqueue event into Log Replication FSM
-        LogReplicationEvent logReplicationEvent = new LogReplicationEvent(LogReplicationEventType.REPLICATION_STOP);
+        LogReplicationEvent logReplicationEvent = new LogReplicationEvent(LogReplicationEventType.REPLICATION_STOP, logReplicationFSM);
         logReplicationFSM.input(logReplicationEvent);
 
         try {
@@ -161,7 +163,8 @@ public class LogReplicationSourceManager {
      * @param metadata
      */
     public void resumeSnapshotSync(LogReplicationEventMetadata metadata) {
-        LogReplicationEvent replicationEvent = new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_TRANSFER_COMPLETE, metadata);
+        LogReplicationEvent replicationEvent = new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_TRANSFER_COMPLETE,
+                metadata, logReplicationFSM);
         logReplicationFSM.input(replicationEvent);
     }
 }

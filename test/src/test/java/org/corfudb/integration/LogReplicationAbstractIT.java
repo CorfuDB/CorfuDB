@@ -199,7 +199,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
         // (1) On startup, init the replication status for each Source cluster in a single transaction
         // (2) When starting snapshot sync apply : is_data_consistent = false
         // (3) When completing snapshot sync apply : is_data_consistent = true
-        final int totalSinkStatusUpdateTx = 3;
+        final int totalSinkStatusUpdateTx = 2;
 
         // Across the above 3 transactions, there will be 5 updates/entries:
         // 1 (1 init update corresponding to each Source cluster )   +      1 (is_data_consistent = false)    + 1
@@ -264,7 +264,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
             verifyDataOnSink(numWrites + (numWrites / 2));
 
             // Verify Sink Status Listener received all expected updates (is_data_consistent)
-            log.info(">> Wait ... Replication status UPDATE ...");
+            log.info(">> Wait ... Replication status UPDATE ..." + statusUpdateLatch.getCount());
             statusUpdateLatch.await();
             assertThat(sinkListener.getAccumulatedStatus().size()).isEqualTo(totalSinkStatusUpdateEntries);
             // Confirm last updates are set to true (corresponding to snapshot sync completed and log entry sync started)
@@ -315,6 +315,17 @@ public class LogReplicationAbstractIT extends AbstractIT {
 
     private void triggerSnapshotAndTestRemainingEntries() throws Exception{
 
+        CountDownLatch statusUpdateLatch = new CountDownLatch(1);
+        ReplicationStatusListener sourceListener = new ReplicationStatusListener(statusUpdateLatch, true);
+        corfuStoreSource.subscribeListener(sourceListener, LogReplicationMetadataManager.NAMESPACE, LR_STATUS_STREAM_TAG);
+
+        corfuStoreSource.openTable(LogReplicationMetadataManager.NAMESPACE,
+                REPLICATION_STATUS_TABLE_NAME,
+                LogReplicationSession.class,
+                ReplicationStatus.class,
+                null,
+                TableOptions.fromProtoSchema(ReplicationStatus.class));
+
         // enforce a snapshot sync
         Table<ExampleSchemas.ClusterUuidMsg, ExampleSchemas.ClusterUuidMsg, ExampleSchemas.ClusterUuidMsg> configTable =
                 corfuStoreSource.openTable(
@@ -331,17 +342,6 @@ public class LogReplicationAbstractIT extends AbstractIT {
         // Sleep, so we have remainingEntries populated from the scheduled polling task instead of
         // from method that marks snapshot complete
         TimeUnit.SECONDS.sleep(longInterval);
-
-        CountDownLatch statusUpdateLatch = new CountDownLatch(1);
-        ReplicationStatusListener sourceListener = new ReplicationStatusListener(statusUpdateLatch, true);
-        corfuStoreSource.subscribeListener(sourceListener, LogReplicationMetadataManager.NAMESPACE, LR_STATUS_STREAM_TAG);
-
-        corfuStoreSource.openTable(LogReplicationMetadataManager.NAMESPACE,
-                REPLICATION_STATUS_TABLE_NAME,
-                LogReplicationSession.class,
-                ReplicationStatus.class,
-                null,
-                TableOptions.fromProtoSchema(ReplicationStatus.class));
 
         LogReplicationSession session = LogReplicationSession.newBuilder()
             .setSourceClusterId(new DefaultClusterConfig().getSourceClusterIds().get(0))
@@ -438,8 +438,10 @@ public class LogReplicationAbstractIT extends AbstractIT {
 
         @Override
         public void onNext(CorfuStreamEntries results) {
-            results.getEntries().forEach((schema, entries) -> entries.forEach(e ->
-                    updates.add(((SnapshotSyncPluginValue)e.getPayload()).getValue())));
+            results.getEntries().forEach((schema, entries) -> entries.forEach(e -> {
+                    System.out.println("onNext: " + ((SnapshotSyncPluginValue)e.getPayload()).getValue());
+                    updates.add(((SnapshotSyncPluginValue)e.getPayload()).getValue());
+            }));
             countDownLatch.countDown();
         }
 
@@ -466,7 +468,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
         @Override
         public void onNext(CorfuStreamEntries results) {
             results.getEntries().forEach((schema, entries) -> entries.forEach(e -> {
-
+                
                 // Replication Status table gets cleared as part of the simulated upgrade in
                 // CorfuReplicationUpgradeIT.  These updates must be ignored.
                 if (e.getOperation() == CorfuStreamEntry.OperationType.CLEAR) {
