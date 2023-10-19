@@ -630,7 +630,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         ((TestSnapshotReader) snapshotReader).setSeqNumsToRead(seqNums);
 
         // Input the Snapshot Sync Request to the FSM.
-        LogReplicationEvent event = new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST);
+        LogReplicationEvent event = new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST, fsm);
         fsm.input(event);
 
         // Once Snapshot Sync starts, the data must be sent and the fsm will eventually reach the terminal
@@ -683,7 +683,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         log.info("**** Transition to Snapshot Sync");
 
         // Transition #1: Snapshot Sync Request
-        fsm.input(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST));
+        fsm.input(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST, fsm));
 
         // Wait till the fsm reaches IN_SNAPSHOT_SYNC state
         while (fsm.getState().getType() != LogReplicationStateType.IN_SNAPSHOT_SYNC) {
@@ -692,7 +692,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         assertThat(fsm.getState().getType()).isEqualTo(LogReplicationStateType.IN_SNAPSHOT_SYNC);
 
         log.info("**** Stop Replication when in IN_SNAPSHOT_SYNC state");
-        fsm.input(new LogReplicationEvent(LogReplicationEventType.REPLICATION_STOP));
+        fsm.input(new LogReplicationEvent(LogReplicationEventType.REPLICATION_STOP, fsm));
 
         while (fsm.getState().getType() != LogReplicationStateType.INITIALIZED) {
             log.debug("Waiting for the FSM to reach INITIALIZED state");
@@ -700,7 +700,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         assertThat(fsm.getState().getType()).isEqualTo(LogReplicationStateType.INITIALIZED);
 
         ((TestDataSender) dataSender).reset();
-        fsm.input(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST));
+        fsm.input(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST, fsm));
 
         while (fsm.getState().getType() != LogReplicationStateType.IN_LOG_ENTRY_SYNC) {
             log.info("Waiting for the FSM to reach IN_LOG_ENTRY_SYNC state");
@@ -1018,9 +1018,9 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         if (eventId != null) {
             // For testing we are enforcing internal events (like Trimmed Exception or Snapshot Complete),
             // for this reason we must set the id of the event that preceded it, so it corresponds to the same state.
-            event = new LogReplicationEvent(eventType, new LogReplicationEventMetadata(eventId));
+            event = new LogReplicationEvent(eventType, new LogReplicationEventMetadata(eventId), fsm);
         } else {
-            event = new LogReplicationEvent(eventType);
+            event = new LogReplicationEvent(eventType, fsm);
         }
 
         fsm.input(event);
@@ -1081,7 +1081,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
                 limitSnapshotMessages == snapshotMessageCounterObservable.getValue() && observeSnapshotSync) {
             // If number of messages in snapshot reaches the expected value force termination of SNAPSHOT_SYNC
             // log.debug("Insert event: " + LogReplicationEventType.REPLICATION_STOP);
-            fsm.input(new LogReplicationEvent(LogReplicationEventType.REPLICATION_STOP));
+            fsm.input(new LogReplicationEvent(LogReplicationEventType.REPLICATION_STOP, fsm));
         }
     }
 

@@ -170,8 +170,7 @@ public class InSnapshotSyncState implements LogReplicationState {
                 fsm.getAckReader().markSnapshotSyncInfoOngoing(forcedSnapshotSync, transitionSyncId);
                 snapshotSyncTransferTimerSample = MeterRegistryProvider.getInstance().map(Timer::start);
             }
-            transmitFuture = fsm.getLogReplicationFSMWorkers()
-                    .submit(() -> snapshotSender.transmit(transitionSyncId, forcedSnapshotSync));
+            snapshotSender.transmit(transitionSyncId, forcedSnapshotSync);
         } catch (Throwable t) {
             log.error("Error on entry of InSnapshotSyncState.", t);
         }

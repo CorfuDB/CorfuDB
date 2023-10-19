@@ -105,7 +105,7 @@ public class LogReplicationSourceManager {
      */
     public void startForcedSnapshotSync(UUID snapshotSyncRequestId) {
         startSnapshotSync(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST,
-                new LogReplicationEventMetadata(snapshotSyncRequestId, true)));
+                new LogReplicationEventMetadata(snapshotSyncRequestId, true), logReplicationFSM));
     }
 
 
@@ -126,7 +126,7 @@ public class LogReplicationSourceManager {
      */
     public void stopLogReplication() {
         log.info("Stop Log Replication");
-        logReplicationFSM.input(new LogReplicationEvent(LogReplicationEventType.REPLICATION_STOP));
+        logReplicationFSM.input(new LogReplicationEvent(LogReplicationEventType.REPLICATION_STOP, logReplicationFSM));
     }
 
     /**
@@ -136,7 +136,7 @@ public class LogReplicationSourceManager {
      */
     public void shutdown() {
         // Enqueue event into Log Replication FSM
-        LogReplicationEvent logReplicationEvent = new LogReplicationEvent(LogReplicationEventType.REPLICATION_STOP);
+        LogReplicationEvent logReplicationEvent = new LogReplicationEvent(LogReplicationEventType.REPLICATION_STOP, logReplicationFSM);
         logReplicationFSM.input(logReplicationEvent);
 
         try {
@@ -163,7 +163,8 @@ public class LogReplicationSourceManager {
      * @param metadata
      */
     public void resumeSnapshotSync(LogReplicationEventMetadata metadata) {
-        LogReplicationEvent replicationEvent = new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_TRANSFER_COMPLETE, metadata);
+        LogReplicationEvent replicationEvent = new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_TRANSFER_COMPLETE,
+                metadata, logReplicationFSM);
         logReplicationFSM.input(replicationEvent);
     }
 }

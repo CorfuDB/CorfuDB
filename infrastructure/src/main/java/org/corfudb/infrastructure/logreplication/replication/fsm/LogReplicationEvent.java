@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure.logreplication.replication.fsm;
 
 import lombok.Data;
+import lombok.Getter;
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationEventMetadata;
 import org.corfudb.util.Utils;
 
@@ -51,15 +52,23 @@ public class LogReplicationEvent {
      */
     private LogReplicationEventMetadata metadata;
 
+    @Getter
+    private LogReplicationFSM replicationFsm;
+
     /**
      * Constructor
      *
      * @param type log replication event type
      */
+
     public LogReplicationEvent(LogReplicationEventType type) {
         this.type = type;
         this.eventId = Utils.genPseudorandomUUID();
         this.metadata = new LogReplicationEventMetadata(Utils.genPseudorandomUUID());
+    }
+
+    public LogReplicationEvent(LogReplicationEventType type, LogReplicationFSM replicationFsm) {
+        this(type, new LogReplicationEventMetadata(Utils.genPseudorandomUUID()), replicationFsm);
     }
 
     /**
@@ -69,9 +78,11 @@ public class LogReplicationEvent {
      * @param metadata log replication event metadata
      *
 \     */
-    public LogReplicationEvent(LogReplicationEventType type, LogReplicationEventMetadata metadata) {
+    public LogReplicationEvent(LogReplicationEventType type, LogReplicationEventMetadata metadata,
+                               LogReplicationFSM replicationFsm) {
         this.type = type;
         this.eventId = Utils.genPseudorandomUUID();
         this.metadata = metadata;
+        this.replicationFsm = replicationFsm;
     }
 }

@@ -529,7 +529,7 @@ public class SessionManager {
     private void createSourceFSMs() {
         newSessionsDiscovered.stream()
                 .filter(outgoingSessions::contains)
-                .forEach(session -> replicationManager.createAndStartRuntime(
+                .forEach(session -> replicationManager.createReplicationRuntime(
                         topology.getAllClustersInTopology().get(session.getSinkClusterId()), session, router));
     }
 
@@ -537,6 +537,8 @@ public class SessionManager {
      * Shutdown session manager
      */
     public void shutdown() {
+        replicationContext.getReplicationFsmTaskManager().shutdown();
+        replicationContext.getRuntimeFsmTaskManager().shutdown();
         replicationManager.stop();
         router.stop(sessions);
         router.shutDownMsgHandlerServer();

@@ -170,7 +170,7 @@ public class WaitSnapshotApplyState implements LogReplicationState {
         if (from != this) {
             snapshotSyncApplyTimerSample = MeterRegistryProvider.getInstance().map(Timer::start);
         }
-        this.fsm.getLogReplicationFSMWorkers().submit(this::verifyStatusOfSnapshotSyncApply);
+        verifyStatusOfSnapshotSyncApply();
     }
 
     @Override
@@ -202,7 +202,7 @@ public class WaitSnapshotApplyState implements LogReplicationState {
                 log.info("Snapshot sync apply is complete appliedTs={}, baseTs={}", metadataResponse.getSnapshotApplied(),
                         baseSnapshotTimestamp);
                 fsm.input(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_APPLY_COMPLETE,
-                        new LogReplicationEventMetadata(transitionSyncId, baseSnapshotTimestamp, baseSnapshotTimestamp)));
+                        new LogReplicationEventMetadata(transitionSyncId, baseSnapshotTimestamp, baseSnapshotTimestamp), fsm));
             } else {
                 log.debug("Snapshot sync apply is still in progress, appliedTs={}, baseTs={}, sync_id={}", metadataResponse.getSnapshotApplied(),
                         baseSnapshotTimestamp, transitionSyncId);
@@ -234,7 +234,7 @@ public class WaitSnapshotApplyState implements LogReplicationState {
     private void scheduleSnapshotApplyVerification() {
         log.debug("Schedule verification of snapshot sync apply id={}", transitionSyncId);
         fsm.input(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_APPLY_IN_PROGRESS,
-                new LogReplicationEventMetadata(transitionSyncId)));
+                new LogReplicationEventMetadata(transitionSyncId), fsm));
     }
 
     @Override

@@ -1,14 +1,13 @@
 package org.corfudb.infrastructure.logreplication.runtime;
 
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationSourceManager;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
-import org.corfudb.infrastructure.logreplication.runtime.fsm.IllegalTransitionException;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRuntimeEvent;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRuntimeState;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRuntimeStateType;
@@ -24,12 +23,6 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Runtime to connect to a remote Corfu Log Replication Cluster.
@@ -118,6 +111,8 @@ public class CorfuLogReplicationRuntime {
     /**
      * Current state of the FSM.
      */
+    @Getter
+    @Setter
     private volatile LogReplicationRuntimeState state;
 
     /**
@@ -125,21 +120,6 @@ public class CorfuLogReplicationRuntime {
      */
     @Getter
     private Map<LogReplicationRuntimeStateType, LogReplicationRuntimeState> states = new HashMap<>();
-
-    /**
-     * Executor service for FSM state tasks
-     */
-    private final ThreadPoolExecutor communicationFSMWorkers;
-
-    /**
-     * Executor service for FSM event queue consume
-     */
-    private final ExecutorService communicationFSMConsumer;
-
-    /**
-     * A queue of events.
-     */
-    private final LinkedBlockingQueue<LogReplicationRuntimeEvent> eventQueue = new LinkedBlockingQueue<>();
 
     private final LogReplicationClientServerRouter router;
 
@@ -170,29 +150,10 @@ public class CorfuLogReplicationRuntime {
         this.connectedNodes = new HashSet<>();
         this.replicationContext = replicationContext;
 
-        ThreadFactory threadFactory = new ThreadFactoryBuilder().setNameFormat("runtime-fsm-worker-"+session.hashCode())
-            .build();
-
-        this.communicationFSMWorkers = new ThreadPoolExecutor(1, 1, 0L,
-            TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>(), threadFactory);
-
-        this.communicationFSMConsumer = Executors.newSingleThreadExecutor(new
-                ThreadFactoryBuilder().setNameFormat(
-                    "runtime-fsm-consumer-"+session.hashCode()).build());
-
         initializeStates(metadataManager);
         this.state = states.get(LogReplicationRuntimeStateType.WAITING_FOR_CONNECTIVITY);
 
         log.info("Log Replication Runtime State Machine initialized");
-    }
-
-    /**
-     * Start Log Replication Communication FSM
-     */
-    public void start() {
-        log.info("Start Log Replication Runtime to remote {}", session.getSinkClusterId());
-        // Start Consumer Thread for this state machine (dedicated thread for event consumption)
-        communicationFSMConsumer.submit(this::consume);
     }
 
     /**
@@ -205,9 +166,8 @@ public class CorfuLogReplicationRuntime {
          */
         states.put(LogReplicationRuntimeStateType.WAITING_FOR_CONNECTIVITY, new WaitingForConnectionsState(this));
         states.put(LogReplicationRuntimeStateType.VERIFYING_REMOTE_LEADER, new VerifyingRemoteSinkLeaderState(this,
-            communicationFSMWorkers, router));
-        states.put(LogReplicationRuntimeStateType.NEGOTIATING, new NegotiatingState(this, communicationFSMWorkers,
-                router, metadataManager));
+            router));
+        states.put(LogReplicationRuntimeStateType.NEGOTIATING, new NegotiatingState(this, router, metadataManager));
         states.put(LogReplicationRuntimeStateType.REPLICATING, new ReplicatingState(this, sourceManager, router));
         states.put(LogReplicationRuntimeStateType.STOPPED, new StoppedState(sourceManager));
         states.put(LogReplicationRuntimeStateType.UNRECOVERABLE, new UnrecoverableState());
@@ -221,47 +181,11 @@ public class CorfuLogReplicationRuntime {
      * @param event LogReplicationRuntimeEvent to process.
      */
     public synchronized void input(LogReplicationRuntimeEvent event) {
-        try {
-            if (state.getType().equals(LogReplicationRuntimeStateType.STOPPED)) {
-                // Not accepting events, in stopped state
-                return;
-            }
-            eventQueue.put(event);
-        } catch (InterruptedException ex) {
-            log.error("Log Replication interrupted Exception: ", ex);
+        if (state.getType().equals(LogReplicationRuntimeStateType.STOPPED)) {
+            // Not accepting events, in stopped state
+            return;
         }
-    }
-
-    /**
-     * Consumer of the eventQueue.
-     * <p>
-     * This method consumes the log replication events and does the state transition.
-     */
-    private void consume() {
-        try {
-            if (state.getType() == LogReplicationRuntimeStateType.STOPPED) {
-                log.info("Log Replication Communication State Machine has been stopped. No more events will be processed.");
-                return;
-            }
-
-            //  Block until an event shows up in the queue.
-            LogReplicationRuntimeEvent event = eventQueue.take();
-
-            try {
-                LogReplicationRuntimeState newState = state.processEvent(event);
-                if (newState != null) {
-                    transition(state, newState);
-                    state = newState;
-                }
-            } catch (IllegalTransitionException illegalState) {
-                log.error("Illegal log replication event {} when in state {}", event.getType(), state.getType());
-            }
-
-            communicationFSMConsumer.submit(this::consume);
-
-        } catch (Throwable t) {
-            log.error("Error on event consumer: ", t);
-        }
+        replicationContext.getRuntimeFsmTaskManager().addTask(event, event.getClass());
     }
 
     /**
@@ -270,7 +194,7 @@ public class CorfuLogReplicationRuntime {
      * @param from initial state
      * @param to   final state
      */
-    private void transition(LogReplicationRuntimeState from, LogReplicationRuntimeState to) {
+    public void transition(LogReplicationRuntimeState from, LogReplicationRuntimeState to) {
         log.trace("Transition from {} to {}", from, to);
         from.onExit(to);
         to.clear();
@@ -314,7 +238,8 @@ public class CorfuLogReplicationRuntime {
      * Stop Log Replication, regardless of current state.
      */
     public void stop() {
-        input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.LOCAL_LEADER_LOSS,
-                router.isConnectionStarterForSession(session)));
+        replicationContext.getRuntimeFsmTaskManager().addTask(
+                new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.LOCAL_LEADER_LOSS,
+                        router.isConnectionStarterForSession(session), this), LogReplicationRuntimeEvent.class);
     }
 }
