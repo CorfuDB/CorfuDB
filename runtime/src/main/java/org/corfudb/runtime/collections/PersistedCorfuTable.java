@@ -4,9 +4,9 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.reflect.TypeToken;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.object.CorfuSmrUpcallTarget;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.ICorfuSMRProxy;
+import org.corfudb.runtime.object.CorfuSmrUpcallTarget;
 
 import javax.annotation.Nonnull;
 import java.util.Map;

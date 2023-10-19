@@ -220,7 +220,7 @@ public class DiskBackedCorfuTable<K, V> implements
             if (value == null) {
                 return null;
             }
-            return (V) serializer.deserialize(Unpooled.wrappedBuffer(value), null);
+            return serializer.deserializeTyped(Unpooled.wrappedBuffer(value), null);
         } catch (RocksDBException ex) {
             throw new UnrecoverableCorfuError(ex);
         } finally {
@@ -461,8 +461,8 @@ public class DiskBackedCorfuTable<K, V> implements
 
             return Streams.zip(keys.stream(), values.stream(), (key, value) ->
                     new AbstractMap.SimpleEntry<>(
-                            (K) serializer.deserialize(Unpooled.wrappedBuffer(key), null),
-                            (V) serializer.deserialize(Unpooled.wrappedBuffer(value), null)
+                            serializer.<K>deserializeTyped(Unpooled.wrappedBuffer(key), null),
+                            serializer.<V>deserializeTyped(Unpooled.wrappedBuffer(value), null)
                     )).collect(Collectors.toList());
         } catch (RocksDBException e) {
             throw new UnrecoverableCorfuError(e);
