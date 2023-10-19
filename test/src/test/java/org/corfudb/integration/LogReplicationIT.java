@@ -1150,7 +1150,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     @Test
     public void testSnapshotSyncWithLastAckDrop() throws Exception {
         testSnapshotSyncAndLogEntrySync(0, false, 3);
-        cleanEnv();
     }
 
 
