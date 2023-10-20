@@ -120,12 +120,17 @@ public final class LogReplicationUtils {
 
     private static Table<LogReplicationSession, ReplicationStatus, Message> openReplicationStatusTable(CorfuStore corfuStore) {
         try {
-            return corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, REPLICATION_STATUS_TABLE_NAME,
-                    LogReplicationSession.class, ReplicationStatus.class, null,
-                    TableOptions.fromProtoSchema(ReplicationStatus.class));
-        } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
-            log.error("Failed to open the Replication Status table", e);
-            throw new StreamingException(e, StreamingException.ExceptionCause.SUBSCRIBE_ERROR);
+            return corfuStore.getTable(CORFU_SYSTEM_NAMESPACE, REPLICATION_STATUS_TABLE_NAME);
+        } catch (NoSuchElementException | IllegalArgumentException e) {
+            log.warn("Failed getTable operation for LR status table, opening table.", e);
+            try {
+                return corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, REPLICATION_STATUS_TABLE_NAME,
+                        LogReplicationSession.class, ReplicationStatus.class, null,
+                        TableOptions.fromProtoSchema(ReplicationStatus.class));
+            } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException ee) {
+                log.error("Failed to open the Replication Status table", ee);
+                throw new StreamingException(ee, StreamingException.ExceptionCause.SUBSCRIBE_ERROR);
+            }
         }
     }
 
@@ -163,23 +168,10 @@ public final class LogReplicationUtils {
             Optional<Timer.Sample> subscribeTimer = MicroMeterUtils.startTimer();
 
             try {
-                replicationStatusTable = corfuStore.getTable(CORFU_SYSTEM_NAMESPACE, REPLICATION_STATUS_TABLE_NAME);
-            } catch (NoSuchElementException | IllegalArgumentException e) {
-                log.warn("Failed getTable operation for LR status table, opening table.", e);
-                try {
-                    IRetry.build(ExponentialBackoffRetry.class, () -> {
-                        try {
-                            replicationStatusTable = openReplicationStatusTable(corfuStore);
-                        } catch (StreamingException se) {
-                            log.warn("Failed to open LR status table, retrying.");
-                            throw new RetryNeededException();
-                        }
-                        return null;
-                    }).setOptions(retrySettings).run();
-                } catch (InterruptedException ie) {
-                    log.warn("Subscription has failed due to inability to open LR status table.");
-                    listener.onError(new StreamingException(ie, StreamingException.ExceptionCause.SUBSCRIBE_ERROR));
-                }
+                replicationStatusTable = openReplicationStatusTable(corfuStore);
+            } catch (StreamingException e) {
+                log.warn("Subscription has failed due to inability to open LR status table.");
+                listener.onError(new StreamingException(e, StreamingException.ExceptionCause.SUBSCRIBE_ERROR));
             }
 
            Long fullSyncTimestamp = null;
