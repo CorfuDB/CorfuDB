@@ -35,14 +35,19 @@ LAYOUTS_CURRENT.ds:
 
 ```json
 {
-  "healProbes":[
-    { "iteration": 1, "time": 123 },
-    { "iteration": 2, "time": 567 }
-  ]
+  "unresponsiveServers": ["B"],
+  "status": {
+    "node":"A", 
+    "clusterStabilityStatus": "GREEN",
+    "healProbes":[
+        { "iteration": 1, "time": 123 },
+        { "iteration": 2, "time": 567 }
+    ]
+  }
 }
 ```
 
-healProbes - is a parameter that we take from previous layout updates ONLY for FAILURES and HEALING, 
+healProbes - is a parameter that we take from previous layout updates ONLY for HEALING, 
 and we ignore any other layout and epoch updates, including state transfer updates.
 
 healProbes is a Pair of iteration number, Timestamp when that heal request was allowed.

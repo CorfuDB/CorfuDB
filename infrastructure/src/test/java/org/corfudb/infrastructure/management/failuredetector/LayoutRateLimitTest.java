@@ -19,7 +19,7 @@ class LayoutRateLimitTest {
     @Test
     public void testCalcAndLayoutProb() {
         TimeoutCalc calc = TimeoutCalc.builder().build();
-        assertEquals(Duration.ofMinutes(1), calc.getTimeout());
+        assertEquals(Duration.ofSeconds(30), calc.getTimeout());
 
         LayoutProbe probe = new LayoutProbe(1,System.currentTimeMillis());
         probe.increaseIteration();
@@ -43,7 +43,7 @@ class LayoutRateLimitTest {
         calc.update(new LayoutProbe(1, startTime));
         assertEquals(1, calc.size());
 
-        LayoutProbe update = new LayoutProbe(1, startTime + Duration.ofSeconds(59).toMillis());
+        LayoutProbe update = new LayoutProbe(1, startTime + Duration.ofSeconds(29).toMillis());
         ProbeStatus probeStatus = calc.calcStats(update);
         assertFalse(probeStatus.isAllowed());
         // as the probe was lesser than 1 min, the iteration should not have been bumped up
@@ -51,52 +51,55 @@ class LayoutRateLimitTest {
         assertEquals(1, probeStatus.getNewProbe().get().getIteration());
         assertEquals(1, calc.size());
 
-        update = new LayoutProbe(1,startTime + Duration.ofSeconds(61).toMillis());
+        update = new LayoutProbe(1,startTime + Duration.ofSeconds(30).toMillis());
         probeStatus = calc.calcStats(update);
         assertTrue(probeStatus.isAllowed());
         assertEquals(2, calc.size());
 
-        update = new LayoutProbe(1,startTime + Duration.ofSeconds(62).toMillis());
+        update = new LayoutProbe(1,startTime + Duration.ofSeconds(31).toMillis());
         probeStatus = calc.calcStats(update);
         assertFalse(probeStatus.isAllowed());
         assertEquals(2, calc.size());
 
+        update = new LayoutProbe(1,startTime + Duration.ofSeconds(71).toMillis());
+        probeStatus = calc.calcStats(update);
+        assertFalse(probeStatus.isAllowed());
+        assertEquals(2, calc.size());
+
+        // 30 starTime + 90 seconds timeout
+        update = new LayoutProbe(1,startTime + Duration.ofSeconds(121).toMillis());
+        probeStatus = calc.calcStats(update);
+        assertTrue(probeStatus.isAllowed());
+        assertEquals(3, calc.size());
+
+        // 180 secs = false
         update = new LayoutProbe(1,startTime + Duration.ofMinutes(3).toMillis());
         probeStatus = calc.calcStats(update);
         assertFalse(probeStatus.isAllowed());
-        assertEquals(2, calc.size());
+        assertEquals(3, calc.size());
 
-        update = new LayoutProbe(1,startTime + Duration.ofMinutes(5).toMillis());
+        // 121 + 3.5 mins
+        update = new LayoutProbe(1,startTime + Duration.ofMinutes(6).toMillis());
         probeStatus = calc.calcStats(update);
         assertTrue(probeStatus.isAllowed());
+        assertEquals(3, probeStatus.getNewProbe().get().getIteration());
         assertEquals(3, calc.size());
 
         update = new LayoutProbe(1,startTime + Duration.ofMinutes(7).toMillis());
         probeStatus = calc.calcStats(update);
         assertFalse(probeStatus.isAllowed());
-        assertEquals(3, calc.size());
-
-        update = new LayoutProbe(1,startTime + Duration.ofMinutes(15).toMillis());
-        probeStatus = calc.calcStats(update);
-        assertTrue(probeStatus.isAllowed());
         assertEquals(3, probeStatus.getNewProbe().get().getIteration());
         assertEquals(3, calc.size());
 
-        update = new LayoutProbe(1,startTime + Duration.ofMinutes(16).toMillis());
-        probeStatus = calc.calcStats(update);
-        assertFalse(probeStatus.isAllowed());
-        assertEquals(3, probeStatus.getNewProbe().get().getIteration());
-        assertEquals(3, calc.size());
-
-        update = new LayoutProbe(1,startTime + Duration.ofMinutes(23).toMillis());
+        update = new LayoutProbe(1,startTime + Duration.ofMinutes(10).toMillis());
         probeStatus = calc.calcStats(update);
         assertTrue(probeStatus.isAllowed());
         assertEquals(3, probeStatus.getNewProbe().get().getIteration());
         assertEquals(3, calc.size());
 
         // Trying after 11 minutes should reduce the iteration number
-        // as it is greater than 1.5 * timeout (=7)
-        update = new LayoutProbe(1,startTime + Duration.ofMinutes(34).toMillis());
+        // as it is greater than 1.5 * 3.5 timeout (5.25)
+        update = new LayoutProbe(1,startTime + Duration.ofMinutes(16).toMillis());
         probeStatus = calc.calcStats(update);
         assertTrue(probeStatus.isAllowed());
         assertEquals(2, probeStatus.getNewProbe().get().getIteration());
@@ -104,7 +107,7 @@ class LayoutRateLimitTest {
 
         // Trying after 100 minutes should reset the iteration number
         // as it is greater than 2 * timeout (=7)
-        update = new LayoutProbe(1,startTime + Duration.ofMinutes(100).toMillis());
+        update = new LayoutProbe(1,startTime + Duration.ofMinutes(50).toMillis());
         probeStatus = calc.calcStats(update);
         assertTrue(probeStatus.isAllowed());
         assertEquals(1, probeStatus.getNewProbe().get().getIteration());
