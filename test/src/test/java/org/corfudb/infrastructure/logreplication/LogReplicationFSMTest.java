@@ -170,7 +170,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         transition(LogReplicationEventType.SNAPSHOT_SYNC_CONTINUE, LogReplicationStateType.IN_SNAPSHOT_SYNC, snapshotSyncId, true);
 
         // Transition #5: Snapshot Sync Transfer Complete
-        transition(LogReplicationEventType.SNAPSHOT_TRANSFER_COMPLETE, LogReplicationStateType.WAIT_SNAPSHOT_APPLY, snapshotSyncId, false);
+        transition(LogReplicationEventType.SNAPSHOT_TRANSFER_COMPLETE, LogReplicationStateType.WAIT_SNAPSHOT_APPLY, snapshotSyncId, true);
 
         // Transition #6: Snapshot Sync Apply still in progress
         transition(LogReplicationEventType.SNAPSHOT_APPLY_IN_PROGRESS, LogReplicationStateType.WAIT_SNAPSHOT_APPLY, false);
@@ -459,7 +459,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         Assert.assertEquals(SyncStatus.ONGOING, currentReplicationVal.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus());
 
         // Transition #2: Wait Snapshot Apply
-        transition(LogReplicationEventType.SNAPSHOT_TRANSFER_COMPLETE, LogReplicationStateType.WAIT_SNAPSHOT_APPLY, snapshotSyncId, false);
+        transition(LogReplicationEventType.SNAPSHOT_TRANSFER_COMPLETE, LogReplicationStateType.WAIT_SNAPSHOT_APPLY, snapshotSyncId, true);
 
         // Transition #3: Log Entry Sync Start
         transition(LogReplicationEventType.SNAPSHOT_APPLY_COMPLETE, LogReplicationStateType.IN_LOG_ENTRY_SYNC, snapshotSyncId, true);
