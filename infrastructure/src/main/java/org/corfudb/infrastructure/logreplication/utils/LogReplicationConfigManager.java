@@ -49,14 +49,13 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import static org.corfudb.infrastructure.logreplication.config.LogReplicationConfig.MERGE_ONLY_STREAMS;
 import static org.corfudb.infrastructure.logreplication.config.LogReplicationConfig.REGISTRY_TABLE_ID;
+import static org.corfudb.infrastructure.logreplication.replication.send.logreader.LogicalGroupLogEntryReader.CLIENT_CONFIG_TABLE_ID;
 import static org.corfudb.runtime.LogReplicationLogicalGroupClient.DEFAULT_LOGICAL_GROUP_CLIENT;
 import static org.corfudb.runtime.LogReplicationLogicalGroupClient.LR_MODEL_METADATA_TABLE_NAME;
 import static org.corfudb.runtime.LogReplicationLogicalGroupClient.LR_REGISTRATION_TABLE_NAME;
-import static org.corfudb.runtime.view.ObjectsView.LOG_REPLICATOR_STREAM_INFO;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 /**
@@ -79,6 +78,8 @@ public class LogReplicationConfigManager {
 
     private long lastRegistryTableLogTail = Address.NON_ADDRESS;
 
+    private long lastClientConfigTableLogTail = Address.NON_ADDRESS;
+
     private Table<ClientRegistrationId, ClientRegistrationInfo, Message> clientRegistrationTable;
 
     private Table<ClientDestinationInfoKey, DestinationInfoVal, Message> clientConfigTable;
@@ -94,13 +95,13 @@ public class LogReplicationConfigManager {
     @Getter
     private final Set<ReplicationSubscriber> registeredSubscribers = ConcurrentHashMap.newKeySet();
 
-    // Map from a logical group to all the Sinks it is targeting.
-    private final Map<String, Set<String>> groupSinksMap = new ConcurrentHashMap<>();
-
-    // In-memory list of registry table entries for generating configs
+    // In-memory list of registry table entries for finding streams to replicate
     private List<Map.Entry<TableName, CorfuRecord<TableDescriptors, TableMetadata>>> registryTableEntries =
             new ArrayList<>();
 
+    // In-memory list of client config table entries for finding group to Sinks map
+    private List<CorfuStoreEntry<ClientDestinationInfoKey, DestinationInfoVal, Message>> clientConfigTableEntries =
+            new ArrayList<>();
 
 
     /**
@@ -151,6 +152,7 @@ public class LogReplicationConfigManager {
         registeredSubscribers.add(getDefaultLogicalGroupSubscriber());
         openClientConfigTables();
         syncWithRegistryTable();
+        syncWithClientConfigTable();
     }
 
     private void openClientConfigTables() {
@@ -184,9 +186,10 @@ public class LogReplicationConfigManager {
     /**
      * Generate LogReplicationConfig for all given sessions based on there replication model.
      *
-     * @param sessions set of sessions for which to generate config
+     * @param sessions set of sessions for which to generate config.
+     * @param updateGroupDestinationConfig True if group destination config needs to be updated.
      */
-    public void generateConfig(Set<LogReplicationSession> sessions) {
+    public void generateConfig(Set<LogReplicationSession> sessions, boolean updateGroupDestinationConfig) {
         sessions.forEach(session -> {
                 switch (session.getSubscriber().getModel()) {
                     case FULL_TABLE:
@@ -197,27 +200,33 @@ public class LogReplicationConfigManager {
                     case LOGICAL_GROUPS:
                         log.debug("Generating LOGICAL_GROUP config for session {}",
                                 TextFormat.shortDebugString(session));
-                        generateLogicalGroupConfig(session);
+                        generateLogicalGroupConfig(session, updateGroupDestinationConfig);
                         break;
-                    default: break;
+                    default:
+                        throw new IllegalArgumentException("Invalid replication model: " +
+                                session.getSubscriber().getModel());
                 }
         });
     }
 
-    private void generateLogicalGroupConfig(LogReplicationSession session) {
+    private void generateLogicalGroupConfig(LogReplicationSession session, boolean updateGroupDestinationConfig) {
         Map<UUID, List<UUID>> streamToTagsMap = new HashMap<>();
         Set<String> streamsToReplicate = new HashSet<>();
         // Check if the local cluster is the Sink for this session. Sink side will honor whatever Source side send
         // instead of relying on groupSinksMap to filter the streams to replicate.
         boolean isSink = session.getSinkClusterId().equals(localClusterId);
+        Map<String, Set<String>> groupToSinksMap = getGroupToSinksMapForSubscriber(session.getSubscriber());
         Map<String, Set<String>> logicalGroupToStreams = new HashMap<>();
-        if (!isSink) {
-            groupSinksMap.entrySet().stream()
+
+        if (!updateGroupDestinationConfig) {
+            // If group config is not supposed to be updated, get it from existing config
+            logicalGroupToStreams.putAll(((LogReplicationLogicalGroupConfig) sessionToConfigMap.get(session))
+                    .getLogicalGroupToStreams());
+        } else if (!isSink) {
+            groupToSinksMap.entrySet().stream()
                     .filter(entry -> entry.getValue().contains(session.getSinkClusterId()))
                     .map(Map.Entry::getKey)
-                    .forEachOrdered(group -> {
-                        logicalGroupToStreams.put(group, new HashSet<>());
-                    });
+                    .forEach(group -> logicalGroupToStreams.put(group, new HashSet<>()));
             log.debug("Targeted logical groups={}", logicalGroupToStreams.keySet());
         }
 
@@ -229,7 +238,7 @@ public class LogReplicationConfigManager {
             if (MERGE_ONLY_STREAMS.contains(streamId)) {
                 streamsToReplicate.add(tableName);
                 // Collect tags for merge-only stream
-                streamToTagsMap.put(streamId, Collections.singletonList(LOG_REPLICATOR_STREAM_INFO.getStreamId()));
+                streamToTagsMap.put(streamId, Collections.singletonList(getOpaqueStreamToTrack(session.getSubscriber())));
             } else if (entry.getValue().getMetadata().getTableOptions().hasReplicationGroup() &&
                     !entry.getValue().getMetadata().getTableOptions().getReplicationGroup().getLogicalGroup().isEmpty()) {
                 // Find streams to replicate for every logical group for this session
@@ -244,20 +253,28 @@ public class LogReplicationConfigManager {
                     logicalGroupToStreams.put(logicalGroup, relatedStreams);
                     // Collect tags for this stream
                     List<UUID> tags = streamToTagsMap.getOrDefault(streamId, new ArrayList<>());
-                    tags.addAll(entry.getValue().getMetadata().getTableOptions().getStreamTagList().stream()
+                    entry.getValue().getMetadata().getTableOptions().getStreamTagList().stream()
                             .map(streamTag -> TableRegistry.getStreamIdForStreamTag(entry.getKey().getNamespace(), streamTag))
-                            .collect(Collectors.toList()));
+                            .forEach(tags::add);
                     streamToTagsMap.put(streamId, tags);
                 }
             }
         });
 
-        LogReplicationLogicalGroupConfig logicalGroupConfig = new LogReplicationLogicalGroupConfig(session,
-                streamsToReplicate, streamToTagsMap, serverContext, logicalGroupToStreams);
-        sessionToConfigMap.put(session, logicalGroupConfig);
-
-        log.info("LogReplicationLogicalGroupConfig generated for session={}, streams to replicate={}, groups={}",
-                TextFormat.shortDebugString(session), streamsToReplicate, logicalGroupToStreams);
+        if (sessionToConfigMap.containsKey(session)) {
+            LogReplicationLogicalGroupConfig config = (LogReplicationLogicalGroupConfig) sessionToConfigMap.get(session);
+            config.setStreamsToReplicate(streamsToReplicate);
+            config.setDataStreamToTagsMap(streamToTagsMap);
+            config.setLogicalGroupToStreams(logicalGroupToStreams);
+            log.info("LogReplicationLogicalGroupConfig updated for session={}, streams to replicate={}, groups={}",
+                    TextFormat.shortDebugString(session), streamsToReplicate, logicalGroupToStreams);
+        } else {
+            LogReplicationLogicalGroupConfig logicalGroupConfig = new LogReplicationLogicalGroupConfig(session,
+                    streamsToReplicate, streamToTagsMap, serverContext, logicalGroupToStreams);
+            sessionToConfigMap.put(session, logicalGroupConfig);
+            log.info("LogReplicationLogicalGroupConfig generated for session={}, streams to replicate={}, groups={}",
+                    TextFormat.shortDebugString(session), streamsToReplicate, logicalGroupToStreams);
+        }
     }
 
     private void generateFullTableConfig(LogReplicationSession session) {
@@ -275,7 +292,7 @@ public class LogReplicationConfigManager {
                 streamsToReplicate.add(tableName);
                 if (MERGE_ONLY_STREAMS.contains(streamId)) {
                     // Collect tags for merge-only stream
-                    streamToTagsMap.put(streamId, Collections.singletonList(LOG_REPLICATOR_STREAM_INFO.getStreamId()));
+                    streamToTagsMap.put(streamId, Collections.singletonList(getOpaqueStreamToTrack(session.getSubscriber())));
                 } else {
                     // Collect tags for normal stream
                     List<UUID> tags = streamToTagsMap.getOrDefault(streamId, new ArrayList<>());
@@ -289,22 +306,42 @@ public class LogReplicationConfigManager {
             }
         });
 
-        LogReplicationFullTableConfig fullTableConfig = new LogReplicationFullTableConfig(session, streamsToReplicate,
-                streamToTagsMap, serverContext, streamsToDrop);
-        sessionToConfigMap.put(session, fullTableConfig);
-
-        log.info("LogReplicationFullTableConfig generated for session={}, streams to replicate={}, streamsToDrop={}",
-                TextFormat.shortDebugString(session), streamsToReplicate, streamsToDrop);
+        if (sessionToConfigMap.containsKey(session)) {
+            LogReplicationFullTableConfig config = (LogReplicationFullTableConfig) sessionToConfigMap.get(session);
+            config.setStreamsToReplicate(streamsToReplicate);
+            config.setDataStreamToTagsMap(streamToTagsMap);
+            config.setStreamsToDrop(streamsToDrop);
+            log.info("LogReplicationFullTableConfig updated for session={}, streams to replicate={}, streamsToDrop={}",
+                    TextFormat.shortDebugString(session), streamsToReplicate, streamsToDrop);
+        } else {
+            LogReplicationFullTableConfig fullTableConfig = new LogReplicationFullTableConfig(session, streamsToReplicate,
+                    streamToTagsMap, serverContext, streamsToDrop);
+            sessionToConfigMap.put(session, fullTableConfig);
+            log.info("LogReplicationFullTableConfig generated for session={}, streams to replicate={}, streamsToDrop={}",
+                    TextFormat.shortDebugString(session), streamsToReplicate, streamsToDrop);
+        }
     }
 
     /**
-     * If registry table has updates, update the streams to replicate and tags for each session based
-     * on the latest registry table entries.
+     * Get updated LogReplicationConfig for the given session.
+     *
+     * @param session LogReplicationSession to get updated config for.
+     * @param updateGroupDestinationConfig True if group destination config needs to be updated.
      */
-    public void getUpdatedConfig() {
-        // Check if the registry table has new entries.  Otherwise, no update is necessary.
-        if (syncWithRegistryTable()) {
-            generateConfig(sessionToConfigMap.keySet());
+    public void getUpdatedConfig(LogReplicationSession session, boolean updateGroupDestinationConfig) {
+        syncWithRegistryTable();
+
+        switch (session.getSubscriber().getModel()) {
+            case FULL_TABLE:
+                generateConfig(Collections.singleton(session), updateGroupDestinationConfig);
+                break;
+            case LOGICAL_GROUPS:
+                syncWithClientConfigTable();
+                generateConfig(Collections.singleton(session), updateGroupDestinationConfig);
+                break;
+            default:
+                throw new IllegalArgumentException("Invalid replication model: " +
+                        session.getSubscriber().getModel());
         }
     }
 
@@ -312,31 +349,77 @@ public class LogReplicationConfigManager {
      * Check if the registry table's log tail moved or not. If it has moved ahead, we need to update
      * lastRegistryTableLogTail and in-memory registry table entries, which will be used for construct
      * LogReplicationConfig objects.
-     *
-     * @return True if registry table has new entries and the in-memory data structures are updated.
      */
-    private synchronized boolean syncWithRegistryTable() {
-        // TODO (V2 / Chris): the operation of check current tail + generate updated config + update last log tail
-        //  should be atomic operation in multi replication session env.
+    private synchronized void syncWithRegistryTable() {
         StreamAddressSpace currentAddressSpace = runtime.getSequencerView().getStreamAddressSpace(
             new StreamAddressRange(REGISTRY_TABLE_ID, Long.MAX_VALUE, Address.NON_ADDRESS));
         long currentLogTail = currentAddressSpace.getTail();
 
         // Check if the log tail of registry table moved ahead
         if (currentLogTail != lastRegistryTableLogTail) {
-            lastRegistryTableLogTail = currentLogTail;
             registryTableEntries = runtime.getTableRegistry().getRegistryTable().entryStream().collect(Collectors.toList());
-            return true;
+            lastRegistryTableLogTail = currentLogTail;
         }
-
-        return false;
     }
 
     /**
-     * Preprocess the registration and logical group configuration tables, get the log tail that will be the start
-     * point for client config listener to monitor updates.
+     * Check if the client config table (groups to Sinks map for LOGICAL_GROUP use case) has new updates or not.
+     * If the table's log tail moved, update the in-memory client config table entry with the latest table content.
+     */
+    private synchronized void syncWithClientConfigTable() {
+        StreamAddressSpace currentAddressSpace = runtime.getSequencerView().getStreamAddressSpace(
+                new StreamAddressRange(CLIENT_CONFIG_TABLE_ID, Long.MAX_VALUE, Address.NON_ADDRESS));
+        long currentLogTail = currentAddressSpace.getTail();
+
+        // Check if the log tail of client config table moved ahead
+        if (currentLogTail != lastClientConfigTableLogTail) {
+            List<CorfuStoreEntry<ClientDestinationInfoKey, DestinationInfoVal, Message>> newEntries = new ArrayList<>();
+            try {
+                IRetry.build(IntervalRetry.class, () -> {
+                    try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+                        newEntries.addAll(txn.executeQuery(clientConfigTable, e -> true));
+                        txn.commit();
+                        return null;
+                    } catch (TransactionAbortedException tae) {
+                        log.error("Failed to sync with client configuration table table due to Txn Abort, retrying", tae);
+                        throw new RetryNeededException();
+                    }
+                }).run();
+            } catch (InterruptedException e) {
+                log.error("Unable to sync with client configuration table", e);
+                throw new UnrecoverableCorfuInterruptedError(e);
+            }
+            clientConfigTableEntries = newEntries;
+            lastClientConfigTableLogTail = currentLogTail;
+        }
+    }
+
+    /**
+     * For LOGICAL_GROUP model, the groups to Sinks map could be different between subscribers.
      *
-     * @return Log tail hat will be the start point for client config listener to monitor updates.
+     * @param subscriber Subscriber whose groups to Sinks map will be returned
+     * @return Given subscriber's groups to Sinks map.
+     */
+    private Map<String, Set<String>> getGroupToSinksMapForSubscriber(ReplicationSubscriber subscriber) {
+        Map<String, Set<String>> groupSinksMap = new HashMap<>();
+        clientConfigTableEntries.stream()
+                .filter(corfuStreamEntry ->
+                        corfuStreamEntry.getKey().getClientName().equals(subscriber.getClientName()) &&
+                        corfuStreamEntry.getKey().getModel().equals(subscriber.getModel()))
+                .forEach(corfuStreamEntry -> {
+                    String groupName = corfuStreamEntry.getKey().getGroupName();
+                    Set<String> destinations = new HashSet<>(corfuStreamEntry.getPayload().getDestinationIdsList());
+                    groupSinksMap.put(groupName, destinations);
+                });
+
+        return groupSinksMap;
+    }
+
+    /**
+     * Preprocess the client registration table, get the log tail that will be the start point for client register
+     * listener to monitor updates.
+     *
+     * @return Log tail hat will be the start point for client register listener to monitor updates.
      */
     public CorfuStoreMetadata.Timestamp preprocessAndGetTail() {
         try {
@@ -349,7 +432,7 @@ public class LogReplicationConfigManager {
                         ReplicationModel model = entry.getPayload().getModel();
                         ReplicationSubscriber subscriber = ReplicationSubscriber.newBuilder()
                                 .setClientName(clientName).setModel(model).build();
-                        // TODO (V2): currently we don't support ccustomized client name, default logical group subscriber
+                        // TODO (V2): currently we don't support customized client name, default logical group subscriber
                         //  should be removed after the grpc stream for Sink session creation is created.
                         if (model.equals(ReplicationModel.LOGICAL_GROUPS)) {
                             subscriber = getDefaultLogicalGroupSubscriber();
@@ -357,30 +440,9 @@ public class LogReplicationConfigManager {
                         registeredSubscribers.add(subscriber);
                     });
 
-                    List<CorfuStoreEntry<ClientDestinationInfoKey, DestinationInfoVal, Message>> groupConfigResults =
-                            txn.executeQuery(clientConfigTable, p -> true);
-                    groupConfigResults.forEach(entry -> {
-                        String clientName = entry.getKey().getClientName();
-                        ReplicationModel model = entry.getKey().getModel();
-                        ReplicationSubscriber subscriber = ReplicationSubscriber.newBuilder()
-                                .setClientName(clientName).setModel(model).build();
-                        String groupName = entry.getKey().getGroupName();
-                        // TODO (V2): currently we don't support ccustomized client name, default logical group subscriber
-                        //  should be removed after the grpc stream for Sink session creation is created.
-                        if (model.equals(ReplicationModel.LOGICAL_GROUPS)) {
-                            subscriber = getDefaultLogicalGroupSubscriber();
-                        }
-                        if (registeredSubscribers.contains(subscriber)) {
-                            groupSinksMap.put(groupName, new HashSet<>(entry.getPayload().getDestinationIdsList()));
-                        } else {
-                            log.warn("Subscriber {} not registered, but found its group config in client table: {}",
-                                    subscriber, groupName);
-                        }
-                    });
-
                     return txn.commit();
                 } catch (TransactionAbortedException tae) {
-                    log.error("Failed to preprocess client configuration tables due to Txn Abort", tae);
+                    log.error("Failed to preprocess client registration table due to Txn Abort, retrying", tae);
                     throw new RetryNeededException();
                 }
             }).run();
@@ -403,51 +465,6 @@ public class LogReplicationConfigManager {
         registeredSubscribers.add(subscriber);
     }
 
-
-    /**
-     * Callback method which is invoked when the client config listener receives update for adding/removing
-     * Sinks from a logical group.
-     *
-     * @param subscriber   Registered replication subscriber that changes the group destination mapping.
-     * @param logicalGroup Logical group that is being modified.
-     * @param destinations The updated list of destinations that this logicalGroup is targeting to.
-     * @return A set of LogReplicationSession that needs a forced snapshot sync
-     */
-    public Set<LogReplicationSession> onGroupDestinationsChange(ReplicationSubscriber subscriber,
-                                                                String logicalGroup,
-                                                                List<String> destinations) {
-        if (!registeredSubscribers.contains(subscriber)) {
-            log.error("Client {} has not registered with replication model {}. Please register first.",
-                    subscriber.getClientName(), subscriber.getModel());
-            return null;
-        }
-
-        Set<String> recordedSinks = groupSinksMap.getOrDefault(logicalGroup, new HashSet<>());
-        Set<String> updatedSinks = new HashSet<>(destinations);
-
-        // The impacted sinks are those who are newly added to this logicalGroup or removed from it. Their config
-        // needs to be generated again to reflect the group destination change.
-        Set<String> impactedSinks = Stream.concat(recordedSinks.stream(), updatedSinks.stream())
-                .filter(sink -> !recordedSinks.contains(sink) || !updatedSinks.contains(sink))
-                .collect(Collectors.toSet());
-        // Update groupSinksMap first and then generate config, as config generation relies on groupSinksMap as well.
-        groupSinksMap.put(logicalGroup, updatedSinks);
-        generateConfig(sessionToConfigMap.keySet().stream()
-                .filter(session -> impactedSinks.contains(session.getSinkClusterId()))
-                .collect(Collectors.toSet()));
-
-        log.info("Updated group to sinks map, group={}, updatedSinks={}", logicalGroup, updatedSinks);
-
-        // Specifically for those who are newly added to this logicalGroup, a forced snapshot sync for
-        // their ongoing replication sessions will be triggered by inputting an event to disocvery service.
-        Set<String> newlyAddedSinks = updatedSinks.stream().filter(sink -> !recordedSinks.contains(sink))
-                .collect(Collectors.toSet());
-
-        return sessionToConfigMap.keySet().stream()
-                .filter(session -> newlyAddedSinks.contains(session.getSinkClusterId()))
-                .collect(Collectors.toSet());
-    }
-
     /**
      * Client listener will perform a full sync upon its resume. We perform a re-processing of the client config
      * tables in the same transaction (as the listener finds the timestamp from which to subscribe for deltas) to
@@ -455,10 +472,16 @@ public class LogReplicationConfigManager {
      */
     public CorfuStoreMetadata.Timestamp onClientListenerResume() {
         registeredSubscribers.clear();
-        groupSinksMap.clear();
         return preprocessAndGetTail();
     }
 
+    /**
+     * Log entry readers will be tracking different opaque streams to get entries for log entry sync, based on the
+     * log replication subscriber's model and client name.
+     *
+     * @param subscriber Replication subscriber based on which the opaque stream id will be determined
+     * @return Stream id of the opaque stream to track for a session's log entry reader.
+     */
     public UUID getOpaqueStreamToTrack(ReplicationSubscriber subscriber) {
         switch(subscriber.getModel()) {
             case FULL_TABLE:
@@ -466,8 +489,7 @@ public class LogReplicationConfigManager {
             case LOGICAL_GROUPS:
                 return ObjectsView.getLogicalGroupStreamTagInfo(subscriber.getClientName()).getStreamId();
             default:
-                log.error("Unsupported replication model received: {}", subscriber.getModel());
-                return null;
+                throw new IllegalArgumentException("Subscriber with invalid replication model: " + subscriber.getModel());
         }
     }
 }

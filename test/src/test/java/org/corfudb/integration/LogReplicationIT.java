@@ -1270,7 +1270,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(srcTestRuntime, LOCAL_SOURCE_CLUSTER_ID);
         LogReplicationContext context = new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT, pluginConfig);
 
-        configManager.generateConfig(Collections.singleton(session));
+        configManager.generateConfig(Collections.singleton(session), false);
 
         // This IT requires custom values to be set for the replication config.  Set these values so that the default
         // values are not used

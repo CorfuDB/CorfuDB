@@ -60,7 +60,7 @@ public class SessionManager {
 
     private final LogReplicationConfigManager configManager;
 
-    private final LogReplicationClientConfigListener clientConfigListener;
+    private final LogReplicationClientRegisterListener clientConfigListener;
 
     @Getter
     private final Set<LogReplicationSession> sessions = ConcurrentHashMap.newKeySet();
@@ -103,7 +103,7 @@ public class SessionManager {
 
         this.configManager = new LogReplicationConfigManager(runtime, serverContext,
                 topology.getLocalClusterDescriptor().getClusterId());
-        this.clientConfigListener = new LogReplicationClientConfigListener(this,
+        this.clientConfigListener = new LogReplicationClientRegisterListener(this,
                 configManager, corfuStore);
         this.replicationContext = new LogReplicationContext(configManager, topology.getTopologyConfigId(),
                 localCorfuEndpoint, pluginConfig);
@@ -140,7 +140,7 @@ public class SessionManager {
             .build();
         this.localCorfuEndpoint = lrNodeLocator.toEndpointUrl();
         this.configManager = new LogReplicationConfigManager(runtime, topology.getLocalClusterDescriptor().getClusterId());
-        this.clientConfigListener = new LogReplicationClientConfigListener(this, configManager, corfuStore);
+        this.clientConfigListener = new LogReplicationClientRegisterListener(this, configManager, corfuStore);
         this.replicationContext = new LogReplicationContext(configManager, topology.getTopologyConfigId(),
                 localCorfuEndpoint, pluginConfig);
         this.metadataManager = new LogReplicationMetadataManager(corfuRuntime, replicationContext);
@@ -329,7 +329,7 @@ public class SessionManager {
         log.info("Total of {} outgoing sessions created with subscriber {}, sessions={}", sessionsToAdd.size(),
                 subscriber, sessionsToAdd);
 
-        configManager.generateConfig(sessionsToAdd);
+        configManager.generateConfig(sessionsToAdd, true);
     }
 
     private void createIncomingSessionsBySubscriber(ReplicationSubscriber subscriber) {
@@ -370,7 +370,7 @@ public class SessionManager {
         log.info("Total of {} incoming sessions created with subscriber {}, sessions={}", sessionsToAdd.size(),
                 subscriber, sessionsToAdd);
 
-        configManager.generateConfig(sessionsToAdd);
+        configManager.generateConfig(sessionsToAdd, true);
     }
 
     private void logNewlyAddedSessionInfo() {
