@@ -234,6 +234,7 @@ public class LogReplicationConfigManager {
                         log.debug("Generating ROUTING_QUEUE config for session {}",
                                 TextFormat.shortDebugString(session));
                         generateRoutingQueueConfig(session);
+                        break;
                     default:
                         throw new IllegalArgumentException("Invalid replication model: " +
                                 session.getSubscriber().getModel());
@@ -381,6 +382,9 @@ public class LogReplicationConfigManager {
             case LOGICAL_GROUPS:
                 syncWithClientConfigTable();
                 generateConfig(Collections.singleton(session), updateGroupDestinationConfig);
+                break;
+            case ROUTING_QUEUES:
+                generateRoutingQueueConfig(session);
                 break;
             default:
                 throw new IllegalArgumentException("Invalid replication model: " +
