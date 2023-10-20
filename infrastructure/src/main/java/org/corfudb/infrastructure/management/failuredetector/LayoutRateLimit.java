@@ -54,7 +54,11 @@ public class LayoutRateLimit {
             Deque<LayoutProbe> tmpProbes = new LinkedList<>(probes);
 
             if (tmpProbes.isEmpty()) {
-                return ProbeStatus.GREEN;
+                update(newProbe);
+                String msg = "Returning true ProbeStatus for probe {}";
+                log.info(msg, newProbe);
+                ClusterStabilityStatus status = ClusterStabilityStatusCalc.calc(limit, newProbe.getIteration());
+                return new ProbeStatus(true, Optional.of(newProbe), status);
             }
 
             // Get the latest (already existing) entry in the probes list
@@ -149,17 +153,22 @@ public class LayoutRateLimit {
     @Builder
     public static class TimeoutCalc {
         @Default
-        private final Duration interval = Duration.ofMinutes(1);
+        private final Duration interval = Duration.ofSeconds(30); //  1,  3,  7 ===> 30sec, 1.5min/90sec, 3.5min
         @Default
         private final int iteration = 1;
 
         public Duration getTimeout() {
             int iterSquare = 1 << iteration;
 
-            long timeout = iterSquare - interval.toMinutes();
+            long timeout = (iterSquare - 1) * interval.getSeconds();
             timeout = Math.max(timeout, 0);
 
-            return Duration.ofMinutes(timeout);
+            return Duration.ofSeconds(timeout);
+        }
+
+        public static void main(String[] args) {
+            System.out.println(((1<<1) - 1) * 30);
+
         }
     }
 
