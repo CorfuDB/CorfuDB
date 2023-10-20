@@ -321,6 +321,7 @@ public class SnapshotSender {
 
         stopSnapshotSync.set(false);
         startSnapshotSync = true;
+        completed = false;
     }
 
     private void resetBaseSnapshotTimestamp(long timestamp) {
