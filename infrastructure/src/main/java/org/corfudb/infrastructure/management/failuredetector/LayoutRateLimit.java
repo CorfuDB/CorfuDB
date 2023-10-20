@@ -165,11 +165,6 @@ public class LayoutRateLimit {
 
             return Duration.ofSeconds(timeout);
         }
-
-        public static void main(String[] args) {
-            System.out.println(((1<<1) - 1) * 30);
-
-        }
     }
 
     @AllArgsConstructor
