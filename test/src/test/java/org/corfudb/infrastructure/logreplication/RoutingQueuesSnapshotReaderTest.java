@@ -61,7 +61,7 @@ public class RoutingQueuesSnapshotReaderTest extends AbstractViewTest {
         configManager = new LogReplicationConfigManager(lrRuntime, session.getSourceClusterId());
         replicationContext = new LogReplicationContext(configManager, 5, session.getSourceClusterId(),
                 true, new LogReplicationPluginConfig(""), lrRuntime);
-        configManager.generateConfig(Collections.singleton(session));
+        configManager.generateConfig(Collections.singleton(session), false);
         snapshotReader = new RoutingQueuesSnapshotReader(session, replicationContext);
         snapshotReader.reset(lrRuntime.getAddressSpaceView().getLogTail());
 
