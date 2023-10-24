@@ -16,6 +16,7 @@ import org.rocksdb.WriteOptions;
 
 import java.nio.ByteBuffer;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**

@@ -27,6 +27,7 @@ import org.rocksdb.WriteOptions;
 import java.nio.ByteBuffer;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.locks.StampedLock;
 import java.util.stream.Collectors;
 
@@ -53,8 +54,7 @@ public class RocksDbStore<S extends SnapshotGenerator<S>> implements
     @Getter
     private final ColumnFamilyHandle defaultColumnFamily;
 
-    @Getter
-    private final ColumnFamilyHandle secondaryIndexColumnFamily;
+    private final Optional<ColumnFamilyHandle> secondaryIndexColumnFamily;
 
     // Options.
     @Getter
@@ -72,7 +72,8 @@ public class RocksDbStore<S extends SnapshotGenerator<S>> implements
                         @NonNull Options rocksDbOptions,
                         @NonNull WriteOptions writeOptions,
                         @NonNull PersistenceOptions persistenceOptions,
-                        @NonNull StoreMode cleanUp) throws RocksDBException {
+                        @NonNull StoreMode cleanUp,
+                        IndexMode indexMode) throws RocksDBException {
         this.absolutePathString = dataPath.toFile().getAbsolutePath();
         this.rocksDbOptions = rocksDbOptions;
         this.writeOptions = writeOptions;
@@ -116,8 +117,15 @@ public class RocksDbStore<S extends SnapshotGenerator<S>> implements
             // MemTableConfig memTableConfig = new HashLinkedListMemTableConfig();
             // columnFamilyOptions.setMemTableConfig(memTableConfig);
 
-            this.secondaryIndexColumnFamily = this.rocksDb.createColumnFamily(
-                    new ColumnFamilyDescriptor("secondary-indexes".getBytes(), columnFamilyOptions));
+            if (indexMode == IndexMode.INDEX) {
+                ColumnFamilyDescriptor descriptor = new ColumnFamilyDescriptor(
+                        "secondary-indexes".getBytes(),
+                        columnFamilyOptions
+                );
+                this.secondaryIndexColumnFamily = Optional.of(this.rocksDb.createColumnFamily(descriptor));
+            } else {
+                this.secondaryIndexColumnFamily = Optional.empty();
+            }
         }
 
         this.metricsId = String.format("%s.%s.",
@@ -192,11 +200,14 @@ public class RocksDbStore<S extends SnapshotGenerator<S>> implements
             }
         }
 
-        try (RocksIterator entryIterator = this.rocksDb.newIterator(secondaryIndexColumnFamily)) {
-            entryIterator.seekToFirst();
-            while (entryIterator.isValid()) {
-                rocksDb.delete(secondaryIndexColumnFamily, entryIterator.key());
-                entryIterator.next();
+        if (secondaryIndexColumnFamily.isPresent()) {
+            ColumnFamilyHandle cf = secondaryIndexColumnFamily.get();
+            try (RocksIterator entryIterator = this.rocksDb.newIterator(cf)) {
+                entryIterator.seekToFirst();
+                while (entryIterator.isValid()) {
+                    rocksDb.delete(cf, entryIterator.key());
+                    entryIterator.next();
+                }
             }
         }
     }
@@ -263,7 +274,17 @@ public class RocksDbStore<S extends SnapshotGenerator<S>> implements
         return new AlwaysLatestSnapshot<>(rocksDb, viewGenerator);
     }
 
+    @Override
+    public ColumnFamilyHandle getSecondaryIndexColumnFamily() {
+        return secondaryIndexColumnFamily
+                .orElseThrow(() -> new IllegalStateException("Secondary index disabled"));
+    }
+
     public enum StoreMode {
         TEMPORARY, PERSISTENT
+    }
+
+    public enum IndexMode {
+        INDEX, NON_INDEX
     }
 }

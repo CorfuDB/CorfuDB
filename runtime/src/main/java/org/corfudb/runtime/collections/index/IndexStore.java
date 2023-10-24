@@ -11,6 +11,7 @@ import org.corfudb.runtime.collections.index.Index.Spec;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.object.RocksDbStore;
 import org.corfudb.util.serializer.ISerializer;
+import org.rocksdb.ColumnFamilyHandle;
 import org.rocksdb.RocksDBException;
 
 import javax.annotation.Nullable;
@@ -188,8 +189,10 @@ public class IndexStore<K, V> {
                     indexId, indexKey, serializer, keys, values);
 
             // Prevent the keys from being consumed.
-            final List<ByteBuffer> duplicateKeys = keys.stream().map(ByteBuffer::duplicate)
+            final List<ByteBuffer> duplicateKeys = keys.stream()
+                    .map(ByteBuffer::duplicate)
                     .collect(Collectors.toList());
+
             rocksApi.multiGet(rocksApi.getDefaultColumnFamily(), duplicateKeys, values);
 
             return Streams.zip(keys.stream(), values.stream(), (key, value) ->
