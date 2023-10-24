@@ -1,6 +1,6 @@
 package org.corfudb.generator.util;
 
-import org.corfudb.runtime.collections.Index;
+import org.corfudb.runtime.collections.index.Index;
 
 import java.util.Iterator;
 import java.util.Optional;

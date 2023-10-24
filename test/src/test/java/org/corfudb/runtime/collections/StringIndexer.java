@@ -1,5 +1,7 @@
 package org.corfudb.runtime.collections;
 
+import org.corfudb.runtime.collections.index.Index;
+
 import java.util.ConcurrentModificationException;
 import java.util.Iterator;
 import java.util.Optional;

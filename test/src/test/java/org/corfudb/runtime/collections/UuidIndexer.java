@@ -1,5 +1,6 @@
 package org.corfudb.runtime.collections;
 
+import org.corfudb.runtime.collections.index.Index;
 import org.corfudb.test.TestSchema;
 
 import java.util.ArrayList;

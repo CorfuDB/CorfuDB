@@ -1,6 +1,5 @@
 package org.corfudb.runtime.collections;
 
-import com.google.common.collect.Streams;
 import com.google.common.hash.HashFunction;
 import com.google.common.hash.Hashing;
 import io.micrometer.core.instrument.Timer;
@@ -11,13 +10,13 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.runtime.CorfuOptions;
+import org.corfudb.runtime.collections.index.Index;
+import org.corfudb.runtime.collections.index.IndexStore;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.object.ColumnFamilyRegistry;
 import org.corfudb.runtime.object.DiskBackedSMRSnapshot;
-import org.corfudb.runtime.object.PersistenceOptions;
 import org.corfudb.runtime.object.RocksDbApi;
 import org.corfudb.runtime.object.RocksDbSnapshotGenerator;
 import org.corfudb.runtime.object.RocksDbStore;
@@ -34,26 +33,14 @@ import org.rocksdb.CompressionType;
 import org.rocksdb.Options;
 import org.rocksdb.RocksDB;
 import org.rocksdb.RocksDBException;
-import org.rocksdb.Statistics;
-import org.rocksdb.StatsLevel;
 import org.rocksdb.WriteOptions;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
-import java.nio.ByteBuffer;
-import java.util.AbstractMap;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 import java.util.Spliterator;
 import java.util.Spliterators;
 import java.util.concurrent.ThreadLocalRandom;
-import java.util.stream.Collectors;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
@@ -92,7 +79,7 @@ public class DiskBackedCorfuTable<K, V> implements
         SnapshotGeneratorWithConsistency<DiskBackedCorfuTable<K, V>>,
         ViewGenerator<DiskBackedCorfuTable<K, V>> {
 
-    public static final Options defaultOptions = getDiskBackedCorfuTableOptions();
+    public static final Options DEFAULT_OPTIONS = getDiskBackedCorfuTableOptions();
     private static final HashFunction murmurHash3 = Hashing.murmur3_32();
     private static final String DISK_BACKED = "diskBacked";
     private static final String TRUE = "true";
@@ -101,77 +88,44 @@ public class DiskBackedCorfuTable<K, V> implements
 
     // Optimization: We never perform crash-recovery, so we can disable
     // Write Ahead Log and disable explicit calls to sync().
-    private static final WriteOptions writeOptions = new WriteOptions()
-                    .setDisableWAL(true)
-                    .setSync(false);
+    public static final WriteOptions WRITE_OPTIONS = new WriteOptions()
+            .setDisableWAL(true)
+            .setSync(false);
 
     static {
         RocksDB.loadLibrary();
     }
 
-    @Getter
-    private final Statistics statistics;
     private final RocksDbApi rocksApi;
     private final RocksDbSnapshotGenerator<DiskBackedCorfuTable<K, V>> rocksDbSnapshotGenerator;
     private final ColumnFamilyRegistry columnFamilyRegistry;
     private final ISerializer serializer;
-    // Index.
-    private final Map<String, String> secondaryIndexesAliasToPath;
-    private final Map<String, Byte> indexToId;
-    private final Set<Index.Spec<K, V, ?>> indexSpec;
-    // Metrics.
-    private final String metricsId;
-    // Options.
-    private final PersistenceOptions persistenceOptions;
 
-    public DiskBackedCorfuTable(@NonNull PersistenceOptions persistenceOptions,
-                                @NonNull Options rocksDbOptions,
-                                @NonNull ISerializer serializer,
-                                @Nonnull Index.Registry<K, V> indices) {
+    private final RocksDbStore<DiskBackedCorfuTable<K, V>> rocksDbStore;
 
-        this.persistenceOptions = persistenceOptions;
-        this.secondaryIndexesAliasToPath = new HashMap<>();
-        this.indexToId = new HashMap<>();
-        this.indexSpec = new HashSet<>();
+    @Getter
+    private final Optional<IndexStore<K, V>> indexStore;
 
-        byte indexId = 0;
-        for (Index.Spec<K, V, ?> index : indices) {
-            this.secondaryIndexesAliasToPath.put(index.getAlias().get(), index.getName().get());
-            this.indexSpec.add(index);
-            this.indexToId.put(index.getName().get(), indexId++);
-        }
+    public DiskBackedCorfuTable(
+            @NonNull ISerializer serializer,
+            @NonNull RocksDbStore<DiskBackedCorfuTable<K, V>> rocksDbStore
+    ) {
+        this(serializer, rocksDbStore, Optional.of(new IndexStore<>(Index.Registry.empty(), serializer, rocksDbStore)));
+    }
 
-        try {
-            this.statistics = new Statistics();
-            this.statistics.setStatsLevel(StatsLevel.ALL);
-            rocksDbOptions.setStatistics(statistics);
-            persistenceOptions.getWriteBufferSize().map(rocksDbOptions::setWriteBufferSize);
+    public DiskBackedCorfuTable(
+            @NonNull ISerializer serializer,
+            @NonNull RocksDbStore<DiskBackedCorfuTable<K, V>> rocksDbStore,
+            @NonNull Optional<IndexStore<K, V>> indexStore
+    ) {
 
-            final RocksDbStore<DiskBackedCorfuTable<K, V>> rocksDbStore = new RocksDbStore<>(
-                    persistenceOptions.getDataPath(), rocksDbOptions, writeOptions);
+        this.rocksDbStore = rocksDbStore;
+        this.rocksApi = rocksDbStore;
+        this.columnFamilyRegistry = rocksDbStore;
+        this.rocksDbSnapshotGenerator = rocksDbStore;
 
-            this.rocksApi = rocksDbStore;
-            this.columnFamilyRegistry = rocksDbStore;
-            this.rocksDbSnapshotGenerator = rocksDbStore;
-            this.metricsId = String.format("%s.%s.",
-                    persistenceOptions.getDataPath().getFileName(), System.identityHashCode(this));
-            MeterRegistryProvider.registerExternalSupplier(metricsId, this.statistics::toString);
-        } catch (RocksDBException e) {
-            throw new UnrecoverableCorfuError(e);
-        }
-
+        this.indexStore = indexStore;
         this.serializer = serializer;
-    }
-
-    public DiskBackedCorfuTable(@NonNull PersistenceOptions persistenceOptions,
-                                @NonNull Options rocksDbOptions,
-                                @NonNull ISerializer serializer) {
-        this(persistenceOptions, rocksDbOptions, serializer, Index.Registry.empty());
-    }
-
-    public DiskBackedCorfuTable(@NonNull PersistenceOptions persistenceOptions,
-                                @NonNull ISerializer serializer) {
-        this(persistenceOptions, defaultOptions, serializer);
     }
 
     /**
@@ -208,23 +162,23 @@ public class DiskBackedCorfuTable<K, V> implements
     }
 
     public V get(@NonNull Object key) {
-        Optional<Timer.Sample> recordSample = MicroMeterUtils.startTimer(
-                SAMPLING_RATE > ThreadLocalRandom.current().nextInt(BOUND));
-
-        final ByteBuf keyPayload = Unpooled.buffer();
+        Optional<Timer.Sample> recordSample = MicroMeterUtils
+                .startTimer(SAMPLING_RATE > ThreadLocalRandom.current().nextInt(BOUND));
 
         try {
             // Serialize in the try-catch block to release ByteBuf when an exception occurs.
-            serializer.serialize(key, keyPayload);
-            byte[] value = rocksApi.get(columnFamilyRegistry.getDefaultColumnFamily(), keyPayload);
-            if (value == null) {
+            AtomicReference<byte[]> value = new AtomicReference<>();
+            managedPayload(key, keyPayload -> {
+                byte[] data = rocksApi.get(columnFamilyRegistry.getDefaultColumnFamily(), keyPayload);
+                value.set(data);
+            });
+
+            byte[] resultValue = value.get();
+            if (resultValue == null) {
                 return null;
             }
-            return serializer.deserializeTyped(Unpooled.wrappedBuffer(value), null);
-        } catch (RocksDBException ex) {
-            throw new UnrecoverableCorfuError(ex);
+            return serializer.deserializeTyped(Unpooled.wrappedBuffer(value.get()), null);
         } finally {
-            keyPayload.release();
             MicroMeterUtils.time(recordSample, "corfu_table.read.timer", DISK_BACKED, TRUE);
         }
     }
@@ -248,171 +202,60 @@ public class DiskBackedCorfuTable<K, V> implements
         Optional<Timer.Sample> recordSample = MicroMeterUtils.startTimer(
                 SAMPLING_RATE > ThreadLocalRandom.current().nextInt(BOUND));
 
-        final ByteBuf keyPayload = Unpooled.buffer();
-        final ByteBuf valuePayload = Unpooled.buffer();
-
         try {
-            // Serialize in the try-catch block to release ByteBuf when an exception occurs.
-            serializer.serialize(key, keyPayload);
-            serializer.serialize(value, valuePayload);
-
-            if (!indexSpec.isEmpty()) {
-                V previous = get(key);
-
-                // Update secondary indexes with new mappings.
-                unmapSecondaryIndexes(key, previous);
-                mapSecondaryIndexes(key, value, valuePayload.readableBytes());
-            }
+            V previous = get(key);
 
             // Insert the primary key-value mapping into the default column family.
-            rocksApi.insert(columnFamilyRegistry.getDefaultColumnFamily(), keyPayload, valuePayload);
+            managedPayload(key, keyPayload -> {
+                managedPayload(value, valuePayload -> {
+                    if (indexStore.isPresent()) {
+                        IndexStore<K, V> registry = indexStore.get();
+                        registry.remap(key, value, previous, valuePayload);
+                    }
+
+                    rocksApi.insert(columnFamilyRegistry.getDefaultColumnFamily(), keyPayload, valuePayload);
+                });
+            });
+
             return this;
-        } catch (RocksDBException ex) {
-            throw new UnrecoverableCorfuError(ex);
         } finally {
-            keyPayload.release();
-            valuePayload.release();
             MicroMeterUtils.time(recordSample, "corfu_table.write.timer", DISK_BACKED, TRUE);
         }
     }
 
-    public DiskBackedCorfuTable<K, V> remove(@NonNull K key) {
-        final ByteBuf keyPayload = Unpooled.buffer();
-
-        try {
-            // Serialize in the try-catch block to release ByteBuf when an exception occurs.
-            serializer.serialize(key, keyPayload);
-
-            if (!indexSpec.isEmpty()) {
-                V previous = get(key);
-                // Remove stale secondary indexes mappings.
-                unmapSecondaryIndexes(key, previous);
-            }
-
-            // Delete the primary key-value mapping from the default column family.
-            rocksApi.delete(columnFamilyRegistry.getDefaultColumnFamily(), keyPayload);
-            return this;
-        } catch (RocksDBException ex) {
-            throw new UnrecoverableCorfuError(ex);
-        } finally {
-            keyPayload.release();
-        }
-    }
 
     /**
-     * Return a compound key consisting of: Index ID (1 byte) + Secondary Key Hash (4 bytes) +
-     * Serialized Secondary Key (Arbitrary) + Serialized Primary Key (Arbitrary)
+     * Prevents the code that uses serialized values from resource leaks
+     * by providing managed ByteBuf which is closed automatically
      *
-     * @param indexId      a mapping (byte) that represents the specific index name/spec
-     * @param secondaryKey secondary key
-     * @param primaryKey   primary key
-     * @return byte representation of the compound key
+     * @param data           data that will be serialized
+     * @param payloadHandler the code that uses serialized payload
+     * @param <T>            data type
      */
-    private ByteBuf getCompoundKey(byte indexId, Object secondaryKey, K primaryKey) {
-        final ByteBuf compositeKey = Unpooled.buffer();
-
-        // Write the index ID (1 byte).
-        compositeKey.writeByte(indexId);
-        final int hashStart = compositeKey.writerIndex();
-
-        // Move the index beyond the hash (4 bytes).
-        compositeKey.writerIndex(compositeKey.writerIndex() + Integer.BYTES);
-
-        // Serialize and write the secondary key and save the offset.
-        final int secondaryStart = compositeKey.writerIndex();
-        serializer.serialize(secondaryKey, compositeKey);
-        final int secondaryLength = compositeKey.writerIndex() - secondaryStart;
-
-        // Serialize and write the primary key and save the offset.
-        serializer.serialize(primaryKey, compositeKey);
-        final int end = compositeKey.writerIndex();
-
-        // Move the pointer to the hash offset and write the hash.
-        compositeKey.writerIndex(hashStart);
-        compositeKey.writeInt(hashBytes(compositeKey.array(), secondaryStart, secondaryLength));
-
-        // Move the pointer to the end.
-        compositeKey.writerIndex(end);
-
-        return compositeKey;
-    }
-
-    private void unmapSecondaryIndexes(@NonNull K primaryKey, @Nullable V value) throws RocksDBException {
-        if (Objects.isNull(value)) {
-            return;
-        }
-
+    private <T> void managedPayload(T data, ManagedPayloadHandler payloadHandler) {
+        final ByteBuf payload = Unpooled.buffer();
         try {
-            for (Index.Spec<K, V, ?> index : indexSpec) {
-                Iterable<?> mappedValues = index.getMultiValueIndexFunction().apply(primaryKey, value);
-                for (Object secondaryKey : mappedValues) {
-                    // Protobuf 3 does not allow for optional fields, so the secondary
-                    // key should never be null.
-                    if (Objects.isNull(secondaryKey)) {
-                        log.warn("{}: null secondary keys are not supported.", index.getName());
-                        continue;
-                    }
-
-                    final ByteBuf serializedCompoundKey = getCompoundKey(
-                            indexToId.get(index.getName().get()), secondaryKey, primaryKey);
-                    try {
-                        rocksApi.delete(columnFamilyRegistry.getSecondaryIndexColumnFamily(), serializedCompoundKey);
-                    } finally {
-                        serializedCompoundKey.release();
-                    }
-                }
-            }
-        } catch (Exception fatal) {
-            log.error("Received an exception while computing the index. " +
-                    "This is most likely an issue with the client's indexing function.", fatal);
-
-            close(); // Do not leave the table in an inconsistent state.
-
-            // In case of both a transactional and non-transactional operation, the client
-            // is going to receive UnrecoverableCorfuError along with the appropriate cause.
-            throw fatal;
+            serializer.serialize(data, payload);
+            payloadHandler.handle(payload);
+        } catch (RocksDBException ex) {
+            close();
+            throw new UnrecoverableCorfuError(ex);
+        } finally {
+            payload.release();
         }
     }
 
-    private void mapSecondaryIndexes(@NonNull K primaryKey, @NonNull V value, int valueSize) throws RocksDBException {
-        try {
-            for (Index.Spec<K, V, ?> index : indexSpec) {
-                Iterable<?> mappedValues = index.getMultiValueIndexFunction().apply(primaryKey, value);
-                for (Object secondaryKey : mappedValues) {
-                    // Protobuf 3 does not allow for optional fields, so the secondary
-                    // key should never be null.
-                    if (Objects.isNull(secondaryKey)) {
-                        log.warn("{}: null secondary keys are not supported.", index.getName());
-                        continue;
-                    }
+    public DiskBackedCorfuTable<K, V> remove(@NonNull K key) {
+        // Delete the primary key-value mapping from the default column family.
+        V previous = get(key);
 
-                    final ByteBuf serializedCompoundKey = getCompoundKey(
-                            indexToId.get(index.getName().get()), secondaryKey, primaryKey);
-
-                    // We need to persist the actual value size, since multi-get API
-                    // requires an allocation of a direct buffer.
-                    final ByteBuf serializedIndexValue = Unpooled.buffer();
-                    serializedIndexValue.writeInt(valueSize);
-
-                    try {
-                        rocksApi.insert(columnFamilyRegistry.getSecondaryIndexColumnFamily(),
-                                serializedCompoundKey, serializedIndexValue);
-                    } finally {
-                        serializedCompoundKey.release();
-                        serializedIndexValue.release();
-                    }
-                }
+        managedPayload(key, keyPayload -> {
+            if (indexStore.isPresent()) {
+                indexStore.get().unmapSecondaryIndexes(key, previous);
             }
-        } catch (Exception fatal) {
-            log.error("Received an exception while computing the index. " +
-                    "This is most likely an issue with the client's indexing function.", fatal);
-
-            close(); // Do not leave the table in an inconsistent state.
-
-            // In case of both a transactional and non-transactional operation, the client
-            // is going to receive UnrecoverableCorfuError along with the appropriate cause.
-            throw new UnrecoverableCorfuError(fatal);
-        }
+            rocksApi.delete(columnFamilyRegistry.getDefaultColumnFamily(), keyPayload);
+        });
+        return this;
     }
 
     public DiskBackedCorfuTable<K, V> clear() {
@@ -432,41 +275,11 @@ public class DiskBackedCorfuTable<K, V> implements
     }
 
     public long size() {
-        if (persistenceOptions.getSizeComputationModel() == EXACT_SIZE) {
+        if (rocksDbStore.getPersistenceOptions().getSizeComputationModel() == EXACT_SIZE) {
             return rocksApi.exactSize();
         }
 
         return rocksApi.estimateSize();
-    }
-
-    public <I> Iterable<Map.Entry<K, V>> getByIndex(@NonNull final Index.Name indexName,
-                                                    @NonNull I indexKey) {
-        final List<ByteBuffer> keys = new ArrayList<>();
-        final List<ByteBuffer> values = new ArrayList<>();
-
-        try {
-            String secondaryIndex = indexName.get();
-            if (!secondaryIndexesAliasToPath.containsKey(secondaryIndex)) {
-                return null;
-            }
-
-            byte indexId = indexToId.get(secondaryIndexesAliasToPath.get(secondaryIndex));
-            rocksApi.prefixScan(columnFamilyRegistry.getSecondaryIndexColumnFamily(),
-                    indexId, indexKey, serializer, keys, values);
-
-            // Prevent the keys from being consumed.
-            final List<ByteBuffer> duplicateKeys = keys.stream().map(ByteBuffer::duplicate)
-                    .collect(Collectors.toList());
-            rocksApi.multiGet(columnFamilyRegistry.getDefaultColumnFamily(), duplicateKeys, values);
-
-            return Streams.zip(keys.stream(), values.stream(), (key, value) ->
-                    new AbstractMap.SimpleEntry<>(
-                            serializer.<K>deserializeTyped(Unpooled.wrappedBuffer(key), null),
-                            serializer.<V>deserializeTyped(Unpooled.wrappedBuffer(value), null)
-                    )).collect(Collectors.toList());
-        } catch (RocksDBException e) {
-            throw new UnrecoverableCorfuError(e);
-        }
     }
 
     @Override
@@ -477,13 +290,9 @@ public class DiskBackedCorfuTable<K, V> implements
 
         try {
             this.rocksApi.close();
+            this.rocksDbStore.close();
         } catch (RocksDBException e) {
             throw new UnrecoverableCorfuError(e);
-        } finally {
-            if (isRoot()) {
-                MeterRegistryProvider.unregisterExternalSupplier(metricsId);
-                this.statistics.close();
-            }
         }
     }
 
@@ -526,6 +335,11 @@ public class DiskBackedCorfuTable<K, V> implements
 
     @Override
     public CorfuOptions.ConsistencyModel getConsistencyModel() {
-        return persistenceOptions.getConsistencyModel();
+        return rocksDbStore.getPersistenceOptions().getConsistencyModel();
+    }
+
+    @FunctionalInterface
+    private interface ManagedPayloadHandler {
+        void handle(ByteBuf payload) throws RocksDBException;
     }
 }

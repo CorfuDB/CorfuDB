@@ -4,6 +4,7 @@ import io.netty.buffer.ByteBuf;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.runtime.collections.RocksDbEntryIterator;
 import org.corfudb.util.serializer.ISerializer;
 import org.rocksdb.BlockBasedTableConfig;
@@ -19,6 +20,8 @@ import org.rocksdb.ReadOptions;
 import org.rocksdb.RocksDB;
 import org.rocksdb.RocksDBException;
 import org.rocksdb.RocksIterator;
+import org.rocksdb.Statistics;
+import org.rocksdb.StatsLevel;
 import org.rocksdb.WriteOptions;
 
 import java.nio.ByteBuffer;
@@ -37,27 +40,55 @@ import java.util.stream.Collectors;
 public class RocksDbStore<S extends SnapshotGenerator<S>> implements
         RocksDbApi,
         RocksDbSnapshotGenerator<S>,
-        ColumnFamilyRegistry {
+        ColumnFamilyRegistry,
+        AutoCloseable {
 
     private final OptimisticTransactionDB rocksDb;
     private final String absolutePathString;
     private final WriteOptions writeOptions;
     private final Options rocksDbOptions;
+    @Getter
+    private final Statistics statistics;
 
     @Getter
     private final ColumnFamilyHandle defaultColumnFamily;
+
     @Getter
     private final ColumnFamilyHandle secondaryIndexColumnFamily;
 
+    // Options.
+    @Getter
+    private final PersistenceOptions persistenceOptions;
+
+    /**
+     * Clean up database after close
+     */
+    private final StoreMode cleanUp;
+
+    // Metrics.
+    private final String metricsId;
+
     public RocksDbStore(@NonNull Path dataPath,
                         @NonNull Options rocksDbOptions,
-                        @NonNull WriteOptions writeOptions) throws RocksDBException {
+                        @NonNull WriteOptions writeOptions,
+                        @NonNull PersistenceOptions persistenceOptions,
+                        @NonNull StoreMode cleanUp) throws RocksDBException {
         this.absolutePathString = dataPath.toFile().getAbsolutePath();
         this.rocksDbOptions = rocksDbOptions;
         this.writeOptions = writeOptions;
+        this.cleanUp = cleanUp;
 
-        // Open the RocksDB instance
-        RocksDB.destroyDB(this.absolutePathString, this.rocksDbOptions);
+        this.statistics = new Statistics();
+        this.statistics.setStatsLevel(StatsLevel.ALL);
+        rocksDbOptions.setStatistics(statistics);
+
+        this.persistenceOptions = persistenceOptions;
+        persistenceOptions.getWriteBufferSize().map(rocksDbOptions::setWriteBufferSize);
+
+        if (cleanUp == StoreMode.TEMPORARY) {
+            // Open the RocksDB instance
+            RocksDB.destroyDB(this.absolutePathString, this.rocksDbOptions);
+        }
         this.rocksDb = OptimisticTransactionDB.open(rocksDbOptions, absolutePathString);
         this.defaultColumnFamily = this.rocksDb.getDefaultColumnFamily();
 
@@ -88,6 +119,10 @@ public class RocksDbStore<S extends SnapshotGenerator<S>> implements
             this.secondaryIndexColumnFamily = this.rocksDb.createColumnFamily(
                     new ColumnFamilyDescriptor("secondary-indexes".getBytes(), columnFamilyOptions));
         }
+
+        this.metricsId = String.format("%s.%s.",
+                persistenceOptions.getDataPath().getFileName(), System.identityHashCode(this));
+        MeterRegistryProvider.registerExternalSupplier(metricsId, this.statistics::toString);
     }
 
     @Override
@@ -188,9 +223,15 @@ public class RocksDbStore<S extends SnapshotGenerator<S>> implements
 
     @Override
     public void close() throws RocksDBException {
+        MeterRegistryProvider.unregisterExternalSupplier(metricsId);
+        this.statistics.close();
+
         rocksDb.close();
-        RocksDB.destroyDB(absolutePathString, rocksDbOptions);
-        log.info("Cleared RocksDB data on {}", absolutePathString);
+
+        if (cleanUp == StoreMode.TEMPORARY) {
+            RocksDB.destroyDB(absolutePathString, rocksDbOptions);
+            log.info("Cleared RocksDB data on {}", absolutePathString);
+        }
     }
 
     /**
@@ -220,5 +261,9 @@ public class RocksDbStore<S extends SnapshotGenerator<S>> implements
     public SMRSnapshot<S> getImplicitSnapshot(
             @NonNull ViewGenerator<S> viewGenerator) {
         return new AlwaysLatestSnapshot<>(rocksDb, viewGenerator);
+    }
+
+    public enum StoreMode {
+        TEMPORARY, PERSISTENT
     }
 }

@@ -249,7 +249,7 @@ public class Table<K extends Message, V extends Message, M extends Message> impl
                     .setTypeToken(PersistedCorfuTable.getTypeToken());
 
             arguments.add(persistenceOptions.build());
-            arguments.add(DiskBackedCorfuTable.defaultOptions);
+            arguments.add(DiskBackedCorfuTable.DEFAULT_OPTIONS);
             arguments.add(safeSerializer);
         } else {
             // Default in-memory implementation.
@@ -281,7 +281,7 @@ public class Table<K extends Message, V extends Message, M extends Message> impl
      *                                  element prevents it from being added to this queue
      */
     public K enqueue(V e) {
-        /**
+        /*
          * This is a callback that is placed into the root transaction's context on
          * the thread local stack which will be invoked right after this transaction
          * is deemed successful and has obtained a final sequence number to write.

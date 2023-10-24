@@ -9,6 +9,7 @@ import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.runtime.collections.index.Index;
 import org.corfudb.runtime.collections.vavr.TupleIterableWrapper;
 import org.corfudb.runtime.object.InMemorySMRSnapshot;
 import org.corfudb.runtime.object.SMRSnapshot;

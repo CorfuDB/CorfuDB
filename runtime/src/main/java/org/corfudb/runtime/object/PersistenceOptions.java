@@ -17,15 +17,15 @@ import java.util.Optional;
 @Builder
 public class PersistenceOptions {
 
-    Path dataPath;
+    private final Path dataPath;
 
     @Builder.Default
-    ConsistencyModel consistencyModel = ConsistencyModel.READ_YOUR_WRITES;
+    private final ConsistencyModel consistencyModel = ConsistencyModel.READ_YOUR_WRITES;
 
     @Builder.Default
-    SizeComputationModel sizeComputationModel = SizeComputationModel.EXACT_SIZE;
+    private final SizeComputationModel sizeComputationModel = SizeComputationModel.EXACT_SIZE;
 
     @Builder.Default
     @SuppressWarnings("OptionalUsedAsFieldOrParameterType")
-    Optional<Long> writeBufferSize = Optional.empty();
+    private final Optional<Long> writeBufferSize = Optional.empty();
 }
