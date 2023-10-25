@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure.logreplication.replication.send;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.protobuf.TextFormat;
 import io.micrometer.core.instrument.Tag;
@@ -13,6 +14,7 @@ import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationCo
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent.LogReplicationEventType;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationFSM;
+import org.corfudb.infrastructure.logreplication.replication.send.logreader.RoutingQueuesSnapshotReader;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.SnapshotReader;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.ReadProcessor;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.SnapshotReadMessage;
@@ -340,6 +342,16 @@ public class SnapshotSender {
         metadata.setTimeoutException(timeoutException);
         // Enqueue cancel event, this will cause re-entrance to snapshot sync to start a new cycle
         fsm.input(new LogReplicationEvent(LogReplicationEventType.SYNC_CANCEL, metadata));
+    }
+
+    /**
+     * Ask the snapshot reader to request the Routing Queue Replication client to provide the data to be transmitted.
+     * @param snapshotSyncEventId
+     */
+    public void requestClientForSnapshotData(UUID snapshotSyncEventId) {
+        // This method must be invoked for the Routing Queue model only
+        Preconditions.checkState(snapshotReader instanceof RoutingQueuesSnapshotReader);
+        ((RoutingQueuesSnapshotReader)snapshotReader).requestClientForSnapshotData(snapshotSyncEventId);
     }
 
     /**

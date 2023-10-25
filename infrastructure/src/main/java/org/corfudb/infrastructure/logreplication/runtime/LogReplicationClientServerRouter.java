@@ -647,6 +647,25 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
      * @return true if the session is a connection starter, false otherwise
      */
     public boolean isConnectionStarterForSession(LogReplicationSession session) {
+        // For routing queue model, bidirectional replication takes place and 2 sessions between the same pair of
+        // clusters are created, as follows:
+        // Session 1:
+        // Source: A
+        // Sink: B
+        // Client: X
+        // Remote endpoint for A: B
+        //
+        // Session 2:
+        // Source: B
+        // Sink: A
+        // Client: X
+        // Remote endpoint for B: A
+        //
+        // The current way to detect connection starter is to check if the remote endpoint is the Source OR Sink.
+        // This will make both A and B become connection starters for both sessions, which is incorrect.  So for this
+        // model, the connection starter is always the Source cluster.
+        // TODO: Instead of below fix, consider providing more information with the remote cluster endpoints to
+        //  determine if a node is the connection starter for a given session.
         if (session.getSubscriber().getModel() == LogReplication.ReplicationModel.ROUTING_QUEUES) {
             return topology.getRemoteClusterEndpoints().containsKey(session.getSinkClusterId());
         }

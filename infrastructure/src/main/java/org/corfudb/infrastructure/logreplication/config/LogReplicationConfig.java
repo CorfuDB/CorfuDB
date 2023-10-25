@@ -32,6 +32,10 @@ public abstract class LogReplicationConfig {
 
     // The recommended max message size of a protobuf message is 64MB. Log Replication uses this limit as the default
     // message size to batch and send data across over to the other side.
+    //
+    // For routing queue model, this number was reduced to ~17MB when testing with multiple (upto 64) reader threads sending
+    // data concurrently.  With this concurrency, LR can run out-of-memory as each thread created a payload to send.
+    // In future with a fixed size thread pool, the empirical 17MB limit can be revisited.
     public static final int DEFAULT_MAX_DATA_MSG_SIZE = 64 << 20;
 
     // Log Replication default max cache number of entries

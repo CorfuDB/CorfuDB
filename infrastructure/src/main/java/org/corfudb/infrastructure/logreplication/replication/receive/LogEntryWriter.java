@@ -48,6 +48,11 @@ public class LogEntryWriter extends SinkWriter {
 
     private final LogReplicationMetadataManager metadataManager;
 
+    // For routing queue replication model, the stream id and tag of the incoming replicated queue
+    private final UUID replicatedRoutingQueueStreamId;
+
+    private final UUID replicatedRoutingQueueStreamTag;
+
     public LogEntryWriter(LogReplicationMetadataManager metadataManager,
                           LogReplicationSession session, LogReplicationContext replicationContext) {
         super(session, replicationContext);
@@ -58,6 +63,17 @@ public class LogEntryWriter extends SinkWriter {
         this.lastMsgTs = metadata.getLastLogEntryBatchProcessed();
         this.metadataManager = metadataManager;
         this.session = session;
+
+        if (session.getSubscriber().getModel() == LogReplication.ReplicationModel.ROUTING_QUEUES) {
+            String replicatedQueueName = ((LogReplicationRoutingQueueConfig) replicationContext.getConfig(session))
+                    .getSinkQueueName();
+            replicatedRoutingQueueStreamId = CorfuRuntime.getStreamID(replicatedQueueName);
+            replicatedRoutingQueueStreamTag = ((LogReplicationRoutingQueueConfig) replicationContext.getConfig(session))
+                    .getSinkQueueStreamTag();
+        } else {
+            replicatedRoutingQueueStreamId = null;
+            replicatedRoutingQueueStreamTag = null;
+        }
     }
 
     /**
@@ -164,12 +180,9 @@ public class LogEntryWriter extends SinkWriter {
                                 // If stream tags exist for the current stream, it means it's intended for streaming
                                 // on the Sink (receiver)
                                 if (session.getSubscriber().getModel().equals(LogReplication.ReplicationModel.ROUTING_QUEUES)) {
-                                    String replicatedQueueName = ((LogReplicationRoutingQueueConfig) replicationContext
-                                            .getConfig(session)).getSinkQueueName();
-                                    streamId = CorfuRuntime.getStreamID(replicatedQueueName);
-                                    UUID replicatedQueueTag = ((LogReplicationRoutingQueueConfig) replicationContext
-                                            .getConfig(session)).getSinkQueueStreamTag();
-                                    txnContext.logUpdate(streamId, smrEntry, Collections.singletonList(replicatedQueueTag));
+                                    streamId = replicatedRoutingQueueStreamId;
+                                    txnContext.logUpdate(streamId, smrEntry, Collections.singletonList(
+                                            replicatedRoutingQueueStreamTag));
                                 } else {
                                     txnContext.logUpdate(streamId, smrEntry,
                                             replicationContext.getConfig(session).getDataStreamToTagsMap().get(streamId));
