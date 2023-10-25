@@ -326,7 +326,7 @@ public class LogReplicationFSM {
      *
      * @param event LogReplicationEvent to process.
      */
-    public synchronized void input(LogReplicationEvent event) {
+    public void input(LogReplicationEvent event) {
         if (state.getType().equals(LogReplicationStateType.ERROR)) {
             log.warn("Not accepting event {} as current state is {}", event.getType(), state.getType());
             return;
@@ -334,7 +334,7 @@ public class LogReplicationFSM {
         if (event.getType() != LogReplicationEventType.LOG_ENTRY_SYNC_CONTINUE) {
             log.trace("Enqueue event {} with ID {}", event.getType(), event.getEventId());
         }
-        taskManager.addTask(event, event.getClass());
+        taskManager.addTask(event, false);
     }
 
     /**

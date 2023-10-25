@@ -185,7 +185,7 @@ public class CorfuLogReplicationRuntime {
             // Not accepting events, in stopped state
             return;
         }
-        replicationContext.getRuntimeFsmTaskManager().addTask(event, event.getClass());
+        replicationContext.getRuntimeFsmTaskManager().addTask(event, true);
     }
 
     /**
@@ -238,8 +238,7 @@ public class CorfuLogReplicationRuntime {
      * Stop Log Replication, regardless of current state.
      */
     public void stop() {
-        replicationContext.getRuntimeFsmTaskManager().addTask(
-                new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.LOCAL_LEADER_LOSS,
-                        router.isConnectionStarterForSession(session), this), LogReplicationRuntimeEvent.class);
+        input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.LOCAL_LEADER_LOSS,
+                        router.isConnectionStarterForSession(session), this));
     }
 }
