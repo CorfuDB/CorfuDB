@@ -79,6 +79,7 @@ public class CorfuGuidGenerator implements OrderedGuidGenerator {
                     continue;
                 }
             }
+            distributedCounter = distributedCounterTable;
 
             try (TxnContext txn = corfuStore.txn(TableRegistry.CORFU_SYSTEM_NAMESPACE)) {
                 final int GUID_INSTANCE_ID_KEY = 0xdeadbeef;
