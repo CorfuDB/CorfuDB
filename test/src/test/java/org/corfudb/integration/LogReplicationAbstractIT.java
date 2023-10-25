@@ -439,7 +439,6 @@ public class LogReplicationAbstractIT extends AbstractIT {
         @Override
         public void onNext(CorfuStreamEntries results) {
             results.getEntries().forEach((schema, entries) -> entries.forEach(e -> {
-                    System.out.println("onNext: " + ((SnapshotSyncPluginValue)e.getPayload()).getValue());
                     updates.add(((SnapshotSyncPluginValue)e.getPayload()).getValue());
             }));
             countDownLatch.countDown();

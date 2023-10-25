@@ -51,11 +51,6 @@ public class InSnapshotSyncState implements LogReplicationState {
     private final SnapshotSender snapshotSender;
 
     /**
-     * A future on the send, in case we need to cancel the ongoing snapshot sync.
-     */
-    private Future<?> transmitFuture;
-
-    /**
      * Indicates if the snapshot sync was forced by the caller (instead of determined by negotiation)
      */
     private boolean forcedSnapshotSync = false;
@@ -207,13 +202,6 @@ public class InSnapshotSyncState implements LogReplicationState {
     private void cancelSnapshotSync(String cancelCause) {
         snapshotSender.stop();
         snapshotSender.getDataSenderBufferManager().getPendingMessages().clear();
-        if (!transmitFuture.isDone()) {
-            try {
-                transmitFuture.get();
-            } catch (Exception e) {
-                log.warn("Exception while waiting on snapshot sync to complete.", e);
-            }
-        }
         log.info("Snapshot sync is ending because {}", cancelCause);
     }
 
