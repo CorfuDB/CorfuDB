@@ -124,7 +124,7 @@ public abstract class BaseSnapshotReader extends SnapshotReader {
         preMsgTs = currentMsgTs;
         sequence++;
 
-        log.info("txMsg {} deepsize sizeInBytes {} entryList.sizeInByres {}  with numEntries {} deepSize sizeInBytes {}",
+        log.trace("txMsg {} deepsize sizeInBytes {} entryList.sizeInByres {}  with numEntries {} deepSize sizeInBytes {}",
             TextFormat.printToString(txMsg.getMetadata()), Memory.sizeOf.deepSizeOf(txMsg), entryList.getSizeInBytes(),
             entryList.getSmrEntries().size(), Memory.sizeOf.deepSizeOf(entryList.smrEntries));
         return txMsg;
