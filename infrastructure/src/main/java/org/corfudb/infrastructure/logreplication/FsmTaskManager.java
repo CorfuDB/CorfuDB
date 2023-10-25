@@ -19,8 +19,8 @@ public class FsmTaskManager {
 
     private ExecutorService fsmWorker;
 
-    public FsmTaskManager (String threadName) {
-        fsmWorker = Executors.newFixedThreadPool(2, new ThreadFactoryBuilder().setNameFormat(threadName+"-%d").build());
+    public FsmTaskManager (String threadName, int threadCount) {
+        fsmWorker = Executors.newFixedThreadPool(threadCount, new ThreadFactoryBuilder().setNameFormat(threadName+"-%d").build());
     }
 
     public <E, T> void addTask(E event, Class<T> clazz) {
