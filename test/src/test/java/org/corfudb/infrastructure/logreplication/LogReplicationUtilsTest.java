@@ -13,7 +13,6 @@ import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.junit.After;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -37,13 +36,15 @@ public class LogReplicationUtilsTest extends AbstractViewTest {
     private String streamTag = "test_tag";
     private CountDownLatch performedFullSync;
 
-    @Before
-    public void setUp() throws Exception {
+    public void setUp(boolean openStatusTable) throws Exception {
         corfuRuntime = getDefaultRuntime();
         corfuStore = new CorfuStore(corfuRuntime);
         performedFullSync = new CountDownLatch(1);
         lrListener = new LogReplicationTestListener(corfuStore, namespace, client, performedFullSync);
-        replicationStatusTable = TestUtils.openReplicationStatusTable(corfuStore);
+
+        if (openStatusTable) {
+            replicationStatusTable = TestUtils.openReplicationStatusTable(corfuStore);
+        }
     }
 
     /**
@@ -51,7 +52,7 @@ public class LogReplicationUtilsTest extends AbstractViewTest {
      * must be updated correctly.
      */
     @Test
-    public void testSubscribeSnapshotSyncOngoing() throws Exception{
+    public void testSubscribeSnapshotSyncOngoing() throws Exception {
         testSubscribe(true, true);
     }
 
@@ -60,7 +61,7 @@ public class LogReplicationUtilsTest extends AbstractViewTest {
      * must be updated correctly.
      */
     @Test
-    public void testSubscribeSnapshotSyncComplete() throws Exception{
+    public void testSubscribeSnapshotSyncComplete() throws Exception {
         testSubscribe(true, false);
     }
 
@@ -74,7 +75,9 @@ public class LogReplicationUtilsTest extends AbstractViewTest {
         testSubscribe(false, false);
     }
 
-    private void testSubscribe(boolean initializeTable, boolean ongoing) throws Exception{
+    private void testSubscribe(boolean initializeTable, boolean ongoing) throws Exception {
+        setUp(true);
+
         if (initializeTable) {
             TestUtils.setSnapshotSyncOngoing(corfuStore, replicationStatusTable, client, ongoing);
         }
@@ -92,7 +95,8 @@ public class LogReplicationUtilsTest extends AbstractViewTest {
      * 5) Verify that full sync was not attempted and snapshot sync was ongoing for new_client
      */
     @Test
-    public void testMultipleClients() throws Exception{
+    public void testMultipleClients() throws Exception {
+        setUp(true);
 
         // Snapshot sync is not in progress on test_client
         TestUtils.setSnapshotSyncOngoing(corfuStore, replicationStatusTable, client, false);
@@ -112,6 +116,16 @@ public class LogReplicationUtilsTest extends AbstractViewTest {
 
         // Verify that full sync was not attempted and snapshot sync was ongoing for new_client
         verifyListenerFlags(newListener, true);
+    }
+
+    /**
+     * If the listener has been subscribed before the status table has been opened or hasn't yet been
+     * opened by the client's runtime, the listener should open the table.
+     */
+    @Test
+    public void testSubscriptionWithUnopenedStatusTable() throws Exception {
+        setUp(false);
+        LogReplicationUtils.subscribe(lrListener, namespace, streamTag, new ArrayList<>(), 5, corfuStore);
     }
 
     private void verifyListenerFlags(LogReplicationTestListener listener, boolean snapshotSyncOngoing) throws InterruptedException {

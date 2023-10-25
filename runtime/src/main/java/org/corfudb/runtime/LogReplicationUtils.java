@@ -31,6 +31,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -57,6 +58,9 @@ public final class LogReplicationUtils {
                                  @Nonnull String streamTag, @Nonnull List<String> tablesOfInterest,
                                  int bufferSize, CorfuStore corfuStore) {
         log.info("Client subscription process has started.");
+
+        // Ensure status table is opened here in case FullSyncExecutor is late to do so.
+        openReplicationStatusTable(corfuStore);
 
         Map<String, List<String>> nsToTableName = new HashMap<>();
         nsToTableName.put(namespace, tablesOfInterest);
@@ -114,6 +118,22 @@ public final class LogReplicationUtils {
         }
     }
 
+    private static Table<LogReplicationSession, ReplicationStatus, Message> openReplicationStatusTable(CorfuStore corfuStore) {
+        try {
+            return corfuStore.getTable(CORFU_SYSTEM_NAMESPACE, REPLICATION_STATUS_TABLE_NAME);
+        } catch (NoSuchElementException | IllegalArgumentException e) {
+            log.warn("Failed getTable operation for LR status table, opening table.", e);
+            try {
+                return corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, REPLICATION_STATUS_TABLE_NAME,
+                        LogReplicationSession.class, ReplicationStatus.class, null,
+                        TableOptions.fromProtoSchema(ReplicationStatus.class));
+            } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException ee) {
+                log.error("Failed to open the Replication Status table", ee);
+                throw new StreamingException(ee, StreamingException.ExceptionCause.SUBSCRIBE_ERROR);
+            }
+        }
+    }
+
     private static class ClientFullSyncAndSubscriptionTask implements Callable<Void> {
 
         private LogReplicationListener listener;
@@ -121,6 +141,7 @@ public final class LogReplicationUtils {
         private String namespace;
         private Map<String, String> nsToStreamTags;
         private Map<String, List<String>> nsToTableName;
+        private Table<LogReplicationSession, ReplicationStatus, Message> replicationStatusTable;
         private int bufferSize;
         private static final Duration retryThreshold = Duration.ofMinutes(2);
 
@@ -146,8 +167,13 @@ public final class LogReplicationUtils {
             Optional<Counter> conflictCounter = MicroMeterUtils.counter("logreplication.subscribe.conflict.count");
             Optional<Timer.Sample> subscribeTimer = MicroMeterUtils.startTimer();
 
-            Table<LogReplicationSession, ReplicationStatus, Message> replicationStatusTable =
-                    openReplicationStatusTable(corfuStore);
+            try {
+                replicationStatusTable = openReplicationStatusTable(corfuStore);
+            } catch (StreamingException e) {
+                log.warn("Subscription has failed due to inability to open LR status table.");
+                listener.onError(new StreamingException(e, StreamingException.ExceptionCause.SUBSCRIBE_ERROR));
+            }
+
            Long fullSyncTimestamp = null;
             try {
                 fullSyncTimestamp = IRetry.build(ExponentialBackoffRetry.class, RetryExhaustedException.class, () -> {
@@ -179,7 +205,7 @@ public final class LogReplicationUtils {
                         // from LR and subscription will be a no-op.
                         if (entries.isEmpty()) {
                             log.warn("No record for client {} and Logical Group Model found in the Status Table.  " +
-                                    "Subscription could have been attempted before LR startup.  Subscribe the listener and" +
+                                    "Subscription could have been attempted before LR startup.  Subscribe the listener and " +
                                     "wait for initial Snapshot Sync", listener.getClientName());
                         } else {
                             // For a given replication model and client, any Sink node will have a single session.
@@ -244,17 +270,6 @@ public final class LogReplicationUtils {
                         listener, nsToTableName, nsToStreamTags, fullSyncTimestamp, bufferSize);
             }
             return null;
-        }
-
-        private Table<LogReplicationSession, ReplicationStatus, Message> openReplicationStatusTable(CorfuStore corfuStore) {
-            try {
-                return corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, REPLICATION_STATUS_TABLE_NAME,
-                        LogReplicationSession.class, ReplicationStatus.class, null,
-                        TableOptions.fromProtoSchema(ReplicationStatus.class));
-            } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
-                log.error("Failed to open the Replication Status table", e);
-                throw new StreamingException(e, StreamingException.ExceptionCause.SUBSCRIBE_ERROR);
-            }
         }
 
         private void incrementCount(Optional<Counter> counter) {
