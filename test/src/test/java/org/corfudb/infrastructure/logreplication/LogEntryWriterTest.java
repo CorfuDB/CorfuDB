@@ -52,7 +52,7 @@ public class LogEntryWriterTest extends AbstractViewTest {
 
         logEntryWriter = new LogEntryWriter(metadataManager, getDefaultSession(),
                 new LogReplicationContext(new LogReplicationConfigManager(corfuRuntime, LOCAL_SINK_CLUSTER_ID), topologyConfigId,
-                        getEndpoint(SERVERS.PORT_0), Mockito.mock(LogReplicationPluginConfig.class), corfuRuntime));
+                        getEndpoint(SERVERS.PORT_0), Mockito.mock(LogReplicationPluginConfig.class), corfuRuntime, 2));
     }
 
     @After
