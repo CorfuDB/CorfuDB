@@ -81,7 +81,7 @@ public class LogReplicationServerTest {
         Set<LogReplicationSession> sessionSet = new HashSet<>();
         sessionSet.add(session);
         LogReplicationContext replicationContext = new LogReplicationContext(mock(LogReplicationConfigManager.class),
-                0L, SAMPLE_HOSTNAME, true, mock(LogReplicationPluginConfig.class));
+                0L, SAMPLE_HOSTNAME, true, mock(LogReplicationPluginConfig.class), 2);
         lrServer = spy(new LogReplicationServer(context, sessionSet, metadataManager, SINK_NODE_ID, SINK_CLUSTER_ID,
                 replicationContext));
         lrServer.getSessionToSinkManagerMap().put(session, sinkManager);

@@ -856,7 +856,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
                 CorfuRuntime runtime = getNewRuntime(getDefaultNode()).connect();
                 snapshotReader = new StreamsSnapshotReader(runtime, DEFAULT_SESSION,
                         new LogReplicationContext(configManager, TEST_TOPOLOGY_CONFIG_ID,
-                                "test:" + SERVERS.PORT_0, pluginConfig));
+                                "test:" + SERVERS.PORT_0, pluginConfig, 2));
                 dataSender = new TestDataSender(waitInSnapshotSync);
                 break;
             default:
@@ -864,7 +864,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         }
 
         LogReplicationContext context = new LogReplicationContext(configManager, TEST_TOPOLOGY_CONFIG_ID,
-                "test:" + SERVERS.PORT_0, true, pluginConfig);
+                "test:" + SERVERS.PORT_0, true, pluginConfig, 2);
         LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(runtime, context);
 
         // Manually initialize the replication status table, needed for tests that check the

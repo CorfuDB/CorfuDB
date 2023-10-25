@@ -52,26 +52,27 @@ public class LogReplicationContext {
      * Constructor
      **/
     public LogReplicationContext(LogReplicationConfigManager configManager, long topologyConfigId,
-                                 String localCorfuEndpoint, LogReplicationPluginConfig pluginConfig) {
+                                 String localCorfuEndpoint, LogReplicationPluginConfig pluginConfig, int fsmThreadCount) {
         this.configManager = configManager;
         this.topologyConfigId = topologyConfigId;
         this.localCorfuEndpoint = localCorfuEndpoint;
         this.pluginConfig = pluginConfig;
         this.isLeader = new AtomicBoolean(false);
-        this.runtimeFsmTaskManager = new FsmTaskManager("runtimeFSM");
-        this.replicationFsmTaskManager = new FsmTaskManager("replicationFSM");
+        this.runtimeFsmTaskManager = new FsmTaskManager("runtimeFSM", fsmThreadCount);
+        this.replicationFsmTaskManager = new FsmTaskManager("replicationFSM", fsmThreadCount);
     }
 
     @VisibleForTesting
     public LogReplicationContext(LogReplicationConfigManager configManager, long topologyConfigId,
-                                 String localCorfuEndpoint, boolean isLeader, LogReplicationPluginConfig pluginConfig) {
+                                 String localCorfuEndpoint, boolean isLeader, LogReplicationPluginConfig pluginConfig,
+                                 int fsmThreadCount) {
         this.configManager = configManager;
         this.topologyConfigId = topologyConfigId;
         this.localCorfuEndpoint = localCorfuEndpoint;
         this.pluginConfig = pluginConfig;
         this.isLeader = new AtomicBoolean(isLeader);
-        this.runtimeFsmTaskManager = new FsmTaskManager("runtimeFSM");
-        this.replicationFsmTaskManager = new FsmTaskManager("replicationFSM");
+        this.runtimeFsmTaskManager = new FsmTaskManager("runtimeFSM", fsmThreadCount);
+        this.replicationFsmTaskManager = new FsmTaskManager("replicationFSM", fsmThreadCount);
     }
 
     public void setIsLeader(boolean newValue) {

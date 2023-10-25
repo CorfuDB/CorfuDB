@@ -468,7 +468,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
         @Override
         public void onNext(CorfuStreamEntries results) {
             results.getEntries().forEach((schema, entries) -> entries.forEach(e -> {
-                
+
                 // Replication Status table gets cleared as part of the simulated upgrade in
                 // CorfuReplicationUpgradeIT.  These updates must be ignored.
                 if (e.getOperation() == CorfuStreamEntry.OperationType.CLEAR) {

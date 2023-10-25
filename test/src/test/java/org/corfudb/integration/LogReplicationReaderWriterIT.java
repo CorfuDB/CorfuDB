@@ -232,7 +232,7 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(rt, LOCAL_SOURCE_CLUSTER_ID);
         configManager.generateConfig(Collections.singleton(getDefaultSession()));
         LogReplicationContext context = new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT,
-                Mockito.mock(LogReplicationPluginConfig.class));
+                Mockito.mock(LogReplicationPluginConfig.class), 2);
 
         StreamsSnapshotReader reader = new StreamsSnapshotReader(rt, getDefaultSession(), context);
 
@@ -272,7 +272,7 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
 
         StreamsSnapshotWriter writer = new StreamsSnapshotWriter(rt, logReplicationMetadataManager,
             getDefaultSession(), new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT,
-                Mockito.mock(LogReplicationPluginConfig.class)));
+                Mockito.mock(LogReplicationPluginConfig.class), 2));
 
         if (msgQ.isEmpty()) {
             log.debug("msgQ is empty");
@@ -307,7 +307,7 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
 
         StreamsLogEntryReader reader = new StreamsLogEntryReader(rt, getDefaultSession(),
                 new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT,
-                        Mockito.mock(LogReplicationPluginConfig.class)));
+                        Mockito.mock(LogReplicationPluginConfig.class), 2));
         reader.setGlobalBaseSnapshot(Address.NON_ADDRESS, Address.NON_ADDRESS);
 
         LogReplicationEntryMsg entry;
@@ -345,7 +345,7 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
         logReplicationMetadataManager.addSession(getDefaultSession(),0, true);
         LogEntryWriter writer = new LogEntryWriter(logReplicationMetadataManager, getDefaultSession(),
                 new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT,
-                        Mockito.mock(LogReplicationPluginConfig.class)));
+                        Mockito.mock(LogReplicationPluginConfig.class), 2));
 
         if (msgQ.isEmpty()) {
             log.debug("msgQ is EMPTY");
@@ -359,7 +359,7 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
     private LogReplicationContext getReplicationContext(LogReplicationConfigManager configManager, long topologyConfigId,
                                                         String localCorfuEndpoint, boolean isLeader) {
         return new LogReplicationContext(configManager, topologyConfigId, localCorfuEndpoint, isLeader,
-                Mockito.mock(LogReplicationPluginConfig.class));
+                Mockito.mock(LogReplicationPluginConfig.class), 2);
     }
 
     private void accessTxStream(Iterator<ILogData> iterator, int num) {
