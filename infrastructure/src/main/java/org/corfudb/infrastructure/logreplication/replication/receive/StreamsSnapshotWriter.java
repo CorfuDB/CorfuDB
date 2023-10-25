@@ -95,6 +95,8 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
     @Getter
     private Phase phase;
 
+    private final UUID replicatedRoutingQueueTag;
+
     public StreamsSnapshotWriter(CorfuRuntime rt, LogReplicationMetadataManager metadataManager,
                                  LogReplicationSession session, LogReplicationContext replicationContext) {
         super(session, replicationContext);
@@ -102,6 +104,13 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
         this.metadataManager = metadataManager;
         this.phase = Phase.TRANSFER_PHASE;
         this.snapshotSyncStartMarker = Optional.empty();
+
+        if (session.getSubscriber().getModel() == ROUTING_QUEUES) {
+            replicatedRoutingQueueTag = TableRegistry.getStreamIdForStreamTag(CORFU_SYSTEM_NAMESPACE,
+                LogReplicationUtils.REPLICATED_QUEUE_TAG);
+        } else {
+            replicatedRoutingQueueTag = null;
+        }
 
         // Serialize the clear entry once to access its constant size on each subsequent use
         serializeClearEntry();
@@ -206,8 +215,7 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
 
         for (SMREntry smrEntry : smrEntries) {
             if (session.getSubscriber().getModel().equals(ROUTING_QUEUES)) {
-                UUID replicatedQueueTag = TableRegistry.getStreamIdForStreamTag(CORFU_SYSTEM_NAMESPACE, LogReplicationUtils.REPLICATED_QUEUE_TAG);
-                txnContext.logUpdate(streamId, smrEntry, Collections.singletonList(replicatedQueueTag));
+                txnContext.logUpdate(streamId, smrEntry, Collections.singletonList(replicatedRoutingQueueTag));
             } else {
                 txnContext.logUpdate(streamId, smrEntry, replicationContext.getConfig(session).getDataStreamToTagsMap().get(streamId));
             }
@@ -447,6 +455,8 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
             log.debug("Start applying shadow streams, seqNum={}", sequenceNumber);
             applyShadowStreams();
 
+            // For Routing Queue replication model, write a dummy entry indicating the end of Snapshot sync
+            // TODO: This is a temporary workaround according to the client behavior.  It must be removed in future.
             if (session.getSubscriber().getModel().equals(ROUTING_QUEUES)) {
                 writeDummyEntryToLogEntrySyncQueue();
             }

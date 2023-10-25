@@ -45,7 +45,10 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 @Slf4j
 public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
 
-    // Set timeout to 40 minutes for DEMO or until batching is fixed up.
+    // Timeout value for which the reader waits for new data to arrive from the Client.  Once the timeout is
+    // exceeded, the current snapshot sync gets cancelled and a new one is started all over again.
+    // TODO: The timeout is currently set to 40 mins.  This can be revisited later to determine a more appropriate
+    //  value.
     private static final long DATA_WAIT_TIMEOUT_MS = 2400000;
 
     @Getter

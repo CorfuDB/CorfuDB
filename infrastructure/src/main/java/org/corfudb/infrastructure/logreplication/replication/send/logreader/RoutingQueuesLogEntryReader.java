@@ -41,13 +41,18 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 @Slf4j
 public class RoutingQueuesLogEntryReader extends BaseLogEntryReader {
 
+    private final String replicatedQueueName;
+
     public RoutingQueuesLogEntryReader(LogReplicationSession session, LogReplicationContext replicationContext) {
         super(session, replicationContext);
 
         try {
             CorfuStore corfuStore = new CorfuStore(replicationContext.getCorfuRuntime());
-            corfuStore.openQueue(CORFU_SYSTEM_NAMESPACE, LOG_ENTRY_SYNC_QUEUE_NAME_SENDER,
-                RoutingTableEntryMsg.class, TableOptions.fromProtoSchema(RoutingTableEntryMsg.class));
+            corfuStore.openQueue(CORFU_SYSTEM_NAMESPACE, LOG_ENTRY_SYNC_QUEUE_NAME_SENDER, RoutingTableEntryMsg.class,
+                    TableOptions.fromProtoSchema(RoutingTableEntryMsg.class));
+            replicatedQueueName = TableRegistry.getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE,
+                    LogReplicationUtils.REPLICATED_RECV_Q_PREFIX + session.getSourceClusterId() + "_" +
+                    session.getSubscriber().getClientName());
         } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
             log.error("Failed to open log entry sync queue", e);
             throw new RuntimeException(e);
@@ -66,17 +71,12 @@ public class RoutingQueuesLogEntryReader extends BaseLogEntryReader {
             CorfuRecord<RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg> record =
                 (CorfuRecord<RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg>)
                     replicationContext.getProtobufSerializer().deserialize(valueBuf, null);
-
             if (record.getPayload().getDestinationsList().contains(session.getSinkClusterId())) {
                 filteredMsgs.add(entry);
             }
         }
         HashMap<UUID, List<SMREntry>> opaqueEntryMap = new HashMap<>();
-        String replicatedQueueName = TableRegistry.getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE,
-                LogReplicationUtils.REPLICATED_RECV_Q_PREFIX + session.getSourceClusterId() + "_" +
-                    session.getSubscriber().getClientName());
-        opaqueEntryMap.put(CorfuRuntime.getStreamID(replicatedQueueName),
-                filteredMsgs);
+        opaqueEntryMap.put(CorfuRuntime.getStreamID(replicatedQueueName), filteredMsgs);
         return new OpaqueEntry(opaqueEntry.getVersion(), opaqueEntryMap);
     }
 

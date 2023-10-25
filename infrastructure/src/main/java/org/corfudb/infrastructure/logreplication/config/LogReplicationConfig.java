@@ -32,6 +32,9 @@ public abstract class LogReplicationConfig {
 
     // Max message size supported by protocol buffers is 17MB. Log Replication uses this limit as the default message
     // size to batch and send data across over to the other side.
+    // This number was chosen based on empirical testing where multiple (upto 64) reader threads were sending data
+    // concurrently.  A larger size caused LR to run out-of-memory as each thread created a payload to send.
+    // In future with a fixed size thread pool, this limit can be revisited.
     public static final long DEFAULT_MAX_DATA_MSG_SIZE = 17825792;
 
     // Log Replication default max cache number of entries
