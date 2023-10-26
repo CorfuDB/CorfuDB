@@ -4,6 +4,9 @@ import lombok.Data;
 import lombok.Getter;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent;
 import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
+import org.corfudb.util.Utils;
+
+import java.util.UUID;
 
 /**
  * This class represents a Log Replication Runtime Event, i.e., an action which
@@ -44,6 +47,11 @@ public class LogReplicationRuntimeEvent {
     @Getter
     private CorfuLogReplicationRuntime runtimeFsm;
 
+    @Getter
+    private UUID eventId;
+
+
+
     /**
      * Constructor
      *
@@ -52,6 +60,7 @@ public class LogReplicationRuntimeEvent {
     public LogReplicationRuntimeEvent(LogReplicationRuntimeEventType type, CorfuLogReplicationRuntime runtimeFsm) {
         this.type = type;
         this.runtimeFsm = runtimeFsm;
+        this.eventId = Utils.genPseudorandomUUID();
     }
 
     /**
@@ -64,6 +73,7 @@ public class LogReplicationRuntimeEvent {
         this.type = type;
         this.isConnectionStarter = isConnectionStarter;
         this.runtimeFsm = runtimeFsm;
+        this.eventId = Utils.genPseudorandomUUID();
     }
 
     /**
@@ -76,6 +86,7 @@ public class LogReplicationRuntimeEvent {
         this.type = type;
         this.nodeId = nodeId;
         this.runtimeFsm = runtimeFsm;
+        this.eventId = Utils.genPseudorandomUUID();
     }
 
     /**
@@ -89,6 +100,7 @@ public class LogReplicationRuntimeEvent {
         this.type = type;
         this.negotiationResult = negotiationResult;
         this.runtimeFsm = runtimeFsm;
+        this.eventId = Utils.genPseudorandomUUID();
     }
 
     /**
@@ -102,6 +114,7 @@ public class LogReplicationRuntimeEvent {
         this.type = type;
         this.t = t;
         this.runtimeFsm = runtimeFsm;
+        this.eventId = Utils.genPseudorandomUUID();
     }
 
 }
