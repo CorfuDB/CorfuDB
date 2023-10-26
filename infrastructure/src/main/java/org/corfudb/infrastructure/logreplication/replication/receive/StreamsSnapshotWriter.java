@@ -1,6 +1,5 @@
 package org.corfudb.infrastructure.logreplication.replication.receive;
 
-import com.google.protobuf.Message;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import lombok.Getter;
@@ -417,7 +416,8 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
         // Sync the config with registry table after applying its entries
         replicationContext.refreshConfig(session, true);
 
-       // TODO: Temporary fix for routing queue poc, will need more complete fix to getStreamsToReplicate()
+       // TODO: Temporary fix for routing queue model, will need more complete fix to getStreamsToReplicate() for
+        //  this model
         // Use replicatedStreamIds if model is routing queues
         List<UUID> replicatedStreams = new ArrayList<>();
         if (session.getSubscriber().getModel() == ROUTING_QUEUES) {

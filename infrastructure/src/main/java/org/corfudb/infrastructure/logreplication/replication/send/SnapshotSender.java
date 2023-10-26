@@ -3,7 +3,6 @@ package org.corfudb.infrastructure.logreplication.replication.send;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
-import com.google.protobuf.TextFormat;
 import io.micrometer.core.instrument.Tag;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -16,7 +15,6 @@ import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationE
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationFSM;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.RoutingQueuesSnapshotReader;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.SnapshotReader;
-import org.corfudb.infrastructure.logreplication.replication.send.logreader.ReadProcessor;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.SnapshotReadMessage;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplication;
@@ -25,7 +23,6 @@ import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.Address;
 
-import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -41,7 +38,7 @@ import static org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg;
 import static org.corfudb.protocols.service.CorfuProtocolLogReplication.getLrEntryAckMsg;
 
 /**
- * This class is responsible of transmitting a consistent view of the data at a given timestamp,
+ * This class is responsible for transmitting a consistent view of the data at a given timestamp,
  * i.e, reading and sending a snapshot of the data for the requested streams.
  * <p>
  * It reads log entries from the data-store through the SnapshotReader, and hands it to the
@@ -136,10 +133,10 @@ public class SnapshotSender {
                     break;
                 } catch (Exception e) {
                     log.error("Caught exception during snapshot sync", e);
-                    log.error("Print stacktrace from thread {}", Arrays.toString(Thread.currentThread().getStackTrace()));
 
                     boolean timeoutException = false;
-                    if (e instanceof RuntimeException && e.getCause() instanceof TimeoutException) {
+                    if (fsm.getSession().getSubscriber().getModel() == LogReplication.ReplicationModel.ROUTING_QUEUES &&
+                        e instanceof RuntimeException && e.getCause() instanceof TimeoutException) {
                         log.info("Snapshot sync timed out waiting for data.  Will request a new snapshot sync");
                         timeoutException = true;
                     }
@@ -193,7 +190,10 @@ public class SnapshotSender {
         // If we are starting a snapshot sync, send a start marker.
         if (startSnapshotSync) {
             if (fsm.getSession().getSubscriber().getModel() == LogReplication.ReplicationModel.ROUTING_QUEUES) {
-                resetBaseSnapshotTimestamp(logReplicationEntries.get(0).getMetadata().getSnapshotTimestamp());
+                // For Routing Queue model, the start timestamp is determined by the timestamp at which the client
+                // starts providing data(cannot be determined in LR).  So set it accordingly
+                resetBaseSnapshotTimestampForRoutingQueue(logReplicationEntries.get(0).getMetadata()
+                    .getSnapshotTimestamp());
             }
 
             dataSenderBufferManager.sendWithBuffering(getSnapshotSyncStartMarker(snapshotSyncEventId));
@@ -239,19 +239,6 @@ public class SnapshotSender {
         return getLrEntryAckMsg(metadata);
     }
 
-    private LogReplicationEntryMsg getSnapshotSyncStartMarker(long timestamp, UUID snapshotSyncEventId) {
-        LogReplication.LogReplicationEntryMetadataMsg metadata = LogReplication.LogReplicationEntryMetadataMsg.newBuilder()
-            .setEntryType(LogReplicationEntryType.SNAPSHOT_START)
-            .setTopologyConfigID(fsm.getTopologyConfigId())
-            .setSyncRequestId(getUuidMsg(snapshotSyncEventId))
-            .setTimestamp(Address.NON_ADDRESS)
-            .setPreviousTimestamp(Address.NON_ADDRESS)
-            .setSnapshotTimestamp(timestamp)
-            .setSnapshotSyncSeqNum(Address.NON_ADDRESS)
-            .build();
-        return getLrEntryAckMsg(metadata);
-    }
-
     private LogReplicationEntryMsg getSnapshotSyncEndMarker(UUID snapshotSyncEventId) {
         LogReplication.LogReplicationEntryMetadataMsg metadata = LogReplication.LogReplicationEntryMetadataMsg.newBuilder()
                 .setEntryType(LogReplicationEntryType.SNAPSHOT_END)
@@ -262,19 +249,6 @@ public class SnapshotSender {
                 .setSnapshotTimestamp(baseSnapshotTimestamp)
                 .setSnapshotSyncSeqNum(Address.NON_ADDRESS)
                 .build();
-        return getLrEntryAckMsg(metadata);
-    }
-
-    private LogReplicationEntryMsg getSnapshotSyncEndMarker(long timestamp, UUID snapshotSyncEventId) {
-        LogReplication.LogReplicationEntryMetadataMsg metadata = LogReplication.LogReplicationEntryMetadataMsg.newBuilder()
-            .setEntryType(LogReplicationEntryType.SNAPSHOT_END)
-            .setTopologyConfigID(fsm.getTopologyConfigId())
-            .setSyncRequestId(getUuidMsg(snapshotSyncEventId))
-            .setTimestamp(Address.NON_ADDRESS)
-            .setPreviousTimestamp(Address.NON_ADDRESS)
-            .setSnapshotTimestamp(timestamp)
-            .setSnapshotSyncSeqNum(Address.NON_ADDRESS)
-            .build();
         return getLrEntryAckMsg(metadata);
     }
 
@@ -314,7 +288,8 @@ public class SnapshotSender {
      */
     public void requestClientForSnapshotData(UUID snapshotSyncEventId) {
         // This method must be invoked for the Routing Queue model only
-        Preconditions.checkState(snapshotReader instanceof RoutingQueuesSnapshotReader);
+        Preconditions.checkState(fsm.getSession().getSubscriber().getModel() ==
+            LogReplication.ReplicationModel.ROUTING_QUEUES);
         ((RoutingQueuesSnapshotReader)snapshotReader).requestClientForSnapshotData(snapshotSyncEventId);
     }
 
@@ -336,7 +311,7 @@ public class SnapshotSender {
         completed = false;
     }
 
-    private void resetBaseSnapshotTimestamp(long timestamp) {
+    private void resetBaseSnapshotTimestampForRoutingQueue(long timestamp) {
         baseSnapshotTimestamp = timestamp;
         fsm.setBaseSnapshot(timestamp);
         fsm.getAckReader().setBaseSnapshot(timestamp);
