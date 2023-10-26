@@ -23,6 +23,8 @@ import java.util.stream.Collectors;
 import static org.corfudb.runtime.LogReplicationUtils.REPLICATED_QUEUE_TAG;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
+// TODO: As the name suggests, this is a simplistic listener which delivers replicated data as received on LR Sink
+//  cluster to the application(client).  Most error handling is yet to be implemented.
 @Slf4j
 public abstract class LiteRoutingQueueListener extends StreamListenerResumeOrFullSync {
 

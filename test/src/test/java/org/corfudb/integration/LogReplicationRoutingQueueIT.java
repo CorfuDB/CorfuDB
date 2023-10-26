@@ -78,7 +78,6 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
         String clientName = DEFAULT_ROUTING_QUEUE_CLIENT;
         String sourceSiteId = DefaultClusterConfig.getSourceClusterIds().get(0);
         RoutingQueueSenderClient queueSenderClient = new RoutingQueueSenderClient(clientCorfuStore, clientName);
-        // SnapshotProvider implements RoutingQueueSenderClient.LRTransmitterReplicationModule
         SnapshotProvider snapshotProvider = new SnapshotProvider(clientCorfuStore);
         queueSenderClient.startLRSnapshotTransmitter(snapshotProvider); // starts a listener on event table
 

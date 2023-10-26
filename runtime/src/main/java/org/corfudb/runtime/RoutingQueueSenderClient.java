@@ -91,38 +91,23 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
         Table<CorfuGuidMsg, RoutingTableEntryMsg, CorfuQueueMetadataMsg> logEntryQ_local = null;
         Table<CorfuGuidMsg, RoutingTableEntryMsg, CorfuQueueMetadataMsg> snapSyncQ_local = null;
         Table<RoutingQSnapSyncHeaderKeyMsg, RoutingQSnapSyncHeaderMsg, Message> snapStartEnd_local = null;
-        while ((numOpenQueueRetries--) > 0) {
-            try {
-                logEntryQ_local = corfuStore.openQueue(CORFU_SYSTEM_NAMESPACE, LOG_ENTRY_SYNC_QUEUE_NAME_SENDER,
-                        RoutingTableEntryMsg.class, TableOptions.fromProtoSchema(RoutingTableEntryMsg.class));
-                snapSyncQ_local = corfuStore.openQueue(CORFU_SYSTEM_NAMESPACE, SNAPSHOT_SYNC_QUEUE_NAME_SENDER,
-                        RoutingTableEntryMsg.class, TableOptions.fromProtoSchema(RoutingTableEntryMsg.class));
-                snapStartEnd_local = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, SNAP_SYNC_TXN_ENVELOPE_TABLE,
-                        RoutingQSnapSyncHeaderKeyMsg.class, RoutingQSnapSyncHeaderMsg.class, null,
-                        TableOptions.fromProtoSchema(RoutingTableEntryMsg.class));
 
-                break;
-            } catch (InvocationTargetException e) {
-                throw new RuntimeException("InvocationTargetException in fromProtoSchema" + e.getMessage());
-            } catch (TransactionAbortedException e) {
-                log.warn("OpenQueue in RoutingQSender hit TAE: retry" + numOpenQueueRetries);
-            } catch (StreamingException se) {
-                log.warn("RoutingQSender subscription hit a Streaming Exception retrying " + numOpenQueueRetries);
-            }
-        }
-
-        while ((numOpenQueueRetries--) > 0) {
-            try {
-                replicationEventTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, REPLICATION_EVENT_TABLE_NAME,
-                        ReplicationEventInfoKey.class,
-                        ReplicationEvent.class,
-                        null,
-                        TableOptions.fromProtoSchema(ReplicationEvent.class));
-                break;
-            } catch (InvocationTargetException | IllegalArgumentException e) {
-                log.error("Failed to open the Event Table", e);
-                throw new RuntimeException(e);
-            }
+        try {
+            logEntryQ_local = corfuStore.openQueue(CORFU_SYSTEM_NAMESPACE, LOG_ENTRY_SYNC_QUEUE_NAME_SENDER,
+                RoutingTableEntryMsg.class, TableOptions.fromProtoSchema(RoutingTableEntryMsg.class));
+            snapSyncQ_local = corfuStore.openQueue(CORFU_SYSTEM_NAMESPACE, SNAPSHOT_SYNC_QUEUE_NAME_SENDER,
+                RoutingTableEntryMsg.class, TableOptions.fromProtoSchema(RoutingTableEntryMsg.class));
+            snapStartEnd_local = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, SNAP_SYNC_TXN_ENVELOPE_TABLE,
+                RoutingQSnapSyncHeaderKeyMsg.class, RoutingQSnapSyncHeaderMsg.class, null,
+                TableOptions.fromProtoSchema(RoutingTableEntryMsg.class));
+            replicationEventTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, REPLICATION_EVENT_TABLE_NAME,
+                ReplicationEventInfoKey.class,
+                ReplicationEvent.class,
+                null,
+                TableOptions.fromProtoSchema(ReplicationEvent.class));
+        } catch (InvocationTargetException |IllegalAccessException | NoSuchMethodException e) {
+            log.error("Failed to open table/queue", e);
+            throw new RuntimeException("InvocationTargetException in fromProtoSchema" + e.getMessage());
         }
 
         this.logEntryQ = logEntryQ_local;
