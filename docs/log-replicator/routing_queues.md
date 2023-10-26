@@ -8,7 +8,7 @@
 
 [LR Server on Sender](#log-entry-reader-in-server-on-sender)
 
-[LR Full Snapshot Sync Sender](#full-sync-sender)
+[LR Snapshot Sync Sender](#snapshot-sync-sender)
 
 [LR Server on Receiver](#lr-server-on-sink)
 
@@ -40,7 +40,8 @@ Data from the clients will be written into the following well known Routing Queu
 Each update made carries destinations and is also tagged with a destination specific stream tag with the following convention:
 1. `lrq_logentry_<remote_id>`: Destination specific stream tag applied when entries are placed into `LRQ_Send_LogEntries`
 2. `lrq_snapsync_<remote_id>`: Destination specific stream tag applied when entries are placed into `LRQ_Send_SnapSync`
-3. `lrq_recv_<client_name>`: This is the tag applied on the sink by LR server to all updates be it full sync or log entry sync. Please note that the lrq_recv_<client_name> tags are per client_name.
+3. `lrq_recv_<client_name>`: This is the tag applied on the sink by LR server to all updates be it snapshot sync or log 
+   entry sync. Please note that the lrq_recv_<client_name> tags are per client_name.
 
 ### Client on sender
 The main api intercepting the transaction is something like
@@ -64,9 +65,9 @@ to the new shared `LRQ_Send_LogEntries` as follows
 ```protobuf
 enum ReplicationType {
   NONE = 0;           // Default value
-  LOG_ENTRY_SYNC = 1; // This entry was made during a delta sync
+  LOG_ENTRY_SYNC = 1; // This entry was made during a log entry sync
   SNAPSHOT_SYNC = 2;  // This entry was made during a snapshot sync
-  LAST_FULL_SYNC_ENTRY = 3; // Last entry denoting the end marker of a full sync
+  LAST_SNAPSHOT_SYNC_ENTRY = 3; // Last entry denoting the end marker of a snapshot sync
 }
 
 // prepare this to look like a CorfuQueue update
@@ -108,10 +109,10 @@ tag_for_destination1, tag_for_destination2...
  */
 ```
 
-## Full Sync Sender
-1. `LRQ_Send_SnapSync` is the shared stream to which the full sync data is written to as queue.
-2. LR Server requests a full sync and puts a record in its internal metadata table.
-3. LR Client listens to this and requests a full sync via callback.
+## Snapshot Sync Sender
+1. `LRQ_Send_SnapSync` is the shared stream to which the snapshot sync data is written to as queue.
+2. LR Server requests a snapshot sync and puts a record in its internal metadata table.
+3. LR Client listens to this and requests a snapshot sync via callback.
 4. The supplied data is placed in the above queue.
 5. LR Server which is listening for updates to this `LRQ_Send_SnapSync` wakes up and starts transmitting.
 6. Before transmitting the stream is changed to `LRQ_Recv_<my_cluster_id>` so it can be applied to one single queue on receiver.
@@ -127,7 +128,7 @@ from one another**
 
 ## LR Client on Sink
 Similar to the ReplicationGroup routing model, listens to both the ReplicationStatus table and the routing queue.
-Identifies when a full sync as started and delivers full sync messages.
+Identifies when a snapshot sync has started and delivers snapshot sync messages.
 If there are log entry message, these are also delivered subsequently.
 It is up to the client to read the envelope information and apply its contents to the respective tables.
 
@@ -136,7 +137,8 @@ The receiver side routing queue (LRQ_Recv_<client_name>_<remote_id>) needs to be
 1. Register receiver routing queue during the first snapshot sync (at snapshot writer or logUpdate time). Snapshot writer/logUpdate have the session object to fetch the remote_id and client_name.
    1. Assumption here is that the snapshot sync would proceed first in the normal cases
    2. During failure cases (service reboot etc), where log entry sync can come first, would be handled in the steps below.
-2. Routing queue subscriber needs to discover the queue from table registry and open the queue before subscribing the queue. One of tha approach is below
+2. Routing queue subscriber needs to discover the queue from table registry and open the queue before subscribing 
+   the queue. One of that approach is below
    1. In the beginning, routing queue subscriber polls on registry table to check if the queue with prefix (LRQ_Recv_<client_name>_) exists. If yes, then do subscribe to it and completes the subscription
    2. if the routing queue does not exist, then the subscriber register to LR status table only. Then, on_next() iterator would poll on registry table and re-subscribe to LR status table and LRQ_Recv_<client_name>_ queue in the same manner as above.
 3. Subscriber interface would expect the client_name parameter from the client. remote_id (source_cluster_id) is not available at the subscription time, hence we're going with the polling approach on the table registry.

@@ -41,7 +41,6 @@ public class CorfuStoreBrowserEditorMain {
         listTagsMap,
         printMetadataMap,
         addRecord,
-
         lrRequestGlobalFullSync
     }
 
