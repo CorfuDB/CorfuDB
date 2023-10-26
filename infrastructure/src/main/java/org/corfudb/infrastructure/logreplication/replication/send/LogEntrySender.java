@@ -15,7 +15,6 @@ import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.exceptions.TrimmedException;
 
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 
 import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
 
@@ -118,8 +117,6 @@ public class LogEntrySender {
                      * take over the shared thread pool of the state machine.
                      */
                     taskActive = false;
-                    // TODO V2: make the backoff intelligent
-                    TimeUnit.MILLISECONDS.sleep(200);
                     break;
                     // Request full sync (something is wrong I cant deliver)
                     // (Optimization):

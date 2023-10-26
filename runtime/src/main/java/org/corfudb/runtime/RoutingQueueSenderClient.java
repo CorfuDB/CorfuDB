@@ -44,7 +44,6 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 @Slf4j
 public class RoutingQueueSenderClient extends LogReplicationClient implements LogReplicationRoutingQueueClient {
-    private static final ReplicationModel model = ReplicationModel.ROUTING_QUEUES;
 
     private final CorfuStore corfuStore;
 
@@ -67,8 +66,6 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
 
     private SnapSyncRequestor fullSyncRequestor;
 
-    private long lrMetadataSize = 0;
-    private long totalPayloadSize = 0;
     private static final int INT_SIZE_IN_BYTES = 4;
 
     /**
@@ -87,7 +84,6 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
         this.corfuStore = corfuStore;
         this.clientName = clientName;
 
-        int numOpenQueueRetries = 8;
         Table<CorfuGuidMsg, RoutingTableEntryMsg, CorfuQueueMetadataMsg> logEntryQ_local = null;
         Table<CorfuGuidMsg, RoutingTableEntryMsg, CorfuQueueMetadataMsg> snapSyncQ_local = null;
         Table<RoutingQSnapSyncHeaderKeyMsg, RoutingQSnapSyncHeaderMsg, Message> snapStartEnd_local = null;
@@ -272,9 +268,6 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
                 long metadataSize = message.getSerializedSize() -
                         (message.getOpaquePayload().size() + message.getOpaqueMetadata().size() + INT_SIZE_IN_BYTES);
 
-                lrMetadataSize += metadataSize;
-                totalPayloadSize += message.getSerializedSize();
-
                 // Only once per transaction we set up the header to identify the request from LR server
                 if (TransactionalContext.getRootContext().getWriteSetInfo().getWriteSet().getSMRUpdates(lrSnapSyncTxnEnvelopeStreamId).isEmpty()) {
                     if (baseSnapshotTimestamp == 0) {
@@ -343,9 +336,6 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
                     throw new UnrecoverableCorfuInterruptedError(e);
                 }
 
-                log.info("Total Payload Size = {}.  LR Metadata Size = {}", totalPayloadSize, lrMetadataSize);
-                totalPayloadSize = 0;
-                lrMetadataSize = 0;
                 if (getSnapshot() != null) {
                     getSnapshot().close();
                     setSnapshot(null);
