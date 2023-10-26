@@ -180,7 +180,7 @@ public class CorfuLogReplicationRuntime {
      *
      * @param event LogReplicationRuntimeEvent to process.
      */
-    public synchronized void input(LogReplicationRuntimeEvent event) {
+    public void input(LogReplicationRuntimeEvent event) {
         if (state.getType().equals(LogReplicationRuntimeStateType.STOPPED)) {
             // Not accepting events, in stopped state
             return;
