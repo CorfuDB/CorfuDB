@@ -1,9 +1,6 @@
 package org.corfudb.runtime.collections;
 
 import com.google.protobuf.Message;
-import org.corfudb.protocols.logprotocol.SMREntry;
-import org.corfudb.runtime.CorfuStoreMetadata;
-import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 
 import javax.annotation.Nonnull;
@@ -11,7 +8,6 @@ import javax.annotation.Nullable;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.UUID;
 import java.util.function.BiFunction;
 import java.util.function.BiPredicate;
 import java.util.function.Function;

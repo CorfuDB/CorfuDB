@@ -68,10 +68,10 @@ public class RoutingQueuesLogEntryReader extends BaseLogEntryReader {
         for (SMREntry entry : routingTableEntryMsgs) {
             Object[] objs = entry.getSMRArguments();
             ByteBuf valueBuf = Unpooled.wrappedBuffer((byte[])objs[1]);
-            CorfuRecord<RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg> record =
+            CorfuRecord<RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg> corfuRecord =
                 (CorfuRecord<RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg>)
                     replicationContext.getProtobufSerializer().deserialize(valueBuf, null);
-            if (record.getPayload().getDestinationsList().contains(session.getSinkClusterId())) {
+            if (corfuRecord.getPayload().getDestinationsList().contains(session.getSinkClusterId())) {
                 filteredMsgs.add(entry);
             }
         }

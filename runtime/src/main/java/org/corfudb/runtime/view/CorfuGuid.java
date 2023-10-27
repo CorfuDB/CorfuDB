@@ -22,6 +22,15 @@ public class CorfuGuid {
     @Getter
     private final long uniqueInstanceId;
 
+    private static final long TIMESTAMP_MSB_MASK = 0x0000007FffFF0000L;
+    private static final long TIMESTAMP_LSB_MASK = 0x000000000000FFffL;
+    private static final long INSTANCE_ID_MASK = 0x000000000000FFffL;
+    private static final int CORRECTION_MASK = MAX_CORRECTION;
+    private static final long TIMESTAMP_MSB_SHIFT = 24;
+    private static final long DRIFT_ADJUST_SHIFT = 36;
+    private static final long TIMESTAMP_LSB_SHIFT = 20;
+    private static final long INSTANCE_ID_SHIFT = 4;
+
     CorfuGuid(long UTCtimestamp, int driftCorrection,
               int resolutionCorrection, long uniqueInstanceId) {
         this.timestamp = UTCtimestamp;
@@ -30,15 +39,16 @@ public class CorfuGuid {
         this.uniqueInstanceId = uniqueInstanceId;
     }
 
-    private static final long TIMESTAMP_MSB_MASK = 0x0000007FffFF0000L;
-    private static final long TIMESTAMP_LSB_MASK = 0x000000000000FFffL;
-    private static final long INSTANCE_ID_MASK = 0x000000000000FFffL;
-    private static final int CORRECTION_MASK = MAX_CORRECTION;
-
-    private static final long TIMESTAMP_MSB_SHIFT = 24;
-    private static final long DRIFT_ADJUST_SHIFT = 36;
-    private static final long TIMESTAMP_LSB_SHIFT = 20;
-    private static final long INSTANCE_ID_SHIFT = 4;
+    CorfuGuid(long encodedTs) {
+        long currentTimestamp = System.currentTimeMillis();
+        final long timestampMSB = (encodedTs >> TIMESTAMP_MSB_SHIFT) & TIMESTAMP_MSB_MASK;
+        final long timestampLSB = (encodedTs >> TIMESTAMP_LSB_SHIFT) & TIMESTAMP_LSB_MASK;
+        timestamp = (currentTimestamp & (~(TIMESTAMP_MSB_MASK | TIMESTAMP_LSB_MASK)))
+            | timestampMSB | timestampLSB;
+        driftCorrection = (int) ((encodedTs >> DRIFT_ADJUST_SHIFT) & CORRECTION_MASK);
+        uniqueInstanceId = (int) ((encodedTs >> INSTANCE_ID_SHIFT) & INSTANCE_ID_MASK);
+        resolutionCorrection = (int) (encodedTs & CORRECTION_MASK);
+    }
 
     /**
      * Construct the CorfuGuid with the UTC + GloballyUniqueCounter + Corrections
@@ -68,17 +78,6 @@ public class CorfuGuid {
                 (timestampLSB << TIMESTAMP_LSB_SHIFT) |
                 (instanceId << INSTANCE_ID_SHIFT) |
                 resolutionAdjust);
-    }
-
-    CorfuGuid(long encodedTs) {
-        long currentTimestamp = System.currentTimeMillis();
-        final long timestampMSB = (encodedTs >> TIMESTAMP_MSB_SHIFT) & TIMESTAMP_MSB_MASK;
-        final long timestampLSB = (encodedTs >> TIMESTAMP_LSB_SHIFT) & TIMESTAMP_LSB_MASK;
-        timestamp = (currentTimestamp & (~(TIMESTAMP_MSB_MASK | TIMESTAMP_LSB_MASK)))
-                | timestampMSB | timestampLSB;
-        driftCorrection = (int) ((encodedTs >> DRIFT_ADJUST_SHIFT) & CORRECTION_MASK);
-        uniqueInstanceId = (int) ((encodedTs >> INSTANCE_ID_SHIFT) & INSTANCE_ID_MASK);
-        resolutionCorrection = (int) (encodedTs & CORRECTION_MASK);
     }
 
     public static long getTimestampFromGuid(long corfuGuidAsLong, long currentTimestamp) {
