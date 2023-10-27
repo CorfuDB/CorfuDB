@@ -71,7 +71,7 @@ public class TransactionCrud<T extends StoreTransaction<T>>
         baseValidateWrite(table, key, validateKey);
     }
 
-    /**private
+    /**
      * All write api must be validate to ensure that the table belongs to the namespace.
      *
      * @param table       - table being written to
@@ -314,12 +314,12 @@ public class TransactionCrud<T extends StoreTransaction<T>>
     @Nonnull
     public <K extends Message, V extends Message, M extends Message>
     K logUpdateEnqueue(@Nonnull Table<K, V, M> table,
-                       @Nonnull final V record, List<UUID> streamTags, CorfuStore corfuStore) {
+                       @Nonnull final V value, List<UUID> streamTags, CorfuStore corfuStore) {
 
         if (TransactionalContext.getRootContext().getPreCommitListeners().isEmpty()) {
             TransactionalContext.getCurrentContext().addPreCommitListener(new QueueEntryAddressGetter());
         }
-        K ret = table.logUpdateEnqueue(record, streamTags, corfuStore);
+        K ret = table.logUpdateEnqueue(value, streamTags, corfuStore);
         tablesUpdated.putIfAbsent(table.getStreamUUID(), table);
         return ret;
     }

@@ -13,6 +13,7 @@ import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationCo
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent.LogReplicationEventType;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationFSM;
+import org.corfudb.infrastructure.logreplication.replication.send.logreader.ReplicationReaderException;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.RoutingQueuesSnapshotReader;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.SnapshotReader;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.SnapshotReadMessage;
@@ -136,7 +137,7 @@ public class SnapshotSender {
 
                     boolean timeoutException = false;
                     if (fsm.getSession().getSubscriber().getModel() == LogReplication.ReplicationModel.ROUTING_QUEUES &&
-                        e instanceof RuntimeException && e.getCause() instanceof TimeoutException) {
+                        e instanceof ReplicationReaderException && e.getCause() instanceof TimeoutException) {
                         log.info("Snapshot sync timed out waiting for data.  Will request a new snapshot sync");
                         timeoutException = true;
                     }
