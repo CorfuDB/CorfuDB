@@ -4,7 +4,6 @@ import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.CorfuTestParameters;
 import org.corfudb.common.util.ObservableValue;
-import org.corfudb.infrastructure.logreplication.config.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
@@ -52,6 +51,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static java.lang.Thread.sleep;
@@ -105,6 +105,8 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     private static final int BATCH_SIZE = 4;
 
     private static final int SMALL_MSG_SIZE = 12000;
+
+    private static final int SLEEP_TIME_MILLIS = 100;
 
     private TestConfig testConfig;
 
@@ -382,14 +384,16 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     }
 
     private void verifyData(CorfuStore corfuStore, Map<String, Table<StringKey, IntValue, Metadata>> tables,
-                            Map<String, Map<String, Integer>> hashMap) {
+                            Map<String, Map<String, Integer>> hashMap) throws Exception {
         for (String name : hashMap.keySet()) {
             Table<StringKey, IntValue, Metadata> table = tables.get(name);
             Map<String, Integer> map = hashMap.get(name);
 
-            log.debug("Table[" + name + "]: " + table.count() + " keys; Expected "
-                    + map.size() + " keys");
-
+            while (table.count() != map.size()) {
+                log.debug("Table[" + name + "]: " + table.count() + " keys; Expected "
+                        + map.size() + " keys");
+                TimeUnit.MILLISECONDS.sleep(SLEEP_TIME_MILLIS);
+            }
             assertThat(table.count()).isEqualTo(map.size());
             try (TxnContext txn = corfuStore.txn(TEST_NAMESPACE)) {
                 for (String key : map.keySet()) {
