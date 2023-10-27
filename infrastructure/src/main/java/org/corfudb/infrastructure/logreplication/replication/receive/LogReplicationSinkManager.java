@@ -215,7 +215,7 @@ public class LogReplicationSinkManager implements DataReceiver {
                         Queue.RoutingTableEntryMsg.class, Queue.CorfuQueueMetadataMsg.class,
                         tableOptions);
             } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
-                throw new RuntimeException(e);
+                throw new ReplicationWriterException(e);
             }
         }
     }

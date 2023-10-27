@@ -6,8 +6,16 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.runtime.LogReplication.LogReplicationSession;
+import org.corfudb.runtime.LogReplication.ReplicationEvent;
+import org.corfudb.runtime.LogReplication.ReplicationEventInfoKey;
 import org.corfudb.runtime.LogReplication.ReplicationModel;
+import org.corfudb.runtime.LogReplication.ReplicationSubscriber;
+import org.corfudb.runtime.Queue.CorfuGuidMsg;
+import org.corfudb.runtime.Queue.CorfuQueueMetadataMsg;
 import org.corfudb.runtime.Queue.RoutingTableEntryMsg;
+import org.corfudb.runtime.Queue.RoutingQSnapSyncHeaderMsg;
+import org.corfudb.runtime.Queue.RoutingQSnapSyncHeaderKeyMsg;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
@@ -20,7 +28,6 @@ import org.corfudb.runtime.collections.TableSchema;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.view.TableRegistry;
 
-import org.corfudb.runtime.exceptions.StreamingException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
@@ -32,14 +39,20 @@ import org.corfudb.util.serializer.ProtobufSerializer;
 import javax.annotation.Nullable;
 import java.lang.reflect.InvocationTargetException;
 import java.time.Instant;
-import java.util.*;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
-import static org.corfudb.runtime.LogReplication.*;
-import static org.corfudb.runtime.LogReplicationUtils.*;
-import static org.corfudb.runtime.Queue.*;
+import static org.corfudb.runtime.LogReplicationUtils.LOG_ENTRY_SYNC_QUEUE_NAME_SENDER;
+import static org.corfudb.runtime.LogReplicationUtils.LOG_ENTRY_SYNC_QUEUE_TAG_SENDER_PREFIX;
+import static org.corfudb.runtime.LogReplicationUtils.SNAPSHOT_SYNC_QUEUE_NAME_SENDER;
+import static org.corfudb.runtime.LogReplicationUtils.SNAP_SYNC_TXN_ENVELOPE_TABLE;
+import static org.corfudb.runtime.LogReplicationUtils.SNAPSHOT_SYNC_QUEUE_TAG_SENDER_PREFIX;
+import static org.corfudb.runtime.LogReplicationUtils.lrSnapSyncTxnEnvelopeStreamId;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 @Slf4j
@@ -84,16 +97,16 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
         this.corfuStore = corfuStore;
         this.clientName = clientName;
 
-        Table<CorfuGuidMsg, RoutingTableEntryMsg, CorfuQueueMetadataMsg> logEntryQ_local = null;
-        Table<CorfuGuidMsg, RoutingTableEntryMsg, CorfuQueueMetadataMsg> snapSyncQ_local = null;
-        Table<RoutingQSnapSyncHeaderKeyMsg, RoutingQSnapSyncHeaderMsg, Message> snapStartEnd_local = null;
+        Table<CorfuGuidMsg, RoutingTableEntryMsg, CorfuQueueMetadataMsg> logEntryQLocal;
+        Table<CorfuGuidMsg, RoutingTableEntryMsg, CorfuQueueMetadataMsg> snapSyncQLocal;
+        Table<RoutingQSnapSyncHeaderKeyMsg, RoutingQSnapSyncHeaderMsg, Message> snapStartEndLocal;
 
         try {
-            logEntryQ_local = corfuStore.openQueue(CORFU_SYSTEM_NAMESPACE, LOG_ENTRY_SYNC_QUEUE_NAME_SENDER,
+            logEntryQLocal = corfuStore.openQueue(CORFU_SYSTEM_NAMESPACE, LOG_ENTRY_SYNC_QUEUE_NAME_SENDER,
                 RoutingTableEntryMsg.class, TableOptions.fromProtoSchema(RoutingTableEntryMsg.class));
-            snapSyncQ_local = corfuStore.openQueue(CORFU_SYSTEM_NAMESPACE, SNAPSHOT_SYNC_QUEUE_NAME_SENDER,
+            snapSyncQLocal = corfuStore.openQueue(CORFU_SYSTEM_NAMESPACE, SNAPSHOT_SYNC_QUEUE_NAME_SENDER,
                 RoutingTableEntryMsg.class, TableOptions.fromProtoSchema(RoutingTableEntryMsg.class));
-            snapStartEnd_local = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, SNAP_SYNC_TXN_ENVELOPE_TABLE,
+            snapStartEndLocal = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, SNAP_SYNC_TXN_ENVELOPE_TABLE,
                 RoutingQSnapSyncHeaderKeyMsg.class, RoutingQSnapSyncHeaderMsg.class, null,
                 TableOptions.fromProtoSchema(RoutingTableEntryMsg.class));
             replicationEventTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, REPLICATION_EVENT_TABLE_NAME,
@@ -106,9 +119,9 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
             throw new RuntimeException("InvocationTargetException in fromProtoSchema" + e.getMessage());
         }
 
-        this.logEntryQ = logEntryQ_local;
-        this.snapSyncQ = snapSyncQ_local;
-        this.snapSyncHeaderTable = snapStartEnd_local;
+        this.logEntryQ = logEntryQLocal;
+        this.snapSyncQ = snapSyncQLocal;
+        this.snapSyncHeaderTable = snapStartEndLocal;
 
         // TODO: Register this client once the DEFAULT CLIENT implementation is no longer needed
         // register(corfuStore, clientName);
@@ -264,9 +277,6 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
                         .map(destination -> TableRegistry.getStreamIdForStreamTag(CORFU_SYSTEM_NAMESPACE,
                                 SNAPSHOT_SYNC_QUEUE_TAG_SENDER_PREFIX + destination + "_" + clientName))
                         .collect(Collectors.toList()), corfuStore);
-
-                long metadataSize = message.getSerializedSize() -
-                        (message.getOpaquePayload().size() + message.getOpaqueMetadata().size() + INT_SIZE_IN_BYTES);
 
                 // Only once per transaction we set up the header to identify the request from LR server
                 if (TransactionalContext.getRootContext().getWriteSetInfo().getWriteSet().getSMRUpdates(lrSnapSyncTxnEnvelopeStreamId).isEmpty()) {
