@@ -173,7 +173,7 @@ public abstract class LiteRoutingQueueListener extends StreamListenerResumeOrFul
         if (entriesProcessed == allMsgs.size()) {
             log.info("LiteQRecv:performFullSync deleting {} messages", entriesProcessed);
             try (TxnContext txnContext = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-                allMsgs.forEach( q -> txnContext.delete(recvQ, q.getRecordId()));
+                allMsgs.forEach(q -> txnContext.delete(recvQ, q.getRecordId()));
                 txnContext.commit();
             }
         }
