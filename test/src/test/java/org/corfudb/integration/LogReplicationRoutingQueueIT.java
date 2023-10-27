@@ -76,7 +76,6 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
         CorfuRuntime clientRuntime = getClientRuntime();
         CorfuStore clientCorfuStore = new CorfuStore(clientRuntime);
         String clientName = DEFAULT_ROUTING_QUEUE_CLIENT;
-        String sourceSiteId = DefaultClusterConfig.getSourceClusterIds().get(0);
         RoutingQueueSenderClient queueSenderClient = new RoutingQueueSenderClient(clientCorfuStore, clientName);
         SnapshotProvider snapshotProvider = new SnapshotProvider(clientCorfuStore);
         queueSenderClient.startLRSnapshotTransmitter(snapshotProvider); // starts a listener on event table
@@ -89,7 +88,7 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
             while (!snapshotProvider.isSnapshotSent) {
                 Thread.sleep(5000);
             }
-            generateData(clientCorfuStore, queueSenderClient, clientName);
+            generateData(clientCorfuStore, queueSenderClient);
             int numLogEntriesReceived = listener.logEntryMsgCnt;
             while (numLogEntriesReceived < numLogEntryUpdates + 1) {
                 Thread.sleep(5000);
@@ -241,7 +240,7 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
         }
     }
 
-    private void generateData(CorfuStore corfuStore, RoutingQueueSenderClient client, String clientName) throws Exception {
+    private void generateData(CorfuStore corfuStore, RoutingQueueSenderClient client) throws Exception {
         String namespace = CORFU_SYSTEM_NAMESPACE;
 
         String streamTagFollowed =
@@ -290,7 +289,7 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
                 Thread.sleep(5000);
             }
             log.info("Snapshot Sent");
-            generateData(clientCorfuStore, queueSenderClient, clientName);
+            generateData(clientCorfuStore, queueSenderClient);
 
             int numLogEntriesReceived = listener.logEntryMsgCnt;
             while (numLogEntriesReceived < 10) {

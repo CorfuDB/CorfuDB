@@ -180,8 +180,7 @@ public class LogEntryWriter extends SinkWriter {
                                 // If stream tags exist for the current stream, it means it's intended for streaming
                                 // on the Sink (receiver)
                                 if (session.getSubscriber().getModel().equals(LogReplication.ReplicationModel.ROUTING_QUEUES)) {
-                                    streamId = replicatedRoutingQueueStreamId;
-                                    txnContext.logUpdate(streamId, smrEntry, Collections.singletonList(
+                                    txnContext.logUpdate(replicatedRoutingQueueStreamId, smrEntry, Collections.singletonList(
                                             replicatedRoutingQueueStreamTag));
                                 } else {
                                     txnContext.logUpdate(streamId, smrEntry,

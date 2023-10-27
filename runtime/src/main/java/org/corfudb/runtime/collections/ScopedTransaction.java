@@ -119,8 +119,8 @@ public class ScopedTransaction implements StoreTransaction<TxnContext>,
     @Nonnull
     @Override
     public <K extends Message, V extends Message, M extends Message>
-    K enqueue(@Nonnull Table<K, V, M> table, @Nonnull V record) {
-        return crud.enqueue(getTableSnapshot(table), record);
+    K enqueue(@Nonnull Table<K, V, M> table, @Nonnull V value) {
+        return crud.enqueue(getTableSnapshot(table), value);
     }
 
     @Nonnull

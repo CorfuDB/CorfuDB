@@ -385,6 +385,7 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
 
     @Override
     public void requestGlobalFullSync() {
+        // Do nothing
     }
 
     class CorfuTableDescriptor {
