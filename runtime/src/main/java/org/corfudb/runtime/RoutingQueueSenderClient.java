@@ -299,7 +299,7 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
                     Object[] smrArgs = new Object[2];
                     smrArgs[0] = fullSyncRequestIdFromLR;
                     smrArgs[1] = markerEntry;
-                    getTxn().logUpdate(LogReplicationUtils.lrSnapSyncTxnEnvelopeStreamId,
+                    getTxn().logUpdate(lrSnapSyncTxnEnvelopeStreamId,
                             new SMREntry("put", smrArgs,
                                     corfuStore.getRuntime().getSerializers().getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE)),
                             message.getDestinationsList().stream()
@@ -436,6 +436,28 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
     }
 
     /**
+     * Request LR to perform a forced snapshot sync.
+     *
+     * @param txn - parent transaction if this request belongs in one.
+     * @param sourceClusterId Id of the Source Cluster
+     * @param sinkClusterId   Id of the Sink Cluster
+     * @param replicationEventType request one or all
+     */
+    public ReplicationEventInfoKey requestSnapshotSync(TxnContext txn, String sourceClusterId, String sinkClusterId,
+                                                       ReplicationEvent.ReplicationEventType replicationEventType) {
+        ReplicationSubscriber subscriber = ReplicationSubscriber.newBuilder()
+            .setClientName(this.clientName)
+            .setModel(ReplicationModel.ROUTING_QUEUES)
+            .build();
+        LogReplicationSession session =
+            LogReplicationSession.newBuilder()
+                .setSourceClusterId(sourceClusterId)
+                .setSinkClusterId(sinkClusterId)
+                .setSubscriber(subscriber).build();
+        return enforceSnapshotSync(txn, session, replicationEventType);
+    }
+
+    /**
      * Request LR to perform a forced snapshot sync for ALL remote sites (To be used for testing only)
      *
      * @param sourceClusterId Id of the Source Cluster
@@ -471,28 +493,6 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
         } catch (InterruptedException e) {
             throw new UnrecoverableCorfuInterruptedError("requestGlobalSnapshotSync Runtime Exception", e);
         }
-    }
-
-    /**
-     * Request LR to perform a forced snapshot sync.
-     *
-     * @param txn - parent transaction if this request belongs in one.
-     * @param sourceClusterId Id of the Source Cluster
-     * @param sinkClusterId   Id of the Sink Cluster
-     * @param replicationEventType request one or all
-     */
-    public ReplicationEventInfoKey requestSnapshotSync(TxnContext txn, String sourceClusterId, String sinkClusterId,
-                                    ReplicationEvent.ReplicationEventType replicationEventType) {
-        ReplicationSubscriber subscriber = ReplicationSubscriber.newBuilder()
-                .setClientName(this.clientName)
-                .setModel(ReplicationModel.ROUTING_QUEUES)
-                .build();
-        LogReplicationSession session =
-                LogReplicationSession.newBuilder()
-                        .setSourceClusterId(sourceClusterId)
-                        .setSinkClusterId(sinkClusterId)
-                        .setSubscriber(subscriber).build();
-        return enforceSnapshotSync(txn, session, replicationEventType);
     }
 
     // TODO pankti:  Move SnapshotSyncUtils to the 'runtime' package so that this method can be reused from there

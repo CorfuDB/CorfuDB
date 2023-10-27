@@ -379,6 +379,7 @@ public class CorfuStoreBrowserEditorMain {
                 } else {
                     log.error("Print metadata map for a specific address. Specify using tag --address");
                 }
+                return 0;
             case lrRequestGlobalFullSync:
                 browser.requestGlobalFullSync();
                 return 0;

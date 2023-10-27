@@ -4,7 +4,6 @@ import org.corfudb.runtime.Queue.RoutingTableEntryMsg;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.TxnContext;
 
-import java.lang.reflect.InvocationTargetException;
 import java.util.List;
 
 public interface LogReplicationRoutingQueueClient {

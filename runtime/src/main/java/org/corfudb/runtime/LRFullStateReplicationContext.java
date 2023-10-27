@@ -28,10 +28,10 @@ public interface LRFullStateReplicationContext {
     void setSnapshot(ScopedTransaction snapshot);
 
     /**
-      * Returns destination site ID.
-      * Data is transmitted from this site.
-      *
-      */
+     * Returns destination site ID.
+     * Data is transmitted from this site.
+     *
+     */
     String getDestinationSiteId();
 
     /**

@@ -45,6 +45,19 @@ public class CorfuGuidGenerator implements OrderedGuidGenerator {
 
     private CompletableFuture<Void> instanceIdGetterFuture;
 
+    // 8388608 (~8.3M) new transactions involving Q writes while an old txn is still running before overflow can occur
+    public static final long MAX_TXN_ID = 1L << 23;
+    // 1048576 (~1M) new jvms restarts while the oldest is still operational before overflow can occur
+    public static final long MAX_INSTANCE_ID = 1L << 20;
+    public static final long TXN_ID_SHIFT = 40;
+    public static final long TXN_ID_MASK      = 0x7fFFff0000000000L;
+    public static final long INSTANCE_ID_MASK = 0x000000FffFF00000L;
+    public static final long TXN_COUNTER_MASK = 0x00000000000FffFFL;
+    public static final long INSTANCE_ID_SHIFT = 20;
+    // 1048576 (~1M) write operations per transaction before an error is thrown
+    public static final long MAX_TXN_Q_ELEMENTS = 1L << 20;
+    // SIGN bit|23 bits of txn id| 20 bits instance id| 20 bits local counter
+
     public CorfuGuidGenerator(CorfuRuntime rt) {
         corfuStore = new CorfuStore((rt));
         instanceIdGetterFuture = CompletableFuture.runAsync(this::generateNewInstanceId);
@@ -210,19 +223,6 @@ public class CorfuGuidGenerator implements OrderedGuidGenerator {
         return txnIdForQueue;
     }
 
-
-    // 8388608 (~8.3M) new transactions involving Q writes while an old txn is still running before overflow can occur
-    public static final long MAX_TXN_ID = 1L << 23;
-    // 1048576 (~1M) new jvms restarts while the oldest is still operational before overflow can occur
-    public static final long MAX_INSTANCE_ID = 1L << 20;
-    public static final long TXN_ID_SHIFT = 40;
-    public static final long TXN_ID_MASK      = 0x7fFFff0000000000L;
-    public static final long INSTANCE_ID_MASK = 0x000000FffFF00000L;
-    public static final long TXN_COUNTER_MASK = 0x00000000000FffFFL;
-    public static final long INSTANCE_ID_SHIFT = 20;
-    // 1048576 (~1M) write operations per transaction before an error is thrown
-    public static final long MAX_TXN_Q_ELEMENTS = 1L << 20;
-    // SIGN bit|23 bits of txn id| 20 bits instance id| 20 bits local counter
     private long generateIdOncePerTxn(long instId) {
         long newTxnId = txnCounter.incrementAndGet();
         newTxnId = (newTxnId<<TXN_ID_SHIFT) & TXN_ID_MASK;
