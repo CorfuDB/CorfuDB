@@ -45,7 +45,6 @@ public class RoutingQueuesSnapshotReaderTest extends AbstractViewTest {
     private CorfuRuntime clientRuntime;
     private LogReplication.LogReplicationSession session;
     private LogReplicationConfigManager configManager;
-    private LogReplicationContext replicationContext;
     private CorfuStore corfuStore;
     private String streamTagFollowed;
     private final String namespace = CORFU_SYSTEM_NAMESPACE;
@@ -59,7 +58,8 @@ public class RoutingQueuesSnapshotReaderTest extends AbstractViewTest {
         session = DefaultClusterConfig.getRoutingQueueSessions().get(0);
 
         configManager = new LogReplicationConfigManager(lrRuntime, session.getSourceClusterId());
-        replicationContext = new LogReplicationContext(configManager, 5, session.getSourceClusterId(),
+        LogReplicationContext replicationContext = new LogReplicationContext(configManager, 5,
+            session.getSourceClusterId(),
                 true, new LogReplicationPluginConfig(""), lrRuntime);
         configManager.generateConfig(Collections.singleton(session), false);
         snapshotReader = new RoutingQueuesSnapshotReader(session, replicationContext);
