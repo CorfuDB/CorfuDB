@@ -32,6 +32,8 @@ import java.util.stream.Collectors;
 
 import static org.corfudb.runtime.LogReplicationLogicalGroupClient.LR_MODEL_METADATA_TABLE_NAME;
 import static org.corfudb.runtime.LogReplicationLogicalGroupClient.LR_REGISTRATION_TABLE_NAME;
+import static org.corfudb.runtime.LogReplicationUtils.LOG_ENTRY_SYNC_QUEUE_NAME_SENDER;
+import static org.corfudb.runtime.view.CorfuGuidGenerator.GUID_STREAM_NAME;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 import static org.corfudb.runtime.view.TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME;
 import static org.corfudb.runtime.view.TableRegistry.REGISTRY_TABLE_NAME;
@@ -162,6 +164,12 @@ public class LogReplicationConfigManagerTest extends AbstractViewTest {
         setupStreamsToDrop(Collections.singleton(TABLE6), SampleSchema.Uuid.class);
         configManager.getUpdatedConfig(sampleSession, true);
         configManager.generateConfig(Collections.singleton(sampleSession), true);
+        // After synchronization with RegistryTable, these 2 streams will be found in streamsToDrop field of
+        // FULL_TABLE log replication config
+        streamsToDrop.add(CorfuRuntime.getStreamID(TableRegistry.getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE,
+                GUID_STREAM_NAME)));
+        streamsToDrop.add(CorfuRuntime.getStreamID(TableRegistry.getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE,
+                LOG_ENTRY_SYNC_QUEUE_NAME_SENDER)));
         verifyExpectedConfigGenerated((LogReplicationFullTableConfig) configManager.getSessionToConfigMap()
                 .get(sampleSession));
     }
