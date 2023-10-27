@@ -51,8 +51,8 @@ public class RoutingQueuesLogEntryReader extends BaseLogEntryReader {
             corfuStore.openQueue(CORFU_SYSTEM_NAMESPACE, LOG_ENTRY_SYNC_QUEUE_NAME_SENDER, RoutingTableEntryMsg.class,
                     TableOptions.fromProtoSchema(RoutingTableEntryMsg.class));
             replicatedQueueName = TableRegistry.getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE,
-                    LogReplicationUtils.REPLICATED_RECV_Q_PREFIX + session.getSourceClusterId() + "_" +
-                    session.getSubscriber().getClientName());
+                    REPLICATED_RECV_Q_PREFIX + session.getSourceClusterId() + "_" +
+                        session.getSubscriber().getClientName());
         } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
             log.error("Failed to open log entry sync queue", e);
             throw new RuntimeException(e);

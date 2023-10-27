@@ -26,6 +26,7 @@ import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TableSchema;
 import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.runtime.exceptions.LogReplicationClientException;
 import org.corfudb.runtime.view.TableRegistry;
 
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
@@ -74,12 +75,8 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
 
     private Table<CorfuGuidMsg, RoutingTableEntryMsg, CorfuQueueMetadataMsg> logEntryQ;
     private Table<CorfuGuidMsg, RoutingTableEntryMsg, CorfuQueueMetadataMsg> snapSyncQ;
-    private Table<RoutingQSnapSyncHeaderKeyMsg, RoutingQSnapSyncHeaderMsg, Message> snapSyncHeaderTable;
     private Table<ReplicationEventInfoKey, ReplicationEvent, Message> replicationEventTable;
-
     private SnapSyncRequestor fullSyncRequestor;
-
-    private static final int INT_SIZE_IN_BYTES = 4;
 
     /**
      * Constructor for the log replication client for routing queues on sender.
@@ -90,8 +87,7 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
      * @throws NoSuchMethodException    NoSuchMethodException.
      * @throws IllegalAccessException   IllegalAccessException.
      */
-    public RoutingQueueSenderClient(CorfuStore corfuStore, String clientName)
-            throws NoSuchMethodException, IllegalAccessException {
+    public RoutingQueueSenderClient(CorfuStore corfuStore, String clientName) {
         Preconditions.checkArgument(isValid(clientName), "clientName is null or empty.");
 
         this.corfuStore = corfuStore;
@@ -99,14 +95,13 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
 
         Table<CorfuGuidMsg, RoutingTableEntryMsg, CorfuQueueMetadataMsg> logEntryQLocal;
         Table<CorfuGuidMsg, RoutingTableEntryMsg, CorfuQueueMetadataMsg> snapSyncQLocal;
-        Table<RoutingQSnapSyncHeaderKeyMsg, RoutingQSnapSyncHeaderMsg, Message> snapStartEndLocal;
 
         try {
             logEntryQLocal = corfuStore.openQueue(CORFU_SYSTEM_NAMESPACE, LOG_ENTRY_SYNC_QUEUE_NAME_SENDER,
                 RoutingTableEntryMsg.class, TableOptions.fromProtoSchema(RoutingTableEntryMsg.class));
             snapSyncQLocal = corfuStore.openQueue(CORFU_SYSTEM_NAMESPACE, SNAPSHOT_SYNC_QUEUE_NAME_SENDER,
                 RoutingTableEntryMsg.class, TableOptions.fromProtoSchema(RoutingTableEntryMsg.class));
-            snapStartEndLocal = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, SNAP_SYNC_TXN_ENVELOPE_TABLE,
+            corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, SNAP_SYNC_TXN_ENVELOPE_TABLE,
                 RoutingQSnapSyncHeaderKeyMsg.class, RoutingQSnapSyncHeaderMsg.class, null,
                 TableOptions.fromProtoSchema(RoutingTableEntryMsg.class));
             replicationEventTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, REPLICATION_EVENT_TABLE_NAME,
@@ -114,14 +109,13 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
                 ReplicationEvent.class,
                 null,
                 TableOptions.fromProtoSchema(ReplicationEvent.class));
-        } catch (InvocationTargetException |IllegalAccessException | NoSuchMethodException e) {
+        } catch (InvocationTargetException | IllegalAccessException | NoSuchMethodException e) {
             log.error("Failed to open table/queue", e);
-            throw new RuntimeException("InvocationTargetException in fromProtoSchema" + e.getMessage());
+            throw new LogReplicationClientException(e);
         }
 
         this.logEntryQ = logEntryQLocal;
         this.snapSyncQ = snapSyncQLocal;
-        this.snapSyncHeaderTable = snapStartEndLocal;
 
         // TODO: Register this client once the DEFAULT CLIENT implementation is no longer needed
         // register(corfuStore, clientName);

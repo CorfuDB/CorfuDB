@@ -253,8 +253,7 @@ public class CorfuStore {
     public static <K extends Message, V extends Message, M extends Message>
     ScopedTransaction snapshotFederatedTables(String namespace, CorfuRuntime runtime) {
         ArrayList<Table> federatedTables = new ArrayList<>();
-        runtime.getTableRegistry().getAllOpenTables().forEach(t ->
-        {
+        runtime.getTableRegistry().getAllOpenTables().forEach(t -> {
             String tableNameWithoutNs = StringUtils.substringAfter(t.getFullyQualifiedTableName(),
                 t.getNamespace()+"$");
             CorfuStoreMetadata.TableName tableName = CorfuStoreMetadata.TableName.newBuilder()

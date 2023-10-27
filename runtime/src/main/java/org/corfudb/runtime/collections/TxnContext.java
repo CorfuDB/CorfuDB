@@ -249,8 +249,8 @@ public class TxnContext
     @Nonnull
     public <K extends Message, V extends Message, M extends Message>
     K logUpdateEnqueue(@Nonnull Table<K, V, M> table,
-                                    @Nonnull final V record, List<UUID> streamTags, CorfuStore corfuStore) {
-        return crud.logUpdateEnqueue(table, record, streamTags, corfuStore);
+                       @Nonnull final V value, List<UUID> streamTags, CorfuStore corfuStore) {
+        return crud.logUpdateEnqueue(table, value, streamTags, corfuStore);
     }
 
     /**
@@ -494,8 +494,8 @@ public class TxnContext
     @Nonnull
     @Override
     public <K extends Message, V extends Message, M extends Message>
-    K enqueue(@Nonnull Table<K, V, M> table, @Nonnull V record) {
-        return crud.enqueue(table, record);
+    K enqueue(@Nonnull Table<K, V, M> table, @Nonnull V value) {
+        return crud.enqueue(table, value);
     }
 
     @Nonnull

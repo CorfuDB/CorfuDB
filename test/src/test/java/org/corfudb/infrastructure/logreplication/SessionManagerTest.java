@@ -1,7 +1,6 @@
 package org.corfudb.infrastructure.logreplication;
 
 import com.google.common.collect.Sets;
-import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.infrastructure.logreplication.infrastructure.CorfuReplicationManager;
 import org.corfudb.infrastructure.logreplication.infrastructure.SessionManager;

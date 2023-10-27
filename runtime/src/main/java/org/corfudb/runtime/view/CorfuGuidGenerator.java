@@ -21,7 +21,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.function.Supplier;
 
 @Slf4j
 public class CorfuGuidGenerator implements OrderedGuidGenerator {
