@@ -705,7 +705,7 @@ public class CorfuStoreIT extends AbstractIT {
 
     @Test
     public void testScopedTransaction() throws Exception {
-        Process corfuServer = startCorfu();
+        startCorfu();
 
         // Define a namespace for the table and table name
         final String namespace = "corfu-namespace";

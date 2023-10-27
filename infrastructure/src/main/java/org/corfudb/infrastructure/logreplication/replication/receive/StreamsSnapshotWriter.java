@@ -508,7 +508,7 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
             }).run();
         } catch (InterruptedException e) {
             log.error("Unrecoverable Error when writing dummy entry to log entry queue", e);
-            throw new RuntimeException(e);
+            throw new ReplicationWriterException(e);
         }
     }
 

@@ -123,7 +123,7 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
                     TableOptions.fromProtoSchema(LogReplication.ReplicationEvent.class));
         } catch (IllegalAccessException | InvocationTargetException | NoSuchMethodException e) {
             log.error("Failed to open the End Marker table", e);
-            throw new RuntimeException(e);
+            throw new ReplicationReaderException(e);
         }
 
         String endMarkerTableName = TableRegistry.getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE,
@@ -251,7 +251,7 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
         try {
             queryFuture.get(DATA_WAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
         } catch (TimeoutException e) {
-            throw new RuntimeException("Timed out waiting for data or end marker for Snapshot Sync", e);
+            throw new ReplicationReaderException("Timed out waiting for data or end marker for Snapshot Sync", e);
         } catch (Exception e) {
             // Handle all other types of exceptions
             log.error("Caught exception in WaitForData ", e);
@@ -278,10 +278,10 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
         }
 
         rawBuf = Unpooled.wrappedBuffer((byte[]) objs[1]);
-        CorfuRecord<Queue.RoutingQSnapSyncHeaderMsg, Message> record =
+        CorfuRecord<Queue.RoutingQSnapSyncHeaderMsg, Message> entry =
                 (CorfuRecord<Queue.RoutingQSnapSyncHeaderMsg, Message>)
                         replicationContext.getProtobufSerializer().deserialize(rawBuf, null);
-        return new CorfuStoreEntry<>(key, record.getPayload(), record.getMetadata());
+        return new CorfuStoreEntry<>(key, entry.getPayload(), entry.getMetadata());
     }
 
     // Check if the Opaque Entry contains an End Marker, denoting the end of snapshot sync data
@@ -425,15 +425,16 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
                         buildOpaqueStreamIterator();
                         if (!currentStreamHasNext()) {
                             log.info("Retrying. currentStreamInfo={}", currentStreamInfo.maxVersion);
-                            throw new RuntimeException("Retry");
+                            throw new ReplicationReaderException();
                         }
                     } catch (Exception e) {
+                        if (e instanceof ReplicationReaderException)
                         throw new RetryNeededException();
                     }
                     return null;
                 }).run();
             } catch (InterruptedException ie) {
-                throw new RuntimeException("Interrupted Exception");
+                throw new ReplicationReaderException("Interrupted Exception");
             }
             return null;
         }

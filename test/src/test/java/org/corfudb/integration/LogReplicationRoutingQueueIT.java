@@ -10,6 +10,7 @@ import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicat
 import org.corfudb.runtime.CorfuOptions;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.ExampleSchemas;
+import org.corfudb.runtime.exceptions.LogReplicationClientException;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.runtime.LRFullStateReplicationContext;
 import org.corfudb.runtime.LRSiteDiscoveryListener;
@@ -101,7 +102,7 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
             assertThat(listener.snapSyncMsgCnt).isEqualTo(5);
             log.info("Sink replicated queue size: {}", listener.snapSyncMsgCnt);
         } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
-            throw new RuntimeException(e);
+            throw new LogReplicationClientException(e);
         }
     }
 
@@ -194,11 +195,7 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
         // Start up Full Sync providers on both sink sites to test reverse replication
         sinkCorfuStores.forEach(sinkCorfuStore -> {
             RoutingQueueSenderClient sinkSideQsender = null;
-            try {
-                sinkSideQsender = new RoutingQueueSenderClient(sinkCorfuStore, clientName);
-            } catch (NoSuchMethodException | IllegalAccessException e) {
-                throw new RuntimeException(e);
-            }
+            sinkSideQsender = new RoutingQueueSenderClient(sinkCorfuStore, clientName);
             // SnapshotProvider implements RoutingQueueSenderClient.LRTransmitterReplicationModule
             SnapshotProvider sinkSideSnapProvider = new SnapshotProvider(sinkCorfuStore);
             sinkSideQsender.startLRSnapshotTransmitter(sinkSideSnapProvider); // starts a listener on event table
