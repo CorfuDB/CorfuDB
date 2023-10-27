@@ -385,11 +385,11 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
                         context.setSnapshot(
                             CorfuStore.snapshotFederatedTables(someNamespace, corfuStore.getRuntime()));
                     }
-                    CorfuStoreEntry<RpcCommon.UuidMsg, ExampleSchemas.ExampleValue, Message> record = context.getSnapshot()
-                            .getRecord(someTable, RpcCommon.UuidMsg.newBuilder().setMsb(i).build());
+                    CorfuStoreEntry<RpcCommon.UuidMsg, ExampleSchemas.ExampleValue, Message> entry =
+                        context.getSnapshot().getRecord(someTable, RpcCommon.UuidMsg.newBuilder().setMsb(i).build());
                     Queue.RoutingTableEntryMsg message = Queue.RoutingTableEntryMsg.newBuilder()
                             .addDestinations(context.getDestinationSiteId())
-                            .setOpaquePayload(ByteString.copyFromUtf8(record.getPayload().getPayload()))
+                            .setOpaquePayload(ByteString.copyFromUtf8(entry.getPayload().getPayload()))
                             .buildPartial();
                     context.transmit(message);
                     log.info("Transmitting full sync message{}", message);
