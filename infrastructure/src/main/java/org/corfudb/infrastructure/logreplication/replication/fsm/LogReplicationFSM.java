@@ -360,13 +360,6 @@ public class LogReplicationFSM {
         logEntrySender.updateTopologyConfigId(topologyConfigId);
     }
 
-    /**
-     * Shutdown Log Replication FSM
-     */
-    public void shutdown() {
-        this.ackReader.shutdown();
-    }
-
     public boolean isValidTransition(UUID currentSyncId, UUID newSyncID) {
         return currentSyncId.equals(newSyncID);
     }
