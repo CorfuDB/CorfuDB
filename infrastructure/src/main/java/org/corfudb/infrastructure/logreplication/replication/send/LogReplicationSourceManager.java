@@ -148,7 +148,6 @@ public class LogReplicationSourceManager {
         }
 
         log.info("Shutdown Log Replication.");
-        logReplicationFSM.shutdown();
         isShutdown = true;
     }
 
