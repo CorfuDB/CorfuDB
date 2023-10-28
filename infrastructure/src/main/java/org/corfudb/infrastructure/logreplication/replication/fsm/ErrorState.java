@@ -24,8 +24,6 @@ public class ErrorState implements LogReplicationState {
 
     @Override
     public void onEntry(LogReplicationState from) {
-        // Disable periodic sync status periodic task while in initialized state (no actual replication occurring)
-        fsm.getAckReader().stopSyncStatusUpdatePeriodicTask();
         fsm.getAckReader().markSyncStatus(SyncStatus.ERROR);
         log.info("Unrecoverable error or explicit shutdown. " +
                 "Log Replication is terminated from state {}. To resume, restart the JVM.", from.getType());

@@ -356,11 +356,4 @@ public class LogReplicationFSM {
         snapshotSender.updateTopologyConfigId(topologyConfigId);
         logEntrySender.updateTopologyConfigId(topologyConfigId);
     }
-
-    /**
-     * Shutdown Log Replication FSM
-     */
-    public void shutdown() {
-        this.ackReader.shutdown();
-    }
 }
