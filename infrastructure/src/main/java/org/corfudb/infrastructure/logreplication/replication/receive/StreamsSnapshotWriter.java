@@ -38,6 +38,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Stream;
 
 import static org.corfudb.infrastructure.logreplication.config.LogReplicationConfig.MERGE_ONLY_STREAMS;
@@ -78,7 +79,7 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
 
     // Represents the actual replicated streams from source. This is a subset of all regular streams in
     // regularToShadowStreamId map
-    private final Set<UUID> replicatedStreamIds = new HashSet<>();
+    private final Set<UUID> replicatedStreamIds = ConcurrentHashMap.newKeySet();
 
     private final LogReplicationMetadataManager metadataManager;
 

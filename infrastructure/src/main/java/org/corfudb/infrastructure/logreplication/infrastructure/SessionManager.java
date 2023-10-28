@@ -10,6 +10,8 @@ import org.corfudb.infrastructure.logreplication.infrastructure.msghandlers.LogR
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
+import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationSinkManager;
+import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationAckReader;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientServerRouter;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.sink.RemoteSourceLeadershipManager;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
@@ -540,11 +542,16 @@ public class SessionManager {
      * Shutdown session manager
      */
     public void shutdown() {
+        //shutdown thread pools
         replicationContext.getReplicationFsmTaskManager().shutdown();
         replicationContext.getRuntimeFsmTaskManager().shutdown();
+        LogReplicationAckReader.shutdownTsPoller();
+        LogReplicationSinkManager.shutdownApplyExecutor();
+
         replicationManager.stop();
         router.stop(sessions);
         router.shutDownMsgHandlerServer();
+
     }
 
     /**

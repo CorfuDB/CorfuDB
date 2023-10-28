@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure.logreplication.replication.send;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import lombok.Getter;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
@@ -43,7 +44,9 @@ public class LogReplicationAckReader {
     private long baseSnapshotTimestamp;
 
     // Periodic Thread which reads the last acknowledged timestamp and writes it to the metadata table
-    private ScheduledExecutorService lastAckedTsPoller;
+    // TODO V2: tune the thread count
+    private static ScheduledExecutorService lastAckedTsPoller = Executors.newScheduledThreadPool(2,
+            new ThreadFactoryBuilder().setNameFormat("ack-timestamp-reader-%d").build());
 
     // Interval at which the thread reads the last acknowledged timestamp
     public static final int ACKED_TS_READ_INTERVAL_SECONDS = 15;
@@ -328,7 +331,7 @@ public class LogReplicationAckReader {
         return totalEntries;
     }
 
-    public void shutdown() {
+    public static void shutdownTsPoller() {
         // Stop accepting any new updates
         lastAckedTsPoller.shutdown();
         try {
@@ -448,20 +451,8 @@ public class LogReplicationAckReader {
      */
     public void startSyncStatusUpdatePeriodicTask() {
         log.info("Start sync status update periodic task");
-        lastAckedTsPoller = Executors.newSingleThreadScheduledExecutor(
-                new ThreadFactoryBuilder().setNameFormat("ack-timestamp-reader-"+ session.hashCode()).build());
         lastAckedTsPoller.scheduleWithFixedDelay(new TsPollingTask(), 0, ACKED_TS_READ_INTERVAL_SECONDS,
                 TimeUnit.SECONDS);
-    }
-
-    /**
-     * Stop periodic replication status update task, as replication is not currently ongoing
-     */
-    public void stopSyncStatusUpdatePeriodicTask() {
-        if (lastAckedTsPoller != null) {
-            log.info("Stop sync status update periodic task");
-            lastAckedTsPoller.shutdownNow();
-        }
     }
 
     /**

@@ -102,13 +102,15 @@ public class LogReplicationSinkManager implements DataReceiver {
 
     private ISnapshotSyncPlugin snapshotSyncPlugin;
 
-    private ExecutorService applyExecutor;
+    // TODO V2: tune the thread count
+    private static ExecutorService applyExecutor = Executors.newFixedThreadPool(2,
+            new ThreadFactoryBuilder()
+                    .setDaemon(true)
+                    .setNameFormat("snapshotSyncApplyExecutor-%d")
+                    .build());;
 
     @Getter
     private final AtomicBoolean ongoingApply = new AtomicBoolean(false);
-
-    @Getter
-    private boolean isSinkManagerShutdown = false;
 
     /**
      * Constructor Sink Manager
@@ -175,12 +177,6 @@ public class LogReplicationSinkManager implements DataReceiver {
         // The sender will query receiver's status and decide what type of replication to start with.
         // It will transit to SNAPSHOT_SYNC state if it received a SNAPSHOT_START message from the sender.
         this.rxState = RxState.LOG_ENTRY_SYNC;
-
-        this.applyExecutor = Executors.newSingleThreadExecutor(
-                new ThreadFactoryBuilder()
-                        .setDaemon(true)
-                        .setNameFormat("snapshotSyncApplyExecutor-" + session.hashCode())
-                        .build());
 
         initWriterAndBufferMgr();
     }
@@ -574,8 +570,10 @@ public class LogReplicationSinkManager implements DataReceiver {
 
     public void shutdown() {
         this.runtime.shutdown();
-        this.applyExecutor.shutdownNow();
-        isSinkManagerShutdown = true;
+    }
+
+    public static void shutdownApplyExecutor() {
+        applyExecutor.shutdown();
     }
 
     /**

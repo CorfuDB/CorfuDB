@@ -129,11 +129,6 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         corfuStore = new CorfuStore(runtime);
     }
 
-    @After
-    public void stopAckReader() {
-        ackReader.shutdown();
-    }
-
     /**
      * Verify state machine behavior in the most simple (no error) path.
      *
