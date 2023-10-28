@@ -82,7 +82,8 @@ public class InLogEntrySyncState implements LogReplicationState {
             case LOG_ENTRY_SYNC_REPLICATED:
                 // Verify the replicated entry corresponds to the current log entry sync cycle (and not a previous/old one)
                 if (transitionEventId.equals(event.getMetadata().getRequestId())) {
-                    log.debug("Log Entry Sync ACK, update last ack timestamp to {}", event.getMetadata().getLastLogEntrySyncedTimestamp());
+                    log.debug("[{}]:: Log Entry Sync ACK, update last ack timestamp to {}", transitionEventId,
+                            event.getMetadata().getLastLogEntrySyncedTimestamp());
                     fsm.setAckedTimestamp(event.getMetadata().getLastLogEntrySyncedTimestamp());
                 }
                 // Do not return a new state as there is no actual transition, the IllegalTransitionException
@@ -101,7 +102,7 @@ public class InLogEntrySyncState implements LogReplicationState {
                             event.getEventId(), transitionEventId);
                 }
             default: {
-                log.warn("Unexpected log replication event {} when in log entry sync state.", event.getType());
+                log.warn("[{}]:: Unexpected log replication event {} when in log entry sync state.", transitionEventId, event.getType());
                 break;
             }
         }
@@ -125,10 +126,10 @@ public class InLogEntrySyncState implements LogReplicationState {
             try {
                 logEntrySyncFuture.get();
             } catch (Exception e) {
-                log.warn("Exception while waiting on log entry sync to complete.", e);
+                log.warn("[{}]:: Exception while waiting on log entry sync to complete.",transitionEventId, e);
             }
         }
-        log.info("Log Entry sync has been canceled due to {}", cancelCause);
+        log.info("[{}]:: Log Entry sync has been canceled due to {}", transitionEventId, cancelCause);
     }
 
     @Override
@@ -151,7 +152,7 @@ public class InLogEntrySyncState implements LogReplicationState {
             logEntrySender.send(transitionEventId);
 
         } catch (Throwable t) {
-            log.error("Error on entry of InLogEntrySyncState", t);
+            log.error("[{}]:: Error on entry of InLogEntrySyncState",transitionEventId, t);
         }
     }
 

@@ -59,8 +59,8 @@ public class LogEntrySinkBufferManager extends SinkBufferManager {
     @Override
     public boolean verifyMessageType(LogReplicationEntryMsg entry) {
         if (entry.getMetadata().getEntryType() != type) {
-            log.warn("Got msg type {} but expecting type {}",
-                    entry.getMetadata().getEntryType(), type);
+            log.warn("Got msg type {} but expecting type {}. sync id {}",
+                    entry.getMetadata().getEntryType(), type, sinkManager.getLastSnapshotSyncId());
             return false;
         }
 

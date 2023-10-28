@@ -42,6 +42,8 @@ public class LogEntryWriter extends SinkWriter {
 
     private final LogReplicationMetadataManager metadataManager;
 
+    private UUID syncId;
+
     public LogEntryWriter(LogReplicationMetadataManager metadataManager,
                           LogReplicationSession session, LogReplicationContext replicationContext) {
         super(session, replicationContext);
@@ -61,7 +63,7 @@ public class LogEntryWriter extends SinkWriter {
      */
     private void verifyMetadata(LogReplicationEntryMetadataMsg metadata) throws ReplicationWriterException {
         if (metadata.getEntryType() != LogReplicationEntryType.LOG_ENTRY_MESSAGE) {
-            log.error("Wrong message metadata {}, expecting type {} snapshot {}", TextFormat.shortDebugString(metadata),
+            log.error("[{}]:: Wrong message metadata {}, expecting type {} snapshot {}", syncId, TextFormat.shortDebugString(metadata),
                 LogReplicationEntryType.LOG_ENTRY_MESSAGE, srcGlobalSnapshot);
             throw new ReplicationWriterException("wrong type of message");
         }
@@ -119,7 +121,7 @@ public class LogEntryWriter extends SinkWriter {
 
                         // Skip Opaque entries with timestamp that are not larger than persistedOpaqueEntryTs
                         if (opaqueEntry.getVersion() <= persistedOpaqueEntryTs) {
-                            log.trace("Skipping entry {} as it is less than the last applied opaque entry {}",
+                            log.trace("[{}]:: Skipping entry {} as it is less than the last applied opaque entry {}",syncId,
                                 opaqueEntry.getVersion(), persistedOpaqueEntryTs);
                             return null;
                         }
@@ -138,8 +140,8 @@ public class LogEntryWriter extends SinkWriter {
 
                         for (UUID streamId : opaqueEntry.getEntries().keySet()) {
                             if (ignoreEntriesForStream(streamId)) {
-                                log.warn("Skip applying log entries for stream {} as it is noisy. The Source and" +
-                                    "Sink sites could be on different versions", streamId);
+                                log.warn("[{}]:: Skip applying log entries for stream {} as it is noisy. The Source and" +
+                                    "Sink sites could be on different versions", syncId, streamId);
                                 continue;
                             }
 
@@ -149,7 +151,7 @@ public class LogEntryWriter extends SinkWriter {
                                 // registry table after this transaction.
                                 smrEntries = filterRegistryTableEntries(new ArrayList<>(smrEntries));
                                 if (!smrEntries.isEmpty()) {
-                                    log.info("Registry Table entries during log entry sync = {}", smrEntries.size());
+                                    log.info("[{}]:: Registry Table entries during log entry sync = {}", syncId, smrEntries.size());
                                     registryTableUpdated.set(true);
                                 }
                             }
@@ -181,10 +183,10 @@ public class LogEntryWriter extends SinkWriter {
                     return null;
                 }).run();
             } catch (IllegalArgumentException e) {
-                log.error("Metadata mismatch detected in entry with sequence " + opaqueEntry.getVersion(), e);
+                log.error("[{}]:: Metadata mismatch detected in entry with sequence " + syncId, opaqueEntry.getVersion(), e);
                 return false;
             } catch (InterruptedException e) {
-                log.error("Could not apply entry with sequence " + opaqueEntry.getVersion());
+                log.error("[{}]:: Could not apply entry with sequence " + syncId, opaqueEntry.getVersion());
                 return false;
             }
         }
@@ -203,21 +205,21 @@ public class LogEntryWriter extends SinkWriter {
      */
     public boolean apply(LogReplicationEntryMsg msg) throws ReplicationWriterException {
 
-        log.debug("Apply log entry {}", msg.getMetadata().getTimestamp());
+        log.debug("[{}]:: Apply log entry {}", syncId, msg.getMetadata().getTimestamp());
 
         verifyMetadata(msg.getMetadata());
 
         // Ignore the out of date messages
         if (msg.getMetadata().getSnapshotTimestamp() < srcGlobalSnapshot) {
-            log.warn("Ignore Log Entry. Received message with snapshot {} is smaller than current snapshot {}",
-                    msg.getMetadata().getSnapshotTimestamp(), srcGlobalSnapshot);
+            log.warn("[{}]:: Ignore Log Entry. Received message with snapshot {} is smaller than current snapshot {}",
+                    syncId, msg.getMetadata().getSnapshotTimestamp(), srcGlobalSnapshot);
             return false;
         }
 
         // A new Delta sync is triggered, setup the new srcGlobalSnapshot and msgQ
         if (msg.getMetadata().getSnapshotTimestamp() > srcGlobalSnapshot) {
-            log.warn("A new log entry sync is triggered with higher snapshot, previous snapshot is {} and setup the " +
-                "new srcGlobalSnapshot & lastMsgTs as {}", srcGlobalSnapshot, msg.getMetadata().getSnapshotTimestamp());
+            log.warn("[{}]:: A new log entry sync is triggered with higher snapshot, previous snapshot is {} and setup the " +
+                "new srcGlobalSnapshot & lastMsgTs as {}", syncId, srcGlobalSnapshot, msg.getMetadata().getSnapshotTimestamp());
             srcGlobalSnapshot = msg.getMetadata().getSnapshotTimestamp();
             lastMsgTs = srcGlobalSnapshot;
         }
@@ -227,8 +229,8 @@ public class LogEntryWriter extends SinkWriter {
             return applyMsg(msg);
         }
 
-        log.warn("Transactions from {} to {} were not processed.  Last timestamp processed = {}, srcGlobalSnapshot={}",
-            msg.getMetadata().getPreviousTimestamp(), msg.getMetadata().getTimestamp(), lastMsgTs, srcGlobalSnapshot);
+        log.warn("[{}]:: Transactions from {} to {} were not processed.  Last timestamp processed = {}, srcGlobalSnapshot={}",
+            syncId, msg.getMetadata().getPreviousTimestamp(), msg.getMetadata().getTimestamp(), lastMsgTs, srcGlobalSnapshot);
         return false;
     }
 
@@ -240,11 +242,12 @@ public class LogEntryWriter extends SinkWriter {
      * @param snapshot the base snapshot on which the last full sync was based on.
      * @param ackTimestamp
      */
-    public void reset(long snapshot, long ackTimestamp) {
+    public void reset(long snapshot, long ackTimestamp, UUID syncId) {
         // Sync with registry table when LogEntryWriter is reset, which will happen when Snapshot sync is completed, and
         // when LogReplicationSinkManager is initialized and reset.
         replicationContext.refresh();
         srcGlobalSnapshot = snapshot;
         lastMsgTs = ackTimestamp;
+        syncId = syncId;
     }
 }

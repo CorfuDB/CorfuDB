@@ -94,7 +94,7 @@ public class WaitSnapshotApplyState implements LogReplicationState {
                 ((InSnapshotSyncState)inSnapshotSyncState).setForcedSnapshotSync(false);
                 return inSnapshotSyncState;
             case SNAPSHOT_APPLY_IN_PROGRESS:
-                log.debug("Snapshot Apply in progress {}. Verify status.", transitionEventId);
+                log.debug("[{}]:: Snapshot Apply in progress {}. Verify status.", transitionEventId);
                 return this;
             case SNAPSHOT_APPLY_COMPLETE:
                 UUID snapshotSyncApplyId = event.getMetadata().getRequestId();
@@ -117,7 +117,7 @@ public class WaitSnapshotApplyState implements LogReplicationState {
                     logEntrySyncState.setTransitionEventId(event.getEventId());
                     fsm.setBaseSnapshot(event.getMetadata().getLastTransferredBaseSnapshot());
                     fsm.setAckedTimestamp(event.getMetadata().getLastLogEntrySyncedTimestamp());
-                    log.info("Snapshot Sync apply completed, syncRequestId={}, baseSnapshot={}. Transition to LOG_ENTRY_SYNC",
+                    log.info("[{}]:: Snapshot Sync apply completed, baseSnapshot={}. Transition to LOG_ENTRY_SYNC",
                             event.getEventId(), event.getMetadata().getLastTransferredBaseSnapshot());
                     return logEntrySyncState;
                 }
@@ -126,14 +126,14 @@ public class WaitSnapshotApplyState implements LogReplicationState {
                         snapshotSyncApplyId, transitionEventId);
                 return this;
             case REPLICATION_STOP:
-                log.debug("Stop Log Replication while waiting for snapshot sync apply to complete id={}", transitionEventId);
+                log.debug("[{}]:: Stop Log Replication while waiting for snapshot sync apply to complete", transitionEventId);
                 stopSnapshotApply.set(true);
                 return fsm.getStates().get(LogReplicationStateType.INITIALIZED);
             case REPLICATION_SHUTDOWN:
-                log.debug("Shutdown Log Replication while waiting for snapshot sync apply to complete id={}", transitionEventId);
+                log.debug("[{}]:: Shutdown Log Replication while waiting for snapshot sync apply to complete", transitionEventId);
                 return fsm.getStates().get(LogReplicationStateType.ERROR);
             default: {
-                log.warn("Unexpected log replication event {} when in wait snapshot sync apply state.", event.getType());
+                log.warn("[{}]:: Unexpected log replication event {} when in wait snapshot sync apply state.", transitionEventId, event.getType());
                 throw new IllegalTransitionException(event.getType(), getType());
             }
         }
@@ -141,7 +141,7 @@ public class WaitSnapshotApplyState implements LogReplicationState {
 
     @Override
     public void onEntry(LogReplicationState from) {
-        log.info("OnEntry :: wait snapshot apply state");
+        log.info("[{}]:: OnEntry :: wait snapshot apply state", transitionEventId);
         if (from.getType().equals(LogReplicationStateType.INITIALIZED)) {
             fsm.getAckReader().setSyncType(SyncType.SNAPSHOT);
             stopSnapshotApply.set(false);
@@ -167,7 +167,7 @@ public class WaitSnapshotApplyState implements LogReplicationState {
 
     private void verifyStatusOfSnapshotSyncApply() {
         try {
-            log.info("Verify snapshot sync apply status, sync={}", transitionEventId);
+            log.info("[{}]:: Verify snapshot sync apply status", transitionEventId);
 
             // Query metadata on remote cluster to verify the status of the snapshot sync apply
             CompletableFuture<LogReplicationMetadataResponseMsg>
@@ -179,13 +179,13 @@ public class WaitSnapshotApplyState implements LogReplicationState {
             // (incremental update replication), otherwise, schedule new query.
             if (metadataResponse.getLastLogEntryTimestamp() == metadataResponse.getSnapshotApplied() &&
                     metadataResponse.getSnapshotApplied() == baseSnapshotTimestamp) {
-                log.info("Snapshot sync apply is complete appliedTs={}, baseTs={}", metadataResponse.getSnapshotApplied(),
-                        baseSnapshotTimestamp);
+                log.info("[{}]:: Snapshot sync apply is complete appliedTs={}, baseTs={}", transitionEventId,
+                        metadataResponse.getSnapshotApplied(), baseSnapshotTimestamp);
                 fsm.input(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_APPLY_COMPLETE,
                         new LogReplicationEventMetadata(transitionEventId, baseSnapshotTimestamp, baseSnapshotTimestamp), fsm));
             } else {
-                log.debug("Snapshot sync apply is still in progress, appliedTs={}, baseTs={}, sync_id={}", metadataResponse.getSnapshotApplied(),
-                        baseSnapshotTimestamp, transitionEventId);
+                log.debug("[{}]:: Snapshot sync apply is still in progress, appliedTs={}, baseTs={}", transitionEventId,
+                        metadataResponse.getSnapshotApplied(), baseSnapshotTimestamp);
                 if (!stopSnapshotApply.get()) {
                     // Schedule a one time action which will verify the snapshot apply status after a given delay
                     this.snapshotSyncApplyMonitorExecutor.schedule(this::scheduleSnapshotApplyVerification, SCHEDULE_APPLY_MONITOR_DELAY,
@@ -193,18 +193,18 @@ public class WaitSnapshotApplyState implements LogReplicationState {
                 }
             }
         } catch (TimeoutException te) {
-            log.error("Snapshot sync apply verification timed out.", te);
+            log.error("[{}]:: Snapshot sync apply verification timed out.", transitionEventId, te);
             // Schedule a one time action which will verify the snapshot apply status after a given delay
             this.snapshotSyncApplyMonitorExecutor.schedule(this::scheduleSnapshotApplyVerification, SCHEDULE_APPLY_MONITOR_DELAY,
                     TimeUnit.MILLISECONDS);
         } catch (ExecutionException ee) {
             // Completable future completed exceptionally
-            log.error("Snapshot sync apply verification failed.", ee);
+            log.error("[{}]:: Snapshot sync apply verification failed.", transitionEventId, ee);
             // Schedule a one time action which will verify the snapshot apply status after a given delay
             this.snapshotSyncApplyMonitorExecutor.schedule(this::scheduleSnapshotApplyVerification, SCHEDULE_APPLY_MONITOR_DELAY,
                     TimeUnit.MILLISECONDS);
         } catch (Exception e) {
-            log.error("Snapshot sync apply verification failed.", e);
+            log.error("[{}]:: Snapshot sync apply verification failed.",transitionEventId, e);
             // Schedule a one time action which will verify the snapshot apply status after a given delay
             this.snapshotSyncApplyMonitorExecutor.schedule(this::scheduleSnapshotApplyVerification, SCHEDULE_APPLY_MONITOR_DELAY,
                     TimeUnit.MILLISECONDS);
@@ -212,7 +212,7 @@ public class WaitSnapshotApplyState implements LogReplicationState {
     }
 
     private void scheduleSnapshotApplyVerification() {
-        log.debug("Schedule verification of snapshot sync apply id={}", transitionEventId);
+        log.debug("[{}]:: Schedule verification of snapshot sync apply", transitionEventId);
         fsm.input(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_APPLY_IN_PROGRESS,
                 new LogReplicationEventMetadata(transitionEventId), fsm));
     }

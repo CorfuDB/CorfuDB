@@ -86,6 +86,8 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
     @Getter
     private Phase phase;
 
+    private UUID snapshotSyncId;
+
     public StreamsSnapshotWriter(CorfuRuntime rt, LogReplicationMetadataManager metadataManager,
                                  LogReplicationSession session, LogReplicationContext replicationContext) {
         super(session, replicationContext);
@@ -121,7 +123,7 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
         if (metadata.getEntryType() != LogReplicationEntryType.SNAPSHOT_MESSAGE ||
                 metadata.getSnapshotTimestamp() != srcGlobalSnapshot ||
                 metadata.getSnapshotSyncSeqNum() != recvSeq) {
-            log.error("Expected snapshot={}, received snapshot={}, expected seq={}, received seq={}",
+            log.error("[{}]:: Expected snapshot={}, received snapshot={}, expected seq={}, received seq={}", snapshotSyncId,
                     srcGlobalSnapshot, metadata.getSnapshotTimestamp(), metadata.getSnapshotSyncSeqNum(), recvSeq);
             throw new ReplicationWriterException("Snapshot message out of order");
         }
@@ -133,12 +135,13 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
      * @param topologyId topology epoch
      * @param snapshot base snapshot timestamp
      */
-    public void reset(long topologyId, long snapshot) {
-        log.debug("Reset snapshot writer, snapshot={}, topologyConfigId={}", snapshot, topologyId);
+    public void reset(long topologyId, long snapshot, UUID syncId) {
+        log.debug("[{}]:: Reset snapshot writer, snapshot={}, topologyConfigId={}", syncId, snapshot, topologyId);
         topologyConfigId = topologyId;
         srcGlobalSnapshot = snapshot;
         recvSeq = 0;
         phase = Phase.TRANSFER_PHASE;
+        snapshotSyncId = syncId;
         snapshotSyncStartMarker = Optional.empty();
         replicatedStreamIds.clear();
         // Sync with registry table to capture local updates on Sink side
@@ -170,7 +173,7 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
             }
         }
 
-        log.debug("Process entries total={}, set sequence number {}", smrEntries.size(), currentSeqNum);
+        log.debug("[{}]:: Process entries total={}, set sequence number {}", snapshotSyncId, smrEntries.size(), currentSeqNum);
     }
 
     /**
@@ -186,9 +189,10 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
         long persistedSequenceNum = metadata.getLastSnapshotTransferredSeqNumber();
 
         if (topologyConfigId != persistedTopologyConfigId || srcGlobalSnapshot != persistedSnapshotStart) {
-            log.warn("Skip processing opaque entry. Current topologyConfigId={}, srcGlobalSnapshot={}, currentSeqNum={}, " +
-                            "persistedTopologyConfigId={}, persistedSnapshotStart={}, persistedLastSequenceNum={}", topologyConfigId,
-                    srcGlobalSnapshot, recvSeq, persistedTopologyConfigId, persistedSnapshotStart, persistedSequenceNum);
+            log.warn("[{}]:: Skip processing opaque entry. Current topologyConfigId={}, srcGlobalSnapshot={}, currentSeqNum={}, " +
+                            "persistedTopologyConfigId={}, persistedSnapshotStart={}, persistedLastSequenceNum={}",
+                    snapshotSyncId, topologyConfigId, srcGlobalSnapshot, recvSeq, persistedTopologyConfigId,
+                    persistedSnapshotStart, persistedSequenceNum);
             return;
         }
 
@@ -217,30 +221,30 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
 
         if (message.getMetadata().getSnapshotSyncSeqNum() != recvSeq ||
                 message.getMetadata().getEntryType() != LogReplicationEntryType.SNAPSHOT_MESSAGE) {
-            log.error("Received {} Expecting snapshot message sequencer number {} != recvSeq {} or wrong message type {} expecting {}",
-                    message.getMetadata(), message.getMetadata().getSnapshotSyncSeqNum(), recvSeq,
+            log.error("[{}]:: Received {} Expecting snapshot message sequencer number {} != recvSeq {} or wrong message type {} expecting {}",
+                    snapshotSyncId, message.getMetadata(), message.getMetadata().getSnapshotSyncSeqNum(), recvSeq,
                     message.getMetadata().getEntryType(), LogReplicationEntryType.SNAPSHOT_MESSAGE);
-            throw new ReplicationWriterException("Message is out of order or wrong type");
+            throw new ReplicationWriterException("Message is out of order or wrong type. Sync ID " + snapshotSyncId);
         }
 
         List<OpaqueEntry> opaqueEntryList = CorfuProtocolLogReplication.extractOpaqueEntries(message);
 
         // For snapshot message, it has only one opaque entry.
         if (opaqueEntryList.size() > 1) {
-            log.error(" Get {} instead of one opaque entry in Snapshot Message", opaqueEntryList.size());
+            log.error("[{}]:: Get {} instead of one opaque entry in Snapshot Message", snapshotSyncId, opaqueEntryList.size());
             return;
         }
 
         OpaqueEntry opaqueEntry = opaqueEntryList.get(0);
         if (opaqueEntry.getEntries().keySet().size() != 1) {
-            log.error("The opaqueEntry has more than one entry {}", opaqueEntry);
+            log.error("[{}]:: The opaqueEntry has more than one entry {}", snapshotSyncId, opaqueEntry);
             return;
         }
         UUID regularStreamId = opaqueEntry.getEntries().keySet().stream().findFirst().get();
 
         if (ignoreEntriesForStream(regularStreamId)) {
-            log.warn("Skip applying log entries for stream {} as it is noisy. Source and Sink are likely to be operating in" +
-                    " different versions", regularStreamId);
+            log.warn("[{}]:: Skip applying log entries for stream {} as it is noisy. Source and Sink are likely to be operating in" +
+                    " different versions", snapshotSyncId, regularStreamId);
             recvSeq++;
             return;
         }
@@ -274,9 +278,9 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
      * @param snapshot base snapshot timestamp
      */
     private void applyShadowStream(UUID streamId, long snapshot) {
-        log.debug("Apply shadow stream for stream {}, snapshot={}", streamId, snapshot);
+        log.debug("[{}]:: Apply shadow stream for stream {}, snapshot={}", snapshotSyncId, streamId, snapshot);
 
-        log.trace("Current addresses of stream {} :: {}", streamId, rt.getSequencerView().getStreamAddressSpace(
+        log.trace("[{}]:: Current addresses of stream {} :: {}", snapshotSyncId, streamId, rt.getSequencerView().getStreamAddressSpace(
             new StreamAddressRange(streamId, Long.MAX_VALUE, Address.NON_ADDRESS)));
 
         UUID shadowStreamId = getShadowStreamId(streamId);
@@ -310,7 +314,7 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
         // 2. Streams which did not evidence data on either source or sink
         // as these streams will get trimmed and 'clear' will be a 'data loss'.
         if (MERGE_ONLY_STREAMS.contains(streamId)) {
-            log.debug("Do not clear stream={} (merge stream)", streamId);
+            log.debug("[{}]:: Do not clear stream={} (merge stream)", snapshotSyncId, streamId);
         }
 
         boolean shouldAddClearRecord = !MERGE_ONLY_STREAMS.contains(streamId);
@@ -328,7 +332,7 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
 
         // if clear record has not been added by now, indicates that shadow stream is empty.
         if (shouldAddClearRecord) {
-            log.trace("No data was written to stream {} on source or sink. Do not clear.", streamId);
+            log.trace("[{}]:: No data was written to stream {} on source or sink. Do not clear.", snapshotSyncId, streamId);
             return;
         }
 
@@ -354,8 +358,8 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
                 try (TxnContext txnContext = metadataManager.getTxnContext()) {
                     updateLog(txnContext, buffer, streamId);
                     CorfuStoreMetadata.Timestamp ts = txnContext.commit();
-                    log.debug("Applied shadow stream partially for stream {} on address :: {}.  {} SMR entries written",
-                        streamId, ts.getSequence(), buffer.size());
+                    log.debug("[{}]:: Applied shadow stream partially for stream {} on address :: {}.  {} SMR entries written",
+                        snapshotSyncId, streamId, ts.getSequence(), buffer.size());
                     buffer.clear();
                     buffer.add(smrEntry);
                     bufferSize = smrEntry.getSerializedSize();
@@ -372,8 +376,8 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
                 txnContext.commit();
             }
         }
-        log.debug("Completed applying updates to stream {}.  {} entries applied across {} transactions.  ", streamId,
-            smrEntries.size(), numBatches);
+        log.debug("[{}]:: Completed applying updates to stream {}.  {} entries applied across {} transactions.  ",
+                snapshotSyncId, streamId, smrEntries.size(), numBatches);
     }
 
     private boolean maxEntriesLimitReached(UUID streamId, List<SMREntry> buffer) {
@@ -385,7 +389,7 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
      * Read from shadowStream and append/apply to the actual stream
      */
     public void applyShadowStreams() {
-        log.debug("Apply Shadow Streams, total={}", replicatedStreamIds.size());
+        log.debug("[{}]:: Apply Shadow Streams, total={}", snapshotSyncId, replicatedStreamIds.size());
         long snapshot = rt.getAddressSpaceView().getLogTail();
 
         // Registry table needs to be applied first, as there could be tables that haven't been opened in Sink side,
@@ -420,7 +424,7 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
         long sequenceNumber = metadataManager.getReplicationMetadata(session).getLastSnapshotTransferredSeqNumber();
 
         if (sequenceNumber != Address.NON_ADDRESS) {
-            log.debug("Start applying shadow streams, seqNum={}", sequenceNumber);
+            log.debug("[{}]:: Start applying shadow streams, seqNum={}", snapshotSyncId, sequenceNumber);
             applyShadowStreams();
         }
     }
@@ -452,8 +456,8 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
             streamsToQuery.add(id);
         }
 
-        log.debug("Total of {} streams were replicated from Source, sequencer query for {} streams, streamsToQuery={}",
-            replicatedStreamIds.size(), streamsToQuery.size(), streamsToQuery);
+        log.debug("[{}]:: Total of {} streams were replicated from Source, sequencer query for {} streams, streamsToQuery={}",
+            snapshotSyncId, replicatedStreamIds.size(), streamsToQuery.size(), streamsToQuery);
         TokenResponse tokenResponse = rt.getSequencerView().query(
             streamsToQuery.toArray(new UUID[0]));
         Set<UUID> streamsWithLocalWrites = new HashSet<>();
@@ -464,10 +468,10 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
         });
 
         if (!streamsWithLocalWrites.isEmpty()) {
-            log.debug("Clear streams with local writes, total={}, streams={}",
+            log.debug("[{}]:: Clear streams with local writes, total={}, streams={}", snapshotSyncId,
                 streamsWithLocalWrites.size(), streamsWithLocalWrites);
         } else {
-            log.debug("No local written streams were found, nothing to clear.");
+            log.debug("[{}]:: No local written streams were found, nothing to clear.", snapshotSyncId);
         }
         clearStreams(streamsWithLocalWrites);
     }
@@ -482,15 +486,15 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
                         clearStream(streamId, txnContext);
                     });
                     CorfuStoreMetadata.Timestamp ts = txnContext.commit();
-                    log.trace("Clear {} streams committed at :: {}", streamsToClear.size(), ts.getSequence());
+                    log.trace("[{}]:: Clear {} streams committed at :: {}", snapshotSyncId, streamsToClear.size(), ts.getSequence());
                 } catch (TransactionAbortedException tae) {
-                    log.error("Error while attempting to clear locally written streams.", tae);
+                    log.error("[{}]:: Error while attempting to clear locally written streams.",snapshotSyncId, tae);
                     throw new RetryNeededException();
                 }
                 return null;
             }).run();
         } catch (InterruptedException e) {
-            log.error("Unrecoverable exception when attempting to clear locally written streams.", e);
+            log.error("[{}]:: Unrecoverable exception when attempting to clear locally written streams.", snapshotSyncId, e);
             throw new UnrecoverableCorfuInterruptedError(e);
         }
     }

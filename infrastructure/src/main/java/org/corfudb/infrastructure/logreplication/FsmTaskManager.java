@@ -34,6 +34,7 @@ public class FsmTaskManager {
     private Map<LogReplicationSession, LinkedList<UUID>> sessionToReplicationEventIdMap;
 
     public FsmTaskManager (String threadName, int threadCount) {
+        //TODO V2: add metrics around the queue sizes
         fsmWorker = Executors.newFixedThreadPool(threadCount, new ThreadFactoryBuilder().setNameFormat(threadName+"-%d").build());
         sessionToRuntimeEventIdMap = new ConcurrentHashMap<>();
         sessionToReplicationEventIdMap = new ConcurrentHashMap<>();

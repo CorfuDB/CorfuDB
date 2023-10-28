@@ -201,13 +201,12 @@ public class LogReplicationFSM {
      * @param dataSender        implementation of a data sender, both snapshot and log entry, this represents
      *                          the application callback for data transmission
      * @param readProcessor     read processor for data transformation
-     * @param workers           FSM executor service for state tasks
      * @param ackReader         AckReader which listens to acks from the Sink and updates the replication status accordingly
      * @param session           Replication Session to the remote(Sink) cluster
      * @param replicationContext Replication context
      */
     public LogReplicationFSM(CorfuRuntime runtime, DataSender dataSender,
-                             ReadProcessor readProcessor, ExecutorService workers, LogReplicationAckReader ackReader,
+                             ReadProcessor readProcessor, LogReplicationAckReader ackReader,
                              LogReplicationSession session, LogReplicationContext replicationContext) {
         this.taskManager = replicationContext.getReplicationFsmTaskManager();
         this.snapshotReader = createSnapshotReader(runtime, session, replicationContext);

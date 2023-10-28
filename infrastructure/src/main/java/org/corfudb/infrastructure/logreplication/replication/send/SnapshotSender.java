@@ -97,7 +97,7 @@ public class SnapshotSender {
      */
     public void transmit(UUID snapshotSyncEventId) {
 
-        log.info("Running snapshot sync for {} on baseSnapshot {}", snapshotSyncEventId,
+        log.info("[{}]:: Running snapshot sync on baseSnapshot {}", snapshotSyncEventId,
                 baseSnapshotTimestamp);
 
         boolean completed = false;  // Flag indicating the snapshot sync is completed
@@ -122,13 +122,13 @@ public class SnapshotSender {
                     // Data Transformation / Processing
                     // readProcessor.process(snapshotReadMessage.getMessages())
                 } catch (TrimmedException te) {
-                    log.warn("Cancel snapshot sync due to trimmed exception.", te);
+                    log.warn("[{}]:: Cancel snapshot sync due to trimmed exception.",snapshotSyncEventId, te);
                     dataSenderBufferManager.reset(Address.NON_ADDRESS);
                     snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.TRIM_SNAPSHOT_SYNC);
                     cancel = true;
                     break;
                 } catch (Exception e) {
-                    log.error("Caught exception during snapshot sync", e);
+                    log.error("[{}]:: Caught exception during snapshot sync", snapshotSyncEventId, e);
                     snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.UNKNOWN);
                     cancel = true;
                     break;
@@ -147,19 +147,19 @@ public class SnapshotSender {
                     if (ack.getMetadata().getSnapshotTimestamp() == baseSnapshotTimestamp &&
                             ack.getMetadata().getEntryType().equals(LogReplicationEntryType.SNAPSHOT_TRANSFER_COMPLETE)) {
                         // Snapshot Sync Transfer Completed
-                        log.info("Snapshot sync transfer completed for {} on timestamp={}, ack={}", snapshotSyncEventId,
+                        log.info("[{}]:: Snapshot sync transfer completed on timestamp={}, ack={}", snapshotSyncEventId,
                                 baseSnapshotTimestamp, TextFormat.shortDebugString(ack.getMetadata()));
                         snapshotSyncTransferComplete(snapshotSyncEventId);
                     } else {
-                        log.warn("Expected ack for {}, but received for a different snapshot {}", baseSnapshotTimestamp,
-                                ack.getMetadata());
+                        log.warn("[{}]:: Expected ack for {}, but received for a different snapshot {} for sync ID {}",
+                                snapshotSyncEventId, baseSnapshotTimestamp, ack.getMetadata());
                         throw new Exception("Wrong base snapshot ack");
                     }
                 } catch (Exception e) {
-                    log.error("Exception caught while blocking on snapshot sync {}, ack for {}",
+                    log.error("[{}]:: Exception caught while blocking on snapshot sync, ack for {}",
                             snapshotSyncEventId, baseSnapshotTimestamp, e);
                     if (snapshotSyncAck.isCompletedExceptionally()) {
-                        log.error("Snapshot Sync completed exceptionally", e);
+                        log.error("[{}]:: Snapshot Sync completed exceptionally",snapshotSyncEventId, e);
                     }
                     snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.UNKNOWN);
                 } finally {
@@ -171,12 +171,12 @@ public class SnapshotSender {
                 // Snapshot Sync is not performed in a single run, as for the case of multi-cluster replication
                 // the shared thread pool could be lower than the number of sites, so we assign resources in
                 // a round robin fashion.
-                log.trace("Snapshot sync continue for {} on timestamp {}", snapshotSyncEventId, baseSnapshotTimestamp);
+                log.trace("[{}]:: Snapshot sync continue on timestamp {}", snapshotSyncEventId, baseSnapshotTimestamp);
                 fsm.input(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_CONTINUE,
                         new LogReplicationEventMetadata(snapshotSyncEventId), fsm));
             }
         } else {
-            log.info("Snapshot sync completed for {} as there is no data in the log.", snapshotSyncEventId);
+            log.info("[{}]:: Snapshot sync completed as there is no data in the log.", snapshotSyncEventId);
 
             try {
                 dataSenderBufferManager.sendWithBuffering(getSnapshotSyncStartMarker(snapshotSyncEventId));
@@ -184,7 +184,7 @@ public class SnapshotSender {
                 snapshotSyncAck.get(DEFAULT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
                 snapshotSyncTransferComplete(snapshotSyncEventId);
             } catch (Exception e) {
-                log.warn("Caught exception while sending data to sink.", e);
+                log.warn("[{}]:: Caught exception while sending data to sink.", snapshotSyncEventId, e);
                 snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.UNKNOWN);
             }
         }
@@ -213,7 +213,7 @@ public class SnapshotSender {
         // If Snapshot is complete, add end marker
         if (completed) {
             LogReplicationEntryMsg endDataMessage = getSnapshotSyncEndMarker(snapshotSyncEventId);
-            log.info("SnapshotSender sent out SNAPSHOT_END message {} ", endDataMessage.getMetadata());
+            log.info("[{}]:: SnapshotSender sent out SNAPSHOT_END message {}", snapshotSyncEventId, endDataMessage.getMetadata());
             snapshotSyncAck = dataSenderBufferManager.sendWithBuffering(endDataMessage);
             numMessages++;
         }
@@ -275,7 +275,7 @@ public class SnapshotSender {
         // Report error to the application through the dataSender
         dataSenderBufferManager.onError(error);
 
-        log.error("SNAPSHOT SYNC is being CANCELED, due to {}", error.getDescription());
+        log.error("SNAPSHOT SYNC {} is being CANCELED, due to {}", snapshotSyncEventId, error.getDescription());
 
         // Enqueue cancel event, this will cause re-entrance to snapshot sync to start a new cycle
         fsm.input(new LogReplicationEvent(LogReplicationEventType.SYNC_CANCEL,

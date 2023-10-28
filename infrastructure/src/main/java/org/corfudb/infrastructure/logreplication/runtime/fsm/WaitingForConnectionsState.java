@@ -26,7 +26,7 @@ public class WaitingForConnectionsState implements LogReplicationRuntimeState {
     public LogReplicationRuntimeState processEvent(LogReplicationRuntimeEvent event) throws IllegalTransitionException {
         switch (event.getType()) {
             case ON_CONNECTION_UP:
-                log.info("On connection up, event={}", event);
+                log.info("On connection up, event={} session {}", event, fsm.getSession());
                 // Set Connected Endpoint for event transition.
                 fsm.updateConnectedNodes(event.getNodeId());
                 return fsm.getStates().get(LogReplicationRuntimeStateType.VERIFYING_REMOTE_LEADER);
@@ -42,6 +42,6 @@ public class WaitingForConnectionsState implements LogReplicationRuntimeState {
     @Override
     public void onEntry(LogReplicationRuntimeState from) {
         // Wait for connections to come up ..
-        log.info("Waiting for connections to remote cluster to be established..");
+        log.info("Waiting for connections to remote cluster to be established for session {}", fsm.getSession());
     }
 }

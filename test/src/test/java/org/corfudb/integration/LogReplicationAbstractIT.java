@@ -244,33 +244,37 @@ public class LogReplicationAbstractIT extends AbstractIT {
             startLogReplicatorServers();
 
             log.info(">> Wait ... Snapshot log replication in progress ...");
+            System.out.println(">> Wait ... Snapshot log replication in progress ...");
             verifyDataOnSink(numWrites);
 
             // Confirm replication status reflects snapshot sync completed
             log.info(">> Verify replication status completed on source");
+            System.out.println(">> Verify replication status completed on source ...");
             verifyReplicationStatusFromSource();
 
             // Wait until both plugin updates
             log.info(">> Wait snapshot sync plugin updates received");
+            System.out.println(">> Wait snapshot sync plugin updates received...");
             latchSnapshotSyncPlugin.await();
             // Confirm snapshot sync plugin was triggered on start and on end
             validateSnapshotSyncPlugin(snapshotSyncPluginListener);
 
             // Add Delta's for Log Entry Sync
             log.info(">> Write deltas");
+            System.out.println("Write deltas");
             writeToSource(numWrites, numWrites / 2);
 
-            log.info(">> Wait ... Delta log replication in progress ...");
+            System.out.println(">> Wait ... Delta log replication in progress ...");
             verifyDataOnSink(numWrites + (numWrites / 2));
 
             // Verify Sink Status Listener received all expected updates (is_data_consistent)
-            log.info(">> Wait ... Replication status UPDATE ..." + statusUpdateLatch.getCount());
+            System.out.println(">> Wait ... Replication status UPDATE ..." + statusUpdateLatch.getCount());
             statusUpdateLatch.await();
             assertThat(sinkListener.getAccumulatedStatus().size()).isEqualTo(totalSinkStatusUpdateEntries);
             // Confirm last updates are set to true (corresponding to snapshot sync completed and log entry sync started)
             assertThat(sinkListener.getAccumulatedStatus().get(sinkListener.getAccumulatedStatus().size() - 1)).isTrue();
             assertThat(sinkListener.getAccumulatedStatus()).contains(false);
-
+            System.out.println("asserts done");
             if (checkRemainingEntriesOnSecondLogEntrySync) {
                 triggerSnapshotAndTestRemainingEntries();
             }
@@ -315,6 +319,24 @@ public class LogReplicationAbstractIT extends AbstractIT {
 
     private void triggerSnapshotAndTestRemainingEntries() throws Exception{
 
+        // enforce a snapshot sync
+        Table<ExampleSchemas.ClusterUuidMsg, ExampleSchemas.ClusterUuidMsg, ExampleSchemas.ClusterUuidMsg> configTable =
+                corfuStoreSource.openTable(
+                        DefaultClusterManager.CONFIG_NAMESPACE, DefaultClusterManager.CONFIG_TABLE_NAME,
+                        ExampleSchemas.ClusterUuidMsg.class, ExampleSchemas.ClusterUuidMsg.class, ExampleSchemas.ClusterUuidMsg.class,
+                        TableOptions.fromProtoSchema(ExampleSchemas.ClusterUuidMsg.class)
+                );
+        System.out.println("Enforce snapshot sync");
+        try (TxnContext txn = corfuStoreSource.txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
+            txn.putRecord(configTable, DefaultClusterManager.OP_ENFORCE_SNAPSHOT_FULL_SYNC,
+                    DefaultClusterManager.OP_ENFORCE_SNAPSHOT_FULL_SYNC, DefaultClusterManager.OP_ENFORCE_SNAPSHOT_FULL_SYNC);
+            txn.commit();
+        }
+
+        // Sleep, so we have remainingEntries populated from the scheduled polling task instead of
+        // from method that marks snapshot complete
+        TimeUnit.SECONDS.sleep(longInterval);
+
         CountDownLatch statusUpdateLatch = new CountDownLatch(1);
         ReplicationStatusListener sourceListener = new ReplicationStatusListener(statusUpdateLatch, true);
         corfuStoreSource.subscribeListener(sourceListener, LogReplicationMetadataManager.NAMESPACE, LR_STATUS_STREAM_TAG);
@@ -326,23 +348,6 @@ public class LogReplicationAbstractIT extends AbstractIT {
                 null,
                 TableOptions.fromProtoSchema(ReplicationStatus.class));
 
-        // enforce a snapshot sync
-        Table<ExampleSchemas.ClusterUuidMsg, ExampleSchemas.ClusterUuidMsg, ExampleSchemas.ClusterUuidMsg> configTable =
-                corfuStoreSource.openTable(
-                        DefaultClusterManager.CONFIG_NAMESPACE, DefaultClusterManager.CONFIG_TABLE_NAME,
-                        ExampleSchemas.ClusterUuidMsg.class, ExampleSchemas.ClusterUuidMsg.class, ExampleSchemas.ClusterUuidMsg.class,
-                        TableOptions.fromProtoSchema(ExampleSchemas.ClusterUuidMsg.class)
-                );
-        try (TxnContext txn = corfuStoreSource.txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
-            txn.putRecord(configTable, DefaultClusterManager.OP_ENFORCE_SNAPSHOT_FULL_SYNC,
-                    DefaultClusterManager.OP_ENFORCE_SNAPSHOT_FULL_SYNC, DefaultClusterManager.OP_ENFORCE_SNAPSHOT_FULL_SYNC);
-            txn.commit();
-        }
-
-        // Sleep, so we have remainingEntries populated from the scheduled polling task instead of
-        // from method that marks snapshot complete
-        TimeUnit.SECONDS.sleep(longInterval);
-
         LogReplicationSession session = LogReplicationSession.newBuilder()
             .setSourceClusterId(new DefaultClusterConfig().getSourceClusterIds().get(0))
             .setSinkClusterId(new DefaultClusterConfig().getSinkClusterIds().get(0))
@@ -350,6 +355,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
             .build();
 
         ReplicationStatus replicationStatus;
+        System.out.println("await");
         statusUpdateLatch.await();
 
         try (TxnContext txn = corfuStoreSource.txn(LogReplicationMetadataManager.NAMESPACE)) {
@@ -478,6 +484,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
                 if (this.waitSnapshotStatusComplete &&
                     status.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus()
                         .equals(SyncStatus.COMPLETED)) {
+                    System.out.println("got completion");
                     countDownLatch.countDown();
                 }
             }));

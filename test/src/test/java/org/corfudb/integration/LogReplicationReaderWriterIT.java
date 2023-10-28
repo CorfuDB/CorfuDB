@@ -282,7 +282,7 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
         long snapshot = msgQ.get(0).getMetadata().getSnapshotTimestamp();
         logReplicationMetadataManager.updateReplicationMetadataField(getDefaultSession(),
                 LogReplicationMetadata.ReplicationMetadata.LASTSNAPSHOTSTARTED_FIELD_NUMBER, snapshot);
-        writer.reset(topologyConfigId, snapshot);
+        writer.reset(topologyConfigId, snapshot, UUID.randomUUID());
 
         for (LogReplicationEntryMsg msg : msgQ) {
             writer.apply(msg);

@@ -92,11 +92,8 @@ public class LogReplicationSourceManager {
         Set<String> streamsToReplicate = replicationContext.getConfig(session).getStreamsToReplicate();
         if (streamsToReplicate == null || streamsToReplicate.isEmpty()) {
             // Avoid FSM being initialized if there are no streams to replicate
-            throw new IllegalArgumentException("Invalid Log Replication: Streams to replicate is EMPTY");
+            throw new IllegalArgumentException("Invalid Log Replication: Streams to replicate is EMPTY for session " + session);
         }
-
-        ExecutorService logReplicationFSMWorkers = Executors.newFixedThreadPool(DEFAULT_FSM_WORKER_THREADS,
-                new ThreadFactoryBuilder().setNameFormat("state-machine-worker-" + session.hashCode()).build());
 
         ReadProcessor readProcessor = new DefaultReadProcessor(runtime);
         this.metadataManager = metadataManager;
@@ -104,8 +101,7 @@ public class LogReplicationSourceManager {
         // Ack Reader for Snapshot and LogEntry Sync
         this.ackReader = new LogReplicationAckReader(this.metadataManager, runtime, session, replicationContext);
 
-        this.logReplicationFSM = new LogReplicationFSM(this.runtime, dataSender, readProcessor,
-                logReplicationFSMWorkers, ackReader, session, replicationContext);
+        this.logReplicationFSM = new LogReplicationFSM(this.runtime, dataSender, readProcessor, ackReader, session, replicationContext);
         this.logReplicationFSM.setTopologyConfigId(params.getTopologyConfigId());
         this.ackReader.setLogEntryReader(this.logReplicationFSM.getLogEntryReader());
         this.ackReader.setLogEntrySender(this.logReplicationFSM.getLogEntrySender());
@@ -124,7 +120,8 @@ public class LogReplicationSourceManager {
     }
 
     private UUID startSnapshotSync(LogReplicationEvent snapshotSyncRequest, boolean forced) {
-        log.info("Start Snapshot Sync, requestId={}, forced={}", snapshotSyncRequest.getEventId(), forced);
+        log.info("Start Snapshot Sync, requestId={}, forced={} session {}", snapshotSyncRequest.getEventId(), forced,
+                logReplicationFSM.getSession());
         // Enqueue snapshot sync request into Log Replication FSM
         logReplicationFSM.input(snapshotSyncRequest);
         return snapshotSyncRequest.getEventId();
@@ -149,7 +146,7 @@ public class LogReplicationSourceManager {
      */
     public void startReplication(LogReplicationEvent replicationEvent) {
         // Enqueue event into Log Replication FSM
-        log.info("Start replication event {}", replicationEvent);
+        log.info("Start replication event {} for session {}", replicationEvent, logReplicationFSM.getSession());
         logReplicationFSM.input(replicationEvent);
     }
 
@@ -157,7 +154,7 @@ public class LogReplicationSourceManager {
      * Stop Log Replication
      */
     public void stopLogReplication() {
-        log.info("Stop Log Replication");
+        log.info("Stop Log Replication for session {}", logReplicationFSM.getSession());
         logReplicationFSM.input(new LogReplicationEvent(LogReplicationEventType.REPLICATION_STOP, logReplicationFSM));
     }
 
@@ -180,10 +177,11 @@ public class LogReplicationSourceManager {
                 logReplicationEvent.wait();
             }
         } catch (InterruptedException e) {
-            log.error("Caught an exception during source manager shutdown ", e);
+            log.error("Caught an exception during source manager shutdown for session {}", logReplicationFSM.getSession(), e);
         }
 
-        log.info("Shutdown Log Replication.");
+
+        log.info("Shutdown Log Replication for session {}", logReplicationFSM.getSession());
         runtime.shutdown();
     }
 
