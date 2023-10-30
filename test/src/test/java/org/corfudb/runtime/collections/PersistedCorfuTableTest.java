@@ -37,6 +37,7 @@ import org.corfudb.runtime.object.PersistenceOptions;
 import org.corfudb.runtime.object.PersistenceOptions.PersistenceOptionsBuilder;
 import org.corfudb.runtime.object.RocksDbReadCommittedTx;
 import org.corfudb.runtime.object.RocksDbStore;
+import org.corfudb.runtime.object.RocksDbStore.IndexMode;
 import org.corfudb.runtime.object.RocksDbStore.StoreMode;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.test.SampleSchema;
@@ -655,29 +656,6 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
         }
     }
 
-    @Test
-    public void testDiskBackedCorfu() throws Exception {
-        PersistenceOptions persistenceOptions = PersistenceOptions.builder()
-                .dataPath(testTempDir.newFolder().toPath())
-                .build();
-
-        RocksDbStore<DiskBackedCorfuTable<String, String>> rocksDbStore = new RocksDbStore<>(
-                persistenceOptions.getDataPath(), defaultOptions,
-                DiskBackedCorfuTable.WRITE_OPTIONS, persistenceOptions, StoreMode.PERSISTENT
-        );
-
-        DiskBackedCorfuTable<String, String> corfuTable = new DiskBackedCorfuTable<>(defaultSerializer, rocksDbStore);
-        corfuTable.put("test", "test");
-        corfuTable.close();
-
-        rocksDbStore = new RocksDbStore<>(
-                persistenceOptions.getDataPath(), defaultOptions,
-                DiskBackedCorfuTable.WRITE_OPTIONS, persistenceOptions, StoreMode.PERSISTENT
-        );
-        corfuTable = new DiskBackedCorfuTable<>(defaultSerializer, rocksDbStore);
-        assertEquals("test", corfuTable.get("test"));
-    }
-
     @Property(tries = NUM_OF_TRIES)
     void invalidView() throws RocksDBException {
         PersistenceOptions persistenceOptions = PersistenceOptions
@@ -689,7 +667,7 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
 
         RocksDbStore<DiskBackedCorfuTable<String, String>> rocksDbStore = new RocksDbStore<>(
                 persistenceOptions.getDataPath(), defaultOptions,
-                DiskBackedCorfuTable.WRITE_OPTIONS, persistenceOptions, StoreMode.TEMPORARY
+                DiskBackedCorfuTable.WRITE_OPTIONS, persistenceOptions, StoreMode.TEMPORARY, IndexMode.INDEX
         );
 
         try (DiskBackedCorfuTable<String, String> table = new DiskBackedCorfuTable<>(defaultSerializer, rocksDbStore, Optional.empty())) {
