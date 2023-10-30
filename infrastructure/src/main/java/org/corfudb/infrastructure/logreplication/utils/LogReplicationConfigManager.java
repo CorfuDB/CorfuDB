@@ -145,7 +145,6 @@ public class LogReplicationConfigManager {
      * 3. Initialize registry table log tail and in-memory entries
      */
     private void init() {
-        if (session.getSinkClusterId().equals(localClusterId);
         registeredSubscribers.add(getDefaultSubscriber());
         openClientConfigTables();
         syncWithRegistryTable();

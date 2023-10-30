@@ -608,7 +608,8 @@ public class SessionManager {
         incomingMsgHandler.leadershipChanged();
     }
 
-    public void sendOutSessionToSinkSide(Set<LogReplicationSession> sessionForSinkSide) {
+    public void createAndSendOutgoingSession(ReplicationSubscriber subscriber) {
+        Set<LogReplicationSession> sessionForSinkSide = this.createOutgoingSessionsBySubscriber(subscriber);
         for (LogReplicationSession session : sessionForSinkSide) {
             LogReplication.LogReplicationSinkSessionInitializationMsg msg = LogReplication.LogReplicationSinkSessionInitializationMsg.newBuilder().setSession(session).build();
             CorfuMessage.RequestPayloadMsg payload = CorfuMessage.RequestPayloadMsg.newBuilder().setLrSinkSessionInitialization(msg).build();
