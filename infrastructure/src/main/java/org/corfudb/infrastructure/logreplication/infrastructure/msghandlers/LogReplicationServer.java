@@ -316,10 +316,10 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
     @LogReplicationRequestHandler(requestType = LR_SINK_SESSION_INITIALIZATION)
     private void handleSinkSessionCreationRequest(RequestMsg request, ResponseMsg res,
                                               @Nonnull IClientServerRouter router) {
-        log.debug("Log Replication Sink Side Session Initialization Request received by Server.");
+        log.debug("Log Replication Remote Session Register Request received by Server.");
         LogReplicationSession session = request.getPayload().getLrSinkSessionInitialization().getSession();
         createSinkManager(session);
-        this.sessionManager.refreshForSinkSideInitialization(session);
+        this.sessionManager.refreshForRemoteSessionRegister(session);
         LogReplication.LogReplicationSinkSessionInitializationAck ack =
                 LogReplication.LogReplicationSinkSessionInitializationAck.newBuilder().build();
         ResponsePayloadMsg payload = ResponsePayloadMsg.newBuilder().setLrSinkSessionInitializationAck(ack).build();
@@ -357,15 +357,6 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
         router.completeRequest(response.getHeader().getSession(), response.getHeader().getRequestId(),
                 response.getPayload().getLrLeadershipResponse());
     }
-
-    @LogReplicationResponseHandler(responseType = LR_SINK_SESSION_INITIALIZATION_ACK)
-    private void handleSinkSessionCreationResponse(RequestMsg req, ResponseMsg response,
-                                          @Nonnull IClientServerRouter router) {
-        log.debug("Handle log replication sink side session initialization response msg {}", TextFormat.shortDebugString(response));
-        router.completeRequest(response.getHeader().getSession(), response.getHeader().getRequestId(),
-                response.getPayload().getLrSinkSessionInitializationAck());
-    }
-
 
     /**
      * Send a leadership loss response.  This will re-trigger leadership discovery on the Source.

@@ -74,6 +74,8 @@ public class LogReplicationConfigManager {
 
     private final CorfuStore corfuStore;
 
+    private LogReplicationSession sessionComeFromSinkSide;
+
     private final String localClusterId;
 
     private long lastRegistryTableLogTail = Address.NON_ADDRESS;
@@ -93,7 +95,7 @@ public class LogReplicationConfigManager {
     @Getter
     private final Set<ReplicationSubscriber> registeredSubscribers = ConcurrentHashMap.newKeySet();
 
-    public ReplicationSubscriber clientReplicationSubscriber;
+    private static ReplicationSubscriber clientReplicationSubscriber;
 
     // Map from a logical group to all the Sinks it is targeting.
     private final Map<String, Set<String>> groupSinksMap = new ConcurrentHashMap<>();
@@ -124,16 +126,10 @@ public class LogReplicationConfigManager {
         init();
     }
 
-    /**
-    // TODO (V2): This builder should be removed after the rpc stream is added for Sink side session creation.
-    public static ReplicationSubscriber getDefaultLogicalGroupSubscriber() {
-        return ReplicationSubscriber.newBuilder()
-                .setClientName(DEFAULT_LOGICAL_GROUP_CLIENT)
-                .setModel(ReplicationModel.LOGICAL_GROUPS)
-                .build();
+    public static ReplicationSubscriber getLogicalGroupSubscriber() {
+        return clientReplicationSubscriber;
     }
 
-     */
     public static ReplicationSubscriber getDefaultSubscriber() {
         return ReplicationSubscriber.newBuilder()
                 .setClientName(DEFAULT_CLIENT)
@@ -149,10 +145,8 @@ public class LogReplicationConfigManager {
      * 3. Initialize registry table log tail and in-memory entries
      */
     private void init() {
+        if (session.getSinkClusterId().equals(localClusterId);
         registeredSubscribers.add(getDefaultSubscriber());
-        // TODO (V2): This builder should be removed after the rpc stream is added for Sink side session creation.
-        //  and logical group subscribers should come from client registration.
-        //registeredSubscribers.add(getDefaultLogicalGroupSubscriber());
         openClientConfigTables();
         syncWithRegistryTable();
     }
@@ -211,6 +205,7 @@ public class LogReplicationConfigManager {
     private void generateLogicalGroupConfig(LogReplicationSession session) {
         Map<UUID, List<UUID>> streamToTagsMap = new HashMap<>();
         Set<String> streamsToReplicate = new HashSet<>();
+        this.sessionComeFromSinkSide = session;
         // Check if the local cluster is the Sink for this session. Sink side will honor whatever Source side send
         // instead of relying on groupSinksMap to filter the streams to replicate.
         boolean isSink = session.getSinkClusterId().equals(localClusterId);
@@ -240,7 +235,7 @@ public class LogReplicationConfigManager {
                 String logicalGroup = entry.getValue().getMetadata().getTableOptions()
                         .getReplicationGroup().getLogicalGroup();
                 // TODO (V2): Client name should be checked after the rpc stream is added for Sink side session creation.
-                //if (session.getSubscriber().getClientName().equals(clientName) && groups.contains(logicalGroup)) {
+                if (session.getSubscriber().getClientName().equals(clientReplicationSubscriber.getClientName()) && clientReplicationSubscriber.getModel().equals(ReplicationModel.LOGICAL_GROUPS)) {
                     if (isSink || logicalGroupToStreams.containsKey(logicalGroup)) {
                         streamsToReplicate.add(tableName);
                         Set<String> relatedStreams = logicalGroupToStreams.getOrDefault(logicalGroup, new HashSet<>());
@@ -253,7 +248,7 @@ public class LogReplicationConfigManager {
                                 .collect(Collectors.toList()));
                         streamToTagsMap.put(streamId, tags);
                     }
-                    //}
+                    }
                 }
         });
 

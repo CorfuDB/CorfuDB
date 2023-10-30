@@ -78,9 +78,6 @@ public class LogReplicationClientConfigListener extends StreamListenerResumeOrFu
     public void start() {
         CorfuStoreMetadata.Timestamp timestamp = configManager.preprocessAndGetTail();
         configManager.generateConfig(sessionManager.getSessions());
-        // TODO: A workaround for the timestamp, since current implementation will not listen to the client update due
-        //  to the timestamp.
-        timestamp = CorfuStoreMetadata.Timestamp.newBuilder().setEpoch(0).setSequence(0).build();
 
         log.info("Start log replication listener for client config tables from {}", timestamp);
         try {
@@ -138,9 +135,15 @@ public class LogReplicationClientConfigListener extends StreamListenerResumeOrFu
                 ReplicationModel model = ((ClientRegistrationInfo) entry.getPayload()).getModel();
                 LogReplication.ReplicationSubscriber subscriber = LogReplication.ReplicationSubscriber.newBuilder()
                         .setClientName(clientName).setModel(model).build();
-                if (model.equals(ReplicationModel.LOGICAL_GROUPS) && model.equals(ReplicationModel.ROUTING_QUEUES)) {
-                    configManager.onNewClientRegister(subscriber);
-                    sessionManager.sendOutSessionToSinkSide(subscriber);
+                if (model.equals(ReplicationModel.LOGICAL_GROUPS) || model.equals(ReplicationModel.ROUTING_QUEUES)) {
+                    if(sessionManager.getReplicationContext().getIsLeader().get()) {
+                        configManager.onNewClientRegister(subscriber);
+                        Set<LogReplicationSession> sessionForSinkSide = sessionManager.createOutgoingSessionsBySubscriber(subscriber);
+                        sessionManager.sendOutSessionToSinkSide(sessionForSinkSide);
+                    }
+                    if (sessionManager.isConnectionReceiver()) {
+
+                    }
                 }
                 log.info("New client {} registered with model {}", clientName, model);
             } else if (entry.getOperation().equals(CorfuStreamEntry.OperationType.DELETE)) {

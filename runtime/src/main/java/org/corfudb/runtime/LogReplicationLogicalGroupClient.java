@@ -125,20 +125,20 @@ public class LogReplicationLogicalGroupClient {
                     ClientRegistrationInfo clientRegistrationInfo = txn.getRecord(replicationRegistrationTable, clientKey).getPayload();
 
                     if (clientRegistrationInfo != null) {
-                        log.info(String.format("Client already registered.\n--- ClientRegistrationId ---\n%s" +
+                        log.warn(String.format("Client already registered.\n--- ClientRegistrationId ---\n%s" +
                                 "--- ClientRegistrationInfo ---\n%s", clientKey, clientRegistrationInfo));
                     } else {
                         txn.putRecord(replicationRegistrationTable, clientKey, clientInfo, null);
                     }
                     txn.commit();
                 } catch (TransactionAbortedException tae) {
-                    log.info(String.format("[%s] Unable to register client.", clientName), tae);
+                    log.warn(String.format("[%s] Unable to register client.", clientName), tae);
                     throw new RetryNeededException();
                 }
                 return null;
             }).run();
         } catch (InterruptedException e) {
-            log.info(String.format("[%s] Client registration failed.", clientName), e);
+            log.warn(String.format("[%s] Client registration failed.", clientName), e);
             throw new UnrecoverableCorfuInterruptedError(e);
         }
     }

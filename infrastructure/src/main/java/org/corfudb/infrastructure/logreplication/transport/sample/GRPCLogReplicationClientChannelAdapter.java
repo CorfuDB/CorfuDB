@@ -390,32 +390,32 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
         StreamObserver<ResponseMsg> responseObserver = new StreamObserver<ResponseMsg>() {
             @Override
             public void onNext(ResponseMsg responseMsg) {
-                log.info("Received leadership response from node {}", nodeId);
+                log.info("Received remoteSessionRegister response from node {}", nodeId);
                 receive(responseMsg);
             }
 
             @Override
             public void onError(Throwable throwable) {
-                log.warn("Error encountered while receiving leadership response msg {}", throwable);
+                log.warn("Error encountered while receiving remoteSessionRegister response msg {}", throwable);
             }
 
             @Override
             public void onCompleted() {
-                log.info("Finished queryLeadership RPC");
+                log.info("Finished remoteSessionRegister RPC");
             }
         };
 
         try {
-            log.info("queryLeadership for session {}", session);
+            log.info("remoteSessionRegister for session {}", session);
             if (sessionToAsyncStubMap.containsKey(session)) {
                 sessionToAsyncStubMap.get(session).withDeadlineAfter(10, TimeUnit.SECONDS)
-                        .queryLeadership(request, responseObserver);
+                        .remoteSessionRegister(request, responseObserver);
             } else {
                 log.warn("Stub not found for session {}. Dropping message of type {}",
                         session, request.getPayload().getPayloadCase());
             }
         } catch (Exception e) {
-            log.error("Caught exception while sending message to query leadership status id {} on channel {}",
+            log.error("Caught exception while sending message to remoteSessionRegister status id {} on channel {}",
                     request.getHeader().getRequestId(), nodeIdToChannelMap.get(nodeId).hashCode(), e);
             onServiceUnavailable(e, nodeId, session);
             getRouter().completeExceptionally(session, request.getHeader().getRequestId(), e);
