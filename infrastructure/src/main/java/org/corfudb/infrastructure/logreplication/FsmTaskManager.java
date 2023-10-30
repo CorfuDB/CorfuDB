@@ -43,51 +43,57 @@ public class FsmTaskManager {
         if (isRuntimeEvent) {
             LogReplicationSession session = ((LogReplicationRuntimeEvent) event).getRuntimeFsm().getSession();
             sessionToRuntimeEventIdMap.putIfAbsent(session, new LinkedList<>());
-            sessionToRuntimeEventIdMap.get(session).add(((LogReplicationRuntimeEvent) event).getEventId());
+            // makes the value part of the map thread safe.
+            sessionToRuntimeEventIdMap.computeIfPresent(session, (sessionKey, eventList) -> {
+                eventList.add(((LogReplicationRuntimeEvent) event).getEventId());
+                return eventList;
+            });
             fsmWorker.submit(() -> processRuntimeTask((LogReplicationRuntimeEvent) event));
         } else {
             LogReplicationSession session = ((LogReplicationEvent) event).getReplicationFsm().getSession();
             sessionToReplicationEventIdMap.putIfAbsent(session, new LinkedList<>());
-            sessionToReplicationEventIdMap.get(session).add(((LogReplicationEvent) event).getEventId());
+            // makes the value part of the map thread safe.
+            sessionToReplicationEventIdMap.computeIfPresent(session, (sessionKey, eventList) -> {
+                eventList.add(((LogReplicationEvent) event).getEventId());
+                return eventList;
+            });
             fsmWorker.submit(() -> processReplicationTask((LogReplicationEvent) event));
         }
     }
 
     private void processRuntimeTask(LogReplicationRuntimeEvent event) {
-        // the processing of event is synchronized on a session. This is to because the submitting of the task
-        // to the thread pool and updating the fsm's state is async. So its possible that thread-1 tries to execute
-        // a task submitted by thread-0 before thread-0 could advance the state of FSM.
+        LogReplicationSession session = event.getRuntimeFsm().getSession();
+        // for a given session, The fsm event should be processed in the order they are queued. This condition ensures
+        // that in the event of 2 threads contending for the monitor, only the task submitted first would be processed.
         synchronized (event.getRuntimeFsm()) {
-            LogReplicationSession session = event.getRuntimeFsm().getSession();
-
-            // for a given session, The fsm event should be processed in the order they are queued. This condition ensures
-            // that in the event of 2 threads contending for the monitor, only the task submitted first would be processed.
-            while(!sessionToRuntimeEventIdMap.get(session).get(0).equals(event.getEventId())) {
+            while (!sessionToRuntimeEventIdMap.get(session).get(0).equals(event.getEventId())) {
                 try {
                     event.getRuntimeFsm().wait();
                 } catch (InterruptedException e) {
                     log.error("Wait for session {} was interrupted {}", session, e.getMessage());
                 }
             }
+        }
 
-            LogReplicationRuntimeState currState = event.getRuntimeFsm().getState();
-            if (currState.getType() == LogReplicationRuntimeStateType.STOPPED) {
-                log.info("Log Replication Communication State Machine has been stopped. No more events will be processed.");
-                return;
+        LogReplicationRuntimeState currState = event.getRuntimeFsm().getState();
+        if (currState.getType() == LogReplicationRuntimeStateType.STOPPED) {
+            log.info("Log Replication Communication State Machine has been stopped. No more events will be processed.");
+            return;
+        }
+
+
+        try {
+            LogReplicationRuntimeState newState = currState.processEvent(event);
+            if (newState != null) {
+                event.getRuntimeFsm().transition(currState, newState);
+                event.getRuntimeFsm().setState(newState);
+
             }
+        } catch (IllegalTransitionException illegalState) {
+            log.error("Illegal log replication event {} when in state {}", event.getType(), currState.getType());
+        }
 
-
-            try {
-                LogReplicationRuntimeState newState = currState.processEvent(event);
-                if (newState != null) {
-                    event.getRuntimeFsm().transition(currState, newState);
-                    event.getRuntimeFsm().setState(newState);
-
-                }
-            } catch (IllegalTransitionException illegalState) {
-                log.error("Illegal log replication event {} when in state {}", event.getType(), currState.getType());
-            }
-
+        synchronized(event.getRuntimeFsm()) {
             sessionToRuntimeEventIdMap.get(session).remove(0);
             event.getRuntimeFsm().notifyAll();
         }
