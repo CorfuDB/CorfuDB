@@ -106,7 +106,7 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
             "-poller-" + session.hashCode()).build());
 
         String replicatedQueueName = TableRegistry.getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE,
-                LogReplicationUtils.REPLICATED_RECV_Q_PREFIX + session.getSourceClusterId() + "_" +
+                REPLICATED_RECV_Q_PREFIX + session.getSourceClusterId() + "_" +
                 session.getSubscriber().getClientName());
         replicatedQueueId = CorfuRuntime.getStreamID(replicatedQueueName);
 
@@ -415,7 +415,7 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
 
     // Internal Utility class which polls for new data to be available on the Sender Routing Queue.  It uses
     // Exponential Backoff mechanism to wait between subsequent retries.
-    private class StreamQueryTask implements Callable<Void> {
+    private final class StreamQueryTask implements Callable<Void> {
 
         @Override
         public Void call() {
@@ -427,9 +427,10 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
                             log.info("Retrying. currentStreamInfo={}", currentStreamInfo.maxVersion);
                             throw new ReplicationReaderException();
                         }
-                    } catch (Exception e) {
-                        if (e instanceof ReplicationReaderException)
+                    } catch (ReplicationReaderException e) {
                         throw new RetryNeededException();
+                    } catch (Exception e) {
+                        log.error("Unexpected exception caught. ", e);
                     }
                     return null;
                 }).run();

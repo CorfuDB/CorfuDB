@@ -27,6 +27,7 @@ import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
+import org.mockito.Mockito;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -79,6 +80,7 @@ public class LogReplicationServerTest {
         metadataManager = mock(LogReplicationMetadataManager.class);
         sessionManager = mock(SessionManager.class);
         sinkManager = mock(LogReplicationSinkManager.class);
+        Mockito.when(sinkManager.getIsShutdown()).thenReturn(new AtomicBoolean(false));
         Set<LogReplicationSession> sessionSet = new HashSet<>();
         sessionSet.add(session);
         LogReplicationContext replicationContext = new LogReplicationContext(mock(LogReplicationConfigManager.class),

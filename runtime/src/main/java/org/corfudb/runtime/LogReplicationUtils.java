@@ -7,6 +7,7 @@ import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
+import org.corfudb.runtime.LogReplication.ReplicationModel;
 import org.corfudb.runtime.LogReplication.ReplicationStatus;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.Table;
@@ -38,7 +39,6 @@ import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.function.Consumer;
 
-import static org.corfudb.runtime.LogReplication.*;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 /**
