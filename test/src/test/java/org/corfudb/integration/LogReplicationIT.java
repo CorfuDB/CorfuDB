@@ -1281,8 +1281,9 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         TransitionSource function) throws InterruptedException {
 
         LogReplicationConfigManager sinkConfigManager = new LogReplicationConfigManager(dstTestRuntime, session.getSinkClusterId());
-        sinkConfigManager.generateConfig(Collections.singleton(session), false);
+        sinkConfigManager.generateConfig(session, false, "session_1");
         LogReplicationContext sinkContext = new LogReplicationContext(sinkConfigManager, 0, DEFAULT_ENDPOINT, pluginConfig, dstTestRuntime);
+
         // This IT requires custom values to be set for the replication config.  Set these values so that the default
         // values are not used
         sinkContext.getConfig(session).setMaxNumMsgPerBatch(BATCH_SIZE);
@@ -1293,7 +1294,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
                 function, sinkContext, dstTestRuntime);
 
         LogReplicationConfigManager srcConfigManager = new LogReplicationConfigManager(srcTestRuntime, LOCAL_SOURCE_CLUSTER_ID);
-        srcConfigManager.generateConfig(Collections.singleton(session), false);
+        srcConfigManager.generateConfig(session, false, "session_1");
         LogReplicationContext srcContext = new LogReplicationContext(srcConfigManager, 0, DEFAULT_ENDPOINT, pluginConfig, srcTestRuntime);
         // This IT requires custom values to be set for the replication config.  Set these values so that the default
         // values are not used

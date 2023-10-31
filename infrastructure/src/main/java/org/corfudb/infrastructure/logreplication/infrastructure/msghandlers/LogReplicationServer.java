@@ -99,13 +99,13 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
 
     public LogReplicationSinkManager createSinkManager(LogReplicationSession session) {
         if(sessionToSinkManagerMap.containsKey(session)) {
-            log.trace("Sink manager already exists for session {}", session);
+            log.trace("[{}]:: Sink manager already exists", replicationContext.getSessionName(session));
             return sessionToSinkManagerMap.get(session);
         }
         LogReplicationSinkManager sinkManager = new LogReplicationSinkManager(metadataManager, session,
                 replicationContext);
         sessionToSinkManagerMap.put(session, sinkManager);
-        log.info("Sink Manager created for session={}", session);
+        log.info("[{}]:: Sink Manager created", replicationContext.getSessionName(session));
         return sinkManager;
 
     }
@@ -181,10 +181,11 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
     @LogReplicationRequestHandler(requestType = LR_ENTRY)
     private void handleLrEntryRequest(RequestMsg request, ResponseMsg res,
                                       @Nonnull IClientServerRouter router) {
-        log.trace("Log Replication Entry received by Server.");
+        LogReplicationSession session = getSession(request);
+        String sessionName = replicationContext.getSessionName(session);
+        log.trace("[{}]:: Log Replication Entry received by Server.", sessionName);
 
         if (replicationContext.getIsLeader().get()) {
-            LogReplicationSession session = getSession(request);
 
             LogReplicationSinkManager sinkManager = sessionToSinkManagerMap.get(session);
 
@@ -215,14 +216,14 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
                 // Forward the received message to the Sink Manager for apply
                 ack = sinkManager.receive(request.getPayload().getLrEntry());
             } catch (NullPointerException npe) {
-                log.warn("Dropping LrEntryRequest with requestId {} as sink manager was destroyed for session {}",
-                        request.getHeader().getRequestId(), session);
+                log.warn("[{}]:: Dropping LrEntryRequest with requestId {} as sink manager was destroyed", sessionName,
+                        request.getHeader().getRequestId());
             }
 
             if (ack != null) {
                 long ts = ack.getMetadata().getEntryType().equals(LogReplicationEntryType.LOG_ENTRY_REPLICATED) ?
                         ack.getMetadata().getTimestamp() : ack.getMetadata().getSnapshotTimestamp();
-                log.info("Sending ACK {} on {} to Client ", TextFormat.shortDebugString(ack.getMetadata()), ts);
+                log.info("[{}]:: Sending ACK {} on {} to Client ", sessionName, TextFormat.shortDebugString(ack.getMetadata()), ts);
 
                 ResponsePayloadMsg payload = ResponsePayloadMsg.newBuilder().setLrEntryAck(ack).build();
                 HeaderMsg responseHeader = getHeaderMsg(request.getHeader());
@@ -232,8 +233,8 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
         } else {
             LogReplicationEntryMsg entryMsg = request.getPayload().getLrEntry();
             LogReplicationEntryType entryType = entryMsg.getMetadata().getEntryType();
-            log.warn("Dropping received message of type {} while NOT LEADER. snapshotSyncSeqNumber={}, ts={}," +
-                            "syncRequestId={}", entryType, entryMsg.getMetadata().getSnapshotSyncSeqNum(),
+            log.warn("[{}]:: Dropping received message of type {} while NOT LEADER. snapshotSyncSeqNumber={}, ts={}," +
+                            "syncRequestId={}", sessionName, entryType, entryMsg.getMetadata().getSnapshotSyncSeqNum(),
                     entryMsg.getMetadata().getTimestamp(), entryMsg.getMetadata().getSyncRequestId());
             sendLeadershipLoss(request, router);
         }
@@ -249,11 +250,11 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
     @LogReplicationRequestHandler(requestType = LR_METADATA_REQUEST)
     private void handleMetadataRequest(RequestMsg request, ResponseMsg res,
                                        @Nonnull IClientServerRouter router) {
-        log.info("Log Replication Metadata Request received by Server.");
+        LogReplicationSession session = getSession(request);
+        String sessionName = replicationContext.getSessionName(session);
+        log.info("[{}]:: Log Replication Metadata Request received by Server.", sessionName);
 
         if (replicationContext.getIsLeader().get()) {
-
-            LogReplicationSession session = getSession(request);
 
             LogReplicationSinkManager sinkManager = sessionToSinkManagerMap.get(session);
 
@@ -279,17 +280,17 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
             ReplicationMetadata metadata = metadataManager.getReplicationMetadata(session);
             ResponseMsg response = getMetadataResponse(request, metadata);
 
-            log.info("Send Metadata response for session {}: :: {}", session.hashCode(), TextFormat.shortDebugString(response.getPayload()));
+            log.info("[{}]:: Send Metadata response:: {}", sessionName, TextFormat.shortDebugString(response.getPayload()));
             router.sendResponse(response);
 
             try {
                 // If a snapshot apply is pending, start (if not started already)
                 sinkManager.startPendingSnapshotApply();
             } catch (NullPointerException npe) {
-                log.warn("Not resuming any pending replication as the sink manager was destroyed for session {}", session);
+                log.warn("[{}]:: Not resuming any pending replication as the sink manager was destroyed", sessionName);
             }
         } else {
-            log.warn("Dropping metadata request as this node is not the leader.  Request id = {}",
+            log.warn("[{}]:: Dropping metadata request as this node is not the leader.  Request id = {}", sessionName,
                     request.getHeader().getRequestId());
             sendLeadershipLoss(request, router);
         }
@@ -305,7 +306,7 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
     @LogReplicationRequestHandler(requestType = LR_LEADERSHIP_QUERY)
     private void  handleLeadershipQuery(RequestMsg request, ResponseMsg res,
                                                      @Nonnull IClientServerRouter router) {
-        log.debug("Log Replication Query Leadership Request received by Server.");
+        log.debug("[{}]:: Log Replication Query Leadership Request received by Server.", replicationContext.getSessionName(getSession(request)));
         HeaderMsg responseHeader = getHeaderMsg(request.getHeader());
         ResponseMsg response = getLeadershipResponse(responseHeader, replicationContext.getIsLeader().get(), localNodeId);
         router.sendResponse(response);
@@ -320,24 +321,28 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
     @LogReplicationResponseHandler(responseType = LR_ENTRY_ACK)
     private void handleAck(RequestMsg req, ResponseMsg response,
                                                   @Nonnull IClientServerRouter router) {
-        log.debug("Handle log replication ACK {}", response);
-        router.completeRequest(response.getHeader().getSession(), response.getHeader().getRequestId(),
+        LogReplicationSession session = response.getHeader().getSession();
+        log.debug("[{}]:: Handle log replication ACK {}", replicationContext.getSessionName(session), response);
+        router.completeRequest(session, response.getHeader().getRequestId(),
                 response.getPayload().getLrEntryAck());
     }
 
     @LogReplicationResponseHandler(responseType = LR_METADATA_RESPONSE)
     private void handleMetadataResponse(RequestMsg req,  ResponseMsg response,
                                                        @Nonnull IClientServerRouter router) {
-        log.debug("Handle log replication Metadata Response");
-        router.completeRequest(response.getHeader().getSession(), response.getHeader().getRequestId(),
+        LogReplicationSession session = response.getHeader().getSession();
+        log.debug("[{}]:: Handle log replication Metadata Response", replicationContext.getSessionName(session));
+        router.completeRequest(session, response.getHeader().getRequestId(),
                 response.getPayload().getLrMetadataResponse());
     }
 
     @LogReplicationResponseHandler(responseType = LR_LEADERSHIP_RESPONSE)
     private void handleLeadershipResponse(RequestMsg req, ResponseMsg response,
                                                                       @Nonnull IClientServerRouter router) {
-        log.debug("Handle log replication query leadership response msg {}", TextFormat.shortDebugString(response));
-        router.completeRequest(response.getHeader().getSession(), response.getHeader().getRequestId(),
+        LogReplicationSession session = response.getHeader().getSession();
+        log.debug("[{}]:: Handle log replication query leadership response msg {}", replicationContext.getSessionName(session),
+                TextFormat.shortDebugString(response));
+        router.completeRequest(session, response.getHeader().getRequestId(),
                 response.getPayload().getLrLeadershipResponse());
     }
 
@@ -365,13 +370,13 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
     }
 
     public synchronized void stopSinkManagerForSession(LogReplicationSession session) {
-        log.info("Stopping Sink manager for session: {}", session);
+        log.info("[{}]:: Stopping Sink manager", replicationContext.getSessionName(session));
         try {
             if (sessionToSinkManagerMap.containsKey(session)) {
                 sessionToSinkManagerMap.remove(session);
             }
         } catch (NullPointerException npe) {
-            log.warn("SinkManger was either shutdown or wasnot created for session {}", session);
+            log.warn("[{}]:: SinkManger was either shutdown or was not created", replicationContext.getSessionName(session));
         }
     }
 }

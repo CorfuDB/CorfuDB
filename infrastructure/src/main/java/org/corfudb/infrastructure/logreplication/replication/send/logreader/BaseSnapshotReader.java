@@ -61,6 +61,7 @@ public abstract class BaseSnapshotReader extends SnapshotReader {
 
     protected final LogReplication.LogReplicationSession session;
     protected final LogReplicationContext replicationContext;
+    private final String sessionName;
 
     /**
      * Init runtime and streams to read
@@ -71,9 +72,10 @@ public abstract class BaseSnapshotReader extends SnapshotReader {
         this.session = session;
         this.replicationContext = replicationContext;
         this.maxDataSizePerMsg = replicationContext.getConfig(session).getMaxMsgSize();
+        this.sessionName = replicationContext.getSessionName(session);
         this.messageSizeDistributionSummary = configureMessageSizeDistributionSummary();
         refreshStreamsToReplicateSet();
-        log.info("Total of {} streams to replicate at initialization. Streams to replicate={}, Session={}",
+        log.info("[{}]:: Total of {} streams to replicate at initialization. Streams to replicate={}", sessionName,
                 this.streams.size(), replicationContext.getConfig(session).getStreamsToReplicate(),
                 TextFormat.shortDebugString(session));
     }
@@ -122,8 +124,8 @@ public abstract class BaseSnapshotReader extends SnapshotReader {
         preMsgTs = currentMsgTs;
         sequence++;
 
-        log.trace("txMsg {} deepsize sizeInBytes {} entryList.sizeInByres {}  with numEntries {} deepSize sizeInBytes {}",
-            TextFormat.printToString(txMsg.getMetadata()), Memory.sizeOf.deepSizeOf(txMsg), entryList.getSizeInBytes(),
+        log.trace("[{}]:: txMsg {} deepsize sizeInBytes {} entryList.sizeInByres {}  with numEntries {} deepSize sizeInBytes {}",
+                sessionName, TextFormat.printToString(txMsg.getMetadata()), Memory.sizeOf.deepSizeOf(txMsg), entryList.getSizeInBytes(),
             entryList.getSmrEntries().size(), Memory.sizeOf.deepSizeOf(entryList.smrEntries));
         return txMsg;
     }
@@ -145,13 +147,13 @@ public abstract class BaseSnapshotReader extends SnapshotReader {
                         int currentEntrySize = ReaderUtility.calculateSize(smrEntries);
 
                         if (currentEntrySize > DEFAULT_MAX_DATA_MSG_SIZE) {
-                            log.error("The current entry size {} is bigger than the maxDataSizePerMsg {} supported",
-                                currentEntrySize, DEFAULT_MAX_DATA_MSG_SIZE);
+                            log.error("[{}]:: The current entry size {} is bigger than the maxDataSizePerMsg {} supported",
+                                    sessionName, currentEntrySize, DEFAULT_MAX_DATA_MSG_SIZE);
                             throw new IllegalSnapshotEntrySizeException(" The snapshot entry is bigger than the system supported");
                         } else if (currentEntrySize > maxDataSizePerMsg) {
                             observeBiggerMsg.setValue(observeBiggerMsg.getValue()+1);
-                            log.warn("The current entry size {} is bigger than the configured maxDataSizePerMsg {}",
-                                currentEntrySize, maxDataSizePerMsg);
+                            log.warn("[{}]:: The current entry size {} is bigger than the configured maxDataSizePerMsg {}",
+                                    sessionName, currentEntrySize, maxDataSizePerMsg);
                         }
 
                         // Skip append this entry in this message. Will process it first at the next round.
@@ -175,12 +177,12 @@ public abstract class BaseSnapshotReader extends SnapshotReader {
                 }
             }
         } catch (TrimmedException e) {
-            log.error("Caught a TrimmedException", e);
+            log.error("[{}]:: Caught a TrimmedException", sessionName, e);
             throw e;
         }
 
-        log.trace("CurrentMsgSize {} lastEntrySize {}  maxDataSizePerMsg {}",
-            currentMsgSize, lastEntry == null ? 0 : ReaderUtility.calculateSize(lastEntry.getEntries().get(stream.uuid)), maxDataSizePerMsg);
+        log.trace("[{}]:: CurrentMsgSize {} lastEntrySize {}  maxDataSizePerMsg {}", sessionName, currentMsgSize,
+                lastEntry == null ? 0 : ReaderUtility.calculateSize(lastEntry.getEntries().get(stream.uuid)), maxDataSizePerMsg);
         return new SMREntryList(currentMsgSize, smrList);
     }
 
@@ -193,8 +195,8 @@ public abstract class BaseSnapshotReader extends SnapshotReader {
     protected LogReplication.LogReplicationEntryMsg read(OpaqueStreamIterator stream, UUID syncRequestId) {
         SMREntryList entryList = next(stream);
         LogReplication.LogReplicationEntryMsg txMsg = generateMessage(stream, entryList, syncRequestId);
-        log.info("Successfully generate a snapshot message for stream {} with snapshotTimestamp={}, numEntries={}, " +
-                "entriesBytes={}, streamId={}", stream.name, snapshotTimestamp,
+        log.info("[{}]:: Successfully generate a snapshot message for stream {} with snapshotTimestamp={}, numEntries={}, " +
+                "entriesBytes={}, streamId={}", sessionName, stream.name, snapshotTimestamp,
             entryList.getSmrEntries().size(), entryList.getSizeInBytes(), stream.uuid);
         messageSizeDistributionSummary
             .ifPresent(distribution -> distribution.record(entryList.getSizeInBytes()));
@@ -221,7 +223,7 @@ public abstract class BaseSnapshotReader extends SnapshotReader {
                 // Setup a new stream
                 String streamToReplicate = streamsToSend.poll();
                 currentStreamInfo = new OpaqueStreamIterator(streamToReplicate, rt, snapshotTimestamp);
-                log.info("Start Snapshot Sync replication for stream name={}, id={}", streamToReplicate,
+                log.info("[{}]:: Start Snapshot Sync replication for stream name={}, id={}", sessionName, streamToReplicate,
                     CorfuRuntime.getStreamID(streamToReplicate));
 
                 // If the new stream has entries to be processed, go to the next step
@@ -229,8 +231,8 @@ public abstract class BaseSnapshotReader extends SnapshotReader {
                     break;
                 } else {
                     // Skip process this stream as it has no entries to process, will poll the next one.
-                    log.info("Snapshot reader will skip reading stream {} as there are no entries to send",
-                        currentStreamInfo.uuid);
+                    log.info("[{}]:: Snapshot reader will skip reading stream {} as there are no entries to send",
+                            sessionName, currentStreamInfo.uuid);
                 }
             }
         }
@@ -243,11 +245,11 @@ public abstract class BaseSnapshotReader extends SnapshotReader {
         }
 
         if (!currentStreamHasNext()) {
-            log.debug("Snapshot log reader finished reading stream id={}, name={}", currentStreamInfo.uuid, currentStreamInfo.name);
+            log.debug("[{}]:: Snapshot log reader finished reading stream id={}, name={}", sessionName, currentStreamInfo.uuid, currentStreamInfo.name);
             currentStreamInfo = null;
 
             if (streamsToSend.isEmpty()) {
-                log.info("Snapshot log reader finished reading ALL streams, total={}", streams.size());
+                log.info("[{}]:: Snapshot log reader finished reading ALL streams, total={}", sessionName, streams.size());
                 endSnapshotSync = true;
             }
         }

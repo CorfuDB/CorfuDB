@@ -12,7 +12,10 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class UnrecoverableState implements LogReplicationRuntimeState {
 
-    public UnrecoverableState() {}
+    private String sessionName;
+    public UnrecoverableState(String sessionName) {
+        this.sessionName = sessionName;
+    }
 
     @Override
     public LogReplicationRuntimeStateType getType() {
@@ -25,7 +28,7 @@ public class UnrecoverableState implements LogReplicationRuntimeState {
             case ERROR:
                 return this;
             default: {
-                log.warn("Unexpected communication event {} when in init state.", event.getType());
+                log.warn("[{}]:: Unexpected communication event {} when in init state.", sessionName, event.getType());
                 throw new IllegalTransitionException(event.getType(), getType());
             }
         }
@@ -42,6 +45,6 @@ public class UnrecoverableState implements LogReplicationRuntimeState {
      * @param cause
      */
     public void setThrowableCause(Throwable cause) {
-        log.error("Log Replication will NOT continue. Entered UNRECOVERABLE state, cause={}", cause);
+        log.error("[{}]:: Log Replication will NOT continue. Entered UNRECOVERABLE state, cause={}", sessionName, cause);
     }
 }

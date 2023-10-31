@@ -31,7 +31,7 @@ public class InitializedState implements LogReplicationState {
     public LogReplicationState processEvent(LogReplicationEvent event) throws IllegalTransitionException {
         switch (event.getType()) {
             case SNAPSHOT_SYNC_REQUEST:
-                log.info("Start Snapshot Sync, requestId={}", event.getEventId());
+                log.info("[{}]:: Start Snapshot Sync, requestId={}", fsm.getSessionName(), event.getEventId());
                 // Set the id of the event that caused the transition to the new state
                 // This is used to correlate trim or error events that derive from this state
                 LogReplicationState snapshotSyncState = fsm.getStates().get(LogReplicationStateType.IN_SNAPSHOT_SYNC);
@@ -39,7 +39,7 @@ public class InitializedState implements LogReplicationState {
                 ((InSnapshotSyncState)snapshotSyncState).setForcedSnapshotSync(event.getMetadata().isForcedSnapshotSync());
                 return snapshotSyncState;
             case SNAPSHOT_TRANSFER_COMPLETE:
-                log.info("Snapshot Sync transfer completed. Wait for snapshot apply to complete.");
+                log.info("[{}]:: Snapshot Sync transfer completed. Wait for snapshot apply to complete.", fsm.getSessionName());
                 WaitSnapshotApplyState waitSnapshotApplyState = (WaitSnapshotApplyState)fsm.getStates().get(LogReplicationStateType.WAIT_SNAPSHOT_APPLY);
                 waitSnapshotApplyState.setTransitionEventId(event.getEventId());
                 waitSnapshotApplyState.setBaseSnapshotTimestamp(event.getMetadata().getLastTransferredBaseSnapshot());
@@ -47,7 +47,7 @@ public class InitializedState implements LogReplicationState {
                 fsm.setAckedTimestamp(event.getMetadata().getLastLogEntrySyncedTimestamp());
                 return waitSnapshotApplyState;
             case LOG_ENTRY_SYNC_REQUEST:
-                log.info("Start Log Entry Sync, requestId={}", event.getEventId());
+                log.info("[{}]:: Start Log Entry Sync, requestId={}", fsm.getSessionName(), event.getEventId());
                 // Set the id of the event that caused the transition to the new state
                 // This is used to correlate trim or error events that derive from this state
                 LogReplicationState logEntrySyncState = fsm.getStates().get(LogReplicationStateType.IN_LOG_ENTRY_SYNC);
@@ -60,7 +60,7 @@ public class InitializedState implements LogReplicationState {
             case REPLICATION_SHUTDOWN:
                 return fsm.getStates().get(LogReplicationStateType.ERROR);
             default: {
-                log.warn("Unexpected log replication event {} when in initialized state.", event.getType());
+                log.warn("[{}]:: Unexpected log replication event {} when in initialized state.", fsm.getSessionName(), event.getType());
                 throw new IllegalTransitionException(event.getType(), getType());
             }
         }
@@ -71,7 +71,7 @@ public class InitializedState implements LogReplicationState {
         if (from != this) {
             fsm.getAckReader().markSyncStatus(SyncStatus.STOPPED);
             fsm.getAckReader().cancelScheduledAckPollerTask();
-            log.debug("Replication status changed to STOPPED");
+            log.debug("[{}]:: Replication status changed to STOPPED", fsm.getSessionName());
         }
     }
 

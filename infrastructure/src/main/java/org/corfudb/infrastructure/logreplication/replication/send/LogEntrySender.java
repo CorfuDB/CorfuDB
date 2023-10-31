@@ -65,7 +65,8 @@ public class LogEntrySender {
 
         this.logEntryReader = logEntryReader;
         this.logReplicationFSM = logReplicationFSM;
-        this.dataSenderBufferManager = new LogEntrySenderBufferManager(dataSender, logReplicationFSM.getAckReader());
+        this.dataSenderBufferManager = new LogEntrySenderBufferManager(dataSender, logReplicationFSM.getAckReader(),
+                logReplicationFSM.getSessionName());
     }
 
     /**
@@ -75,7 +76,7 @@ public class LogEntrySender {
      */
     public void send(UUID logEntrySyncEventId) {
 
-        log.trace("Send Log Entry Sync, id={}", logEntrySyncEventId);
+        log.trace("[{}]:: Send Log Entry Sync, id={}", logReplicationFSM.getSessionName(), logEntrySyncEventId);
 
         taskActive = true;
 
@@ -90,7 +91,7 @@ public class LogEntrySender {
                                 ack.getMetadata().getTimestamp())));
             }
         } catch (LogEntrySyncTimeoutException te) {
-            log.error("LogEntrySyncTimeoutException after several retries.", te);
+            log.error("[{}]:: LogEntrySyncTimeoutException after several retries.", logReplicationFSM.getSessionName(), te);
             cancelLogEntrySync(LogReplicationError.LOG_ENTRY_ACK_TIMEOUT, LogReplicationEventType.SYNC_CANCEL, logEntrySyncEventId);
             return;
         }
@@ -127,12 +128,12 @@ public class LogEntrySender {
                     // Back-off for couple of seconds and retry n times if not require full sync
                 }
             } catch (TrimmedException te) {
-                log.error("Caught Trimmed Exception while reading for {}", logEntrySyncEventId);
+                log.error("[{}]:: Caught Trimmed Exception while reading for {}", logReplicationFSM.getSessionName(), logEntrySyncEventId);
                 cancelLogEntrySync(LogReplicationError.TRIM_LOG_ENTRY_SYNC,
                         LogReplicationEventType.SYNC_CANCEL, logEntrySyncEventId);
                 return;
             } catch (MessageSizeExceededException me) {
-                log.error("Caught Message Size Exceeded Exception while reading for {}", logEntrySyncEventId);
+                log.error("[{}]:: Caught Message Size Exceeded Exception while reading for {}", logReplicationFSM.getSessionName(), logEntrySyncEventId);
                 cancelLogEntrySync(LogReplicationError.LOG_ENTRY_MESSAGE_SIZE_EXCEEDED,
                         LogReplicationEventType.SYNC_CANCEL, logEntrySyncEventId);
                 return;
@@ -141,7 +142,7 @@ public class LogEntrySender {
                         LogReplicationEventType.SYNC_CANCEL, logEntrySyncEventId);
                 return;
             } catch (Exception e) {
-                log.error("Caught exception at log entry sender", e);
+                log.error("[{}]:: Caught exception at log entry sender", logReplicationFSM.getSessionName(), e);
                 cancelLogEntrySync(LogReplicationError.UNKNOWN, LogReplicationEventType.SYNC_CANCEL, logEntrySyncEventId);
                 return;
             }
@@ -168,7 +169,8 @@ public class LogEntrySender {
      */
     public void reset(long lastSentBaseSnapshotTimestamp, long lastAckedTimestamp) {
         taskActive = true;
-        log.info("Reset baseSnapshot {} maxAckTimestamp {}", lastSentBaseSnapshotTimestamp, lastAckedTimestamp);
+        log.info("[{}]:: Reset baseSnapshot {} maxAckTimestamp {}", logReplicationFSM.getSessionName(),
+                lastSentBaseSnapshotTimestamp, lastAckedTimestamp);
         logEntryReader.reset(lastSentBaseSnapshotTimestamp, lastAckedTimestamp);
         dataSenderBufferManager.reset(lastAckedTimestamp);
     }

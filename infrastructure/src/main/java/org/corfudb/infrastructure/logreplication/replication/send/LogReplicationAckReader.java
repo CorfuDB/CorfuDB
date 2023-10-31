@@ -71,11 +71,14 @@ public class LogReplicationAckReader {
 
     private final Lock lock = new ReentrantLock();
 
+    private final String sessionName;
+
     public LogReplicationAckReader(LogReplicationMetadataManager metadataManager, LogReplicationSession session,
-                                   LogReplicationContext replicationContext) {
+                LogReplicationContext replicationContext) {
         this.metadataManager = metadataManager;
         this.runtime = replicationContext.getCorfuRuntime();
         this.session = session;
+        this.sessionName = replicationContext.getSessionName(session);
         this.replicationContext = replicationContext;
     }
 
@@ -133,15 +136,15 @@ public class LogReplicationAckReader {
         StreamIteratorMetadata currentTxStreamProcessedTs = logEntryReader.getCurrentProcessedEntryMetadata();
 
         if (log.isTraceEnabled()) {
-            log.trace("calculateRemainingEntriesToSend:: maxTailReplicateStreams={}, txStreamTail={}, lastTxStreamProcessedTs={}, " +
-                            "lastTxStreamProcessedStreamsPresent={}, sync={}",
+            log.trace("[{}]:: calculateRemainingEntriesToSend:: maxTailReplicateStreams={}, txStreamTail={}, lastTxStreamProcessedTs={}, " +
+                            "lastTxStreamProcessedStreamsPresent={}, sync={}", sessionName,
                     maxReplicatedStreamTail, txStreamTail, currentTxStreamProcessedTs.getTimestamp(),
                     currentTxStreamProcessedTs.isStreamsToReplicatePresent(), lastSyncType);
         }
 
         // No data to send on the source, so no replication remaining
         if (maxReplicatedStreamTail == Address.NON_ADDRESS) {
-            log.debug("No data to replicate, replication complete.");
+            log.debug("[{}]:: No data to replicate, replication complete.", sessionName);
             return NO_REPLICATION_REMAINING_ENTRIES;
         }
 
@@ -170,7 +173,7 @@ public class LogReplicationAckReader {
             return tailMap.get(ObjectsView.getLogReplicatorStreamId());
         }
 
-        log.warn("Tx Stream tail not present in sequencer, id={}", ObjectsView.getLogReplicatorStreamId());
+        log.warn("[{}]:: Tx Stream tail not present in sequencer, id={}", sessionName, ObjectsView.getLogReplicatorStreamId());
         return Address.NON_ADDRESS;
     }
 
@@ -267,8 +270,10 @@ public class LogReplicationAckReader {
             if (currentTxStreamProcessedTs.isStreamsToReplicatePresent()) {
                 if (lastAckedTs == currentTxStreamProcessedTs.getTimestamp()) {
                     if (log.isTraceEnabled()) {
-                        log.trace("Log Entry Sync up to date, lastAckedTs={}, txStreamTail={}, currentTxProcessedTs={}, containsEntries={}", lastAckedTs,
-                                txStreamTail, currentTxStreamProcessedTs.getTimestamp(), currentTxStreamProcessedTs.isStreamsToReplicatePresent());
+                        log.trace("[{}]:: Log Entry Sync up to date, lastAckedTs={}, txStreamTail={}, " +
+                                        "currentTxProcessedTs={}, containsEntries={}", sessionName, lastAckedTs,
+                                txStreamTail, currentTxStreamProcessedTs.getTimestamp(),
+                                currentTxStreamProcessedTs.isStreamsToReplicatePresent());
                     }
                     // (Case 2.0)
                     return noRemainingEntriesToSend;
@@ -278,8 +283,9 @@ public class LogReplicationAckReader {
                 // Last ack'ed timestamp should match the last processed tx stream timestamp.
                 // Calculate how many entries are missing, based on the tx stream's address map
                 if (log.isTraceEnabled()) {
-                    log.trace("Log Entry Sync pending ACKs, lastAckedTs={}, txStreamTail={}, currentTxProcessedTs={}, containsEntries={}", lastAckedTs,
-                            txStreamTail, currentTxStreamProcessedTs.getTimestamp(), currentTxStreamProcessedTs.isStreamsToReplicatePresent());
+                    log.trace("[{}]:: Log Entry Sync pending ACKs, lastAckedTs={}, txStreamTail={}, " +
+                                    "currentTxProcessedTs={}, containsEntries={}", sessionName, lastAckedTs, txStreamTail,
+                            currentTxStreamProcessedTs.getTimestamp(), currentTxStreamProcessedTs.isStreamsToReplicatePresent());
                 }
                 return getTxStreamTotalEntries(lastAckedTs, currentTxStreamProcessedTs.getTimestamp());
             }
@@ -289,8 +295,9 @@ public class LogReplicationAckReader {
             // and we're at or beyond the last known tail, no entries remaining to be sent
             // at this point.
             if (log.isTraceEnabled()) {
-                log.trace("Log Entry Sync up to date, no pending ACKs, lastAckedTs={}, txStreamTail={}, currentTxProcessedTs={}, containsEntries={}", lastAckedTs,
-                        txStreamTail, currentTxStreamProcessedTs.getTimestamp(), currentTxStreamProcessedTs.isStreamsToReplicatePresent());
+                log.trace("[{}]:: Log Entry Sync up to date, no pending ACKs, lastAckedTs={}, txStreamTail={}, " +
+                                "currentTxProcessedTs={}, containsEntries={}", sessionName, lastAckedTs, txStreamTail,
+                        currentTxStreamProcessedTs.getTimestamp(), currentTxStreamProcessedTs.isStreamsToReplicatePresent());
             }
             return noRemainingEntriesToSend;
         }
@@ -311,8 +318,8 @@ public class LogReplicationAckReader {
         }
 
         if (log.isTraceEnabled()) {
-            log.trace("Log Entry Sync pending entries for processing, lastAckedTs={}, txStreamTail={}, " +
-                            "currentTxProcessedTs={}, containsEntries={}, remaining={}", lastAckedTs,
+            log.trace("[{}]:: Log Entry Sync pending entries for processing, lastAckedTs={}, txStreamTail={}, " +
+                            "currentTxProcessedTs={}, containsEntries={}, remaining={}", sessionName, lastAckedTs,
                     txStreamTail, currentTxStreamProcessedTs.getTimestamp(),
                     currentTxStreamProcessedTs.isStreamsToReplicatePresent(), remainingEntries);
         }
@@ -332,7 +339,7 @@ public class LogReplicationAckReader {
             totalEntries = txStreamAddressSpace.size();
         }
 
-        log.trace("getTxStreamTotalEntries:: entries={} in range ({}, {}]", totalEntries, lowerBoundary, upperBoundary);
+        log.trace("[{}]:: getTxStreamTotalEntries:: entries={} in range ({}, {}]", sessionName, totalEntries, lowerBoundary, upperBoundary);
         return totalEntries;
     }
 
@@ -362,20 +369,19 @@ public class LogReplicationAckReader {
                     metadataManager.updateSnapshotSyncStatusCompleted(session,
                             calculateRemainingEntriesToSend(baseSnapshotTimestamp), baseSnapshotTimestamp);
                 } catch (TransactionAbortedException tae) {
-                    log.error("Error while attempting to markSnapshotSyncInfoCompleted for remote session {}.",
-                            session, tae);
+                    log.error("[{}]:: Error while attempting to markSnapshotSyncInfoCompleted", sessionName, tae);
                     throw new RetryNeededException();
                 } finally {
                     lock.unlock();
                 }
 
                 if (log.isTraceEnabled()) {
-                    log.trace("markSnapshotSyncInfoCompleted succeeds for remote session {}.", session);
+                    log.trace("[{}]:: markSnapshotSyncInfoCompleted succeeds.", sessionName);
                 }
                 return null;
             }).run();
         } catch (InterruptedException e) {
-            log.error("Unrecoverable exception when attempting to markSnapshotSyncInfoCompleted.", e);
+            log.error("[{}]:: Unrecoverable exception when attempting to markSnapshotSyncInfoCompleted.", sessionName, e);
             throw new UnrecoverableCorfuInterruptedError(e);
         }
     }
@@ -389,19 +395,19 @@ public class LogReplicationAckReader {
                     metadataManager.updateSnapshotSyncStatusOngoing(session, forced, eventId,
                             baseSnapshotTimestamp, remainingEntriesToSend);
                 } catch (TransactionAbortedException tae) {
-                    log.error("Error while attempting to markSnapshotSyncInfoOngoing for event {}.", eventId, tae);
+                    log.error("[{}]:: Error while attempting to markSnapshotSyncInfoOngoing for event {}.", sessionName, eventId, tae);
                     throw new RetryNeededException();
                 } finally {
                     lock.unlock();
                 }
 
                 if (log.isTraceEnabled()) {
-                    log.trace("markSnapshotSyncInfoOngoing succeeds with eventId{} and forced flag {}.", eventId, forced);
+                    log.trace("[{}]:: markSnapshotSyncInfoOngoing succeeds with eventId{} and forced flag {}.", sessionName, eventId, forced);
                 }
                 return null;
             }).run();
         } catch (InterruptedException e) {
-            log.error("Unrecoverable exception when attempting to markSnapshotSyncInfoOngoing.", e);
+            log.error("[{}]:: Unrecoverable exception when attempting to markSnapshotSyncInfoOngoing.", sessionName, e);
             throw new UnrecoverableCorfuInterruptedError(e);
         }
     }
@@ -413,7 +419,7 @@ public class LogReplicationAckReader {
                     lock.lock();
                     metadataManager.updateSyncStatus(session, lastSyncType, SyncStatus.ONGOING);
                 } catch (TransactionAbortedException tae) {
-                    log.error("Error while attempting to markSnapshotSyncInfoOngoing for session {}.", session, tae);
+                    log.error("[{}]:: Error while attempting to markSnapshotSyncInfoOngoing.", sessionName, tae);
                     throw new RetryNeededException();
                 } finally {
                     lock.unlock();
@@ -422,7 +428,7 @@ public class LogReplicationAckReader {
                 return null;
             }).run();
         } catch (InterruptedException e) {
-            log.error("Unrecoverable exception when attempting to markSnapshotSyncInfoOngoing.", e);
+            log.error("[{}]:: Unrecoverable exception when attempting to markSnapshotSyncInfoOngoing.", sessionName, e);
             throw new UnrecoverableCorfuInterruptedError(e);
         }
     }
@@ -434,19 +440,19 @@ public class LogReplicationAckReader {
                     lock.lock();
                     metadataManager.updateSyncStatus(session, lastSyncType, status);
                 } catch (TransactionAbortedException tae) {
-                    log.error("Error while attempting to markSyncStatus as {}.", status, tae);
+                    log.error("[{}]:: Error while attempting to markSyncStatus as {}.", sessionName, status, tae);
                     throw new RetryNeededException();
                 } finally {
                     lock.unlock();
                 }
 
                 if (log.isTraceEnabled()) {
-                    log.trace("markSyncStatus succeeds as {}.", status);
+                    log.trace("[{}]:: markSyncStatus succeeds as {}.", sessionName, status);
                 }
                 return null;
             }).run();
         } catch (InterruptedException e) {
-            log.error("Unrecoverable exception when attempting to markSyncStatus as {}.", status, e);
+            log.error("[{}]:: Unrecoverable exception when attempting to markSyncStatus as {}.", sessionName, status, e);
             throw new UnrecoverableCorfuInterruptedError(e);
         }
     }
@@ -455,9 +461,15 @@ public class LogReplicationAckReader {
      * Start periodic replication status update task (completion percentage)
      */
     public void startSyncStatusUpdatePeriodicTask() {
+<<<<<<< HEAD
         log.info("Start sync status update periodic task");
         sessionToAckPollerFuture.put(session, lastAckedTsPoller.scheduleWithFixedDelay(new TsPollingTask(), 0, ACKED_TS_READ_INTERVAL_SECONDS,
                 TimeUnit.SECONDS));
+=======
+        log.info("[{}]:: Start sync status update periodic task", sessionName);
+        lastAckedTsPoller.scheduleWithFixedDelay(new TsPollingTask(), 0, ACKED_TS_READ_INTERVAL_SECONDS,
+                TimeUnit.SECONDS);
+>>>>>>> b351fac91f6 (1. Generate unique name for session)
     }
 
     /**
@@ -471,13 +483,13 @@ public class LogReplicationAckReader {
                     try {
                         lock.lock();
                         if (lastSyncType == null) {
-                            log.info("lastSyncType is null before polling task run");
+                            log.info("[{}]:: lastSyncType is null before polling task run", sessionName);
                             return null;
                         }
                         long entriesToSend = calculateRemainingEntriesToSend(lastAckedTimestamp);
                         metadataManager.updateRemainingEntriesToSend(session, entriesToSend, lastSyncType);
                     } catch (TransactionAbortedException tae) {
-                        log.error("Error while attempting to set remaining entries for remote session {} with " +
+                        log.error("[{}]:: Error while attempting to set remaining entries for remote session {} with " +
                                 "lastSyncType {}.", session, lastSyncType, tae);
                         throw new RetryNeededException();
                     } finally {
@@ -487,7 +499,7 @@ public class LogReplicationAckReader {
                     return null;
                 }).run();
             } catch (InterruptedException e) {
-                log.error("Unrecoverable exception when attempting to updateRemainingEntriesToSend", e);
+                log.error("[{}]:: Unrecoverable exception when attempting to updateRemainingEntriesToSend", sessionName, e);
                 throw new UnrecoverableCorfuInterruptedError(e);
             }
         }

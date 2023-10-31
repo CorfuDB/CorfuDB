@@ -85,6 +85,10 @@ public class SessionManager {
 
     private final LogReplicationServer incomingMsgHandler;
 
+    private int sessionNameIdx;
+
+    private String SESSION_NAME_PREFIX = "session_";
+
     /**
      * Constructor
      *
@@ -96,6 +100,8 @@ public class SessionManager {
                           ServerContext serverContext,
                           String localCorfuEndpoint, LogReplicationPluginConfig pluginConfig) {
         this.topology = topology;
+
+        this.sessionNameIdx = 1;
         this.corfuStore = new CorfuStore(corfuRuntime);
 
         this.localCorfuEndpoint = localCorfuEndpoint;
@@ -117,7 +123,7 @@ public class SessionManager {
 
         this.router = new LogReplicationClientServerRouter(replicationManager,
                 topology.getLocalNodeDescriptor().getClusterId(), topology.getLocalNodeDescriptor().getNodeId(),
-                incomingSessions, outgoingSessions, incomingMsgHandler, serverContext, pluginConfig);
+                incomingSessions, outgoingSessions, incomingMsgHandler, serverContext, pluginConfig, replicationContext);
     }
 
     /**
@@ -276,15 +282,14 @@ public class SessionManager {
             createOutgoingSessionsBySubscriber(subscriber);
             createIncomingSessionsBySubscriber(subscriber);
         }
+        generateNameForNewlyAddedSession();
+        newSessionsDiscovered.forEach(session -> configManager.generateConfig(session, true,
+                replicationContext.getSessionName(session)));
+        // TODO(V2): print the mapping into a separate log file
+        replicationContext.printSessionNameMapping();
         updateRouterWithNewSessions();
         createSourceFSMs();
-        // TODO(V2): The below method logs a mapping of a session's hashcode to the session itself.  This
-        //  is because LR names worker threads corresponding to a session using its hashcode.
-        //  To identify the remote cluster and replication information while debugging, we need a view of
-        //  the whole session object.  However, this method of logging the mapping has limitations
-        //  because the mapping is only printed when the session is created for the first time.  If the
-        //  logs have rolled over, the information is lost.  We need a permanent store/log of this mapping.
-        logNewlyAddedSessionInfo();
+
     }
 
     private void createOutgoingSessionsBySubscriber(ReplicationSubscriber subscriber) {
@@ -326,8 +331,6 @@ public class SessionManager {
         outgoingSessions.addAll(sessionsToAdd);
         log.info("Total of {} outgoing sessions created with subscriber {}, sessions={}", sessionsToAdd.size(),
                 subscriber, sessionsToAdd);
-
-        configManager.generateConfig(sessionsToAdd, true);
     }
 
     private void createIncomingSessionsBySubscriber(ReplicationSubscriber subscriber) {
@@ -367,15 +370,6 @@ public class SessionManager {
         incomingSessions.addAll(sessionsToAdd);
         log.info("Total of {} incoming sessions created with subscriber {}, sessions={}", sessionsToAdd.size(),
                 subscriber, sessionsToAdd);
-
-        configManager.generateConfig(sessionsToAdd, true);
-    }
-
-    private void logNewlyAddedSessionInfo() {
-        log.info("========= HashCode -> Session mapping for newly added session: =========");
-        for (LogReplicationSession session : newSessionsDiscovered) {
-            log.info("HashCode: {}, Session: {}", session.hashCode(), session);
-        }
     }
 
     private void updateRouterWithNewSessions() {
@@ -396,7 +390,8 @@ public class SessionManager {
                 if (incomingSessions.contains(session)) {
                     router.getSessionToRemoteSourceLeaderManager().put(session,
                             new RemoteSourceLeadershipManager(session, router,
-                                    topology.getLocalNodeDescriptor().getNodeId(), replicationContext));
+                                    topology.getLocalNodeDescriptor().getNodeId(), replicationContext,
+                                            replicationContext.getSessionName(session)));
                 }
             }
         });
@@ -412,6 +407,14 @@ public class SessionManager {
                 .setSinkClusterId(sinkClusterId)
                 .setSubscriber(subscriber)
                 .build();
+    }
+
+    private void generateNameForNewlyAddedSession() {
+        for(LogReplicationSession session : newSessionsDiscovered) {
+            String nameForSession = SESSION_NAME_PREFIX + sessionNameIdx;
+            ++sessionNameIdx;
+            replicationContext.addSessionNameForLogging(session, nameForSession);
+        }
     }
 
     private void removeStaleSessionOnLeadershipAcquire() {
@@ -495,6 +498,8 @@ public class SessionManager {
             }
             this.outgoingSessions.remove(session);
             this.incomingSessions.remove(session);
+
+            replicationContext.removeSessionName(session);
         });
 
     }

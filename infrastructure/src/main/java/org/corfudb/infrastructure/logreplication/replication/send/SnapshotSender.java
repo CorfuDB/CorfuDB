@@ -83,6 +83,7 @@ public class SnapshotSender {
 
     private volatile AtomicBoolean stopSnapshotSync = new AtomicBoolean(false);
 
+
     public SnapshotSender(LogReplicationContext replicationContext, SnapshotReader snapshotReader, DataSender dataSender,
                           LogReplicationFSM fsm) {
         this.runtime = replicationContext.getCorfuRuntime();
@@ -90,7 +91,7 @@ public class SnapshotSender {
         this.fsm = fsm;
         int snapshotSyncBatchSize = replicationContext.getConfig(fsm.getSession()).getMaxNumMsgPerBatch();
         this.maxNumSnapshotMsgPerBatch = snapshotSyncBatchSize <= 0 ? DEFAULT_MAX_NUM_MSG_PER_BATCH : snapshotSyncBatchSize;
-        this.dataSenderBufferManager = new SnapshotSenderBufferManager(dataSender, fsm.getAckReader());
+        this.dataSenderBufferManager = new SnapshotSenderBufferManager(dataSender, fsm.getAckReader(), fsm.getSessionName());
         this.messageCounter = MeterRegistryProvider.getInstance().map(registry ->
                 registry.gauge("logreplication.messages",
                         ImmutableList.of(Tag.of("replication.type", "snapshot")),
@@ -106,7 +107,7 @@ public class SnapshotSender {
      */
     public void transmit(UUID snapshotSyncEventId) {
 
-        log.info("Running snapshot sync for {} on baseSnapshot {}", snapshotSyncEventId,
+        log.info("[{}]:: Running snapshot sync for {} on baseSnapshot {}", fsm.getSessionName(), snapshotSyncEventId,
                 baseSnapshotTimestamp);
 
         boolean cancel = false;     // Flag indicating snapshot sync needs to be canceled
@@ -130,7 +131,7 @@ public class SnapshotSender {
                     // Data Transformation / Processing
                     // readProcessor.process(snapshotReadMessage.getMessages())
                 } catch (TrimmedException te) {
-                    log.warn("Cancel snapshot sync due to trimmed exception.", te);
+                    log.warn("[{}]:: Cancel snapshot sync due to trimmed exception.", fsm.getSessionName(), te);
                     dataSenderBufferManager.reset(Address.NON_ADDRESS);
                     snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.TRIM_SNAPSHOT_SYNC, false);
                     cancel = true;
@@ -153,7 +154,7 @@ public class SnapshotSender {
                     }
                     break;
                 } catch (Exception e) {
-                    log.error("Caught exception during snapshot sync", e);
+                    log.error("[{}]:: Caught exception during snapshot sync", fsm.getSessionName(), e);
                     snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.UNKNOWN, false);
                     cancel = true;
                     break;
@@ -167,7 +168,7 @@ public class SnapshotSender {
 
             if (completed && dataSenderBufferManager.pendingMessages.isEmpty()) {
                 // Snapshot Sync Transfer Completed
-                log.info("Snapshot sync transfer completed for {} on timestamp={}", snapshotSyncEventId,
+                log.info("[{}]:: Snapshot sync transfer completed for {} on timestamp={}", fsm.getSessionName(), snapshotSyncEventId,
                         baseSnapshotTimestamp);
                 snapshotSyncTransferComplete(snapshotSyncEventId);
                 completed = false;
@@ -177,12 +178,13 @@ public class SnapshotSender {
                 // Snapshot Sync is not performed in a single run, as for the case of multi-cluster replication
                 // the shared thread pool could be lower than the number of sites, so we assign resources in
                 // a round robin fashion.
-                log.trace("Snapshot sync continue for {} on timestamp {}", snapshotSyncEventId, baseSnapshotTimestamp);
+                log.trace("[{}]:: Snapshot sync continue for {} on timestamp {}", fsm.getSessionName(), snapshotSyncEventId,
+                        baseSnapshotTimestamp);
                 fsm.input(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_CONTINUE,
                         new LogReplicationEventMetadata(snapshotSyncEventId)));
             }
         } else {
-            log.info("Snapshot sync completed for {} as there is no data in the log.", snapshotSyncEventId);
+            log.info("[{}]:: Snapshot sync completed for {} as there is no data in the log.", fsm.getSessionName(), snapshotSyncEventId);
 
             try {
                 dataSenderBufferManager.sendWithBuffering(getSnapshotSyncStartMarker(snapshotSyncEventId));
@@ -190,7 +192,7 @@ public class SnapshotSender {
                 snapshotSyncAck.get(DEFAULT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
                 snapshotSyncTransferComplete(snapshotSyncEventId);
             } catch (Exception e) {
-                log.warn("Caught exception while sending data to sink.", e);
+                log.warn("[{}]:: Caught exception while sending data to sink.", fsm.getSessionName(), e);
                 snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.UNKNOWN, false);
             }
         }
@@ -226,7 +228,7 @@ public class SnapshotSender {
         // If Snapshot is complete, add end marker
         if (completed) {
             LogReplicationEntryMsg endDataMessage = getSnapshotSyncEndMarker(snapshotSyncEventId);
-            log.info("SnapshotSender sent out SNAPSHOT_END message {} ", endDataMessage.getMetadata());
+            log.info("[{}]:: SnapshotSender sent out SNAPSHOT_END message {} ", fsm.getSessionName(), endDataMessage.getMetadata());
             snapshotSyncAck = dataSenderBufferManager.sendWithBuffering(endDataMessage);
             numMessages++;
         }
@@ -288,7 +290,7 @@ public class SnapshotSender {
         // Report error to the application through the dataSender
         dataSenderBufferManager.onError(error);
 
-        log.error("SNAPSHOT SYNC is being CANCELED, due to {}", error.getDescription());
+        log.error("[{}]:: SNAPSHOT SYNC is being CANCELED, due to {}", fsm.getSessionName(), error.getDescription());
 
         LogReplicationEventMetadata metadata = new LogReplicationEventMetadata(snapshotSyncEventId);
         metadata.setTimeoutException(timeoutException);

@@ -195,6 +195,9 @@ public class LogReplicationFSM {
     private final FsmTaskManager fsmTaskManager;
 
 
+    @Getter
+    private final String sessionName;
+
     /**
      * Constructor for LogReplicationFSM, custom read processor for data transformation.
      *
@@ -209,6 +212,7 @@ public class LogReplicationFSM {
         this.snapshotReader = createSnapshotReader(session, replicationContext);
         this.logEntryReader = createLogEntryReader(session, replicationContext);
 
+        this.sessionName = replicationContext.getSessionName(session);
         this.ackReader = ackReader;
         this.session = session;
         this.snapshotSender = new SnapshotSender(replicationContext, snapshotReader, dataSender, this);
@@ -217,7 +221,7 @@ public class LogReplicationFSM {
         this.fsmTaskManager = replicationContext.getTaskManager();
         this.fsmTaskManager.createReplicationTaskManager("replicationFSM", MAX_REPLICATION_WORKER_THREAD_COUNT);
 
-        init(dataSender, session);
+        init(dataSender);
         setTopologyConfigId(replicationContext.getTopologyConfigId());
     }
 
@@ -236,6 +240,7 @@ public class LogReplicationFSM {
     public LogReplicationFSM(SnapshotReader snapshotReader, DataSender dataSender,
                              LogEntryReader logEntryReader, LogReplicationAckReader ackReader,
                              LogReplicationSession session, LogReplicationContext replicationContext) {
+        this.sessionName = replicationContext.getSessionName(session);
         this.snapshotReader = snapshotReader;
         this.logEntryReader = logEntryReader;
         this.ackReader = ackReader;
@@ -245,7 +250,7 @@ public class LogReplicationFSM {
         this.fsmTaskManager = replicationContext.getTaskManager();
         this.fsmTaskManager.createReplicationTaskManager("replicationFSM", MAX_REPLICATION_WORKER_THREAD_COUNT);
 
-        init(dataSender, session);
+        init(dataSender);
     }
 
     private SnapshotReader createSnapshotReader(LogReplicationSession session, LogReplicationContext replicationContext) {
@@ -265,7 +270,7 @@ public class LogReplicationFSM {
                 break;
 
             default:
-                log.error("Unsupported replication model found: {}", model);
+                log.error("[{}]:: Unsupported replication model found: {}",sessionName, model);
                 throw new IllegalArgumentException("Unsupported replication model found: " + model);
 
         }
@@ -289,18 +294,18 @@ public class LogReplicationFSM {
                 break;
 
             default:
-                log.error("Unsupported Replication Model Found: {}", model);
+                log.error("[{}]:: Unsupported Replication Model Found: {}", sessionName, model);
                 throw new IllegalArgumentException("Unsupported Replication Model Found: " +
                         session.getSubscriber().getModel());
         }
         return logEntryReader;
     }
 
-    private void init(DataSender dataSender, LogReplicationSession session) {
+    private void init(DataSender dataSender) {
         // Initialize Log Replication 5 FSM states - single instance per state
         initializeStates(snapshotSender, logEntrySender, dataSender);
         this.state = states.get(LogReplicationStateType.INITIALIZED);
-        log.info("Log Replication FSM initialized for session={}", session);
+        log.info("[{}]:: Log Replication FSM initialized", sessionName);
     }
 
     /**
@@ -330,11 +335,11 @@ public class LogReplicationFSM {
      */
     public void input(LogReplicationEvent event) {
         if (state.getType().equals(LogReplicationStateType.ERROR)) {
-            log.warn("Not accepting event {} as current state is {}", event.getType(), state.getType());
+            log.warn("[{}]:: Not accepting event {} as current state is {}", sessionName, event.getType(), state.getType());
             return;
         }
         if (event.getType() != LogReplicationEventType.LOG_ENTRY_SYNC_CONTINUE) {
-            log.trace("Enqueue event {} with ID {}", event.getType(), event.getEventId());
+            log.trace("[{}]:: Enqueue event {} with ID {}", sessionName, event.getType(), event.getEventId());
         }
         this.fsmTaskManager.addTask(event, FsmTaskManager.FsmEventType.LogReplicationEvent, 0, this);
     }

@@ -56,6 +56,8 @@ public class RemoteSourceLeadershipManager {
     private volatile Optional<String> leaderNodeId = Optional.empty();
 
     private final String localNodeId;
+    
+    private final String sessionName;
 
     //TODO v2: tune thread count;
     private static final int MAX_SINK_TASK_WORKER_THREAD_COUNT = 2;
@@ -63,12 +65,13 @@ public class RemoteSourceLeadershipManager {
     private final FsmTaskManager taskManager;
 
     public RemoteSourceLeadershipManager(LogReplicationSession session, LogReplicationClientServerRouter router,
-                                         String localNodeId, LogReplicationContext replicationContext) {
+                                         String localNodeId, LogReplicationContext replicationContext, String sessionName) {
         this.session = session;
         this.router = router;
         this.localNodeId = localNodeId;
         this.connectedNodes = new HashSet<>();
         this.taskManager = replicationContext.getTaskManager();
+        this.sessionName = sessionName;
 
         this.taskManager.createSinkTaskManager("sinkFSM", MAX_SINK_TASK_WORKER_THREAD_COUNT);
     }
@@ -92,46 +95,46 @@ public class RemoteSourceLeadershipManager {
      * @param event
      */
     public void processEvent(LogReplicationSinkEvent event) {
-        log.info("processing event {}", event);
+        log.info("[{}]:: processing event {}", sessionName, event);
         switch (event.getType()) {
             case ON_CONNECTION_DOWN:
                 String nodeIdDown = event.getNodeId();
-                log.info("Detected connection down from node={}", nodeIdDown);
+                log.info("[{}]:: Detected connection down from node={}", sessionName, nodeIdDown);
                 updateDisconnectedNodes(nodeIdDown);
                 resetRemoteLeader(nodeIdDown);
                 break;
             case REMOTE_LEADER_NOT_FOUND:
-                log.info("Remote Leader not found. Retrying...");
+                log.info("[{}]:: Remote Leader not found. Retrying...", sessionName);
                 verifyRemoteLeader(this, connectedNodes, session.getSourceClusterId(), router,
-                        RemoteSourceLeadershipManager.class);
+                        RemoteSourceLeadershipManager.class, sessionName);
                 break;
             case ON_CONNECTION_UP:
-                log.info("Detected connection up from endpoint={}", event.getNodeId());
+                log.info("[{}]:: Detected connection up from endpoint={}", sessionName, event.getNodeId());
                 // Add new connected node, for leadership verification
                 updateConnectedNodes(event.getNodeId());
                 verifyRemoteLeader(this, connectedNodes, session.getSourceClusterId(), router,
-                        RemoteSourceLeadershipManager.class);
+                        RemoteSourceLeadershipManager.class, sessionName);
                 break;
             case REMOTE_LEADER_FOUND:
-                log.debug("Remote Leader is found: {}", event.getNodeId());
+                log.debug("[{}]:: Remote Leader is found: {}", sessionName, event.getNodeId());
                 invokeReverseReplication();
                 break;
             case REMOTE_LEADER_LOSS:
                 String oldLeader = event.getNodeId();
-                log.debug("Remote leader has changed. old leader {}", oldLeader);
+                log.debug("[{}]:: Remote leader has changed. old leader {}", sessionName, oldLeader);
                 resetRemoteLeader(oldLeader);
                 verifyRemoteLeader(this, connectedNodes, session.getSourceClusterId(), router,
-                        RemoteSourceLeadershipManager.class);
+                        RemoteSourceLeadershipManager.class, sessionName);
                 break;
             default: {
-                log.warn("Unexpected communication event {}", event.getType());
+                log.warn("[{}]:: Unexpected communication event {}", sessionName, event.getType());
             }
         }
     }
 
     private void resetRemoteLeader(String nodeId) {
         if (leaderNodeId.isPresent() && leaderNodeId.get().equals(nodeId)) {
-            log.debug("Reset remote leader");
+            log.debug("[{}]:: Reset remote leader", sessionName);
             leaderNodeId = Optional.empty();
         }
     }
@@ -145,12 +148,12 @@ public class RemoteSourceLeadershipManager {
     }
 
     public synchronized void setRemoteLeaderNodeId(String leaderId) {
-        log.debug("Set remote leader node id {}", leaderId);
+        log.debug("[{}]:: Set remote leader node id {}", sessionName, leaderId);
         leaderNodeId = Optional.ofNullable(leaderId);
     }
 
     public synchronized Optional<String> getRemoteLeaderNodeId() {
-        log.trace("Retrieve remote leader node id {}", leaderNodeId);
+        log.trace("[{}]:: Retrieve remote leader node id {}", sessionName, leaderNodeId);
         return leaderNodeId;
     }
 
@@ -173,7 +176,7 @@ public class RemoteSourceLeadershipManager {
                 .build();
 
 
-        log.info("Send the reverseReplicate rpc {} for session {}", payload, session);
+        log.info("[{}]:: Send the reverseReplicate rpc {}", sessionName, payload);
         router.sendResponse(getResponseMsg(header, payload));
     }
 

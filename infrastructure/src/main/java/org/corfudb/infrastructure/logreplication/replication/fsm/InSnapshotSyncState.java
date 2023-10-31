@@ -96,15 +96,16 @@ public class InSnapshotSyncState implements LogReplicationState {
                  batch of updates for the current snapshot sync.
                  */
                 if (event.getMetadata().getRequestId() == transitionEventId) {
-                    log.debug("InSnapshotSync[{}] :: Continuation of snapshot sync for {}", transitionEventId, event.getEventId());
+                    log.debug("[{}]:: InSnapshotSync[{}] :: Continuation of snapshot sync for {}", fsm.getSessionName(),
+                            transitionEventId, event.getEventId());
                     return this;
                 } else {
-                    log.warn("Unexpected snapshot sync continue event {} when in snapshot sync state {}.",
-                            event.getEventId(), transitionEventId);
+                    log.warn("[{}]:: Unexpected snapshot sync continue event {} when in snapshot sync state {}.",
+                            fsm.getSessionName(), event.getEventId(), transitionEventId);
                     throw new IllegalTransitionException(event.getType(), getType());
                 }
             case SNAPSHOT_TRANSFER_COMPLETE:
-                log.info("Snapshot Sync transfer is complete for {}", event.getEventId());
+                log.info("[{}]:: Snapshot Sync transfer is complete for {}", fsm.getSessionName(), event.getEventId());
                 WaitSnapshotApplyState waitSnapshotApplyState = (WaitSnapshotApplyState)fsm.getStates().get(LogReplicationStateType.WAIT_SNAPSHOT_APPLY);
                 waitSnapshotApplyState.setTransitionEventId(transitionEventId);
                 waitSnapshotApplyState.setBaseSnapshotTimestamp(snapshotSender.getBaseSnapshotTimestamp());
@@ -119,7 +120,8 @@ public class InSnapshotSyncState implements LogReplicationState {
                     // Re-trigger SnapshotSync due to error, generate a new event Id for the new snapshot sync
                     LogReplicationState inSnapshotSyncState = fsm.getStates().get(LogReplicationStateType.IN_SNAPSHOT_SYNC);
                     UUID newSnapshotSyncId = UUID.randomUUID();
-                    log.debug("Starting new snapshot sync after cancellation id={}", newSnapshotSyncId);
+                    log.debug("[{}]:: Starting new snapshot sync after cancellation id={}", fsm.getSessionName(),
+                            newSnapshotSyncId);
                     inSnapshotSyncState.setTransitionEventId(newSnapshotSyncId);
                     ((InSnapshotSyncState)inSnapshotSyncState).setForcedSnapshotSync(false);
                     snapshotSender.reset();
@@ -130,7 +132,7 @@ public class InSnapshotSyncState implements LogReplicationState {
                     return inSnapshotSyncState;
                 }
 
-                log.warn("Sync Cancel for eventId {}, but running snapshot sync for {}",
+                log.warn("[{}]:: Sync Cancel for eventId {}, but running snapshot sync for {}", fsm.getSessionName(),
                         event.getEventId(), transitionEventId);
                 return this;
             case REPLICATION_STOP:
@@ -140,7 +142,8 @@ public class InSnapshotSyncState implements LogReplicationState {
                 cancelSnapshotSync("replication terminated.");
                 return fsm.getStates().get(LogReplicationStateType.ERROR);
             default: {
-                log.warn("Unexpected log replication event {} when in snapshot sync state.", event.getType());
+                log.warn("[{}]:: Unexpected log replication event {} when in snapshot sync state.", fsm.getSessionName(),
+                        event.getType());
             }
 
             throw new IllegalTransitionException(event.getType(), getType());
@@ -160,7 +163,7 @@ public class InSnapshotSyncState implements LogReplicationState {
             }
             snapshotSender.transmit(transitionEventId);
         } catch (Throwable t) {
-            log.error("Error on entry of InSnapshotSyncState.", t);
+            log.error("[{}]:: Error on entry of InSnapshotSyncState.", fsm.getSessionName(), t);
         }
     }
 
@@ -182,7 +185,7 @@ public class InSnapshotSyncState implements LogReplicationState {
         }
         if (to.getType().equals(LogReplicationStateType.INITIALIZED)) {
             fsm.getAckReader().markSyncStatus(SyncStatus.STOPPED);
-            log.debug("Snapshot sync status changed to STOPPED");
+            log.debug("[{}]:: Snapshot sync status changed to STOPPED", fsm.getSessionName());
         }
     }
 
@@ -202,7 +205,7 @@ public class InSnapshotSyncState implements LogReplicationState {
     private void cancelSnapshotSync(String cancelCause) {
         snapshotSender.stop();
         snapshotSender.getDataSenderBufferManager().getPendingMessages().clear();
-        log.info("Snapshot sync is ending because {}", cancelCause);
+        log.info("[{}]:: Snapshot sync is ending because {}", fsm.getSessionName(), cancelCause);
     }
 
     @Override

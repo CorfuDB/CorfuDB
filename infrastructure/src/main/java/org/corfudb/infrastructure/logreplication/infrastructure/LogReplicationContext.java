@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure.logreplication.infrastructure;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.protobuf.TextFormat;
 import lombok.Getter;
 import lombok.Setter;
 import org.corfudb.infrastructure.logreplication.FsmTaskManager;
@@ -10,7 +11,12 @@ import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManag
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.util.serializer.ISerializer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.corfudb.util.serializer.ProtobufSerializer.PROTOBUF_SERIALIZER_CODE;
@@ -47,6 +53,10 @@ public class LogReplicationContext {
     @Getter
     private final FsmTaskManager taskManager;
 
+    private Map<LogReplicationSession, String> sessionToNameForLogging;
+
+    private final Logger log;
+
     /**
      * Constructor
      **/
@@ -60,6 +70,8 @@ public class LogReplicationContext {
         this.isLeader = new AtomicBoolean(false);
         this.corfuRuntime = runtime;
         this.taskManager = new FsmTaskManager();
+        this.sessionToNameForLogging = new HashMap<>();
+        this.log = LoggerFactory.getLogger("session-name");
     }
 
     @VisibleForTesting
@@ -73,6 +85,8 @@ public class LogReplicationContext {
         this.isLeader = new AtomicBoolean(isLeader);
         this.corfuRuntime = runtime;
         this.taskManager = new FsmTaskManager();
+        this.sessionToNameForLogging = new HashMap<>();
+        this.log = LoggerFactory.getLogger("session-name");
     }
 
     public void setIsLeader(boolean newValue) {
@@ -87,7 +101,7 @@ public class LogReplicationContext {
      * @param updateGroupDestinationConfig True if group destination config needs to be updated.
      */
     public void refreshConfig(LogReplicationSession session, boolean updateGroupDestinationConfig) {
-        this.configManager.getUpdatedConfig(session, updateGroupDestinationConfig);
+        this.configManager.getUpdatedConfig(session, updateGroupDestinationConfig, sessionToNameForLogging.get(session));
     }
 
     /**
@@ -109,4 +123,23 @@ public class LogReplicationContext {
     public ISerializer getProtobufSerializer() {
         return configManager.getRuntime().getSerializers().getSerializer(PROTOBUF_SERIALIZER_CODE);
     }
+
+    public String getSessionName(LogReplicationSession session) {
+        return sessionToNameForLogging.get(session);
+    }
+
+    public void addSessionNameForLogging(LogReplicationSession session, String name) {
+        sessionToNameForLogging.put(session, name);
+    }
+
+    public void removeSessionName(LogReplicationSession session) {
+        sessionToNameForLogging.remove(session);
+    }
+
+    public void printSessionNameMapping() {
+        log.info(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>");
+        log.info("Session -> Session Name: "+ sessionToNameForLogging.entrySet());
+        log.info(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>");
+    }
+
 }
