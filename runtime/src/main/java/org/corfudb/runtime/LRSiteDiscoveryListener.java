@@ -15,6 +15,10 @@ import java.util.concurrent.TimeUnit;
 /**
  * This listener will notify when a new remote site for specific
  * log replication model is available for replication.
+ *
+ * TODO: This is a temporary fix for the case where a Sink receives data from multiple sources.  The client
+ * (application) on the Sink cluster must know the source cluster ids so that it can create a stream listener for
+ * corresponding streams.
  */
 @Slf4j
 public abstract class LRSiteDiscoveryListener {
