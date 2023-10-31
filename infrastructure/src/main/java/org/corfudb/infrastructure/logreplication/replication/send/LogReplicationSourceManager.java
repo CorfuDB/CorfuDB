@@ -33,9 +33,8 @@ import java.util.concurrent.Executors;
 @Data
 @Slf4j
 public class LogReplicationSourceManager {
-
-    private static final int DEFAULT_FSM_WORKER_THREADS = 1;
-
+    
+    @VisibleForTesting
     private final LogReplicationFSM logReplicationFSM;
 
     private final LogReplicationMetadataManager metadataManager;
@@ -64,17 +63,12 @@ public class LogReplicationSourceManager {
             // Avoid FSM being initialized if there are no streams to replicate
             throw new IllegalArgumentException("Invalid Log Replication: Streams to replicate is EMPTY");
         }
-
-        ExecutorService logReplicationFSMWorkers = Executors.newFixedThreadPool(DEFAULT_FSM_WORKER_THREADS,
-                new ThreadFactoryBuilder().setNameFormat("state-machine-worker-" + session.hashCode()).build());
-
         this.metadataManager = metadataManager;
 
         // Ack Reader for Snapshot and LogEntry Sync
         this.ackReader = new LogReplicationAckReader(this.metadataManager, session, replicationContext);
 
-        this.logReplicationFSM = new LogReplicationFSM(dataSender,
-                logReplicationFSMWorkers, ackReader, session, replicationContext);
+        this.logReplicationFSM = new LogReplicationFSM(dataSender, ackReader, session, replicationContext);
         this.ackReader.setLogEntryReader(this.logReplicationFSM.getLogEntryReader());
         this.ackReader.setLogEntrySender(this.logReplicationFSM.getLogEntrySender());
     }
