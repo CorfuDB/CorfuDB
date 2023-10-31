@@ -202,12 +202,11 @@ public class LogReplicationFSM {
      *
      * @param dataSender        implementation of a data sender, both snapshot and log entry, this represents
      *                          the application callback for data transmission
-     * @param workers           FSM executor service for state tasks
      * @param ackReader         AckReader which listens to acks from the Sink and updates the replication status accordingly
      * @param session           Replication Session to the remote(Sink) cluster
      * @param replicationContext Replication context
      */
-    public LogReplicationFSM(DataSender dataSender,ExecutorService workers, LogReplicationAckReader ackReader,
+    public LogReplicationFSM(DataSender dataSender, LogReplicationAckReader ackReader,
                              LogReplicationSession session, LogReplicationContext replicationContext) {
         this.snapshotReader = createSnapshotReader(session, replicationContext);
         this.logEntryReader = createLogEntryReader(session, replicationContext);
@@ -229,14 +228,13 @@ public class LogReplicationFSM {
      * @param snapshotReader snapshot logreader implementation
      * @param dataSender application callback for snapshot and log entry sync messages
      * @param logEntryReader log entry logreader implementation
-     * @param workers FSM executor service for state tasks
      * @param ackReader AckReader which listens to acks from the Sink and updates the replication status accordingly
      * @param session   Replication Session to the remote(Sink) cluster
      * @param replicationContext Replication context
      */
     @VisibleForTesting
     public LogReplicationFSM(SnapshotReader snapshotReader, DataSender dataSender,
-                             LogEntryReader logEntryReader, ExecutorService workers, LogReplicationAckReader ackReader,
+                             LogEntryReader logEntryReader, LogReplicationAckReader ackReader,
                              LogReplicationSession session, LogReplicationContext replicationContext) {
         this.taskManager = replicationContext.getReplicationFsmTaskManager();
         this.snapshotReader = snapshotReader;
