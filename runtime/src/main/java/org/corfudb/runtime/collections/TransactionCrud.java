@@ -525,8 +525,8 @@ public class TransactionCrud<T extends StoreTransaction<T>>
     @Override
     public <K extends Message, V extends Message, M extends Message>
     boolean isExists(@Nonnull Table<K, V, M> table, @Nonnull final K key) {
-        CorfuStoreEntry<K, V, M> record = getRecord(table, key);
-        return record.getPayload() != null;
+        CorfuStoreEntry<K, V, M> entry = getRecord(table, key);
+        return entry.getPayload() != null;
     }
 
     /**
