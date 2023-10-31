@@ -122,13 +122,7 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
 
         // Open queue on sink
         try {
-            log.info("Sink Queue name: {}", REPLICATED_RECV_Q_PREFIX+sourceSiteId);
-            Table<Queue.CorfuGuidMsg, Queue.RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg> replicatedQueueSink
-                    = sinkCorfuStores.get(0).openQueue(CORFU_SYSTEM_NAMESPACE,
-                    REPLICATED_RECV_Q_PREFIX+sourceSiteId,
-                    Queue.RoutingTableEntryMsg.class, TableOptions.builder().schemaOptions(CorfuOptions.SchemaOptions.newBuilder()
-                            .addStreamTag(REPLICATED_QUEUE_TAG).build()).build());
-
+            log.info("Sink Queue name: {}", REPLICATED_RECV_Q_PREFIX + sourceSiteId);
             startReplicationServers();
             while (!snapshotProvider.isSnapshotSent) {
                 Thread.sleep(5000);

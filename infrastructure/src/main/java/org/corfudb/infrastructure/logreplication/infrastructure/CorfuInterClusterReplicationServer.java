@@ -379,7 +379,7 @@ public class CorfuInterClusterReplicationServer implements Runnable {
                 .ksPasswordFile((String) serverContext.getServerConfig().get(ConfigParamNames.KEY_STORE_PASS_FILE))
                 .tlsEnabled((Boolean) serverContext.getServerConfig().get("--enable-tls"))
                 .systemDownHandler(() -> System.exit(SYSTEM_EXIT_ERROR_CODE))
-                .maxCacheEntries(serverContext.getLogReplicationCacheMaxSize()/2)
+                .maxCacheEntries(serverContext.getLogReplicationCacheMaxSize())
                 .maxWriteSize(serverContext.getMaxWriteSize())
                 .retainSerializedDataInCache(true)
                 .build())
