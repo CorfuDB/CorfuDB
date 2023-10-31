@@ -117,6 +117,9 @@ public class LogEntrySender {
                      * take over the shared thread pool of the state machine.
                      */
                     taskActive = false;
+                    // TODO V2: When log entries to send are sparse, the CPU usage spikes because we keep checking with
+                    //  the sequencer if there is any data to be sent continuously.  Add a backoff or delay mechanism
+                    //  to avoid the repeated sequencer query.
                     break;
                     // Request full sync (something is wrong I cant deliver)
                     // (Optimization):
