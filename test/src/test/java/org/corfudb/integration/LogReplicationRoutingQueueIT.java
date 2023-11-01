@@ -121,50 +121,48 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
         queueSenderClient.startLRSnapshotTransmitter(snapshotProvider); // starts a listener on event table
 
         // Open queue on sink
-        try {
-            log.info("Sink Queue name: {}", REPLICATED_RECV_Q_PREFIX + sourceSiteId);
-            startReplicationServers();
-            while (!snapshotProvider.isSnapshotSent) {
-                Thread.sleep(5000);
-            }
 
-            RoutingQueueListener listener = new RoutingQueueListener(sinkCorfuStores.get(0),
-                    sourceSiteId, clientName);
-            sinkCorfuStores.get(0).subscribeRoutingQListener(listener);
-
-            int numFullSyncMsgsGot = listener.snapSyncMsgCnt;
-            while (numFullSyncMsgsGot < 5) {
-                Thread.sleep(5000);
-                numFullSyncMsgsGot = listener.snapSyncMsgCnt;
-                log.info("Entries got on receiver {}", numFullSyncMsgsGot);
-            }
-            assertThat(listener.snapSyncMsgCnt).isEqualTo(5);
-
-            // Now request a full sync again for all sites!
-            snapshotProvider.isSnapshotSent = false;
-            editor.requestGlobalFullSync();
-
-            while (numFullSyncMsgsGot < 10) {
-                Thread.sleep(5000);
-                numFullSyncMsgsGot = listener.snapSyncMsgCnt;
-                log.info("Entries got on receiver after 2nd full sync {}", numFullSyncMsgsGot);
-            }
-            assertThat(listener.snapSyncMsgCnt).isEqualTo(10);
-
-            // Now request a full sync this time for just one site!
-            snapshotProvider.isSnapshotSent = false;
-            queueSenderClient.requestSnapshotSync(DefaultClusterConfig.getSourceClusterIds().get(0),
-                    DefaultClusterConfig.getSinkClusterIds().get(0));
-
-            while (numFullSyncMsgsGot < 15) {
-                Thread.sleep(5000);
-                numFullSyncMsgsGot = listener.snapSyncMsgCnt;
-                log.info("Entries got on receiver after 3rd full sync {}", numFullSyncMsgsGot);
-            }
-            assertThat(listener.snapSyncMsgCnt).isEqualTo(15);
-        } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
-            throw new RuntimeException(e);
+        log.info("Sink Queue name: {}", REPLICATED_RECV_Q_PREFIX + sourceSiteId);
+        startReplicationServers();
+        while (!snapshotProvider.isSnapshotSent) {
+            Thread.sleep(5000);
         }
+
+        RoutingQueueListener listener = new RoutingQueueListener(sinkCorfuStores.get(0),
+            sourceSiteId, clientName);
+        sinkCorfuStores.get(0).subscribeRoutingQListener(listener);
+
+        int numFullSyncMsgsGot = listener.snapSyncMsgCnt;
+        while (numFullSyncMsgsGot < 5) {
+            Thread.sleep(5000);
+            numFullSyncMsgsGot = listener.snapSyncMsgCnt;
+            log.info("Entries got on receiver {}", numFullSyncMsgsGot);
+        }
+        assertThat(listener.snapSyncMsgCnt).isEqualTo(5);
+
+        // Now request a full sync again for all sites!
+        snapshotProvider.isSnapshotSent = false;
+        editor.requestGlobalFullSync();
+
+        while (numFullSyncMsgsGot < 10) {
+            Thread.sleep(5000);
+            numFullSyncMsgsGot = listener.snapSyncMsgCnt;
+            log.info("Entries got on receiver after 2nd full sync {}", numFullSyncMsgsGot);
+        }
+        assertThat(listener.snapSyncMsgCnt).isEqualTo(10);
+
+        // Now request a full sync this time for just one site!
+        snapshotProvider.isSnapshotSent = false;
+        queueSenderClient.requestSnapshotSync(DefaultClusterConfig.getSourceClusterIds().get(0),
+            DefaultClusterConfig.getSinkClusterIds().get(0));
+
+        while (numFullSyncMsgsGot < 15) {
+            Thread.sleep(5000);
+            numFullSyncMsgsGot = listener.snapSyncMsgCnt;
+            log.info("Entries got on receiver after 3rd full sync {}", numFullSyncMsgsGot);
+        }
+        assertThat(listener.snapSyncMsgCnt).isEqualTo(15);
+
     }
 
     @Test
@@ -442,12 +440,13 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
 
     static class RoutingQSiteDiscoverer extends LRSiteDiscoveryListener {
         private final String clientName;
+        public final Map<String, RoutingQueueListener> iGot = new HashMap<>();
+
         public RoutingQSiteDiscoverer(CorfuStore corfuStore, LogReplication.ReplicationModel replicationModel,
                                       String clientName) {
             super(corfuStore, replicationModel, clientName);
             this.clientName = clientName;
         }
-        public final Map<String, RoutingQueueListener> iGot = new HashMap<>();
 
         @Override
         public void onNewSiteUp(String siteId) {

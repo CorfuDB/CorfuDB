@@ -321,9 +321,9 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
                 try {
                     IRetry.build(IntervalRetry.class, () -> {
                         try (TxnContext txnContext = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-                            txnContext.logUpdate(LogReplicationUtils.lrSnapSyncTxnEnvelopeStreamId,
-                                    new SMREntry("put", smrArgs,
-                                            corfuStore.getRuntime().getSerializers().getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE)),
+                            txnContext.logUpdate(lrSnapSyncTxnEnvelopeStreamId, new SMREntry("put", smrArgs,
+                                    corfuStore.getRuntime().getSerializers().getSerializer(
+                                        ProtobufSerializer.PROTOBUF_SERIALIZER_CODE)),
                                     Arrays.asList(TableRegistry.getStreamIdForStreamTag(CORFU_SYSTEM_NAMESPACE,
                                             SNAPSHOT_SYNC_QUEUE_TAG_SENDER_PREFIX +
                                                     key.getSession().getSinkClusterId() + "_" + clientName))
