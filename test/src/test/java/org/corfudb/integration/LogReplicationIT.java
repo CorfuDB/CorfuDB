@@ -264,7 +264,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         srcMetadataManager = new LogReplicationMetadataManager(srcTestRuntime,
                 new LogReplicationContext(new LogReplicationConfigManager(srcTestRuntime, session.getSourceClusterId()), 0,
-                        "test" + SERVERS.PORT_0, true, pluginConfig, srcTestRuntime, 2));
+                        "test" + SERVERS.PORT_0, true, pluginConfig, srcTestRuntime));
         srcMetadataManager.addSession(session, 0, true);
 
         expectedAckTimestamp = new AtomicLong(Long.MAX_VALUE);
@@ -1284,7 +1284,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         LogReplicationConfigManager sinkConfigManager = new LogReplicationConfigManager(dstTestRuntime, session.getSinkClusterId());
         sinkConfigManager.generateConfig(Collections.singleton(session), false);
-        LogReplicationContext sinkContext = new LogReplicationContext(sinkConfigManager, 0, DEFAULT_ENDPOINT, pluginConfig, dstTestRuntime, 2);
+        LogReplicationContext sinkContext = new LogReplicationContext(sinkConfigManager, 0, DEFAULT_ENDPOINT, pluginConfig, dstTestRuntime);
         // This IT requires custom values to be set for the replication config.  Set these values so that the default
         // values are not used
         sinkContext.getConfig(session).setMaxNumMsgPerBatch(BATCH_SIZE);

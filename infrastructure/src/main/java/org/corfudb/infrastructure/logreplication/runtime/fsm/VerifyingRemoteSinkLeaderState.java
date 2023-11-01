@@ -4,8 +4,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientServerRouter;
 
-import java.util.concurrent.ThreadPoolExecutor;
-
 import static org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationFsmUtil.canEnqueueStopRuntimeFsmEvent;
 import static org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationFsmUtil.verifyRemoteLeader;
 

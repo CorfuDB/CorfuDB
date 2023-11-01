@@ -48,6 +48,7 @@ public class LogReplicationRuntimeEvent {
     private CorfuLogReplicationRuntime runtimeFsm;
 
     @Getter
+    // Used in the FsmTaskManager to ensure the order of consumption of events for a session
     private UUID eventId;
 
 

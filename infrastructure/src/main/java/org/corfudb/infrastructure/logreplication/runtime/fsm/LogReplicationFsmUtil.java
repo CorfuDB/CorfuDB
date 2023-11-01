@@ -4,6 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientServerRouter;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.sink.LogReplicationSinkEvent;
+import org.corfudb.infrastructure.logreplication.runtime.fsm.sink.RemoteSourceLeadershipManager;
 import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.proto.service.CorfuMessage;
 
@@ -109,7 +110,7 @@ public class LogReplicationFsmUtil {
             clazz.getMethod("input", LogReplicationSinkEvent.class).invoke(fsm,
                     new LogReplicationSinkEvent(
                             LogReplicationSinkEvent.LogReplicationSinkEventType.REMOTE_LEADER_FOUND,
-                            leader));
+                            leader, (RemoteSourceLeadershipManager) fsm));
         }
     }
 
@@ -125,7 +126,7 @@ public class LogReplicationFsmUtil {
             clazz.getMethod("input", LogReplicationSinkEvent.class).invoke(fsm,
                     new LogReplicationSinkEvent(
                             LogReplicationSinkEvent.LogReplicationSinkEventType.REMOTE_LEADER_NOT_FOUND,
-                            leader));
+                            leader, (RemoteSourceLeadershipManager) fsm));
         }
     }
 

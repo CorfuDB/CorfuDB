@@ -192,7 +192,7 @@ public class LogReplicationFSM {
     @Getter
     private final LogReplicationSession session;
 
-    private final FsmTaskManager taskManager;
+    private final static FsmTaskManager taskManager = new FsmTaskManager("replicationFSM", 2);
 
     /**
      * Constructor for LogReplicationFSM, custom read processor for data transformation.
@@ -207,7 +207,6 @@ public class LogReplicationFSM {
                              LogReplicationSession session, LogReplicationContext replicationContext) {
         this.snapshotReader = createSnapshotReader(session, replicationContext);
         this.logEntryReader = createLogEntryReader(session, replicationContext);
-        this.taskManager = replicationContext.getReplicationFsmTaskManager();
 
         this.ackReader = ackReader;
         this.session = session;
@@ -233,7 +232,6 @@ public class LogReplicationFSM {
     public LogReplicationFSM(SnapshotReader snapshotReader, DataSender dataSender,
                              LogEntryReader logEntryReader, LogReplicationAckReader ackReader,
                              LogReplicationSession session, LogReplicationContext replicationContext) {
-        this.taskManager = replicationContext.getReplicationFsmTaskManager();
         this.snapshotReader = snapshotReader;
         this.logEntryReader = logEntryReader;
         this.ackReader = ackReader;
@@ -332,7 +330,7 @@ public class LogReplicationFSM {
         if (event.getType() != LogReplicationEventType.LOG_ENTRY_SYNC_CONTINUE) {
             log.trace("Enqueue event {} with ID {}", event.getType(), event.getEventId());
         }
-        taskManager.addTask(event, false);
+        taskManager.addTask(event, FsmTaskManager.fsmEventType.LogReplicationEvent);
     }
 
     /**
@@ -353,5 +351,9 @@ public class LogReplicationFSM {
         logEntryReader.setTopologyConfigId(topologyConfigId);
         snapshotSender.updateTopologyConfigId(topologyConfigId);
         logEntrySender.updateTopologyConfigId(topologyConfigId);
+    }
+
+    public static void shutdownTaskManager() {
+        taskManager.shutdown();
     }
 }

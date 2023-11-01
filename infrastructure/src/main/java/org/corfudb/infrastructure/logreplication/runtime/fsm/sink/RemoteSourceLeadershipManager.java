@@ -1,8 +1,8 @@
 package org.corfudb.infrastructure.logreplication.runtime.fsm.sink;
 
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.logreplication.FsmTaskManager;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientServerRouter;
 import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
@@ -12,8 +12,6 @@ import java.util.HashSet;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 
 import static org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationFsmUtil.verifyRemoteLeader;
@@ -29,11 +27,6 @@ import static org.corfudb.protocols.service.CorfuProtocolMessage.getResponseMsg;
  */
 @Slf4j
 public class RemoteSourceLeadershipManager {
-
-    /**
-     * Executor service for FSM event queue consume
-     */
-    private final ExecutorService communicationFSMConsumer;
 
     /**
      * Remote nodes to which connection has been established.
@@ -63,6 +56,8 @@ public class RemoteSourceLeadershipManager {
 
     private final String localNodeId;
 
+    private final static FsmTaskManager taskManager = new FsmTaskManager("sink-consumers", 2);
+
     public RemoteSourceLeadershipManager(LogReplicationSession session, LogReplicationClientServerRouter router,
                                          String localNodeId) {
         this.session = session;
@@ -70,39 +65,11 @@ public class RemoteSourceLeadershipManager {
         this.localNodeId = localNodeId;
         this.connectedNodes = new HashSet<>();
 
-        this.communicationFSMConsumer = Executors.newSingleThreadExecutor(new
-                ThreadFactoryBuilder().setNameFormat(
-                "sink-consumer-"+session.hashCode()).build());
-
-
-        communicationFSMConsumer.submit(this::consume);
     }
 
-    public synchronized void input(LogReplicationSinkEvent event) {
-        try {
-            log.info("adding to the queue {}", event);
-            eventQueue.put(event);
-        } catch (InterruptedException ex) {
-            log.error("Log Replication interrupted Exception: ", ex);
-        }
-    }
-
-    /**
-     * Consumer of the eventQueue.
-     * <p>
-     * This method consumes the log replication events and does the state transition.
-     */
-    private void consume() {
-        try {
-            //  Block until an event shows up in the queue.
-            LogReplicationSinkEvent event = eventQueue.take();
-            processEvent(event);
-
-            communicationFSMConsumer.submit(this::consume);
-
-        } catch (Throwable t) {
-            log.error("Error on event consumer: ", t);
-        }
+    public void input(LogReplicationSinkEvent event) {
+        log.info("adding to the queue {}", event);
+        taskManager.addTask(event, FsmTaskManager.fsmEventType.LogReplicationSinkEvent);
     }
 
     /**
@@ -118,7 +85,7 @@ public class RemoteSourceLeadershipManager {
      *
      * @param event
      */
-    private void processEvent(LogReplicationSinkEvent event) {
+    public void processEvent(LogReplicationSinkEvent event) {
         log.info("processing event {}", event);
         switch (event.getType()) {
             case ON_CONNECTION_DOWN:
@@ -202,6 +169,10 @@ public class RemoteSourceLeadershipManager {
 
         log.info("Send the reverseReplicate rpc {} for session {}", payload, session);
         router.sendResponse(getResponseMsg(header, payload));
+    }
+
+    public static void shutdownTaskManager() {
+        taskManager.shutdown();
     }
 
 }
