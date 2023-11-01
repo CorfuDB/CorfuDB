@@ -97,7 +97,7 @@ public class TransactionCrud<T extends StoreTransaction<T>>
                     + table.getNamespace() + " to transaction on namespace " + namespace);
         }
         if (!TransactionalContext.isInTransaction()) {
-            throw new IllegalStateException( // Do not allow transactions after commit() or abort()
+            throw new IllegalStateException(// Do not allow transactions after commit() or abort()
                     "TxnContext cannot be used after a transaction has ended on " +
                             table.getFullyQualifiedTableName());
         }
