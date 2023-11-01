@@ -441,8 +441,9 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
                 runtimeFsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent
                         .LogReplicationRuntimeEventType.ON_CONNECTION_DOWN, nodeId, runtimeFsm));
             } else {
-                sessionToRemoteSourceLeaderManager.get(session).input(new LogReplicationSinkEvent(
-                        LogReplicationSinkEvent.LogReplicationSinkEventType.ON_CONNECTION_DOWN, nodeId));
+                RemoteSourceLeadershipManager sourceLeadershipManager = sessionToRemoteSourceLeaderManager.get(session);
+                sourceLeadershipManager.input(new LogReplicationSinkEvent(
+                        LogReplicationSinkEvent.LogReplicationSinkEventType.ON_CONNECTION_DOWN, nodeId, sourceLeadershipManager));
             }
             throw ne;
         } catch(NullPointerException npe) {
@@ -510,8 +511,10 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
                     if (sessionToRemoteSourceLeaderManager.get(session).getRemoteLeaderNodeId().isPresent()) {
                         clientChannelAdapter.send(sessionToRemoteSourceLeaderManager.get(session).getRemoteLeaderNodeId().get(), response);
                     } else {
-                        sessionToRemoteSourceLeaderManager.get(session).input(
-                                new LogReplicationSinkEvent(LogReplicationSinkEvent.LogReplicationSinkEventType.REMOTE_LEADER_LOSS));
+                        RemoteSourceLeadershipManager sourceLeadershipManager = sessionToRemoteSourceLeaderManager.get(session);
+                        sourceLeadershipManager.input(new LogReplicationSinkEvent(
+                                LogReplicationSinkEvent.LogReplicationSinkEventType.REMOTE_LEADER_LOSS,
+                                sourceLeadershipManager));
                     }
                 }
             } catch(NullPointerException npe) {
@@ -528,8 +531,9 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
     }
 
     public void inputRemoteSourceLeaderLoss(LogReplicationSession session) {
-        sessionToRemoteSourceLeaderManager.get(session).input(
-                new LogReplicationSinkEvent(LogReplicationSinkEvent.LogReplicationSinkEventType.REMOTE_LEADER_LOSS));
+        RemoteSourceLeadershipManager sourceLeadershipManager = sessionToRemoteSourceLeaderManager.get(session);
+        sourceLeadershipManager.input(new LogReplicationSinkEvent(
+                LogReplicationSinkEvent.LogReplicationSinkEventType.REMOTE_LEADER_LOSS, sourceLeadershipManager));
     }
 
     @Override
@@ -546,9 +550,9 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
                             .input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent
                                     .LogReplicationRuntimeEventType.REMOTE_LEADER_LOSS, nodeId, runtimeFsm));
                 } else {
-                    sessionToRemoteSourceLeaderManager.get(session)
-                            .input(new LogReplicationSinkEvent(LogReplicationSinkEvent
-                                    .LogReplicationSinkEventType.REMOTE_LEADER_LOSS, nodeId));
+                    RemoteSourceLeadershipManager sourceLeadershipManager = sessionToRemoteSourceLeaderManager.get(session);
+                    sourceLeadershipManager.input(new LogReplicationSinkEvent(LogReplicationSinkEvent
+                                    .LogReplicationSinkEventType.REMOTE_LEADER_LOSS, nodeId, sourceLeadershipManager));
                 }
                 completeRequest(msg.getHeader().getSession(), msg.getHeader().getRequestId(),
                         msg.getPayload().getLrLeadershipLoss());
@@ -605,9 +609,10 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
                 LogReplicationSession session = message.getHeader().getSession();
 
                 this.clientChannelAdapter.processLeadershipLoss(session);
-                sessionToRemoteSourceLeaderManager.get(session).input(new LogReplicationSinkEvent(
+                RemoteSourceLeadershipManager sourceLeadershipManager = sessionToRemoteSourceLeaderManager.get(session);
+                sourceLeadershipManager.input(new LogReplicationSinkEvent(
                         LogReplicationSinkEvent.LogReplicationSinkEventType.REMOTE_LEADER_LOSS,
-                        message.getPayload().getLrLeadershipLoss().getNodeId()));
+                        message.getPayload().getLrLeadershipLoss().getNodeId(), sourceLeadershipManager));
                 // ack the leadership loss msg with an empty payload
                 CorfuMessage.ResponsePayloadMsg responsePayloadMsg = CorfuMessage.ResponsePayloadMsg.newBuilder()
                         .setLrEntryAck(LogReplication.LogReplicationEntryMsg.newBuilder().build()).build();
@@ -810,8 +815,9 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
         if (outgoingSession.contains(session)) {
             addConnectionUpEvent(session, nodeId);
         } else {
-            sessionToRemoteSourceLeaderManager.get(session).input(new LogReplicationSinkEvent(
-                    LogReplicationSinkEvent.LogReplicationSinkEventType.ON_CONNECTION_UP, nodeId));
+            RemoteSourceLeadershipManager sourceLeadershipManager = sessionToRemoteSourceLeaderManager.get(session);
+            sourceLeadershipManager.input(new LogReplicationSinkEvent(
+                    LogReplicationSinkEvent.LogReplicationSinkEventType.ON_CONNECTION_UP, nodeId, sourceLeadershipManager));
         }
     }
 
@@ -829,8 +835,9 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
                 runtimeFsm.input(new LogReplicationRuntimeEvent(
                         LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.ON_CONNECTION_DOWN, nodeId, runtimeFsm));
             } else if (incomingSession.contains(session)){
-                sessionToRemoteSourceLeaderManager.get(session).input(new LogReplicationSinkEvent(
-                        LogReplicationSinkEvent.LogReplicationSinkEventType.ON_CONNECTION_DOWN, nodeId));
+                RemoteSourceLeadershipManager sourceLeadershipManager = sessionToRemoteSourceLeaderManager.get(session);
+                sourceLeadershipManager.input(new LogReplicationSinkEvent(
+                        LogReplicationSinkEvent.LogReplicationSinkEventType.ON_CONNECTION_DOWN, nodeId, sourceLeadershipManager));
             }
         } catch (NullPointerException npe) {
             log.info("The replication components are already stopped for session {}", session);

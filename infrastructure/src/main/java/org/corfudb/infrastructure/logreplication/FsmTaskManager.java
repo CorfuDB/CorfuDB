@@ -9,6 +9,7 @@ import org.corfudb.infrastructure.logreplication.runtime.fsm.IllegalTransitionEx
 import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRuntimeEvent;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRuntimeState;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRuntimeStateType;
+import org.corfudb.infrastructure.logreplication.runtime.fsm.sink.LogReplicationSinkEvent;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 
 import java.util.LinkedList;
@@ -33,14 +34,17 @@ public class FsmTaskManager {
 
     private Map<LogReplicationSession, LinkedList<UUID>> sessionToReplicationEventIdMap;
 
+    private Map<LogReplicationSession, LinkedList<UUID>> sessionToSinkEventIdMap;
+
     public FsmTaskManager (String threadName, int threadCount) {
         fsmWorker = Executors.newFixedThreadPool(threadCount, new ThreadFactoryBuilder().setNameFormat(threadName+"-%d").build());
         sessionToRuntimeEventIdMap = new ConcurrentHashMap<>();
         sessionToReplicationEventIdMap = new ConcurrentHashMap<>();
+        sessionToSinkEventIdMap = new ConcurrentHashMap<>();
     }
 
-    public <E> void addTask(E event, boolean isRuntimeEvent) {
-        if (isRuntimeEvent) {
+    public <E> void addTask(E event, fsmEventType fsm) {
+        if (fsm.equals(fsmEventType.LogReplicationRuntimeEvent)) {
             LogReplicationSession session = ((LogReplicationRuntimeEvent) event).getRuntimeFsm().getSession();
             sessionToRuntimeEventIdMap.putIfAbsent(session, new LinkedList<>());
             // makes the value part of the map thread safe.
@@ -49,7 +53,7 @@ public class FsmTaskManager {
                 return eventList;
             });
             fsmWorker.submit(() -> processRuntimeTask((LogReplicationRuntimeEvent) event));
-        } else {
+        } else if (fsm.equals(fsmEventType.LogReplicationEvent)){
             LogReplicationSession session = ((LogReplicationEvent) event).getReplicationFsm().getSession();
             sessionToReplicationEventIdMap.putIfAbsent(session, new LinkedList<>());
             // makes the value part of the map thread safe.
@@ -58,6 +62,35 @@ public class FsmTaskManager {
                 return eventList;
             });
             fsmWorker.submit(() -> processReplicationTask((LogReplicationEvent) event));
+        } else {
+            LogReplicationSession session = ((LogReplicationSinkEvent) event).getSourceLeadershipManager().getSession();
+            sessionToSinkEventIdMap.putIfAbsent(session, new LinkedList<>());
+            // makes the value part of the map thread safe.
+            sessionToSinkEventIdMap.computeIfPresent(session, (sessionKey, eventList) -> {
+                eventList.add(((LogReplicationSinkEvent) event).getEventId());
+                return eventList;
+            });
+            fsmWorker.submit(() -> processSinkTask((LogReplicationSinkEvent) event));
+        }
+    }
+
+    private void processSinkTask(LogReplicationSinkEvent event) {
+        LogReplicationSession session = event.getSourceLeadershipManager().getSession();
+        synchronized (event.getSourceLeadershipManager()) {
+            while (!sessionToSinkEventIdMap.get(session).get(0).equals(event.getEventId())) {
+                try {
+                    event.getSourceLeadershipManager().wait();
+                } catch (InterruptedException e) {
+                    log.error("Wait for session {} was interrupted {}", session, e.getMessage());
+                }
+            }
+        }
+
+        event.getSourceLeadershipManager().processEvent(event);
+
+        synchronized (event.getSourceLeadershipManager()) {
+            sessionToSinkEventIdMap.get(session).remove(0);
+            event.getSourceLeadershipManager().notifyAll();
         }
     }
 
@@ -152,5 +185,11 @@ public class FsmTaskManager {
 
     public void shutdown() {
         fsmWorker.shutdown();
+    }
+
+    public enum fsmEventType {
+        LogReplicationEvent,
+        LogReplicationRuntimeEvent,
+        LogReplicationSinkEvent
     }
 }
