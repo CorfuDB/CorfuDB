@@ -59,7 +59,11 @@ public class WaitSnapshotApplyState implements LogReplicationState {
      */
     private long baseSnapshotTimestamp;
 
-    private final ScheduledExecutorService snapshotSyncApplyMonitorExecutor;
+    private final static ScheduledExecutorService snapshotSyncApplyMonitorExecutor = Executors.newScheduledThreadPool(
+            2, new ThreadFactoryBuilder()
+                    .setDaemon(true)
+                    .setNameFormat("snapshotSyncApplyVerificationScheduler")
+                    .build());;
 
     private final AtomicBoolean stopSnapshotApply = new AtomicBoolean(false);
 
@@ -73,10 +77,6 @@ public class WaitSnapshotApplyState implements LogReplicationState {
     public WaitSnapshotApplyState(LogReplicationFSM logReplicationFSM, DataSender dataSender) {
         this.fsm = logReplicationFSM;
         this.dataSender = dataSender;
-        this.snapshotSyncApplyMonitorExecutor = Executors.newSingleThreadScheduledExecutor(new ThreadFactoryBuilder()
-                .setDaemon(true)
-                .setNameFormat("snapshotSyncApplyVerificationScheduler")
-                .build());
     }
 
     @Override
@@ -167,22 +167,24 @@ public class WaitSnapshotApplyState implements LogReplicationState {
             stopSnapshotApply.set(false);
             fsm.getAckReader().markSnapshotSyncInfoOngoing();
         }
-        if (from != this) {
-            snapshotSyncApplyTimerSample = MeterRegistryProvider.getInstance().map(Timer::start);
-        }
+        //TODO V2: the metrics need to be per session
+//        if (from != this) {
+//            snapshotSyncApplyTimerSample = MeterRegistryProvider.getInstance().map(Timer::start);
+//        }
         verifyStatusOfSnapshotSyncApply();
     }
 
     @Override
     public void onExit(LogReplicationState to) {
-        if (to.getType().equals(LogReplicationStateType.IN_LOG_ENTRY_SYNC)) {
-            snapshotSyncApplyTimerSample
-                    .flatMap(sample -> MeterRegistryProvider.getInstance()
-                            .map(registry -> {
-                                Timer timer = registry.timer("logreplication.snapshot.apply.duration");
-                                return sample.stop(timer);
-                            }));
-        }
+        // TODO V2: the metrics here need to be per session.
+//        if (to.getType().equals(LogReplicationStateType.IN_LOG_ENTRY_SYNC)) {
+//            snapshotSyncApplyTimerSample
+//                    .flatMap(sample -> MeterRegistryProvider.getInstance()
+//                            .map(registry -> {
+//                                Timer timer = registry.timer("logreplication.snapshot.apply.duration");
+//                                return sample.stop(timer);
+//                            }));
+//        }
     }
 
     private void verifyStatusOfSnapshotSyncApply() {
@@ -208,25 +210,25 @@ public class WaitSnapshotApplyState implements LogReplicationState {
                         baseSnapshotTimestamp, transitionSyncId);
                 if (!stopSnapshotApply.get()) {
                     // Schedule a one time action which will verify the snapshot apply status after a given delay
-                    this.snapshotSyncApplyMonitorExecutor.schedule(this::scheduleSnapshotApplyVerification, SCHEDULE_APPLY_MONITOR_DELAY,
+                    snapshotSyncApplyMonitorExecutor.schedule(this::scheduleSnapshotApplyVerification, SCHEDULE_APPLY_MONITOR_DELAY,
                             TimeUnit.MILLISECONDS);
                 }
             }
         } catch (TimeoutException te) {
             log.error("Snapshot sync apply verification timed out.", te);
             // Schedule a one time action which will verify the snapshot apply status after a given delay
-            this.snapshotSyncApplyMonitorExecutor.schedule(this::scheduleSnapshotApplyVerification, SCHEDULE_APPLY_MONITOR_DELAY,
+            snapshotSyncApplyMonitorExecutor.schedule(this::scheduleSnapshotApplyVerification, SCHEDULE_APPLY_MONITOR_DELAY,
                     TimeUnit.MILLISECONDS);
         } catch (ExecutionException ee) {
             // Completable future completed exceptionally
             log.error("Snapshot sync apply verification failed.", ee);
             // Schedule a one time action which will verify the snapshot apply status after a given delay
-            this.snapshotSyncApplyMonitorExecutor.schedule(this::scheduleSnapshotApplyVerification, SCHEDULE_APPLY_MONITOR_DELAY,
+            snapshotSyncApplyMonitorExecutor.schedule(this::scheduleSnapshotApplyVerification, SCHEDULE_APPLY_MONITOR_DELAY,
                     TimeUnit.MILLISECONDS);
         } catch (Exception e) {
             log.error("Snapshot sync apply verification failed.", e);
             // Schedule a one time action which will verify the snapshot apply status after a given delay
-            this.snapshotSyncApplyMonitorExecutor.schedule(this::scheduleSnapshotApplyVerification, SCHEDULE_APPLY_MONITOR_DELAY,
+            snapshotSyncApplyMonitorExecutor.schedule(this::scheduleSnapshotApplyVerification, SCHEDULE_APPLY_MONITOR_DELAY,
                     TimeUnit.MILLISECONDS);
         }
     }
