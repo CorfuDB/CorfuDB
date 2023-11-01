@@ -228,7 +228,7 @@ public final class LogReplicationUtils {
                         List<CorfuStoreEntry<LogReplicationSession, ReplicationStatus, Message>> entries =
                                 txnContext.executeQuery(replicationStatusTable,
                                         entry -> entry.getKey().getSubscriber().getModel()
-                                                .equals(LogReplication.ReplicationModel.LOGICAL_GROUPS) &&
+                                                .equals(ReplicationModel.LOGICAL_GROUPS) &&
                                                 Objects.equals(entry.getKey().getSubscriber().getClientName(),
                                                         listener.getClientName()));
 

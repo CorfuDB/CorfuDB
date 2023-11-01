@@ -54,7 +54,7 @@ public class RoutingQueuesLogEntryReader extends BaseLogEntryReader {
                         session.getSubscriber().getClientName());
         } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
             log.error("Failed to open log entry sync queue", e);
-            throw new RuntimeException(e);
+            throw new ReplicationReaderException(e);
         }
     }
 

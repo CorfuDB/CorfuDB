@@ -9,6 +9,7 @@ import org.corfudb.runtime.collections.StreamListenerResumeOrFullSync;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.runtime.exceptions.LogReplicationClientException;
 import org.corfudb.runtime.view.CorfuGuid;
 
 import java.util.ArrayList;
@@ -88,8 +89,8 @@ public abstract class LiteRoutingQueueListener extends StreamListenerResumeOrFul
             if (currentType.equals(Queue.ReplicationType.LAST_FULL_SYNC_ENTRY)) {
                 currentType = msg.getReplicationType();
             } else if (!currentType.equals(msg.getReplicationType())) {
-                throw new RuntimeException("Not expecting mixed event types "+ currentType
-                        +" vs "+msg.getReplicationType());
+                throw new LogReplicationClientException("Not expecting mixed event types "+ currentType +" vs "
+                    +msg.getReplicationType());
             }
         }
         if (allEntries.isEmpty()) {
