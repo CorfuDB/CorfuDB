@@ -3,6 +3,7 @@ package org.corfudb.infrastructure.logreplication.runtime;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.logreplication.FsmTaskManager;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
@@ -137,6 +138,8 @@ public class CorfuLogReplicationRuntime {
     @Getter
     private final LogReplicationContext replicationContext;
 
+    private final static FsmTaskManager taskManager = new FsmTaskManager("runtimeFSM", 2);
+
     /**
      * Default Constructor
      */
@@ -185,7 +188,7 @@ public class CorfuLogReplicationRuntime {
             // Not accepting events, in stopped state
             return;
         }
-        replicationContext.getRuntimeFsmTaskManager().addTask(event, true);
+        taskManager.addTask(event, FsmTaskManager.fsmEventType.LogReplicationRuntimeEvent);
     }
 
     /**
@@ -240,5 +243,9 @@ public class CorfuLogReplicationRuntime {
     public void stop() {
         input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.LOCAL_LEADER_LOSS,
                         router.isConnectionStarterForSession(session), this));
+    }
+
+    public static void shutdownTaskManager() {
+        taskManager.shutdown();
     }
 }

@@ -235,4 +235,8 @@ public class WaitSnapshotApplyState implements LogReplicationState {
     public void setBaseSnapshotTimestamp(long baseSnapshotTimestamp) {
         this.baseSnapshotTimestamp = baseSnapshotTimestamp;
     }
+
+    public static void shutdownApplyMonitor() {
+        snapshotSyncApplyMonitorExecutor.shutdown();
+    }
 }
