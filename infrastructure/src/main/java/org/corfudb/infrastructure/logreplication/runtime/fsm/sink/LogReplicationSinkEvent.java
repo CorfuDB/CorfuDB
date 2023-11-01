@@ -1,6 +1,9 @@
 package org.corfudb.infrastructure.logreplication.runtime.fsm.sink;
 
 import lombok.Getter;
+import org.corfudb.util.Utils;
+
+import java.util.UUID;
 
 /**
  * This class represents events for SINK to establish a replication channel with the SOURCE, when SINK is the connection
@@ -26,13 +29,23 @@ public class LogReplicationSinkEvent {
     @Getter
     private String nodeId;
 
-    public LogReplicationSinkEvent(LogReplicationSinkEvent.LogReplicationSinkEventType type, String nodeId) {
-        this.type = type;
+    @Getter
+    private UUID eventId;
+
+    @Getter
+    private RemoteSourceLeadershipManager sourceLeadershipManager;
+
+    public LogReplicationSinkEvent(LogReplicationSinkEvent.LogReplicationSinkEventType type, String nodeId,
+                                   RemoteSourceLeadershipManager sourceLeadershipManager) {
+        this(type, sourceLeadershipManager);
         this.nodeId = nodeId;
     }
 
-    public LogReplicationSinkEvent(LogReplicationSinkEvent.LogReplicationSinkEventType type) {
+    public LogReplicationSinkEvent(LogReplicationSinkEvent.LogReplicationSinkEventType type,
+                                   RemoteSourceLeadershipManager sourceLeadershipManager) {
         this.type = type;
+        this.sourceLeadershipManager = sourceLeadershipManager;
+        this.eventId = Utils.genPseudorandomUUID();
     }
 
 }
