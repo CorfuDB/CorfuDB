@@ -127,6 +127,7 @@ public class SMRMapTest extends AbstractViewTest {
         PersistentCorfuTable<String, PersistentCorfuTable<String, String>> testTable2 = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("test 2")
+                .setSerializer(Serializers.JAVA)
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, PersistentCorfuTable<String, String>>>() {})
                 .open();
         testTable2.insert("a", testTable);
