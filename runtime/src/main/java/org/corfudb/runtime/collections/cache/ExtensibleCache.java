@@ -37,6 +37,11 @@ public class ExtensibleCache<K, V> implements AutoCloseable {
         }
     }
 
+    public ExtensibleCache(RocksDbStore<DiskBackedCorfuTable<K, V>> rocksDbStore, ISerializer serializer) {
+        this.rocksDbStore = rocksDbStore;
+        table = new DiskBackedCorfuTable<>(serializer, rocksDbStore, Optional.empty());
+    }
+
     public V get(K key) {
         return table.get(key);
     }
