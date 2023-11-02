@@ -49,7 +49,7 @@ public class CorfuGuidGenerator implements OrderedGuidGenerator {
     // 1048576 (~1M) new jvms restarts while the oldest is still operational before overflow can occur
     public static final long MAX_INSTANCE_ID = 1L << 20;
     public static final long TXN_ID_SHIFT = 40;
-    public static final long TXN_ID_MASK      = 0x7fFFff0000000000L;
+    public static final long TXN_ID_MASK = 0x7fFFff0000000000L;
     public static final long INSTANCE_ID_MASK = 0x000000FffFF00000L;
     public static final long TXN_COUNTER_MASK = 0x00000000000FffFFL;
     public static final long INSTANCE_ID_SHIFT = 20;

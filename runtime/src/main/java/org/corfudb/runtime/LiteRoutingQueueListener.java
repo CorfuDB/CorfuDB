@@ -45,15 +45,15 @@ public abstract class LiteRoutingQueueListener extends StreamListenerResumeOrFul
         this.corfuStore = corfuStore;
         this.sourceSiteId = sourceSiteId;
         this.clientName = clientName;
-        Table<Queue.CorfuGuidMsg, Queue.RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg> recvQ_lcl = null;
+        Table<Queue.CorfuGuidMsg, Queue.RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg> recvQLcl = null;
         int numRetries = 8;
         while (numRetries-- > 0) {
             try {
                 try {
-                    recvQ_lcl = corfuStore.getTable(CORFU_SYSTEM_NAMESPACE,
+                    recvQLcl = corfuStore.getTable(CORFU_SYSTEM_NAMESPACE,
                             LogReplicationUtils.REPLICATED_RECV_Q_PREFIX + sourceSiteId + "_" + clientName);
                 } catch(NoSuchElementException | IllegalArgumentException e) {
-                    recvQ_lcl = corfuStore.openQueue(CORFU_SYSTEM_NAMESPACE,
+                    recvQLcl = corfuStore.openQueue(CORFU_SYSTEM_NAMESPACE,
                             LogReplicationUtils.REPLICATED_RECV_Q_PREFIX + sourceSiteId + "_" + clientName,
                             Queue.RoutingTableEntryMsg.class,
                             TableOptions.builder().schemaOptions(
@@ -67,7 +67,7 @@ public abstract class LiteRoutingQueueListener extends StreamListenerResumeOrFul
                 log.error("Failed to open replicated queue due to exception!", e);
             }
         }
-        this.recvQ = recvQ_lcl;
+        this.recvQ = recvQLcl;
     }
 
     @Override

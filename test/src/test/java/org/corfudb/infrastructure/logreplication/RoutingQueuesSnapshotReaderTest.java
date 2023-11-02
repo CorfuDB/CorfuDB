@@ -130,7 +130,7 @@ public class RoutingQueuesSnapshotReaderTest extends AbstractViewTest {
         Object[] smrArgs = new Object[2];
         smrArgs[0] = snapshotSyncId;
 
-        CorfuRecord<Queue.RoutingQSnapSyncHeaderMsg, Message> record;
+        CorfuRecord<Queue.RoutingQSnapSyncHeaderMsg, Message> entry;
 
         UUID markerStreamId = CorfuRuntime.getStreamID(TableRegistry.getFullyQualifiedTableName(
                 namespace, SNAP_SYNC_TXN_ENVELOPE_TABLE));
@@ -138,8 +138,8 @@ public class RoutingQueuesSnapshotReaderTest extends AbstractViewTest {
         if (start) {
             marker = Queue.RoutingQSnapSyncHeaderMsg.newBuilder().setSnapshotStartTimestamp(txnContext.getTxnSequence())
                 .build();
-            record = new CorfuRecord<>(marker, null);
-            smrArgs[1] = record;
+            entry = new CorfuRecord<>(marker, null);
+            smrArgs[1] = entry;
             // Start marker is written in the same transaction as the data.  So reuse the transaction which was passed
             txnContext.logUpdate(markerStreamId, new SMREntry("put", smrArgs,
                     corfuStore.getRuntime().getSerializers().getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE)),
@@ -149,8 +149,8 @@ public class RoutingQueuesSnapshotReaderTest extends AbstractViewTest {
 
         // End marker is written in a separate transaction and with different data
         marker = Queue.RoutingQSnapSyncHeaderMsg.newBuilder().setSnapshotStartTimestamp(-timestamp).build();
-        record = new CorfuRecord<>(marker, null);
-        smrArgs[1] = record;
+        entry = new CorfuRecord<>(marker, null);
+        smrArgs[1] = entry;
         try (TxnContext txn = corfuStore.txn(namespace)) {
             txn.logUpdate(markerStreamId, new SMREntry("put", smrArgs,
                     corfuStore.getRuntime().getSerializers().getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE)),

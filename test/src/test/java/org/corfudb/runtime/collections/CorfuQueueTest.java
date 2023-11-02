@@ -286,17 +286,14 @@ public class CorfuQueueTest extends AbstractViewTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    public void logUpdateThatLooksLikeEnqueue() {
+    public void logUpdateThatLooksLikeEnqueue() throws Exception {
         final CorfuStore corfuStore = new CorfuStore(createDefaultRuntime());
         final String namespace = "some_ns";
         final String tableName = "some_table";
         Table<Queue.CorfuGuidMsg, RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg> q = null;
-        try {
-            q = corfuStore.openQueue(namespace, tableName, RoutingTableEntryMsg.class,
-                    TableOptions.fromProtoSchema(RoutingTableEntryMsg.class));
-        } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
-            throw new RuntimeException(e);
-        }
+        q = corfuStore.openQueue(namespace, tableName, RoutingTableEntryMsg.class,
+            TableOptions.fromProtoSchema(RoutingTableEntryMsg.class));
+
         final Table<Queue.CorfuGuidMsg, RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg> finalQ = q;
         final byte[] payload = {'a', 'b', 'c'};
         executeTxn(corfuStore, namespace, (TxnContext tx) -> tx.enqueue(finalQ,
