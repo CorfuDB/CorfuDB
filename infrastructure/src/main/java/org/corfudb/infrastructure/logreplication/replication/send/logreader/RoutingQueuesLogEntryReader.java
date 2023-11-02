@@ -22,6 +22,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -74,7 +75,7 @@ public class RoutingQueuesLogEntryReader extends BaseLogEntryReader {
                 filteredMsgs.add(entry);
             }
         }
-        HashMap<UUID, List<SMREntry>> opaqueEntryMap = new HashMap<>();
+        Map<UUID, List<SMREntry>> opaqueEntryMap = new HashMap<>();
         opaqueEntryMap.put(CorfuRuntime.getStreamID(replicatedQueueName), filteredMsgs);
         return new OpaqueEntry(opaqueEntry.getVersion(), opaqueEntryMap);
     }

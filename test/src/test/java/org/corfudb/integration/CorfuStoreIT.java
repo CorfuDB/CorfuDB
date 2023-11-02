@@ -712,9 +712,7 @@ public class CorfuStoreIT extends AbstractIT {
         final String tableName1 = "Table1";
         final String tableName2 = "Table2";
         final String tableName3 = "Table3";
-        final String tableNameNoWrites = "NoWritesTable";
         final int numUpdates1 = 100;
-        final long OFFSET = 5L;
 
         // Create & Register the table.
         Table<Uuid, Uuid, ManagedResources> table1 = corfuStore.openTable(

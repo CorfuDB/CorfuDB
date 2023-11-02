@@ -16,7 +16,6 @@ import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
-import org.corfudb.runtime.LogReplicationUtils;
 import org.corfudb.runtime.Queue;
 import org.corfudb.runtime.collections.*;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
@@ -46,8 +45,12 @@ import java.util.UUID;
 
 import static org.corfudb.infrastructure.logreplication.config.LogReplicationConfig.DEFAULT_MAX_DATA_MSG_SIZE;
 import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.REPLICATION_EVENT_TABLE_NAME;
-import static org.corfudb.runtime.LogReplicationUtils.*;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
+import static org.corfudb.runtime.LogReplicationUtils.REPLICATED_RECV_Q_PREFIX;
+import static org.corfudb.runtime.LogReplicationUtils.SNAPSHOT_SYNC_QUEUE_TAG_SENDER_PREFIX;
+import static org.corfudb.runtime.LogReplicationUtils.SNAPSHOT_SYNC_QUEUE_NAME_SENDER;
+import static org.corfudb.runtime.LogReplicationUtils.SNAP_SYNC_TXN_ENVELOPE_TABLE;
+
 
 /**
  * Snapshot reader implementation for Routing Queues Replication Model.
@@ -92,8 +95,7 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
     public RoutingQueuesSnapshotReader(LogReplicationSession session,
                                        LogReplicationContext replicationContext) {
         super(session, replicationContext);
-        streamTagFollowed =
-            LogReplicationUtils.SNAPSHOT_SYNC_QUEUE_TAG_SENDER_PREFIX + session.getSinkClusterId() + "_" +
+        streamTagFollowed = SNAPSHOT_SYNC_QUEUE_TAG_SENDER_PREFIX + session.getSinkClusterId() + "_" +
                 session.getSubscriber().getClientName();
 
         String snapshotSyncQueueFullyQualifiedName = TableRegistry.getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE,

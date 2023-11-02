@@ -52,7 +52,7 @@ public interface StoreTransaction<T extends StoreTransaction<T>> {
     @Nonnull
     <K extends Message, V extends Message, M extends Message>
     K enqueue(@Nonnull Table<K, V, M> table,
-              @Nonnull V record);
+              @Nonnull V value);
 
     @Nonnull
     <K extends Message, V extends Message, M extends Message>

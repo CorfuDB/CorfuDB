@@ -39,7 +39,8 @@ public interface TableStringApi {
     /**
      * Variant of isExists that works on tableName instead of the table object.
      *
-     * @param tableName - namespace + tablename of table being tested-     * @param key       - key to check for existence
+     * @param tableName - namespace + tablename of table being tested
+     * @param key       - key to check for existence
      * @param <K>       - type of the key
      * @param <V>       - type of payload or value
      * @param <M>       - type of metadata

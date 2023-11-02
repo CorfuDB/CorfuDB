@@ -145,16 +145,20 @@ public class SnapshotSender {
                     snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.TRIM_SNAPSHOT_SYNC, false, forcedSnapshotSync);
                     cancel = true;
                     break;
+                } catch (ReplicationReaderException e) {
+                   if (e.getCause() instanceof TimeoutException &&
+                       fsm.getSession().getSubscriber().getModel() == LogReplication.ReplicationModel.ROUTING_QUEUES) {
+                       log.info("Snapshot sync timed out waiting for data.  Will request a new snapshot sync");
+                       snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.UNKNOWN, true, forcedSnapshotSync);
+                   } else {
+                       log.error("Replication Reader Exception thrown from an unkown path", e);
+                       snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.UNKNOWN, false, forcedSnapshotSync);
+                   }
+                    cancel = true;
+                    break;
                 } catch (Exception e) {
                     log.error("Caught exception during snapshot sync", e);
-
-                    boolean timeoutException = false;
-                    if (fsm.getSession().getSubscriber().getModel() == LogReplication.ReplicationModel.ROUTING_QUEUES &&
-                        e instanceof ReplicationReaderException && e.getCause() instanceof TimeoutException) {
-                        log.info("Snapshot sync timed out waiting for data.  Will request a new snapshot sync");
-                        timeoutException = true;
-                    }
-                    snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.UNKNOWN, timeoutException, forcedSnapshotSync);
+                    snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.UNKNOWN, false, forcedSnapshotSync);
                     cancel = true;
                     break;
                 }
