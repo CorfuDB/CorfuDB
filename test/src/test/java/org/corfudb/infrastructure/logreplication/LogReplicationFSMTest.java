@@ -869,7 +869,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         // Manually initialize the replication status table, needed for tests that check the
         // source status so incoming needs to be set to false
         metadataManager.addSession(DEFAULT_SESSION, 0, false);
-
+        
         ackReader = new LogReplicationAckReader(metadataManager, DEFAULT_SESSION, context);
         fsm = new LogReplicationFSM(snapshotReader, dataSender, logEntryReader,
                 ackReader, DEFAULT_SESSION, context);
