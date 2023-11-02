@@ -36,7 +36,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.runtime.LogReplicationUtils.LOG_ENTRY_SYNC_QUEUE_TAG_SENDER_PREFIX;
@@ -261,11 +260,12 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
         CorfuRuntime clientRuntime = getClientRuntime();
         CorfuStore clientCorfuStore = new CorfuStore(clientRuntime);
         String clientName = DEFAULT_ROUTING_QUEUE_CLIENT;
-        String sourceSiteId = DefaultClusterConfig.getSourceClusterIds().get(0);
         RoutingQueueSenderClient queueSenderClient = new RoutingQueueSenderClient(clientCorfuStore, clientName);
         // SnapshotProvider implements RoutingQueueSenderClient.LRTransmitterReplicationModule
         ScopedSnapshotProvider snapshotProvider = new ScopedSnapshotProvider(clientCorfuStore);
-        queueSenderClient.startLRSnapshotTransmitter(snapshotProvider); // starts a listener on event table
+
+        // starts a listener on event table
+        queueSenderClient.startLRSnapshotTransmitter(snapshotProvider);
 
         try {
             RoutingQueueListener listener = new RoutingQueueListener(sinkCorfuStores.get(0),
@@ -320,7 +320,6 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
                     context.transmit(message);
                     log.info("Transmitting full sync message{}", message);
                     // For debugging Q's stream id should be "61d2fc0f-315a-3d87-a982-24fb36932050"
-                    AbstractTransactionalContext txCtx = TransactionalContext.getRootContext();
                     log.info("FS Committed at {}", tx.commit());
                 }
             }
@@ -338,9 +337,9 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
         Table<RpcCommon.UuidMsg, ExampleSchemas.ExampleValue, Message> someTable;
         public ScopedSnapshotProvider(CorfuStore corfuStore) {
             super(corfuStore);
-            Table<RpcCommon.UuidMsg, ExampleSchemas.ExampleValue, Message> someTable_lcl = null;
+            Table<RpcCommon.UuidMsg, ExampleSchemas.ExampleValue, Message> someTableLcl = null;
             try {
-                someTable_lcl = corfuStore.openTable(someNamespace,
+                someTableLcl = corfuStore.openTable(someNamespace,
                         "testSnapshotProvider",
                         RpcCommon.UuidMsg.class,
                         ExampleSchemas.ExampleValue.class, null,
@@ -348,7 +347,7 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
             } catch (Exception e) {
                 assertThat(e).isNull();
             }
-            this.someTable = someTable_lcl;
+            this.someTable = someTableLcl;
             // Now insert some data into it
             try (TxnContext tx = corfuStore.txn(someNamespace)) {
                 for (int i = 0; i < numFullSyncBatches; i++) {
