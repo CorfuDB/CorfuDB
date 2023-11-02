@@ -195,7 +195,8 @@ public class LogReplicationFSM {
     @Getter
     private final LogReplicationSession session;
 
-    private final static FsmTaskManager taskManager = new FsmTaskManager("replicationFSM", 2);
+    // not 'final' to help unit test reset taskManager
+    private static FsmTaskManager taskManager = new FsmTaskManager("replicationFSM", 2);
 
     /**
      * Constructor for LogReplicationFSM, custom read processor for data transformation.
@@ -362,5 +363,10 @@ public class LogReplicationFSM {
 
     public static void shutdownTaskManager() {
         taskManager.shutdown();
+    }
+
+    //used only in unit tests
+    public static void resetTaskManager(int threadCount) {
+        taskManager = new FsmTaskManager("replicationFSM", threadCount);
     }
 }

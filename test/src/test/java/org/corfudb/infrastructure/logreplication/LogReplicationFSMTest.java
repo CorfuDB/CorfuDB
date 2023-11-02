@@ -51,6 +51,7 @@ import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -245,6 +246,11 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         Assert.assertEquals(expectedSyncTypes, actualSyncTypes);
         Assert.assertEquals(replicationSyncStatusAfterEntry, actualSyncStatus);
         Assert.assertEquals(snapshotInfoSyncStatusAfterEntry, actualSnapshotInfoSyncStatus);
+    }
+
+    @AfterAll
+    public void tearDown() {
+        LogReplicationFSM.shutdownTaskManager();
     }
 
     /**
@@ -981,6 +987,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         metadataManager.addSession(DEFAULT_SESSION, 0, false);
         
         ackReader = new LogReplicationAckReader(metadataManager, DEFAULT_SESSION, context);
+        LogReplicationFSM.resetTaskManager(2);
         fsm = new LogReplicationFSM(snapshotReader, dataSender, logEntryReader,
                 ackReader, DEFAULT_SESSION, context);
         ackReader.setLogEntryReader(fsm.getLogEntryReader());

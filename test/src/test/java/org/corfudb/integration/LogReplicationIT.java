@@ -285,6 +285,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
             dstDataRuntime.shutdown();
             dstTestRuntime.shutdown();
         }
+        LogReplicationFSM.shutdownTaskManager();
         super.cleanUp();
     }
 
@@ -1305,6 +1306,8 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         srcContext.getConfig(session).setMaxNumMsgPerBatch(BATCH_SIZE);
         srcContext.getConfig(session).setMaxTransferSize(SMALL_MSG_SIZE);
 
+        LogReplicationFSM.resetTaskManager(2);
+        
         // Source Manager
         LogReplicationSourceManager logReplicationSourceManager = new LogReplicationSourceManager(srcMetadataManager,
                 sourceDataSender, session, srcContext);

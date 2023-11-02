@@ -210,7 +210,7 @@ public class ServerContext implements AutoCloseable {
         Optional<String> threadCount = getServerConfig("--log-replication-server-threads");
         return threadCount.map(Integer::parseInt).orElse(1); // TODO: tune receiver threads!
     }
-    
+
     public Optional<String> getCompactorConfig() {
         return getServerConfig("--compactor-config");
     }
