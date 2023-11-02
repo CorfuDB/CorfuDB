@@ -161,6 +161,12 @@ public class TxnContext
         this.touch(getTable(tableName), key);
     }
 
+    @Override
+    public <K extends Message, V extends Message, M extends Message>
+    void touch(@Nonnull Table<K, V, M> table, @Nonnull K key) {
+        crud.touch(table, key);
+    }
+
     /**
      * Apply a Corfu SMREntry directly to a stream. This can be used for replaying the mutations
      * directly into the underlying stream bypassing the object layer entirely.
@@ -216,6 +222,12 @@ public class TxnContext
         this.clear(getTable(tableName));
     }
 
+    @Override
+    public <K extends Message, V extends Message, M extends Message>
+    void clear(@Nonnull Table<K, V, M> table) {
+        crud.clear(table);
+    }
+
     /**
      * Deletes the specified key on a table given its full name.
      *
@@ -230,6 +242,14 @@ public class TxnContext
     void delete(@Nonnull String tableName,
                 @Nonnull final K key) {
         this.delete(getTable(tableName), key);
+    }
+
+    @Nonnull
+    @Override
+    public <K extends Message, V extends Message, M extends Message>
+    TxnContext delete(@Nonnull Table<K, V, M> table, @Nonnull K key) {
+        crud.delete(table, key);
+        return this;
     }
 
     // ************************** Queue API ***************************************/
@@ -290,6 +310,13 @@ public class TxnContext
         return this.getRecord(getTable(tableName), key);
     }
 
+    @Nonnull
+    @Override
+    public <K extends Message, V extends Message, M extends Message> CorfuStoreEntry<K, V, M>
+    getRecord(@Nonnull Table<K, V, M> table, @Nonnull K key) {
+        return crud.getRecord(table, key);
+    }
+
     /**
      * Query by a secondary index given just the full tableName.
      *
@@ -310,6 +337,13 @@ public class TxnContext
         return this.getByIndex(this.getTable(tableName), indexName, indexKey);
     }
 
+    @Nonnull
+    @Override
+    public <K extends Message, V extends Message, M extends Message, I> List<CorfuStoreEntry<K, V, M>>
+    getByIndex(@Nonnull Table<K, V, M> table, @Nonnull String indexName, @Nonnull I indexKey) {
+        return crud.getByIndex(table, indexName, indexKey);
+    }
+
     /**
      * Gets the count of records in the table at a particular timestamp.
      *
@@ -319,6 +353,12 @@ public class TxnContext
     @Override
     public int count(@Nonnull final String tableName) {
         return this.count(this.getTable(tableName));
+    }
+
+    @Override
+    public <K extends Message, V extends Message, M extends Message>
+    int count(@Nonnull Table<K, V, M> table) {
+        return crud.count(table);
     }
 
     /**
@@ -334,12 +374,22 @@ public class TxnContext
     }
 
     @Override
+    public <K extends Message, V extends Message, M extends Message> Set<K>
+    keySet(@Nonnull Table<K, V, M> table) {
+        return crud.keySet(table);
+    }
+
+    @Override
     public <K extends Message, V extends Message, M extends Message>
     boolean isExists(@Nonnull String tableName, @Nonnull final K key) {
         return this.isExists(getTable(tableName), key);
     }
 
-
+    @Override
+    public <K extends Message, V extends Message, M extends Message>
+    boolean isExists(@Nonnull Table<K, V, M> table, @Nonnull K key) {
+        return crud.isExists(table, key);
+    }
 
     /**
      * Scan and filter by entry.
@@ -353,6 +403,13 @@ public class TxnContext
     List<CorfuStoreEntry<K, V, M>> executeQuery(@Nonnull final String tableName,
                                                 @Nonnull final Predicate<CorfuStoreEntry<K, V, M>> entryPredicate) {
         return this.executeQuery(this.getTable(tableName), entryPredicate);
+    }
+
+    @Override
+    public <K extends Message, V extends Message, M extends Message> List<CorfuStoreEntry<K, V, M>>
+    executeQuery(@Nonnull Table<K, V, M> table,
+                 @Nonnull Predicate<CorfuStoreEntry<K, V, M>> corfuStoreEntryPredicate) {
+        return crud.executeQuery(table, corfuStoreEntryPredicate);
     }
 
     /**
@@ -471,26 +528,6 @@ public class TxnContext
         crud.merge(table, key, mergeCallback, recordDelta);
     }
 
-    @Override
-    public <K extends Message, V extends Message, M extends Message>
-    void touch(@Nonnull Table<K, V, M> table, @Nonnull K key) {
-        crud.touch(table, key);
-    }
-
-    @Override
-    public <K extends Message, V extends Message, M extends Message>
-    void clear(@Nonnull Table<K, V, M> table) {
-        crud.clear(table);
-    }
-
-    @Nonnull
-    @Override
-    public <K extends Message, V extends Message, M extends Message>
-    TxnContext delete(@Nonnull Table<K, V, M> table, @Nonnull K key) {
-        crud.delete(table, key);
-        return this;
-    }
-
     @Nonnull
     @Override
     public <K extends Message, V extends Message, M extends Message>
@@ -498,43 +535,10 @@ public class TxnContext
         return crud.enqueue(table, value);
     }
 
-    @Nonnull
-    @Override
-    public <K extends Message, V extends Message, M extends Message> CorfuStoreEntry<K, V, M>
-    getRecord(@Nonnull Table<K, V, M> table, @Nonnull K key) {
-        return crud.getRecord(table, key);
-    }
-
-    @Nonnull
-    @Override
-    public <K extends Message, V extends Message, M extends Message, I> List<CorfuStoreEntry<K, V, M>>
-    getByIndex(@Nonnull Table<K, V, M> table, @Nonnull String indexName, @Nonnull I indexKey) {
-        return crud.getByIndex(table, indexName, indexKey);
-    }
-
-    @Override
-    public <K extends Message, V extends Message, M extends Message>
-    int count(@Nonnull Table<K, V, M> table) {
-        return crud.count(table);
-    }
-
-    @Override
-    public <K extends Message, V extends Message, M extends Message> Set<K>
-    keySet(@Nonnull Table<K, V, M> table) {
-        return crud.keySet(table);
-    }
-
     @Override
     public <K extends Message, V extends Message, M extends Message> Stream<CorfuStoreEntry<K, V, M>>
     entryStream(@Nonnull Table<K, V, M> table) {
         return crud.entryStream(table);
-    }
-
-    @Override
-    public <K extends Message, V extends Message, M extends Message> List<CorfuStoreEntry<K, V, M>>
-    executeQuery(@Nonnull Table<K, V, M> table,
-                 @Nonnull Predicate<CorfuStoreEntry<K, V, M>> corfuStoreEntryPredicate) {
-        return crud.executeQuery(table, corfuStoreEntryPredicate);
     }
 
     @Nonnull
@@ -569,12 +573,6 @@ public class TxnContext
         return crud.executeJoinQuery(
                 table1, table2, query1, query2, queryOptions1, queryOptions2,
                 joinPredicate, joinFunction, joinProjection);
-    }
-
-    @Override
-    public <K extends Message, V extends Message, M extends Message>
-    boolean isExists(@Nonnull Table<K, V, M> table, @Nonnull K key) {
-        return crud.isExists(table, key);
     }
 
     @Override

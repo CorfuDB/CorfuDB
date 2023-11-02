@@ -152,6 +152,8 @@ public class LogReplicationSinkManager implements DataReceiver {
                         .build());
 
         if (session.getSubscriber().getModel().equals(LogReplication.ReplicationModel.ROUTING_QUEUES)) {
+            // TODO v2: Insert the replicated queue in the registry table so that is is opened and the application
+            //  (client) can subscribe to it.  This is a temporary fix and must be addressed cleanly
             insertQInRegistryTable();
         }
         initWriterAndBufferMgr();

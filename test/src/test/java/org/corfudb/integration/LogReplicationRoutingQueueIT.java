@@ -196,11 +196,9 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
         // Open queue on sink
         try {
             log.info("Sink Queue name: {}", REPLICATED_RECV_Q_PREFIX+sourceSiteId);
-            Table<Queue.CorfuGuidMsg, Queue.RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg> replicatedQueueSink
-                    = sinkCorfuStores.get(0).openQueue(CORFU_SYSTEM_NAMESPACE,
-                    REPLICATED_RECV_Q_PREFIX+sourceSiteId,
-                    Queue.RoutingTableEntryMsg.class, TableOptions.builder().schemaOptions(CorfuOptions.SchemaOptions.newBuilder()
-                            .addStreamTag(REPLICATED_QUEUE_TAG).build()).build());
+            sinkCorfuStores.get(0).openQueue(CORFU_SYSTEM_NAMESPACE, REPLICATED_RECV_Q_PREFIX+sourceSiteId,
+                    Queue.RoutingTableEntryMsg.class, TableOptions.builder().schemaOptions(
+                        CorfuOptions.SchemaOptions.newBuilder().addStreamTag(REPLICATED_QUEUE_TAG).build()).build());
 
             startReplicationServers();
             while (!snapshotProvider.isSnapshotSent) {
@@ -365,8 +363,6 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
 
         @Override
         public void provideFullStateData(LRFullStateReplicationContext context) {
-            RpcCommon.UuidMsg key = RpcCommon.UuidMsg.newBuilder()
-                    .setMsb(0).setLsb(numFullSyncBatches).build();
             for (int i = 0; i < numFullSyncBatches; i++) {
                 try (TxnContext tx = corfuStore.txn(someNamespace)) {
                     if (context.getSnapshot() == null) {
