@@ -201,7 +201,8 @@ public class TableRegistry {
      * @throws InvocationTargetException If this is not a protobuf message.
      * @throws IllegalAccessException    If this is not a protobuf message.
      */
-    // Exposing for PoC
+    // TODO: Log Replication code currently invokes this method and has a TODO for eliminating it.  After it is
+    //  addressed, make the method private.
     public <K extends Message, V extends Message, M extends Message>
     void registerTable(@Nonnull String namespace,
                        @Nonnull String tableName,

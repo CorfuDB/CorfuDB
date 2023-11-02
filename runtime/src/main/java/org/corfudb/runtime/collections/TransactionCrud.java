@@ -279,7 +279,7 @@ public class TransactionCrud<T extends StoreTransaction<T>>
      * Enqueue a message object into the CorfuQueue.
      *
      * @param table  Table object to perform the delete on.
-     * @param record Record to be inserted into the Queue.
+     * @param value Record to be inserted into the Queue.
      * @param <K>    Type of Key.
      * @param <V>    Type of Value.
      * @param <M>    Type of Metadata.
@@ -289,12 +289,12 @@ public class TransactionCrud<T extends StoreTransaction<T>>
     @Nonnull
     public <K extends Message, V extends Message, M extends Message>
     K enqueue(@Nonnull Table<K, V, M> table,
-              @Nonnull final V record) {
+              @Nonnull final V value) {
         validateWrite(table);
         if (TransactionalContext.getRootContext().getPreCommitListeners().isEmpty()) {
             TransactionalContext.getCurrentContext().addPreCommitListener(new QueueEntryAddressGetter());
         }
-        K ret = table.enqueue(record);
+        K ret = table.enqueue(value);
         tablesUpdated.putIfAbsent(table.getStreamUUID(), table);
         return ret;
     }
@@ -353,7 +353,7 @@ public class TransactionCrud<T extends StoreTransaction<T>>
      *
      * @param table Table object to retrieve the record from
      * @param key   Key of the record.
-     * @return CorfuStoreEntry<Key, Value, Metadata> instance.
+     * @return CorfuStoreEntry
      */
     @Override
     @Nonnull
