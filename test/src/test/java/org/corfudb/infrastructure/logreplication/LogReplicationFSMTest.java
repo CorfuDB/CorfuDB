@@ -738,30 +738,16 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         // Write LARGE_NUM_ENTRIES to streamA
         writeToMap();
 
+        assertThat(fsm.getState().getType()).isEqualTo(LogReplicationStateType.INITIALIZED);
+
         // Initial acquire of semaphore, the transition method will block until a transition occurs
         transitionAvailable.acquire();
 
         // Transition #1: Replication Start
-        // transition(LogReplicationEventType.LOG_ENTRY_SYNC_REQUEST, LogReplicationStateType.IN_LOG_ENTRY_SYNC);
+         transition(LogReplicationEventType.LOG_ENTRY_SYNC_REQUEST, LogReplicationStateType.IN_LOG_ENTRY_SYNC, true);
 
         // Transition #2: Snapshot Sync Request
-        UUID snapshotSyncRequestId = transition(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST,
-                LogReplicationStateType.IN_SNAPSHOT_SYNC, true);
-
-        // Block until the snapshot sync completes and next transition occurs.
-        // The transition should happen to IN_LOG_ENTRY_SYNC state.
-        log.debug("**** Wait for snapshot sync to complete");
-
-        // Block until the snapshot sync completes and next transition occurs.
-        while (fsm.getState().getType() != LogReplicationStateType.WAIT_SNAPSHOT_APPLY) {
-            log.trace("Current state={}, expected={}", fsm.getState().getType(), LogReplicationStateType.WAIT_SNAPSHOT_APPLY);
-            // Acquire the semaphore again in case transition is blocked with SNAPSHOT_SYNC_CONTINUE event
-            transitionAvailable.acquire();
-        }
-
-        assertThat(fsm.getState().getType()).isEqualTo(LogReplicationStateType.WAIT_SNAPSHOT_APPLY);
-
-        transition(LogReplicationEventType.SNAPSHOT_APPLY_COMPLETE, LogReplicationStateType.IN_LOG_ENTRY_SYNC, snapshotSyncRequestId, true);
+        transition(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST, LogReplicationStateType.IN_LOG_ENTRY_SYNC, true);
 
         assertThat(fsm.getState().getType()).isEqualTo(LogReplicationStateType.IN_LOG_ENTRY_SYNC);
 
