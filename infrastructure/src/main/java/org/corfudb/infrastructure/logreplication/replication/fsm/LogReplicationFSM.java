@@ -28,7 +28,6 @@ import org.corfudb.runtime.view.Address;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.ExecutorService;
 
 
 /**
@@ -331,7 +330,7 @@ public class LogReplicationFSM {
         if (event.getType() != LogReplicationEventType.LOG_ENTRY_SYNC_CONTINUE) {
             log.trace("Enqueue event {} with ID {}", event.getType(), event.getEventId());
         }
-        taskManager.addTask(event, FsmTaskManager.fsmEventType.LogReplicationEvent);
+        taskManager.addTask(event, FsmTaskManager.FsmEventType.LogReplicationEvent);
     }
 
     /**

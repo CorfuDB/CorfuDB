@@ -138,7 +138,7 @@ public class CorfuLogReplicationRuntime {
     @Getter
     private final LogReplicationContext replicationContext;
 
-    private final static FsmTaskManager taskManager = new FsmTaskManager("runtimeFSM", 2);
+    private static final FsmTaskManager taskManager = new FsmTaskManager("runtimeFSM", 2);
 
     /**
      * Default Constructor
@@ -188,7 +188,7 @@ public class CorfuLogReplicationRuntime {
             // Not accepting events, in stopped state
             return;
         }
-        taskManager.addTask(event, FsmTaskManager.fsmEventType.LogReplicationRuntimeEvent);
+        taskManager.addTask(event, FsmTaskManager.FsmEventType.LogReplicationRuntimeEvent);
     }
 
     /**
