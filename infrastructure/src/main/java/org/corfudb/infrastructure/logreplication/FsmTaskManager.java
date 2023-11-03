@@ -36,15 +36,15 @@ public class FsmTaskManager {
 
     private Map<LogReplicationSession, LinkedList<UUID>> sessionToSinkEventIdMap;
 
-    public FsmTaskManager (String threadName, int threadCount) {
+    public FsmTaskManager(String threadName, int threadCount) {
         fsmWorker = Executors.newFixedThreadPool(threadCount, new ThreadFactoryBuilder().setNameFormat(threadName+"-%d").build());
         sessionToRuntimeEventIdMap = new ConcurrentHashMap<>();
         sessionToReplicationEventIdMap = new ConcurrentHashMap<>();
         sessionToSinkEventIdMap = new ConcurrentHashMap<>();
     }
 
-    public <E> void addTask(E event, fsmEventType fsm) {
-        if (fsm.equals(fsmEventType.LogReplicationRuntimeEvent)) {
+    public <E> void addTask(E event, FsmEventType fsm) {
+        if (fsm.equals(FsmEventType.LogReplicationRuntimeEvent)) {
             LogReplicationSession session = ((LogReplicationRuntimeEvent) event).getRuntimeFsm().getSession();
             sessionToRuntimeEventIdMap.putIfAbsent(session, new LinkedList<>());
             // makes the value part of the map thread safe.
@@ -53,7 +53,7 @@ public class FsmTaskManager {
                 return eventList;
             });
             fsmWorker.submit(() -> processRuntimeTask((LogReplicationRuntimeEvent) event));
-        } else if (fsm.equals(fsmEventType.LogReplicationEvent)){
+        } else if (fsm.equals(FsmEventType.LogReplicationEvent)){
             LogReplicationSession session = ((LogReplicationEvent) event).getReplicationFsm().getSession();
             sessionToReplicationEventIdMap.putIfAbsent(session, new LinkedList<>());
             // makes the value part of the map thread safe.
@@ -187,7 +187,7 @@ public class FsmTaskManager {
         fsmWorker.shutdown();
     }
 
-    public enum fsmEventType {
+    public static enum FsmEventType {
         LogReplicationEvent,
         LogReplicationRuntimeEvent,
         LogReplicationSinkEvent
