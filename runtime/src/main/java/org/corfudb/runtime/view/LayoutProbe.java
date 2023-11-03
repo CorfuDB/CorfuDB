@@ -2,14 +2,16 @@ package org.corfudb.runtime.view;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
-import lombok.Builder.Default;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
 import lombok.ToString;
 
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 
 @Builder
@@ -17,6 +19,8 @@ import java.util.List;
 @AllArgsConstructor
 @ToString
 public class LayoutProbe implements Comparable<LayoutProbe> {
+    @Setter
+    private String endpoint;
     @Setter
     private int iteration;
     private long time;
@@ -35,11 +39,6 @@ public class LayoutProbe implements Comparable<LayoutProbe> {
      * Iteration increment or decrement value (diff between each increase or decrease operation)
      */
     private static final int ITERATION_DIFF = 1;
-
-
-    public static LayoutProbe current() {
-        return new LayoutProbe(1, System.currentTimeMillis());
-    }
 
     @Override
     public int compareTo(LayoutProbe other) {
@@ -66,7 +65,17 @@ public class LayoutProbe implements Comparable<LayoutProbe> {
         this.iteration = MIN_ITERATIONS;
     }
 
-    public enum ClusterStabilityStatus {
+    @Override
+    public String toString() {
+        DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
+        return "LayoutProbe{" +
+                "endpoint=" + endpoint +
+                ", iteration=" + iteration +
+                ", time=" + dateFormat.format(new Date(time)) +
+                '}';
+    }
+
+    public static enum ClusterStabilityStatus {
         GREEN, YELLOW, RED
     }
 

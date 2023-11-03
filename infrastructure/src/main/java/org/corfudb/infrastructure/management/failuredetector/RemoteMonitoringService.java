@@ -26,7 +26,7 @@ import org.corfudb.infrastructure.management.failuredetector.FailureDetectorServ
 import org.corfudb.infrastructure.management.failuredetector.FailureDetectorService.SequencerBootstrapper;
 import org.corfudb.infrastructure.management.failuredetector.FailuresAgent;
 import org.corfudb.infrastructure.management.failuredetector.HealingAgent;
-import org.corfudb.infrastructure.management.failuredetector.LocalMonitoringService;
+import org.corfudb.infrastructure.management.failuredetector.LayoutRateLimit.LayoutRateLimitParams;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
 import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats;
@@ -46,6 +46,7 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 
 import static org.corfudb.infrastructure.health.Issue.IssueId.SOME_NODES_ARE_UNRESPONSIVE;
+import static org.corfudb.infrastructure.utils.ServerContextUtils.buildRateLimitParamsFromServerContext;
 
 /**
  * Remote Monitoring Service constitutes of failure and healing monitoring and handling.
@@ -246,6 +247,8 @@ public class RemoteMonitoringService implements ManagementService {
      */
     private synchronized CompletableFuture<DetectorTask> runDetectionTasks() {
         String localEndpoint = serverContext.getLocalEndpoint();
+        LayoutRateLimitParams layoutRateLimitParams = buildRateLimitParamsFromServerContext(serverContext);
+
         return getCorfuRuntime()
                 .invalidateLayout()
                 .thenApply(serverContext::saveManagementLayout)
@@ -273,7 +276,11 @@ public class RemoteMonitoringService implements ManagementService {
                                 return pollReport;
                             })
                             //Execute failure detector task using failureDetectorWorker executor
-                            .thenCompose(pollReport -> fdService.runFailureDetectorTask(pollReport, ourLayout, localEndpoint));
+                            .thenCompose(pollReport -> fdService.runFailureDetectorTask(
+                                    pollReport,
+                                    ourLayout,
+                                    localEndpoint,
+                                    layoutRateLimitParams));
                 }).thenApply(task -> {
                     Issue issue = Issue.createIssue(Component.FAILURE_DETECTOR,
                             SOME_NODES_ARE_UNRESPONSIVE,

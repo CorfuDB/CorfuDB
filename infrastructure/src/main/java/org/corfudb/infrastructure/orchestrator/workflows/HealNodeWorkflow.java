@@ -2,6 +2,8 @@ package org.corfudb.infrastructure.orchestrator.workflows;
 
 import com.google.common.collect.ImmutableList;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.ServerContext;
+import org.corfudb.infrastructure.management.failuredetector.LayoutRateLimit.LayoutRateLimitParams;
 import org.corfudb.infrastructure.management.failuredetector.LayoutRateLimit.ProbeCalc;
 import org.corfudb.infrastructure.management.failuredetector.LayoutRateLimit.ProbeStatus;
 import org.corfudb.infrastructure.orchestrator.Action;
@@ -11,11 +13,11 @@ import org.corfudb.protocols.wireprotocol.orchestrator.AddNodeRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.HealNodeRequest;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Layout;
-import org.corfudb.runtime.view.LayoutProbe;
 import org.corfudb.runtime.view.LayoutProbe.LayoutStatus;
 
 import javax.annotation.Nonnull;
 
+import static org.corfudb.infrastructure.utils.ServerContextUtils.buildRateLimitParamsFromServerContext;
 import static org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorRequestType.HEAL_NODE;
 
 /**
@@ -31,7 +33,7 @@ public class HealNodeWorkflow extends AddNodeWorkflow {
 
     private final HealNodeRequest request;
 
-    public HealNodeWorkflow(HealNodeRequest healNodeRequest) {
+    public HealNodeWorkflow(HealNodeRequest healNodeRequest, ServerContext serverContext) {
         super(new AddNodeRequest(healNodeRequest.getEndpoint()));
         this.request = healNodeRequest;
 
@@ -40,7 +42,7 @@ public class HealNodeWorkflow extends AddNodeWorkflow {
                 .redundancyCalculator(new RedundancyCalculator(request.getEndpoint()))
                 .build();
 
-        this.actions = ImmutableList.of(new HealNodeToLayout(), mergeSegmentsAction);
+        this.actions = ImmutableList.of(new HealNodeToLayout(serverContext), mergeSegmentsAction);
     }
 
     @Override
@@ -55,19 +57,28 @@ public class HealNodeWorkflow extends AddNodeWorkflow {
      * tail determined during the layout modification.
      */
     class HealNodeToLayout extends Action {
+        private final ServerContext serverContext;
+
         @Override
         public String getName() {
             return "HealNodeToLayout";
+        }
+
+        public HealNodeToLayout(ServerContext serverContext) {
+            this.serverContext = serverContext;
         }
 
         @Override
         public void impl(@Nonnull CorfuRuntime runtime) throws Exception {
             Layout currentLayout = new Layout(runtime.getLayoutView().getLayout());
 
-            ProbeCalc probeCalc = ProbeCalc.builder().build();
-            for (LayoutProbe probe : currentLayout.getStatus().getHealProbes()) {
-                probeCalc.update(new LayoutProbe(probe.getIteration(), probe.getTime()));
-            }
+            LayoutRateLimitParams layoutRateLimitParams = buildRateLimitParamsFromServerContext(serverContext);
+
+            ProbeCalc probeCalc = ProbeCalc.builder()
+                    .localEndpoint(serverContext.getLocalEndpoint())
+                    .layoutRateLimitParams(layoutRateLimitParams)
+                    .build();
+            probeCalc.updateFromLayout(currentLayout);
 
             ProbeStatus probeStatus = probeCalc.calcStatsForNewUpdate();
             if (probeStatus.isAllowed()) {

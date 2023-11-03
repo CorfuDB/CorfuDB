@@ -3,6 +3,7 @@ package org.corfudb.runtime.view;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NonNull;
+import lombok.ToString;
 
 import java.util.Map;
 
@@ -14,6 +15,7 @@ import java.util.Map;
  */
 @Builder
 @Getter
+@ToString
 public class ClusterStatusReport {
 
     /**

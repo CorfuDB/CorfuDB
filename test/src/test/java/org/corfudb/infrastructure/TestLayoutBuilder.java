@@ -5,7 +5,6 @@ import lombok.Setter;
 import lombok.experimental.Accessors;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.LayoutProbe;
-import org.corfudb.runtime.view.LayoutProbe.ClusterStabilityStatus;
 import org.corfudb.runtime.view.LayoutProbe.LayoutStatus;
 
 import java.util.ArrayList;

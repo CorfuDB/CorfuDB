@@ -1,5 +1,6 @@
 package org.corfudb.universe.scenario;
 
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.view.ClusterStatusReport;
 import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
@@ -13,6 +14,7 @@ import org.corfudb.universe.node.server.CorfuServer;
 import org.corfudb.universe.scenario.fixture.Fixture;
 import org.corfudb.universe.universe.UniverseParams;
 import org.junit.Test;
+import org.slf4j.event.Level;
 
 import java.time.Duration;
 import java.util.Map;
@@ -25,6 +27,8 @@ import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DE
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.fail;
 
+@SuppressWarnings("checkstyle:ClassNamingConventions")
+@Slf4j
 public class RepeatingFailureIT extends GenericIntegrationTest {
 
     /**
@@ -36,25 +40,27 @@ public class RepeatingFailureIT extends GenericIntegrationTest {
      * 4) Recover cluster by restarting the stopped node
      * 5) Verify layout, cluster status and data path again
      */
-    @Test(timeout = 300000)
+    @Test(timeout = 1000000)
     public void repeatingNodeFailreTest() {
 
         workflow(wf -> {
             wf.setupDocker(fixture -> {
-                fixture.getUniverse().cleanUpEnabled(false);
+                fixture.getUniverse().cleanUpEnabled(true);
+                fixture.getLogging().enabled(true);
+                fixture.getServer().logLevel(Level.DEBUG);
             });
 
             wf.deploy();
 
             try {
-                repeatingNodeFailre(wf);
+                repeatingNodeFailure(wf);
             } catch (Exception e) {
                 fail("Test failed", e);
             }
         });
     }
 
-    private void repeatingNodeFailre(UniverseWorkflow<Fixture<UniverseParams>> wf) throws Exception {
+    private void repeatingNodeFailure(UniverseWorkflow<Fixture<UniverseParams>> wf) throws Exception {
         String groupName = wf.getFixture().data().getGroupParamByIndex(0).getName();
         CorfuCluster corfuCluster = wf.getUniverse().getGroup(groupName);
 
@@ -69,10 +75,13 @@ public class RepeatingFailureIT extends GenericIntegrationTest {
 
         //Should stop one node and then restart
         for (int i = 0; i < 3; i++) {
+            Thread.sleep(5000);
+            log.info("Layout before restart: {}", corfuClient.getLayout());
             corfuServerRestart(corfuCluster, corfuClient);
         }
+
         assertEquals(
-                1,
+                3,
                 corfuClient.getLayout().getStatus().getHealProbes().size(),
                 () -> "Wrong probes section. Layout: " + corfuClient.getLayout()
         );
@@ -103,12 +112,14 @@ public class RepeatingFailureIT extends GenericIntegrationTest {
 
         // Verify layout, unresponsive servers should contain only the stopped node
         Layout layout = corfuClient.getLayout();
+        log.info("corfuServerRestart: Current Layout = {}", layout);
         assertThat(layout.getUnresponsiveServers()).containsExactly(server0.getEndpoint());
 
         // Verify cluster status is DEGRADED with one node down
         ClusterStatusReport clusterStatusReport = corfuClient
                 .getManagementView()
                 .getClusterStatus();
+        log.info("corfuServerRestart: clusterStatusReport={}",clusterStatusReport);
         assertThat(clusterStatusReport.getClusterStatus()).isEqualTo(ClusterStatus.DEGRADED);
 
         Map<String, NodeStatus> statusMap = clusterStatusReport.getClusterNodeStatusMap();

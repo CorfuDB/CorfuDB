@@ -339,9 +339,10 @@ public class OrchestratorTest {
     public void testHealNodeRequestWithoutExisting() {
         // We expect a new workflow to be created and prepare the required mocked behaviour.
         ArgumentCaptor<HealNodeRequest> requestArgumentCaptor = ArgumentCaptor.forClass(HealNodeRequest.class);
+        ArgumentCaptor<ServerContext> serverContextArgumentCaptor = ArgumentCaptor.forClass(ServerContext.class);
         HealNodeWorkflow mockWorkflow = mock(HealNodeWorkflow.class);
         doReturn(WORKFLOW_ID_2).when(mockWorkflow).getId();
-        doReturn(mockWorkflow).when(workflowFactory).getHealNode(any(HealNodeRequest.class));
+        doReturn(mockWorkflow).when(workflowFactory).getHealNode(any(HealNodeRequest.class), any(ServerContext.class));
 
         sendAndValidateWorkflowDispatch(
                 getHealNodeRequestMsg(ENDPOINT_2, 10, true, false, true),
@@ -350,7 +351,7 @@ public class OrchestratorTest {
 
         // Verify that a single HealNodeWorkflow was built for the given endpoint, and
         // that the corresponding workflowId was added to the activeWorkflows map.
-        verify(workflowFactory).getHealNode(requestArgumentCaptor.capture());
+        verify(workflowFactory).getHealNode(requestArgumentCaptor.capture(), serverContextArgumentCaptor.capture());
         assertEquals(ENDPOINT_2, requestArgumentCaptor.getValue().getEndpoint());
         assertTrue(requestArgumentCaptor.getValue().isLayoutServer());
         assertFalse(requestArgumentCaptor.getValue().isSequencerServer());

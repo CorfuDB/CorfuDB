@@ -4,11 +4,14 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Builder.Default;
 import lombok.Getter;
+import lombok.Setter;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.LayoutProbe;
 import org.corfudb.runtime.view.LayoutProbe.ClusterStabilityStatus;
 
+import java.security.InvalidParameterException;
 import java.time.Duration;
 import java.util.Deque;
 import java.util.LinkedList;
@@ -28,6 +31,10 @@ public class LayoutRateLimit {
         @Default
         private final int limit = 3;
 
+        private String localEndpoint;
+
+        private LayoutRateLimitParams layoutRateLimitParams;
+
         private final Queue<LayoutProbe> probes = new LinkedList<>();
 
         public void update(LayoutProbe update) {
@@ -40,14 +47,27 @@ public class LayoutRateLimit {
             }
         }
 
+        public void updateFromLayout(Layout layout) {
+            for (LayoutProbe probe : layout.getStatus().getHealProbes()) {
+                // Only use current node's probes and ignore other entries
+                if (probe.getEndpoint().equals(this.localEndpoint)){
+                    log.debug("updateFromLayout: Updating probe.getEndpoint()={}, localEndpoint={}",
+                            probe.getEndpoint(), this.localEndpoint);
+                    this.update(new LayoutProbe(probe.getEndpoint(), probe.getIteration(), probe.getTime()));
+                } else {
+                    log.debug("updateFromLayout: Ignoring probe.getEndpoint()={}, localEndpoint={}",
+                            probe.getEndpoint(), this.localEndpoint);
+                }
+            }
+        }
+
         public List<LayoutProbe> printToLayout() {
             return probes.stream().sorted()
-                    .map(probe -> new LayoutProbe(probe.getIteration(), probe.getTime()))
                     .collect(Collectors.toList());
         }
 
         public ProbeStatus calcStatsForNewUpdate() {
-            return calcStats(LayoutProbe.current());
+            return calcStats(new LayoutProbe(localEndpoint, 1, System.currentTimeMillis()));
         }
 
         public ProbeStatus calcStats(LayoutProbe newProbe) {
@@ -64,7 +84,10 @@ public class LayoutRateLimit {
             // Get the latest (already existing) entry in the probes list
             LayoutProbe existingProbe = tmpProbes.pollLast();
 
-            TimeoutCalc timeoutCalc = TimeoutCalc.builder().iteration(existingProbe.getIteration()).build();
+            TimeoutCalc timeoutCalc = TimeoutCalc.builder()
+                    .iteration(existingProbe.getIteration())
+                    .interval(Duration.ofSeconds(layoutRateLimitParams.timeout))
+                    .build();
             Duration timeout = timeoutCalc.getTimeout();
             // diff between the new probe's time and latest one's before that
             // should be greater than timeout
@@ -81,12 +104,12 @@ public class LayoutRateLimit {
 
                 return new ProbeStatus(false, Optional.of(newProbe), status);
             } else {
-                if (diff.getSeconds() > 2 * timeout.getSeconds()) {
+                if ((double) diff.getSeconds() > layoutRateLimitParams.resetMultiplier * timeout.getSeconds()) {
                     // reset iteration number to 1 as the new probe was done
                     // after 2 times the timeout
                     // this multiplier can be configured in future as required
                     newProbe.resetIteration();
-                } else if (diff.getSeconds() > (long) (1.5 * timeout.getSeconds())) {
+                } else if ((double) diff.getSeconds() > layoutRateLimitParams.cooldownMultiplier * timeout.getSeconds()) {
                     // decrease iteration number as the new probe was done
                     // after 1.5 times the timeout
                     // this multiplier can be configured in future as required
@@ -151,19 +174,52 @@ public class LayoutRateLimit {
     }
 
     @Builder
+    @Setter
     public static class TimeoutCalc {
-        @Default
-        private final Duration interval = Duration.ofSeconds(30); //  1,  3,  7 ===> 30sec, 1.5min/90sec, 3.5min
-        @Default
-        private final int iteration = 1;
+        private Duration interval; //  1,  3,  7 ===> 30sec, 1.5min/90sec, 3.5min
+        private int iteration;
 
         public Duration getTimeout() {
+            if (iteration == 0 || null == interval){
+                throw new InvalidParameterException("Invalid params: iteration=" + iteration +
+                        " interval=" + interval);
+            }
             int iterSquare = 1 << iteration;
 
             long timeout = (iterSquare - 1) * interval.getSeconds();
             timeout = Math.max(timeout, 0);
 
             return Duration.ofSeconds(timeout);
+        }
+    }
+
+    @Getter
+    @Builder
+    public static class LayoutRateLimitParams {
+        /**
+         * The initial timeout in seconds
+         */
+        private final int timeout;
+        public static final int DEFAULT_TIMEOUT = 30;
+
+        /**
+         * The iteration reset Multiplier
+         */
+        private final double resetMultiplier;
+        public static final double DEFAULT_LAYOUT_RATE_LIMIT_RESET_MULTIPLIER = 2.0;
+
+        /**
+         * The iteration cooldown Multiplier
+         */
+        private double cooldownMultiplier;
+        public static final double DEFAULT_LAYOUT_RATE_LIMIT_COOLDOWN_MULTIPLIER = 1.5;
+
+        public static LayoutRateLimitParams getDefaultParams(){
+            return LayoutRateLimitParams.builder()
+                    .timeout(30)
+                    .resetMultiplier(2)
+                    .cooldownMultiplier(1.5)
+                    .build();
         }
     }
 

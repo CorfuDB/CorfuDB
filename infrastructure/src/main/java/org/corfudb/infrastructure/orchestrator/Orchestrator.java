@@ -142,7 +142,7 @@ public class Orchestrator {
                 break;
 
             case HEAL_NODE:
-                workflow = workflowFactory.getHealNode(getHealNodeRequest(msg.getHealNode()));
+                workflow = workflowFactory.getHealNode(getHealNodeRequest(msg.getHealNode()), serverContext);
                 dispatch(workflow, req, ctx, r, msg.getHealNode().getEndpoint());
                 break;
 
@@ -323,8 +323,8 @@ public class Orchestrator {
             return new ForceRemoveWorkflow(req);
         }
 
-        HealNodeWorkflow getHealNode(@Nonnull HealNodeRequest req) {
-            return new HealNodeWorkflow(req);
+        HealNodeWorkflow getHealNode(@Nonnull HealNodeRequest req, ServerContext serverContext) {
+            return new HealNodeWorkflow(req, serverContext);
         }
 
         RestoreRedundancyMergeSegmentsWorkflow getRestoreRedundancy(@Nonnull RestoreRedundancyMergeSegmentsRequest req) {

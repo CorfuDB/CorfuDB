@@ -145,6 +145,7 @@ public class Layout {
      * Overloaded old Constructor for backward compatibility.
      * @deprecated "Use the new constructor with all the arguments"
      */
+    @Deprecated
     public Layout(@NonNull List<String> layoutServers, @NonNull List<String> sequencers,
                   @NonNull List<LayoutSegment> segments, @NonNull List<String> unresponsiveServers,
                   long epoch, @Nullable UUID clusterId) {
