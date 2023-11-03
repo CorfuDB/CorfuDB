@@ -177,6 +177,7 @@ public class DiskBackedCorfuTable<K, V> implements
             if (resultValue == null) {
                 return null;
             }
+
             return serializer.deserializeTyped(Unpooled.wrappedBuffer(value.get()), null);
         } finally {
             MicroMeterUtils.time(recordSample, "corfu_table.read.timer", DISK_BACKED, TRUE);

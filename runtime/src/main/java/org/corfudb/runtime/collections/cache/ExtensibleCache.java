@@ -4,8 +4,6 @@ import org.corfudb.runtime.collections.DiskBackedCorfuTable;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.object.PersistenceOptions;
 import org.corfudb.runtime.object.RocksDbStore;
-import org.corfudb.runtime.object.RocksDbStore.IndexMode;
-import org.corfudb.runtime.object.RocksDbStore.StoreMode;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 import org.rocksdb.Options;
@@ -26,10 +24,7 @@ public class ExtensibleCache<K, V> implements AutoCloseable {
 
     public ExtensibleCache(PersistenceOptions persistenceOptions, ISerializer serializer) {
         try {
-            rocksDbStore = new RocksDbStore<>(
-                    persistenceOptions.getDataPath(), defaultOptions,
-                    DiskBackedCorfuTable.WRITE_OPTIONS, persistenceOptions, StoreMode.PERSISTENT, IndexMode.NON_INDEX
-            );
+            rocksDbStore = new RocksDbStore<>(defaultOptions, DiskBackedCorfuTable.WRITE_OPTIONS, persistenceOptions);
             table = new DiskBackedCorfuTable<>(serializer, rocksDbStore, Optional.empty());
 
         } catch (RocksDBException ex) {

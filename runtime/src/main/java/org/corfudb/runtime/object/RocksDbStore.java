@@ -25,7 +25,6 @@ import org.rocksdb.StatsLevel;
 import org.rocksdb.WriteOptions;
 
 import java.nio.ByteBuffer;
-import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.locks.StampedLock;
@@ -45,7 +44,6 @@ public class RocksDbStore<S extends SnapshotGenerator<S>> implements
         AutoCloseable {
 
     private final OptimisticTransactionDB rocksDb;
-    private final String absolutePathString;
     private final WriteOptions writeOptions;
     private final Options rocksDbOptions;
     @Getter
@@ -60,24 +58,13 @@ public class RocksDbStore<S extends SnapshotGenerator<S>> implements
     @Getter
     private final PersistenceOptions persistenceOptions;
 
-    /**
-     * Clean up database after close
-     */
-    private final StoreMode cleanUp;
-
     // Metrics.
     private final String metricsId;
 
-    public RocksDbStore(@NonNull Path dataPath,
-                        @NonNull Options rocksDbOptions,
-                        @NonNull WriteOptions writeOptions,
-                        @NonNull PersistenceOptions persistenceOptions,
-                        @NonNull StoreMode cleanUp,
-                        IndexMode indexMode) throws RocksDBException {
-        this.absolutePathString = dataPath.toFile().getAbsolutePath();
+    public RocksDbStore(@NonNull Options rocksDbOptions, @NonNull WriteOptions writeOptions,
+            @NonNull PersistenceOptions persistenceOptions) throws RocksDBException {
         this.rocksDbOptions = rocksDbOptions;
         this.writeOptions = writeOptions;
-        this.cleanUp = cleanUp;
 
         this.statistics = new Statistics();
         this.statistics.setStatsLevel(StatsLevel.ALL);
@@ -86,9 +73,10 @@ public class RocksDbStore<S extends SnapshotGenerator<S>> implements
         this.persistenceOptions = persistenceOptions;
         persistenceOptions.getWriteBufferSize().map(rocksDbOptions::setWriteBufferSize);
 
-        if (cleanUp == StoreMode.TEMPORARY) {
+        String absolutePathString = persistenceOptions.getAbsolutePathString();
+        if (persistenceOptions.getStoreMode() == StoreMode.TEMPORARY) {
             // Open the RocksDB instance
-            RocksDB.destroyDB(this.absolutePathString, this.rocksDbOptions);
+            RocksDB.destroyDB(absolutePathString, this.rocksDbOptions);
         }
         this.rocksDb = OptimisticTransactionDB.open(rocksDbOptions, absolutePathString);
         this.defaultColumnFamily = this.rocksDb.getDefaultColumnFamily();
@@ -117,7 +105,7 @@ public class RocksDbStore<S extends SnapshotGenerator<S>> implements
             // MemTableConfig memTableConfig = new HashLinkedListMemTableConfig();
             // columnFamilyOptions.setMemTableConfig(memTableConfig);
 
-            if (indexMode == IndexMode.INDEX) {
+            if (persistenceOptions.getIndexMode() == IndexMode.INDEX) {
                 ColumnFamilyDescriptor descriptor = new ColumnFamilyDescriptor(
                         "secondary-indexes".getBytes(),
                         columnFamilyOptions
@@ -239,7 +227,8 @@ public class RocksDbStore<S extends SnapshotGenerator<S>> implements
 
         rocksDb.close();
 
-        if (cleanUp == StoreMode.TEMPORARY) {
+        if (persistenceOptions.getStoreMode() == StoreMode.TEMPORARY) {
+            String absolutePathString = persistenceOptions.getAbsolutePathString();
             RocksDB.destroyDB(absolutePathString, rocksDbOptions);
             log.info("Cleared RocksDB data on {}", absolutePathString);
         }

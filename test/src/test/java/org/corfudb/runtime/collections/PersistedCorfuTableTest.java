@@ -665,10 +665,8 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
 
         OptimisticTransactionDB rocksDb = Mockito.mock(OptimisticTransactionDB.class);
 
-        RocksDbStore<DiskBackedCorfuTable<String, String>> rocksDbStore = new RocksDbStore<>(
-                persistenceOptions.getDataPath(), defaultOptions,
-                DiskBackedCorfuTable.WRITE_OPTIONS, persistenceOptions, StoreMode.TEMPORARY, IndexMode.INDEX
-        );
+        RocksDbStore<DiskBackedCorfuTable<String, String>> rocksDbStore =
+                new RocksDbStore<>(defaultOptions, DiskBackedCorfuTable.WRITE_OPTIONS, persistenceOptions);
 
         try (DiskBackedCorfuTable<String, String> table = new DiskBackedCorfuTable<>(defaultSerializer, rocksDbStore, Optional.empty())) {
             DiskBackedCorfuTable<String, String> newView = table.newView(new RocksDbReadCommittedTx(rocksDb));
