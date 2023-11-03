@@ -132,7 +132,7 @@ public class SessionManager {
     @VisibleForTesting
     public SessionManager(@Nonnull TopologyDescriptor topology, CorfuRuntime corfuRuntime,
                           CorfuReplicationManager replicationManager, LogReplicationClientServerRouter router,
-                          LogReplicationServer logReplicationServer, LogReplicationPluginConfig pluginConfig, int numThreads) {
+                          LogReplicationServer logReplicationServer, LogReplicationPluginConfig pluginConfig) {
         this.topology = topology;
         CorfuRuntime runtime = corfuRuntime;
         this.corfuStore = new CorfuStore(corfuRuntime);

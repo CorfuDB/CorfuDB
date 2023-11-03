@@ -56,7 +56,7 @@ public class RemoteSourceLeadershipManager {
 
     private final String localNodeId;
 
-    private final static FsmTaskManager taskManager = new FsmTaskManager("sink-consumers", 2);
+    private static final FsmTaskManager taskManager = new FsmTaskManager("sink-consumers", 2);
 
     public RemoteSourceLeadershipManager(LogReplicationSession session, LogReplicationClientServerRouter router,
                                          String localNodeId) {
@@ -69,7 +69,7 @@ public class RemoteSourceLeadershipManager {
 
     public void input(LogReplicationSinkEvent event) {
         log.info("adding to the queue {}", event);
-        taskManager.addTask(event, FsmTaskManager.fsmEventType.LogReplicationSinkEvent);
+        taskManager.addTask(event, FsmTaskManager.FsmEventType.LogReplicationSinkEvent);
     }
 
     /**

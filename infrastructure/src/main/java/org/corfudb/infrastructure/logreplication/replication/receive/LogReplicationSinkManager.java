@@ -114,7 +114,7 @@ public class LogReplicationSinkManager implements DataReceiver {
             new ThreadFactoryBuilder()
                     .setDaemon(true)
                     .setNameFormat("snapshotSyncApplyExecutor-%d")
-                    .build());;
+                    .build());
 
     @Getter
     private final AtomicBoolean ongoingApply = new AtomicBoolean(false);

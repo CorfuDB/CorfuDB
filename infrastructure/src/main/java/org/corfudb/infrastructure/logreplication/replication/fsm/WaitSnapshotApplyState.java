@@ -59,7 +59,7 @@ public class WaitSnapshotApplyState implements LogReplicationState {
      */
     private long baseSnapshotTimestamp;
 
-    private final static ScheduledExecutorService snapshotSyncApplyMonitorExecutor = Executors.newScheduledThreadPool(
+    private static final ScheduledExecutorService snapshotSyncApplyMonitorExecutor = Executors.newScheduledThreadPool(
             2, new ThreadFactoryBuilder()
                     .setDaemon(true)
                     .setNameFormat("snapshotSyncApplyVerificationScheduler")

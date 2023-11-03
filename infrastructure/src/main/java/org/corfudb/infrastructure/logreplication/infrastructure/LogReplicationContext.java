@@ -5,7 +5,6 @@ import lombok.Getter;
 import lombok.Setter;
 import org.corfudb.infrastructure.logreplication.config.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
-import org.corfudb.infrastructure.logreplication.FsmTaskManager;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
