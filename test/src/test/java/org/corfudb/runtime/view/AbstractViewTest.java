@@ -106,8 +106,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
     final Map<String, TestServer> testServerMap = new ConcurrentHashMap<>();
 
     /** A map of maps to endpoint->routers, mapped for each runtime instance captured */
-    final Map<CorfuRuntime, Map<String, TestClientRouter>>
-            runtimeRouterMap = new ConcurrentHashMap<>();
+    final Map<CorfuRuntime, Map<String, TestClientRouter>> runtimeRouterMap = new ConcurrentHashMap<>();
 
     /** Test Endpoint hostname. */
     private final static String testHostname = "tcp://test";

@@ -3,21 +3,17 @@ package org.corfudb.runtime.object.transactions;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
-import org.corfudb.runtime.CorfuOptions;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.AppendException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.object.ConsistencyView;
 import org.corfudb.runtime.object.ICorfuSMRAccess;
 import org.corfudb.runtime.object.MVOCorfuCompileProxy;
-import org.corfudb.runtime.object.SnapshotGenerator;
+import org.corfudb.runtime.object.SnapshotGenerator.SnapshotGeneratorWithConsistency;
 
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
-
-import static org.corfudb.runtime.CorfuOptions.ConsistencyModel.READ_COMMITTED;
 
 
 /** A Corfu optimistic transaction context.
@@ -64,11 +60,11 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
      * transactional context as the proxy's new optimistic context.
      * - Then, inside proxy.syncObjectUnsafe, depending on the proxy version,
      * we may need to undo or redo committed changes, or apply forward committed changes.
-     *
+     * <p>
      * {@inheritDoc}
      */
     @Override
-    public <R, S extends SnapshotGenerator<S> & ConsistencyView> R access(
+    public <R, S extends SnapshotGeneratorWithConsistency<S>> R access(
             MVOCorfuCompileProxy<S> proxy, ICorfuSMRAccess<R, S> accessFunction, Object[] conflictObject) {
         long startAccessTime = System.nanoTime();
         try {
@@ -136,7 +132,6 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
      *
      * @param tc The transaction to merge.
      */
-    @SuppressWarnings("unchecked")
     public void addTransaction(AbstractTransactionalContext tc) {
         log.trace("Merge[{}] adding {}", this, tc);
         // merge the conflict maps
@@ -157,7 +152,6 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
      * @throws TransactionAbortedException  If the transaction was aborted.
      */
     @Override
-    @SuppressWarnings("unchecked")
     public long commitTransaction() throws TransactionAbortedException {
         log.trace("TX[{}] request optimistic commit", this);
         return getConflictSetAndCommit(getReadSetInfo());
@@ -203,7 +197,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         // Write to streams corresponding to the streamTags
         affectedStreamsIds.addAll(getWriteSetInfo().getStreamTags());
 
-        UUID[] affectedStreams = affectedStreamsIds.toArray(new UUID[affectedStreamsIds.size()]);
+        UUID[] affectedStreams = affectedStreamsIds.toArray(new UUID[0]);
 
         // Now we obtain a conditional address from the sequencer.
         // This step currently happens all at once, and we get an

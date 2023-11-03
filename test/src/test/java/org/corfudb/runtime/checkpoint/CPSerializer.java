@@ -60,6 +60,11 @@ public class CPSerializer implements ISerializer {
         }
     }
 
+    @Override
+    public <T> T deserializeTyped(ByteBuf b, CorfuRuntime rt) {
+        return (T) deserialize(b, rt);
+    }
+
     public void serialize(Object o, ByteBuf b) {
         String className = o == null ? "null" : o.getClass().getName();
         byte[] classNameBytes = className.getBytes();

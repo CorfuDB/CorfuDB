@@ -11,6 +11,10 @@ import java.util.Optional;
  */
 public interface SnapshotGenerator<T> extends AutoCloseable {
 
+    interface SnapshotGeneratorWithConsistency<S> extends SnapshotGenerator<S>, ConsistencyView {
+
+    }
+
     /**
      * Generate a new snapshot of the underlying data structure
      * and associate a version with it.

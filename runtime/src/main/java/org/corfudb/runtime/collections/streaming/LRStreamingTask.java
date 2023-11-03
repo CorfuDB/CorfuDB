@@ -9,6 +9,7 @@ import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableSchema;
 import org.corfudb.runtime.exceptions.StreamingException;
 import org.corfudb.runtime.view.TableRegistry;
+
 import javax.annotation.Nonnull;
 import java.util.ArrayList;
 import java.util.List;

@@ -45,6 +45,11 @@ public class JavaSerializer implements ISerializer {
         }
     }
 
+    @Override
+    public <T> T deserializeTyped(ByteBuf b, CorfuRuntime rt) {
+        return (T) deserialize(b, rt);
+    }
+
     /**
      * Serialize an object into a given byte buffer.
      *

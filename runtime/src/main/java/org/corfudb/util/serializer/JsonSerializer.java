@@ -15,7 +15,7 @@ import java.io.OutputStreamWriter;
 import java.util.UUID;
 
 /**
- * Created by mwei on 2/10/16.
+ * Json serialized based on Gson
  */
 @Slf4j
 public class JsonSerializer implements ISerializer {
@@ -71,6 +71,11 @@ public class JsonSerializer implements ISerializer {
                 throw new RuntimeException(ie);
             }
         }
+    }
+
+    @Override
+    public <T> T deserializeTyped(ByteBuf b, CorfuRuntime rt) {
+        return (T) deserialize(b, rt);
     }
 
     /**

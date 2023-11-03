@@ -113,6 +113,11 @@ public class ProtobufSerializer implements ISerializer {
         }
     }
 
+    @Override
+    public <T> T deserializeTyped(ByteBuf b, CorfuRuntime rt) {
+        return (T) deserialize(b, rt);
+    }
+
     /**
      * Serialize an object into a given byte buffer.
      *
@@ -126,7 +131,7 @@ public class ProtobufSerializer implements ISerializer {
         MessageType type;
 
         if (o instanceof CorfuRecord) {
-            CorfuRecord corfuRecord = (CorfuRecord) o;
+            CorfuRecord<Message, Message> corfuRecord = (CorfuRecord<Message, Message>) o;
             Any message = Any.pack(corfuRecord.getPayload());
             Record.Builder recordBuilder = Record.newBuilder()
                     .setPayload(message);

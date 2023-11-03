@@ -12,6 +12,7 @@ import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.runtime.object.SnapshotGenerator.SnapshotGeneratorWithConsistency;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.Address;
@@ -25,9 +26,7 @@ import java.util.Set;
 import java.util.UUID;
 
 @Slf4j
-public class MVOCorfuCompileProxy<
-        S extends SnapshotGenerator<S> & ConsistencyView>
-        implements ICorfuSMRProxy<S> {
+public class MVOCorfuCompileProxy<S extends SnapshotGeneratorWithConsistency<S>> implements ICorfuSMRProxy<S> {
 
     @Getter
     private final MultiVersionObject<S> underlyingMVO;
@@ -49,7 +48,7 @@ public class MVOCorfuCompileProxy<
     private final ObjectOpenOption objectOpenOption;
 
     public MVOCorfuCompileProxy(CorfuRuntime rt, UUID streamID, Class<S> type, Object[] args,
-                                ISerializer serializer, Set<UUID> streamTags, ICorfuSMR wrapperObject,
+                                ISerializer serializer, Set<UUID> streamTags, ICorfuSMR<?> wrapperObject,
                                 ObjectOpenOption objectOpenOption, MVOCache<S> mvoCache) {
         this.rt = rt;
         this.streamID = streamID;

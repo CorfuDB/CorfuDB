@@ -494,12 +494,14 @@ public class Table<K extends Message, V extends Message, M extends Message> impl
      */
     @Nonnull
     <I>
-    List<CorfuStoreEntry<K, V, M>> getByIndex(@Nonnull final String indexName,
-                                              @Nonnull final I indexKey) {
-        return StreamSupport.stream(corfuTable.getByIndex(() -> indexName, indexKey).spliterator(), false)
-                .map(entry -> new CorfuStoreEntry<>(entry.getKey(),
+    List<CorfuStoreEntry<K, V, M>> getByIndex(@Nonnull final String indexName, @Nonnull final I indexKey) {
+        return StreamSupport
+                .stream(corfuTable.getByIndex(() -> indexName, indexKey).spliterator(), false)
+                .map(entry -> new CorfuStoreEntry<>(
+                        entry.getKey(),
                         entry.getValue().getPayload(),
-                        entry.getValue().getMetadata()))
+                        entry.getValue().getMetadata())
+                )
                 .collect(Collectors.toList());
     }
 

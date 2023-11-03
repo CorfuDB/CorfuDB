@@ -48,6 +48,11 @@ public class CorfuQueueSerializer implements ISerializer {
         }
     }
 
+    @Override
+    public <T> T deserializeTyped(ByteBuf b, CorfuRuntime rt) {
+        return (T) deserialize(b, rt);
+    }
+
     /**
      * {@inheritDoc}
      */
@@ -58,13 +63,11 @@ public class CorfuQueueSerializer implements ISerializer {
             CorfuQueue.CorfuRecordId recordId = (CorfuQueue.CorfuRecordId) o;
             b.writeByte(entryRecordIdMarker);
             recordId.serialize(b);
-            return;
         } else if (o instanceof ByteString) {
             b.writeByte(entryPayloadMarker);
             ByteString payload = (ByteString) o;
             b.writeInt(payload.size());
             b.writeBytes(payload.asReadOnlyByteBuffer());
-            return;
         } else {
             throw new IllegalArgumentException("Unknown type! " + o.getClass().getSimpleName());
         }

@@ -29,6 +29,11 @@ public class SafeProtobufSerializer implements ISerializer {
     }
 
     @Override
+    public <T> T deserializeTyped(ByteBuf b, CorfuRuntime rt) {
+        return (T) deserialize(b, rt);
+    }
+
+    @Override
     public void serialize(Object object, ByteBuf target) {
         if (Objects.nonNull(PrimitiveSerializer.SerializerMap.get(object.getClass()))) {
             Serializers.PRIMITIVE.serialize(object, target);

@@ -9,6 +9,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.object.CorfuCompileWrapperBuilder;
 import org.corfudb.runtime.object.ICorfuSMR;
+import org.corfudb.runtime.view.ObjectsView.ObjectID;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 
@@ -16,6 +17,7 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 
 /**
  *
@@ -145,28 +147,32 @@ public class SMRObject<T extends ICorfuSMR<?>> {
                 if (smrObject.getOpenOption() == ObjectOpenOption.NO_CACHE) {
                     return CorfuCompileWrapperBuilder.getWrapper(smrObject);
                 } else {
-                    ObjectsView.ObjectID<T> oid = new ObjectsView.ObjectID(streamID, type);
-                    return (T) smrObject.getRuntime().getObjectsView().objectCache.computeIfAbsent(oid, x -> {
-                                try {
-                                    T result = CorfuCompileWrapperBuilder.getWrapper(smrObject);
+                    ObjectID<T> oid = new ObjectID<>(streamID, type);
+                    Function<? super ObjectID<? extends ICorfuSMR<?>>, ? extends ICorfuSMR<?>> objectFactory = x -> {
+                        try {
+                            T result = CorfuCompileWrapperBuilder.getWrapper(smrObject);
 
-                                    // Get object serializer to check if we didn't attempt to set another serializer
-                                    // to an already existing map
-                                    ISerializer objectSerializer = result.getCorfuSMRProxy().getSerializer();
-                                    if (smrObject.getSerializer() != objectSerializer) {
-                                        log.warn("open: Attempt to open an existing object with a different serializer {}. " +
-                                                        "Object {} opened with original serializer {}.",
-                                                smrObject.getSerializer().getClass().getSimpleName(),
-                                                oid,
-                                                objectSerializer.getClass().getSimpleName());
-                                    }
-                                    log.info("Added SMRObject {} to objectCache", oid);
-                                    return result;
-                                } catch (Exception ex) {
-                                    throw new UnrecoverableCorfuError(ex);
-                                }
+                            // Get object serializer to check if we didn't attempt to set another serializer
+                            // to an already existing map
+                            ISerializer objectSerializer = result.getCorfuSMRProxy().getSerializer();
+                            if (smrObject.getSerializer() != objectSerializer) {
+                                log.warn("open: Attempt to open an existing object with a different serializer {}. " +
+                                                "Object {} opened with original serializer {}.",
+                                        smrObject.getSerializer().getClass().getSimpleName(),
+                                        oid,
+                                        objectSerializer.getClass().getSimpleName());
                             }
-                    );
+                            log.info("Added SMRObject {} to objectCache", oid);
+                            return result;
+                        } catch (Exception ex) {
+                            throw new UnrecoverableCorfuError(ex);
+                        }
+                    };
+
+                    return (T) smrObject.getRuntime()
+                            .getObjectsView()
+                            .objectCache
+                            .computeIfAbsent(oid, objectFactory);
                 }
 
             } catch (Exception ex) {

@@ -250,7 +250,7 @@ public class AbstractCorfuTest {
         /** Get the line number of the test which caused the exception.
          * @param e             The exception which caused the error.
          * @param description   A description of the method run.
-         * @return
+         * @return line number
          */
         private int getLineNumber(Throwable e, Description description) {
             try {
@@ -269,17 +269,6 @@ public class AbstractCorfuTest {
         /** Run when the test is finished.
          */
         protected void finished() {
-        }
-
-        /** Run when a test is skipped due to being disabled on Travis-CI.
-         * This method doesn't provide an exception, unlike skipped().
-         */
-        protected void travisSkipped() {
-            System.out.print(ansi().a("[")
-                    .fg(Ansi.Color.YELLOW)
-                    .a("SKIPPED").reset()
-                    .a("]").newline());
-            System.out.flush();
         }
 
         /** Run when a test is skipped due to not meeting prereqs.

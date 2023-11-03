@@ -24,6 +24,7 @@ public class PrimitiveSerializer implements ISerializer {
     public static final Map<Byte, DeserializerFunction> DeserializerMap =
             Arrays.stream(Primitives.values())
                     .collect(Collectors.toMap(Primitives::getTypeNum, Primitives::getDeserializer));
+
     public static final Map<Class, Primitives> SerializerMap = getSerializerMap();
 
     public PrimitiveSerializer(byte type) {
@@ -85,11 +86,15 @@ public class PrimitiveSerializer implements ISerializer {
      * @return The deserialized object.
      */
     @Override
-    @SuppressWarnings("unchecked")
     public Object deserialize(ByteBuf b, CorfuRuntime rt) {
         byte type = b.readByte();
-        DeserializerFunction d = DeserializerMap.get(type);
+        DeserializerFunction<?> d = DeserializerMap.get(type);
         return d.deserialize(b, rt);
+    }
+
+    @Override
+    public <T> T deserializeTyped(ByteBuf b, CorfuRuntime rt) {
+        return (T) deserialize(b, rt);
     }
 
     /**

@@ -6,7 +6,6 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.protocols.logprotocol.SMREntry;
-import org.corfudb.runtime.CorfuOptions;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
@@ -64,7 +63,7 @@ public class MultiVersionObject<S extends SnapshotGenerator<S> & ConsistencyView
     /**
      * The upcall map for this object.
      */
-    private final Map<String, ICorfuSMRUpcallTarget<S>> upcallTargetMap;
+    private final Map<String, CorfuSmrUpcallTarget<S>> upcallTargetMap;
 
     /**
      * A function that generates a new instance of this object.
@@ -135,7 +134,7 @@ public class MultiVersionObject<S extends SnapshotGenerator<S> & ConsistencyView
         this.objectOpenOption = objectOpenOption;
 
         this.smrStream = smrStream;
-        this.upcallTargetMap = wrapperObject.getSMRUpcallMap();
+        this.upcallTargetMap = wrapperObject.getSmrUpCallMap();
         this.newObjectFn = newObjectFn;
 
         this.lock = new StampedLock();
@@ -421,7 +420,7 @@ public class MultiVersionObject<S extends SnapshotGenerator<S> & ConsistencyView
                     updateEntry.getSMRMethod(), updateEntry.getGlobalAddress(), updateEntry.getSMRArguments());
         }
 
-        final ICorfuSMRUpcallTarget<S> target = upcallTargetMap.get(updateEntry.getSMRMethod());
+        final CorfuSmrUpcallTarget<S> target = upcallTargetMap.get(updateEntry.getSMRMethod());
 
         if (target == null) {
             throw new IllegalStateException("Unknown upcall " + updateEntry.getSMRMethod());

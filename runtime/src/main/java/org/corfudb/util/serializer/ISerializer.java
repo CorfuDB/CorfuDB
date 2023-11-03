@@ -18,6 +18,7 @@ import java.nio.ByteBuffer;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.function.Function;
 
 /**
@@ -55,6 +56,14 @@ public interface ISerializer {
     Object deserialize(ByteBuf b, CorfuRuntime rt);
 
     /**
+     * Deserialize an object from a given byte buffer.
+     *
+     * @param b The bytebuf to deserialize.
+     * @return The deserialized object.
+     */
+    <T> T deserializeTyped(ByteBuf b, CorfuRuntime rt);
+
+    /**
      * Serialize an object into a given byte buffer.
      *
      * @param o The object to serialize.
@@ -62,8 +71,7 @@ public interface ISerializer {
      */
     void serialize(Object o, ByteBuf b);
 
-    Map<Class<?>, Function<?, byte[]>> customHashingMap =
-            new ConcurrentHashMap<>();
+    ConcurrentMap<Class<?>, Function<?, byte[]>> customHashingMap = new ConcurrentHashMap<>();
 
     /** Register a new custom hasher with the serializer.
      * @param cls               The class this hasher will handle.
