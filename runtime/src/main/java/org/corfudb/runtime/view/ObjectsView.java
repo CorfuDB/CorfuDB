@@ -30,9 +30,11 @@ import org.corfudb.runtime.object.transactions.TransactionalContext;
 
 import javax.annotation.Nonnull;
 import java.time.Duration;
+import java.util.Collections;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * A view of the objects inside a Corfu instance.
@@ -161,9 +163,27 @@ public class ObjectsView extends AbstractView {
 
         long txEndStartTime = System.nanoTime();
         try {
+
             long commitAddress = TransactionalContext.getCurrentContext().commitTransaction();
-            MicroMeterUtils.time(Duration.ofMillis(System.currentTimeMillis() - context.getStartTime()),
+            long endTxnts = System.currentTimeMillis();
+            MicroMeterUtils.time(Duration.ofMillis(endTxnts - context.getStartTime()),
                     "transaction.duration");
+
+
+            if (ThreadLocalRandom.current().nextInt(0, 11) < 4) {
+                AbstractTransactionalContext dContext = TransactionalContext.getRootContext();
+
+                Collections.sort(dContext.readStreams);
+
+                log.info("txntrace: tailQ {} streamQ {} time(us) {} perc(us) {} streams {}",
+                        dContext.tailQuery,
+                        dContext.streamQuery,
+                        dContext.timeSpent/1000.0,
+                        (dContext.timeSpent*1.0/1000.0/1000.0 / (endTxnts - context.getStartTime()) * 1.0),
+                        dContext.readStreams);
+            }
+
+
             if (commitAddress == Address.NON_ADDRESS) {
                 // If no streams were touched or only empty streams were touched, the returned address would be -1
                 // But -1 can be detrimental to stream subscription which is just looking for a safe spot

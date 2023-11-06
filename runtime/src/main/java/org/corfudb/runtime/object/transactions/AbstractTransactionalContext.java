@@ -150,6 +150,11 @@ public abstract class AbstractTransactionalContext implements
 
     public long dbNanoTime = 0;
 
+    public long tailQuery = 0;
+    public long streamQuery = 0;
+    public long timeSpent = 0;
+    public List<String> readStreams = new ArrayList<>();
+
     AbstractTransactionalContext(Transaction transaction) {
         transactionID = Utils.genPseudorandomUUID();
         this.transaction = transaction;

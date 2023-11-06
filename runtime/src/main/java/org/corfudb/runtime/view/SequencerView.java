@@ -6,6 +6,9 @@ import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
+import org.corfudb.runtime.object.transactions.Transaction;
+import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.CFUtils;
 
@@ -44,7 +47,19 @@ public class SequencerView extends AbstractView {
                         .nextToken(Arrays.asList(streamIds), 0)));
             }
         };
-        return MicroMeterUtils.time(querySupplier, "sequencer.query");
+
+        long start = System.nanoTime();
+        TokenResponse ret = MicroMeterUtils.time(querySupplier, "sequencer.query");
+        long end = System.nanoTime();
+        if (TransactionalContext.isInTransaction()) {
+            AbstractTransactionalContext context = TransactionalContext.getRootContext();
+            context.tailQuery++;
+            for (UUID id : streamIds) {
+                context.readStreams.add(id.toString());
+            }
+            context.timeSpent += (end - start);
+        }
+        return ret;
 
     }
 
@@ -58,7 +73,16 @@ public class SequencerView extends AbstractView {
         Supplier<Long> tailSupplier = () ->
                 layoutHelper(e -> CFUtils.getUninterruptibly(e.getPrimarySequencerClient()
                         .nextToken(Arrays.asList(streamId), 0))).getStreamTail(streamId);
-        return MicroMeterUtils.time(tailSupplier, "sequencer.query");
+        long start = System.nanoTime();
+        long ret = MicroMeterUtils.time(tailSupplier, "sequencer.query");
+        long end = System.nanoTime();
+        if (TransactionalContext.isInTransaction()) {
+            AbstractTransactionalContext context = TransactionalContext.getRootContext();
+            context.tailQuery++;
+            context.readStreams.add(streamId.toString());
+            context.timeSpent += (end - start);
+        }
+        return ret;
     }
 
     /**
@@ -81,7 +105,16 @@ public class SequencerView extends AbstractView {
      * @return address space composed of the trim mark and collection of all addresses belonging to this stream.
      */
     public StreamAddressSpace getStreamAddressSpace(StreamAddressRange streamsAddressesRange) {
-        return getStreamsAddressSpace(Arrays.asList(streamsAddressesRange)).get(streamsAddressesRange.getStreamID());
+        long start = System.nanoTime();
+        StreamAddressSpace ret =  getStreamsAddressSpace(Arrays.asList(streamsAddressesRange)).get(streamsAddressesRange.getStreamID());
+        long end = System.nanoTime();
+        if (TransactionalContext.isInTransaction()) {
+            AbstractTransactionalContext context = TransactionalContext.getRootContext();
+            context.streamQuery++;
+            context.readStreams.add(streamsAddressesRange.getStreamID().toString());
+            context.timeSpent += (end - start);
+        }
+        return  ret;
     }
 
     /**
