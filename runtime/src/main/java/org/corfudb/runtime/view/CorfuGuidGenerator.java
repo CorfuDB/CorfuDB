@@ -225,7 +225,7 @@ public class CorfuGuidGenerator implements OrderedGuidGenerator {
     private long generateIdOncePerTxn(long instId) {
         long newTxnId = txnCounter.incrementAndGet();
         newTxnId = (newTxnId<<TXN_ID_SHIFT) & TXN_ID_MASK;
-        newTxnId = newTxnId | ((instId<< INSTANCE_ID_SHIFT )&INSTANCE_ID_MASK);
+        newTxnId = newTxnId | ((instId<< INSTANCE_ID_SHIFT)&INSTANCE_ID_MASK);
         return newTxnId;
     }
 

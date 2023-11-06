@@ -1,14 +1,4 @@
 package org.corfudb.infrastructure.logreplication.replication.send.logreader;
-
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Preconditions;
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import com.google.protobuf.Message;
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
-import lombok.Getter;
-import lombok.Setter;
-import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.infrastructure.logreplication.replication.send.IllegalSnapshotEntrySizeException;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
@@ -17,7 +7,11 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.Queue;
-import org.corfudb.runtime.collections.*;
+import org.corfudb.runtime.collections.CorfuRecord;
+import org.corfudb.runtime.collections.CorfuStore;
+import org.corfudb.runtime.collections.CorfuStoreEntry;
+import org.corfudb.runtime.collections.TableOptions;
+import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
@@ -28,6 +22,14 @@ import org.corfudb.util.retry.ExponentialBackoffRetry;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalRetry;
 import org.corfudb.util.retry.RetryNeededException;
+
+import static org.corfudb.infrastructure.logreplication.config.LogReplicationConfig.DEFAULT_MAX_DATA_MSG_SIZE;
+import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.REPLICATION_EVENT_TABLE_NAME;
+import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
+import static org.corfudb.runtime.LogReplicationUtils.REPLICATED_RECV_Q_PREFIX;
+import static org.corfudb.runtime.LogReplicationUtils.SNAPSHOT_SYNC_QUEUE_TAG_SENDER_PREFIX;
+import static org.corfudb.runtime.LogReplicationUtils.SNAPSHOT_SYNC_QUEUE_NAME_SENDER;
+import static org.corfudb.runtime.LogReplicationUtils.SNAP_SYNC_TXN_ENVELOPE_TABLE;
 
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
@@ -43,15 +45,15 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
-import static org.corfudb.infrastructure.logreplication.config.LogReplicationConfig.DEFAULT_MAX_DATA_MSG_SIZE;
-import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.REPLICATION_EVENT_TABLE_NAME;
-import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
-import static org.corfudb.runtime.LogReplicationUtils.REPLICATED_RECV_Q_PREFIX;
-import static org.corfudb.runtime.LogReplicationUtils.SNAPSHOT_SYNC_QUEUE_TAG_SENDER_PREFIX;
-import static org.corfudb.runtime.LogReplicationUtils.SNAPSHOT_SYNC_QUEUE_NAME_SENDER;
-import static org.corfudb.runtime.LogReplicationUtils.SNAP_SYNC_TXN_ENVELOPE_TABLE;
-
-
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Preconditions;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import com.google.protobuf.Message;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+import lombok.Getter;
+import lombok.Setter;
+import lombok.extern.slf4j.Slf4j;
 /**
  * Snapshot reader implementation for Routing Queues Replication Model.
  */
