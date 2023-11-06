@@ -731,7 +731,8 @@ public class CorfuStoreIT extends AbstractIT {
                 ManagedResources.class,
                 TableOptions.builder().build());
 
-        Table<Uuid, SampleSchema.EventInfo, ManagedResources> table3 = corfuStore.openTable(
+        // Open table3
+        corfuStore.openTable(
                 namespace,
                 tableName3,
                 Uuid.class,

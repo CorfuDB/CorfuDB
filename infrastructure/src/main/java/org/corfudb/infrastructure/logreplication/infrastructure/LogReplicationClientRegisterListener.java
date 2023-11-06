@@ -5,7 +5,6 @@ import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManag
 import org.corfudb.infrastructure.logreplication.utils.SnapshotSyncUtils;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.LogReplication;
-import org.corfudb.runtime.LogReplication.ReplicationEvent;
 import org.corfudb.runtime.LogReplication.ClientRegistrationId;
 import org.corfudb.runtime.LogReplication.ClientRegistrationInfo;
 import org.corfudb.runtime.LogReplication.ReplicationModel;
