@@ -193,37 +193,33 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
         });
 
         // Open queue on sink
-        try {
-            log.info("Sink Queue name: {}", REPLICATED_RECV_Q_PREFIX+sourceSiteId);
-            sinkCorfuStores.get(0).openQueue(CORFU_SYSTEM_NAMESPACE, REPLICATED_RECV_Q_PREFIX+sourceSiteId,
-                    Queue.RoutingTableEntryMsg.class, TableOptions.builder().schemaOptions(
-                        CorfuOptions.SchemaOptions.newBuilder().addStreamTag(REPLICATED_QUEUE_TAG).build()).build());
+        log.info("Sink Queue name: {}", REPLICATED_RECV_Q_PREFIX + sourceSiteId);
+        sinkCorfuStores.get(0).openQueue(CORFU_SYSTEM_NAMESPACE, REPLICATED_RECV_Q_PREFIX + sourceSiteId,
+            Queue.RoutingTableEntryMsg.class, TableOptions.builder().schemaOptions(
+                CorfuOptions.SchemaOptions.newBuilder().addStreamTag(REPLICATED_QUEUE_TAG).build()).build());
 
-            startReplicationServers();
-            while (!snapshotProvider.isSnapshotSent) {
-                Thread.sleep(5000);
-            }
-
-            // Test forward replication source -> sink
-            RoutingQueueListener listener = new RoutingQueueListener(sinkCorfuStores.get(0),
-                    sourceSiteId, clientName);
-            sinkCorfuStores.get(0).subscribeRoutingQListener(listener);
-
-            int numFullSyncMsgsGot = listener.snapSyncMsgCnt;
-            while (numFullSyncMsgsGot < 5) {
-                Thread.sleep(5000);
-                numFullSyncMsgsGot = listener.snapSyncMsgCnt;
-                log.info("Entries got on receiver {}", numFullSyncMsgsGot);
-            }
-            assertThat(listener.snapSyncMsgCnt).isEqualTo(5);
-
-            // Test reverse replication from the 2 sinks to the source
-            remoteSiteDiscoverer.iGot.values().forEach(sourceListener -> {
-                assertThat(sourceListener.snapSyncMsgCnt).isEqualTo(5);
-            });
-        } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
-            throw new RuntimeException(e);
+        startReplicationServers();
+        while (!snapshotProvider.isSnapshotSent) {
+            Thread.sleep(5000);
         }
+
+        // Test forward replication source -> sink
+        RoutingQueueListener listener = new RoutingQueueListener(sinkCorfuStores.get(0),
+            sourceSiteId, clientName);
+        sinkCorfuStores.get(0).subscribeRoutingQListener(listener);
+
+        int numFullSyncMsgsGot = listener.snapSyncMsgCnt;
+        while (numFullSyncMsgsGot < 5) {
+            Thread.sleep(5000);
+            numFullSyncMsgsGot = listener.snapSyncMsgCnt;
+            log.info("Entries got on receiver {}", numFullSyncMsgsGot);
+        }
+        assertThat(listener.snapSyncMsgCnt).isEqualTo(5);
+
+        // Test reverse replication from the 2 sinks to the source
+        remoteSiteDiscoverer.iGot.values().forEach(sourceListener -> {
+            assertThat(sourceListener.snapSyncMsgCnt).isEqualTo(5);
+        });
     }
 
     private void generateData(CorfuStore corfuStore, RoutingQueueSenderClient client) throws Exception {
@@ -377,7 +373,6 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
                     context.transmit(message);
                     log.info("Transmitting full sync message{}", message);
                     // For debugging Q's stream id should be "61d2fc0f-315a-3d87-a982-24fb36932050"
-                    AbstractTransactionalContext txCtx = TransactionalContext.getRootContext();
                     log.info("FS Committed at {}", tx.commit());
                 }
             }

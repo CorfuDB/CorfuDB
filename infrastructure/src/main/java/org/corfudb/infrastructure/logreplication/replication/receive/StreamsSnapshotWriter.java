@@ -416,8 +416,8 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
         // Sync the config with registry table after applying its entries
         replicationContext.refreshConfig(session, true);
 
-       // TODO: Temporary fix for routing queue model, will need more complete fix to getStreamsToReplicate() for
-        //  this model
+        // TODO: Temporary fix for routing queue model, will need more complete fix to getStreamsToReplicate() for
+        // this model.
         // Use replicatedStreamIds if model is routing queues
         List<UUID> replicatedStreams = new ArrayList<>();
         if (session.getSubscriber().getModel() == ROUTING_QUEUES) {
