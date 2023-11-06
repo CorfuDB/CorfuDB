@@ -23,7 +23,7 @@ import java.util.stream.Collectors;
 
 public class MicroMeterUtils {
 
-    private static final double[] PERCENTILES = new double[]{0.5, 0.75, 0.99};
+    private static final double[] PERCENTILES = new double[]{0.5, 0.75, 0.95, 0.99};
     private static final boolean PUBLISH_HISTOGRAM = true;
     /**
      * A list of server metrics that will be ignored.
