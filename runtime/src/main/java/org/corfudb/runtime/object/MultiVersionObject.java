@@ -104,8 +104,6 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
 
     private final Logger correctnessLogger = LoggerFactory.getLogger("correctness");
 
-    private final Logger statsLogger = LoggerFactory.getLogger("org.corfudb.client.cachemetrics");
-
     /**
      * Number of times to retry a sync when a TrimmedException is encountered.
      */
@@ -195,8 +193,6 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
                 return snapshot.get();
             }
 
-            long originalMaterializedUpTo = materializedUpTo;
-
             // If not, perform a sync on the stream.
             for (int x = 0; x < trimRetry; x++) {
                 try {
@@ -227,10 +223,6 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
                 log.trace("SnapshotProxy[{}] write lock request at {}", Utils.toReadableId(getID()), streamTs);
             }
 
-            if (streamTs != originalMaterializedUpTo && statsLogger.isDebugEnabled()) {
-                statsLogger.debug("Sync: {},{},{}", getID(), originalMaterializedUpTo, streamTs);
-            }
-
             updateSMRSnapshotMetrics(currentInstrumentedObject, false);
 
             correctnessLogger.trace(CORRECTNESS_LOG_MSG, streamTs);
@@ -243,10 +235,7 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
     private void updateSMRSnapshotMetrics(@NonNull InstrumentedSMRSnapshot<T> snapshot, boolean fromCache) {
         if (fromCache) {
             snapshot.getMetrics().requestedWhileCached();
-        } else {
-            snapshot.getMetrics().requestedWhileGenerated();
         }
-
         snapshot.getMetrics().setLastAccessedTs(System.nanoTime());
     }
 

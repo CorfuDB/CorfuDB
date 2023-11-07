@@ -14,6 +14,5 @@ public class InstrumentedSMRSnapshot<T extends ICorfuSMR<T>> {
 
     public InstrumentedSMRSnapshot(@NonNull T snapshot) {
         this(snapshot, new VersionedObjectStats());
-        this.metrics.setGenerationTs(System.nanoTime());
     }
 }
