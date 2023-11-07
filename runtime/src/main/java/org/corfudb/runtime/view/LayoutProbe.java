@@ -17,7 +17,7 @@ import java.util.List;
 @Builder
 @Getter
 @AllArgsConstructor
-@ToString
+@EqualsAndHashCode
 public class LayoutProbe implements Comparable<LayoutProbe> {
     @Setter
     private String endpoint;
