@@ -237,6 +237,11 @@ public class CorfuRuntime {
         boolean cacheDisabled = false;
 
         /*
+         * Time for an entry to live in the mvo cache
+         */
+        private long mvoCacheExpirySeconds = 60;
+
+        /*
          * The maximum number of entries in the AddressSpaceView cache.
          * This will be overridden to 0 if cacheDisabled is true.
          */
@@ -433,6 +438,8 @@ public class CorfuRuntime {
             private Duration holeFillTimeout = Duration.ofSeconds(10);
             private boolean cacheEntryMetricsDisabled = true;
             private boolean cacheDisabled = false;
+
+            private long mvoCacheExpirySeconds = 60;
             private long maxCacheEntries = 2500;
             private long maxMvoCacheEntries = 2500;
             private long maxCacheWeight;
@@ -644,6 +651,11 @@ public class CorfuRuntime {
                 return this;
             }
 
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder mvoCacheExpirySeconds(long mvoCacheExpirySeconds) {
+                this.mvoCacheExpirySeconds = mvoCacheExpirySeconds;
+                return this;
+            }
+
             public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder maxCacheEntries(long maxCacheEntries) {
                 this.maxCacheEntries = maxCacheEntries;
                 return this;
@@ -804,6 +816,7 @@ public class CorfuRuntime {
                 corfuRuntimeParameters.setHoleFillTimeout(holeFillTimeout);
                 corfuRuntimeParameters.setCacheEntryMetricsDisabled(cacheEntryMetricsDisabled);
                 corfuRuntimeParameters.setCacheDisabled(cacheDisabled);
+                corfuRuntimeParameters.setMvoCacheExpirySeconds(mvoCacheExpirySeconds);
                 corfuRuntimeParameters.setMaxCacheEntries(maxCacheEntries);
                 corfuRuntimeParameters.setMaxMvoCacheEntries(maxMvoCacheEntries);
                 corfuRuntimeParameters.setMaxCacheWeight(maxCacheWeight);

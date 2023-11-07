@@ -10,10 +10,9 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.runtime.CorfuRuntime;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nonnull;
+import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -35,8 +34,6 @@ public class MVOCache<T extends ICorfuSMR<T>> {
     @Getter
     private final Cache<VersionedObjectIdentifier, InstrumentedSMRSnapshot<T>> objectCache;
 
-    private final Logger statsLogger = LoggerFactory.getLogger("org.corfudb.client.cachemetrics");
-
     public MVOCache(@Nonnull CorfuRuntime corfuRuntime) {
 
         // If not explicitly set by user, it takes default value in CorfuRuntimeParameters
@@ -48,6 +45,7 @@ public class MVOCache<T extends ICorfuSMR<T>> {
         log.info("MVO cache size is set to {}", maxCacheSize);
 
         this.objectCache = CacheBuilder.newBuilder()
+                .expireAfterAccess(Duration.ofSeconds(corfuRuntime.getParameters().getMvoCacheExpirySeconds()))
                 .maximumSize(maxCacheSize)
                 .removalListener(this::handleEviction)
                 .recordStats()
@@ -58,11 +56,13 @@ public class MVOCache<T extends ICorfuSMR<T>> {
     }
 
     private void handleEviction(RemovalNotification<VersionedObjectIdentifier, InstrumentedSMRSnapshot<T>> notification) {
-        log.trace("handleEviction: evicting {} cause {}", notification.getKey(), notification.getCause());
+        long evictedTs = System.nanoTime();
+        notification.getValue().getMetrics().recordMetrics(notification.getKey().getObjectId().toString(), evictedTs);
 
-        if(statsLogger.isDebugEnabled()) {
-            statsLogger.debug("handleEviction: {},{},{},{}", notification.getKey().getObjectId(),
-                    notification.getKey().getVersion(), notification.getValue().getMetrics(), System.nanoTime());
+        if(log.isTraceEnabled()) {
+            log.trace("handleEviction: {},{},{},{} cause {}", notification.getKey().getObjectId(),
+                    notification.getKey().getVersion(), notification.getValue().getMetrics(), evictedTs,
+                    notification.getCause());
         }
     }
 
