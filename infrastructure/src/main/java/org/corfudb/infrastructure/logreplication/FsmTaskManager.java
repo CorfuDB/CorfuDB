@@ -146,39 +146,39 @@ public class FsmTaskManager {
             }
         }
 
-            LogReplicationState currState = event.getReplicationFsm().getState();
-            if (currState.getType() == LogReplicationStateType.ERROR) {
-                log.info("Log Replication State Machine has been stopped. No more events will be processed.");
-                return;
+        LogReplicationState currState = event.getReplicationFsm().getState();
+        if (currState.getType() == LogReplicationStateType.ERROR) {
+            log.info("Log Replication State Machine has been stopped. No more events will be processed.");
+            return;
+        }
+
+        // TODO (Anny): consider strategy for continuously failing snapshot sync (never ending cancellation)
+
+        try {
+            LogReplicationState newState = currState.processEvent(event);
+            log.trace("Transition from {} to {}", currState, newState);
+
+            event.getReplicationFsm().transition(currState, newState);
+            event.getReplicationFsm().setState(newState);
+            event.getReplicationFsm().getNumTransitions().setValue(event.getReplicationFsm().getNumTransitions().getValue() + 1);
+
+        } catch (org.corfudb.infrastructure.logreplication.replication.fsm.IllegalTransitionException illegalState) {
+            // Ignore LOG_ENTRY_SYNC_REPLICATED events for logging purposes as they will likely come in frequently,
+            // as it is used for update purposes but does not imply a transition.
+            if (!event.getType().equals(LogReplicationEvent.LogReplicationEventType.LOG_ENTRY_SYNC_REPLICATED)) {
+                log.error("Illegal log replication event {} when in state {}", event.getType(), currState.getType());
             }
+        }
 
-            // TODO (Anny): consider strategy for continuously failing snapshot sync (never ending cancellation)
-
-            try {
-                LogReplicationState newState = currState.processEvent(event);
-                log.trace("Transition from {} to {}", currState, newState);
-
-                event.getReplicationFsm().transition(currState, newState);
-                event.getReplicationFsm().setState(newState);
-                event.getReplicationFsm().getNumTransitions().setValue(event.getReplicationFsm().getNumTransitions().getValue() + 1);
-
-            } catch (org.corfudb.infrastructure.logreplication.replication.fsm.IllegalTransitionException illegalState) {
-                // Ignore LOG_ENTRY_SYNC_REPLICATED events for logging purposes as they will likely come in frequently,
-                // as it is used for update purposes but does not imply a transition.
-                if (!event.getType().equals(LogReplicationEvent.LogReplicationEventType.LOG_ENTRY_SYNC_REPLICATED)) {
-                    log.error("Illegal log replication event {} when in state {}", event.getType(), currState.getType());
-                }
+        // For testing purpose to notify the event generator the stop of the event.
+        if (event.getType() == LogReplicationEvent.LogReplicationEventType.REPLICATION_STOP) {
+            synchronized (event) {
+                event.notifyAll();
             }
+        }
 
-            // For testing purpose to notify the event generator the stop of the event.
-            if (event.getType() == LogReplicationEvent.LogReplicationEventType.REPLICATION_STOP) {
-                synchronized (event) {
-                    event.notifyAll();
-                }
-            }
-
-        sessionToReplicationEventIdMap.get(session).remove(0);
         synchronized(event.getReplicationFsm()) {
+            sessionToReplicationEventIdMap.get(session).remove(0);
             event.getReplicationFsm().notifyAll();
         }
     }
