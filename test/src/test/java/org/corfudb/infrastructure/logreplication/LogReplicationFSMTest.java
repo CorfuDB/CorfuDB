@@ -1,6 +1,5 @@
 package org.corfudb.infrastructure.logreplication;
 
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.Message;
 import lombok.Getter;
@@ -97,7 +96,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
     private static final String LOCAL_SOURCE_CLUSTER_ID = DefaultClusterConfig.getSourceClusterIds().get(0);
 
     // This semaphore is used to block until the triggering event causes the transition to a new state
-    private final Semaphore transitionAvailable = new Semaphore(1, true);
+    private Semaphore transitionAvailable;
     // We observe the transition counter to know that a transition occurred.
     private ObservableValue transitionObservable;
 
@@ -318,6 +317,16 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         Assert.assertEquals(expectedSyncTypes, actualSyncTypes);
         Assert.assertEquals(replicationSyncStatusAfterEntry, actualSyncStatus);
         Assert.assertEquals(snapshotInfoSyncStatusAfterEntry, actualSnapshotInfoSyncStatus);
+    }
+
+    @After
+    public void stopFsmTransitions() throws InterruptedException {
+        observeTransitions = true;
+        transition(LogReplicationEventType.REPLICATION_SHUTDOWN, LogReplicationStateType.ERROR, true);
+        Assert.assertEquals(fsm.getState().getType(), LogReplicationStateType.ERROR);
+        LogReplicationFSM.shutdownTaskManager();
+        transitionAvailable.release();
+        observeTransitions = false;
     }
 
     /**
@@ -731,6 +740,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
      */
     @Test
     public void testSnapshotSyncStreamImplementation() throws Exception {
+        observeTransitions = true;
 
         // Initialize State Machine
         initLogReplicationFSM(ReaderImplementation.STREAMS, false);
@@ -977,6 +987,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         fsm = new LogReplicationFSM(snapshotReader, dataSender, logEntryReader,
                 ackReader, DEFAULT_SESSION, context);
         ackReader.setLogEntryReader(fsm.getLogEntryReader());
+        transitionAvailable = new Semaphore(1, true);
         transitionObservable = fsm.getNumTransitions();
         transitionObservable.addObserver(this);
 
