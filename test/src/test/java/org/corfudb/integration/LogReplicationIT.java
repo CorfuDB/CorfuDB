@@ -1304,7 +1304,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         srcContext.getConfig(session).setMaxMsgSize(SMALL_MSG_SIZE);
 
         LogReplicationFSM.resetTaskManager(2);
-        
+
         // Source Manager
         LogReplicationSourceManager logReplicationSourceManager = new LogReplicationSourceManager(srcMetadataManager,
                 sourceDataSender, session, srcContext);
