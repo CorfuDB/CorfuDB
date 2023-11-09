@@ -23,8 +23,6 @@ import org.corfudb.runtime.collections.CorfuStoreEntry;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
-import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
-import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.proto.RpcCommon;
 import org.junit.Before;
 import org.junit.Test;
