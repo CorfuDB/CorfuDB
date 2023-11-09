@@ -360,11 +360,11 @@ public class TransactionCrud<T extends StoreTransaction<T>>
     public <K extends Message, V extends Message, M extends Message>
     CorfuStoreEntry<K, V, M> getRecord(@Nonnull Table<K, V, M> table,
                                        @Nonnull final K key) {
-        CorfuRecord<V, M> record = table.get(key);
-        if (record == null) {
+        CorfuRecord<V, M> corfuRecord = table.get(key);
+        if (corfuRecord == null) {
             return new CorfuStoreEntry<K, V, M>(key, null, null);
         }
-        return new CorfuStoreEntry<K, V, M>(key, record.getPayload(), record.getMetadata());
+        return new CorfuStoreEntry<K, V, M>(key, corfuRecord.getPayload(), corfuRecord.getMetadata());
     }
 
     /**
