@@ -147,7 +147,7 @@ public class InSnapshotSyncState implements LogReplicationState {
                 return fsm.getStates().get(LogReplicationStateType.ERROR);
             default: {
                 if (!fsm.isValidTransition(transitionEventId, event.getMetadata().getRequestId())) {
-                    log.warn("Ignoring log replication event {} for sync {} when in wait snapshot sync apply state for sync {}",
+                    log.warn("Ignoring log replication event {} for sync {} when in snapshot sync state for sync {}",
                             event.getType(), event.getMetadata().getRequestId(), transitionEventId);
                     return this;
                 }
