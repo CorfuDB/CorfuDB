@@ -85,8 +85,6 @@ public class SessionManager {
 
     private final LogReplicationServer incomingMsgHandler;
 
-    private int sessionNameIdx;
-
     private String SESSION_NAME_PREFIX = "session_";
 
     /**
@@ -100,8 +98,6 @@ public class SessionManager {
                           ServerContext serverContext,
                           String localCorfuEndpoint, LogReplicationPluginConfig pluginConfig) {
         this.topology = topology;
-
-        this.sessionNameIdx = 1;
         this.corfuStore = new CorfuStore(corfuRuntime);
 
         this.localCorfuEndpoint = localCorfuEndpoint;
@@ -411,10 +407,23 @@ public class SessionManager {
 
     private void generateNameForNewlyAddedSession() {
         for(LogReplicationSession session : newSessionsDiscovered) {
-            String nameForSession = SESSION_NAME_PREFIX + sessionNameIdx;
-            ++sessionNameIdx;
+            String nameForSession = SESSION_NAME_PREFIX + getSessionHash(session);
             replicationContext.addSessionNameForLogging(session, nameForSession);
         }
+    }
+
+
+    /**
+     * Implement own hashcode to ensure that hash for a session is always the same (on both source and sink), even on restart.
+     */
+    private int getSessionHash(LogReplicationSession session) {
+        int hash = 41;
+        hash = (53 * hash) + session.getSourceClusterId().hashCode();
+        hash = (53 * hash) + session.getSinkClusterId().hashCode();
+        hash = (53 * hash) + session.getSubscriber().getModel().hashCode();
+        hash = (53 * hash) + session.getSubscriber().getClientName().hashCode();
+
+        return hash;
     }
 
     private void removeStaleSessionOnLeadershipAcquire() {
