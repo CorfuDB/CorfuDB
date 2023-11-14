@@ -29,9 +29,6 @@ public interface CorfuReplicationDiscoveryServiceAdapter {
      * Enforce snapshotFullSync
      */
     UUID forceSnapshotSync(LogReplicationSession session) throws LogReplicationDiscoveryServiceException;
-
-    // TODO [V2]: Remove this when localNodeId moves to plugin
-    String getLocalNodeId();
     
     /**
      * Get outgoing sessions
