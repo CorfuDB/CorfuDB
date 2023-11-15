@@ -50,6 +50,10 @@ public class ExtensibleCache<K, V> implements AutoCloseable {
         return this;
     }
 
+    public boolean isEmpty() {
+        return table.size() == 0;
+    }
+
     public ExtensibleCache<K, V> remove(K key) {
         table.remove(key);
         return this;
