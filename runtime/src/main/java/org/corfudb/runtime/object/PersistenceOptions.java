@@ -5,6 +5,8 @@ import lombok.Builder.Default;
 import lombok.Getter;
 import org.corfudb.runtime.CorfuOptions.ConsistencyModel;
 import org.corfudb.runtime.CorfuOptions.SizeComputationModel;
+import org.corfudb.runtime.object.RocksDbStore.IndexMode;
+import org.corfudb.runtime.object.RocksDbStore.StoreMode;
 
 import java.nio.file.Path;
 import java.util.Optional;
@@ -17,15 +19,28 @@ import java.util.Optional;
 @Builder
 public class PersistenceOptions {
 
-    Path dataPath;
+    private final Path dataPath;
+
+    /**
+     * Clean up database after close
+     */
+    @Builder.Default
+    private final StoreMode storeMode = StoreMode.TEMPORARY;
 
     @Builder.Default
-    ConsistencyModel consistencyModel = ConsistencyModel.READ_YOUR_WRITES;
+    private final IndexMode indexMode = IndexMode.INDEX;
 
     @Builder.Default
-    SizeComputationModel sizeComputationModel = SizeComputationModel.EXACT_SIZE;
+    private final ConsistencyModel consistencyModel = ConsistencyModel.READ_YOUR_WRITES;
+
+    @Builder.Default
+    private final SizeComputationModel sizeComputationModel = SizeComputationModel.EXACT_SIZE;
 
     @Builder.Default
     @SuppressWarnings("OptionalUsedAsFieldOrParameterType")
-    Optional<Long> writeBufferSize = Optional.empty();
+    private final Optional<Long> writeBufferSize = Optional.empty();
+
+    public String getAbsolutePathString() {
+        return dataPath.toFile().getAbsolutePath();
+    }
 }

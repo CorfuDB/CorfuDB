@@ -29,19 +29,25 @@ import org.corfudb.runtime.CorfuOptions.SizeComputationModel;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.CorfuStoreMetadata;
+import org.corfudb.runtime.collections.index.Index;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.object.PersistenceOptions;
 import org.corfudb.runtime.object.PersistenceOptions.PersistenceOptionsBuilder;
 import org.corfudb.runtime.object.RocksDbReadCommittedTx;
+import org.corfudb.runtime.object.RocksDbStore;
+import org.corfudb.runtime.object.RocksDbStore.IndexMode;
+import org.corfudb.runtime.object.RocksDbStore.StoreMode;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.test.SampleSchema;
 import org.corfudb.test.SampleSchema.EventInfo;
 import org.corfudb.test.SampleSchema.Uuid;
 import org.corfudb.util.serializer.ISerializer;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.jupiter.api.Assertions;
+import org.junit.rules.TemporaryFolder;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
@@ -68,6 +74,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -79,6 +86,7 @@ import java.util.stream.StreamSupport;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy;
 import static org.corfudb.common.metrics.micrometer.MeterRegistryProvider.MeterRegistryInitializer.initClientMetrics;
+import static org.junit.Assert.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.times;
 
@@ -104,6 +112,9 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
 
     @Captor
     private ArgumentCaptor<String> logCaptor;
+
+    @Rule
+    public TemporaryFolder testTempDir = new TemporaryFolder();
 
     public PersistedCorfuTableTest() {
         AbstractViewTest.initEventGroup();
@@ -646,14 +657,18 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
     }
 
     @Property(tries = NUM_OF_TRIES)
-    void invalidView() {
-        PersistenceOptionsBuilder persistenceOptions = PersistenceOptions.builder()
-                .dataPath(Paths.get(diskBackedDirectory, defaultTableName));
+    void invalidView() throws RocksDBException {
+        PersistenceOptions persistenceOptions = PersistenceOptions
+                .builder()
+                .dataPath(Paths.get(diskBackedDirectory, defaultTableName))
+                .build();
 
         OptimisticTransactionDB rocksDb = Mockito.mock(OptimisticTransactionDB.class);
 
-        try (DiskBackedCorfuTable<String, String> table = new DiskBackedCorfuTable<>(
-                persistenceOptions.build(), defaultOptions, defaultSerializer)) {
+        RocksDbStore<DiskBackedCorfuTable<String, String>> rocksDbStore =
+                new RocksDbStore<>(defaultOptions, DiskBackedCorfuTable.WRITE_OPTIONS, persistenceOptions);
+
+        try (DiskBackedCorfuTable<String, String> table = new DiskBackedCorfuTable<>(defaultSerializer, rocksDbStore, Optional.empty())) {
             DiskBackedCorfuTable<String, String> newView = table.newView(new RocksDbReadCommittedTx(rocksDb));
             assertThat(newView).isNotNull();
             assertThatThrownBy(() -> newView.newView(new RocksDbReadCommittedTx(rocksDb)))
@@ -753,7 +768,7 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
 
     @Property(tries = NUM_OF_TRIES)
     void testEstimateSize(@ForAll @UniqueElements @Size(SAMPLE_SIZE)
-                   Set<@AlphaChars @StringLength(min = 1) String> intended) {
+                          Set<@AlphaChars @StringLength(min = 1) String> intended) {
         resetTests();
         try (final PersistedCorfuTable<String, String> table =
                      setupTable(defaultTableName, ENABLE_READ_YOUR_WRITES, !EXACT_SIZE)) {

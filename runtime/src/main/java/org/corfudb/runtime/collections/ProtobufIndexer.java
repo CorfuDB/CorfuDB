@@ -5,6 +5,7 @@ import com.google.protobuf.Descriptors.OneofDescriptor;
 import com.google.protobuf.Message;
 import org.corfudb.common.util.ClassUtils;
 import org.corfudb.runtime.CorfuOptions;
+import org.corfudb.runtime.collections.index.Index;
 
 import java.util.ArrayList;
 import java.util.Arrays;

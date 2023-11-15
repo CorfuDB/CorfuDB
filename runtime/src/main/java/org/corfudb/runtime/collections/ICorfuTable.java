@@ -1,5 +1,7 @@
 package org.corfudb.runtime.collections;
 
+import org.corfudb.runtime.collections.index.Index;
+
 import javax.annotation.Nonnull;
 import java.util.Map.Entry;
 import java.util.Set;

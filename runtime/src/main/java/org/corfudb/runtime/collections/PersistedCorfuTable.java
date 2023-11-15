@@ -4,12 +4,15 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.reflect.TypeToken;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.object.CorfuSmrUpcallTarget;
+import org.corfudb.runtime.collections.index.Index;
+import org.corfudb.runtime.collections.index.IndexStore;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.ICorfuSMRProxy;
+import org.corfudb.runtime.object.CorfuSmrUpcallTarget;
 
 import javax.annotation.Nonnull;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -111,7 +114,11 @@ public class PersistedCorfuTable<K, V> implements
 
     @Override
     public <I> Iterable<Map.Entry<K, V>> getByIndex(@NonNull final Index.Name indexName, @NonNull I indexKey) {
-        return proxy.access(corfuSmr -> corfuSmr.getByIndex(indexName, indexKey), null);
+        return proxy.access(corfuSmr -> {
+            Optional<IndexStore<K, V>> maybeIndex = corfuSmr.getIndexStore();
+            IndexStore<K, V> index = maybeIndex.orElseThrow(() -> new IllegalStateException("Index store has been disabled"));
+            return index.getByIndex(indexName, indexKey);
+        }, null);
     }
     @Override
     public Map<String, CorfuSmrUpcallTarget<DiskBackedCorfuTable<K, V>>> getSmrUpCallMap() {

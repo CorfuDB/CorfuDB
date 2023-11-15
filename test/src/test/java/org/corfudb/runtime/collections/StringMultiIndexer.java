@@ -1,5 +1,7 @@
 package org.corfudb.runtime.collections;
 
+import org.corfudb.runtime.collections.index.Index;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
