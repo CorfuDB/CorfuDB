@@ -553,10 +553,9 @@ public class SessionManager {
     private void shutDownThreadPools() {
         CorfuLogReplicationRuntime.shutdownTaskManager();
         LogReplicationFSM.shutdownTaskManager();
+        RemoteSourceLeadershipManager.shutdownTaskManager();
         LogReplicationAckReader.shutdownTsPoller();
         LogReplicationSinkManager.shutdownApplyExecutor();
-        RemoteSourceLeadershipManager.shutdownTaskManager();
-        WaitSnapshotApplyState.shutdownApplyMonitor();
     }
 
     /**

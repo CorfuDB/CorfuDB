@@ -28,12 +28,17 @@ public class SnapshotReadMessage {
      * @param endRead True, last read of snapshot sync. False, otherwise.
      */
     public SnapshotReadMessage(List<LogReplicationEntryMsg> messages, boolean endRead) {
+        this(messages, endRead, false);
+    }
+
+    public SnapshotReadMessage(List<LogReplicationEntryMsg> messages, boolean endRead, boolean forceEmptySnapshotMsg) {
         this.messages = messages;
         this.endRead = endRead;
 
         // Enforce end of read if there is no data
-        if(messages.isEmpty() && !endRead) {
+        if(messages.isEmpty() && !endRead && !forceEmptySnapshotMsg) {
             throw new IllegalArgumentException("List of messages is empty and no end read marker found.");
         }
     }
+
 }
