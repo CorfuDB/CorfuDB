@@ -31,7 +31,9 @@ import org.corfudb.runtime.object.transactions.TransactionalContext;
 import javax.annotation.Nonnull;
 import java.time.Duration;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
@@ -181,6 +183,10 @@ public class ObjectsView extends AbstractView {
                         dContext.timeSpent/1000.0,
                         (dContext.timeSpent*1.0/1000.0/1000.0 / (endTxnts - context.getStartTime()) * 1.0),
                         dContext.readStreams);
+                Set<String> uniqueReadStreams = new HashSet<>(dContext.readStreams);
+                if (uniqueReadStreams.size() > 10) {
+                    logCurrentStackTrace(uniqueReadStreams);
+                }
             }
 
 
@@ -242,6 +248,16 @@ public class ObjectsView extends AbstractView {
                     "transaction.db.duration");
             TransactionalContext.removeContext();
         }
+    }
+
+    private static void logCurrentStackTrace(Set<String> uniqueReadStreams) {
+        StackTraceElement[] stackTraceElements = Thread.currentThread().getStackTrace();
+        StringBuilder sb = new StringBuilder("uniqueReadStreams: ")
+                .append(uniqueReadStreams).append("\nCurrent stack trace:\n");
+        for (StackTraceElement ste : stackTraceElements) {
+            sb.append("\tat ").append(ste.toString()).append("\n");
+        }
+        log.info(sb.toString());
     }
 
     /**
