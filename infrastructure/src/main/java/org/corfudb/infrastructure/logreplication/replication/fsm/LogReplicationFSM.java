@@ -18,12 +18,10 @@ import org.corfudb.infrastructure.logreplication.replication.send.logreader.LogE
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.SnapshotReader;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.LogicalGroupLogEntryReader;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.LogicalGroupSnapshotReader;
-import org.corfudb.infrastructure.logreplication.replication.send.logreader.ReadProcessor;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.RoutingQueuesLogEntryReader;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.RoutingQueuesSnapshotReader;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.StreamsLogEntryReader;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.StreamsSnapshotReader;
-import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Address;
 
 import java.util.HashMap;
@@ -330,7 +328,18 @@ public class LogReplicationFSM {
         if (event.getType() != LogReplicationEventType.LOG_ENTRY_SYNC_CONTINUE) {
             log.trace("Enqueue event {} with ID {}", event.getType(), event.getEventId());
         }
-        taskManager.addTask(event, FsmTaskManager.FsmEventType.LogReplicationEvent);
+        taskManager.addTask(event, FsmTaskManager.FsmEventType.LogReplicationEvent, 0);
+    }
+
+    /**
+     * Input function of the FSM.
+     *
+     * This method enqueues log replication events for further processing.
+     *
+     * @param event LogReplicationEvent to process.
+     */
+    public void inputWithDelay(LogReplicationEvent event, long delay) {
+        taskManager.addTask(event, FsmTaskManager.FsmEventType.LogReplicationEvent, delay);
     }
 
     /**

@@ -99,10 +99,8 @@ public abstract class BaseSnapshotReader extends SnapshotReader {
      * @param entryList
      * @return
      */
-    private LogReplication.LogReplicationEntryMsg generateMessage(
-        OpaqueStreamIterator stream,
-        SMREntryList entryList,
-        UUID snapshotRequestId) {
+    private LogReplication.LogReplicationEntryMsg generateMessage(OpaqueStreamIterator stream, SMREntryList entryList,
+                                                                  UUID snapshotRequestId) {
         currentMsgTs = stream.maxVersion;
         OpaqueEntry opaqueEntry = generateOpaqueEntry(currentMsgTs, stream.uuid, entryList);
         if (!stream.iterator.hasNext()) {

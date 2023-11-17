@@ -6,10 +6,15 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.browser.CorfuStoreBrowserEditor;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager;
+import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationFSM;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
+import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.runtime.CorfuOptions;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.ExampleSchemas;
+import org.corfudb.runtime.collections.CorfuStreamEntries;
+import org.corfudb.runtime.collections.CorfuStreamEntry;
+import org.corfudb.runtime.collections.StreamListener;
 import org.corfudb.runtime.exceptions.LogReplicationClientException;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.runtime.LRFullStateReplicationContext;
@@ -24,6 +29,8 @@ import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.proto.RpcCommon;
+import org.corfudb.util.retry.IRetry;
+import org.corfudb.util.retry.IntervalRetry;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -34,9 +41,13 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.fail;
+import static org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager.TP_MIXED_MODEL_ROUTING_QUEUE_ONE_SINK;
 import static org.corfudb.runtime.LogReplicationUtils.LOG_ENTRY_SYNC_QUEUE_TAG_SENDER_PREFIX;
+import static org.corfudb.runtime.LogReplicationUtils.LR_STATUS_STREAM_TAG;
 import static org.corfudb.runtime.LogReplicationUtils.REPLICATED_RECV_Q_PREFIX;
 import static org.corfudb.runtime.LogReplicationUtils.REPLICATED_QUEUE_TAG;
 import static org.corfudb.runtime.LogReplicationUtils.REPLICATION_STATUS_TABLE_NAME;
@@ -62,14 +73,14 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
                 .connect();
     }
 
-    @Before
-    public void setUp() throws Exception {
-        super.setUp(1, 1, DefaultClusterManager.TP_SINGLE_SOURCE_SINK_ROUTING_QUEUE);
+    public void setUp(ExampleSchemas.ClusterUuidMsg topology) throws Exception {
+        setUp(1, 1, topology);
         openLogReplicationStatusTable();
     }
 
     @Test
     public void testRoutingQueueReplication() throws Exception {
+        setUp(DefaultClusterManager.TP_SINGLE_SOURCE_SINK_ROUTING_QUEUE);
         // Register client and setup initial group destinations mapping
         CorfuRuntime clientRuntime = getClientRuntime();
         CorfuStore clientCorfuStore = new CorfuStore(clientRuntime);
@@ -105,7 +116,7 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
 
     @Test
     public void testRoutingQueueFullSyncs() throws Exception {
-
+        setUp(DefaultClusterManager.TP_SINGLE_SOURCE_SINK_ROUTING_QUEUE);
         // Register client and setup initial group destinations mapping
         CorfuRuntime clientRuntime = getClientRuntime();
         CorfuStore clientCorfuStore = new CorfuStore(clientRuntime);
@@ -164,7 +175,7 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
 
     @Test
     public void testRoutingQueue2way() throws Exception {
-
+        setUp(DefaultClusterManager.TP_SINGLE_SOURCE_SINK_ROUTING_QUEUE);
         // Register client and setup initial group destinations mapping
         CorfuRuntime clientRuntime = getClientRuntime();
         CorfuStore clientCorfuStore = new CorfuStore(clientRuntime);
@@ -220,6 +231,81 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
         });
     }
 
+    /**
+     * This test works with multiple sessions, Full_table and routing Queue,  between 2 clusters and ensures that when
+     * data is not seen for routing_queue session, the replication for the other session doesn't get interrupted.
+     */
+    @Test
+    public void testMultiModelWithRoutingQueueWaitingForData() throws Exception{
+        setUp(TP_MIXED_MODEL_ROUTING_QUEUE_ONE_SINK);
+
+        //open full_Table tables
+        openMaps();
+        // write data to full tables. Do not write to routingQ
+        writeData(sourceCorfuStores.get(0), srcTables.get(0).getFullyQualifiedTableName(), srcTables.get(0), 0, 20);
+
+        CountDownLatch latch = new CountDownLatch(1);
+        ReplicationStatusListener statusListener = new ReplicationStatusListener(latch);
+        sourceCorfuStores.get(0).subscribeListener(statusListener, LogReplicationMetadataManager.NAMESPACE, LR_STATUS_STREAM_TAG);
+
+        // start replication
+        startReplicationServers();
+        latch.await();
+
+        LogReplication.LogReplicationSession fullTableSession = LogReplication.LogReplicationSession.newBuilder()
+                .setSourceClusterId(DefaultClusterConfig.getSourceClusterIds().get(0))
+                .setSinkClusterId(DefaultClusterConfig.getSinkClusterIds().get(0))
+                .setSubscriber(LogReplicationConfigManager.getDefaultSubscriber())
+                .build();
+
+        LogReplication.ReplicationStatus fullTableStatus = getSourceStatusForSession(fullTableSession);
+        assertThat(fullTableStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus().equals(LogReplication.SyncStatus.COMPLETED));
+
+        LogReplication.LogReplicationSession routingQueueSession = LogReplication.LogReplicationSession.newBuilder()
+                .setSourceClusterId(DefaultClusterConfig.getSourceClusterIds().get(0))
+                .setSinkClusterId(DefaultClusterConfig.getSinkClusterIds().get(0))
+                .setSubscriber(LogReplicationConfigManager.getDefaultRoutingQueueSubscriber())
+                .build();
+
+        LogReplication.ReplicationStatus routingQStatus = getSourceStatusForSession(routingQueueSession);
+        assertThat(routingQStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus().equals(LogReplication.SyncStatus.NOT_STARTED));
+
+    }
+
+    private LogReplication.ReplicationStatus getSourceStatusForSession(LogReplication.LogReplicationSession session) {
+        CorfuStoreEntry<LogReplication.LogReplicationSession, LogReplication.ReplicationStatus, Message> status;
+        try(TxnContext txn = sourceCorfuStores.get(0).txn(LogReplicationMetadataManager.NAMESPACE)) {
+            status = txn.getRecord(REPLICATION_STATUS_TABLE_NAME, session);
+        }
+
+        return status.getPayload();
+    }
+
+    private class ReplicationStatusListener implements StreamListener {
+
+        private final CountDownLatch countDownLatch;
+
+        public ReplicationStatusListener(CountDownLatch countdownLatch) {
+            this.countDownLatch = countdownLatch;
+        }
+
+        @Override
+        public void onNext(CorfuStreamEntries results) {
+            results.getEntries().forEach((schema, entries) -> entries.forEach(e -> {
+                LogReplication.ReplicationStatus status = (LogReplication.ReplicationStatus) e.getPayload();
+                if(status.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus().equals(LogReplication.SyncStatus.COMPLETED)){
+                    countDownLatch.countDown();
+                }
+            }));
+        }
+
+        @Override
+        public void onError(Throwable throwable) {
+            log.error("Error: ", throwable);
+            fail("onError for ReplicationStatusListener");
+        }
+    }
+
     private void generateData(CorfuStore corfuStore, RoutingQueueSenderClient client) throws Exception {
         String namespace = CORFU_SYSTEM_NAMESPACE;
 
@@ -250,6 +336,7 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
 
     @Test
     public void testRoutingQueueReplicationWithScopedTxn() throws Exception {
+        setUp(DefaultClusterManager.TP_SINGLE_SOURCE_SINK_ROUTING_QUEUE);
         // Register client and setup initial group destinations mapping
         CorfuRuntime clientRuntime = getClientRuntime();
         CorfuStore clientCorfuStore = new CorfuStore(clientRuntime);

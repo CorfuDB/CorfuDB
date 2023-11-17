@@ -188,7 +188,7 @@ public class CorfuLogReplicationRuntime {
             // Not accepting events, in stopped state
             return;
         }
-        taskManager.addTask(event, FsmTaskManager.FsmEventType.LogReplicationRuntimeEvent);
+        taskManager.addTask(event, FsmTaskManager.FsmEventType.LogReplicationRuntimeEvent, 0);
     }
 
     /**

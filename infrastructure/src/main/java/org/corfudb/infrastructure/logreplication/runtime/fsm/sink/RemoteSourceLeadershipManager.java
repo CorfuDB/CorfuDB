@@ -69,7 +69,7 @@ public class RemoteSourceLeadershipManager {
 
     public void input(LogReplicationSinkEvent event) {
         log.info("adding to the queue {}", event);
-        taskManager.addTask(event, FsmTaskManager.FsmEventType.LogReplicationSinkEvent);
+        taskManager.addTask(event, FsmTaskManager.FsmEventType.LogReplicationSinkEvent, 0);
     }
 
     /**
