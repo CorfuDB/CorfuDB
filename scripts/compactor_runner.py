@@ -89,14 +89,6 @@ class CommandBuilder(object):
         cmd = []
         if "UseConcMarkSweepGC" in GCParameters and GCParameters["UseConcMarkSweepGC"] is True:
             cmd.append("-XX:+UseConcMarkSweepGC")
-        if "UseG1GC" in GCParameters and GCParameters["UseG1GC"] is True:
-            cmd.append("-XX:+UseG1GC")
-        if "PrintGCDetails" in GCParameters and GCParameters["PrintGCDetails"] is True:
-            cmd.append("-XX:+PrintGCDetails")
-        if "PrintGCTimeStamps" in GCParameters and  GCParameters["PrintGCTimeStamps"] is True:
-            cmd.append("-XX:+PrintGCTimeStamps")
-        if "PrintGCDateStamps" in GCParameters and  GCParameters["PrintGCDateStamps"] is True:
-            cmd.append("-XX:+PrintGCDateStamps")
         if "UseGCLogFileRotation" in GCParameters and GCParameters["UseGCLogFileRotation"] is True:
             cmd.append("-XX:+UseGCLogFileRotation")
 
@@ -107,8 +99,6 @@ class CommandBuilder(object):
         ConfigFiles = compactor_config["ConfigFiles"]
         cmd.append("-Djava.io.tmpdir=" + ConfigFiles["TempDir"])
         cmd.append("-Dlogback.configurationFile=" + ConfigFiles["CompactorLogbackPath"])
-        cmd.append("-XX:HeapDumpPath=" + ConfigFiles["HeapDumpPath"])
-        cmd.append("-XX:OnOutOfMemoryError=\"gzip -f " + ConfigFiles["HeapDumpPath"] + "\"")
 
         corfudb_tool_shaded_jar = ""
         for name in glob.glob(ConfigFiles["ClassPath"]):
