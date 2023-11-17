@@ -93,7 +93,6 @@ public class MeterRegistryProvider {
                         new LoggingMeterRegistryWithHistogramSupport(config, logger::debug, externalMetricsSuppliers);
                 registry.config().commonTags("id", identifier);
                 Optional<MeterRegistry> ret = Optional.of(registry);
-                JVMMetrics.register(ret);
                 return ret;
             };
 
