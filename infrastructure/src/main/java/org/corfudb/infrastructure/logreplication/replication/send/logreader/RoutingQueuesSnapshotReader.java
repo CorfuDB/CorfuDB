@@ -19,7 +19,6 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterrupte
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.runtime.view.stream.OpaqueStream;
-import org.corfudb.util.retry.ExponentialBackoffRetry;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalRetry;
 import org.corfudb.util.retry.RetryNeededException;
@@ -34,12 +33,9 @@ import static org.corfudb.runtime.LogReplicationUtils.SNAP_SYNC_TXN_ENVELOPE_TAB
 
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
-import java.util.concurrent.Callable;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Future;
 import java.util.concurrent.TimeoutException;
-import java.util.concurrent.TimeUnit;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -65,9 +61,12 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
 
     // Timeout value for which the reader waits for new data to arrive from the Client.  Once the timeout is
     // exceeded, the current snapshot sync gets cancelled and a new one is started all over again.
-    // TODO: The timeout is currently set to 40 mins.  This can be revisited later to determine a more appropriate
+    // TODO: The timeout is currently set to 2s.  This can be revisited later to determine a more appropriate
     //  value.
-    private static final long DATA_WAIT_TIMEOUT_MS = 2400000;
+    @VisibleForTesting
+    public static long DATA_WAIT_TIMEOUT_MS = 120000;
+
+    private static long lastDataReceivedEpoch = 0;
 
     @Getter
     private final CorfuStore corfuStore;
@@ -160,7 +159,7 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
         // long logTail = rt.getAddressSpaceView().getLogTail();
         long logTail = Address.MAX;
 
-        log.info("Start reading data from {}, log tail = {} streamName={} uuid={}", lastReadTimestamp,
+        log.info("Check for data from {}, log tail = {} streamName={} uuid={}", lastReadTimestamp,
                 logTail, streamOfStreamTag, uuidOfStreamTagFollowed);
 
         currentStreamInfo = new OpaqueStreamIterator(opaqueStream, streamOfStreamTag, logTail);
@@ -185,8 +184,8 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
     }
 
     /**
-     * Reads data from the Snapshot Sync Queue, waiting for a predetermined time for new data to appear if there is
-     * none.  This data is sent to the destination.
+     * Reads data from the Snapshot Sync Queue. If data is not found, retry again after a fixed delay.
+     * This data is sent to the destination.
      * @param syncRequestId
      * @return
      */
@@ -200,9 +199,17 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
         log.info("Start Snapshot Sync replication for stream name={}, id={}", streamNameOfTag,
                 CorfuRuntime.getStreamID(streamNameOfTag));
 
-        // Wait for data to be available on the Snapshot Sync Queue if it is empty
+        // If data is not present in the snapshot sync queue:
+        // (1) check if data for any session was received in the last time window. If not, request for snapshot sync
+        // data from the client again.
+        // (2) If within the timeout window, enqueue a snapshot_continue event. This would mean that the client is
+        // providing data for other sessions, and is yet to start generating for the current session.
         if (currentStreamInfo == null || !currentStreamHasNext()) {
-            waitForData();
+            if (!dataFound() && receiveWindowTimedOut()) {
+                throw new ReplicationReaderException("Timed out waiting for data or end marker for Snapshot Sync", new TimeoutException());
+            } else if (!dataFound()) {
+                return new SnapshotReadMessage(messages, endMarkerReached, true);
+            }
         }
         msg = read(currentStreamInfo, syncRequestId);
         if (msg != null) {
@@ -247,22 +254,30 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
             log.error("Unrecoverable exception while adding enforce snapshot sync event", e);
             throw new UnrecoverableCorfuInterruptedError(e);
         }
+        lastDataReceivedEpoch = System.currentTimeMillis();
     }
 
-    // Waits for a default timeout period for data to get written for this destination on the Snapshot Sync queue
-    private void waitForData() {
-        // Create a task to wait for more data until DATA_WAIT_TIMEOUT_MS
-        StreamQueryTask streamQueryTask = new StreamQueryTask();
-        Future<Void> queryFuture = dataPoller.submit(streamQueryTask);
-
+    private boolean dataFound() {
         try {
-            queryFuture.get(DATA_WAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
-        } catch (TimeoutException e) {
-            throw new ReplicationReaderException("Timed out waiting for data or end marker for Snapshot Sync", e);
+            buildOpaqueStreamIterator();
+            if (currentStreamHasNext()) {
+                return true;
+            }
         } catch (Exception e) {
-            // Handle all other types of exceptions
-            log.error("Caught exception in WaitForData ", e);
+            log.error("Unexpected exception caught. ", e);
         }
+
+        log.info("Retrying. currentStreamInfo={}", currentStreamInfo.maxVersion);
+        return false;
+    }
+
+    @VisibleForTesting
+    public boolean receiveWindowTimedOut() {
+        // This for unit test. In real scenarios, lastDataReceivedEpoch would not be 0 when we reach here.
+        if (lastDataReceivedEpoch == 0) {
+            lastDataReceivedEpoch = System.currentTimeMillis();
+        }
+        return System.currentTimeMillis() - lastDataReceivedEpoch >= DATA_WAIT_TIMEOUT_MS;
     }
 
     private CorfuStoreEntry<Queue.RoutingQSnapSyncHeaderKeyMsg, Queue.RoutingQSnapSyncHeaderMsg, Message>
@@ -387,6 +402,7 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
         }
 
         log.info("CurrentMsgSize {}  maxDataSizePerMsg {}", currentMsgSize, maxTransferSize);
+        lastDataReceivedEpoch = System.currentTimeMillis();
         return new SMREntryList(currentMsgSize, smrList);
     }
 
@@ -418,33 +434,5 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
                 ", session=" + session +
                 ", replicationContext=" + replicationContext +
                 '}';
-    }
-
-    // Internal Utility class which polls for new data to be available on the Sender Routing Queue.  It uses
-    // Exponential Backoff mechanism to wait between subsequent retries.
-    private final class StreamQueryTask implements Callable<Void> {
-
-        @Override
-        public Void call() {
-            try {
-                IRetry.build(ExponentialBackoffRetry.class, () -> {
-                    try {
-                        buildOpaqueStreamIterator();
-                        if (!currentStreamHasNext()) {
-                            log.info("Retrying. currentStreamInfo={}", currentStreamInfo.maxVersion);
-                            throw new ReplicationReaderException();
-                        }
-                    } catch (ReplicationReaderException e) {
-                        throw new RetryNeededException();
-                    } catch (Exception e) {
-                        log.error("Unexpected exception caught. ", e);
-                    }
-                    return null;
-                }).run();
-            } catch (InterruptedException ie) {
-                throw new ReplicationReaderException("Interrupted Exception");
-            }
-            return null;
-        }
     }
 }

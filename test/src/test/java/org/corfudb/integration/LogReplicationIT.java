@@ -260,7 +260,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         destMetadataManager = new LogReplicationMetadataManager(dstTestRuntime,
                 new LogReplicationContext(new LogReplicationConfigManager(dstTestRuntime, session.getSinkClusterId()), 0,
-                "test" + SERVERS.PORT_0, true, pluginConfig, dstTestRuntime, 2));
+                "test" + SERVERS.PORT_0, true, pluginConfig, dstTestRuntime));
         destMetadataManager.addSession(session, 0, true);
 
         srcMetadataManager = new LogReplicationMetadataManager(srcTestRuntime,

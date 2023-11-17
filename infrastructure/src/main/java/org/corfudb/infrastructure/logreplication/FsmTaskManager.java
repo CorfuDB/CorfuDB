@@ -18,6 +18,8 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 /**
  * This class manages the tasks submitted by the runtime FSM and the replication FSM.
@@ -28,7 +30,7 @@ import java.util.concurrent.Executors;
 @Slf4j
 public class FsmTaskManager {
 
-    private ExecutorService fsmWorker;
+    private ScheduledExecutorService fsmWorker;
 
     private Map<LogReplicationSession, LinkedList<UUID>> sessionToRuntimeEventIdMap;
 
@@ -37,13 +39,13 @@ public class FsmTaskManager {
     private Map<LogReplicationSession, LinkedList<UUID>> sessionToSinkEventIdMap;
 
     public FsmTaskManager(String threadName, int threadCount) {
-        fsmWorker = Executors.newFixedThreadPool(threadCount, new ThreadFactoryBuilder().setNameFormat(threadName+"-%d").build());
+        fsmWorker = Executors.newScheduledThreadPool(threadCount, new ThreadFactoryBuilder().setNameFormat(threadName+"-%d").build());
         sessionToRuntimeEventIdMap = new ConcurrentHashMap<>();
         sessionToReplicationEventIdMap = new ConcurrentHashMap<>();
         sessionToSinkEventIdMap = new ConcurrentHashMap<>();
     }
 
-    public <E> void addTask(E event, FsmEventType fsm) {
+    public <E> void addTask(E event, FsmEventType fsm, long delay) {
         if (fsm.equals(FsmEventType.LogReplicationRuntimeEvent)) {
             LogReplicationSession session = ((LogReplicationRuntimeEvent) event).getRuntimeFsm().getSession();
             sessionToRuntimeEventIdMap.putIfAbsent(session, new LinkedList<>());
@@ -52,7 +54,7 @@ public class FsmTaskManager {
                 eventList.add(((LogReplicationRuntimeEvent) event).getEventId());
                 return eventList;
             });
-            fsmWorker.submit(() -> processRuntimeTask((LogReplicationRuntimeEvent) event));
+            fsmWorker.schedule(() -> processRuntimeTask((LogReplicationRuntimeEvent) event), delay, TimeUnit.MILLISECONDS);
         } else if (fsm.equals(FsmEventType.LogReplicationEvent)){
             LogReplicationSession session = ((LogReplicationEvent) event).getReplicationFsm().getSession();
             sessionToReplicationEventIdMap.putIfAbsent(session, new LinkedList<>());
@@ -61,7 +63,7 @@ public class FsmTaskManager {
                 eventList.add(((LogReplicationEvent) event).getEventId());
                 return eventList;
             });
-            fsmWorker.submit(() -> processReplicationTask((LogReplicationEvent) event));
+            fsmWorker.schedule(() -> processReplicationTask((LogReplicationEvent) event), delay, TimeUnit.MILLISECONDS);
         } else {
             LogReplicationSession session = ((LogReplicationSinkEvent) event).getSourceLeadershipManager().getSession();
             sessionToSinkEventIdMap.putIfAbsent(session, new LinkedList<>());
@@ -70,7 +72,7 @@ public class FsmTaskManager {
                 eventList.add(((LogReplicationSinkEvent) event).getEventId());
                 return eventList;
             });
-            fsmWorker.submit(() -> processSinkTask((LogReplicationSinkEvent) event));
+            fsmWorker.schedule(() -> processSinkTask((LogReplicationSinkEvent) event), delay, TimeUnit.MILLISECONDS);
         }
     }
 

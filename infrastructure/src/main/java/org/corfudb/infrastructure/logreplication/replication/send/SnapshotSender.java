@@ -54,6 +54,8 @@ import static org.corfudb.protocols.service.CorfuProtocolLogReplication.getLrEnt
 @Slf4j
 public class SnapshotSender {
 
+    private static final int DEFAULT_DELAY_MS = 2000;
+
     private CorfuRuntime runtime;
     private SnapshotReader snapshotReader;
     @Getter
@@ -140,21 +142,25 @@ public class SnapshotSender {
                     cancel = true;
                     break;
                 } catch (ReplicationReaderException e) {
-                    if (e.getCause() instanceof TimeoutException &&
-                        fsm.getSession().getSubscriber().getModel() == LogReplication.ReplicationModel.ROUTING_QUEUES) {
+                    if (e.getCause() instanceof TimeoutException) {
                         log.info("Snapshot sync timed out waiting for data.  Will request a new snapshot sync");
                         snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.UNKNOWN, true, forcedSnapshotSync);
-                    } else {
-                        log.error("Replication Reader Exception thrown from an unkown path", e);
-                        snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.UNKNOWN, false, forcedSnapshotSync);
+                        cancel = true;
                     }
-                    cancel = true;
                     break;
                 } catch (Exception e) {
                     log.error("Caught exception during snapshot sync {}", e);
                     snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.UNKNOWN, false, forcedSnapshotSync);
                     cancel = true;
                     break;
+                }
+
+                if (fsm.getSession().getSubscriber().getModel() == LogReplication.ReplicationModel.ROUTING_QUEUES &&
+                        snapshotReadMessage.getMessages().isEmpty() && !snapshotCompleted) {
+                    log.info("Snapshot data not found. Retrying after a delay..");
+                    fsm.inputWithDelay(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_CONTINUE,
+                            new LogReplicationEventMetadata(snapshotSyncEventId), fsm), DEFAULT_DELAY_MS);
+                    return;
                 }
 
                 messagesSent += processReads(snapshotReadMessage.getMessages(), snapshotSyncEventId, snapshotCompleted);
