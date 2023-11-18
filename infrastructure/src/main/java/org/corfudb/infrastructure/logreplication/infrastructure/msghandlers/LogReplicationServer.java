@@ -126,7 +126,6 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
     public void shutdown() {
         super.shutdown();
         executor.shutdown();
-        sessionToSinkManagerMap.values().forEach(sinkManager -> sinkManager.shutdown());
         sessionToSinkManagerMap.clear();
     }
 
@@ -369,7 +368,6 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
         log.info("Stopping Sink manager for session: {}", session);
         try {
             if (sessionToSinkManagerMap.containsKey(session)) {
-                sessionToSinkManagerMap.get(session).shutdown();
                 sessionToSinkManagerMap.remove(session);
             }
         } catch (NullPointerException npe) {
