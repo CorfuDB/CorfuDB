@@ -300,10 +300,6 @@ public class SourceForwardingDataSender implements DataSender {
             destinationDataSender.getSourceManager().shutdown();
         }
 
-        if (destinationLogReplicationManager != null) {
-            destinationLogReplicationManager.shutdown();
-        }
-
         if (runtime != null) {
             runtime.shutdown();
         }
