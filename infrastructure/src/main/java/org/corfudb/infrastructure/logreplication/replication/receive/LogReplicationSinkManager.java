@@ -587,10 +587,6 @@ public class LogReplicationSinkManager implements DataReceiver {
                 metadata.getLastLogEntryBatchProcessed(), this);
     }
 
-    public void shutdown() {
-        this.runtime.shutdown();
-    }
-
     public static void shutdownApplyExecutor() {
         applyExecutor.shutdown();
     }
