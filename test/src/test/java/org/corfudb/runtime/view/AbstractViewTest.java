@@ -89,9 +89,9 @@ import static org.corfudb.protocols.service.CorfuProtocolSequencer.getBootstrapS
 @Slf4j
 public abstract class AbstractViewTest extends AbstractCorfuTest {
 
-//    static {
-//        ByteBuddyAgent.install();
-//    }
+    static {
+        ByteBuddyAgent.install();
+    }
 
     private static final int QUIET_PERIOD = 100;
     private static final int TIMEOUT = 300;
