@@ -26,6 +26,8 @@ import org.corfudb.test.TestSchema;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.ProtobufSerializer;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.mockito.junit.MockitoJUnitRunner;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -54,6 +56,7 @@ import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.spy;
 
 @SuppressWarnings("checkstyle:magicnumber")
+@RunWith(MockitoJUnitRunner.class)
 public class PersistentCorfuTableTest extends AbstractViewTest {
 
     PersistentCorfuTable<TestSchema.Uuid, CorfuRecord<TestSchema.Uuid, TestSchema.Uuid>> corfuTable;

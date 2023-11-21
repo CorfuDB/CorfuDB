@@ -32,7 +32,7 @@ public class SessionManagerTest extends AbstractViewTest {
     private TopologyDescriptor topology;
     LogReplicationClientServerRouter router;
     CorfuReplicationManager replicationManager;
-    LogReplicationServer msgHandler;
+    LogReplicationServer msgHandler = Mockito.mock(LogReplicationServer.class);
     LogReplicationPluginConfig pluginConfig;
 
     @Before
@@ -40,8 +40,6 @@ public class SessionManagerTest extends AbstractViewTest {
         corfuRuntime = getDefaultRuntime();
         LogReplicationConfigManager configManager = Mockito.mock(LogReplicationConfigManager.class);
         Mockito.doReturn(corfuRuntime).when(configManager).getRuntime();
-
-        msgHandler = Mockito.mock(LogReplicationServer.class);
         Mockito.doNothing().when(msgHandler).updateTopologyConfigId(anyLong());
         Mockito.doReturn(Mockito.mock(LogReplicationSinkManager.class)).when(msgHandler).createSinkManager(any());
 
