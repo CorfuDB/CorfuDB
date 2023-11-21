@@ -563,7 +563,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
 
         // Transition #3: Trimmed Exception
         // Because this is an internal state, we need to capture the actual event id internally generated
-        UUID logEntrySyncID = fsm.getStates().get(LogReplicationStateType.IN_LOG_ENTRY_SYNC).getTransitionEventId();
+        UUID logEntrySyncID = fsm.getStates().get(LogReplicationStateType.IN_LOG_ENTRY_SYNC).getTransitionSyncId();
         transition(LogReplicationEventType.SYNC_CANCEL, LogReplicationStateType.IN_SNAPSHOT_SYNC, logEntrySyncID, true);
     }
 
@@ -814,12 +814,12 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
 
         // Simulate a new incoming Snapshot sync request
         UUID snapshotSync2 = UUID.randomUUID();
-        assertThat(fsm.getState().getTransitionEventId()).isEqualTo(snapshotSync1);
+        assertThat(fsm.getState().getTransitionSyncId()).isEqualTo(snapshotSync1);
 
         // Transition #3: Snapshot sync continue -> IN_SNAPSHOT_SYNC state
         transition(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST, LogReplicationStateType.IN_SNAPSHOT_SYNC, snapshotSync2, true);
 
-        assertThat(fsm.getState().getTransitionEventId()).isEqualTo(snapshotSync2);
+        assertThat(fsm.getState().getTransitionSyncId()).isEqualTo(snapshotSync2);
 
         // Transition #4: old sync's snapshot sync continue -> ignored by FSM
         transition(LogReplicationEventType.SNAPSHOT_SYNC_CONTINUE, LogReplicationStateType.IN_SNAPSHOT_SYNC, snapshotSync1, false);
@@ -835,7 +835,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
 
         assertThat(fsm.getState().getType()).isEqualTo(LogReplicationStateType.WAIT_SNAPSHOT_APPLY);
 
-        assertThat(fsm.getState().getTransitionEventId()).isEqualTo(snapshotSync2);
+        assertThat(fsm.getState().getTransitionSyncId()).isEqualTo(snapshotSync2);
     }
 
     /**
@@ -876,7 +876,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         // Transition #4: sync cancel from a different snapshot event -> Ignored, reaming in WAIT_SNAPSHOT_APPLY
         transition(LogReplicationEventType.SYNC_CANCEL, LogReplicationStateType.WAIT_SNAPSHOT_APPLY, UUID.randomUUID(), false);
 
-        assertThat(fsm.getState().getTransitionEventId()).isEqualTo(snapshotSync);
+        assertThat(fsm.getState().getTransitionSyncId()).isEqualTo(snapshotSync);
 
         UUID forceSnapshotID = UUID.randomUUID();
         // Transition #5: stop the running snapshot sync -> INITIALIZED state
@@ -885,7 +885,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         // Transition #6: Snapshot sync request -> IN_SNAPSHOT_SYNC state
         transition(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST, LogReplicationStateType.IN_SNAPSHOT_SYNC, forceSnapshotID, true);
 
-        assertThat(fsm.getState().getTransitionEventId()).isEqualTo(forceSnapshotID);
+        assertThat(fsm.getState().getTransitionSyncId()).isEqualTo(forceSnapshotID);
 
     }
 

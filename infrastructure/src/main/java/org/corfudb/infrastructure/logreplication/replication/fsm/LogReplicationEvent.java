@@ -59,22 +59,7 @@ public class LogReplicationEvent {
     public LogReplicationEvent(LogReplicationEventType type) {
         this.type = type;
         this.eventId = Utils.genPseudorandomUUID();
-        this.metadata = new LogReplicationEventMetadata(eventId);
-    }
-
-    /**
-     * Constructor used when an event identifier is given in advance.
-     * This is used for the case of force snapshot sync for which an
-     * identifier was previously computed in order to provide the caller
-     * with a tracking identifier.
-     *
-     * @param type log replication event type
-     * @param eventId event unique identifier
-     */
-    public LogReplicationEvent(LogReplicationEventType type, UUID eventId) {
-        this.type = type;
-        this.eventId = eventId;
-        this.metadata = new LogReplicationEventMetadata(true);
+        this.metadata = new LogReplicationEventMetadata(Utils.genPseudorandomUUID());
     }
 
     /**

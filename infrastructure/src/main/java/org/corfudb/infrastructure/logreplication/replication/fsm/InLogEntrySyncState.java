@@ -31,10 +31,10 @@ public class InLogEntrySyncState implements LogReplicationState {
     private Future<?> logEntrySyncFuture = CompletableFuture.completedFuture(null);
 
     /**
-     * Unique Identifier of the event that caused the transition to this state,
-     * i.e., current event/request being processed.
+     * Uniquely identifies the sync that caused the transition to this state.
+     * This is required to validate if the incoming FSM event is for the current sync.
      */
-    private UUID transitionEventId;
+    private UUID transitionSyncId;
 
     /**
      * Constructor
@@ -56,23 +56,23 @@ public class InLogEntrySyncState implements LogReplicationState {
                 cancelLogEntrySync(cancelCause);
                 LogReplicationState snapshotSyncState = fsm.getStates().get(LogReplicationStateType.IN_SNAPSHOT_SYNC);
                 // set the ID of the new snapshot sync to the incoming request ID
-                snapshotSyncState.setTransitionEventId(event.getMetadata().getRequestId());
+                snapshotSyncState.setTransitionSyncId(event.getMetadata().getSyncId());
                 ((InSnapshotSyncState)snapshotSyncState).setForcedSnapshotSync(event.getMetadata().isForcedSnapshotSync());
                 return snapshotSyncState;
             case SYNC_CANCEL:
                 // If cancel was intended for current log entry sync task, cancel and transition to new state
                 // In the case of log entry sync, cancel is caused by an encountered trimmed exception or any
                 // other exception while reading/sending.
-                if (fsm.isValidTransition(transitionEventId, event.getMetadata().getRequestId())) {
+                if (fsm.isValidTransition(transitionSyncId, event.getMetadata().getSyncId())) {
                     cancelLogEntrySync("sync cancel.");
                     LogReplicationState inSnapshotSyncState = fsm.getStates().get(LogReplicationStateType.IN_SNAPSHOT_SYNC);
                     // new ID for new snapshot_sync request
-                    inSnapshotSyncState.setTransitionEventId(UUID.randomUUID());
+                    inSnapshotSyncState.setTransitionSyncId(UUID.randomUUID());
                     ((InSnapshotSyncState)inSnapshotSyncState).setForcedSnapshotSync(false);
                     return inSnapshotSyncState;
                 }
                 log.warn("Ignoring Log Entry Sync cancel for eventId {}, while running log entry sync for {}",
-                        event.getMetadata().getRequestId(), transitionEventId);
+                        event.getMetadata().getSyncId(), transitionSyncId);
                 return this;
             case REPLICATION_STOP:
                 // No need to validate transitionId as REPLICATION_STOP comes either from enforceSnapshotSync or when
@@ -84,7 +84,7 @@ public class InLogEntrySyncState implements LogReplicationState {
                 return fsm.getStates().get(LogReplicationStateType.ERROR);
             case LOG_ENTRY_SYNC_REPLICATED:
                 // Verify the replicated entry corresponds to the current log entry sync cycle (and not a previous/old one)
-                if (fsm.isValidTransition(transitionEventId, event.getMetadata().getRequestId())) {
+                if (fsm.isValidTransition(transitionSyncId, event.getMetadata().getSyncId())) {
                     log.debug("Log Entry Sync ACK, update last ack timestamp to {}", event.getMetadata().getLastLogEntrySyncedTimestamp());
                     fsm.setAckedTimestamp(event.getMetadata().getLastLogEntrySyncedTimestamp());
                 }
@@ -96,12 +96,12 @@ public class InLogEntrySyncState implements LogReplicationState {
                 // corresponding to this snapshot sync. This is done to accommodate the case
                 // of multi-cluster replication sharing a common thread pool, continuation allows to send another
                 // batch of updates for the current snapshot sync.
-                if (fsm.isValidTransition(transitionEventId, event.getMetadata().getRequestId())) {
-                    log.trace("Continuation of log entry sync for {}", event.getMetadata().getRequestId());
+                if (fsm.isValidTransition(transitionSyncId, event.getMetadata().getSyncId())) {
+                    log.trace("Continuation of log entry sync for {}", event.getMetadata().getSyncId());
                     return this;
                 } else {
                     log.warn("Ignoring log entry sync continue event {} while in log entry sync state {}.",
-                            event.getMetadata().getRequestId(), transitionEventId);
+                            event.getMetadata().getSyncId(), transitionSyncId);
                 }
             default: {
                 log.warn("Unexpected log replication event {} when in log entry sync state.", event.getType());
@@ -152,7 +152,7 @@ public class InLogEntrySyncState implements LogReplicationState {
             }
 
             logEntrySyncFuture = fsm.getLogReplicationFSMWorkers().submit(() ->
-                    logEntrySender.send(transitionEventId));
+                    logEntrySender.send(transitionSyncId));
 
         } catch (Throwable t) {
             log.error("Error on entry of InLogEntrySyncState", t);
@@ -160,13 +160,13 @@ public class InLogEntrySyncState implements LogReplicationState {
     }
 
     @Override
-    public void setTransitionEventId(UUID eventId) {
-        transitionEventId = eventId;
+    public void setTransitionSyncId(UUID eventId) {
+        transitionSyncId = eventId;
     }
 
     @Override
-    public UUID getTransitionEventId() {
-        return transitionEventId;
+    public UUID getTransitionSyncId() {
+        return transitionSyncId;
     }
 
     @Override

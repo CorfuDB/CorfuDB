@@ -120,11 +120,11 @@ public class LogReplicationSourceManager {
     }
 
     private UUID startSnapshotSync(LogReplicationEvent snapshotSyncRequest) {
-        log.info("Start Snapshot Sync, requestId={}, forced={}", snapshotSyncRequest.getMetadata().getRequestId(),
+        log.info("Start Snapshot Sync, requestId={}, forced={}", snapshotSyncRequest.getMetadata().getSyncId(),
                 snapshotSyncRequest.getMetadata().isForcedSnapshotSync());
         // Enqueue snapshot sync request into Log Replication FSM
         logReplicationFSM.input(snapshotSyncRequest);
-        return snapshotSyncRequest.getMetadata().getRequestId();
+        return snapshotSyncRequest.getMetadata().getSyncId();
     }
 
     /**
