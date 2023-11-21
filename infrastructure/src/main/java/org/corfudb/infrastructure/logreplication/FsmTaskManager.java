@@ -16,7 +16,6 @@ import java.util.LinkedList;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -32,20 +31,38 @@ public class FsmTaskManager {
 
     private ScheduledExecutorService fsmWorker;
 
-    private Map<LogReplicationSession, LinkedList<UUID>> sessionToRuntimeEventIdMap;
+    private final Map<LogReplicationSession, LinkedList<UUID>> sessionToRuntimeEventIdMap;
 
-    private Map<LogReplicationSession, LinkedList<UUID>> sessionToReplicationEventIdMap;
+    private final Map<LogReplicationSession, LinkedList<UUID>> sessionToReplicationEventIdMap;
 
-    private Map<LogReplicationSession, LinkedList<UUID>> sessionToSinkEventIdMap;
+    private final Map<LogReplicationSession, LinkedList<UUID>> sessionToDelayedReplicationEventIdMap;
+
+    private final Map<LogReplicationSession, LinkedList<UUID>> sessionToSinkEventIdMap;
 
     public FsmTaskManager(String threadName, int threadCount) {
         fsmWorker = Executors.newScheduledThreadPool(threadCount, new ThreadFactoryBuilder().setNameFormat(threadName+"-%d").build());
         sessionToRuntimeEventIdMap = new ConcurrentHashMap<>();
         sessionToReplicationEventIdMap = new ConcurrentHashMap<>();
         sessionToSinkEventIdMap = new ConcurrentHashMap<>();
+        sessionToDelayedReplicationEventIdMap = new ConcurrentHashMap<>();
     }
 
     public <E> void addTask(E event, FsmEventType fsm, long delay) {
+        addEventToSessionEventMap(event, fsm, delay);
+        if (fsm.equals(FsmEventType.LogReplicationRuntimeEvent)) {
+            fsmWorker.schedule(() -> processRuntimeTask((LogReplicationRuntimeEvent) event), delay, TimeUnit.MILLISECONDS);
+        } else if (fsm.equals(FsmEventType.LogReplicationEvent)){
+            fsmWorker.schedule(() -> processReplicationTask((LogReplicationEvent) event), delay, TimeUnit.MILLISECONDS);
+        } else {
+            fsmWorker.schedule(() -> processSinkTask((LogReplicationSinkEvent) event), delay, TimeUnit.MILLISECONDS);
+        }
+    }
+
+    /**
+     * Add event to in-memory session->event maps. This is to ensure the order of event processing for a given session.
+     * Currently the "delay" is non-zero for only the replicating FSM.
+     */
+    private <E> void addEventToSessionEventMap(E event, FsmEventType fsm, long delay) {
         if (fsm.equals(FsmEventType.LogReplicationRuntimeEvent)) {
             LogReplicationSession session = ((LogReplicationRuntimeEvent) event).getRuntimeFsm().getSession();
             sessionToRuntimeEventIdMap.putIfAbsent(session, new LinkedList<>());
@@ -54,16 +71,23 @@ public class FsmTaskManager {
                 eventList.add(((LogReplicationRuntimeEvent) event).getEventId());
                 return eventList;
             });
-            fsmWorker.schedule(() -> processRuntimeTask((LogReplicationRuntimeEvent) event), delay, TimeUnit.MILLISECONDS);
         } else if (fsm.equals(FsmEventType.LogReplicationEvent)){
             LogReplicationSession session = ((LogReplicationEvent) event).getReplicationFsm().getSession();
-            sessionToReplicationEventIdMap.putIfAbsent(session, new LinkedList<>());
-            // makes the value part of the map thread safe.
-            sessionToReplicationEventIdMap.computeIfPresent(session, (sessionKey, eventList) -> {
-                eventList.add(((LogReplicationEvent) event).getEventId());
-                return eventList;
-            });
-            fsmWorker.schedule(() -> processReplicationTask((LogReplicationEvent) event), delay, TimeUnit.MILLISECONDS);
+            if (delay > 0) {
+                sessionToDelayedReplicationEventIdMap.putIfAbsent(session, new LinkedList<>());
+                // makes the value part of the map thread safe.
+                sessionToDelayedReplicationEventIdMap.computeIfPresent(session, (sessionKey, eventList) -> {
+                    eventList.add(((LogReplicationEvent) event).getEventId());
+                    return eventList;
+                });
+            } else {
+                sessionToReplicationEventIdMap.putIfAbsent(session, new LinkedList<>());
+                // makes the value part of the map thread safe.
+                sessionToReplicationEventIdMap.computeIfPresent(session, (sessionKey, eventList) -> {
+                    eventList.add(((LogReplicationEvent) event).getEventId());
+                    return eventList;
+                });
+            }
         } else {
             LogReplicationSession session = ((LogReplicationSinkEvent) event).getSourceLeadershipManager().getSession();
             sessionToSinkEventIdMap.putIfAbsent(session, new LinkedList<>());
@@ -72,7 +96,6 @@ public class FsmTaskManager {
                 eventList.add(((LogReplicationSinkEvent) event).getEventId());
                 return eventList;
             });
-            fsmWorker.schedule(() -> processSinkTask((LogReplicationSinkEvent) event), delay, TimeUnit.MILLISECONDS);
         }
     }
 
@@ -134,54 +157,75 @@ public class FsmTaskManager {
         }
     }
 
-    private void processReplicationTask(LogReplicationEvent event) {
-        LogReplicationSession session = event.getReplicationFsm().getSession();
+    private boolean canProcessEventForSession(LogReplicationSession session, UUID currEventId) {
+            return (sessionToReplicationEventIdMap.get(session) != null &&
+                        !sessionToReplicationEventIdMap.get(session).isEmpty() &&
+                        sessionToReplicationEventIdMap.get(session).get(0).equals(currEventId)) ||
+                    (sessionToDelayedReplicationEventIdMap.get(session) != null &&
+                            !sessionToDelayedReplicationEventIdMap.get(session).isEmpty() &&
+                            sessionToDelayedReplicationEventIdMap.get(session).get(0).equals(currEventId));
+    }
+
+    private void processReplicationTask(LogReplicationEvent currEvent) {
+        LogReplicationSession session = currEvent.getReplicationFsm().getSession();
         // for a given session, the fsm events should be processed in the order they are queued. This snippets ensures
         // that in the event of 2 threads contending for the monitor, only the task submitted first would be processed.
-        synchronized(event.getReplicationFsm()) {
-            while (!sessionToReplicationEventIdMap.get(session).get(0).equals(event.getEventId())) {
-                try {
-                    event.getReplicationFsm().wait();
-                } catch (InterruptedException e) {
-                    log.error("Wait for session {} was interrupted {}", session, e.getMessage());
+        synchronized(currEvent.getReplicationFsm()) {
+            while (true) {
+                if (canProcessEventForSession(session, currEvent.getEventId())) {
+                    break;
+                } else {
+                    try {
+                        currEvent.getReplicationFsm().wait();
+                    } catch (InterruptedException e) {
+                        log.error("Wait for session {} was interrupted {}", session, e.getMessage());
+                    }
                 }
             }
-        }
 
-        LogReplicationState currState = event.getReplicationFsm().getState();
-        if (currState.getType() == LogReplicationStateType.ERROR) {
-            log.info("Log Replication State Machine has been stopped. No more events will be processed.");
-            return;
-        }
-
-        // TODO (Anny): consider strategy for continuously failing snapshot sync (never ending cancellation)
-
-        try {
-            LogReplicationState newState = currState.processEvent(event);
-            log.trace("Transition from {} to {}", currState, newState);
-
-            event.getReplicationFsm().transition(currState, newState);
-            event.getReplicationFsm().setState(newState);
-            event.getReplicationFsm().getNumTransitions().setValue(event.getReplicationFsm().getNumTransitions().getValue() + 1);
-
-        } catch (org.corfudb.infrastructure.logreplication.replication.fsm.IllegalTransitionException illegalState) {
-            // Ignore LOG_ENTRY_SYNC_REPLICATED events for logging purposes as they will likely come in frequently,
-            // as it is used for update purposes but does not imply a transition.
-            if (!event.getType().equals(LogReplicationEvent.LogReplicationEventType.LOG_ENTRY_SYNC_REPLICATED)) {
-                log.error("Illegal log replication event {} when in state {}", event.getType(), currState.getType());
+            LogReplicationState currState = currEvent.getReplicationFsm().getState();
+            if (currState.getType() == LogReplicationStateType.ERROR) {
+                log.info("Log Replication State Machine has been stopped. No more events will be processed.");
+                return;
             }
-        }
 
-        // For testing purpose to notify the event generator the stop of the event.
-        if (event.getType() == LogReplicationEvent.LogReplicationEventType.REPLICATION_STOP) {
-            synchronized (event) {
-                event.notifyAll();
+            // TODO (Anny): consider strategy for continuously failing snapshot sync (never ending cancellation)
+
+            try {
+                LogReplicationState newState = currState.processEvent(currEvent);
+                log.trace("Transition from {} to {}", currState, newState);
+
+                currEvent.getReplicationFsm().transition(currState, newState);
+                currEvent.getReplicationFsm().setState(newState);
+                currEvent.getReplicationFsm().getNumTransitions().setValue(currEvent.getReplicationFsm().getNumTransitions().getValue() + 1);
+
+            } catch (org.corfudb.infrastructure.logreplication.replication.fsm.IllegalTransitionException illegalState) {
+                // Ignore LOG_ENTRY_SYNC_REPLICATED events for logging purposes as they will likely come in frequently,
+                // as it is used for update purposes but does not imply a transition.
+                if (!currEvent.getType().equals(LogReplicationEvent.LogReplicationEventType.LOG_ENTRY_SYNC_REPLICATED)) {
+                    log.error("Illegal log replication event {} when in state {}", currEvent.getType(), currState.getType());
+                }
             }
+
+            // For testing purpose to notify the event generator the stop of the event.
+            if (currEvent.getType() == LogReplicationEvent.LogReplicationEventType.REPLICATION_STOP) {
+                synchronized (currEvent) {
+                    currEvent.notifyAll();
+                }
+            }
+
+            removeReplicationEventIdFromMap(session, currEvent.getEventId());
+            currEvent.getReplicationFsm().notifyAll();
         }
 
-        synchronized(event.getReplicationFsm()) {
+    }
+
+    private void removeReplicationEventIdFromMap(LogReplicationSession session, UUID currEventID) {
+        if (sessionToReplicationEventIdMap.get(session) != null && !sessionToReplicationEventIdMap.get(session).isEmpty() &&
+                sessionToReplicationEventIdMap.get(session).get(0).equals(currEventID)) {
             sessionToReplicationEventIdMap.get(session).remove(0);
-            event.getReplicationFsm().notifyAll();
+        } else {
+            sessionToDelayedReplicationEventIdMap.get(session).remove(0);
         }
     }
 
