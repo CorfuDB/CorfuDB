@@ -55,9 +55,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 @Slf4j
 public class AbstractIT extends AbstractCorfuTest {
 
-    static {
-        ByteBuddyAgent.install();
-    }
+//    static {
+//        ByteBuddyAgent.install();
+//    }
 
     static final String DEFAULT_HOST = "localhost";
     static final int DEFAULT_PORT = 9000;
