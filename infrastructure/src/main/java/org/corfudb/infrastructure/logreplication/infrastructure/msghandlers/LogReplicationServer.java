@@ -6,6 +6,7 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
+import org.corfudb.infrastructure.logreplication.infrastructure.SessionManager;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.transport.IClientServerRouter;
@@ -72,6 +73,8 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
 
     private final ServerContext serverContext;
 
+    private final SessionManager sessionManager;
+
     private final Set<LogReplicationSession> allSessions;
 
     private final LogReplicationMetadataManager metadataManager;
@@ -87,13 +90,14 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
 
     public LogReplicationServer(@Nonnull ServerContext context, Set<LogReplicationSession> sessions,
                                 LogReplicationMetadataManager metadataManager, String localNodeId, String localClusterId,
-                                LogReplicationContext replicationContext) {
+                                LogReplicationContext replicationContext, SessionManager sessionManager) {
         this.serverContext = context;
         this.allSessions = sessions;
         this.metadataManager = metadataManager;
         this.localNodeId = localNodeId;
         this.localClusterId = localClusterId;
         this.replicationContext = replicationContext;
+        this.sessionManager = sessionManager;
         this.executor = context.getExecutorService(context.getLogReplicationServerThreadCount(), EXECUTOR_NAME_PREFIX);
     }
 
@@ -303,10 +307,15 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
      * @param router  router used for sending back the response
      */
     @LogReplicationRequestHandler(requestType = LR_LEADERSHIP_QUERY)
-    private void  handleLeadershipQuery(RequestMsg request, ResponseMsg res,
+    private void handleLeadershipQuery(RequestMsg request, ResponseMsg res,
                                                      @Nonnull IClientServerRouter router) {
         log.debug("Log Replication Query Leadership Request received by Server.");
         HeaderMsg responseHeader = getHeaderMsg(request.getHeader());
+        if (replicationContext.getIsLeader().get()) {
+            LogReplicationSession session = getSession(request);
+            this.sessionManager.refreshForRemoteSessionRegister(session);
+            createSinkManager(session);
+            }
         ResponseMsg response = getLeadershipResponse(responseHeader, replicationContext.getIsLeader().get(), localNodeId);
         router.sendResponse(response);
     }

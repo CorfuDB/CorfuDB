@@ -141,7 +141,7 @@ public class LogReplicationLogicalGroupIT extends CorfuReplicationMultiSourceSin
         // Register client and setup initial group destinations mapping
         CorfuRuntime clientRuntime = getClientRuntime();
         LogReplicationLogicalGroupClient logicalGroupClient =
-                new LogReplicationLogicalGroupClient(clientRuntime, SAMPLE_CLIENT_NAME);
+                new LogReplicationLogicalGroupClient(clientRuntime, "00000000-0000-0000-0000-0000000000009");
         logicalGroupClient.setDestinations(GROUP_A,
                 Collections.singletonList(DefaultClusterConfig.getSinkClusterIds().get(SINK2_INDEX)));
         logicalGroupClient.setDestinations(GROUP_B,
@@ -167,8 +167,8 @@ public class LogReplicationLogicalGroupIT extends CorfuReplicationMultiSourceSin
         // Verify all the sessions' snapshot sync completed
         verifySessionInLogEntrySyncState(SINK1_INDEX, LogReplicationConfigManager.getDefaultSubscriber());
         // TODO: should be replaced by real client name after Sink session creation workflow is introduced
-        verifySessionInLogEntrySyncState(SINK2_INDEX, LogReplicationConfigManager.getDefaultLogicalGroupSubscriber());
-        verifySessionInLogEntrySyncState(SINK3_INDEX, LogReplicationConfigManager.getDefaultLogicalGroupSubscriber());
+        verifySessionInLogEntrySyncState(SINK2_INDEX, LogReplicationConfigManager.getClientSubscriber());
+        verifySessionInLogEntrySyncState(SINK3_INDEX, LogReplicationConfigManager.getClientSubscriber());
 
         // Verify tables' content on Sink side
         verifyFederatedTableData(sinkCorfuStores.get(SINK1_INDEX), NUM_WRITES, sinkFederatedTables);
@@ -237,8 +237,8 @@ public class LogReplicationLogicalGroupIT extends CorfuReplicationMultiSourceSin
         // will only replicate MERGE_ONLY streams (RegistryTable and ProtobufDescriptorTable)
         verifySessionInLogEntrySyncState(SINK1_INDEX, LogReplicationConfigManager.getDefaultSubscriber());
         // TODO: should be replaced by real client name after Sink session creation workflow is introduced
-        verifySessionInLogEntrySyncState(SINK2_INDEX, LogReplicationConfigManager.getDefaultLogicalGroupSubscriber());
-        verifySessionInLogEntrySyncState(SINK3_INDEX, LogReplicationConfigManager.getDefaultLogicalGroupSubscriber());
+        verifySessionInLogEntrySyncState(SINK2_INDEX, LogReplicationConfigManager.getClientSubscriber());
+        verifySessionInLogEntrySyncState(SINK3_INDEX, LogReplicationConfigManager.getClientSubscriber());
 
         // Verify tables' content on Sink side
         verifyFederatedTableData(sinkCorfuStores.get(SINK1_INDEX), NUM_WRITES, sinkFederatedTables);
@@ -305,8 +305,8 @@ public class LogReplicationLogicalGroupIT extends CorfuReplicationMultiSourceSin
         // Verify all the sessions' snapshot sync completed
         verifySessionInLogEntrySyncState(SINK1_INDEX, LogReplicationConfigManager.getDefaultSubscriber());
         // TODO: should be replaced by real client name after Sink session creation workflow is introduced
-        verifySessionInLogEntrySyncState(SINK2_INDEX, LogReplicationConfigManager.getDefaultLogicalGroupSubscriber());
-        verifySessionInLogEntrySyncState(SINK3_INDEX, LogReplicationConfigManager.getDefaultLogicalGroupSubscriber());
+        verifySessionInLogEntrySyncState(SINK2_INDEX, LogReplicationConfigManager.getClientSubscriber());
+        verifySessionInLogEntrySyncState(SINK3_INDEX, LogReplicationConfigManager.getClientSubscriber());
 
         // Verify tables' content on Sink side
         verifyFederatedTableData(sinkCorfuStores.get(SINK1_INDEX), NUM_WRITES, sinkFederatedTables);
@@ -384,8 +384,8 @@ public class LogReplicationLogicalGroupIT extends CorfuReplicationMultiSourceSin
         // ProtobufDescriptorTable for snapshot sync)
         verifySessionInLogEntrySyncState(SINK1_INDEX, LogReplicationConfigManager.getDefaultSubscriber());
         // TODO: should be replaced by real client name after Sink session creation workflow is introduced
-        verifySessionInLogEntrySyncState(SINK2_INDEX, LogReplicationConfigManager.getDefaultLogicalGroupSubscriber());
-        verifySessionInLogEntrySyncState(SINK3_INDEX, LogReplicationConfigManager.getDefaultLogicalGroupSubscriber());
+        verifySessionInLogEntrySyncState(SINK2_INDEX, LogReplicationConfigManager.getClientSubscriber());
+        verifySessionInLogEntrySyncState(SINK3_INDEX, LogReplicationConfigManager.getClientSubscriber());
 
         // Verify tables' content on Sink side
         verifyFederatedTableData(sinkCorfuStores.get(SINK1_INDEX), NUM_WRITES, sinkFederatedTables);
@@ -479,8 +479,8 @@ public class LogReplicationLogicalGroupIT extends CorfuReplicationMultiSourceSin
 
         // Verify all the sessions' snapshot sync completed.
         verifySessionInLogEntrySyncState(SINK1_INDEX, LogReplicationConfigManager.getDefaultSubscriber());
-        verifySessionInLogEntrySyncState(SINK2_INDEX, LogReplicationConfigManager.getDefaultLogicalGroupSubscriber());
-        verifySessionInLogEntrySyncState(SINK3_INDEX, LogReplicationConfigManager.getDefaultLogicalGroupSubscriber());
+        verifySessionInLogEntrySyncState(SINK2_INDEX, LogReplicationConfigManager.getClientSubscriber());
+        verifySessionInLogEntrySyncState(SINK3_INDEX, LogReplicationConfigManager.getClientSubscriber());
 
         // Verify tables' content on Sink side
         verifyFederatedTableData(sinkCorfuStores.get(SINK1_INDEX), NUM_WRITES, sinkFederatedTables);
@@ -522,8 +522,8 @@ public class LogReplicationLogicalGroupIT extends CorfuReplicationMultiSourceSin
 
         // Verify all the sessions' snapshot sync completed
         verifySessionInLogEntrySyncState(SINK1_INDEX, LogReplicationConfigManager.getDefaultSubscriber());
-        verifySessionInLogEntrySyncState(SINK2_INDEX, LogReplicationConfigManager.getDefaultLogicalGroupSubscriber());
-        verifySessionInLogEntrySyncState(SINK3_INDEX, LogReplicationConfigManager.getDefaultLogicalGroupSubscriber());
+        verifySessionInLogEntrySyncState(SINK2_INDEX, LogReplicationConfigManager.getClientSubscriber());
+        verifySessionInLogEntrySyncState(SINK3_INDEX, LogReplicationConfigManager.getClientSubscriber());
 
         // Open tables on Sink side
         openFederatedTable(numTables, sinkCorfuStores.get(SINK1_INDEX), sinkFederatedTables);
@@ -593,8 +593,8 @@ public class LogReplicationLogicalGroupIT extends CorfuReplicationMultiSourceSin
         // Verify all the sessions' snapshot sync completed
         verifySessionInLogEntrySyncState(SINK1_INDEX, LogReplicationConfigManager.getDefaultSubscriber());
         // TODO: should be replaced by real client name after Sink session creation workflow is introduced
-        verifySessionInLogEntrySyncState(SINK2_INDEX, LogReplicationConfigManager.getDefaultLogicalGroupSubscriber());
-        verifySessionInLogEntrySyncState(SINK3_INDEX, LogReplicationConfigManager.getDefaultLogicalGroupSubscriber());
+        verifySessionInLogEntrySyncState(SINK2_INDEX, LogReplicationConfigManager.getClientSubscriber());
+        verifySessionInLogEntrySyncState(SINK3_INDEX, LogReplicationConfigManager.getClientSubscriber());
 
         // Verify tables' content on Sink side
         verifyFederatedTableData(sinkCorfuStores.get(SINK1_INDEX), NUM_WRITES, sinkFederatedTables);
@@ -716,8 +716,8 @@ public class LogReplicationLogicalGroupIT extends CorfuReplicationMultiSourceSin
         // Verify all the sessions' snapshot sync completed
         verifySessionInLogEntrySyncState(SINK1_INDEX, LogReplicationConfigManager.getDefaultSubscriber());
         // TODO: should be replaced by real client name after Sink session creation workflow is introduced
-        verifySessionInLogEntrySyncState(SINK2_INDEX, LogReplicationConfigManager.getDefaultLogicalGroupSubscriber());
-        verifySessionInLogEntrySyncState(SINK3_INDEX, LogReplicationConfigManager.getDefaultLogicalGroupSubscriber());
+        verifySessionInLogEntrySyncState(SINK2_INDEX, LogReplicationConfigManager.getClientSubscriber());
+        verifySessionInLogEntrySyncState(SINK3_INDEX, LogReplicationConfigManager.getClientSubscriber());
 
         List<Table<StringKey, SampleGroupMsgA, Message>> sinkTablesGroupAOnSink3 = new ArrayList<>();
         openGroupATable(numTables, sinkCorfuStores.get(SINK3_INDEX), sinkTablesGroupAOnSink3);
@@ -828,8 +828,8 @@ public class LogReplicationLogicalGroupIT extends CorfuReplicationMultiSourceSin
         // Verify all the sessions' snapshot sync completed
         verifySessionInLogEntrySyncState(SINK1_INDEX, LogReplicationConfigManager.getDefaultSubscriber());
         // TODO: should be replaced by real client name after Sink session creation workflow is introduced
-        verifySessionInLogEntrySyncState(SINK2_INDEX, LogReplicationConfigManager.getDefaultLogicalGroupSubscriber());
-        verifySessionInLogEntrySyncState(SINK3_INDEX, LogReplicationConfigManager.getDefaultLogicalGroupSubscriber());
+        verifySessionInLogEntrySyncState(SINK2_INDEX, LogReplicationConfigManager.getClientSubscriber());
+        verifySessionInLogEntrySyncState(SINK3_INDEX, LogReplicationConfigManager.getClientSubscriber());
 
         List<Table<StringKey, SampleGroupMsgA, Message>> sinkTablesGroupAOnSink3 = new ArrayList<>();
         openGroupATable(numTables, sinkCorfuStores.get(SINK3_INDEX), sinkTablesGroupAOnSink3);
@@ -946,8 +946,8 @@ public class LogReplicationLogicalGroupIT extends CorfuReplicationMultiSourceSin
         // Verify all the sessions' snapshot sync completed
         verifySessionInLogEntrySyncState(SINK1_INDEX, LogReplicationConfigManager.getDefaultSubscriber());
         // TODO: should be replaced by real client name after Sink session creation workflow is introduced
-        verifySessionInLogEntrySyncState(SINK2_INDEX, LogReplicationConfigManager.getDefaultLogicalGroupSubscriber());
-        verifySessionInLogEntrySyncState(SINK3_INDEX, LogReplicationConfigManager.getDefaultLogicalGroupSubscriber());
+        verifySessionInLogEntrySyncState(SINK2_INDEX, LogReplicationConfigManager.getClientSubscriber());
+        verifySessionInLogEntrySyncState(SINK3_INDEX, LogReplicationConfigManager.getClientSubscriber());
 
         List<Table<StringKey, SampleGroupMsgA, Message>> sinkTablesGroupAOnSink3 = new ArrayList<>();
         openGroupATable(numTables, sinkCorfuStores.get(SINK3_INDEX), sinkTablesGroupAOnSink3);
@@ -1062,8 +1062,8 @@ public class LogReplicationLogicalGroupIT extends CorfuReplicationMultiSourceSin
         // Verify all the sessions' snapshot sync completed
         verifySessionInLogEntrySyncState(SINK1_INDEX, LogReplicationConfigManager.getDefaultSubscriber());
         // TODO: should be replaced by real client name after Sink session creation workflow is introduced
-        verifySessionInLogEntrySyncState(SINK2_INDEX, LogReplicationConfigManager.getDefaultLogicalGroupSubscriber());
-        verifySessionInLogEntrySyncState(SINK3_INDEX, LogReplicationConfigManager.getDefaultLogicalGroupSubscriber());
+        verifySessionInLogEntrySyncState(SINK2_INDEX, LogReplicationConfigManager.getClientSubscriber());
+        verifySessionInLogEntrySyncState(SINK3_INDEX, LogReplicationConfigManager.getClientSubscriber());
 
         // Verify tables' content on Sink side
         verifyFederatedTableData(sinkCorfuStores.get(SINK1_INDEX), NUM_WRITES, sinkFederatedTables);
@@ -1162,8 +1162,8 @@ public class LogReplicationLogicalGroupIT extends CorfuReplicationMultiSourceSin
         // Verify all the sessions' snapshot sync completed
         verifySessionInLogEntrySyncState(SINK1_INDEX, LogReplicationConfigManager.getDefaultSubscriber());
         // TODO: should be replaced by real client name after Sink session creation workflow is introduced
-        verifySessionInLogEntrySyncState(SINK2_INDEX, LogReplicationConfigManager.getDefaultLogicalGroupSubscriber());
-        verifySessionInLogEntrySyncState(SINK3_INDEX, LogReplicationConfigManager.getDefaultLogicalGroupSubscriber());
+        verifySessionInLogEntrySyncState(SINK2_INDEX, LogReplicationConfigManager.getClientSubscriber());
+        verifySessionInLogEntrySyncState(SINK3_INDEX, LogReplicationConfigManager.getClientSubscriber());
 
         // Verify tables' content on Sink side
         verifyFederatedTableData(sinkCorfuStores.get(SINK1_INDEX), NUM_WRITES, sinkFederatedTables);
@@ -1271,8 +1271,8 @@ public class LogReplicationLogicalGroupIT extends CorfuReplicationMultiSourceSin
         // Verify all the sessions' snapshot sync completed
         verifySessionInLogEntrySyncState(SINK1_INDEX, LogReplicationConfigManager.getDefaultSubscriber());
         // TODO: should be replaced by real client name after Sink session creation workflow is introduced
-        verifySessionInLogEntrySyncState(SINK2_INDEX, LogReplicationConfigManager.getDefaultLogicalGroupSubscriber());
-        verifySessionInLogEntrySyncState(SINK3_INDEX, LogReplicationConfigManager.getDefaultLogicalGroupSubscriber());
+        verifySessionInLogEntrySyncState(SINK2_INDEX, LogReplicationConfigManager.getClientSubscriber());
+        verifySessionInLogEntrySyncState(SINK3_INDEX, LogReplicationConfigManager.getClientSubscriber());
 
         // Verify tables' content on Sink side
         verifyFederatedTableData(sinkCorfuStores.get(SINK1_INDEX), NUM_WRITES, sinkFederatedTables);
@@ -1378,8 +1378,8 @@ public class LogReplicationLogicalGroupIT extends CorfuReplicationMultiSourceSin
 
         // Verify all the sessions' snapshot sync completed
         verifySessionInLogEntrySyncState(SINK1_INDEX, LogReplicationConfigManager.getDefaultSubscriber());
-        verifySessionInLogEntrySyncState(SINK2_INDEX, LogReplicationConfigManager.getDefaultLogicalGroupSubscriber());
-        verifySessionInLogEntrySyncState(SINK3_INDEX, LogReplicationConfigManager.getDefaultLogicalGroupSubscriber());
+        verifySessionInLogEntrySyncState(SINK2_INDEX, LogReplicationConfigManager.getClientSubscriber());
+        verifySessionInLogEntrySyncState(SINK3_INDEX, LogReplicationConfigManager.getClientSubscriber());
 
         // Verify tables' content on Sink side
         verifyFederatedTableData(sinkCorfuStores.get(SINK1_INDEX), NUM_WRITES, sinkFederatedTables);
@@ -1515,8 +1515,8 @@ public class LogReplicationLogicalGroupIT extends CorfuReplicationMultiSourceSin
 
         // Verify all the sessions' snapshot sync completed
         verifySessionInLogEntrySyncState(SINK1_INDEX, LogReplicationConfigManager.getDefaultSubscriber());
-        verifySessionInLogEntrySyncState(SINK2_INDEX, LogReplicationConfigManager.getDefaultLogicalGroupSubscriber());
-        verifySessionInLogEntrySyncState(SINK3_INDEX, LogReplicationConfigManager.getDefaultLogicalGroupSubscriber());
+        verifySessionInLogEntrySyncState(SINK2_INDEX, LogReplicationConfigManager.getClientSubscriber());
+        verifySessionInLogEntrySyncState(SINK3_INDEX, LogReplicationConfigManager.getClientSubscriber());
 
         // Verify the data is successfully replicated
         verifyFederatedTableData(sinkCorfuStores.get(SINK1_INDEX), NUM_WRITES, sinkFederatedTables);
