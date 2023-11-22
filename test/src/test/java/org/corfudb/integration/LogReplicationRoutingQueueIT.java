@@ -97,7 +97,7 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
         // Create the Routing Queue Sender client and subscribe a listener to get snapshot sync requests.
         CorfuRuntime clientRuntime = getClientRuntime();
         CorfuStore clientCorfuStore = new CorfuStore(clientRuntime);
-        String clientName = DEFAULT_ROUTING_QUEUE_CLIENT;
+        String clientName = "ABC";
         RoutingQueueSenderClient queueSenderClient = new RoutingQueueSenderClient(clientCorfuStore, clientName);
         SnapshotProvider snapshotProvider = new SnapshotProvider(clientCorfuStore);
         queueSenderClient.startLRSnapshotTransmitter(snapshotProvider); // starts a listener on event table
@@ -149,7 +149,7 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
         CorfuStore clientCorfuStore = new CorfuStore(clientRuntime);
         String sourceSiteId = DefaultClusterConfig.getSourceClusterIds().get(0);
         CorfuStoreBrowserEditor editor = new CorfuStoreBrowserEditor(clientRuntime, null, true);
-        String clientName = DEFAULT_ROUTING_QUEUE_CLIENT;
+        String clientName = "00000000-0000-0000-0000-0000000000013";
         RoutingQueueSenderClient queueSenderClient = new RoutingQueueSenderClient(clientCorfuStore, clientName);
 
         // SnapshotProvider implements RoutingQueueSenderClient.LRTransmitterReplicationModule
@@ -214,7 +214,7 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
         CorfuRuntime clientRuntime = getClientRuntime();
         CorfuStore clientCorfuStore = new CorfuStore(clientRuntime);
         String sourceSiteId = DefaultClusterConfig.getSourceClusterIds().get(0);
-        final String clientName = DEFAULT_ROUTING_QUEUE_CLIENT;
+        final String clientName = "00000000-0000-0000-0000-000000000000A";
 
         RoutingQueueSenderClient queueSenderClient = new RoutingQueueSenderClient(clientCorfuStore, clientName);
         // SnapshotProvider implements RoutingQueueSenderClient.LRTransmitterReplicationModule
@@ -229,7 +229,11 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
         // Start up snapshot sync providers on both sink sites to test reverse replication
         sinkCorfuStores.forEach(sinkCorfuStore -> {
             RoutingQueueSenderClient sinkSideQsender = null;
-            sinkSideQsender = new RoutingQueueSenderClient(sinkCorfuStore, clientName);
+            try {
+                sinkSideQsender = new RoutingQueueSenderClient(sinkCorfuStore, clientName);
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
             // SnapshotProvider implements RoutingQueueSenderClient.LRTransmitterReplicationModule
             SnapshotProvider sinkSideSnapProvider = new SnapshotProvider(sinkCorfuStore);
             sinkSideQsender.startLRSnapshotTransmitter(sinkSideSnapProvider); // starts a listener on event table
@@ -357,7 +361,7 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
         // Create the Routing Queue Sender client and subscribe a listener to get snapshot sync requests.
         CorfuRuntime clientRuntime = getClientRuntime();
         CorfuStore clientCorfuStore = new CorfuStore(clientRuntime);
-        String clientName = DEFAULT_ROUTING_QUEUE_CLIENT;
+        String clientName = "00000000-0000-0000-0000-0000000000008";
         RoutingQueueSenderClient queueSenderClient = new RoutingQueueSenderClient(clientCorfuStore, clientName);
 
         // SnapshotProvider implements RoutingQueueSenderClient.LRTransmitterReplicationModule
