@@ -56,7 +56,8 @@ public class RemoteSourceLeadershipManager {
     private volatile Optional<String> leaderNodeId = Optional.empty();
 
     private final String localNodeId;
-    
+
+    @Getter
     private final String sessionName;
 
     //TODO v2: tune thread count;
