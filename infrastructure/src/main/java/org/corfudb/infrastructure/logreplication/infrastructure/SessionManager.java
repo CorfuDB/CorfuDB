@@ -606,26 +606,28 @@ public class SessionManager {
     public void createAndSendOutgoingSession(ReplicationSubscriber subscriber) {
         Set<LogReplicationSession> sessionForSinkSide = this.createOutgoingSessionsBySubscriber(subscriber);
         for (LogReplicationSession session : sessionForSinkSide) {
-            CorfuMessage.RequestPayloadMsg payload = CorfuMessage.RequestPayloadMsg.newBuilder().setLrLeadershipQuery(
-                    LogReplication.LogReplicationLeadershipRequestMsg.newBuilder().build()
-            ).build();
-            updateRouterWithNewSessions();
-            createSourceFSMs();
-            logNewlyAddedSessionInfo();
-            connect(session);
-            try {
-                IRetry.build(ExponentialBackoffRetry.class, () -> {
-                    try {
-                        CompletableFuture<LogReplication.LogReplicationMetadataResponseMsg> cf = router.sendRequestAndGetCompletable(session, payload, router.getSessionToRemoteClusterDescriptor().get(session).getClusterId());
-                        cf.get(CorfuLogReplicationRuntime.DEFAULT_TIMEOUT, TimeUnit.MILLISECONDS);
-                    } catch (TimeoutException | ExecutionException e) {
-                        log.error("Caught exception while waiting for ACK for . Retry.", e);
-                        throw new RetryNeededException();
-                    }
-                    return null;
-                }).run();
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
+            if (topology.getLocalClusterDescriptor().getClusterId().equals((session.getSourceClusterId())) && topology.getRemoteSinkClusters().containsKey(session.getSinkClusterId())) {
+                CorfuMessage.RequestPayloadMsg payload = CorfuMessage.RequestPayloadMsg.newBuilder().setLrLeadershipQuery(
+                        LogReplication.LogReplicationLeadershipRequestMsg.newBuilder().build()
+                ).build();
+                updateRouterWithNewSessions();
+                createSourceFSMs();
+                logNewlyAddedSessionInfo();
+                connect(session);
+                try {
+                    IRetry.build(ExponentialBackoffRetry.class, () -> {
+                        try {
+                            CompletableFuture<LogReplication.LogReplicationMetadataResponseMsg> cf = router.sendRequestAndGetCompletable(session, payload, router.getSessionToRemoteClusterDescriptor().get(session).getClusterId());
+                            cf.get(CorfuLogReplicationRuntime.DEFAULT_TIMEOUT, TimeUnit.MILLISECONDS);
+                        } catch (TimeoutException | ExecutionException e) {
+                            log.error("Caught exception while waiting for ACK for . Retry.", e);
+                            throw new RetryNeededException();
+                        }
+                        return null;
+                    }).run();
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
             }
         }
     }
