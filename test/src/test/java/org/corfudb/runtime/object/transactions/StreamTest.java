@@ -3,6 +3,7 @@ package org.corfudb.runtime.object.transactions;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Random;
 import java.util.UUID;
@@ -65,6 +66,24 @@ public class StreamTest extends AbstractTransactionsTest {
         assertThatThrownBy(() -> getRuntime().getStreamsView().append(
                 new byte[payloadSize], null, svId))
                 .isInstanceOf(AppendException.class);
+    }
+
+    @Test
+    public void testMaxWriteSizeLimitExceeded() {
+        ICorfuTable<String, String> map = instantiateCorfuObject(PersistentCorfuTable.class, "TestTable");
+        byte[] array = new byte[25_000_000];
+        new Random().nextBytes(array);
+        String payloadString = new String(array, Charset.forName("UTF-8"));
+        boolean abortException = false;
+        try {
+            TXBegin();
+            map.insert(Integer.toString(0), payloadString);
+            TXEnd();
+        } catch (TransactionAbortedException tae) {
+            assertThat(tae.getAbortCause()).isEqualTo(AbortCause.SIZE_EXCEEDED);
+            abortException = true;
+        }
+        assertThat(abortException).isTrue();
     }
 
     @Test

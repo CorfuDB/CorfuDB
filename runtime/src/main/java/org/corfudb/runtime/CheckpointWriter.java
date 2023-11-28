@@ -72,13 +72,6 @@ public class CheckpointWriter<T extends ICorfuTable<?, ?>> {
     @Setter
     private int batchSize;
 
-    /**
-     *  Max uncompressed checkpoint entry size: Maximum uncompressed size of a single Checkpoint CONTINUATION Entry.
-     */
-    @Getter
-    @Setter
-    private long maxUncompressedCpEntrySize;
-
     @SuppressWarnings("checkstyle:abbreviation")
     private final UUID checkpointStreamID;
     private final Map<CheckpointEntry.CheckpointDictKey, String> mdkv = new HashMap<>();
@@ -135,7 +128,6 @@ public class CheckpointWriter<T extends ICorfuTable<?, ?>> {
         checkpointId = UUID.randomUUID();
         checkpointStreamID = CorfuRuntime.getCheckpointStreamIdFromId(streamId);
         sv = rt.getStreamsView();
-        maxUncompressedCpEntrySize = rt.getParameters().getMaxUncompressedCpEntrySize();
         batchSize = rt.getParameters().getCheckpointBatchSize();
     }
 
@@ -327,7 +319,6 @@ public class CheckpointWriter<T extends ICorfuTable<?, ?>> {
                 ImmutableMap.copyOf(this.mdkv);
 
         int totalEntryCount = 0;
-        int numBytesPerCheckpointEntry = 0;
         int numBytesPerUncompressedCheckpointEntry = 0;
 
         MultiSMREntry smrEntries = new MultiSMREntry();
@@ -346,22 +337,18 @@ public class CheckpointWriter<T extends ICorfuTable<?, ?>> {
             ByteBuf inputBuffer = Unpooled.buffer();
             smrPutEntry.serialize(inputBuffer);
             numBytesPerUncompressedCheckpointEntry += smrPutEntry.getSerializedSize();
-            int compressedBufferSize = getCompressedBufferSize(inputBuffer);
-            numBytesPerCheckpointEntry += compressedBufferSize;
             inputBuffer.clear();
 
             /* CheckpointEntry has some metadata and make the total size larger than the actual size
-             * of SMR entries. Its a safeguard against the smr entries amounting to the actual
+             * of SMR entries. It's a safeguard against the smr entries amounting to the actual
              * boundary limit.
              */
-            if (numBytesPerUncompressedCheckpointEntry > maxUncompressedCpEntrySize
-                    || numBytesPerCheckpointEntry > maxWriteSizeLimit || smrEntries.getUpdates().size() >= batchSize) {
+            if (numBytesPerUncompressedCheckpointEntry > maxWriteSizeLimit || smrEntries.getUpdates().size() >= batchSize) {
                 convertAndAppendCheckpointEntry(smrEntries, kvCopy);
                 log.trace("Batched size of checkpoint log entry consists {} smr entries",
                         smrEntries.getUpdates().size());
                 /* reset the num of bytes and the new batch size entries below
                 also, reset the smr entry to add the newly read SMR:each from the stream. */
-                numBytesPerCheckpointEntry = compressedBufferSize;
                 numBytesPerUncompressedCheckpointEntry = smrPutEntry.getSerializedSize();
                 smrEntries = new MultiSMREntry();
             }

@@ -149,9 +149,9 @@ public class LogData implements IMetadata, ILogData {
     }
 
     @Override
-    public synchronized void acquireBuffer(boolean metadata) {
+    public synchronized void acquireBuffer(boolean metadata, boolean checkSize, int limit) {
         if (serializedCache == null) {
-            acquireBufferInternal(metadata);
+            acquireBufferInternal(metadata, checkSize, limit);
         } else {
             if (metadata) {
                 serializedCache.buffer.resetReaderIndex();
@@ -165,16 +165,16 @@ public class LogData implements IMetadata, ILogData {
     public synchronized void updateAcquiredBuffer(boolean metadata) {
         Preconditions.checkState(serializedCache != null,
                 "updateAcquiredBuffer requires serialized form");
-        acquireBufferInternal(metadata);
+        acquireBufferInternal(metadata, false, 0);
     }
 
-    private void acquireBufferInternal(boolean metadata) {
+    private void acquireBufferInternal(boolean metadata, boolean checkSize, int limit) {
         ByteBuf buf = Unpooled.buffer();
         if (metadata) {
-            int metadataOffset = doSerializeInternal(buf);
+            int metadataOffset = doSerializeInternal(buf, checkSize, limit);
             serializedCache = new SerializedCache(buf, metadataOffset);
         } else {
-            doSerializePayloadInternal(buf);
+            doSerializePayloadInternal(buf, checkSize, limit);
             serializedCache = new SerializedCache(buf, buf.writerIndex());
         }
     }
@@ -299,19 +299,19 @@ public class LogData implements IMetadata, ILogData {
             serializedCache.buffer.resetReaderIndex();
             buf.writeBytes(serializedCache.buffer);
         } else {
-            doSerializeInternal(buf);
+            doSerializeInternal(buf, false, 0);
         }
     }
 
-    private int doSerializeInternal(ByteBuf buf) {
-        doSerializePayloadInternal(buf);
+    private int doSerializeInternal(ByteBuf buf, boolean checkSize, int limit) {
+        doSerializePayloadInternal(buf, checkSize, limit);
         int metadataOffset = buf.writerIndex();
         doSerializeMetadataInternal(buf);
 
         return metadataOffset;
     }
 
-    private void doSerializePayloadInternal(ByteBuf buf) {
+    private void doSerializePayloadInternal(ByteBuf buf, boolean checkSize, int limit) {
         CorfuProtocolCommon.serialize(buf, type.asByte());
         if (type == DataType.DATA) {
             if (data == null) {
@@ -321,9 +321,15 @@ public class LogData implements IMetadata, ILogData {
                     // If the payload has a codec we need to also compress the payload
                     ByteBuf serializeBuf = Unpooled.buffer();
                     Serializers.CORFU.serialize(payload.get(), serializeBuf);
+                    if (checkSize) {
+                        checkMaxWriteSize(limit, serializeBuf);
+                    }
                     doCompressInternal(serializeBuf, buf);
                 } else {
                     Serializers.CORFU.serialize(payload.get(), buf);
+                    if (checkSize) {
+                        checkMaxWriteSize(limit, buf);
+                    }
                 }
                 int size = buf.writerIndex() - (lengthIndex + 4);
                 buf.writerIndex(lengthIndex);
@@ -382,16 +388,14 @@ public class LogData implements IMetadata, ILogData {
         return "LogData[" + getGlobalAddress() + "]";
     }
 
-    /**
-     * Verify that max payload is enforced for the specified limit.
-     *
-     * @param limit Max write limit
-     * @return the serialized size of the payload
-     */
-    public int checkMaxWriteSize(int limit) {
-        Preconditions.checkState(serializedCache != null, "checkMaxWriteSize requires serialized form");
+    private void checkMaxWriteSize(int limit, ByteBuf buf) {
+        int payloadSize;
+        if (buf.hasArray()) {
+            payloadSize = buf.array().length;
+        } else {
+            payloadSize = buf.readableBytes();
+        }
 
-        int payloadSize = getSizeEstimate();
         if (log.isTraceEnabled()) {
             log.trace("checkMaxWriteSize: payload size is {} bytes.", payloadSize);
         }
@@ -399,7 +403,5 @@ public class LogData implements IMetadata, ILogData {
         if (payloadSize > limit) {
             throw new WriteSizeException(payloadSize, limit);
         }
-
-        return payloadSize;
     }
 }

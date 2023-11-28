@@ -468,7 +468,10 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         final long cont3Recordffset = startAddress + 5;
         assertThat(r.getAddressSpaceView().read(cont3Recordffset).getCheckpointType())
                 .isEqualTo(CheckpointEntry.CheckpointEntryType.CONTINUATION);
-        final long finishRecord1Offset = startAddress + 7;
+        final long cont4Recordffset = startAddress + 7;
+        assertThat(r.getAddressSpaceView().read(cont4Recordffset).getCheckpointType())
+                .isEqualTo(CheckpointEntry.CheckpointEntryType.CONTINUATION);
+        final long finishRecord1Offset = startAddress + 9;
         assertThat(r.getAddressSpaceView().read(finishRecord1Offset).getCheckpointType())
                 .isEqualTo(CheckpointEntry.CheckpointEntryType.END);
 
@@ -702,6 +705,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
 
         // set the max write size to 25 MB
         getRuntime().getParameters().setMaxWriteSize(maxWriteSize);
+        r.getParameters().setMaxWriteSize(maxWriteSize << 1);
         getRuntime().getParameters().setCodecType(Codec.Type.NONE);
         CheckpointWriter<PersistentCorfuTable<String, String>> cpw = new CheckpointWriter<>(getRuntime(), streamId, author, m);
         cpw.setSerializer(serializer);
@@ -816,7 +820,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
      * Test checkpoint of a large transaction
      * <p>
      * CheckpointWriter should be able to write CheckpointEntries even if the size
-     * of a single transaction is larger than the compressed and uncompressed size limits.
+     * of a single transaction is larger than the maxWriteSize limit.
      */
     @Test
     @SuppressWarnings("checkstyle:magicnumber")
@@ -828,7 +832,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         PersistentCorfuTable<String, String> m = instantiateStringTable(streamName);
 
         //8 MB of data
-        String repeatedCharString = StringUtils.repeat("a", (1 << 23));
+        String repeatedCharString = StringUtils.repeat("a", (1 << 22));
 
         for (int i = 0; i < numKeys; i++) {
             String key = String.valueOf(i);
@@ -837,7 +841,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         }
 
         getRuntime().getParameters().setCodecType(Codec.Type.ZSTD);
-        getRuntime().getParameters().setMaxUncompressedCpEntrySize(2_000_000);
+        getRuntime().getParameters().setMaxWriteSize(2_000_000);
         CheckpointWriter<PersistentCorfuTable<String, String>> cpw = new CheckpointWriter<>(getRuntime(), streamId, "author", m);
         cpw.setSerializer(serializer);
 
@@ -867,7 +871,6 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         ILogData logData = r.getAddressSpaceView().read(contRecordffset);
         CheckpointEntry cpEntry = (CheckpointEntry) logData.getPayload(r);
         long logDataSize = logData.getSizeEstimate();
-        assertThat(logDataSize).isLessThanOrEqualTo(r.getParameters().getMaxUncompressedCpEntrySize());
         assertThat(logDataSize).isLessThanOrEqualTo(r.getParameters().getMaxWriteSize());
         assertThat(cpEntry.getSmrEntries().getUpdates().size()).isEqualTo(0);
 
@@ -875,7 +878,6 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         logData = r.getAddressSpaceView().read(cont2Recordffset);
         cpEntry = (CheckpointEntry) logData.getPayload(r);
         logDataSize = logData.getSizeEstimate();
-        assertThat(logDataSize).isLessThanOrEqualTo(r.getParameters().getMaxUncompressedCpEntrySize());
         assertThat(logDataSize).isLessThanOrEqualTo(r.getParameters().getMaxWriteSize());
         assertThat(cpEntry.getSmrEntries().getUpdates().size()).isEqualTo(1);
 
@@ -883,86 +885,6 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         logData = r.getAddressSpaceView().read(cont3Recordffset);
         cpEntry = (CheckpointEntry) logData.getPayload(r);
         logDataSize = logData.getSizeEstimate();
-        assertThat(logDataSize).isLessThanOrEqualTo(r.getParameters().getMaxUncompressedCpEntrySize());
-        assertThat(logDataSize).isLessThanOrEqualTo(r.getParameters().getMaxWriteSize());
-        assertThat(cpEntry.getSmrEntries().getUpdates().size()).isEqualTo(1);
-    }
-
-    /**
-     * Test the CheckpointWriter's uncompressed size check
-     * <p>
-     * CheckpointWriter aggregates a batch of SMREntries into one CheckpointEntry.
-     * This test verifies that it batches only SMR entries that are lesser
-     * in size when aggregated than the maxUncompressedSize limit, even if the
-     * compressedSize limit is not reached
-     *
-     */
-    @Test
-    @SuppressWarnings("checkstyle:magicnumber")
-    public void checkpointUnompressedSizeTest() {
-        final String streamName = "mystream8";
-        final UUID streamId = CorfuRuntime.getStreamID(streamName);
-        final int numKeys = 5;
-
-        PersistentCorfuTable<String, String> m = instantiateStringTable(streamName);
-
-        //8 MB of data
-        String repeatedCharString = StringUtils.repeat("a", (1 << 23));
-
-        for (int i = 0; i < numKeys; i++) {
-            String key = String.valueOf(i);
-            String payload = repeatedCharString;
-            m.insert(key, payload);
-        }
-
-        getRuntime().getParameters().setCodecType(Codec.Type.ZSTD);
-        getRuntime().getParameters().setMaxUncompressedCpEntrySize(25_000_000);
-        CheckpointWriter<PersistentCorfuTable<String, String>> cpw = new CheckpointWriter<>(getRuntime(), streamId, "author", m);
-        cpw.setSerializer(serializer);
-
-        // Write all CP data.
-        r.getObjectsView().TXBuild()
-                .type(TransactionType.SNAPSHOT)
-                .build()
-                .begin();
-        Token snapshot = TransactionalContext
-                .getCurrentContext()
-                .getSnapshotTimestamp();
-        try {
-            cpw.startCheckpoint(snapshot);
-            cpw.appendObjectState(m.entryStream());
-            cpw.finishCheckpoint();
-        } finally {
-            r.getObjectsView().TXEnd();
-        }
-
-        setRuntime();
-        r.getSerializers().registerSerializer(serializer);
-        long startAddress = snapshot.getSequence() + 1;
-        assertThat(r.getAddressSpaceView().read(startAddress).getCheckpointType())
-                .isEqualTo(CheckpointEntry.CheckpointEntryType.START);
-
-        final long contRecordffset = startAddress + 1;
-        ILogData logData = r.getAddressSpaceView().read(contRecordffset);
-        CheckpointEntry cpEntry = (CheckpointEntry) logData.getPayload(r);
-        long logDataSize = logData.getSizeEstimate();
-        assertThat(logDataSize).isLessThanOrEqualTo(r.getParameters().getMaxUncompressedCpEntrySize());
-        assertThat(logDataSize).isLessThanOrEqualTo(r.getParameters().getMaxWriteSize());
-        assertThat(cpEntry.getSmrEntries().getUpdates().size()).isEqualTo(2);
-
-        final long cont2Recordffset = startAddress + 2;
-        logData = r.getAddressSpaceView().read(cont2Recordffset);
-        cpEntry = (CheckpointEntry) logData.getPayload(r);
-        logDataSize = logData.getSizeEstimate();
-        assertThat(logDataSize).isLessThanOrEqualTo(r.getParameters().getMaxUncompressedCpEntrySize());
-        assertThat(logDataSize).isLessThanOrEqualTo(r.getParameters().getMaxWriteSize());
-        assertThat(cpEntry.getSmrEntries().getUpdates().size()).isEqualTo(2);
-
-        final long cont3Recordffset = startAddress + 3;
-        logData = r.getAddressSpaceView().read(cont3Recordffset);
-        cpEntry = (CheckpointEntry) logData.getPayload(r);
-        logDataSize = logData.getSizeEstimate();
-        assertThat(logDataSize).isLessThanOrEqualTo(r.getParameters().getMaxUncompressedCpEntrySize());
         assertThat(logDataSize).isLessThanOrEqualTo(r.getParameters().getMaxWriteSize());
         assertThat(cpEntry.getSmrEntries().getUpdates().size()).isEqualTo(1);
     }

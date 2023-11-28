@@ -20,9 +20,9 @@ import java.util.Optional;
 @Slf4j
 public class CompactorBaseConfig {
 
-    // Reduce checkpoint batch size due to disk-based nature and for smaller compactor JVM size
-    public static final int DISK_BACKED_DEFAULT_CP_MAX_WRITE_SIZE = 1 << 20;
-    public static final int DEFAULT_CP_MAX_WRITE_SIZE = 25 << 20;
+    // Since the maxWriteSize now validates the uncompressed limit, the value can be made
+    // same as the maxUncompressedCpEntrySize
+    public static final int DEFAULT_CP_MAX_WRITE_SIZE = 100_000_000;
     public static final int SYSTEM_DOWN_HANDLER_TRIGGER_LIMIT = 100;  // Corfu default is 20
     public static final int CORFU_LOG_CHECKPOINT_ERROR = 3;
     private static final int SYSTEM_EXIT_ERROR_CODE = -3;
@@ -77,13 +77,7 @@ public class CompactorBaseConfig {
         if (maybeMaxWriteSize.isPresent()) {
             maxWriteSize = Integer.parseInt(maybeMaxWriteSize.get());
         } else {
-            if (!persistedCacheRoot.isPresent()) {
-                // in-memory compaction
-                maxWriteSize = DEFAULT_CP_MAX_WRITE_SIZE;
-            } else {
-                // disk-backed compaction
-                maxWriteSize = DISK_BACKED_DEFAULT_CP_MAX_WRITE_SIZE;
-            }
+            maxWriteSize = DEFAULT_CP_MAX_WRITE_SIZE;
         }
         builder.maxWriteSize(maxWriteSize);
 

@@ -52,9 +52,9 @@ public interface ILogData extends IMetadata, Comparable<ILogData> {
          * @param data     the log data to manage
          * @param metadata whether metadata needs to be serialized
          */
-        public SerializationHandle(ILogData data, boolean metadata) {
+        public SerializationHandle(ILogData data, boolean metadata, boolean checkSize, int limit) {
             this.data = data;
-            data.acquireBuffer(metadata);
+            data.acquireBuffer(metadata, checkSize, limit);
         }
 
         /**
@@ -74,7 +74,11 @@ public interface ILogData extends IMetadata, Comparable<ILogData> {
      * @return a serialization handle of this entry
      */
     default SerializationHandle getSerializedForm(boolean metadata) {
-        return new SerializationHandle(this, metadata);
+        return getSerializedForm(metadata, false, 0);
+    }
+
+    default SerializationHandle getSerializedForm(boolean metadata, boolean checkSize, int limit) {
+        return new SerializationHandle(this, metadata, checkSize, limit);
     }
 
     /**
@@ -87,7 +91,7 @@ public interface ILogData extends IMetadata, Comparable<ILogData> {
      *
      * @param metadata whether metadata needs to be serialized
      */
-    void acquireBuffer(boolean metadata);
+    void acquireBuffer(boolean metadata, boolean checkSize, int limit);
 
     /**
      * Return the payload as a log entry.

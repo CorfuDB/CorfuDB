@@ -186,9 +186,10 @@ public abstract class AbstractQueuedStreamView extends
         // The serialization here only serializes the payload because the token is not
         // acquired yet, thus metadata is incomplete. Once a token is acquired, the
         // writer will append the serialized metadata to the buffer.
-        try (ILogData.SerializationHandle sh = ld.getSerializedForm(false)) {
-            // Validate if the  size of the log data is under max write size.
-            int payloadSize = ld.checkMaxWriteSize(runtime.getParameters().getMaxWriteSize());
+        // Also, validate if the  size of the log data is under max write size.
+        try (ILogData.SerializationHandle sh = ld.getSerializedForm(false, true,
+                runtime.getParameters().getMaxWriteSize())) {
+            int payloadSize = ld.getSizeEstimate();
 
             // First, we get a token from the sequencer.
             TokenResponse tokenResponse = runtime.getSequencerView().next(id);
