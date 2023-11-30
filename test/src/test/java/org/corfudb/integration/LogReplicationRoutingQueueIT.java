@@ -2,6 +2,8 @@ package org.corfudb.integration;
 
 import com.google.protobuf.ByteString;
 import com.google.protobuf.Message;
+import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.browser.CorfuStoreBrowserEditor;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
@@ -34,6 +36,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.runtime.LogReplicationUtils.LOG_ENTRY_SYNC_QUEUE_TAG_SENDER_PREFIX;
@@ -220,6 +223,54 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
         });
     }
 
+    @Test
+    public void testSnapshotCancel() throws Exception {
+
+        // Register client and setup initial group destinations mapping
+        CorfuRuntime clientRuntime = getClientRuntime();
+        CorfuStore clientCorfuStore = new CorfuStore(clientRuntime);
+        String sourceSiteId = DefaultClusterConfig.getSourceClusterIds().get(0);
+        CorfuStoreBrowserEditor editor = new CorfuStoreBrowserEditor(clientRuntime, null, true);
+        String clientName = DEFAULT_ROUTING_QUEUE_CLIENT;
+        RoutingQueueSenderClient queueSenderClient = new RoutingQueueSenderClient(clientCorfuStore, clientName);
+        CountDownLatch startedTransmitting = new CountDownLatch(1);
+        SnapshotProvider snapshotProvider = new SnapshotProvider(clientCorfuStore, startedTransmitting);
+        queueSenderClient.startLRSnapshotTransmitter(snapshotProvider);
+
+        startReplicationServers();
+
+        RoutingQueueListener listener = new RoutingQueueListener(sinkCorfuStores.get(0),
+                sourceSiteId, clientName);
+        sinkCorfuStores.get(0).subscribeRoutingQListener(listener);
+
+        int numFullSyncMsgsGot = listener.snapSyncMsgCnt;
+        boolean sentDuplicateSync = false;
+        boolean cancelledInitialSync = false;
+
+        snapshotProvider.setNumFullSyncBatches(200);
+
+        startedTransmitting.await();
+        log.info("Negotiation snapshot sync has started!!!");
+
+        while (numFullSyncMsgsGot < snapshotProvider.getNumFullSyncBatches()) {
+            while (!cancelledInitialSync) {
+                Map<String, LRFullStateReplicationContext> fullSyncIDs = queueSenderClient.getPendingFullSyncs();
+                if (fullSyncIDs.containsKey(DefaultClusterConfig.getSinkClusterIds().get(0))) {
+                    snapshotProvider.cancel(queueSenderClient.getPendingFullSyncs().get(DefaultClusterConfig.getSinkClusterIds().get(0)));
+                    cancelledInitialSync = true;
+                }
+            }
+
+            if (!sentDuplicateSync) {
+                editor.requestGlobalFullSync();
+                sentDuplicateSync = true;
+            }
+
+            numFullSyncMsgsGot = listener.snapSyncMsgCnt;
+        }
+        assertThat(listener.snapSyncMsgCnt).isEqualTo(snapshotProvider.getNumFullSyncBatches());
+    }
+
     private void generateData(CorfuStore corfuStore, RoutingQueueSenderClient client) throws Exception {
         String namespace = CORFU_SYSTEM_NAMESPACE;
 
@@ -294,12 +345,22 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
     public static class SnapshotProvider implements RoutingQueueSenderClient.LRTransmitterReplicationModule {
 
         public final String someNamespace = "testNamespace";
-        public final int numFullSyncBatches = 5;
+
+        @Getter
+        @Setter
+        public int numFullSyncBatches = 5;
+        public CountDownLatch startedTransmitting;
         private int recordId = 0;
         CorfuStore corfuStore;
         public boolean isSnapshotSent = false;
+
         SnapshotProvider(CorfuStore corfuStore) {
             this.corfuStore = corfuStore;
+        }
+
+        SnapshotProvider(CorfuStore corfuStore, CountDownLatch latch) {
+            this.corfuStore = corfuStore;
+            this.startedTransmitting = latch;
         }
 
         @Override
@@ -312,6 +373,11 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
                             .buildPartial();
                     recordId++;
                     context.transmit(message);
+
+                    if (startedTransmitting != null && startedTransmitting.getCount() > 0) {
+                        startedTransmitting.countDown();
+                    }
+
                     log.info("Transmitting full sync message{}", message);
                     // For debugging Q's stream id should be "61d2fc0f-315a-3d87-a982-24fb36932050"
                     log.info("FS Committed at {}", tx.commit());
