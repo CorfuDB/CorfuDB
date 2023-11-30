@@ -47,9 +47,9 @@
         <commons.io.version>2.11.0</commons.io.version>
         <lombok.version>1.18.24</lombok.version>
         <guava.version>32.1.2-jre</guava.version>
-        <junit.jupiter.version>5.7.1</junit.jupiter.version>
+        <junit.jupiter.version>5.10.1</junit.jupiter.version>
         <mockito.version>4.11.0</mockito.version>
-        <bytebuddy.version>1.14.4</bytebuddy.version>
+        <bytebuddy.version>1.12.19</bytebuddy.version>
         <assertj.version>3.19.0</assertj.version>
         <zero.allocation.hashing.version>0.8</zero.allocation.hashing.version>
         <jacoco.version>0.8.8</jacoco.version>
@@ -419,12 +419,12 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
-                <version>3.0.0-M5</version>
+                <version>3.2.2</version>
                 <configuration>
                     <!--suppress UnresolvedMavenProperty (resolved at runtime) -->
                     <argLine>${unit.jacoco.args}</argLine>
                     <forkCount>1C</forkCount>
-                    <reuseForks>true</reuseForks>
+                    <reuseForks>false</reuseForks>
                     <trimStackTrace>false</trimStackTrace>
                     <!-- Option to generate a file test report or just output the test report to the console. -->
                     <useFile>false</useFile>

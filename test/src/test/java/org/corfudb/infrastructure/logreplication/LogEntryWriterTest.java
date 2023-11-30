@@ -33,8 +33,8 @@ public class LogEntryWriterTest extends AbstractViewTest {
 
     private static final String LOCAL_SINK_CLUSTER_ID = DefaultClusterConfig.getSinkClusterIds().get(0);
     private CorfuRuntime corfuRuntime;
-    private LogReplicationMetadataManager metadataManager;
-    private TxnContext txnContext;
+    private LogReplicationMetadataManager metadataManager = Mockito.mock(LogReplicationMetadataManager.class);
+    private TxnContext txnContext = Mockito.mock(TxnContext.class);
     private LogEntryWriter logEntryWriter;
 
     private TestUtils utils = new TestUtils();
@@ -45,8 +45,6 @@ public class LogEntryWriterTest extends AbstractViewTest {
     public void setUp() {
         corfuRuntime = getDefaultRuntime();
 
-        metadataManager = Mockito.mock(LogReplicationMetadataManager.class);
-        txnContext = Mockito.mock(TxnContext.class);
         Mockito.doReturn(txnContext).when(metadataManager).getTxnContext();
         Mockito.doReturn(getDefaultMetadata()).when(metadataManager).queryReplicationMetadata(txnContext,
             getDefaultSession());

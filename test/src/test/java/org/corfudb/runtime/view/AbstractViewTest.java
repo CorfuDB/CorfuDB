@@ -6,7 +6,6 @@ import io.netty.channel.EventLoopGroup;
 import lombok.Data;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import net.bytebuddy.agent.ByteBuddyAgent;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.infrastructure.BaseServer;
 import org.corfudb.infrastructure.IServerRouter;
@@ -39,12 +38,12 @@ import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
+import org.mockito.MockitoAnnotations;
 
 import javax.annotation.Nonnull;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Map;
-import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.TimeUnit;
@@ -89,10 +88,6 @@ import static org.corfudb.protocols.service.CorfuProtocolSequencer.getBootstrapS
 @Slf4j
 public abstract class AbstractViewTest extends AbstractCorfuTest {
 
-    static {
-        ByteBuddyAgent.install();
-    }
-
     private static final int QUIET_PERIOD = 100;
     private static final int TIMEOUT = 300;
     static final int MVO_CACHE_SIZE = 5000;
@@ -114,6 +109,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
 
     /** Initialize the AbstractViewTest. */
     public AbstractViewTest() {
+        MockitoAnnotations.openMocks(this);
         // Force all new CorfuRuntimes to override the getRouterFn
         CorfuRuntime.overrideGetRouterFunction = this::getRouterFunction;
         runtime = CorfuRuntime.fromParameters(CorfuRuntimeParameters.builder()

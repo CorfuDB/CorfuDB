@@ -42,12 +42,10 @@ import org.corfudb.test.SampleSchema.Uuid;
 import org.corfudb.util.serializer.ISerializer;
 import org.junit.Test;
 import org.junit.jupiter.api.Assertions;
-import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
-import org.mockito.junit.MockitoJUnitRunner;
 import org.rocksdb.Env;
 import org.rocksdb.OptimisticTransactionDB;
 import org.rocksdb.Options;
@@ -83,7 +81,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.times;
 
 @Slf4j
-@RunWith(MockitoJUnitRunner.class)
 public class PersistedCorfuTableTest extends AbstractViewTest implements AutoCloseable {
 
     private static final String defaultTableName = "diskBackedTable";

@@ -35,7 +35,8 @@ public class MetadataManagerTest extends AbstractViewTest {
 
     private static final String LOCAL_SOURCE_CLUSTER_ID = DefaultClusterConfig.getSourceClusterIds().get(0);
     private CorfuRuntime corfuRuntime;
-    private LogReplicationConfigManager configManager;
+    private LogReplicationConfigManager configManager = Mockito.mock(LogReplicationConfigManager.class);
+
     private boolean success;
     private long topologyConfigId = 5L;
     private TestUtils utils;
@@ -47,7 +48,6 @@ public class MetadataManagerTest extends AbstractViewTest {
     @Before
     public void setUp() {
         corfuRuntime = getDefaultRuntime();
-        configManager = Mockito.mock(LogReplicationConfigManager.class);
         Mockito.doReturn(corfuRuntime).when(configManager).getRuntime();
         utils = new TestUtils();
         replicationContext = new LogReplicationContext(new LogReplicationConfigManager(corfuRuntime,

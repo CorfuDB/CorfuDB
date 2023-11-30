@@ -21,6 +21,7 @@ import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.util.serializer.ISerializer;
 import org.junit.After;
 import org.junit.Before;
+import org.mockito.MockitoAnnotations;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -54,10 +55,6 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 @Slf4j
 public class AbstractIT extends AbstractCorfuTest {
-
-    static {
-        ByteBuddyAgent.install();
-    }
 
     static final String DEFAULT_HOST = "localhost";
     static final int DEFAULT_PORT = 9000;
@@ -97,6 +94,7 @@ public class AbstractIT extends AbstractCorfuTest {
 
 
     public AbstractIT() {
+        MockitoAnnotations.openMocks(this);
         CorfuRuntime.overrideGetRouterFunction = null;
         ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
         InputStream input = classLoader.getResourceAsStream("CorfuDB.properties");

@@ -17,7 +17,7 @@ public class LsofSpec {
 
     public void check(Path fileName) throws IOException {
         Process process = new ProcessBuilder()
-                .command("lsof")
+                .command("lsof", fileName.toAbsolutePath().toString())
                 .start();
 
         String output;
