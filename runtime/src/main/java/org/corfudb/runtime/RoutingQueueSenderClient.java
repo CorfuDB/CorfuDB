@@ -206,7 +206,7 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
             }
         }
 
-        public Map<String, LRFullStateReplicationContext> getPendingFullSyncs() {
+        Map<String, LRFullStateReplicationContext> getPendingFullSyncs() {
             return new HashMap<>(pendingFullSyncsPerDestination);
         }
 

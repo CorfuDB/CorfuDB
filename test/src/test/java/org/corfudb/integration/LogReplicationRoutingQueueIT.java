@@ -224,7 +224,7 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
     }
 
     @Test
-    public void testSnapshotCancel() throws Exception {
+    public void testSnapshotSyncCancel() throws Exception {
 
         // Register client and setup initial group destinations mapping
         CorfuRuntime clientRuntime = getClientRuntime();
@@ -237,11 +237,11 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
         SnapshotProvider snapshotProvider = new SnapshotProvider(clientCorfuStore, startedTransmitting);
         queueSenderClient.startLRSnapshotTransmitter(snapshotProvider);
 
-        startReplicationServers();
-
         RoutingQueueListener listener = new RoutingQueueListener(sinkCorfuStores.get(0),
                 sourceSiteId, clientName);
         sinkCorfuStores.get(0).subscribeRoutingQListener(listener);
+
+        startReplicationServers();
 
         int numFullSyncMsgsGot = listener.snapSyncMsgCnt;
         boolean sentDuplicateSync = false;
@@ -253,12 +253,13 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
         log.info("Negotiation snapshot sync has started!!!");
 
         while (numFullSyncMsgsGot < snapshotProvider.getNumFullSyncBatches()) {
-            while (!cancelledInitialSync) {
-                Map<String, LRFullStateReplicationContext> fullSyncIDs = queueSenderClient.getPendingFullSyncs();
-                if (fullSyncIDs.containsKey(DefaultClusterConfig.getSinkClusterIds().get(0))) {
-                    snapshotProvider.cancel(queueSenderClient.getPendingFullSyncs().get(DefaultClusterConfig.getSinkClusterIds().get(0)));
-                    cancelledInitialSync = true;
-                }
+            if (!cancelledInitialSync) {
+                assertThat(queueSenderClient.getPendingFullSyncs()
+                        .containsKey(DefaultClusterConfig.getSinkClusterIds().get(0)))
+                        .isTrue();
+                snapshotProvider.cancel(queueSenderClient.getPendingFullSyncs()
+                        .get(DefaultClusterConfig.getSinkClusterIds().get(0)));
+                cancelledInitialSync = true;
             }
 
             if (!sentDuplicateSync) {
@@ -374,13 +375,13 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
                     recordId++;
                     context.transmit(message);
 
-                    if (startedTransmitting != null && startedTransmitting.getCount() > 0) {
-                        startedTransmitting.countDown();
-                    }
-
                     log.info("Transmitting full sync message{}", message);
                     // For debugging Q's stream id should be "61d2fc0f-315a-3d87-a982-24fb36932050"
                     log.info("FS Committed at {}", tx.commit());
+
+                    if (startedTransmitting != null && startedTransmitting.getCount() > 0) {
+                        startedTransmitting.countDown();
+                    }
                 }
             }
             context.markCompleted();
