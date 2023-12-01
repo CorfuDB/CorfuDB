@@ -6,7 +6,6 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.protocols.logprotocol.SMREntry;
-import org.corfudb.runtime.CorfuOptions;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
@@ -144,22 +143,6 @@ public class MultiVersionObject<S extends SnapshotGenerator<S> & ConsistencyView
         this.snapshotFifo.add(this.currentObject.generateSnapshot(
                 new VersionedObjectIdentifier(getID(), Address.NON_EXIST)));
         this.trimRetry = corfuRuntime.getParameters().getTrimRetry();
-    }
-
-    /**
-     * Retrieve a particular version of this object.
-     * Allows subclasses to control caching behaviour, if applicable.
-     *
-     * @param voId The desired version of the object.
-     */
-    private SMRSnapshot<S> retrieveSnapshotUnsafe(@Nonnull VersionedObjectIdentifier voId) {
-        if (voId.getVersion() == materializedUpTo) {
-            return getCurrentSnapshot();
-        }
-
-        return mvoCache.get(voId).orElseThrow(() -> new TrimmedException(voId.getVersion(),
-                String.format("Trimmed address %s has been evicted from MVOCache. StreamAddressSpace: %s.",
-                        voId.getVersion(), addressSpace.toString())));
     }
 
     private void applySingleAddressUpdates(SingleAddressUpdates addressUpdates) {
@@ -336,11 +319,19 @@ public class MultiVersionObject<S extends SnapshotGenerator<S> & ConsistencyView
                         Utils.toReadableId(getID()), timestamp, streamTs);
             }
 
+            updateSMRSnapshotMetrics(getCurrentSnapshot(), false);
             correctnessLogger.trace(CORRECTNESS_LOG_MSG, streamTs);
             return new SnapshotProxy<>(getCurrentSnapshot(), getVersionSupplier(streamTs), upcallTargetMap);
         } finally {
             lock.unlock(lockTs);
         }
+    }
+
+    private void updateSMRSnapshotMetrics(@Nonnull SMRSnapshot<S> snapshot, boolean fromCache) {
+        if (fromCache) {
+            snapshot.getMetrics().requestedWhileCached();
+        }
+        snapshot.getMetrics().setLastAccessedTs(System.nanoTime());
     }
 
     /**
@@ -385,12 +376,23 @@ public class MultiVersionObject<S extends SnapshotGenerator<S> & ConsistencyView
 
                 // The snapshot is acquired before validating the lock, as the state of the
                 // underlying object can change afterward.
-                final SMRSnapshot<S> versionedObject = retrieveSnapshotUnsafe(voId);
+                final SMRSnapshot<S> versionedObject;
+                boolean retrieveFromCache = false;
+                if (voId.getVersion() == materializedUpTo) {
+                    versionedObject = getCurrentSnapshot();
+                } else {
+                    retrieveFromCache = true;
+                    versionedObject = mvoCache.get(voId).orElseThrow(() -> new TrimmedException(voId.getVersion(),
+                            String.format("Trimmed address %s has been evicted from MVOCache. StreamAddressSpace: %s.",
+                                    voId.getVersion(), addressSpace.toString())));
+                }
+
                 snapshotProxy = new SnapshotProxy<>(versionedObject, getVersionSupplier(streamTs), upcallTargetMap);
 
                 if (lock.validate(lockTs)) {
                     correctnessLogger.trace(CORRECTNESS_LOG_MSG, streamTs);
                     isLockStampValid = true;
+                    updateSMRSnapshotMetrics(versionedObject, retrieveFromCache);
                     return Optional.of(snapshotProxy);
                 }
             }

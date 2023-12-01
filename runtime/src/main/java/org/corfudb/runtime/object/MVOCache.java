@@ -75,7 +75,12 @@ public class MVOCache<S extends SnapshotGenerator<S>> {
     }
 
     public void handleEviction(RemovalNotification<VersionedObjectIdentifier, SMRSnapshot<S>> notification) {
-        log.trace("handleEviction: evicting {} cause {}", notification.getKey(), notification.getCause());
+        notification.getValue().getMetrics().setEvictedTs(System.nanoTime());
+        notification.getValue().getMetrics().recordMetrics(notification.getKey().getObjectId().toString());
+        if (log.isTraceEnabled()) {
+            log.trace("handleEviction: [{}] {}, Cause: {}", notification.getKey(),
+                    notification.getValue().getMetrics(), notification.getCause());
+        }
         notification.getValue().release();
     }
 
@@ -109,6 +114,7 @@ public class MVOCache<S extends SnapshotGenerator<S>> {
             log.trace("MVOCache: performing a put for {}", voId);
         }
 
+        object.getMetrics().setCacheEntryTs(System.nanoTime());
         objectCache.put(voId, object);
     }
 
