@@ -97,7 +97,8 @@ import static org.corfudb.protocols.service.CorfuProtocolMessage.getResponseMsg;
 @Slf4j
 public class LogUnitServer extends AbstractServer {
 
-    private static final Logger WRITER_LOG = LoggerFactory.getLogger(LogUnitServer.class);
+    private static final String WRITER_LOGGER_NAME = LogUnitServer.class.getName() + "Writer";
+    private static final Logger WRITER_LOG = LoggerFactory.getLogger(WRITER_LOGGER_NAME);
 
     /**
      * The options map.
