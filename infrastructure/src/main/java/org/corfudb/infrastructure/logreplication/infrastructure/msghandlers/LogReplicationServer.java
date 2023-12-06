@@ -313,7 +313,7 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
         HeaderMsg responseHeader = getHeaderMsg(request.getHeader());
         if (replicationContext.getIsLeader().get()) {
             LogReplicationSession session = getSession(request);
-            this.sessionManager.refreshForRemoteSessionRegister(session);
+            this.sessionManager.createIncomingSessionsBySubscriber(null, session);
             createSinkManager(session);
             }
         ResponseMsg response = getLeadershipResponse(responseHeader, replicationContext.getIsLeader().get(), localNodeId);

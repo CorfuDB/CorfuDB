@@ -220,7 +220,7 @@ public class SessionManager {
                 stopReplication(sessionsToRemove);
                 updateTopology(newTopology);
                 updateReplicationParameters(Sets.intersection(sessionsUnchanged, outgoingSessions));
-                createSessions();
+                createSessions(configManager.getRegisteredSubscribers(), true);
                 return null;
             }).run();
         } catch (InterruptedException e) {
@@ -238,33 +238,6 @@ public class SessionManager {
             removeStaleSessionOnLeadershipAcquire();
         }
     }
-
-    public synchronized void refreshForRemoteSessionRegister(LogReplicationSession sessionFromSource) {
-        Set<LogReplicationSession> sessionsToAdd = new HashSet<>();
-        try {
-            IRetry.build(IntervalRetry.class, () -> {
-                try (TxnContext txn = corfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
-                    for(ClusterDescriptor remoteSourceCluster : topology.getRemoteSourceClusters().values()) {if (!sessions.contains(sessionFromSource)) {
-                        sessionsToAdd.add(sessionFromSource);
-                        metadataManager.addSession(txn, sessionFromSource, topology.getTopologyConfigId(), true);
-                    }
-                    }
-                    txn.commit();
-                    return null;
-                } catch (TransactionAbortedException e) {
-                    log.error("Failed to create sessions. Retrying.", e);sessionsToAdd.clear();
-                    throw new RetryNeededException();
-                }
-            }).run();
-        } catch (InterruptedException e) {
-            log.error("Unrecoverable Corfu Error when creating the sessions", e);throw new UnrecoverableCorfuInterruptedError(e);
-        }
-        newSessionsDiscovered.addAll(sessionsToAdd);
-        sessions.addAll(sessionsToAdd);
-        incomingSessions.addAll(sessionsToAdd);
-        configManager.generateConfig(sessionsToAdd, true);
-    }
-
 
     /**
      * Update in-memory topology and topologyId
@@ -297,11 +270,13 @@ public class SessionManager {
      *     Source side: invoke session creation method from client config listener
      *     Sink side: assigned grpc stream for subscriber registration
      */
-    private void createSessions() {
+    public void createSessions(Set<ReplicationSubscriber> subscribers, boolean fromRefresh) {
         newSessionsDiscovered.clear();
-        for (ReplicationSubscriber subscriber : configManager.getRegisteredSubscribers()) {
+        for (ReplicationSubscriber subscriber : subscribers) {
             createOutgoingSessionsBySubscriber(subscriber);
-            createIncomingSessionsBySubscriber(subscriber);
+            if (fromRefresh) {
+                createIncomingSessionsBySubscriber(subscriber, null);
+            }
         }
         updateRouterWithNewSessions();
         createSourceFSMs();
@@ -358,17 +333,17 @@ public class SessionManager {
         return sessionsToAdd;
     }
 
-    private void createIncomingSessionsBySubscriber(ReplicationSubscriber subscriber) {
+    public void createIncomingSessionsBySubscriber(ReplicationSubscriber subscriber, LogReplicationSession sessionFromSource) {
         Set<LogReplicationSession> sessionsToAdd = new HashSet<>();
         try {
-            String localClusterId = topology.getLocalClusterDescriptor().getClusterId();
             IRetry.build(IntervalRetry.class, () -> {
                 try (TxnContext txn = corfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
                     // Create out-going sessions by combing the given registered replication subscriber and topology
                     for(ClusterDescriptor remoteSourceCluster : topology.getRemoteSourceClusters().values()) {
                         Set<ReplicationModel> supportedModels =
                                 topology.getRemoteSourceClusterToReplicationModels().get(remoteSourceCluster);
-                        if (supportedModels.contains(subscriber.getModel())) {
+                        if (subscriber != null && supportedModels.contains(subscriber.getModel())) {
+                            String localClusterId = topology.getLocalClusterDescriptor().getClusterId();
                             LogReplicationSession session =
                                     constructSession(remoteSourceCluster.clusterId, localClusterId, subscriber);
                             // TODO: (V2 / Chris) this is still not thread-safe, need to synchronize on sessions
@@ -376,6 +351,10 @@ public class SessionManager {
                                 sessionsToAdd.add(session);
                                 metadataManager.addSession(txn, session, topology.getTopologyConfigId(), true);
                             }
+                        }
+                        else if (sessionFromSource != null){
+                            sessionsToAdd.add(sessionFromSource);
+                            metadataManager.addSession(txn, sessionFromSource, topology.getTopologyConfigId(), true);
                         }
                     }
                     txn.commit();
@@ -642,5 +621,3 @@ public class SessionManager {
         }
     }
 }
-
-

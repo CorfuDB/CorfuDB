@@ -14,9 +14,7 @@ import org.corfudb.runtime.collections.CorfuStreamEntry;
 import org.corfudb.runtime.collections.StreamListenerResumeOrFullSync;
 import org.corfudb.runtime.exceptions.StreamingException;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.corfudb.infrastructure.logreplication.config.LogReplicationLogicalGroupConfig.CLIENT_CONFIG_TAG;
@@ -122,7 +120,8 @@ public class LogReplicationClientRegisterListener extends StreamListenerResumeOr
                 ReplicationModel model = ((ClientRegistrationInfo) entry.getPayload()).getModel();
                 LogReplication.ReplicationSubscriber subscriber = LogReplication.ReplicationSubscriber.newBuilder()
                         .setClientName(clientName).setModel(model).build();
-                if (model.equals(ReplicationModel.LOGICAL_GROUPS) || model.equals(ReplicationModel.ROUTING_QUEUES)) {
+                if (model.equals(ReplicationModel.FULL_TABLE)
+                        || model.equals(ReplicationModel.LOGICAL_GROUPS) || model.equals(ReplicationModel.ROUTING_QUEUES)) {
                     if(sessionManager.getReplicationContext().getIsLeader().get()) {
                         configManager.onNewClientRegister(subscriber);
                         sessionManager.createAndSendOutgoingSession(subscriber);
