@@ -56,7 +56,10 @@ public class RemoteSourceLeadershipManager {
 
     private final String localNodeId;
 
-    private static final FsmTaskManager taskManager = new FsmTaskManager("sink-consumers", 2);
+    //TODO v2: tune thread count;
+    private static final int TASK_MANAGER_THREAD_COUNT = 2;
+
+    private static final FsmTaskManager taskManager = new FsmTaskManager("sink-consumers", TASK_MANAGER_THREAD_COUNT);
 
     public RemoteSourceLeadershipManager(LogReplicationSession session, LogReplicationClientServerRouter router,
                                          String localNodeId) {

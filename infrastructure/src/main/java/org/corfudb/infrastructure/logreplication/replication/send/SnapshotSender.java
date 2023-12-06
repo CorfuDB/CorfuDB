@@ -23,6 +23,7 @@ import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.Address;
+import org.corfudb.util.retry.RetryNeededException;
 
 import java.util.List;
 import java.util.Optional;
@@ -135,10 +136,16 @@ public class SnapshotSender {
                     cancel = true;
                     break;
                 } catch (ReplicationReaderException e) {
-                    if (e.getCause() instanceof TimeoutException) {
-                        log.info("Snapshot sync timed out waiting for data.  Will request a new snapshot sync");
-                        snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.UNKNOWN, true);
-                        cancel = true;
+                    if (fsm.getSession().getSubscriber().getModel().equals(LogReplication.ReplicationModel.ROUTING_QUEUES)) {
+                        if (e.getCause() instanceof TimeoutException) {
+                            log.info("Snapshot sync timed out waiting for data.  Will request a new snapshot sync");
+                            snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.UNKNOWN, true);
+                            cancel = true;
+                        } else if (e.getCause() instanceof RetryNeededException) {
+                            log.info("Snapshot data not found. Retrying after a delay..");
+                            fsm.inputWithDelay(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_CONTINUE,
+                                    new LogReplicationEventMetadata(snapshotSyncEventId), fsm), DEFAULT_DELAY_MS);
+                        }
                     }
                     break;
                 } catch (Exception e) {
@@ -146,14 +153,6 @@ public class SnapshotSender {
                     snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.UNKNOWN, false);
                     cancel = true;
                     break;
-                }
-
-                if (fsm.getSession().getSubscriber().getModel() == LogReplication.ReplicationModel.ROUTING_QUEUES &&
-                        snapshotReadMessage.getMessages().isEmpty() && !completed) {
-                    log.info("Snapshot data not found. Retrying after a delay..");
-                    fsm.inputWithDelay(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_CONTINUE,
-                            new LogReplicationEventMetadata(snapshotSyncEventId), fsm), DEFAULT_DELAY_MS);
-                    return;
                 }
 
                 messagesSent += processReads(snapshotReadMessage.getMessages(), snapshotSyncEventId, completed);
