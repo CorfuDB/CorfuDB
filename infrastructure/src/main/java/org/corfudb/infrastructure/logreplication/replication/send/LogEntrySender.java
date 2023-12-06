@@ -44,6 +44,7 @@ public class LogEntrySender {
      */
     private final LogReplicationFSM logReplicationFSM;
 
+    @Getter
     private volatile boolean taskActive = false;
 
     /**
@@ -110,7 +111,6 @@ public class LogEntrySender {
                     } else {
                         dataSenderBufferManager.sendWithBuffering(message);
                     }
-
                 } else {
                     /*
                      * If no message is returned we can break out and enqueue a CONTINUE, so other processes can
@@ -120,6 +120,7 @@ public class LogEntrySender {
                     // TODO V2: When log entries to send are sparse, the CPU usage spikes because we keep checking with
                     //  the sequencer if there is any data to be sent continuously.  Add a backoff or delay mechanism
                     //  to avoid the repeated sequencer query.
+
                     break;
                     // Request full sync (something is wrong I cant deliver)
                     // (Optimization):

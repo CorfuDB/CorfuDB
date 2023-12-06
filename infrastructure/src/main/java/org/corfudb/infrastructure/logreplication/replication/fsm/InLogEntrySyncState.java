@@ -7,6 +7,7 @@ import org.corfudb.infrastructure.logreplication.replication.send.LogEntrySender
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 /**
  * This class represents the InLogEntrySync state of the Log Replication State Machine.
@@ -35,6 +36,9 @@ public class InLogEntrySyncState implements LogReplicationState {
      * i.e., current event/request being processed.
      */
     private UUID transitionEventId;
+
+    private long waitRetryRead = 1;
+    private final long WAIT_RETRY_READ_MAX = 5;
 
     /**
      * Constructor
@@ -148,8 +152,15 @@ public class InLogEntrySyncState implements LogReplicationState {
                 fsm.getAckReader().markSnapshotSyncInfoCompleted();
             }
 
-            logEntrySyncFuture = fsm.getLogReplicationFSMWorkers().submit(() ->
-                    logEntrySender.send(transitionEventId));
+            if (from.getType() == LogReplicationStateType.IN_LOG_ENTRY_SYNC && !logEntrySender.isTaskActive()) {
+                logEntrySyncFuture = fsm.getLogReplicationFSMWorkers().schedule(() ->
+                        logEntrySender.send(transitionEventId), waitRetryRead, TimeUnit.SECONDS);
+                waitRetryRead = Math.min(waitRetryRead + 1, WAIT_RETRY_READ_MAX);
+            } else {
+                logEntrySyncFuture = fsm.getLogReplicationFSMWorkers().submit(() ->
+                        logEntrySender.send(transitionEventId));
+                waitRetryRead = 1;
+            }
 
         } catch (Throwable t) {
             log.error("Error on entry of InLogEntrySyncState", t);

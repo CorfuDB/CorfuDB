@@ -18,8 +18,8 @@ import org.corfudb.runtime.LogReplication.LogReplicationSession;
 
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 
 /**
  * This class represents the Log Replication Manager at the source cluster.
@@ -65,7 +65,7 @@ public class LogReplicationSourceManager {
             throw new IllegalArgumentException("Invalid Log Replication: Streams to replicate is EMPTY");
         }
 
-        ExecutorService logReplicationFSMWorkers = Executors.newFixedThreadPool(DEFAULT_FSM_WORKER_THREADS,
+        ScheduledExecutorService logReplicationFSMWorkers = Executors.newScheduledThreadPool(DEFAULT_FSM_WORKER_THREADS,
                 new ThreadFactoryBuilder().setNameFormat("state-machine-worker-" + session.hashCode()).build());
 
         this.metadataManager = metadataManager;

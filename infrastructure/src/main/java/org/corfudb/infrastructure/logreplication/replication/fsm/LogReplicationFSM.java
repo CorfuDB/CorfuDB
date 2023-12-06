@@ -31,6 +31,7 @@ import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ScheduledExecutorService;
 
 
 /**
@@ -145,7 +146,7 @@ public class LogReplicationFSM {
      * Executor service for FSM state tasks (it can be shared across several LogReplicationFSMs)
      */
     @Getter
-    private final ExecutorService logReplicationFSMWorkers;
+    private final ScheduledExecutorService logReplicationFSMWorkers;
 
     /**
      * Executor service for FSM event queue consume
@@ -219,7 +220,7 @@ public class LogReplicationFSM {
      * @param session           Replication Session to the remote(Sink) cluster
      * @param replicationContext Replication context
      */
-    public LogReplicationFSM(DataSender dataSender,ExecutorService workers, LogReplicationAckReader ackReader,
+    public LogReplicationFSM(DataSender dataSender, ScheduledExecutorService workers, LogReplicationAckReader ackReader,
                              LogReplicationSession session, LogReplicationContext replicationContext) {
         this.snapshotReader = createSnapshotReader(session, replicationContext);
         this.logEntryReader = createLogEntryReader(session, replicationContext);
@@ -251,7 +252,7 @@ public class LogReplicationFSM {
      */
     @VisibleForTesting
     public LogReplicationFSM(SnapshotReader snapshotReader, DataSender dataSender,
-                             LogEntryReader logEntryReader, ExecutorService workers, LogReplicationAckReader ackReader,
+                             LogEntryReader logEntryReader, ScheduledExecutorService workers, LogReplicationAckReader ackReader,
                              LogReplicationSession session, LogReplicationContext replicationContext) {
 
         this.snapshotReader = snapshotReader;
