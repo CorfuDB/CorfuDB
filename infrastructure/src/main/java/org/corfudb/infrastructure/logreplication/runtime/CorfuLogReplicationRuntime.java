@@ -138,7 +138,10 @@ public class CorfuLogReplicationRuntime {
     @Getter
     private final LogReplicationContext replicationContext;
 
-    private static final FsmTaskManager taskManager = new FsmTaskManager("runtimeFSM", 2);
+    //TODO v2: tune thread count;
+    private static final int TASK_MANAGER_THREAD_COUNT = 2;
+
+    private static final FsmTaskManager taskManager = new FsmTaskManager("runtimeFSM", TASK_MANAGER_THREAD_COUNT);
 
     /**
      * Default Constructor
