@@ -246,7 +246,13 @@ public abstract class BaseSnapshotReader extends SnapshotReader {
         }
 
         if (!currentStreamHasNext()) {
-            log.debug("Snapshot log reader finished reading stream id={}, name={}", currentStreamInfo.uuid, currentStreamInfo.name);
+            // Since FSM is a perpetually running machine, InSnapshotSync.onEntry() is called even when an incoming
+            // event is ignored for any reason.
+            // This translates to read() being called even if currentStreamInfo was set to null after sending all the
+            // snapshot sync data but before transitioning to the next state.
+            if(currentStreamInfo != null) {
+                log.debug("Snapshot log reader finished reading stream id={}, name={}", currentStreamInfo.uuid, currentStreamInfo.name);
+            }
             currentStreamInfo = null;
 
             if (streamsToSend.isEmpty()) {
@@ -259,6 +265,9 @@ public abstract class BaseSnapshotReader extends SnapshotReader {
     }
 
     private boolean currentStreamHasNext() {
+        if (currentStreamInfo == null) {
+            return false;
+        }
         return currentStreamInfo.iterator.hasNext() || lastEntry != null;
     }
 
