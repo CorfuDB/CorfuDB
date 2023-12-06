@@ -23,6 +23,7 @@ import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.TableRegistry;
+import org.corfudb.util.retry.RetryNeededException;
 import org.corfudb.util.serializer.ProtobufSerializer;
 import org.junit.After;
 import org.junit.Assert;
@@ -50,6 +51,7 @@ public class RoutingQueuesSnapshotReaderTest extends AbstractViewTest {
     private final String namespace = CORFU_SYSTEM_NAMESPACE;
     private LogReplicationConfigManager configManager;
     private LogReplicationContext replicationContext;
+    private long snapshotReqTimestamp;
 
     @Before
     public void setUp() {
@@ -82,17 +84,16 @@ public class RoutingQueuesSnapshotReaderTest extends AbstractViewTest {
     @Test
     public void testReadWithoutData() throws Exception {
         // 1. Try to read when there is no data in the send queue.
-        SnapshotReadMessage snapshotMessage = snapshotReader.read(syncRequestId);
-        Assert.assertTrue(snapshotMessage.getMessages().isEmpty());
-        Assert.assertFalse(snapshotMessage.isEndRead());
+        Exception e = Assert.assertThrows(ReplicationReaderException.class, ()-> snapshotReader.read(syncRequestId));
+        Assert.assertTrue(e.getCause() instanceof RetryNeededException);
 
         // 2. Write data to a different session and read for that session, ensure the timeout window moves.
         LogReplication.LogReplicationSession anotherSession = DefaultClusterConfig.getRoutingQueueSessions().get(1);
         configManager.generateConfig(Collections.singleton(anotherSession), false);
         BaseSnapshotReader anotherSnapshotReader = new RoutingQueuesSnapshotReader(anotherSession, replicationContext);
-        anotherSnapshotReader.reset(lrRuntime.getAddressSpaceView().getLogTail());
 
         generateData(anotherSession);
+        ((RoutingQueuesSnapshotReader) anotherSnapshotReader).setRequestSnapSyncId(snapshotReqTimestamp);
         SnapshotReadMessage differentSnapshotMessage = anotherSnapshotReader.read(syncRequestId);
         Assert.assertTrue(!differentSnapshotMessage.getMessages().isEmpty());
         // Now check if the "session" is going to timeout.
@@ -123,7 +124,7 @@ public class RoutingQueuesSnapshotReaderTest extends AbstractViewTest {
         log.info("Stream UUID: {}, name: {}", CorfuRuntime.getStreamID(streamTagFollowed), streamTagFollowed);
 
         // Corfu log tail which represents the timestamp at which snapshot sync was requested
-        long snapshotReqTimestamp = lrRuntime.getAddressSpaceView().getLogTail();
+        snapshotReqTimestamp = lrRuntime.getAddressSpaceView().getLogTail();
         ((RoutingQueuesSnapshotReader) snapshotReader).setRequestSnapSyncId(snapshotReqTimestamp);
 
         for (int i = 0; i < 10; i++) {
@@ -136,7 +137,7 @@ public class RoutingQueuesSnapshotReaderTest extends AbstractViewTest {
             try (TxnContext txnContext = corfuStore.txn(namespace)) {
                 txnContext.logUpdateEnqueue(q, val, Arrays.asList(CorfuRuntime.getStreamID(streamTagFollowed)),
                     corfuStore);
-                writeMarker(true, snapshotReqTimestamp, txnContext, streamTagFollowed, session);
+                writeMarker(true, txnContext, streamTagFollowed, session);
                 txnContext.commit();
             } catch (Exception e) {
                 log.error("Failed to add data to the queue", e);
@@ -145,14 +146,14 @@ public class RoutingQueuesSnapshotReaderTest extends AbstractViewTest {
         log.info("Queue Size = {}.  Stream tags = {}", q.count(), q.getStreamTags());
 
         // Write the End Marker
-        writeMarker(false, snapshotReqTimestamp, null, streamTagFollowed, session);
+        writeMarker(false, null, streamTagFollowed, session);
     }
 
-    private void writeMarker(boolean start, long timestamp, TxnContext txnContext, String streamTagFollowed,
+    private void writeMarker(boolean start, TxnContext txnContext, String streamTagFollowed,
                              LogReplication.LogReplicationSession session) {
         Queue.RoutingQSnapSyncHeaderKeyMsg snapshotSyncId =
             Queue.RoutingQSnapSyncHeaderKeyMsg.newBuilder().setDestination(session.getSinkClusterId())
-                .setSnapSyncRequestId(0).build();
+                .setSnapSyncRequestId(snapshotReqTimestamp).build();
 
         Queue.RoutingQSnapSyncHeaderMsg marker;
 
@@ -177,7 +178,7 @@ public class RoutingQueuesSnapshotReaderTest extends AbstractViewTest {
         }
 
         // End marker is written in a separate transaction and with different data
-        marker = Queue.RoutingQSnapSyncHeaderMsg.newBuilder().setSnapshotStartTimestamp(-timestamp).build();
+        marker = Queue.RoutingQSnapSyncHeaderMsg.newBuilder().setSnapshotStartTimestamp(-snapshotReqTimestamp).build();
         entry = new CorfuRecord<>(marker, null);
         smrArgs[1] = entry;
         try (TxnContext txn = corfuStore.txn(namespace)) {
