@@ -85,7 +85,7 @@ public class SessionManager {
 
     private final LogReplicationServer incomingMsgHandler;
 
-    private String SESSION_NAME_PREFIX = "session_";
+    private final String SESSION_NAME_PREFIX = "session_";
 
     /**
      * Constructor

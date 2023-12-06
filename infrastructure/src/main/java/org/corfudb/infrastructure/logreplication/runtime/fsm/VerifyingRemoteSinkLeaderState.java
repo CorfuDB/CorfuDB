@@ -32,7 +32,7 @@ public class VerifyingRemoteSinkLeaderState implements LogReplicationRuntimeStat
     }
 
     @Override
-    public LogReplicationRuntimeState processEvent(LogReplicationRuntimeEvent event) throws IllegalTransitionException {
+    public LogReplicationRuntimeState processEvent(LogReplicationRuntimeEvent event) throws IllegalRuntimeTransitionException {
         switch (event.getType()) {
             case REMOTE_LEADER_FOUND:
                 ((NegotiatingState)fsm.getStates().get(LogReplicationRuntimeStateType.NEGOTIATING)).setLeaderNodeId(event.getNodeId());
@@ -61,7 +61,7 @@ public class VerifyingRemoteSinkLeaderState implements LogReplicationRuntimeStat
                 return null;
             default: {
                 log.warn("[{}]:: Unexpected communication event {} when in init state.", fsm.getSessionName(), event.getType());
-                throw new IllegalTransitionException(event.getType(), getType());
+                throw new IllegalRuntimeTransitionException(event.getType(), getType());
             }
         }
     }

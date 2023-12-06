@@ -6,7 +6,7 @@ package org.corfudb.infrastructure.logreplication.runtime.fsm;
  *
  * @author annym
  */
-public class IllegalTransitionException extends Exception {
+public class IllegalRuntimeTransitionException extends Exception {
 
     /**
      * Constructor
@@ -14,7 +14,7 @@ public class IllegalTransitionException extends Exception {
      * @param event     incoming lock event
      * @param stateType current state type
      */
-    public IllegalTransitionException(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType event, LogReplicationRuntimeStateType stateType) {
+    public IllegalRuntimeTransitionException(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType event, LogReplicationRuntimeStateType stateType) {
         super(String.format("Illegal transition for event %s while in state %s", event, stateType));
     }
 

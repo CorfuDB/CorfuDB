@@ -23,7 +23,7 @@ public class WaitingForConnectionsState implements LogReplicationRuntimeState {
     }
 
     @Override
-    public LogReplicationRuntimeState processEvent(LogReplicationRuntimeEvent event) throws IllegalTransitionException {
+    public LogReplicationRuntimeState processEvent(LogReplicationRuntimeEvent event) throws IllegalRuntimeTransitionException {
         switch (event.getType()) {
             case ON_CONNECTION_UP:
                 log.info("[{}]:: On connection up, event={}", fsm.getSessionName(), event);
@@ -34,7 +34,7 @@ public class WaitingForConnectionsState implements LogReplicationRuntimeState {
                 return fsm.getStates().get(LogReplicationRuntimeStateType.STOPPED);
             default: {
                 log.warn("[{}]:: Unexpected communication event {} when in init state.", fsm.getSessionName(), event.getType());
-                throw new IllegalTransitionException(event.getType(), getType());
+                throw new IllegalRuntimeTransitionException(event.getType(), getType());
             }
         }
     }

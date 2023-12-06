@@ -3,12 +3,13 @@ package org.corfudb.infrastructure.logreplication;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.logreplication.replication.fsm.IllegalTransitionException;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationFSM;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationState;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationStateType;
 import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
-import org.corfudb.infrastructure.logreplication.runtime.fsm.IllegalTransitionException;
+import org.corfudb.infrastructure.logreplication.runtime.fsm.IllegalRuntimeTransitionException;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRuntimeEvent;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRuntimeState;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRuntimeStateType;
@@ -162,7 +163,7 @@ public class FsmTaskManager {
                     fsm.setState(newState);
 
                 }
-            } catch (IllegalTransitionException illegalState) {
+            } catch (IllegalRuntimeTransitionException illegalState) {
                 log.error("[{}]:: Illegal log replication event {} when in state {}", sessionName, event.getType(), currState.getType());
             }
 
