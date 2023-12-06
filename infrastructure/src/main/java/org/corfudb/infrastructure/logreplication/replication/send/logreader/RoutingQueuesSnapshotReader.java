@@ -61,7 +61,7 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
 
     // Timeout value for which the reader waits for new data to arrive from the Client.  Once the timeout is
     // exceeded, the current snapshot sync gets cancelled and a new one is started all over again.
-    // TODO: The timeout is currently set to 2s.  This can be revisited later to determine a more appropriate
+    // TODO: The timeout is currently set to 2 mins.  This can be revisited later to determine a more appropriate
     //  value.
     @VisibleForTesting
     public static long DATA_WAIT_TIMEOUT_MS = 120000;
@@ -208,7 +208,7 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
             if (!dataFound() && receiveWindowTimedOut()) {
                 throw new ReplicationReaderException("Timed out waiting for data or end marker for Snapshot Sync", new TimeoutException());
             } else if (!dataFound()) {
-                return new SnapshotReadMessage(messages, endMarkerReached, true);
+                throw new ReplicationReaderException("Data not found. Retry...", new RetryNeededException());
             }
         }
         msg = read(currentStreamInfo, syncRequestId);

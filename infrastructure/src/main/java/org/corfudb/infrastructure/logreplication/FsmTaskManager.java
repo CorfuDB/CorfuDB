@@ -31,12 +31,18 @@ public class FsmTaskManager {
 
     private ScheduledExecutorService fsmWorker;
 
+    // Session -> list of runtime event IDs. This data structure is used to maintain the order of events processed for a given session.
     private final Map<LogReplicationSession, LinkedList<UUID>> sessionToRuntimeEventIdMap;
 
+    // Session -> list of replication event IDs. This data structure is used to maintain the order of events processed for a given session.
     private final Map<LogReplicationSession, LinkedList<UUID>> sessionToReplicationEventIdMap;
 
+    // Session -> list of replication event IDs. This is different than the above in the way that the events in this
+    // structure are to be processed after a delay.
+    // Currently will have the snapshot-apply-verification events and (only relevant for routing queue model) the check for data event
     private final Map<LogReplicationSession, LinkedList<UUID>> sessionToDelayedReplicationEventIdMap;
 
+    // Session -> list of sink event IDs. This data structure is used to maintain the order of events processed for a given session.
     private final Map<LogReplicationSession, LinkedList<UUID>> sessionToSinkEventIdMap;
 
     public FsmTaskManager(String threadName, int threadCount) {
@@ -88,7 +94,7 @@ public class FsmTaskManager {
                     return eventList;
                 });
             }
-        } else {
+        } else if (fsm.equals(FsmEventType.LogReplicationSinkEvent)){
             LogReplicationSession session = ((LogReplicationSinkEvent) event).getSourceLeadershipManager().getSession();
             sessionToSinkEventIdMap.putIfAbsent(session, new LinkedList<>());
             // makes the value part of the map thread safe.
@@ -96,6 +102,8 @@ public class FsmTaskManager {
                 eventList.add(((LogReplicationSinkEvent) event).getEventId());
                 return eventList;
             });
+        } else {
+            log.warn("Ignored {}. Unexpected FSM event type", fsm);
         }
     }
 

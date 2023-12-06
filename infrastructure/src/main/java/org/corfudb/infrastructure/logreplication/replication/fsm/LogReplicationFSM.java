@@ -192,8 +192,11 @@ public class LogReplicationFSM {
     @Getter
     private final LogReplicationSession session;
 
+    //TODO v2: tune thread count;
+    private static final int TASK_MANAGER_THREAD_COUNT = 2;
+
     // not 'final' to help unit test reset taskManager
-    private static FsmTaskManager taskManager = new FsmTaskManager("replicationFSM", 2);
+    private static FsmTaskManager taskManager = new FsmTaskManager("replicationFSM", TASK_MANAGER_THREAD_COUNT);
 
     /**
      * Constructor for LogReplicationFSM, custom read processor for data transformation.
