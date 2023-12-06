@@ -150,7 +150,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
     @Test
     public void testLogReplicationFSMTransitions() throws Exception {
 
-        initLogReplicationFSM(ReaderImplementation.EMPTY, false);
+        initLogReplicationFSM(ReaderImplementation.STREAMS, false);
 
         // Initial state: Initialized
         LogReplicationState initState = fsm.getState();
@@ -431,7 +431,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
      */
     @Test
     public void testSyncStatusUpdatesForSnapshotToLogEntryTransition() throws Exception {
-        initLogReplicationFSM(ReaderImplementation.EMPTY, false);
+        initLogReplicationFSM(ReaderImplementation.STREAMS, false);
 
         final Table<LogReplicationSession, ReplicationStatus, Message> statusTable =
                 this.corfuStore.getTable(NAMESPACE, REPLICATION_STATUS_TABLE_NAME);
@@ -460,7 +460,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         Assert.assertEquals(SyncStatus.ONGOING, currentReplicationVal.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus());
 
         // Transition #2: Wait Snapshot Apply
-        transition(LogReplicationEventType.SNAPSHOT_TRANSFER_COMPLETE, LogReplicationStateType.WAIT_SNAPSHOT_APPLY, snapshotSyncId, false);
+        transition(LogReplicationEventType.SNAPSHOT_TRANSFER_COMPLETE, LogReplicationStateType.WAIT_SNAPSHOT_APPLY, snapshotSyncId, true);
 
         // Transition #3: Log Entry Sync Start
         transition(LogReplicationEventType.SNAPSHOT_APPLY_COMPLETE, LogReplicationStateType.IN_LOG_ENTRY_SYNC, snapshotSyncId, true);
@@ -798,7 +798,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
     public void testTransitionFromInSnapshotSyncWhenMultipleSnapshotSync() throws Exception {
         observeTransitions = true;
 
-        initLogReplicationFSM(ReaderImplementation.EMPTY, false);
+        initLogReplicationFSM(ReaderImplementation.STREAMS, false);
 
         // Initial state: Initialized
         LogReplicationState initState = fsm.getState();
@@ -856,7 +856,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
     @Test
     public void testTransitionFromWaitSnapshotApplyWhenMultipleSnapshotSync() throws Exception {
 
-        initLogReplicationFSM(ReaderImplementation.EMPTY, false);
+        initLogReplicationFSM(ReaderImplementation.STREAMS, false);
 
         // Initial state: Initialized
         LogReplicationState initState = fsm.getState();
@@ -1040,7 +1040,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
 
         assertThat(fsm.getState().getType()).isEqualTo(expectedState);
 
-        return event.getEventId();
+        return event.getMetadata().getSyncId();
     }
 
     /**
