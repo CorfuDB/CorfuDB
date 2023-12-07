@@ -543,38 +543,6 @@ public class LogReplicationMetadataManager {
         }
     }
 
-    /**
-     * Set the snapshot sync start marker, i.e., a unique identification of the current snapshot sync cycle.
-     * Identified by the snapshot sync Id and the min shadow stream update timestamp for this cycle.
-     * @param txn
-     * @param session
-     * @param newSnapshotCycleId
-     * @param shadowStreamTs
-     */
-    public void setSnapshotSyncStartMarker(TxnContext txn, LogReplicationSession session, UUID newSnapshotCycleId,
-                                           CorfuStoreMetadata.Timestamp shadowStreamTs) {
-        ReplicationMetadata metadata = queryReplicationMetadata(txn, session);
-
-
-        UUID currentSnapshotCycleId = new UUID(metadata.getCurrentSnapshotCycleId().getMsb(), metadata.getCurrentSnapshotCycleId().getLsb());
-
-        // Update if current Snapshot Sync differs from the persisted one, otherwise ignore.
-        // It could have already been updated in the case that leader changed in between a snapshot sync cycle
-        if (!Objects.equals(currentSnapshotCycleId, newSnapshotCycleId)) {
-            RpcCommon.UuidMsg uuidMsg = RpcCommon.UuidMsg.newBuilder()
-                .setMsb(newSnapshotCycleId.getMostSignificantBits())
-                .setLsb(newSnapshotCycleId.getLeastSignificantBits())
-                .build();
-
-            ReplicationMetadata updatedMetadata = metadata.toBuilder()
-                .setCurrentCycleMinShadowStreamTs(shadowStreamTs.getSequence())
-                .setCurrentSnapshotCycleId(uuidMsg)
-                .build();
-
-            updateReplicationMetadata(txn, session, updatedMetadata);
-        }
-    }
-
     // =============================== Replication Event Table Methods ===================================
 
     /**
