@@ -491,6 +491,11 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
             });
             return true;
         }
+
+        @Override
+        protected void onSnapshotSyncComplete() {
+            log.info("Snapshot Sync Completed");
+        }
     }
 
     static class RoutingQSiteDiscoverer extends LRSiteDiscoveryListener {
