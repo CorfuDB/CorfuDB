@@ -31,9 +31,9 @@ public class WorkflowOnNotificationHandler extends NotificationListenerHandler {
 
             String workflowName = properties.getProperty("workflow.name");
             Class<?> workflowClass = Class.forName(workflowName);
-            Constructor<?> workflowConstructor = workflowClass.getConstructor(String.class);
-            workflow = (Workflow) workflowConstructor.newInstance(workflowName);
-            workflow.init(properties.getProperty("workflow.properties.file"), corfuStore.getRuntime(), commonUtils);
+            Constructor<?> workflowConstructor = workflowClass.getConstructor(String.class, String.class);
+            workflow = (Workflow) workflowConstructor.newInstance(workflowName, properties.getProperty("workflow.properties.file"));
+            workflow.init(corfuStore.getRuntime(), commonUtils);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }

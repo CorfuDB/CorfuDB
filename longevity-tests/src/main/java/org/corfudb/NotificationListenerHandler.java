@@ -1,6 +1,7 @@
 package org.corfudb;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.runtime.ExampleSchemas;
 import org.corfudb.runtime.collections.*;
@@ -11,6 +12,7 @@ import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+@Slf4j
 public abstract class NotificationListenerHandler extends StreamListenerResumeOrFullSync {
     CommonUtils commonUtils;
     ExecutorService executorService;
@@ -33,8 +35,9 @@ public abstract class NotificationListenerHandler extends StreamListenerResumeOr
                 entries.forEach(entry -> {
                     onEachEntry(schema, entry);
                     ExampleSchemas.ManagedMetadata metadata = (ExampleSchemas.ManagedMetadata) entry.getMetadata();
+//                    log.info("********Notification recieve time: {}", currentTime - metadata.getLastModifiedTime());
                     MicroMeterUtils.time(Duration.ofMillis(currentTime - metadata.getLastModifiedTime()),
-                            "notification.receive.timer", "single");
+                            "notification.receive.timer");
                 });
             }
         ));

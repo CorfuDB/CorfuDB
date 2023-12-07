@@ -32,13 +32,30 @@ public class CommonUtils {
 
         @Parameter(names = "--port", description = "Port to connect to")
         String port;
+
+        @Parameter(names = "--tlsEnabled", description = "Enable tls")
+        boolean tlsEnabled;
+
+        @Parameter(names = "--keystore", description = "keystore")
+        String keystore;
+
+        @Parameter(names = "--ks_password", description = "ks_password")
+        String ks_password;
+
+        @Parameter(names = "--truststore", description = "truststore")
+        String truststore;
+
+        @Parameter(names = "--truststore_password", description = "truststore_password")
+        String truststore_password;
     }
 
     public static final String EXAMPLE_VALUE_PREFIX = "Value_";
     public static final String EXAMPLE_KEY_PREFIX = "Key_";
     public static final int DEFAULT_BOUND = 100;
-    CorfuRuntime corfuRuntime;
-    CorfuStore corfuStore;
+
+    private final CorfuRuntime corfuRuntime;
+    private final CorfuStore corfuStore;
+
     Map<String, Table<ExampleKey, ? extends Message, ManagedMetadata>> openedTables = new HashMap<>();
     Map<String, Table<Queue.CorfuGuidMsg, ExampleValue, Queue.CorfuQueueMetadataMsg>> openedQueues = new HashMap<>();
 

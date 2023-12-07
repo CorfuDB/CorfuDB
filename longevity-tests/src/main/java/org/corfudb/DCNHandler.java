@@ -43,24 +43,24 @@ public class DCNHandler extends NotificationListenerHandler {
 
     @Override
     public void onNext(CorfuStreamEntries results) {
-        results.getEntries().forEach((schema, entries) -> {
-            if (schema.getTableName().contains("Queue")) {
-                return;
-            }
-            try (TxnContext txn = store.txn(namespace)) {
-                int size = txn.count(schema.getTableName());
-                if (size > 5) {
-                    log.debug("TableName: {} has size: {}", schema.getTableName(), size);
-                    List<CorfuStoreEntry<Message, Message, Message>> filteredEntries =
-                            txn.getByIndex(schema.getTableName(), "anotherKey",
-                                    ThreadLocalRandom.current().nextInt(100));
-                    filteredEntries.forEach(e -> txn.delete(schema.getTableName(), e.getKey()));
-                }
-                txn.commit();
-            } catch (Exception e) {
-                log.error("Exception encountered in DCNHandler: " + e);
-            }
-        });
+//        results.getEntries().forEach((schema, entries) -> {
+//            if (schema.getTableName().contains("Queue")) {
+//                return;
+//            }
+//            try (TxnContext txn = store.txn(namespace)) {
+//                int size = txn.count(schema.getTableName());
+//                if (size > 5) {
+//                    log.debug("TableName: {} has size: {}", schema.getTableName(), size);
+//                    List<CorfuStoreEntry<Message, Message, Message>> filteredEntries =
+//                            txn.getByIndex(schema.getTableName(), "anotherKey",
+//                                    ThreadLocalRandom.current().nextInt(100));
+//                    filteredEntries.forEach(e -> txn.delete(schema.getTableName(), e.getKey()));
+//                }
+//                txn.commit();
+//            } catch (Exception e) {
+//                log.error("Exception encountered in DCNHandler: " + e);
+//            }
+//        });
     }
 
     @Override

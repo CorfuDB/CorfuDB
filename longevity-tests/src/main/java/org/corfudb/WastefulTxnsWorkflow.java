@@ -17,33 +17,23 @@ public class WastefulTxnsWorkflow extends Workflow {
     CommonUtils commonUtils;
     Duration interval = Duration.ofSeconds(60);
 
-    public WastefulTxnsWorkflow(String name) {
-        super(name);
+    public WastefulTxnsWorkflow(String name, String propFilePath) {
+        super(name, propFilePath);
     }
 
     @Override
-    void init(String propFilePath, CorfuRuntime corfuRuntime, CommonUtils commonUtils) {
+    void init(CorfuRuntime corfuRuntime, CommonUtils commonUtils) {
         this.corfuRuntime = corfuRuntime;
         this.corfuStore = new CorfuStore(corfuRuntime);
         this.commonUtils = commonUtils;
-
-        try (InputStream input = Files.newInputStream(Paths.get(propFilePath))) {
-            Properties properties = new Properties();
-            properties.load(input);
-
-
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
     }
 
     @Override
     void start() {
-        this.executor.scheduleWithFixedDelay(this::submitTask,
-                1, interval.toMillis()/10, TimeUnit.MILLISECONDS);
+        executor.submit(() -> submitTask(interval));
     }
 
-    void executeTask() {
+    void executeTask(long loadSize) {
         try (TxnContext txn = corfuStore.txn("Random")) {
             //do nothing
             TimeUnit.MINUTES.sleep(1);

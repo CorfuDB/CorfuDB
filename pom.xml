@@ -12,10 +12,11 @@
         <module>common</module>
         <module>cmdlets</module>
         <module>corfudb-tools</module>
+        <module>longevity-tests</module>
         <module>generator</module>
         <module>coverage</module>
         <module>samples</module>
-	<module>annotations</module>
+	    <module>annotations</module>
         <module>debian</module>
         <module>test</module>
         <module>it</module>
