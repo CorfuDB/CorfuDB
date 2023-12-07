@@ -182,6 +182,7 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
     @Getter
     private Set<LogReplicationSession> connectedSessions = ConcurrentHashMap.newKeySet();
 
+    @Getter
     private LogReplicationContext replicationContext;
 
 
@@ -230,13 +231,14 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
                                             Set<LogReplicationSession> outgoingSession,
                                             LogReplicationServer msgHandler,
                                             IClientChannelAdapter clientChannelAdapter,
-                                            IServerChannelAdapter serverChannelAdapter) {
+                                            IServerChannelAdapter serverChannelAdapter, LogReplicationContext replicationContext) {
         this.timeoutResponse = timeout;
         this.localClusterId = localClusterId;
         this.localNodeId = localNodeId;
         this.incomingSession = incomingSession;
         this.outgoingSession = outgoingSession;
         this.msgHandler = msgHandler;
+        this.replicationContext = replicationContext;
 
         this.sessionToRemoteClusterDescriptor = new ConcurrentHashMap<>();
         this.sessionToRequestIdCounter = new ConcurrentHashMap<>();
