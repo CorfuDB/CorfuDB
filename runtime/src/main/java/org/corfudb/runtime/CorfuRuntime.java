@@ -1073,6 +1073,10 @@ public class CorfuRuntime {
         }
     }
 
+    public void reloadSslCertificates() {
+        nodeRouterPool.reloadSslCertificates();
+    }
+
     /**
      * Get a UUID for a named stream.
      *

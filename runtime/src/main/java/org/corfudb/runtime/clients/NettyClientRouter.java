@@ -140,6 +140,8 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object> imple
      */
     public volatile boolean shutdown;
 
+    public volatile boolean reloadSslCertificates;
+
     /**
      * The {@link NodeLocator} which represents the remote node this {@link NettyClientRouter}
      * connects to.
@@ -215,18 +217,6 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object> imple
         outstandingRequests = new ConcurrentHashMap<>();
         shutdown = true;
 
-        if (parameters.isTlsEnabled()) {
-            try {
-                sslContext = SslContextConstructor.constructSslContext(
-                        false,
-                        parameters.getKeyStoreConfig(),
-                        parameters.getTrustStoreConfig()
-                );
-            } catch (SSLException e) {
-                throw new UnrecoverableCorfuError(e);
-            }
-        }
-
         addClient(new BaseHandler());
 
         // Initialize the channel
@@ -300,6 +290,12 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object> imple
                 .findFirst().get();
     }
 
+    @Override
+     public void reloadSslCertificates() {
+        this.reloadSslCertificates = true;
+        channel.close();
+     }
+
     /**
      * Get the {@link ChannelInitializer} used for initializing the Netty channel pipeline.
      *
@@ -312,6 +308,16 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object> imple
                 ch.pipeline().addLast(new IdleStateHandler(parameters.getIdleConnectionTimeout(),
                         parameters.getKeepAlivePeriod(), 0));
                 if (parameters.isTlsEnabled()) {
+                    try {
+                        sslContext = SslContextConstructor.constructSslContext(
+                                false,
+                                parameters.getKeyStoreConfig(),
+                                parameters.getTrustStoreConfig()
+                        );
+                    } catch (SSLException e) {
+                        throw new UnrecoverableCorfuError(e);
+                    }
+
                     ch.pipeline().addLast("ssl", sslContext.newHandler(ch.alloc()));
                 }
                 ch.pipeline().addLast(new LengthFieldPrepender(4));
@@ -358,6 +364,9 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object> imple
                 Sleep.sleepUninterruptibly(parameters.getConnectionRetryRate());
                 log.debug("addReconnectionOnCloseFuture[{}]: reconnecting...", node);
                 // Asynchronously connect again.
+                if (reloadSslCertificates) {
+                    bootstrap.handler(getChannelInitializer());
+                }
                 connectAsync(bootstrap);
             }
         });
@@ -391,6 +400,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object> imple
             // Register a future to reconnect in case we get disconnected
             addReconnectionOnCloseFuture(future.channel(), bootstrap);
             log.debug("connectAsync[{}]: Channel connected.", node);
+            reloadSslCertificates = false;
         } else {
             // Otherwise, the connection failed. If we're not shutdown, try reconnecting after
             // a sleep period.

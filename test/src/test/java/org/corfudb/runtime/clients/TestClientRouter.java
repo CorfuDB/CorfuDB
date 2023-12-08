@@ -350,6 +350,11 @@ public class TestClientRouter implements IClientRouter {
         //TODO - pause pipeline
     }
 
+    @Override
+    public void reloadSslCertificates() {
+        // no-op
+    }
+
     public RequestMsg simulateSerialization(RequestMsg message) throws IOException {
         // Simulate serialization/deserialization
         ByteBuf oBuf = Unpooled.buffer();
