@@ -10,12 +10,10 @@ import org.corfudb.infrastructure.logreplication.infrastructure.msghandlers.LogR
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
-import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientServerRouter;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.sink.RemoteSourceLeadershipManager;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.LogReplication.ReplicationModel;
 import org.corfudb.runtime.LogReplication.ReplicationStatus;
@@ -24,9 +22,7 @@ import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
-import org.corfudb.runtime.proto.service.CorfuMessage;
 import org.corfudb.util.NodeLocator;
-import org.corfudb.util.retry.ExponentialBackoffRetry;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalRetry;
 import org.corfudb.util.retry.RetryNeededException;
@@ -287,6 +283,9 @@ public class SessionManager {
         //  because the mapping is only printed when the session is created for the first time.  If the
         //  logs have rolled over, the information is lost.  We need a permanent store/log of this mapping.
         logNewlyAddedSessionInfo();
+        if (!fromRefresh) {
+            connectToRemoteClusters();
+        }
     }
 
     private Set<LogReplicationSession> createOutgoingSessionsBySubscriber(ReplicationSubscriber subscriber) {
@@ -580,35 +579,6 @@ public class SessionManager {
      */
     public void notifyLeadershipChange() {
         incomingMsgHandler.leadershipChanged();
-    }
-
-    public void createAndSendOutgoingSession(ReplicationSubscriber subscriber) {
-        Set<LogReplicationSession> sessionForSinkSide = this.createOutgoingSessionsBySubscriber(subscriber);
-        for (LogReplicationSession session : sessionForSinkSide) {
-            if (topology.getLocalClusterDescriptor().getClusterId().equals((session.getSourceClusterId())) && topology.getRemoteSinkClusters().containsKey(session.getSinkClusterId())) {
-                CorfuMessage.RequestPayloadMsg payload = CorfuMessage.RequestPayloadMsg.newBuilder().setLrLeadershipQuery(
-                        LogReplication.LogReplicationLeadershipRequestMsg.newBuilder().build()
-                ).build();
-                updateRouterWithNewSessions();
-                createSourceFSMs();
-                logNewlyAddedSessionInfo();
-                connect(session);
-                try {
-                    IRetry.build(ExponentialBackoffRetry.class, () -> {
-                        try {
-                            CompletableFuture<LogReplication.LogReplicationMetadataResponseMsg> cf = router.sendRequestAndGetCompletable(session, payload, router.getSessionToRemoteClusterDescriptor().get(session).getClusterId());
-                            cf.get(CorfuLogReplicationRuntime.DEFAULT_TIMEOUT, TimeUnit.MILLISECONDS);
-                        } catch (TimeoutException | ExecutionException e) {
-                            log.error("Caught exception while waiting for ACK for . Retry.", e);
-                            throw new RetryNeededException();
-                        }
-                        return null;
-                    }).run();
-                } catch (InterruptedException e) {
-                    throw new RuntimeException(e);
-                }
-            }
-        }
     }
 
     private void connect(LogReplicationSession session) {

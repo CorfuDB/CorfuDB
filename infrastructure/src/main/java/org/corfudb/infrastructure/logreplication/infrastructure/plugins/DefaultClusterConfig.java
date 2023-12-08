@@ -120,7 +120,7 @@ public final class DefaultClusterConfig {
                 sessions.add(LogReplicationSession.newBuilder()
                     .setSourceClusterId(sourceClusterId)
                     .setSinkClusterId(sinkClusterId)
-                    .setSubscriber(LogReplicationConfigManager.getClientSubscriber())
+                    .setSubscriber(LogReplicationConfigManager.getDefaultRoutingQueueSubscriber())
                     .build());
             }
         }

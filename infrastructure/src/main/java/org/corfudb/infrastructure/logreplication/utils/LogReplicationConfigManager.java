@@ -58,6 +58,7 @@ import static org.corfudb.infrastructure.logreplication.replication.send.logread
 import static org.corfudb.runtime.LogReplicationLogicalGroupClient.LR_MODEL_METADATA_TABLE_NAME;
 import static org.corfudb.runtime.LogReplicationLogicalGroupClient.LR_REGISTRATION_TABLE_NAME;
 import static org.corfudb.runtime.LogReplicationUtils.LOG_ENTRY_SYNC_QUEUE_NAME_SENDER;
+import static org.corfudb.runtime.RoutingQueueSenderClient.DEFAULT_ROUTING_QUEUE_CLIENT;
 import static org.corfudb.runtime.RoutingQueueSenderClient.DEFAULT_ROUTING_QUEUE_CONFIG_CLIENT;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
@@ -144,6 +145,14 @@ public class LogReplicationConfigManager {
         return ReplicationSubscriber.newBuilder()
                 .setClientName(DEFAULT_CLIENT)
                 .setModel(ReplicationModel.FULL_TABLE)
+                .build();
+    }
+
+    // Testing
+    public static ReplicationSubscriber getDefaultRoutingQueueSubscriber() {
+        return ReplicationSubscriber.newBuilder()
+                .setClientName(DEFAULT_ROUTING_QUEUE_CLIENT)
+                .setModel(ReplicationModel.ROUTING_QUEUES)
                 .build();
     }
 
