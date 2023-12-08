@@ -92,7 +92,7 @@ public class ReplicatingState implements LogReplicationRuntimeState {
                 break;
             case SNAPSHOT_TRANSFER_COMPLETE:
                 replicationSourceManager.resumeSnapshotSync(replicationEvent.getMetadata());
-                log.trace("Wait Snapshot Sync to complete, request={}", replicationEvent.getMetadata().getRequestId());
+                log.trace("Wait Snapshot Sync to complete, request={}", replicationEvent.getMetadata().getSyncId());
                 break;
             case LOG_ENTRY_SYNC_REQUEST:
                 replicationSourceManager.startReplication(replicationEvent);
