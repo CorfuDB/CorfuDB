@@ -92,6 +92,8 @@ public interface IClientRouter {
      */
     void stop();
 
+    void reloadSslCertificates();
+
     /**
      * The host that this router is routing requests for.
      */
