@@ -223,10 +223,6 @@ public class CompactorService implements ManagementService {
                     compactionTriggerPolicy.markCompactionCycleStart();
                     compactorLeaderServices.initCompactionCycle();
                 }
-
-                // experiment reloading ssl certs
-                log.info("reloading ssl certificates from compactor orchestrator");
-                getCorfuRuntime().reloadSslCertificates();
             }
             if (managerStatus != null) {
                 if (managerStatus.getStatus() == StatusType.FAILED || managerStatus.getStatus() == StatusType.COMPLETED) {

@@ -54,12 +54,14 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Random;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
@@ -192,6 +194,11 @@ public class CorfuRuntime {
      */
     @Getter
     private final Serializers serializers = new Serializers();
+
+    private ExecutorService sslReloadDaemon = Executors.newSingleThreadExecutor(
+            new ThreadFactoryBuilder()
+                    .setNameFormat("runtime-sslReloadDaemon")
+                    .build());
 
     /**
      * A class which holds parameters and settings for the {@link CorfuRuntime}.
@@ -966,8 +973,27 @@ public class CorfuRuntime {
             log.warn("Runtime metrics are disabled.");
         }
 
+        sslReloadDaemon.submit(this::triggerReloadSSL);
+
         log.info("Corfu runtime version {} initialized.",
                 Long.toHexString(GitRepositoryState.getCorfuSourceCodeVersion()));
+    }
+
+    private void triggerReloadSSL() {
+        int min = 30;
+        int max = 60;
+        Random random = new Random();
+        int randomInt = random.nextInt((max - min) + 1) + min;
+        try {
+            TimeUnit.SECONDS.sleep(randomInt);
+        } catch (InterruptedException e) {
+            log.warn("Sleep interrupted!", e);
+        }
+
+        log.info("Now trigger reloadSslCertificates");
+        reloadSslCertificates();
+
+        sslReloadDaemon.submit(this::triggerReloadSSL);
     }
 
     /**

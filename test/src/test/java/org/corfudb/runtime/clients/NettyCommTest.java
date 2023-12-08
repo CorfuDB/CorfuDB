@@ -25,8 +25,12 @@ import javax.annotation.Nonnull;
 import javax.net.ssl.SSLSession;
 import java.io.IOException;
 import java.net.ServerSocket;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
+import java.util.Random;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -394,6 +398,141 @@ public class NettyCommTest extends AbstractCorfuTest {
 
         clientRouter.getConnectionFuture().join();
         assertThat(getBaseClient(clientRouter).pingSync()).isTrue();
+        clientRouter.close();
+
+        serverData.shutdownServer();
+        serverData.serverContext.close();
+    }
+
+    @Test
+    public void testBasicReloadSslCerts() throws Exception {
+        int port = findRandomOpenPort();
+
+        Path certDir = Paths.get(PARAMETERS.TEST_TEMP_DIR);
+
+        // Start corfu server
+        CertificateManager serverCertManager = CertificateManager.buildSHA384withEcDsa(certDir);
+        NettyServerData serverData = new NettyServerData(buildServerContext(port, serverCertManager.certManagementConfig));
+        serverData.bootstrapServer();
+
+        // Happy path
+        CertificateManager clientCertManager = CertificateManager.buildSHA384withEcDsa(certDir);
+        clientCertManager.trustStoreManager.addCertificate(serverCertManager);
+        clientCertManager.trustStoreManager.save();
+        serverCertManager.trustStoreManager.addCertificate(clientCertManager);
+        serverCertManager.trustStoreManager.save();
+        NettyClientRouter clientRouter = new NettyClientRouter(
+                NodeLocator.builder().host("localhost").port(port).build(),
+                buildRuntimeParams(clientCertManager.certManagementConfig)
+        );
+        clientRouter.getConnectionFuture().join();
+        assertThat(getBaseClient(clientRouter).pingSync()).isTrue();
+
+        // Reload ssl
+        clientRouter.reloadSslCertAsync();
+        TimeUnit.SECONDS.sleep(1);
+        assertThat(getBaseClient(clientRouter).pingSync()).isTrue();
+
+        clientRouter.close();
+
+        serverData.shutdownServer();
+        serverData.serverContext.close();
+    }
+
+    @Test
+    public void testReloadSslCertsWithCorruptedKeyStore() throws Exception {
+        int port = findRandomOpenPort();
+
+        Path certDir = Paths.get(PARAMETERS.TEST_TEMP_DIR);
+
+        // Start corfu server
+        CertificateManager serverCertManager = CertificateManager.buildSHA384withEcDsa(certDir);
+        NettyServerData serverData = new NettyServerData(buildServerContext(port, serverCertManager.certManagementConfig));
+        serverData.bootstrapServer();
+
+        // Happy path with correct cert
+        CertificateManager clientCertManager = CertificateManager.buildSHA384withEcDsa(certDir);
+        clientCertManager.trustStoreManager.addCertificate(serverCertManager);
+        clientCertManager.trustStoreManager.save();
+        serverCertManager.trustStoreManager.addCertificate(clientCertManager);
+        serverCertManager.trustStoreManager.save();
+        NettyClientRouter clientRouter = new NettyClientRouter(
+                NodeLocator.builder().host("localhost").port(port).build(),
+                buildRuntimeParams(clientCertManager.certManagementConfig)
+        );
+        clientRouter.getConnectionFuture().join();
+        assertThat(getBaseClient(clientRouter).pingSync()).isTrue();
+
+        // Corrupt client cert and reload ssl
+        Path keyStoreFilePath = clientCertManager.keyStoreConfig.getKeyStoreFile();
+        Path keyStoreFilePathCopy = keyStoreFilePath.resolveSibling(keyStoreFilePath.getFileName() + ".copy");
+        Files.move(keyStoreFilePath, keyStoreFilePathCopy, StandardCopyOption.ATOMIC_MOVE);
+
+        byte[] randomBytes = new byte[100];
+        Random random = new Random();
+        random.nextBytes(randomBytes);
+        Files.write(keyStoreFilePath, randomBytes, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
+
+        clientRouter.reloadSslCertAsync();
+        TimeUnit.SECONDS.sleep(1);
+        assertThat(getBaseClient(clientRouter).pingSync()).isFalse();
+
+        // Restore the correct cert and reload ssl
+        Files.move(keyStoreFilePathCopy, keyStoreFilePath, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        clientRouter.reloadSslCertAsync();
+        TimeUnit.SECONDS.sleep(1);
+        assertThat(getBaseClient(clientRouter).pingSync()).isTrue();
+
+        clientRouter.close();
+
+        serverData.shutdownServer();
+        serverData.serverContext.close();
+    }
+
+    @Test
+    public void testReloadSslCertsWithCorruptedTrustStore() throws Exception {
+        int port = findRandomOpenPort();
+
+        Path certDir = Paths.get(PARAMETERS.TEST_TEMP_DIR);
+
+        // Start corfu server
+        CertificateManager serverCertManager = CertificateManager.buildSHA384withEcDsa(certDir);
+        NettyServerData serverData = new NettyServerData(buildServerContext(port, serverCertManager.certManagementConfig));
+        serverData.bootstrapServer();
+
+        // Happy path with correct cert
+        CertificateManager clientCertManager = CertificateManager.buildSHA384withEcDsa(certDir);
+        clientCertManager.trustStoreManager.addCertificate(serverCertManager);
+        clientCertManager.trustStoreManager.save();
+        serverCertManager.trustStoreManager.addCertificate(clientCertManager);
+        serverCertManager.trustStoreManager.save();
+        NettyClientRouter clientRouter = new NettyClientRouter(
+                NodeLocator.builder().host("localhost").port(port).build(),
+                buildRuntimeParams(clientCertManager.certManagementConfig)
+        );
+        clientRouter.getConnectionFuture().join();
+        assertThat(getBaseClient(clientRouter).pingSync()).isTrue();
+
+        // Corrupt client cert and reload ssl
+        Path trustStoreFilePath = clientCertManager.trustStoreManager.config.getTrustStoreFile();
+        Path trustStoreFilePathCopy = trustStoreFilePath.resolveSibling(trustStoreFilePath.getFileName() + ".copy");
+        Files.move(trustStoreFilePath, trustStoreFilePathCopy, StandardCopyOption.ATOMIC_MOVE);
+
+        byte[] randomBytes = new byte[100];
+        Random random = new Random();
+        random.nextBytes(randomBytes);
+        Files.write(trustStoreFilePath, randomBytes, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
+
+        clientRouter.reloadSslCertAsync();
+        TimeUnit.SECONDS.sleep(1);
+        assertThat(getBaseClient(clientRouter).pingSync()).isFalse();
+
+        // Restore the correct cert and reload ssl
+        Files.move(trustStoreFilePathCopy, trustStoreFilePath, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        clientRouter.reloadSslCertAsync();
+        TimeUnit.SECONDS.sleep(1);
+        assertThat(getBaseClient(clientRouter).pingSync()).isTrue();
+
         clientRouter.close();
 
         serverData.shutdownServer();

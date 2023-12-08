@@ -92,7 +92,7 @@ public interface IClientRouter {
      */
     void stop();
 
-    void reloadSslCertificates();
+    void reloadSslCertAsync();
 
     /**
      * The host that this router is routing requests for.

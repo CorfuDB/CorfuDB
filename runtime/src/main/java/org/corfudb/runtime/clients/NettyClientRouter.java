@@ -30,6 +30,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.Nonnull;
 import javax.net.ssl.SSLException;
@@ -142,7 +143,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object> imple
      */
     public volatile boolean shutdown;
 
-    public volatile boolean reloadSslCertificates;
+    public final AtomicBoolean reloadSslCertificates = new AtomicBoolean(false);
 
     /**
      * The {@link NodeLocator} which represents the remote node this {@link NettyClientRouter}
@@ -182,6 +183,8 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object> imple
         CompletableFuture<?> future;
         RequestPayloadMsg.PayloadCase payloadCase;
     }
+
+    static volatile AtomicLong counter = new AtomicLong(0);
 
     /**
      * Creates a new NettyClientRouter connected to the specified host and port with the specified tls
@@ -293,8 +296,8 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object> imple
     }
 
     @Override
-     public void reloadSslCertificates() {
-        this.reloadSslCertificates = true;
+     public void reloadSslCertAsync() {
+        this.reloadSslCertificates.set(true);
         channel.close();
      }
 
@@ -317,6 +320,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object> imple
                                 parameters.getTrustStoreConfig()
                         );
                     } catch (SSLException e) {
+                        log.error("Cannot init channel due to SSL error", e);
                         throw new UnrecoverableCorfuError(e);
                     }
 
@@ -366,7 +370,10 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object> imple
                 Sleep.sleepUninterruptibly(parameters.getConnectionRetryRate());
                 log.debug("addReconnectionOnCloseFuture[{}]: reconnecting...", node);
                 // Asynchronously connect again.
-                if (reloadSslCertificates) {
+                if (reloadSslCertificates.get()) {
+                    if (true) {
+                        throw new InterruptedException();
+                    }
                     bootstrap.handler(getChannelInitializer());
                     log.debug("addReconnectionOnCloseFuture[{}]: reloaded ssl certs", node);
                 }
@@ -403,7 +410,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object> imple
             // Register a future to reconnect in case we get disconnected
             addReconnectionOnCloseFuture(future.channel(), bootstrap);
             log.debug("connectAsync[{}]: Channel connected.", node);
-            reloadSslCertificates = false;
+            reloadSslCertificates.set(false);
         } else {
             // Otherwise, the connection failed. If we're not shutdown, try reconnecting after
             // a sleep period.
@@ -605,7 +612,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object> imple
     }
 
     @Override
-    protected void channelRead0(ChannelHandlerContext ctx, Object o) throws Exception {
+    protected void channelRead0(ChannelHandlerContext ctx, Object o) {
         try {
             if (o instanceof ResponseMsg) {
                 ResponseMsg responseMsg = (ResponseMsg) o;
@@ -662,7 +669,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object> imple
     }
 
     @Override
-    public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
+    public void userEventTriggered(ChannelHandlerContext ctx, Object evt) {
         if (evt.equals(ClientHandshakeEvent.CONNECTED)) {
             // Handshake successful. Complete the connection future to allow
             // clients to proceed.

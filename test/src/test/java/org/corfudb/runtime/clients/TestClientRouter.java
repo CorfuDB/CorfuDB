@@ -352,7 +352,7 @@ public class TestClientRouter implements IClientRouter {
     }
 
     @Override
-    public void reloadSslCertificates() {
+    public void reloadSslCertAsync() {
         // no-op
     }
 

@@ -59,7 +59,7 @@ public class NodeRouterPool {
 
     public void reloadSslCertificates() {
         for (IClientRouter r : nodeRouters.values()) {
-            r.reloadSslCertificates();
+            r.reloadSslCertAsync();
         }
     }
 }

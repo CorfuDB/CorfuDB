@@ -82,6 +82,11 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
                 // batches whenever we have a cache miss. This allows next reads
                 // to be serviced immediately, rather than reading one entry at a time.
                 ld = read(currentRead, queue);
+                log.info("read log at {}", currentRead);
+
+                if (currentRead == 500L) {
+                    runtime.reloadSslCertificates();
+                }
 
                 if (queue == getCurrentContext().readQueue) {
                     // Validate that the data entry belongs to this stream, otherwise, skip.
