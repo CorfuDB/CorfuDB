@@ -61,7 +61,7 @@
     <appender name="log_unit_writes_file" class="ch.qos.logback.core.rolling.RollingFileAppender">
         <file>${LOG_DIRECTORY}/tx-log.log</file>
         <rollingPolicy class="ch.qos.logback.core.rolling.FixedWindowRollingPolicy">
-            <fileNamePattern>${LOG_DIRECTORY}/log-unit.%i.log.gz</fileNamePattern>
+            <fileNamePattern>${LOG_DIRECTORY}/tx-log.%i.log.gz</fileNamePattern>
             <minIndex>1</minIndex>
             <maxIndex>75</maxIndex>
         </rollingPolicy>
