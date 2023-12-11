@@ -36,23 +36,6 @@
         </encoder>
     </appender>
 
-    <appender name="log_unit_writes_file" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>${LOG_DIRECTORY}/log-unit.log</file>
-        <rollingPolicy class="ch.qos.logback.core.rolling.FixedWindowRollingPolicy">
-            <fileNamePattern>${LOG_DIRECTORY}/log-unit.%i.log.gz</fileNamePattern>
-            <minIndex>1</minIndex>
-            <maxIndex>50</maxIndex>
-        </rollingPolicy>
-        <triggeringPolicy class="ch.qos.logback.core.rolling.SizeBasedTriggeringPolicy">
-            <maxFileSize>100MB</maxFileSize>
-        </triggeringPolicy>
-        <encoder>
-            <pattern>
-                %date{yyyy-MM-dd'T'HH:mm:ss.SSSXXX, UTC} | %msg%n%xException
-            </pattern>
-        </encoder>
-    </appender>
-
     <!-- https://logback.qos.ch/manual/appenders.html#AsyncAppender -->
     <appender name="async_file" class="ch.qos.logback.classic.AsyncAppender">
         <appender-ref ref="compactor_file" />
@@ -64,16 +47,6 @@
         <queueSize>1024</queueSize>
         <maxFlushTime>5000</maxFlushTime>
     </appender>
-
-    <appender name="async_log_unit_writes_file" class="ch.qos.logback.classic.AsyncAppender">
-        <appender-ref ref="log_unit_writes_file" />
-        <queueSize>1024</queueSize>
-        <maxFlushTime>1000</maxFlushTime>
-    </appender>
-
-    <logger name="org.corfudb.infrastructure.LogUnitServerWriter" level="debug">
-        <appender-ref ref="async_log_unit_writes_file"/>
-    </logger>
 
     <root level="info">
         <appender-ref ref="async_file"/>
