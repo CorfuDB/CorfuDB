@@ -97,6 +97,8 @@ import static org.corfudb.protocols.service.CorfuProtocolMessage.getResponseMsg;
 @Slf4j
 public class LogUnitServer extends AbstractServer {
 
+    public static final int UUID_TAIL_LENGTH = 8;
+
     private static final String WRITER_LOGGER_NAME = LogUnitServer.class.getName() + "Writer";
     private static final Logger WRITER_LOG = LoggerFactory.getLogger(WRITER_LOGGER_NAME);
 
@@ -305,7 +307,6 @@ public class LogUnitServer extends AbstractServer {
      */
     @RequestHandler(type = PayloadCase.WRITE_LOG_REQUEST)
     private void handleWrite(RequestMsg req, ChannelHandlerContext ctx, IServerRouter router) {
-        final int uuidTailLength = 12;
 
         LogData logData = getLogData(req.getPayload().getWriteLogRequest().getLogData());
         Map<UUID, Long> backPointerMap = logData.getBackpointerMap();
@@ -313,7 +314,7 @@ public class LogUnitServer extends AbstractServer {
         Map<String, Long> reducedBackPointerMap = new HashMap<>(backPointerMap.size());
         backPointerMap.forEach((uuid, data) ->{
             String uuidStr = uuid.toString();
-            String uuidTail = uuidStr.substring(uuidStr.length() - uuidTailLength);
+            String uuidTail = uuidStr.substring(uuidStr.length() - UUID_TAIL_LENGTH);
 
             reducedBackPointerMap.put(uuidTail, data);
         });
