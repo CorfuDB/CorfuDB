@@ -37,6 +37,8 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 @Slf4j
 public class LogReplicationLogicalGroupClient extends LogReplicationClient{
 
+    public static final String DEFAULT_LOGICAL_GROUP_CLIENT = "00000000-0000-0000-0000-0000000000001";
+
     /**
      * Key: ClientDestinationInfoKey
      * Value: DestinationInfoVal
@@ -65,7 +67,7 @@ public class LogReplicationLogicalGroupClient extends LogReplicationClient{
         Preconditions.checkArgument(isValid(clientName), "clientName is null or empty.");
 
         this.corfuStore = new CorfuStore(runtime);
-        this.clientName = clientName;;
+        this.clientName = clientName;
 
         try {
             this.sourceMetadataTable = corfuStore.getTable(CORFU_SYSTEM_NAMESPACE, LR_MODEL_METADATA_TABLE_NAME);

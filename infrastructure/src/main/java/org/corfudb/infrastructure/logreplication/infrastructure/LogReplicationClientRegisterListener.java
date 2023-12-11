@@ -17,8 +17,6 @@ import org.corfudb.runtime.exceptions.StreamingException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.corfudb.infrastructure.logreplication.config.LogReplicationLogicalGroupConfig.CLIENT_CONFIG_TAG;
@@ -73,7 +71,9 @@ public class LogReplicationClientRegisterListener extends StreamListenerResumeOr
      */
     public void start() {
         CorfuStoreMetadata.Timestamp timestamp = configManager.preprocessAndGetTail();
-        CorfuStoreMetadata.Timestamp clientSubscriptionTimeStamp = CorfuStoreMetadata.Timestamp.newBuilder().setEpoch(timestamp.getEpoch()).setSequence(timestamp.getSequence()-1).build();
+        CorfuStoreMetadata.Timestamp clientSubscriptionTimeStamp = CorfuStoreMetadata.Timestamp.
+                newBuilder().setEpoch(timestamp.getEpoch()).setSequence(timestamp.getSequence()-1).build();
+
         log.info("Start log replication listener for client registration table from {}", clientSubscriptionTimeStamp);
         try {
             corfuStore.subscribeListener(this, CORFU_SYSTEM_NAMESPACE, CLIENT_CONFIG_TAG, tablesOfInterest, clientSubscriptionTimeStamp);
@@ -124,15 +124,12 @@ public class LogReplicationClientRegisterListener extends StreamListenerResumeOr
                 ReplicationModel model = ((ClientRegistrationInfo) entry.getPayload()).getModel();
                 LogReplication.ReplicationSubscriber subscriber = LogReplication.ReplicationSubscriber.newBuilder()
                         .setClientName(clientName).setModel(model).build();
-                if (model.equals(ReplicationModel.FULL_TABLE)
-                        || model.equals(ReplicationModel.LOGICAL_GROUPS) || model.equals(ReplicationModel.ROUTING_QUEUES)) {
-                    if(sessionManager.getReplicationContext().getIsLeader().get()) {
-                        configManager.onNewClientRegister(subscriber);
-                        Set<LogReplication.ReplicationSubscriber> subscriberSet = ConcurrentHashMap.newKeySet();
-                        subscriberSet.add(subscriber);
-                        sessionManager.createSessions(subscriberSet, false);
-                    }
-                    }
+                if ((model.equals(ReplicationModel.FULL_TABLE) || model.equals(ReplicationModel.LOGICAL_GROUPS)
+                        || model.equals(ReplicationModel.ROUTING_QUEUES)) && sessionManager.getReplicationContext().getIsLeader().get()) {
+                    configManager.onNewClientRegister(subscriber);
+                    sessionManager.createSessionsForClientRegister(subscriber);
+
+                }
                 log.info("New client {} registered with model {}", clientName, model);
             } else if (entry.getOperation().equals(CorfuStreamEntry.OperationType.DELETE)) {
                 // TODO (V2 / Chris/Shreay): add unregister API for clients
