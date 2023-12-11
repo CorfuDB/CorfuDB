@@ -258,6 +258,7 @@ public class TxnContext
      * This API is used to add an entry to the CorfuQueue without materializing the queue in memory.
      *
      * @param table  Table object to operate on the queue.
+     * @param record Record to be added.
      * @param streamTags  - stream tags associated to the given stream id
      * @param corfuStore CorfuStore that gets the runtime for the serializer.
      * @param <K>    Type of Key.

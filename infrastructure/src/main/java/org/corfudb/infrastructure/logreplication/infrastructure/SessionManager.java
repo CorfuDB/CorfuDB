@@ -31,7 +31,8 @@ import javax.annotation.Nonnull;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
@@ -216,7 +217,7 @@ public class SessionManager {
                 stopReplication(sessionsToRemove);
                 updateTopology(newTopology);
                 updateReplicationParameters(Sets.intersection(sessionsUnchanged, outgoingSessions));
-                createSessions(configManager.getRegisteredSubscribers(), true);
+                createSessions();
                 return null;
             }).run();
         } catch (InterruptedException e) {
@@ -266,13 +267,11 @@ public class SessionManager {
      *     Source side: invoke session creation method from client config listener
      *     Sink side: assigned grpc stream for subscriber registration
      */
-    public void createSessions(Set<ReplicationSubscriber> subscribers, boolean fromRefresh) {
+    private void createSessions() {
         newSessionsDiscovered.clear();
-        for (ReplicationSubscriber subscriber : subscribers) {
+        for (ReplicationSubscriber subscriber : configManager.getRegisteredSubscribers()) {
             createOutgoingSessionsBySubscriber(subscriber);
-            if (fromRefresh) {
-                createIncomingSessionsBySubscriber(subscriber, null);
-            }
+            createIncomingSessionsBySubscriber(subscriber);
         }
         updateRouterWithNewSessions();
         createSourceFSMs();
@@ -283,9 +282,13 @@ public class SessionManager {
         //  because the mapping is only printed when the session is created for the first time.  If the
         //  logs have rolled over, the information is lost.  We need a permanent store/log of this mapping.
         logNewlyAddedSessionInfo();
-        if (!fromRefresh) {
-            connectToRemoteClusters();
-        }
+    }
+
+    public void createSessionsForClientRegister(ReplicationSubscriber subscriber) {
+        createOutgoingSessionsBySubscriber(subscriber);
+        updateRouterWithNewSessions();
+        createSourceFSMs();
+        connectToRemoteClusters();
     }
 
     private Set<LogReplicationSession> createOutgoingSessionsBySubscriber(ReplicationSubscriber subscriber) {
@@ -332,17 +335,17 @@ public class SessionManager {
         return sessionsToAdd;
     }
 
-    public void createIncomingSessionsBySubscriber(ReplicationSubscriber subscriber, LogReplicationSession sessionFromSource) {
+    public void createIncomingSessionsBySubscriber(ReplicationSubscriber subscriber) {
         Set<LogReplicationSession> sessionsToAdd = new HashSet<>();
         try {
+            String localClusterId = topology.getLocalClusterDescriptor().getClusterId();
             IRetry.build(IntervalRetry.class, () -> {
                 try (TxnContext txn = corfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
                     // Create out-going sessions by combing the given registered replication subscriber and topology
                     for(ClusterDescriptor remoteSourceCluster : topology.getRemoteSourceClusters().values()) {
                         Set<ReplicationModel> supportedModels =
                                 topology.getRemoteSourceClusterToReplicationModels().get(remoteSourceCluster);
-                        if (subscriber != null && supportedModels.contains(subscriber.getModel())) {
-                            String localClusterId = topology.getLocalClusterDescriptor().getClusterId();
+                        if (supportedModels.contains(subscriber.getModel())) {
                             LogReplicationSession session =
                                     constructSession(remoteSourceCluster.clusterId, localClusterId, subscriber);
                             // TODO: (V2 / Chris) this is still not thread-safe, need to synchronize on sessions
@@ -350,10 +353,6 @@ public class SessionManager {
                                 sessionsToAdd.add(session);
                                 metadataManager.addSession(txn, session, topology.getTopologyConfigId(), true);
                             }
-                        }
-                        else if (sessionFromSource != null){
-                            sessionsToAdd.add(sessionFromSource);
-                            metadataManager.addSession(txn, sessionFromSource, topology.getTopologyConfigId(), true);
                         }
                     }
                     txn.commit();
@@ -373,7 +372,33 @@ public class SessionManager {
         incomingSessions.addAll(sessionsToAdd);
         log.info("Total of {} incoming sessions created with subscriber {}, sessions={}", sessionsToAdd.size(),
                 subscriber, sessionsToAdd);
+        configManager.generateConfig(sessionsToAdd, true);
+    }
 
+    public synchronized void addSessionForClient(LogReplicationSession sessionFromSource) {
+        Set<LogReplicationSession> sessionsToAdd = new HashSet<>();
+        try {
+            IRetry.build(IntervalRetry.class, () -> {
+                try (TxnContext txn = corfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
+                    if (!sessions.contains(sessionFromSource)) {
+                        sessionsToAdd.add(sessionFromSource);
+                        metadataManager.addSession(txn, sessionFromSource, topology.getTopologyConfigId(), true);
+                    }
+                    txn.commit();
+                    return null;
+                } catch (TransactionAbortedException e) {
+                    log.error("Failed to create sessions. Retrying.", e);
+                    sessionsToAdd.clear();
+                    throw new RetryNeededException();
+                }
+            }).run();
+        } catch (InterruptedException e) {
+            log.error("Unrecoverable Corfu Error when creating the sessions", e);
+            throw new UnrecoverableCorfuInterruptedError(e);
+        }
+        newSessionsDiscovered.addAll(sessionsToAdd);
+        sessions.addAll(sessionsToAdd);
+        incomingSessions.addAll(sessionsToAdd);
         configManager.generateConfig(sessionsToAdd, true);
     }
 

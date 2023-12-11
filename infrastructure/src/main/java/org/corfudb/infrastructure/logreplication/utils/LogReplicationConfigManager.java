@@ -60,6 +60,7 @@ import static org.corfudb.runtime.LogReplicationLogicalGroupClient.LR_REGISTRATI
 import static org.corfudb.runtime.LogReplicationUtils.LOG_ENTRY_SYNC_QUEUE_NAME_SENDER;
 import static org.corfudb.runtime.RoutingQueueSenderClient.DEFAULT_ROUTING_QUEUE_CLIENT;
 import static org.corfudb.runtime.RoutingQueueSenderClient.DEFAULT_ROUTING_QUEUE_CONFIG_CLIENT;
+import static org.corfudb.runtime.LogReplicationLogicalGroupClient.DEFAULT_LOGICAL_GROUP_CLIENT;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 /**
@@ -99,8 +100,6 @@ public class LogReplicationConfigManager {
     @Getter
     private final Set<ReplicationSubscriber> registeredSubscribers = ConcurrentHashMap.newKeySet();
 
-    private static ReplicationSubscriber clientReplicationSubscriber;
-
     // In-memory list of registry table entries for finding streams to replicate
     private List<Map.Entry<TableName, CorfuRecord<TableDescriptors, TableMetadata>>> registryTableEntries =
             new ArrayList<>();
@@ -130,8 +129,18 @@ public class LogReplicationConfigManager {
         init();
     }
 
-    public static ReplicationSubscriber getClientSubscriber() {
-        return clientReplicationSubscriber;
+    public static ReplicationSubscriber getDefaultLogicalGroupSubscriber() {
+        return ReplicationSubscriber.newBuilder()
+                .setClientName(DEFAULT_LOGICAL_GROUP_CLIENT)
+                .setModel(ReplicationModel.LOGICAL_GROUPS)
+                .build();
+    }
+
+    public static ReplicationSubscriber getDefaultRoutingQueueSubscriber() {
+        return ReplicationSubscriber.newBuilder()
+                .setClientName(DEFAULT_ROUTING_QUEUE_CLIENT)
+                .setModel(ReplicationModel.ROUTING_QUEUES)
+                .build();
     }
 
     public static ReplicationSubscriber getDefaultRoutingQueueConfigSubscriber() {
@@ -147,15 +156,6 @@ public class LogReplicationConfigManager {
                 .setModel(ReplicationModel.FULL_TABLE)
                 .build();
     }
-
-    // Testing
-    public static ReplicationSubscriber getDefaultRoutingQueueSubscriber() {
-        return ReplicationSubscriber.newBuilder()
-                .setClientName(DEFAULT_ROUTING_QUEUE_CLIENT)
-                .setModel(ReplicationModel.ROUTING_QUEUES)
-                .build();
-    }
-
     /**
      * Init config manager:
      * 1. Adding default subscriber to registeredSubscribers
@@ -282,20 +282,19 @@ public class LogReplicationConfigManager {
                 // Find streams to replicate for every logical group for this session
                 String logicalGroup = entry.getValue().getMetadata().getTableOptions()
                         .getReplicationGroup().getLogicalGroup();
-                if (session.getSubscriber().getClientName().equals(clientReplicationSubscriber.getClientName()) &&
-                clientReplicationSubscriber.getModel().equals(ReplicationModel.LOGICAL_GROUPS)) {
-                    if (isSink || logicalGroupToStreams.containsKey(logicalGroup)) {
-                        streamsToReplicate.add(tableName);
-                        Set<String> relatedStreams = logicalGroupToStreams.getOrDefault(logicalGroup, new HashSet<>());
-                        relatedStreams.add(tableName);
-                        logicalGroupToStreams.put(logicalGroup, relatedStreams);
-                        // Collect tags for this stream
-                        List<UUID> tags = streamToTagsMap.getOrDefault(streamId, new ArrayList<>());
-                        entry.getValue().getMetadata().getTableOptions().getStreamTagList().stream()
-                                .map(streamTag -> TableRegistry.getStreamIdForStreamTag(entry.getKey().getNamespace(), streamTag))
-                                .forEach(tags::add);
-                        streamToTagsMap.put(streamId, tags);
-                    }
+                //if (session.getSubscriber().getClientName().equals(clientReplicationSubscriber.getClientName()) &&
+                //clientReplicationSubscriber.getModel().equals(ReplicationModel.LOGICAL_GROUPS)) {
+                if (isSink || logicalGroupToStreams.containsKey(logicalGroup)) {
+                    streamsToReplicate.add(tableName);
+                    Set<String> relatedStreams = logicalGroupToStreams.getOrDefault(logicalGroup, new HashSet<>());
+                    relatedStreams.add(tableName);
+                    logicalGroupToStreams.put(logicalGroup, relatedStreams);
+                    // Collect tags for this stream
+                    List<UUID> tags = streamToTagsMap.getOrDefault(streamId, new ArrayList<>());
+                    entry.getValue().getMetadata().getTableOptions().getStreamTagList().stream()
+                            .map(streamTag -> TableRegistry.getStreamIdForStreamTag(entry.getKey().getNamespace(), streamTag))
+                            .forEach(tags::add);
+                    streamToTagsMap.put(streamId, tags);
                 }
             }
         });
@@ -474,8 +473,8 @@ public class LogReplicationConfigManager {
                         ReplicationModel model = entry.getPayload().getModel();
                         ReplicationSubscriber subscriber = ReplicationSubscriber.newBuilder()
                                 .setClientName(clientName).setModel(model).build();
-                        if (model.equals(ReplicationModel.LOGICAL_GROUPS) || model.equals(ReplicationModel.ROUTING_QUEUES)) {
-                            clientReplicationSubscriber = subscriber;
+                        if (model.equals(ReplicationModel.LOGICAL_GROUPS)) {
+                            subscriber = getDefaultLogicalGroupSubscriber();
                         }
                         registeredSubscribers.add(subscriber);
                     });
