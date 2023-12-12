@@ -76,6 +76,7 @@ public class LogReplicationMetadataManager {
     public static final String REPLICATION_EVENT_TABLE_NAME = "LogReplicationEventTable";
     public static final String LR_STREAM_TAG = "log_replication";
 
+    @Getter
     private final CorfuStore corfuStore;
 
     @Getter
