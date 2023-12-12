@@ -59,7 +59,7 @@ public class BatchProcessor implements AutoCloseable {
      * This is persisted in the ServerContext by the LogUnitServer to withstand restarts.
      */
     @Getter
-    private long sealEpoch;
+    private volatile long sealEpoch;
 
     private final BatchProcessorContext context;
 
@@ -243,6 +243,9 @@ public class BatchProcessor implements AutoCloseable {
         } catch (Exception e) {
             log.error("Caught exception in the write processor ", e);
             context.setErrorStatus();
+        } catch (Throwable th) {
+            log.error("Encountered throwable in the write processor ", th);
+            throw th;
         }
     }
 
