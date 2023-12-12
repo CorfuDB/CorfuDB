@@ -314,7 +314,7 @@ public class LogUnitServer extends AbstractServer {
         Map<String, Long> reducedBackPointerMap = new HashMap<>(backPointerMap.size());
         backPointerMap.forEach((uuid, data) ->{
             String uuidStr = uuid.toString();
-            String uuidTail = uuidStr.substring(uuidStr.length() - UUID_TAIL_LENGTH);
+            String uuidTail = uuidStr.substring(0, UUID_TAIL_LENGTH);
 
             reducedBackPointerMap.put(uuidTail, data);
         });
