@@ -4,6 +4,7 @@ import com.google.common.collect.Iterables;
 import com.google.protobuf.Message;
 import io.micrometer.core.instrument.Timer;
 import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
@@ -20,6 +21,7 @@ import org.corfudb.runtime.LogReplicationUtils;
 import org.corfudb.runtime.Queue;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.view.CorfuGuidGenerator;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.Utils;
@@ -59,6 +61,10 @@ public class CorfuStore {
     private final CorfuRuntime runtime;
 
     private final CorfuStoreMetrics corfuStoreMetrics;
+
+    @Getter
+    @Setter
+    private volatile CorfuGuidGenerator corfuGuidGenerator;
 
     /**
      * Creates a new CorfuStore.

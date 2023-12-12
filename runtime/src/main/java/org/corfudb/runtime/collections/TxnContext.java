@@ -257,8 +257,8 @@ public class TxnContext
     /**
      * This API is used to add an entry to the CorfuQueue without materializing the queue in memory.
      *
-     * @param table  Table object to operate on the queue.
-     * @param record Record to be added.
+     * @param queueUUID  Corfu Stream ID of the Queue
+     * @param value Record to be added.
      * @param streamTags  - stream tags associated to the given stream id
      * @param corfuStore CorfuStore that gets the runtime for the serializer.
      * @param <K>    Type of Key.
@@ -268,9 +268,9 @@ public class TxnContext
      */
     @Nonnull
     public <K extends Message, V extends Message, M extends Message>
-    K logUpdateEnqueue(@Nonnull Table<K, V, M> table,
+    K logUpdateEnqueue(@Nonnull UUID queueUUID,
                        @Nonnull final V value, List<UUID> streamTags, CorfuStore corfuStore) {
-        return crud.logUpdateEnqueue(table, value, streamTags, corfuStore);
+        return crud.logUpdateEnqueue(queueUUID, value, streamTags, corfuStore);
     }
 
     /**
