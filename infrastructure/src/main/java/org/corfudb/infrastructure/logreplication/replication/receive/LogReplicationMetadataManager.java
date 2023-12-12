@@ -147,14 +147,14 @@ public class LogReplicationMetadataManager {
      * 2. LogReplicationStatus
      * Type: Schema change for key AND value types with NO table name change
      * (ReplicationStatusKey, ReplicationStatusVal) ->
-     * (LogReplicationSession.class, ReplicationMetadata.class)
+     * (LogReplicationSession, ReplicationMetadata)
      * Action: Make serializer aware of old types, open table with new type, clear it
      *
      * 3. LogReplicationEventTable
-     * Type: Schema change for Key type only
-     * (ReplicationEventKey, ReplicationEvent) ->
-     * (ReplicationEventInfoKey, ReplicationEvent)
-     * Action: Make serializer aware of old key type, open table with new type, clear it
+     * Type: Schema change for Key type and path of Value type
+     * (ReplicationEventKey, LogReplicationMetadata.ReplicationEvent) ->
+     * (ReplicationEventInfoKey, LogReplication.ReplicationEvent)
+     * Action: Make serializer aware of old key and value types, open table with new types, clear it
      * @param corfuStore - the same runtime used by LogReplicationMetadataManager
      */
     public static void addLegacyTypesToSerializer(CorfuStore corfuStore) {
@@ -164,6 +164,9 @@ public class LogReplicationMetadataManager {
                 .addTypeToClassMap(LogReplicationMetadata.ReplicationStatusVal.getDefaultInstance());
         corfuStore.getRuntime().getTableRegistry()
                 .addTypeToClassMap(LogReplicationMetadata.ReplicationEventKey.getDefaultInstance());
+        corfuStore.getRuntime().getTableRegistry()
+                .addTypeToClassMap(LogReplicationMetadata.ReplicationEvent.getDefaultInstance());
+
     }
 
     public static void migrateData(TxnContext txnContext) {
