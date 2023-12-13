@@ -47,9 +47,10 @@ public class LogEntrySender {
     private volatile boolean taskActive = false;
 
     // TODO V2: These values need to be tuned as to not add any unnecessary increase in latency
+    // Duration in milliseconds to delay the execution of the next read + send operation.
     private long waitRetryRead = 100;
-    private final long WAIT_RETRY_READ_INCREMENT = 50;
-    private final long WAIT_RETRY_READ_MAX = 200;
+    private final long WAIT_RETRY_READ_INCREMENT_MS = 50;
+    private final long WAIT_RETRY_READ_MAX_MS = 200;
 
     /**
      * Stop the send for Log Entry Sync
@@ -150,7 +151,7 @@ public class LogEntrySender {
         if (isRetry && !taskActive) {
             logReplicationFSM.inputWithDelay(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.LOG_ENTRY_SYNC_CONTINUE,
                     new LogReplicationEventMetadata(logEntrySyncEventId), logReplicationFSM), waitRetryRead);
-            waitRetryRead = Math.min(waitRetryRead + WAIT_RETRY_READ_INCREMENT, WAIT_RETRY_READ_MAX);
+            waitRetryRead = Math.min(waitRetryRead + WAIT_RETRY_READ_INCREMENT_MS, WAIT_RETRY_READ_MAX_MS);
         } else {
             logReplicationFSM.input(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.LOG_ENTRY_SYNC_CONTINUE,
                     new LogReplicationEventMetadata(logEntrySyncEventId), logReplicationFSM));
