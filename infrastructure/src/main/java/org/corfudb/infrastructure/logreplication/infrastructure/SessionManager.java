@@ -6,7 +6,6 @@ import com.google.protobuf.TextFormat;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.ServerContext;
-import org.corfudb.infrastructure.logreplication.FsmTaskManager;
 import org.corfudb.infrastructure.logreplication.infrastructure.msghandlers.LogReplicationServer;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationMetadata;
@@ -397,7 +396,7 @@ public class SessionManager {
                 if (incomingSessions.contains(session)) {
                     router.getSessionToRemoteSourceLeaderManager().put(session,
                             new RemoteSourceLeadershipManager(session, router,
-                                    topology.getLocalNodeDescriptor().getNodeId()));
+                                    topology.getLocalNodeDescriptor().getNodeId(), replicationContext));
                 }
             }
         });
@@ -549,7 +548,7 @@ public class SessionManager {
     }
 
     private void shutDownThreadPools() {
-        FsmTaskManager.shutdown();
+        replicationContext.getTaskManager().shutdown();
         LogReplicationAckReader.shutdownTsPoller();
         LogReplicationSinkManager.shutdownApplyExecutor();
     }
