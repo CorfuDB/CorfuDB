@@ -8,7 +8,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.browser.CorfuStoreBrowserEditor;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager;
-import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationFSM;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuOptions;

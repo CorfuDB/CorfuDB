@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure.logreplication;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent;
@@ -29,38 +30,48 @@ import java.util.concurrent.TimeUnit;
 @Slf4j
 public class FsmTaskManager {
 
-    private ScheduledExecutorService fsmWorker;
+    private static ScheduledExecutorService runtimeWorker = null;
+    private static ScheduledExecutorService replicationWorker = null;
+    private static ScheduledExecutorService sinkTaskWorker = null;
 
     // Session -> list of runtime event IDs. This data structure is used to maintain the order of events processed for a given session.
-    private final Map<LogReplicationSession, LinkedList<UUID>> sessionToRuntimeEventIdMap;
+    private static final Map<LogReplicationSession, LinkedList<UUID>> sessionToRuntimeEventIdMap = new ConcurrentHashMap<>();
 
     // Session -> list of replication event IDs. This data structure is used to maintain the order of events processed for a given session.
-    private final Map<LogReplicationSession, LinkedList<UUID>> sessionToReplicationEventIdMap;
+    private static final Map<LogReplicationSession, LinkedList<UUID>> sessionToReplicationEventIdMap = new ConcurrentHashMap<>();
 
     // Session -> list of replication event IDs. This is different than the above in the way that the events in this
     // structure are to be processed after a delay.
     // Currently will have the snapshot-apply-verification events and (only relevant for routing queue model) the check for data event
-    private final Map<LogReplicationSession, LinkedList<UUID>> sessionToDelayedReplicationEventIdMap;
+    private static final Map<LogReplicationSession, LinkedList<UUID>> sessionToDelayedReplicationEventIdMap = new ConcurrentHashMap<>();
 
     // Session -> list of sink event IDs. This data structure is used to maintain the order of events processed for a given session.
-    private final Map<LogReplicationSession, LinkedList<UUID>> sessionToSinkEventIdMap;
+    private static final Map<LogReplicationSession, LinkedList<UUID>> sessionToSinkEventIdMap = new ConcurrentHashMap<>();
 
-    public FsmTaskManager(String threadName, int threadCount) {
-        fsmWorker = Executors.newScheduledThreadPool(threadCount, new ThreadFactoryBuilder().setNameFormat(threadName+"-%d").build());
-        sessionToRuntimeEventIdMap = new ConcurrentHashMap<>();
-        sessionToReplicationEventIdMap = new ConcurrentHashMap<>();
-        sessionToSinkEventIdMap = new ConcurrentHashMap<>();
-        sessionToDelayedReplicationEventIdMap = new ConcurrentHashMap<>();
+    private FsmTaskManager() {
+
     }
 
-    public <E> void addTask(E event, FsmEventType fsm, long delay) {
+    public static void createRuntimeTaskManager(String threadName, int threadCount) {
+        runtimeWorker = Executors.newScheduledThreadPool(threadCount, new ThreadFactoryBuilder().setNameFormat(threadName +"-%d").build());
+    }
+
+    public static void createReplicationTaskManager(String threadName, int threadCount) {
+        replicationWorker = Executors.newScheduledThreadPool(threadCount, new ThreadFactoryBuilder().setNameFormat(threadName+"-%d").build());
+    }
+
+    public static void createSinkTaskManager(String threadName, int threadCount) {
+        sinkTaskWorker = Executors.newScheduledThreadPool(threadCount, new ThreadFactoryBuilder().setNameFormat(threadName+"-%d").build());
+    }
+
+    public static <E> void addTask(E event, FsmEventType fsm, long delay) {
         addEventToSessionEventMap(event, fsm, delay);
         if (fsm.equals(FsmEventType.LogReplicationRuntimeEvent)) {
-            fsmWorker.schedule(() -> processRuntimeTask((LogReplicationRuntimeEvent) event), delay, TimeUnit.MILLISECONDS);
+            runtimeWorker.schedule(() -> processRuntimeTask((LogReplicationRuntimeEvent) event), delay, TimeUnit.MILLISECONDS);
         } else if (fsm.equals(FsmEventType.LogReplicationEvent)){
-            fsmWorker.schedule(() -> processReplicationTask((LogReplicationEvent) event), delay, TimeUnit.MILLISECONDS);
+            replicationWorker.schedule(() -> processReplicationTask((LogReplicationEvent) event), delay, TimeUnit.MILLISECONDS);
         } else {
-            fsmWorker.schedule(() -> processSinkTask((LogReplicationSinkEvent) event), delay, TimeUnit.MILLISECONDS);
+            sinkTaskWorker.schedule(() -> processSinkTask((LogReplicationSinkEvent) event), delay, TimeUnit.MILLISECONDS);
         }
     }
 
@@ -68,7 +79,7 @@ public class FsmTaskManager {
      * Add event to in-memory session->event maps. This is to ensure the order of event processing for a given session.
      * Currently the "delay" is non-zero for only the replicating FSM.
      */
-    private <E> void addEventToSessionEventMap(E event, FsmEventType fsm, long delay) {
+    private static <E> void addEventToSessionEventMap(E event, FsmEventType fsm, long delay) {
         if (fsm.equals(FsmEventType.LogReplicationRuntimeEvent)) {
             LogReplicationSession session = ((LogReplicationRuntimeEvent) event).getRuntimeFsm().getSession();
             sessionToRuntimeEventIdMap.putIfAbsent(session, new LinkedList<>());
@@ -107,7 +118,7 @@ public class FsmTaskManager {
         }
     }
 
-    private void processSinkTask(LogReplicationSinkEvent event) {
+    private static void processSinkTask(LogReplicationSinkEvent event) {
         LogReplicationSession session = event.getSourceLeadershipManager().getSession();
         synchronized (event.getSourceLeadershipManager()) {
             while (!sessionToSinkEventIdMap.get(session).get(0).equals(event.getEventId())) {
@@ -127,7 +138,7 @@ public class FsmTaskManager {
         }
     }
 
-    private void processRuntimeTask(LogReplicationRuntimeEvent event) {
+    private static void processRuntimeTask(LogReplicationRuntimeEvent event) {
         LogReplicationSession session = event.getRuntimeFsm().getSession();
         // for a given session, The fsm event should be processed in the order they are queued. This condition ensures
         // that in the event of 2 threads contending for the monitor, only the task submitted first would be processed.
@@ -165,7 +176,7 @@ public class FsmTaskManager {
         }
     }
 
-    private boolean canProcessEventForSession(LogReplicationSession session, UUID currEventId) {
+    private static boolean canProcessEventForSession(LogReplicationSession session, UUID currEventId) {
             return (sessionToReplicationEventIdMap.get(session) != null &&
                         !sessionToReplicationEventIdMap.get(session).isEmpty() &&
                         sessionToReplicationEventIdMap.get(session).get(0).equals(currEventId)) ||
@@ -174,7 +185,7 @@ public class FsmTaskManager {
                             sessionToDelayedReplicationEventIdMap.get(session).get(0).equals(currEventId));
     }
 
-    private void processReplicationTask(LogReplicationEvent currEvent) {
+    private static void processReplicationTask(LogReplicationEvent currEvent) {
         LogReplicationSession session = currEvent.getReplicationFsm().getSession();
         // for a given session, the fsm events should be processed in the order they are queued. This snippets ensures
         // that in the event of 2 threads contending for the monitor, only the task submitted first would be processed.
@@ -228,7 +239,7 @@ public class FsmTaskManager {
 
     }
 
-    private void removeReplicationEventIdFromMap(LogReplicationSession session, UUID currEventID) {
+    private static void removeReplicationEventIdFromMap(LogReplicationSession session, UUID currEventID) {
         if (sessionToReplicationEventIdMap.get(session) != null && !sessionToReplicationEventIdMap.get(session).isEmpty() &&
                 sessionToReplicationEventIdMap.get(session).get(0).equals(currEventID)) {
             sessionToReplicationEventIdMap.get(session).remove(0);
@@ -237,8 +248,24 @@ public class FsmTaskManager {
         }
     }
 
-    public void shutdown() {
-        fsmWorker.shutdown();
+    public static void shutdown() {
+        if (runtimeWorker != null) {
+            runtimeWorker.shutdown();
+        }
+
+        if (replicationWorker != null) {
+            replicationWorker.shutdown();
+        }
+
+        if (sinkTaskWorker != null) {
+            sinkTaskWorker.shutdown();
+        }
+    }
+
+    @VisibleForTesting
+    //Only used in LogReplicationFSMTest
+    public static void shutdownReplicationTaskWorkerPool() {
+        replicationWorker.shutdown();
     }
 
     public static enum FsmEventType {

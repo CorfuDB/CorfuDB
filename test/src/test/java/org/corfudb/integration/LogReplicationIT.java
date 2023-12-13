@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.CorfuTestParameters;
 import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.logreplication.config.LogReplicationConfig;
+import org.corfudb.infrastructure.logreplication.FsmTaskManager;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
@@ -285,7 +286,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
             dstDataRuntime.shutdown();
             dstTestRuntime.shutdown();
         }
-        LogReplicationFSM.shutdownTaskManager();
+        FsmTaskManager.shutdown();
         super.cleanUp();
     }
 
