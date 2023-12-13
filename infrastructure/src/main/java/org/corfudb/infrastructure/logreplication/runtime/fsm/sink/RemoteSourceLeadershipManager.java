@@ -59,7 +59,9 @@ public class RemoteSourceLeadershipManager {
     //TODO v2: tune thread count;
     private static final int TASK_MANAGER_THREAD_COUNT = 2;
 
-    private static final FsmTaskManager taskManager = new FsmTaskManager("sink-consumers", TASK_MANAGER_THREAD_COUNT);
+    static {
+        FsmTaskManager.createSinkTaskManager("sinkFSM", TASK_MANAGER_THREAD_COUNT);
+    }
 
     public RemoteSourceLeadershipManager(LogReplicationSession session, LogReplicationClientServerRouter router,
                                          String localNodeId) {
@@ -72,7 +74,7 @@ public class RemoteSourceLeadershipManager {
 
     public void input(LogReplicationSinkEvent event) {
         log.info("adding to the queue {}", event);
-        taskManager.addTask(event, FsmTaskManager.FsmEventType.LogReplicationSinkEvent, 0);
+        FsmTaskManager.addTask(event, FsmTaskManager.FsmEventType.LogReplicationSinkEvent, 0);
     }
 
     /**
@@ -172,10 +174,6 @@ public class RemoteSourceLeadershipManager {
 
         log.info("Send the reverseReplicate rpc {} for session {}", payload, session);
         router.sendResponse(getResponseMsg(header, payload));
-    }
-
-    public static void shutdownTaskManager() {
-        taskManager.shutdown();
     }
 
 }

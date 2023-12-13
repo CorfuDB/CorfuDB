@@ -6,15 +6,13 @@ import com.google.protobuf.TextFormat;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.ServerContext;
+import org.corfudb.infrastructure.logreplication.FsmTaskManager;
 import org.corfudb.infrastructure.logreplication.infrastructure.msghandlers.LogReplicationServer;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationMetadata;
-import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationFSM;
-import org.corfudb.infrastructure.logreplication.replication.fsm.WaitSnapshotApplyState;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationSinkManager;
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationAckReader;
-import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientServerRouter;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.sink.RemoteSourceLeadershipManager;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
@@ -551,9 +549,7 @@ public class SessionManager {
     }
 
     private void shutDownThreadPools() {
-        CorfuLogReplicationRuntime.shutdownTaskManager();
-        LogReplicationFSM.shutdownTaskManager();
-        RemoteSourceLeadershipManager.shutdownTaskManager();
+        FsmTaskManager.shutdown();
         LogReplicationAckReader.shutdownTsPoller();
         LogReplicationSinkManager.shutdownApplyExecutor();
     }

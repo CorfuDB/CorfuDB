@@ -192,8 +192,10 @@ public class LogReplicationFSM {
     //TODO v2: tune thread count;
     private static final int TASK_MANAGER_THREAD_COUNT = 2;
 
-    // not 'final' to help unit test reset taskManager
-    private static FsmTaskManager taskManager = new FsmTaskManager("replicationFSM", TASK_MANAGER_THREAD_COUNT);
+    static {
+        FsmTaskManager.createReplicationTaskManager("replicationFSM", TASK_MANAGER_THREAD_COUNT);
+    }
+
 
     /**
      * Constructor for LogReplicationFSM, custom read processor for data transformation.
@@ -331,7 +333,7 @@ public class LogReplicationFSM {
         if (event.getType() != LogReplicationEventType.LOG_ENTRY_SYNC_CONTINUE) {
             log.trace("Enqueue event {} with ID {}", event.getType(), event.getEventId());
         }
-        taskManager.addTask(event, FsmTaskManager.FsmEventType.LogReplicationEvent, 0);
+        FsmTaskManager.addTask(event, FsmTaskManager.FsmEventType.LogReplicationEvent, 0);
     }
 
     /**
@@ -342,7 +344,7 @@ public class LogReplicationFSM {
      * @param event LogReplicationEvent to process.
      */
     public void inputWithDelay(LogReplicationEvent event, long delay) {
-        taskManager.addTask(event, FsmTaskManager.FsmEventType.LogReplicationEvent, delay);
+        FsmTaskManager.addTask(event, FsmTaskManager.FsmEventType.LogReplicationEvent, delay);
     }
 
     /**
@@ -365,12 +367,15 @@ public class LogReplicationFSM {
         logEntrySender.updateTopologyConfigId(topologyConfigId);
     }
 
+    @VisibleForTesting
+    //used only in tests
     public static void shutdownTaskManager() {
-        taskManager.shutdown();
+        FsmTaskManager.shutdownReplicationTaskWorkerPool();
     }
 
+    @VisibleForTesting
     //used only in unit tests
     public static void resetTaskManager(int threadCount) {
-        taskManager = new FsmTaskManager("replicationFSM", threadCount);
+        FsmTaskManager.createReplicationTaskManager("replicationFSM", threadCount);
     }
 }

@@ -99,9 +99,9 @@ public class RoutingQueuesSnapshotReaderTest extends AbstractViewTest {
         // Now check if the "session" is going to timeout.
         Assert.assertFalse(((RoutingQueuesSnapshotReader) snapshotReader).receiveWindowTimedOut());
 
-        RoutingQueuesSnapshotReader.DATA_WAIT_TIMEOUT_MS = 1000;
+        RoutingQueuesSnapshotReader.dataWaitTimeoutMs = 1000;
         //3. Sleep for the timeout window to simulate data not being seen for the timeout window.
-        TimeUnit.MILLISECONDS.sleep(RoutingQueuesSnapshotReader.DATA_WAIT_TIMEOUT_MS);
+        TimeUnit.MILLISECONDS.sleep(RoutingQueuesSnapshotReader.dataWaitTimeoutMs);
         Assert.assertThrows(ReplicationReaderException.class, () -> snapshotReader.read(syncRequestId));
     }
 
