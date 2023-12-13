@@ -141,7 +141,10 @@ public class CorfuLogReplicationRuntime {
     //TODO v2: tune thread count;
     private static final int TASK_MANAGER_THREAD_COUNT = 2;
 
-    private static final FsmTaskManager taskManager = new FsmTaskManager("runtimeFSM", TASK_MANAGER_THREAD_COUNT);
+    static {
+        FsmTaskManager.createRuntimeTaskManager("runtimeFSM", TASK_MANAGER_THREAD_COUNT);
+    }
+
 
     /**
      * Default Constructor
@@ -191,7 +194,7 @@ public class CorfuLogReplicationRuntime {
             // Not accepting events, in stopped state
             return;
         }
-        taskManager.addTask(event, FsmTaskManager.FsmEventType.LogReplicationRuntimeEvent, 0);
+        FsmTaskManager.addTask(event, FsmTaskManager.FsmEventType.LogReplicationRuntimeEvent, 0);
     }
 
     /**
@@ -246,9 +249,5 @@ public class CorfuLogReplicationRuntime {
     public void stop() {
         input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.LOCAL_LEADER_LOSS,
                         router.isConnectionStarterForSession(session), this));
-    }
-
-    public static void shutdownTaskManager() {
-        taskManager.shutdown();
     }
 }

@@ -109,8 +109,10 @@ public class LogReplicationSinkManager implements DataReceiver {
 
     private ISnapshotSyncPlugin snapshotSyncPlugin;
 
+    private static final int MAX_CONCURRENCY = 2;
+
     // TODO V2: tune the thread count
-    private static ExecutorService applyExecutor = Executors.newFixedThreadPool(2,
+    private static ExecutorService applyExecutor = Executors.newFixedThreadPool(MAX_CONCURRENCY,
             new ThreadFactoryBuilder()
                     .setDaemon(true)
                     .setNameFormat("snapshotSyncApplyExecutor-%d")
