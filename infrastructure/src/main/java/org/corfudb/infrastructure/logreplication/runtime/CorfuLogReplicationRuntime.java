@@ -139,11 +139,9 @@ public class CorfuLogReplicationRuntime {
     private final LogReplicationContext replicationContext;
 
     //TODO v2: tune thread count;
-    private static final int TASK_MANAGER_THREAD_COUNT = 2;
+    private final int REPLICATION_RUNTIME_WORKER_THREAD_COUNT = 2;
 
-    static {
-        FsmTaskManager.createRuntimeTaskManager("runtimeFSM", TASK_MANAGER_THREAD_COUNT);
-    }
+    private final FsmTaskManager taskManager;
 
 
     /**
@@ -158,6 +156,9 @@ public class CorfuLogReplicationRuntime {
                 session, replicationContext);
         this.connectedNodes = new HashSet<>();
         this.replicationContext = replicationContext;
+
+        this.taskManager = replicationContext.getTaskManager();
+        this.taskManager.createRuntimeTaskManager("runtimeFSM", REPLICATION_RUNTIME_WORKER_THREAD_COUNT);
 
         initializeStates(metadataManager);
         this.state = states.get(LogReplicationRuntimeStateType.WAITING_FOR_CONNECTIVITY);
@@ -194,7 +195,7 @@ public class CorfuLogReplicationRuntime {
             // Not accepting events, in stopped state
             return;
         }
-        FsmTaskManager.addTask(event, FsmTaskManager.FsmEventType.LogReplicationRuntimeEvent, 0);
+        this.taskManager.addTask(event, FsmTaskManager.FsmEventType.LogReplicationRuntimeEvent, 0);
     }
 
     /**

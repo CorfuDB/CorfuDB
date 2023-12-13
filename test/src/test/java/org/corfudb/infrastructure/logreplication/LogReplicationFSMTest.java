@@ -117,6 +117,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
     private DataSender dataSender;
     private SnapshotReader snapshotReader;
     private LogReplicationAckReader ackReader;
+    private LogReplicationContext context;
 
     private static final String pluginConfigFilePath = "src/test/resources/transport/pluginConfig.properties";
 
@@ -249,7 +250,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
 
     @AfterAll
     public void tearDown() {
-        LogReplicationFSM.shutdownTaskManager();
+        context.getTaskManager().shutdownReplicationTaskWorkerPool();
     }
 
     /**
@@ -324,7 +325,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         observeTransitions = true;
         transition(LogReplicationEventType.REPLICATION_SHUTDOWN, LogReplicationStateType.ERROR, true);
         Assert.assertEquals(fsm.getState().getType(), LogReplicationStateType.ERROR);
-        LogReplicationFSM.shutdownTaskManager();
+        context.getTaskManager().shutdownReplicationTaskWorkerPool();
         transitionAvailable.release();
         observeTransitions = false;
     }
@@ -974,7 +975,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
                 break;
         }
 
-        LogReplicationContext context = new LogReplicationContext(configManager, TEST_TOPOLOGY_CONFIG_ID,
+        context = new LogReplicationContext(configManager, TEST_TOPOLOGY_CONFIG_ID,
                 "test:" + SERVERS.PORT_0, true, pluginConfig, runtime);
         LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(runtime, context);
 
@@ -983,9 +984,9 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         metadataManager.addSession(DEFAULT_SESSION, 0, false);
         
         ackReader = new LogReplicationAckReader(metadataManager, DEFAULT_SESSION, context);
-        LogReplicationFSM.resetTaskManager(2);
         fsm = new LogReplicationFSM(snapshotReader, dataSender, logEntryReader,
                 ackReader, DEFAULT_SESSION, context);
+        context.getTaskManager().createReplicationTaskManager("replicationFSM", 2);
         ackReader.setLogEntryReader(fsm.getLogEntryReader());
         transitionAvailable = new Semaphore(1, true);
         transitionObservable = fsm.getNumTransitions();

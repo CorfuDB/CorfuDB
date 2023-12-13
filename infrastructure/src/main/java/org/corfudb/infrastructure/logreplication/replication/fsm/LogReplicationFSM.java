@@ -193,11 +193,9 @@ public class LogReplicationFSM {
     private final LogReplicationSession session;
 
     //TODO v2: tune thread count;
-    private static final int TASK_MANAGER_THREAD_COUNT = 2;
+    private static final int REPLICATION_WORKER_THREAD_COUNT = 2;
 
-    static {
-        FsmTaskManager.createReplicationTaskManager("replicationFSM", TASK_MANAGER_THREAD_COUNT);
-    }
+    private final FsmTaskManager fsmTaskManager;
 
 
     /**
@@ -218,6 +216,9 @@ public class LogReplicationFSM {
         this.session = session;
         this.snapshotSender = new SnapshotSender(replicationContext, snapshotReader, dataSender, this);
         this.logEntrySender = new LogEntrySender(logEntryReader, dataSender, this);
+
+        this.fsmTaskManager = replicationContext.getTaskManager();
+        this.fsmTaskManager.createReplicationTaskManager("replicationFSM", REPLICATION_WORKER_THREAD_COUNT);
 
         init(dataSender, session);
         setTopologyConfigId(replicationContext.getTopologyConfigId());
@@ -244,6 +245,8 @@ public class LogReplicationFSM {
         this.session = session;
         this.snapshotSender = new SnapshotSender(replicationContext, snapshotReader, dataSender, this);
         this.logEntrySender = new LogEntrySender(logEntryReader, dataSender, this);
+        this.fsmTaskManager = replicationContext.getTaskManager();
+        this.fsmTaskManager.createReplicationTaskManager("replicationFSM", REPLICATION_WORKER_THREAD_COUNT);
 
         init(dataSender, session);
     }
@@ -336,7 +339,7 @@ public class LogReplicationFSM {
         if (event.getType() != LogReplicationEventType.LOG_ENTRY_SYNC_CONTINUE) {
             log.trace("Enqueue event {} with ID {}", event.getType(), event.getEventId());
         }
-        FsmTaskManager.addTask(event, FsmTaskManager.FsmEventType.LogReplicationEvent, 0);
+        this.fsmTaskManager.addTask(event, FsmTaskManager.FsmEventType.LogReplicationEvent, 0);
     }
 
     /**
@@ -347,7 +350,7 @@ public class LogReplicationFSM {
      * @param event LogReplicationEvent to process.
      */
     public void inputWithDelay(LogReplicationEvent event, long delay) {
-        FsmTaskManager.addTask(event, FsmTaskManager.FsmEventType.LogReplicationEvent, delay);
+        this.fsmTaskManager.addTask(event, FsmTaskManager.FsmEventType.LogReplicationEvent, delay);
     }
 
     /**
@@ -372,17 +375,5 @@ public class LogReplicationFSM {
     
     public boolean isValidTransition(UUID currentSyncId, UUID newSyncID) {
         return currentSyncId.equals(newSyncID);
-    }
-
-    @VisibleForTesting
-    //used only in tests
-    public static void shutdownTaskManager() {
-        FsmTaskManager.shutdownReplicationTaskWorkerPool();
-    }
-
-    @VisibleForTesting
-    //used only in unit tests
-    public static void resetTaskManager(int threadCount) {
-        FsmTaskManager.createReplicationTaskManager("replicationFSM", threadCount);
     }
 }
