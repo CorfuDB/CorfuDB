@@ -285,7 +285,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
             dstDataRuntime.shutdown();
             dstTestRuntime.shutdown();
         }
-        FsmTaskManager.shutdown();
         super.cleanUp();
     }
 
@@ -1304,11 +1303,11 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         srcContext.getConfig(session).setMaxNumMsgPerBatch(BATCH_SIZE);
         srcContext.getConfig(session).setMaxMsgSize(SMALL_MSG_SIZE);
 
-        LogReplicationFSM.resetTaskManager(2);
-
         // Source Manager
         LogReplicationSourceManager logReplicationSourceManager = new LogReplicationSourceManager(srcMetadataManager,
                 sourceDataSender, session, srcContext);
+
+        srcContext.getTaskManager().createReplicationTaskManager("replicationFSM", 2);
 
         // Set Log Replication Source Manager so we can emulate the channel for data & control messages (required
         // for testing)

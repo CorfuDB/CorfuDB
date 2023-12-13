@@ -3,6 +3,7 @@ package org.corfudb.infrastructure.logreplication.infrastructure;
 import com.google.common.annotations.VisibleForTesting;
 import lombok.Getter;
 import lombok.Setter;
+import org.corfudb.infrastructure.logreplication.FsmTaskManager;
 import org.corfudb.infrastructure.logreplication.config.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
@@ -42,6 +43,10 @@ public class LogReplicationContext {
 
     @Getter
     private final CorfuRuntime corfuRuntime;
+
+    @Getter
+    private final FsmTaskManager taskManager;
+
     /**
      * Constructor
      **/
@@ -54,6 +59,7 @@ public class LogReplicationContext {
         this.pluginConfig = pluginConfig;
         this.isLeader = new AtomicBoolean(false);
         this.corfuRuntime = runtime;
+        this.taskManager = new FsmTaskManager();
     }
 
     @VisibleForTesting
@@ -66,6 +72,7 @@ public class LogReplicationContext {
         this.pluginConfig = pluginConfig;
         this.isLeader = new AtomicBoolean(isLeader);
         this.corfuRuntime = runtime;
+        this.taskManager = new FsmTaskManager();
     }
 
     public void setIsLeader(boolean newValue) {
