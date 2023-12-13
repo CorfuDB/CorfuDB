@@ -106,6 +106,8 @@ public class SourceForwardingDataSender implements DataSender {
 
     private int numStartMsgsDropped;
 
+    private LogReplicationContext replicationContext;
+
     @SneakyThrows
     public SourceForwardingDataSender(LogReplicationIT.TestConfig testConfig,
                                       LogReplicationMetadataManager metadataManager,
@@ -134,6 +136,7 @@ public class SourceForwardingDataSender implements DataSender {
                 null,
                 TableOptions.fromProtoSchema(ReplicationStatus.class));
         this.testConfig = testConfig;
+        this.replicationContext = context;
     }
 
     @Override
@@ -299,6 +302,8 @@ public class SourceForwardingDataSender implements DataSender {
         if (destinationDataSender != null && destinationDataSender.getSourceManager() != null) {
             destinationDataSender.getSourceManager().shutdown();
         }
+
+        replicationContext.getTaskManager().shutdownReplicationTaskWorkerPool();;
 
         if (runtime != null) {
             runtime.shutdown();

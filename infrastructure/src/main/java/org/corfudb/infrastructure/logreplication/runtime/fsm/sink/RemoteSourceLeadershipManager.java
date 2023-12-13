@@ -3,6 +3,7 @@ package org.corfudb.infrastructure.logreplication.runtime.fsm.sink;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.FsmTaskManager;
+import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientServerRouter;
 import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
@@ -57,24 +58,24 @@ public class RemoteSourceLeadershipManager {
     private final String localNodeId;
 
     //TODO v2: tune thread count;
-    private static final int TASK_MANAGER_THREAD_COUNT = 2;
+    private static final int SINK_TASK_WORKER_THREAD_COUNT = 2;
 
-    static {
-        FsmTaskManager.createSinkTaskManager("sinkFSM", TASK_MANAGER_THREAD_COUNT);
-    }
+    private final FsmTaskManager taskManager;
 
     public RemoteSourceLeadershipManager(LogReplicationSession session, LogReplicationClientServerRouter router,
-                                         String localNodeId) {
+                                         String localNodeId, LogReplicationContext replicationContext) {
         this.session = session;
         this.router = router;
         this.localNodeId = localNodeId;
         this.connectedNodes = new HashSet<>();
+        this.taskManager = replicationContext.getTaskManager();
 
+        this.taskManager.createSinkTaskManager("sinkFSM", SINK_TASK_WORKER_THREAD_COUNT);
     }
 
     public void input(LogReplicationSinkEvent event) {
         log.info("adding to the queue {}", event);
-        FsmTaskManager.addTask(event, FsmTaskManager.FsmEventType.LogReplicationSinkEvent, 0);
+        this.taskManager.addTask(event, FsmTaskManager.FsmEventType.LogReplicationSinkEvent, 0);
     }
 
     /**
