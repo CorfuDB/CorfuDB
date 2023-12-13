@@ -61,7 +61,7 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
     // TODO: The timeout is currently set to 2 mins.  This can be revisited later to determine a more appropriate
     //  value.
     @VisibleForTesting
-    public static long DATA_WAIT_TIMEOUT_MS = 120000;
+    public static long dataWaitTimeoutMs = 120000;
 
     private static long lastDataReceivedEpoch = 0;
 
@@ -274,7 +274,7 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
         if (lastDataReceivedEpoch == 0) {
             lastDataReceivedEpoch = System.currentTimeMillis();
         }
-        return System.currentTimeMillis() - lastDataReceivedEpoch >= DATA_WAIT_TIMEOUT_MS;
+        return System.currentTimeMillis() - lastDataReceivedEpoch >= dataWaitTimeoutMs;
     }
 
     private CorfuStoreEntry<Queue.RoutingQSnapSyncHeaderKeyMsg, Queue.RoutingQSnapSyncHeaderMsg, Message>
