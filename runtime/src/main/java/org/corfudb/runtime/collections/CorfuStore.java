@@ -62,9 +62,11 @@ public class CorfuStore {
 
     private final CorfuStoreMetrics corfuStoreMetrics;
 
-    @Getter
-    @Setter
-    private volatile CorfuGuidGenerator corfuGuidGenerator;
+    /** Until the first request to access this guid generator is made,
+     *  Do not attempt to instantiate the guid generator.
+     */
+    @Getter(lazy = true)
+    private final CorfuGuidGenerator corfuGuidGenerator = new CorfuGuidGenerator(runtime);
 
     /**
      * Creates a new CorfuStore.

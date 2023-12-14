@@ -318,7 +318,8 @@ public class Table<K extends Message, V extends Message, M extends Message> impl
          * is deemed successful and has obtained a final sequence number to write.
          */
         // Obtain a cluster-wide unique 64-bit id to identify this entry in the queue.
-        long entryId = corfuStore.getCorfuGuidGenerator().nextLong(TransactionalContext.getRootContext().getTxnContext());
+        long entryId = corfuStore.getCorfuGuidGenerator()
+                .nextLong(TransactionalContext.getRootContext().getTxnContext());
         // Embed this key into a protobuf.
         K keyOfQueueEntry = (K) Queue.CorfuGuidMsg.newBuilder().setInstanceId(entryId).build();
 

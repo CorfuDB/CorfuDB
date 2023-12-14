@@ -317,13 +317,9 @@ public class TransactionCrud<T extends StoreTransaction<T>>
                        @Nonnull final V value, List<UUID> streamTags, CorfuStore corfuStore) {
 
         if (TransactionalContext.getRootContext().getPreCommitListeners().isEmpty()) {
-            TransactionalContext.getCurrentContext().addPreCommitListener(new QueueEntryAddressGetter());
-            if (corfuStore.getCorfuGuidGenerator() == null) {
-                corfuStore.setCorfuGuidGenerator(corfuStore.getRuntime().getTableRegistry().getCorfuGuidGenerator());
-            }
+            TransactionalContext.getCurrentContext().addPreCommitListener(new QueueEntryAddressGetter<>());
         }
-        K ret = Table.logUpdateEnqueue(queueUUID, value, streamTags, corfuStore);
-        return ret;
+        return Table.logUpdateEnqueue(queueUUID, value, streamTags, corfuStore);
     }
 
     /**
