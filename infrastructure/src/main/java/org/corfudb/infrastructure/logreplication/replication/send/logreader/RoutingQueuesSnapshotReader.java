@@ -202,10 +202,12 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
         // (2) If within the timeout window, enqueue a snapshot_continue event. This would mean that the client is
         // providing data for other sessions, and is yet to start generating for the current session.
         if (currentStreamInfo == null || !currentStreamHasNext()) {
-            if (!dataFound() && receiveWindowTimedOut()) {
-                throw new ReplicationReaderException("Timed out waiting for data or end marker for Snapshot Sync", new TimeoutException());
-            } else if (!dataFound()) {
-                throw new ReplicationReaderException("Data not found. Retry...", new RetryNeededException());
+            if (!dataFound()) {
+                if (receiveWindowTimedOut()) {
+                    throw new ReplicationReaderException("Timed out waiting for data or end marker for Snapshot Sync", new TimeoutException());
+                } else {
+                    throw new ReplicationReaderException("Data not found. Retry...", new RetryNeededException());
+                }
             }
         }
         msg = read(currentStreamInfo, syncRequestId);
