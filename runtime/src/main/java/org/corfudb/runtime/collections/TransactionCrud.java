@@ -9,6 +9,7 @@ import org.corfudb.runtime.object.transactions.TransactionalContext;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -257,7 +258,7 @@ public class TransactionCrud<T extends StoreTransaction<T>>
         @Override
         public void preCommitCallback(TokenResponse tokenResponse) {
             tablesUpdated.entrySet().forEach(e -> {
-                if (e.getValue().getGuidGenerator() == null) {
+                if (e.getValue() != null && e.getValue().getGuidGenerator() == null) {
                     return; // Transaction has an update to a table which is not a Queue, so ignore.
                 }
                 TransactionalContext.getRootContext().getWriteSetInfo().getWriteSet().getSMRUpdates(e.getKey())
@@ -302,7 +303,7 @@ public class TransactionCrud<T extends StoreTransaction<T>>
     /**
      * This API is used to add an entry to the CorfuQueue without materializing the queue in memory.
      *
-     * @param table  Table object to operate on the queue.
+     * @param queueUUID  queue ID
      * @param value Record to be added.
      * @param streamTags  - stream tags associated to the given stream id
      * @param corfuStore CorfuStore that gets the runtime for the serializer.
@@ -319,7 +320,12 @@ public class TransactionCrud<T extends StoreTransaction<T>>
         if (TransactionalContext.getRootContext().getPreCommitListeners().isEmpty()) {
             TransactionalContext.getCurrentContext().addPreCommitListener(new QueueEntryAddressGetter<>());
         }
-        return Table.logUpdateEnqueue(queueUUID, value, streamTags, corfuStore);
+
+        K ret = Table.logUpdateEnqueue(queueUUID, value, streamTags, corfuStore);
+        // Table object is not instantiated in this path. The precommit-listener will know to run for updates where
+        // table object is null or when the table object has a guid generator.
+        tablesUpdated.put(queueUUID, null);
+        return ret;
     }
 
     /**

@@ -459,6 +459,9 @@ public class TxnContext
         MultiObjectSMREntry writeSet = rootContext.getWriteSetInfo().getWriteSet();
         final Map<String, List<CorfuStreamEntry>> mutations = new HashMap<>(crud.tablesUpdated.size());
         crud.tablesUpdated.forEach((uuid, table) -> {
+            if (table == null) {
+                return;
+            }
             List<CorfuStreamEntry> writesInTable = writeSet.getSMRUpdates(uuid).stream()
                     .map(CorfuStreamEntry::fromSMREntry).collect(Collectors.toList());
             mutations.put(table.getFullyQualifiedTableName(), writesInTable);
