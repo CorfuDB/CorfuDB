@@ -193,6 +193,7 @@ public class CorfuLogReplicationRuntime {
     public void input(LogReplicationRuntimeEvent event) {
         if (state.getType().equals(LogReplicationRuntimeStateType.STOPPED)) {
             // Not accepting events, in stopped state
+            log.info("Log Replication Runtime State Machine has been stopped. No more events will be processed.");
             return;
         }
         this.taskManager.addTask(event, FsmTaskManager.FsmEventType.LogReplicationRuntimeEvent, 0);
