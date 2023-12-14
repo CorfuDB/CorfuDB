@@ -42,6 +42,7 @@ import javax.annotation.Nonnull;
 import java.lang.invoke.MethodHandles;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -311,19 +312,19 @@ public class LogUnitServer extends AbstractServer {
         LogData logData = getLogData(req.getPayload().getWriteLogRequest().getLogData());
         Map<UUID, Long> backPointerMap = logData.getBackpointerMap();
 
-        Map<String, Long> reducedBackPointerMap = new HashMap<>(backPointerMap.size());
+        List<String> reducedBackPointers = new ArrayList<>(backPointerMap.size());
         backPointerMap.forEach((uuid, data) ->{
             String uuidStr = uuid.toString();
             String uuidTail = uuidStr.substring(0, UUID_TAIL_LENGTH);
 
-            reducedBackPointerMap.put(uuidTail, data);
+            reducedBackPointers.add(uuidTail + "=" + data);
         });
 
         WRITER_LOG.debug("{}, {}, {}: {}",
                 logData.getToken().getEpoch(),
                 logData.getToken().getSequence(),
                 logData.getType(),
-                reducedBackPointerMap
+                reducedBackPointers
         );
 
         // Its not clear that making all holes high priority is the right thing to do, but since
