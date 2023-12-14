@@ -153,6 +153,10 @@ public class SnapshotSender {
                             fsm.inputWithDelay(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_CONTINUE,
                                     new LogReplicationEventMetadata(snapshotSyncEventId), fsm), DEFAULT_DELAY_MS);
                         }
+                    } else {
+                        log.error("Replication Reader Exception thrown from an unkown path", e);
+                        snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.UNKNOWN, false);
+                        cancel = true;
                     }
                     break;
                 } catch (Exception e) {
