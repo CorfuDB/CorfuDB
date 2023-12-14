@@ -48,9 +48,10 @@ public class LogEntrySender {
 
     // TODO V2: These values need to be tuned as to not add any unnecessary increase in latency
     // Duration in milliseconds to delay the execution of the next read + send operation.
-    private long waitRetryRead = 100;
+    private final long WAIT_RETRY_READ_DEFAULT_MS = 100;
     private final long WAIT_RETRY_READ_INCREMENT_MS = 50;
     private final long WAIT_RETRY_READ_MAX_MS = 200;
+    private long waitRetryRead = WAIT_RETRY_READ_DEFAULT_MS;
 
     /**
      * Stop the send for Log Entry Sync
@@ -79,7 +80,7 @@ public class LogEntrySender {
      *
      * @param logEntrySyncEventId Transition event id that cased FSM transits into IN_LOG_ENTRY_SYNC state.
      */
-    public void send(UUID logEntrySyncEventId, boolean isRetry) {
+    public void send(UUID logEntrySyncEventId) {
 
         log.trace("Send Log Entry Sync, id={}", logEntrySyncEventId);
 
@@ -147,14 +148,14 @@ public class LogEntrySender {
             }
         }
 
-        if (isRetry && !taskActive) {
+        if (taskActive) {
+            logReplicationFSM.input(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.LOG_ENTRY_SYNC_CONTINUE,
+                    new LogReplicationEventMetadata(logEntrySyncEventId), logReplicationFSM));
+            waitRetryRead = WAIT_RETRY_READ_DEFAULT_MS;
+        } else {
             logReplicationFSM.inputWithDelay(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.LOG_ENTRY_SYNC_CONTINUE,
                     new LogReplicationEventMetadata(logEntrySyncEventId), logReplicationFSM), waitRetryRead);
             waitRetryRead = Math.min(waitRetryRead + WAIT_RETRY_READ_INCREMENT_MS, WAIT_RETRY_READ_MAX_MS);
-        } else {
-            logReplicationFSM.input(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.LOG_ENTRY_SYNC_CONTINUE,
-                    new LogReplicationEventMetadata(logEntrySyncEventId), logReplicationFSM));
-            waitRetryRead = 100;
         }
     }
 
