@@ -35,8 +35,6 @@ import org.corfudb.runtime.collections.TableParameters;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.object.ICorfuVersionPolicy;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.proto.RpcCommon;
@@ -47,7 +45,6 @@ import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.test.SampleSchema;
 import org.corfudb.test.SampleSchema.Uuid;
 import org.corfudb.test.SampleSchema.ManagedResources;
-import org.corfudb.util.CFUtils;
 import org.corfudb.util.serializer.DynamicProtobufSerializer;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.ProtobufSerializer;
@@ -1129,38 +1126,5 @@ public class CorfuStoreIT extends AbstractIT {
         runtime.getTableRegistry().getRegistryTable().delete(tableNameKey);
 
         runtime.getObjectsView().TXEnd();
-    }
-
-    @Test
-    @SuppressWarnings("unchecked")
-    public void test() throws Exception {
-
-        final Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort, true);
-        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
-
-        PersistentCorfuTable<String, String>
-                corfuTable = runtime.getObjectsView().build()
-                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
-                .setStreamName("test")
-                .open();
-
-        for (int i = 0; i < 1000; i++) {
-            String key = "key_" + i;
-            String value = "value_" + i;
-            corfuTable.insert(key, value);
-        }
-        runtime.shutdown();
-
-        runtime = createRuntime(singleNodeEndpoint);
-        corfuTable = runtime.getObjectsView().build()
-                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
-                .setStreamName("test")
-                .open();
-
-        System.out.println("table size is " + corfuTable.size());
-        assertThat(corfuTable.size()).isEqualTo(1000);
-
-        runtime.shutdown();
-        shutdownCorfuServer(corfuServer);
     }
 }

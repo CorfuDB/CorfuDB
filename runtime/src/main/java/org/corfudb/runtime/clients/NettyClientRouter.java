@@ -184,8 +184,6 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object> imple
         RequestPayloadMsg.PayloadCase payloadCase;
     }
 
-    static volatile AtomicLong counter = new AtomicLong(0);
-
     /**
      * Creates a new NettyClientRouter connected to the specified host and port with the specified tls
      * and sasl options. The new {@link this} will attempt connection to the node until {@link
@@ -371,9 +369,6 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object> imple
                 log.debug("addReconnectionOnCloseFuture[{}]: reconnecting...", node);
                 // Asynchronously connect again.
                 if (reloadSslCertificates.get()) {
-                    if (true) {
-                        throw new InterruptedException();
-                    }
                     bootstrap.handler(getChannelInitializer());
                     log.debug("addReconnectionOnCloseFuture[{}]: reloaded ssl certs", node);
                 }
