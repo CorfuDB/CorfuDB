@@ -148,7 +148,7 @@ public class InLogEntrySyncState implements LogReplicationState {
                 fsm.getAckReader().markSnapshotSyncInfoCompleted();
             }
 
-            logEntrySender.send(transitionEventId, from.getType() == this.getType());
+            logEntrySender.send(transitionEventId);
 
         } catch (Throwable t) {
             log.error("Error on entry of InLogEntrySyncState", t);
