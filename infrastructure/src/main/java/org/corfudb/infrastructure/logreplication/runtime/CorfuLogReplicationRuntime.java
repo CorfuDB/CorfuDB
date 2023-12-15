@@ -139,7 +139,7 @@ public class CorfuLogReplicationRuntime {
     private final LogReplicationContext replicationContext;
 
     //TODO v2: tune thread count;
-    private final int REPLICATION_RUNTIME_WORKER_THREAD_COUNT = 2;
+    private final static int REPLICATION_RUNTIME_WORKER_THREAD_COUNT = 2;
 
     private final FsmTaskManager taskManager;
 

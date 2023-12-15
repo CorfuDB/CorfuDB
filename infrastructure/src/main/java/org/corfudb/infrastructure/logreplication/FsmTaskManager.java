@@ -22,10 +22,10 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 /**
- * This class manages the tasks submitted by the runtime FSM and the replication FSM.
- * Both the FSMs have their own instances of this class to which tasks are submitted and executed.
+ * This class manages the tasks submitted by the runtime FSM, the replication FSM and for the sink tasks when SINK is
+ * the connection starter.
  *
- * The threads are shared by all the sessions traversing an FSM.
+ * The thread pools are shared by all the sessions traversing an FSM.
  */
 @Slf4j
 public class FsmTaskManager {
@@ -50,15 +50,21 @@ public class FsmTaskManager {
 
 
     public void createRuntimeTaskManager(String threadName, int threadCount) {
-        runtimeWorker = Executors.newScheduledThreadPool(threadCount, new ThreadFactoryBuilder().setNameFormat(threadName +"-%d").build());
+        if (runtimeWorker == null) {
+            runtimeWorker = Executors.newScheduledThreadPool(threadCount, new ThreadFactoryBuilder().setNameFormat(threadName + "-%d").build());
+        }
     }
 
     public void createReplicationTaskManager(String threadName, int threadCount) {
-        replicationWorker = Executors.newScheduledThreadPool(threadCount, new ThreadFactoryBuilder().setNameFormat(threadName+"-%d").build());
+        if (replicationWorker == null) {
+            replicationWorker = Executors.newScheduledThreadPool(threadCount, new ThreadFactoryBuilder().setNameFormat(threadName + "-%d").build());
+        }
     }
 
     public void createSinkTaskManager(String threadName, int threadCount) {
-        sinkTaskWorker = Executors.newScheduledThreadPool(threadCount, new ThreadFactoryBuilder().setNameFormat(threadName+"-%d").build());
+        if (sinkTaskWorker == null) {
+            sinkTaskWorker = Executors.newScheduledThreadPool(threadCount, new ThreadFactoryBuilder().setNameFormat(threadName + "-%d").build());
+        }
     }
 
     public <E> void addTask(E event, FsmEventType fsm, long delay) {
