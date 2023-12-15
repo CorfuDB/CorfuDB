@@ -20,6 +20,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+import static org.corfudb.runtime.LogReplication.ReplicationModel.ROUTING_QUEUES;
+import static org.corfudb.runtime.LogReplicationUtils.REPLICATED_RECV_Q_PREFIX;
+import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
+
 /**
  * A parent class for Sink side StreamsSnapshotWriter and LogEntryWriter, which contains some common
  * utility methods that could be used in both snapshot sync and log entry sync.

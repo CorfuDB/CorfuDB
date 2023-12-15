@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure.logreplication.replication.receive;
 
+import com.google.protobuf.Message;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import lombok.Getter;
@@ -51,6 +52,7 @@ import static org.corfudb.infrastructure.logreplication.config.LogReplicationCon
 import static org.corfudb.infrastructure.logreplication.config.LogReplicationConfig.REGISTRY_TABLE_ID;
 import static org.corfudb.infrastructure.logreplication.config.LogReplicationConfig.PROTOBUF_TABLE_ID;
 import static org.corfudb.runtime.LogReplication.ReplicationModel.ROUTING_QUEUES;
+import static org.corfudb.runtime.LogReplicationUtils.REPLICATED_RECV_Q_PREFIX;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 /**
@@ -96,6 +98,8 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
 
     private final UUID replicatedRoutingQueueTag;
 
+    private final UUID replicatedRoutingQUuid;;
+
     public StreamsSnapshotWriter(CorfuRuntime rt, LogReplicationMetadataManager metadataManager,
                                  LogReplicationSession session, LogReplicationContext replicationContext) {
         super(session, replicationContext);
@@ -105,9 +109,15 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
         this.snapshotSyncStartMarker = Optional.empty();
 
         if (session.getSubscriber().getModel() == ROUTING_QUEUES) {
+            replicatedRoutingQUuid = CorfuRuntime.getStreamID(
+                    TableRegistry.getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE,
+                            REPLICATED_RECV_Q_PREFIX + session.getSourceClusterId() + "_" +
+                                    session.getSubscriber().getClientName())
+            );
             replicatedRoutingQueueTag = TableRegistry.getStreamIdForStreamTag(CORFU_SYSTEM_NAMESPACE,
                 LogReplicationUtils.REPLICATED_QUEUE_TAG);
         } else {
+            replicatedRoutingQUuid = null;
             replicatedRoutingQueueTag = null;
         }
 
@@ -214,7 +224,11 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
 
         for (SMREntry smrEntry : smrEntries) {
             if (session.getSubscriber().getModel().equals(ROUTING_QUEUES)) {
-                txnContext.logUpdate(streamId, smrEntry, Collections.singletonList(replicatedRoutingQueueTag));
+                CorfuRecord<Queue.RoutingTableEntryMsg, Message> record =
+                        (CorfuRecord<Queue.RoutingTableEntryMsg, Message>)(replicationContext.getProtobufSerializer()
+                        .deserialize(Unpooled.wrappedBuffer((byte[])smrEntry.getSMRArguments()[1]), null));
+                txnContext.logUpdateEnqueue(replicatedRoutingQUuid, record.getPayload(),
+                        Collections.singletonList(replicatedRoutingQueueTag), metadataManager.getCorfuStore());
             } else {
                 txnContext.logUpdate(streamId, smrEntry, replicationContext.getConfig(session).getDataStreamToTagsMap().get(streamId));
             }

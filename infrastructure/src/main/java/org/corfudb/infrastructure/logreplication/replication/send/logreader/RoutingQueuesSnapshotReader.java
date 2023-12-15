@@ -285,6 +285,7 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
         CorfuRecord<Queue.RoutingQSnapSyncHeaderMsg, Message> entry =
                 (CorfuRecord<Queue.RoutingQSnapSyncHeaderMsg, Message>)
                         replicationContext.getProtobufSerializer().deserialize(rawBuf, null);
+        log.info("Shama, entry payload is {} and metadata is {}", entry.getPayload(), entry.getMetadata());
         return new CorfuStoreEntry<>(key, entry.getPayload(), entry.getMetadata());
     }
 
