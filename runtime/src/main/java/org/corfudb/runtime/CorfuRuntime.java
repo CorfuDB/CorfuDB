@@ -1077,6 +1077,13 @@ public class CorfuRuntime {
     }
 
     /**
+     * Reestablish the netty connections to corfu servers
+     */
+    public void reconnect() {
+        nodeRouterPool.reconnect();
+    }
+
+    /**
      * Get a UUID for a named stream.
      *
      * @param string The name of the stream.

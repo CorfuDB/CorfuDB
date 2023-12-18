@@ -30,7 +30,7 @@ public class SslContextConstructor {
         log.info("Trust store file path: {}.", trustStoreConfig.getTrustStoreFile());
         log.info("Trust store password file path: {}.", trustStoreConfig.getPasswordFile());
 
-        KeyManagerFactory kmf = TlsUtils.createKeyManagerFactory(keyStoreConfig);
+        KeyManagerFactory kmf = new ReloadableKeyManagerFactory(keyStoreConfig);
         ReloadableTrustManagerFactory tmf = new ReloadableTrustManagerFactory(trustStoreConfig);
 
         SslProvider provider = getSslProvider();

@@ -92,6 +92,11 @@ public interface IClientRouter {
     void stop();
 
     /**
+     * Reestablish the connection.
+     */
+    void reconnect();
+
+    /**
      * The host that this router is routing requests for.
      */
     String getHost();
