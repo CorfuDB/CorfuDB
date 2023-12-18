@@ -137,6 +137,8 @@ class CommandBuilder(object):
         cmd.append("-XX:+HeapDumpOnOutOfMemoryError")
         cmd.append("-XX:+CrashOnOutOfMemoryError")
         cmd.append("-XX:+AlwaysPreTouch")
+        if 'RootDir' in compactor_config['CorfuPaths']:
+            cmd.append("-XX:ErrorFile=" + compactor_config['CorfuPaths']['RootDir'] + "hs_err_pid%p.log")
         cmd.append("-Xms" + str(xmx) + "m")
         cmd.append("-Xmx" + str(xmx) + "m")
         cmd.append("-Djdk.nio.maxCachedBufferSize=1048576")

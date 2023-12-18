@@ -198,9 +198,11 @@ public class LoggingMeterRegistryWithHistogramSupport extends StepMeterRegistry 
                             this::writeFunctionTimer,
                             this::writeMeter
                     )).forEach(loggingSink);
-            externalMetricsSuppliers.entrySet().stream()
-                    .map(entry -> entry.getValue().get().replaceAll("(?m)^", entry.getKey()))
-                    .forEach(loggingSink);
+            synchronized (externalMetricsSuppliers) {
+                externalMetricsSuppliers.entrySet().stream()
+                        .map(entry -> entry.getValue().get().replaceAll("(?m)^", entry.getKey()))
+                        .forEach(loggingSink);
+            }
         }
     }
 

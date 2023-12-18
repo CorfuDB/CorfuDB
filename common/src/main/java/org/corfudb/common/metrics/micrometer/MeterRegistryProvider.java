@@ -181,7 +181,9 @@ public class MeterRegistryProvider {
     }
 
     public static void unregisterExternalSupplier(String identifier) {
-        externalMetricsSuppliers.remove(identifier);
+        synchronized (externalMetricsSuppliers) {
+            externalMetricsSuppliers.remove(identifier);
+        }
     }
 
     /**
