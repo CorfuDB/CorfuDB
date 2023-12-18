@@ -303,7 +303,7 @@ public class SourceForwardingDataSender implements DataSender {
             destinationDataSender.getSourceManager().shutdown();
         }
 
-        replicationContext.getTaskManager().shutdownReplicationTaskWorkerPool();;
+        replicationContext.getTaskManager().shutdownReplicationTaskWorkerPool();
 
         if (runtime != null) {
             runtime.shutdown();
