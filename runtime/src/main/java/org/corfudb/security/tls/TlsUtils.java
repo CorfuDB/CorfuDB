@@ -94,29 +94,6 @@ public class TlsUtils {
         return password;
     }
 
-    public static KeyManagerFactory createKeyManagerFactory(KeyStoreConfig cfg) throws SSLException {
-
-        KeyStore keyStore = TlsUtils.openCertStore(cfg);
-        String keyStorePassword = getKeyStorePassword(cfg.getPasswordFile());
-
-        KeyManagerFactory kmf;
-        try {
-            kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
-            kmf.init(keyStore, keyStorePassword.toCharArray());
-            return kmf;
-        } catch (UnrecoverableKeyException e) {
-            String errorMessage = "Unrecoverable key in key store " + cfg.getKeyStoreFile() + ".";
-            throw new SSLException(errorMessage, e);
-        } catch (NoSuchAlgorithmException e) {
-            String errorMessage = "Can not create key manager factory with default algorithm "
-                    + KeyManagerFactory.getDefaultAlgorithm() + ".";
-            throw new SSLException(errorMessage, e);
-        } catch (KeyStoreException e) {
-            String errorMessage = "Can not initialize key manager factory from " + cfg.getKeyStoreFile() + ".";
-            throw new SSLException(errorMessage, e);
-        }
-    }
-
     /**
      * Java key store configuration class
      * https://www.baeldung.com/java-keystore-truststore-difference
