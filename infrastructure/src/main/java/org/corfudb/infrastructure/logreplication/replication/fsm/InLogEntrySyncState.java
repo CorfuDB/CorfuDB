@@ -26,11 +26,6 @@ public class InLogEntrySyncState implements LogReplicationState {
     private LogEntrySender logEntrySender;
 
     /**
-     * A future on the log entry send, send call.
-     */
-    private Future<?> logEntrySyncFuture = CompletableFuture.completedFuture(null);
-
-    /**
      * Unique Identifier of the event that caused the transition to this state,
      * i.e., current event/request being processed.
      */
@@ -121,13 +116,6 @@ public class InLogEntrySyncState implements LogReplicationState {
         // for log entry sync and snapshot sync (app can handle this)
         logEntrySender.stop();
         logEntrySender.getDataSenderBufferManager().getPendingMessages().clear();
-        if (!logEntrySyncFuture.isDone()) {
-            try {
-                logEntrySyncFuture.get();
-            } catch (Exception e) {
-                log.warn("Exception while waiting on log entry sync to complete.", e);
-            }
-        }
         log.info("Log Entry sync has been canceled due to {}", cancelCause);
     }
 

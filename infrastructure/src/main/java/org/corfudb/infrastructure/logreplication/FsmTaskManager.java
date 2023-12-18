@@ -67,11 +67,11 @@ public class FsmTaskManager {
         }
     }
 
-    public <E> void addTask(E event, FsmEventType fsm, long delay) {
-        addEventToSessionEventMap(event, fsm, delay);
-        if (fsm.equals(FsmEventType.LogReplicationRuntimeEvent)) {
+    public <E> void addTask(E event, FsmEventType fsmType, long delay) {
+        addEventToSessionEventMap(event, fsmType, delay);
+        if (fsmType.equals(FsmEventType.LogReplicationRuntimeEvent)) {
             runtimeWorker.schedule(() -> processRuntimeTask((LogReplicationRuntimeEvent) event), delay, TimeUnit.MILLISECONDS);
-        } else if (fsm.equals(FsmEventType.LogReplicationEvent)){
+        } else if (fsmType.equals(FsmEventType.LogReplicationEvent)){
             replicationWorker.schedule(() -> processReplicationTask((LogReplicationEvent) event), delay, TimeUnit.MILLISECONDS);
         } else {
             sinkTaskWorker.schedule(() -> processSinkTask((LogReplicationSinkEvent) event), delay, TimeUnit.MILLISECONDS);
@@ -82,8 +82,8 @@ public class FsmTaskManager {
      * Add event to in-memory session->event maps. This is to ensure the order of event processing for a given session.
      * Currently the "delay" is non-zero for only the replicating FSM.
      */
-    private <E> void addEventToSessionEventMap(E event, FsmEventType fsm, long delay) {
-        if (fsm.equals(FsmEventType.LogReplicationRuntimeEvent)) {
+    private <E> void addEventToSessionEventMap(E event, FsmEventType fsmType, long delay) {
+        if (fsmType.equals(FsmEventType.LogReplicationRuntimeEvent)) {
             LogReplicationSession session = ((LogReplicationRuntimeEvent) event).getRuntimeFsm().getSession();
             sessionToRuntimeEventIdMap.putIfAbsent(session, new LinkedList<>());
             // makes the value part of the map thread safe.
@@ -91,7 +91,7 @@ public class FsmTaskManager {
                 eventList.add(((LogReplicationRuntimeEvent) event).getEventId());
                 return eventList;
             });
-        } else if (fsm.equals(FsmEventType.LogReplicationEvent)){
+        } else if (fsmType.equals(FsmEventType.LogReplicationEvent)){
             LogReplicationSession session = ((LogReplicationEvent) event).getReplicationFsm().getSession();
             if (delay > 0) {
                 sessionToDelayedReplicationEventIdMap.putIfAbsent(session, new LinkedList<>());
@@ -108,7 +108,7 @@ public class FsmTaskManager {
                     return eventList;
                 });
             }
-        } else if (fsm.equals(FsmEventType.LogReplicationSinkEvent)){
+        } else if (fsmType.equals(FsmEventType.LogReplicationSinkEvent)){
             LogReplicationSession session = ((LogReplicationSinkEvent) event).getSourceLeadershipManager().getSession();
             sessionToSinkEventIdMap.putIfAbsent(session, new LinkedList<>());
             // makes the value part of the map thread safe.
@@ -117,7 +117,7 @@ public class FsmTaskManager {
                 return eventList;
             });
         } else {
-            log.warn("Ignored {}. Unexpected FSM event type", fsm);
+            log.warn("Ignored {}. Unexpected FSM event type", fsmType);
         }
     }
 
