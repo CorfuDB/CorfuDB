@@ -47,6 +47,7 @@
         <queueSize>1024</queueSize>
         <maxFlushTime>5000</maxFlushTime>
     </appender>
+
     <root level="info">
         <appender-ref ref="async_file"/>
     </root>
