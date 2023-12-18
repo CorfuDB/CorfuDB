@@ -58,7 +58,7 @@ public class RemoteSourceLeadershipManager {
     private final String localNodeId;
 
     //TODO v2: tune thread count;
-    private static final int SINK_TASK_WORKER_THREAD_COUNT = 2;
+    private static final int MAX_SINK_TASK_WORKER_THREAD_COUNT = 2;
 
     private final FsmTaskManager taskManager;
 
@@ -70,7 +70,7 @@ public class RemoteSourceLeadershipManager {
         this.connectedNodes = new HashSet<>();
         this.taskManager = replicationContext.getTaskManager();
 
-        this.taskManager.createSinkTaskManager("sinkFSM", SINK_TASK_WORKER_THREAD_COUNT);
+        this.taskManager.createSinkTaskManager("sinkFSM", MAX_SINK_TASK_WORKER_THREAD_COUNT);
     }
 
     public void input(LogReplicationSinkEvent event) {

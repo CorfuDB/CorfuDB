@@ -1,9 +1,7 @@
 package org.corfudb.infrastructure.logreplication.replication.fsm;
 
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.infrastructure.logreplication.DataSender;
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationEventMetadata;
 import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
@@ -14,8 +12,6 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -59,8 +55,6 @@ public class WaitSnapshotApplyState implements LogReplicationState {
     private long baseSnapshotTimestamp;
 
     private final AtomicBoolean stopSnapshotApply = new AtomicBoolean(false);
-
-    private Optional<Timer.Sample> snapshotSyncApplyTimerSample = Optional.empty();
 
     /**
      * Constructor
@@ -151,14 +145,15 @@ public class WaitSnapshotApplyState implements LogReplicationState {
     @Override
     public void onExit(LogReplicationState to) {
         // TODO V2: the metrics here need to be per session.
-//        if (to.getType().equals(LogReplicationStateType.IN_LOG_ENTRY_SYNC)) {
-//            snapshotSyncApplyTimerSample
-//                    .flatMap(sample -> MeterRegistryProvider.getInstance()
-//                            .map(registry -> {
-//                                Timer timer = registry.timer("logreplication.snapshot.apply.duration");
-//                                return sample.stop(timer);
-//                            }));
-//        }
+
+        //        if (to.getType().equals(LogReplicationStateType.IN_LOG_ENTRY_SYNC)) {
+        //            snapshotSyncApplyTimerSample
+        //                    .flatMap(sample -> MeterRegistryProvider.getInstance()
+        //                            .map(registry -> {
+        //                                Timer timer = registry.timer("logreplication.snapshot.apply.duration");
+        //                                return sample.stop(timer);
+        //                            }));
+        //        }
     }
 
     private void verifyStatusOfSnapshotSyncApply() {
