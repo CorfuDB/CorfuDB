@@ -245,6 +245,7 @@ public class BatchProcessor implements AutoCloseable {
             context.setErrorStatus();
         } catch (Throwable th) {
             log.error("Encountered throwable in the write processor ", th);
+            context.setErrorStatus();
             throw th;
         }
     }
