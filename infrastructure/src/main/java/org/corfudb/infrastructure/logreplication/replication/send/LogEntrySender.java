@@ -46,6 +46,13 @@ public class LogEntrySender {
 
     private volatile boolean taskActive = false;
 
+    // TODO V2: These values need to be tuned as to not add any unnecessary increase in latency
+    // Duration in milliseconds to delay the execution of the next read + send operation.
+    private final long WAIT_RETRY_READ_DEFAULT_MS = 100;
+    private final long WAIT_RETRY_READ_INCREMENT_MS = 50;
+    private final long WAIT_RETRY_READ_MAX_MS = 200;
+    private long waitRetryRead = WAIT_RETRY_READ_DEFAULT_MS;
+
     /**
      * Stop the send for Log Entry Sync
      */
@@ -119,13 +126,7 @@ public class LogEntrySender {
                      * take over the shared thread pool of the state machine.
                      */
                     taskActive = false;
-                    // TODO V2: When log entries to send are sparse, the CPU usage spikes because we keep checking with
-                    //  the sequencer if there is any data to be sent continuously.  Add a backoff or delay mechanism
-                    //  to avoid the repeated sequencer query.
                     break;
-                    // Request full sync (something is wrong I cant deliver)
-                    // (Optimization):
-                    // Back-off for couple of seconds and retry n times if not require full sync
                 }
             } catch (TrimmedException te) {
                 log.error("Caught Trimmed Exception while reading for {}", logEntrySyncEventId);
@@ -148,8 +149,15 @@ public class LogEntrySender {
             }
         }
 
-        logReplicationFSM.input(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.LOG_ENTRY_SYNC_CONTINUE,
-                new LogReplicationEventMetadata(logEntrySyncEventId), logReplicationFSM));
+        if (taskActive) {
+            logReplicationFSM.input(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.LOG_ENTRY_SYNC_CONTINUE,
+                    new LogReplicationEventMetadata(logEntrySyncEventId), logReplicationFSM));
+            waitRetryRead = WAIT_RETRY_READ_DEFAULT_MS;
+        } else {
+            logReplicationFSM.inputWithDelay(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.LOG_ENTRY_SYNC_CONTINUE,
+                    new LogReplicationEventMetadata(logEntrySyncEventId), logReplicationFSM), waitRetryRead);
+            waitRetryRead = Math.min(waitRetryRead + WAIT_RETRY_READ_INCREMENT_MS, WAIT_RETRY_READ_MAX_MS);
+        }
     }
 
     /**
