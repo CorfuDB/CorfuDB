@@ -71,10 +71,28 @@ public class StreamTest extends AbstractTransactionsTest {
     @Test
     public void testMaxWriteSizeLimitExceeded() {
         ICorfuTable<String, String> map = instantiateCorfuObject(PersistentCorfuTable.class, "TestTable");
-        byte[] array = new byte[getRuntime().getParameters().getMaxWriteSize()];
-        new Random().nextBytes(array);
-        String payloadString = new String(array, Charset.forName("UTF-8"));
+
+        //Max uncompressed write size check
+        byte[] array1 = new byte[getRuntime().getParameters().getMaxUncompressedWriteSize()];
+        new Random().nextBytes(array1);
+        String payloadString = new String(array1, Charset.forName("UTF-8"));
         boolean abortException = false;
+        try {
+            TXBegin();
+            map.insert(Integer.toString(0), payloadString);
+            TXEnd();
+        } catch (TransactionAbortedException tae) {
+            assertThat(tae.getAbortCause()).isEqualTo(AbortCause.SIZE_EXCEEDED);
+            abortException = true;
+        }
+        assertThat(abortException).isTrue();
+
+        //Max compressed write size check
+        byte[] array2 = new byte[getRuntime().getParameters().getMaxWriteSize()];
+        getRuntime().getParameters().setMaxWriteSize(1);
+        new Random().nextBytes(array2);
+        payloadString = new String(array2, Charset.forName("UTF-8"));
+        abortException = false;
         try {
             TXBegin();
             map.insert(Integer.toString(0), payloadString);

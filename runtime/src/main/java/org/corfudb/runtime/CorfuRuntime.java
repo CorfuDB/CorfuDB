@@ -203,7 +203,12 @@ public class CorfuRuntime {
         /*
          * Max uncompressed size for a write request.
          */
-        int maxWriteSize = 26214400;
+        int maxUncompressedWriteSize = 100 << 20;
+
+        /*
+         * Max compressed size for a write request.
+         */
+        int maxWriteSize = 25 << 20;
 
         /*
          * Set the bulk read size.
@@ -425,7 +430,9 @@ public class CorfuRuntime {
         public static class CorfuRuntimeParametersBuilder extends RuntimeParametersBuilder {
 
             //Max uncompressed size for a write request.
-            private int maxWriteSize = 26214400;
+            private int maxUncompressedWriteSize = 100 << 20;
+            //Max compressed size for a write request
+            private int maxWriteSize = 25 << 20;
             private int bulkReadSize = 10;
             private int holeFillRetry = 10;
             private Duration holeFillRetryThreshold = Duration.ofSeconds(1L);
@@ -613,6 +620,11 @@ public class CorfuRuntime {
                 return this;
             }
 
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder maxUncompressedWriteSize(int maxUncompressedWriteSize) {
+                this.maxUncompressedWriteSize = maxUncompressedWriteSize;
+                return this;
+            }
+
             public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder bulkReadSize(int bulkReadSize) {
                 this.bulkReadSize = bulkReadSize;
                 return this;
@@ -797,6 +809,7 @@ public class CorfuRuntime {
                 corfuRuntimeParameters.setSystemDownHandler(systemDownHandler);
                 corfuRuntimeParameters.setBeforeRpcHandler(beforeRpcHandler);
                 corfuRuntimeParameters.setMaxWriteSize(maxWriteSize);
+                corfuRuntimeParameters.setMaxUncompressedWriteSize(maxUncompressedWriteSize);
                 corfuRuntimeParameters.setBulkReadSize(bulkReadSize);
                 corfuRuntimeParameters.setHoleFillRetry(holeFillRetry);
                 corfuRuntimeParameters.setHoleFillRetryThreshold(holeFillRetryThreshold);

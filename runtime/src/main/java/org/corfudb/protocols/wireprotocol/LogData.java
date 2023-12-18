@@ -322,11 +322,11 @@ public class LogData implements IMetadata, ILogData {
                     // If the payload has a codec we need to also compress the payload
                     ByteBuf serializeBuf = Unpooled.buffer();
                     Serializers.CORFU.serialize(payload.get(), serializeBuf);
-                    checkMaxWriteSizeIfRequired(limit, serializeBuf.writerIndex() - (lengthIndex + 4));
+                    checkMaxUncompressedWriteSizeIfRequired(limit, serializeBuf.writerIndex() - (lengthIndex + 4));
                     doCompressInternal(serializeBuf, buf);
                 } else {
                     Serializers.CORFU.serialize(payload.get(), buf);
-                    checkMaxWriteSizeIfRequired(limit, buf.writerIndex() - (lengthIndex + 4));
+                    checkMaxUncompressedWriteSizeIfRequired(limit, buf.writerIndex() - (lengthIndex + 4));
                 }
                 int size = buf.writerIndex() - (lengthIndex + 4);
                 buf.writerIndex(lengthIndex);
@@ -385,13 +385,32 @@ public class LogData implements IMetadata, ILogData {
         return "LogData[" + getGlobalAddress() + "]";
     }
 
-    private void checkMaxWriteSizeIfRequired(Optional<Integer> limit, int payloadSize) {
+    private void checkMaxUncompressedWriteSizeIfRequired(Optional<Integer> limit, int payloadSize) {
         if (!limit.isPresent()) {
             return;
         }
-        log.trace("checkMaxWriteSize: payload size is {} bytes.", payloadSize);
+        log.trace("checkMaxUncompressedWriteSizeIfRequired: uncompressed payload size is {} bytes.", payloadSize);
         if (payloadSize > limit.get()) {
-            throw new WriteSizeException(payloadSize, limit.get());
+            throw new WriteSizeException("Trying to write " + payloadSize + " bytes but max uncompressed write limit is "
+                    + limit.get() + " bytes");
         }
+    }
+
+    /**
+     * Verify that max payload is enforced for the specified limit.
+     *
+     * @param limit Max write limit
+     * @return the serialized size of the payload
+     */
+    public int checkMaxWriteSize(int limit) {
+        Preconditions.checkState(serializedCache != null, "checkMaxWriteSize requires serialized form");
+
+        int payloadSize = getSizeEstimate();
+        log.trace("checkMaxWriteSize: payload size is {} bytes", payloadSize);
+        if (payloadSize > limit) {
+            throw new WriteSizeException(payloadSize, limit);
+        }
+
+        return payloadSize;
     }
 }

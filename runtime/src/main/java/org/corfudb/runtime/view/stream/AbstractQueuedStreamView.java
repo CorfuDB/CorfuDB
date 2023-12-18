@@ -188,8 +188,8 @@ public abstract class AbstractQueuedStreamView extends
         // writer will append the serialized metadata to the buffer.
         // Also, validate if the  size of the log data is under max write size.
         try (ILogData.SerializationHandle sh = ld.getSerializedForm(false,
-                Optional.of(runtime.getParameters().getMaxWriteSize()))) {
-            int payloadSize = ld.getSizeEstimate();
+                Optional.of(runtime.getParameters().getMaxUncompressedWriteSize()))) {
+            int payloadSize = ld.checkMaxWriteSize(runtime.getParameters().getMaxWriteSize());
 
             // First, we get a token from the sequencer.
             TokenResponse tokenResponse = runtime.getSequencerView().next(id);

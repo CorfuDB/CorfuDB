@@ -151,7 +151,11 @@ public class StreamsView extends AbstractView {
         // acquired yet, thus metadata is incomplete. Once a token is acquired, the
         // writer will append the serialized metadata to the buffer.
         try (ILogData.SerializationHandle sh = ld.getSerializedForm(serializeMetadata,
-                skipWriteSizeCheck ? Optional.empty() : Optional.of(runtime.getParameters().getMaxWriteSize()))) {
+                skipWriteSizeCheck ? Optional.empty() : Optional.of(runtime.getParameters().getMaxUncompressedWriteSize()))) {
+
+            int payloadSize = skipWriteSizeCheck ? ld.getSizeEstimate() :
+                    ld.checkMaxWriteSize(runtime.getParameters().getMaxWriteSize());
+
             for (int retry = 0; retry < runtime.getParameters().getWriteRetry(); retry++) {
                 // Go to the sequencer, grab a token to write.
                 tokenResponse = conflictInfo == null
@@ -205,8 +209,7 @@ public class StreamsView extends AbstractView {
             log.error("append[{}]: failed after {} retries, streams {}, write size {} bytes (compressed)",
                     tokenResponse == null ? -1 : tokenResponse.getSequence(),
                     runtime.getParameters().getWriteRetry(),
-                    Arrays.stream(streamIDs).map(Utils::toReadableId).collect(Collectors.toSet()),
-                    ld.getSizeEstimate());
+                    Arrays.stream(streamIDs).map(Utils::toReadableId).collect(Collectors.toSet()), payloadSize);
         }
 
         throw new AppendException();
