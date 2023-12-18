@@ -84,7 +84,7 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
 
     // Represents the actual replicated streams from source. This is a subset of all regular streams in
     // regularToShadowStreamId map
-    private final Set<UUID> replicatedStreamIds = ConcurrentHashMap.newKeySet();
+    private final Set<UUID> replicatedStreamIds = new HashSet<>();
 
     private final LogReplicationMetadataManager metadataManager;
 

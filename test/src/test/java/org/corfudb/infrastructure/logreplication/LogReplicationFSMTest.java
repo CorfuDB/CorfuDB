@@ -142,7 +142,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
      *
      */
     //    @Test
-    //TODO V2: This tests needs a fix that in PR #3750. Uncomment this test once its merged to master
+    // TODO V2: This tests needs a fix that in PR #3750. Uncomment this test once its merged to master
     public void testLogReplicationFSMTransitions() throws Exception {
 
         initLogReplicationFSM(ReaderImplementation.EMPTY, false);

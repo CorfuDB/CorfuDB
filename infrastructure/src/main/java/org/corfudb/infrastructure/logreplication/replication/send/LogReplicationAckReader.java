@@ -24,8 +24,10 @@ import org.corfudb.util.retry.RetryNeededException;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
@@ -42,10 +44,15 @@ public class LogReplicationAckReader {
     // be read(calculateRemainingEntriesToSend) and written(setBaseSnapshot) concurrently.
     private long baseSnapshotTimestamp;
 
-    // Periodic Thread which reads the last acknowledged timestamp and writes it to the metadata table
+    private static final int MAX_ACK_POLLER_THREAD_COUNT = 2;
+
+    // Periodic Thread which reads the last acknowledged timestamp and writes it to the metadata table.
+    // This thread pool is shared amongst all sessions
     // TODO V2: tune the thread count
-    private static ScheduledExecutorService lastAckedTsPoller = Executors.newScheduledThreadPool(2,
+    private static final ScheduledExecutorService lastAckedTsPoller = Executors.newScheduledThreadPool(MAX_ACK_POLLER_THREAD_COUNT,
             new ThreadFactoryBuilder().setNameFormat("ack-timestamp-reader-%d").build());
+
+    private static final Map<LogReplicationSession, ScheduledFuture> sessionToAckPollerFuture = new ConcurrentHashMap<>();
 
     // Interval at which the thread reads the last acknowledged timestamp
     public static final int ACKED_TS_READ_INTERVAL_SECONDS = 15;
@@ -449,8 +456,8 @@ public class LogReplicationAckReader {
      */
     public void startSyncStatusUpdatePeriodicTask() {
         log.info("Start sync status update periodic task");
-        lastAckedTsPoller.scheduleWithFixedDelay(new TsPollingTask(), 0, ACKED_TS_READ_INTERVAL_SECONDS,
-                TimeUnit.SECONDS);
+        sessionToAckPollerFuture.put(session, lastAckedTsPoller.scheduleWithFixedDelay(new TsPollingTask(), 0, ACKED_TS_READ_INTERVAL_SECONDS,
+                TimeUnit.SECONDS));
     }
 
     /**
@@ -484,5 +491,13 @@ public class LogReplicationAckReader {
                 throw new UnrecoverableCorfuInterruptedError(e);
             }
         }
+    }
+
+    public void cancelScheduledAckPollerTask() {
+        sessionToAckPollerFuture.computeIfPresent(session, (session, future) -> {
+            future.cancel(false);
+            return null;
+        });
+        sessionToAckPollerFuture.remove(session);
     }
 }

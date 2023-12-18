@@ -193,7 +193,7 @@ public class LogReplicationFSM {
     private final LogReplicationSession session;
 
     //TODO v2: tune thread count;
-    private static final int REPLICATION_WORKER_THREAD_COUNT = 2;
+    private static final int MAX_REPLICATION_WORKER_THREAD_COUNT = 2;
 
     private final FsmTaskManager fsmTaskManager;
 
@@ -218,7 +218,7 @@ public class LogReplicationFSM {
         this.logEntrySender = new LogEntrySender(logEntryReader, dataSender, this);
 
         this.fsmTaskManager = replicationContext.getTaskManager();
-        this.fsmTaskManager.createReplicationTaskManager("replicationFSM", REPLICATION_WORKER_THREAD_COUNT);
+        this.fsmTaskManager.createReplicationTaskManager("replicationFSM", MAX_REPLICATION_WORKER_THREAD_COUNT);
 
         init(dataSender, session);
         setTopologyConfigId(replicationContext.getTopologyConfigId());
@@ -246,7 +246,7 @@ public class LogReplicationFSM {
         this.snapshotSender = new SnapshotSender(replicationContext, snapshotReader, dataSender, this);
         this.logEntrySender = new LogEntrySender(logEntryReader, dataSender, this);
         this.fsmTaskManager = replicationContext.getTaskManager();
-        this.fsmTaskManager.createReplicationTaskManager("replicationFSM", REPLICATION_WORKER_THREAD_COUNT);
+        this.fsmTaskManager.createReplicationTaskManager("replicationFSM", MAX_REPLICATION_WORKER_THREAD_COUNT);
 
         init(dataSender, session);
     }
