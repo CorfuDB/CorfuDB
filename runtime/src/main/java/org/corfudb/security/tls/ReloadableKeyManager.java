@@ -80,7 +80,7 @@ public class ReloadableKeyManager implements X509KeyManager {
             reloadKeyStore();
         } catch (SSLException e) {
             String message = "Unable to reload key store " + keyStoreConfig.getKeyStoreFile() + ".";
-            throw new RuntimeException(message, e);
+            throw new IllegalStateException(message, e);
         }
     }
 
