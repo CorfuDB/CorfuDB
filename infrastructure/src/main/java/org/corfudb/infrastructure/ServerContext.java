@@ -298,6 +298,11 @@ public class ServerContext implements AutoCloseable {
         return val == null ? DEFAULT_MAX_CACHE_NUM_ENTRIES : Integer.parseInt(val);
     }
 
+    public int getMaxUncompressedTxSize() {
+        String val = getServerConfig(String.class, "--runtime-max-uncompressed-size");
+        return val == null ? CorfuRuntime.MAX_UNCOMPRESSED_WRITE_SIZE : Integer.parseInt(val);
+    }
+
     /**
      * Get the max write size of a transaction for LR's runtime.
      * @return max write size of a transaction

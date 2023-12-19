@@ -41,7 +41,7 @@ public abstract class LogReplicationConfig {
     public static final int DEFAULT_MAX_CACHE_NUM_ENTRIES = 200;
 
     // Percentage of log data per log replication message
-    public static final int DATA_FRACTION_PER_MSG = 90;
+    public static final int DATA_FRACTION_OF_UNCOMPRESSED_WRITE_SIZE = 85;
 
     public static final UUID REGISTRY_TABLE_ID = CorfuRuntime.getStreamID(
         TableRegistry.getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, TableRegistry.REGISTRY_TABLE_NAME));
@@ -67,9 +67,9 @@ public abstract class LogReplicationConfig {
     private int maxCacheSize;
 
     /**
-     * The max size of data payload for the log replication message.
+     * The max size of replicated data payload transferred at a time.
      */
-    private int maxDataSizePerMsg;
+    private int maxTransferSize;
 
     /**
      * Max number of entries to be applied during a snapshot sync.  For special tables only.
@@ -103,6 +103,7 @@ public abstract class LogReplicationConfig {
             this.maxCacheSize = serverContext.getLogReplicationCacheMaxSize();
             this.maxSnapshotEntriesApplied = serverContext.getMaxSnapshotEntriesApplied();
         }
-        this.maxDataSizePerMsg = maxMsgSize * DATA_FRACTION_PER_MSG / 100;
+        this.maxTransferSize = Math.min(maxMsgSize,
+                serverContext.getMaxUncompressedTxSize() * DATA_FRACTION_OF_UNCOMPRESSED_WRITE_SIZE / 100);
     }
 }

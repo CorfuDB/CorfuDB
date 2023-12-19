@@ -71,7 +71,7 @@ public abstract class BaseSnapshotReader extends SnapshotReader {
         this.session = session;
         this.replicationContext = replicationContext;
         this.rt.parseConfigurationString(runtime.getLayoutServers().get(0)).connect();
-        this.maxDataSizePerMsg = replicationContext.getConfig(session).getMaxDataSizePerMsg();
+        this.maxDataSizePerMsg = replicationContext.getConfig(session).getMaxTransferSize();
         this.messageSizeDistributionSummary = configureMessageSizeDistributionSummary();
         refreshStreamsToReplicateSet();
         log.info("Total of {} streams to replicate at initialization. Streams to replicate={}, Session={}",
@@ -146,7 +146,6 @@ public abstract class BaseSnapshotReader extends SnapshotReader {
                     List<SMREntry> smrEntries = lastEntry.getEntries().get(stream.uuid);
                     if (smrEntries != null) {
                         int currentEntrySize = ReaderUtility.calculateSize(smrEntries);
-
                         if (currentEntrySize > DEFAULT_MAX_DATA_MSG_SIZE) {
                             log.error("The current entry size {} is bigger than the maxDataSizePerMsg {} supported",
                                 currentEntrySize, DEFAULT_MAX_DATA_MSG_SIZE);
