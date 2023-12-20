@@ -235,13 +235,6 @@ public class FsmTaskManager {
                 }
             }
 
-            // For testing purpose to notify the event generator the stop of the event.
-            if (currEvent.getType() == LogReplicationEvent.LogReplicationEventType.REPLICATION_STOP) {
-                synchronized (currEvent) {
-                    currEvent.notifyAll();
-                }
-            }
-
             removeReplicationEventIdFromMap(session, currEvent.getEventId());
             fsm.notifyAll();
         }
