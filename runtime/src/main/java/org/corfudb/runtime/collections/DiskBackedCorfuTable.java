@@ -96,6 +96,9 @@ public class DiskBackedCorfuTable<K, V> implements
 
     public static final Options defaultOptions = getDiskBackedCorfuTableOptions();
     private static final HashFunction murmurHash3 = Hashing.murmur3_32();
+    private static final long NUM_LOG_FILES = 2;
+    private static final long LOG_FILE_SIZE = 1024 * 1024 * 5; // 5MB.
+
     private static final String DISK_BACKED = "diskBacked";
     private static final String TRUE = "true";
     private static final int BOUND = 100;
@@ -197,6 +200,11 @@ public class DiskBackedCorfuTable<K, V> implements
 
         options.setCreateIfMissing(true);
         options.setCompressionType(CompressionType.LZ4_COMPRESSION);
+
+        // For long-running processes, limit the amount of space
+        // that the log files can occupy.
+        options.setKeepLogFileNum(NUM_LOG_FILES);
+        options.setMaxLogFileSize(LOG_FILE_SIZE);
 
         BlockBasedTableConfig blockBasedTableConfig = new BlockBasedTableConfig();
         blockBasedTableConfig.setFilterPolicy(new BloomFilter(10));
