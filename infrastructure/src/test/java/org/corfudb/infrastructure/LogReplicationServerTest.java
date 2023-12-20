@@ -6,6 +6,7 @@ import org.assertj.core.api.Assertions;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.infrastructure.logreplication.infrastructure.SessionManager;
 import org.corfudb.infrastructure.logreplication.infrastructure.msghandlers.LogReplicationServer;
+import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
@@ -68,7 +69,7 @@ public class LogReplicationServerTest {
     LogReplicationSession session = LogReplicationSession.newBuilder()
             .setSourceClusterId(sourceClusterId)
             .setSinkClusterId(SINK_CLUSTER_ID)
-            .setSubscriber(LogReplicationConfigManager.getDefaultSubscriber())
+            .setSubscriber(DefaultClusterConfig.getDefaultSubscriber())
             .build();
 
     /**
@@ -81,11 +82,9 @@ public class LogReplicationServerTest {
         sessionManager = mock(SessionManager.class);
         sinkManager = mock(LogReplicationSinkManager.class);
         Mockito.when(sinkManager.getIsShutdown()).thenReturn(new AtomicBoolean(false));
-        Set<LogReplicationSession> sessionSet = new HashSet<>();
-        sessionSet.add(session);
         LogReplicationContext replicationContext = new LogReplicationContext(mock(LogReplicationConfigManager.class),
                 0L, SAMPLE_HOSTNAME, true, mock(LogReplicationPluginConfig.class), mock(CorfuRuntime.class));
-        lrServer = spy(new LogReplicationServer(context, sessionSet, metadataManager, SINK_NODE_ID, SINK_CLUSTER_ID,
+        lrServer = spy(new LogReplicationServer(context, metadataManager, SINK_NODE_ID, SINK_CLUSTER_ID,
                 replicationContext, sessionManager));
         lrServer.getSessionToSinkManagerMap().put(session, sinkManager);
         mockHandlerContext = mock(ChannelHandlerContext.class);

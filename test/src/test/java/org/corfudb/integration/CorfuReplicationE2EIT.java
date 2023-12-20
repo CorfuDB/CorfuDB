@@ -32,8 +32,7 @@ public class CorfuReplicationE2EIT extends LogReplicationAbstractIT {
         );
 
         List<ExampleSchemas.ClusterUuidMsg> topologyTypes = Arrays.asList(
-                DefaultClusterManager.TP_SINGLE_SOURCE_SINK,
-                DefaultClusterManager.TP_SINGLE_SOURCE_SINK_REV_CONNECTION
+                DefaultClusterManager.TP_SINGLE_SOURCE_SINK
         );
 
         List<Pair<String, ExampleSchemas.ClusterUuidMsg>> absolutePathPlugins = new ArrayList<>();

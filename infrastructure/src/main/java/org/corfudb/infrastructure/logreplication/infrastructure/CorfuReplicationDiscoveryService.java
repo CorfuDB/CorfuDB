@@ -373,7 +373,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
 
         // Setup the connection components if this node is the leader
         if (sessionManager.getReplicationContext().getIsLeader().get()) {
-            setupConnectionComponents();
+            setupConnectionReceivingComponents();
         }
 
         // If invoked on a topology change and no longer a Source, stop the listeners
@@ -394,16 +394,11 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         }
     }
 
-    private void setupConnectionComponents() {
-        setupConnectionReceivingComponents();
-        sessionManager.connectToRemoteClusters();
-    }
-
     /**
      * Create CorfuInterClusterReplicationServerNode when the cluster is a connection endpoint.
      */
     private void setupConnectionReceivingComponents() {
-        if (!sessionManager.isConnectionReceiver()) {
+        if (!topologyDescriptor.getRemoteSinkClusters().isEmpty()) {
             if (interClusterServerNode != null) {
                 // Stop the replication server.
                 // There may be a topology change where the remote cluster that would connect to the local cluster was
@@ -454,7 +449,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
      */
     private void stopLogReplication(boolean lockReleased) {
         if (lockReleased || sessionManager.getReplicationContext().getIsLeader().get()) {
-            log.info("Stopping log replication.");
+            log.info("Stopping Log Replication");
             sessionManager.stopReplication();
         }
     }

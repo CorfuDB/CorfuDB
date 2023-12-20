@@ -60,12 +60,6 @@ public class GRPCLogReplicationServerChannelAdapter extends IServerChannelAdapte
     }
 
     @Override
-    public void send(CorfuMessage.RequestMsg msg) {
-        log.info("Server send Request message {}", msg.getPayload().getPayloadCase());
-        service.send(msg);
-    }
-
-    @Override
     public CompletableFuture<Boolean> start() throws IllegalStateException {
         CompletableFuture<Boolean> serverCompletable = new CompletableFuture<>();
         try {

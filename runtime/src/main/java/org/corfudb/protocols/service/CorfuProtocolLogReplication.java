@@ -191,20 +191,4 @@ public final class CorfuProtocolLogReplication {
                 .setLrLeadershipLoss(leadershipLossMsg).build();
         return getResponseMsg(header, payload);
     }
-
-    /**
-     * construct a leadership loss msg embedded in a request msg. This is used by the SOURCE to notify the SINK when the
-     * latter is the connection starter
-     *
-     * @param nodeId
-     * @return
-     */
-    public static RequestPayloadMsg getLeadershipLossRequestPayloadMsg(String nodeId) {
-        LogReplication.LogReplicationLeadershipLossMsg leadershipLossMsg = LogReplication.LogReplicationLeadershipLossMsg
-                .newBuilder()
-                .setNodeId(nodeId)
-                .build();
-        return RequestPayloadMsg.newBuilder()
-                .setLrLeadershipLoss(leadershipLossMsg).build();
-    }
 }

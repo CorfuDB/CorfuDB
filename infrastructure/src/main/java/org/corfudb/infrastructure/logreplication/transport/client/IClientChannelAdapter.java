@@ -74,14 +74,6 @@ public abstract class IClientChannelAdapter {
     public abstract void send(String nodeId, RequestMsg request);
 
     /**
-     * Send a message across the channel to a specific endpoint.
-     *
-     * @param nodeId remote node id
-     * @param request corfu message to be sent
-     */
-    public abstract void send(String nodeId, ResponseMsg request);
-
-    /**
      * Notify adapter of cluster change or reconfiguration.
      *
      * Since the adapter manages the connections to the remote site it must close or open
@@ -98,10 +90,6 @@ public abstract class IClientChannelAdapter {
      * @param msg received corfu message
      */
     public void receive(ResponseMsg msg) {
-        router.receive(msg);
-    }
-
-    public void receive(RequestMsg msg) {
         router.receive(msg);
     }
 

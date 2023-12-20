@@ -104,8 +104,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
         );
 
         List<ExampleSchemas.ClusterUuidMsg> topologyTypes = Arrays.asList(
-                DefaultClusterManager.TP_SINGLE_SOURCE_SINK,
-                DefaultClusterManager.TP_SINGLE_SOURCE_SINK_REV_CONNECTION
+                DefaultClusterManager.TP_SINGLE_SOURCE_SINK
         );
 
         List<Pair<String, ExampleSchemas.ClusterUuidMsg>> absolutePathPlugins = new ArrayList<>();
@@ -249,11 +248,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
                                          LogReplication.SyncStatus targetSnapshotSyncStatus,
                                          boolean verifyNoMoreEntriesToSend) {
 
-        LogReplicationSession session = LogReplicationSession.newBuilder()
-            .setSourceClusterId(new DefaultClusterConfig().getSourceClusterIds().get(0))
-            .setSinkClusterId(new DefaultClusterConfig().getSinkClusterIds().get(0))
-            .setSubscriber(LogReplicationConfigManager.getDefaultSubscriber())
-            .build();
+        LogReplicationSession session = DefaultClusterConfig.getSessionsForTopology(topologyType, 1, 1).stream().findFirst().get();
 
         LogReplication.ReplicationStatus replicationStatus;
         try (TxnContext txn = corfuStoreSource.txn(LogReplicationMetadataManager.NAMESPACE)) {
@@ -316,6 +311,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
         try {
             log.debug("Setup source and sink Corfu's");
             setupSourceAndSinkCorfu();
+            initSingleSourceSinkCluster();
 
             log.debug("Open map on source and sink");
             openMaps(MAP_COUNT, false);
@@ -623,11 +619,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
     }
 
     private void blockUntilSnapshotSyncCompleted() {
-        LogReplicationSession key = LogReplicationSession.newBuilder()
-            .setSourceClusterId(new DefaultClusterConfig().getSourceClusterIds().get(0))
-            .setSinkClusterId(new DefaultClusterConfig().getSinkClusterIds().get(0))
-            .setSubscriber(LogReplicationConfigManager.getDefaultSubscriber())
-            .build();
+        LogReplicationSession key = DefaultClusterConfig.getSessionsForTopology(topologyType, 1, 1).stream().findFirst().get();
 
         LogReplication.ReplicationStatus replicationStatus;
         boolean snapshotSyncCompleted = false;

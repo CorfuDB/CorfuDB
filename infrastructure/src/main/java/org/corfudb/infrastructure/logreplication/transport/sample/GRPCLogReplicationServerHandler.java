@@ -46,18 +46,11 @@ public class GRPCLogReplicationServerHandler extends LogReplicationGrpc.LogRepli
      */
     Map<Pair<LogReplicationSession, Long>, CorfuStreamObserver<ResponseMsg>>  replicationStreamObserverMap;
 
-    /*
-     * Used when Sink is the connection starter. Source drives the replication using the streamObserver.
-     * Map of session to StreamObserver to send requests to the clients.
-     *
-     */
-    Map<LogReplicationSession, CorfuStreamObserver<RequestMsg>> reverseReplicationStreamObserverMap;
 
     public GRPCLogReplicationServerHandler(LogReplicationClientServerRouter router) {
         this.router = router;
         this.unaryCallStreamObserverMap = new ConcurrentHashMap<>();
         this.replicationStreamObserverMap = new ConcurrentHashMap<>();
-        this.reverseReplicationStreamObserverMap = new ConcurrentHashMap<>();
     }
 
     @Override
@@ -113,45 +106,6 @@ public class GRPCLogReplicationServerHandler extends LogReplicationGrpc.LogRepli
         };
     }
 
-    @Override
-    public StreamObserver<ResponseMsg> reverseReplicate(StreamObserver<RequestMsg> responseObserver) {
-
-        return new StreamObserver<ResponseMsg>() {
-            LogReplicationSession session;
-            long requestId;
-            @Override
-            public void onNext(ResponseMsg lrResponseMsg) {
-                requestId = lrResponseMsg.getHeader().getRequestId();
-
-                session = lrResponseMsg.getHeader().getSession();
-
-                try {
-                    reverseReplicationStreamObserverMap.putIfAbsent(session, new CorfuStreamObserver<>(responseObserver));
-                } catch (Exception e) {
-                    log.error("Exception caught when unpacking log replication entry {}. Skipping message.",
-                            requestId, e);
-                }
-
-                router.receive(lrResponseMsg);
-            }
-
-            @Override
-            public void onError(Throwable t) {
-                log.error("Encountered error in the long living reverse replicate RPC for {}...", session, t);
-                reverseReplicationStreamObserverMap.remove(session);
-                router.completeExceptionally(session, requestId, t);
-                router.onConnectionDown(session);
-            }
-
-            @Override
-            public void onCompleted() {
-                log.info("Client has completed snapshot replication.");
-            }
-        };
-    }
-
-
-
     public void send(ResponseMsg msg) {
         long requestId = msg.getHeader().getRequestId();
         LogReplicationSession session = msg.getHeader().getSession();
@@ -195,36 +149,6 @@ public class GRPCLogReplicationServerHandler extends LogReplicationGrpc.LogRepli
             // Remove observer as response was already sent
             unaryCallStreamObserverMap.remove(Pair.of(session, requestId));
         }
-    }
-
-    public void send(RequestMsg msg) {
-
-        LogReplicationSession session = msg.getHeader().getSession();
-        try {
-
-            if (!reverseReplicationStreamObserverMap.containsKey(session)) {
-                log.warn("Corfu Message {} has no pending observer. Message {} will not be sent.",
-                        msg.getHeader().getRequestId(), msg.getPayload().getPayloadCase().name());
-                router.completeExceptionally(session, msg.getHeader().getRequestId(),
-                        new NetworkException(String.format("No pending observer for session %s", session),
-                                session.getSinkClusterId()));
-                return;
-            }
-
-            CorfuStreamObserver<RequestMsg> observer = reverseReplicationStreamObserverMap.get(session);
-            observer.onNext(msg);
-
-        } catch (StatusRuntimeException e) {
-            if (e.getStatus().getCode().equals(Status.Code.CANCELLED)) {
-                log.error("StreamObserver is cancelled for session {} with exception", msg.getHeader().getSession(), e);
-                router.onConnectionDown(msg.getHeader().getSession());
-            }
-            router.completeExceptionally(session, msg.getHeader().getRequestId(), e);
-        } catch (Exception e) {
-            log.error("Caught exception while trying to send message {}", msg.getHeader().getRequestId(), e);
-            router.completeExceptionally(session, msg.getHeader().getRequestId(), e);
-        }
-
     }
 
 }

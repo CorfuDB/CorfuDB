@@ -385,7 +385,7 @@ public class LogEntryWriterTest extends AbstractViewTest {
     }
 
     private LogReplicationSession getDefaultSession() {
-        return DefaultClusterConfig.getSessions().get(0);
+        return DefaultClusterConfig.getAllFullTableSessions().get(0);
     }
 
     /**

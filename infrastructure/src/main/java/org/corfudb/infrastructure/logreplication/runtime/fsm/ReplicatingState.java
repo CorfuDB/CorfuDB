@@ -8,7 +8,6 @@ import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientSer
 
 import java.util.UUID;
 
-import static org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationFsmUtil.canEnqueueStopRuntimeFsmEvent;
 
 /**
  * Log Replication Runtime Replicating State.
@@ -71,10 +70,7 @@ public class ReplicatingState implements LogReplicationRuntimeState {
                 fsm.updateConnectedNodes(event.getNodeId());
                 return null;
             case LOCAL_LEADER_LOSS:
-                if (canEnqueueStopRuntimeFsmEvent(router, fsm, event.isConnectionStarter())) {
-                    return fsm.getStates().get(LogReplicationRuntimeStateType.STOPPED);
-                }
-                return null;
+                return fsm.getStates().get(LogReplicationRuntimeStateType.STOPPED);
             default: {
                 log.warn("Unexpected communication event {} when in init state.", event.getType());
                 throw new IllegalTransitionException(event.getType(), getType());

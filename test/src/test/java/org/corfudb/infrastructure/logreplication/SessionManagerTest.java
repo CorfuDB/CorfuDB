@@ -56,7 +56,7 @@ public class SessionManagerTest extends AbstractViewTest {
 
         replicationManager = Mockito.mock(CorfuReplicationManager.class);
         Mockito.doNothing().when(replicationManager).refreshRuntime(any(), any(), anyLong());
-        Mockito.doNothing().when(replicationManager).createAndStartRuntime(any(), any(), any());
+        Mockito.doNothing().when(replicationManager).createAndStartRuntime(any(), any());
 
         pluginConfig = Mockito.mock(LogReplicationPluginConfig.class);
     }
@@ -145,13 +145,17 @@ public class SessionManagerTest extends AbstractViewTest {
         Assert.assertEquals(0, sessionManager.getIncomingSessions().size());
 
         //get sessions from topology1
-        Set<LogReplication.LogReplicationSession> sessionsFromTopology1 = new HashSet<>(sessionManager.getSessions());
+        Set<LogReplication.LogReplicationSession> sessionsFromTopology1 = new HashSet<>();
+        sessionsFromTopology1.addAll(sessionManager.getOutgoingSessions());
+        sessionsFromTopology1.addAll(sessionManager.getIncomingSessions());
 
         // Encounter topology change by introducing a new sink cluster and removing the existing sink cluster.
         TopologyDescriptor newTopology = clusterManager.addAndRemoveSinkFromDefaultTopology();
         sessionManager.refresh(newTopology);
         // get sessions from topology2
-        Set<LogReplication.LogReplicationSession> sessionFromTopology2 = new HashSet<>(sessionManager.getSessions());
+        Set<LogReplication.LogReplicationSession> sessionFromTopology2 = new HashSet<>();
+        sessionFromTopology2.addAll(sessionManager.getOutgoingSessions());
+        sessionFromTopology2.addAll(sessionManager.getIncomingSessions());
 
         //assert size of incoming and outgoing sessions
         Assert.assertEquals(0, sessionManager.getIncomingSessions().size());
@@ -179,7 +183,7 @@ public class SessionManagerTest extends AbstractViewTest {
         IServerChannelAdapter serverChannelAdapter = Mockito.mock(IServerChannelAdapter.class);
         this.router = new LogReplicationClientServerRouter(0L,
                 topology.getLocalNodeDescriptor().getClusterId(), topology.getLocalNodeDescriptor().getNodeId(),
-                new HashSet<>(), new HashSet<>(), msgHandler, clientChannelAdapter, serverChannelAdapter);
+                msgHandler, clientChannelAdapter, serverChannelAdapter);
 
         SessionManager sessionManager = new SessionManager(topology, corfuRuntime, replicationManager, router,
                 msgHandler, pluginConfig);
@@ -194,11 +198,9 @@ public class SessionManagerTest extends AbstractViewTest {
         remoteSinkToModel.remove(clusterToRemove);
         Map<String, ClusterDescriptor> newAllClusters = new HashMap<>(topology.getAllClustersInTopology());
         newAllClusters.remove(clusterToRemove.getClusterId());
-        Set<ClusterDescriptor> newRemoteClusterEndpoints = new HashSet<>(topology.getRemoteClusterEndpoints().values());
-        newRemoteClusterEndpoints.remove(clusterToRemove);
 
         TopologyDescriptor newTopology = new TopologyDescriptor(topology.getTopologyConfigId() + 1, remoteSinkToModel,
-                topology.getRemoteSourceClusterToReplicationModels(), newAllClusters, newRemoteClusterEndpoints,
+                topology.getRemoteSourceClusterToReplicationModels(), newAllClusters,
                 topology.getLocalNodeDescriptor().getNodeId());
         sessionManager.refresh(newTopology);
         Assert.assertTrue(router.getConnectedSessions().size() == 2);

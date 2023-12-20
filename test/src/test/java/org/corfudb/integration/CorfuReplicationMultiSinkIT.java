@@ -68,17 +68,11 @@ public class CorfuReplicationMultiSinkIT extends CorfuReplicationMultiSourceSink
     }
 
     @Test
-    public void testUpdatesOnReplicatedTables_sinkConnectionStarter() throws Exception {
-        super.setUp(1, MAX_REMOTE_CLUSTERS, DefaultClusterManager.TP_MULTI_SINK_REV_CONNECTION);
-        verifySnapshotAndLogEntrySink(false);
-    }
-
-    @Test
     public void testRoleChange() throws Exception {
         verifySnapshotAndLogEntrySink(false);
-        log.info("Preparing for role change");
+        System.out.println("Preparing for role change");
         prepareTestTopologyForRoleChange(MAX_REMOTE_CLUSTERS, 1);
-        log.info("Testing after role change");
+        System.out.println("Testing after role change");
         verifySnapshotAndLogEntrySink(true);
     }
 }

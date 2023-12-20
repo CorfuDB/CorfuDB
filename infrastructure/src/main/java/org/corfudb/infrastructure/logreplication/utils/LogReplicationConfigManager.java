@@ -5,11 +5,13 @@ import com.google.protobuf.Message;
 import com.google.protobuf.TextFormat;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.tuple.Pair;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.logreplication.config.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.config.LogReplicationFullTableConfig;
 import org.corfudb.infrastructure.logreplication.config.LogReplicationLogicalGroupConfig;
 import org.corfudb.infrastructure.logreplication.config.LogReplicationRoutingQueueConfig;
+import org.corfudb.infrastructure.logreplication.infrastructure.SessionManager;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
@@ -72,6 +74,7 @@ public class LogReplicationConfigManager {
 
     // Represents default client for LR V1, i.e., use case where tables are tagged with
     // 'is_federated' flag, yet no client is specified in proto
+    @Getter
     private static final String DEFAULT_CLIENT = "00000000-0000-0000-0000-000000000000";
 
     @Getter
@@ -129,33 +132,7 @@ public class LogReplicationConfigManager {
         init();
     }
 
-    public static ReplicationSubscriber getDefaultLogicalGroupSubscriber() {
-        return ReplicationSubscriber.newBuilder()
-                .setClientName(DEFAULT_LOGICAL_GROUP_CLIENT)
-                .setModel(ReplicationModel.LOGICAL_GROUPS)
-                .build();
-    }
 
-    public static ReplicationSubscriber getDefaultRoutingQueueSubscriber() {
-        return ReplicationSubscriber.newBuilder()
-                .setClientName(DEFAULT_ROUTING_QUEUE_CLIENT)
-                .setModel(ReplicationModel.ROUTING_QUEUES)
-                .build();
-    }
-
-    public static ReplicationSubscriber getDefaultRoutingQueueConfigSubscriber() {
-        return ReplicationSubscriber.newBuilder()
-            .setClientName(DEFAULT_ROUTING_QUEUE_CONFIG_CLIENT)
-            .setModel(ReplicationModel.ROUTING_QUEUES)
-            .build();
-    }
-
-    public static ReplicationSubscriber getDefaultSubscriber() {
-        return ReplicationSubscriber.newBuilder()
-                .setClientName(DEFAULT_CLIENT)
-                .setModel(ReplicationModel.FULL_TABLE)
-                .build();
-    }
     /**
      * Init config manager:
      * 1. Adding default subscriber to registeredSubscribers
@@ -163,18 +140,8 @@ public class LogReplicationConfigManager {
      * 3. Initialize registry table log tail and in-memory entries
      */
     private void init() {
-        registeredSubscribers.add(getDefaultSubscriber());
-        registeredSubscribers.add(getDefaultRoutingQueueConfigSubscriber());
         openClientConfigTables();
         syncWithRegistryTable();
-        syncWithClientConfigTable();
-
-        try {
-            corfuStore.openQueue(CORFU_SYSTEM_NAMESPACE, LOG_ENTRY_SYNC_QUEUE_NAME_SENDER, Queue.RoutingTableEntryMsg.class,
-                TableOptions.fromProtoSchema(Queue.RoutingTableEntryMsg.class));
-        } catch (Exception e) {
-            log.error("Failed to open the Log Entry Sync Queue", e);
-        }
     }
 
     private void openClientConfigTables() {
@@ -282,8 +249,8 @@ public class LogReplicationConfigManager {
                 // Find streams to replicate for every logical group for this session
                 String logicalGroup = entry.getValue().getMetadata().getTableOptions()
                         .getReplicationGroup().getLogicalGroup();
-                //if (session.getSubscriber().getClientName().equals(clientReplicationSubscriber.getClientName()) &&
-                //clientReplicationSubscriber.getModel().equals(ReplicationModel.LOGICAL_GROUPS)) {
+                // TODO (V2): Client name should be checked after the rpc stream is added for Sink side session creation.
+                // if (session.getSubscriber().getClientName().equals(clientName) && groups.contains(logicalGroup)) {
                 if (isSink || logicalGroupToStreams.containsKey(logicalGroup)) {
                     streamsToReplicate.add(tableName);
                     Set<String> relatedStreams = logicalGroupToStreams.getOrDefault(logicalGroup, new HashSet<>());
@@ -462,9 +429,10 @@ public class LogReplicationConfigManager {
      *
      * @return Log tail hat will be the start point for client register listener to monitor updates.
      */
-    public CorfuStoreMetadata.Timestamp preprocessAndGetTail() {
+    public Pair<Set<ReplicationSubscriber>, CorfuStoreMetadata.Timestamp> preprocessAndGetTail() {
         try {
             return IRetry.build(IntervalRetry.class, () -> {
+                Set<ReplicationSubscriber> newSubscribers = new HashSet<>();
                 try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
                     List<CorfuStoreEntry<ClientRegistrationId, ClientRegistrationInfo, Message>> registrationResults =
                             txn.executeQuery(clientRegistrationTable, p -> true);
@@ -473,12 +441,13 @@ public class LogReplicationConfigManager {
                         ReplicationModel model = entry.getPayload().getModel();
                         ReplicationSubscriber subscriber = ReplicationSubscriber.newBuilder()
                                 .setClientName(clientName).setModel(model).build();
-                        if (model.equals(ReplicationModel.LOGICAL_GROUPS)) {
-                            subscriber = getDefaultLogicalGroupSubscriber();
+                        if (!registeredSubscribers.contains(subscriber)) {
+                            registeredSubscribers.add(subscriber);
+                            newSubscribers.add(subscriber);
                         }
-                        registeredSubscribers.add(subscriber);
                     });
-                    return txn.commit();
+                    CorfuStoreMetadata.Timestamp ts = txn.commit();
+                    return Pair.of(newSubscribers, ts);
                 } catch (TransactionAbortedException tae) {
                     log.error("Failed to preprocess client registration table due to Txn Abort, retrying", tae);
                     throw new RetryNeededException();
@@ -488,6 +457,8 @@ public class LogReplicationConfigManager {
             log.error("Unable to preprocess client configuration tables", e);
             throw new UnrecoverableCorfuInterruptedError(e);
         }
+
+
     }
 
     /**
@@ -506,7 +477,7 @@ public class LogReplicationConfigManager {
      * tables in the same transaction (as the listener finds the timestamp from which to subscribe for deltas) to
      * avoid data loss.
      */
-    public CorfuStoreMetadata.Timestamp onClientListenerResume() {
+    public Pair<Set<ReplicationSubscriber>, CorfuStoreMetadata.Timestamp> onClientListenerResume() {
         registeredSubscribers.clear();
         return preprocessAndGetTail();
     }

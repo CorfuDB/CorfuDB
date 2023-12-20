@@ -93,7 +93,6 @@ message RequestPayloadMsg {
     LogReplicationEntryMsg lr_entry = 70;
     LogReplicationMetadataRequestMsg lr_metadata_request = 71;
     LogReplicationLeadershipRequestMsg lr_leadership_query = 72;
-    LogReplicationLeadershipLossMsg lr_leadership_loss = 73;
   }
 }
 
@@ -150,7 +149,6 @@ message ResponsePayloadMsg {
     LogReplicationLeadershipResponseMsg lr_leadership_response = 72;
 
     LogReplicationLeadershipLossMsg lr_leadership_loss = 73;
-    ReverseReplicateMsg lr_reverse_replicate_msg = 74;
 
     // Server Error
     ServerErrorMsg server_error = 200;

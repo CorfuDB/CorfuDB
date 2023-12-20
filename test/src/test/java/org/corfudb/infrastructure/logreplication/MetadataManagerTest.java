@@ -40,7 +40,7 @@ public class MetadataManagerTest extends AbstractViewTest {
     private boolean success;
     private long topologyConfigId = 5L;
     private TestUtils utils;
-    private List<LogReplicationSession> sessions = DefaultClusterConfig.getSessions();
+    private List<LogReplicationSession> sessions = DefaultClusterConfig.getAllFullTableSessions();
     private LogReplicationSession defaultSession = sessions.get(0);
     private LogReplicationMetadataManager metadataManager;
     private LogReplicationContext replicationContext;

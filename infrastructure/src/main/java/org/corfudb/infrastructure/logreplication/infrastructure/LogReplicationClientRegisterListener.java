@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure.logreplication.infrastructure;
 
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.tuple.Pair;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.infrastructure.logreplication.utils.SnapshotSyncUtils;
 import org.corfudb.runtime.CorfuStoreMetadata;
@@ -17,6 +18,7 @@ import org.corfudb.runtime.exceptions.StreamingException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.corfudb.infrastructure.logreplication.config.LogReplicationLogicalGroupConfig.CLIENT_CONFIG_TAG;
@@ -70,13 +72,13 @@ public class LogReplicationClientRegisterListener extends StreamListenerResumeOr
      * Subscribe this stream listener to start monitoring the changes of LR client config tables.
      */
     public void start() {
-        CorfuStoreMetadata.Timestamp timestamp = configManager.preprocessAndGetTail();
-        CorfuStoreMetadata.Timestamp clientSubscriptionTimeStamp = CorfuStoreMetadata.Timestamp.
-                newBuilder().setEpoch(timestamp.getEpoch()).setSequence(timestamp.getSequence()-1).build();
+        Pair<Set<LogReplication.ReplicationSubscriber>, CorfuStoreMetadata.Timestamp> subscribersAndLogTail = configManager.preprocessAndGetTail();
+        subscribersAndLogTail.getLeft().forEach(sessionManager :: createSessions);
+        CorfuStoreMetadata.Timestamp tail = subscribersAndLogTail.getRight();
 
-        log.info("Start log replication listener for client registration table from {}", clientSubscriptionTimeStamp);
+        log.info("Start log replication listener for client registration table from {}", tail);
         try {
-            corfuStore.subscribeListener(this, CORFU_SYSTEM_NAMESPACE, CLIENT_CONFIG_TAG, tablesOfInterest, clientSubscriptionTimeStamp);
+            corfuStore.subscribeListener(this, CORFU_SYSTEM_NAMESPACE, CLIENT_CONFIG_TAG, tablesOfInterest, tail);
             started.set(true);
         } catch (StreamingException e) {
             if (e.getExceptionCause().equals(StreamingException.ExceptionCause.LISTENER_SUBSCRIBED)) {
@@ -124,12 +126,8 @@ public class LogReplicationClientRegisterListener extends StreamListenerResumeOr
                 ReplicationModel model = ((ClientRegistrationInfo) entry.getPayload()).getModel();
                 LogReplication.ReplicationSubscriber subscriber = LogReplication.ReplicationSubscriber.newBuilder()
                         .setClientName(clientName).setModel(model).build();
-                if ((model.equals(ReplicationModel.FULL_TABLE) || model.equals(ReplicationModel.LOGICAL_GROUPS)
-                        || model.equals(ReplicationModel.ROUTING_QUEUES)) && sessionManager.getReplicationContext().getIsLeader().get()) {
-                    configManager.onNewClientRegister(subscriber);
-                    sessionManager.createSessionsForClientRegister(subscriber);
-
-                }
+                configManager.onNewClientRegister(subscriber);
+                sessionManager.createSessions(subscriber);
                 log.info("New client {} registered with model {}", clientName, model);
             } else if (entry.getOperation().equals(CorfuStreamEntry.OperationType.DELETE)) {
                 // TODO (V2 / Chris/Shreay): add unregister API for clients
@@ -163,11 +161,12 @@ public class LogReplicationClientRegisterListener extends StreamListenerResumeOr
      */
     @Override
     protected CorfuStoreMetadata.Timestamp performFullSync() {
-        CorfuStoreMetadata.Timestamp timestamp = configManager.onClientListenerResume();
-        sessionManager.getSessions().forEach(session -> {
+        Pair<Set<LogReplication.ReplicationSubscriber>, CorfuStoreMetadata.Timestamp> subscribersAndTs = configManager.onClientListenerResume();
+        subscribersAndTs.getLeft().forEach(sessionManager::createSessions);
+        sessionManager.getOutgoingSessions().forEach(session -> {
             SnapshotSyncUtils.enforceSnapshotSync(session, corfuStore,
                     LogReplication.ReplicationEvent.ReplicationEventType.FORCE_SNAPSHOT_SYNC);
         });
-        return timestamp;
+        return subscribersAndTs.getRight();
     }
 }
