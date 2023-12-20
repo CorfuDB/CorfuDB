@@ -70,6 +70,7 @@ public class InitializedState implements LogReplicationState {
     public void onEntry(LogReplicationState from) {
         if (from != this) {
             fsm.getAckReader().markSyncStatus(SyncStatus.STOPPED);
+            fsm.getAckReader().cancelScheduledAckPollerTask();
             log.debug("Replication status changed to STOPPED");
         }
     }

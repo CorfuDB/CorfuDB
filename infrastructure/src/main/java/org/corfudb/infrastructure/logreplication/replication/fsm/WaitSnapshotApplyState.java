@@ -1,6 +1,5 @@
 package org.corfudb.infrastructure.logreplication.replication.fsm;
 
-import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.DataSender;
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationEventMetadata;
@@ -8,13 +7,11 @@ import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRunt
 import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
 import org.corfudb.runtime.LogReplication.SyncType;
 
-import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * This class represents the WaitSnapshotApply state of the Log Replication State Machine.
@@ -54,8 +51,6 @@ public class WaitSnapshotApplyState implements LogReplicationState {
      * Base Snapshot Timestamp for current Snapshot Sync
      */
     private long baseSnapshotTimestamp;
-
-    private final AtomicBoolean stopSnapshotApply = new AtomicBoolean(false);
 
     /**
      * Constructor
@@ -129,7 +124,6 @@ public class WaitSnapshotApplyState implements LogReplicationState {
                 // No need to validate transitionId as REPLICATION_STOP comes either from enforceSnapshotSync or when
                 // the runtime FSM transitions back to VERIFYING_REMOTE_LEADER from REPLICATING state
                 log.debug("Stop Log Replication while waiting for snapshot sync apply to complete id={}", transitionSyncId);
-                stopSnapshotApply.set(true);
                 return fsm.getStates().get(LogReplicationStateType.INITIALIZED);
             case REPLICATION_SHUTDOWN:
                 log.debug("Shutdown Log Replication while waiting for snapshot sync apply to complete id={}", transitionSyncId);
@@ -152,7 +146,6 @@ public class WaitSnapshotApplyState implements LogReplicationState {
         log.info("OnEntry :: wait snapshot apply state");
         if (from.getType().equals(LogReplicationStateType.INITIALIZED)) {
             fsm.getAckReader().setSyncType(SyncType.SNAPSHOT);
-            stopSnapshotApply.set(false);
             fsm.getAckReader().markSnapshotSyncInfoOngoing();
         }
         //TODO V2: the metrics need to be per session
@@ -193,9 +186,7 @@ public class WaitSnapshotApplyState implements LogReplicationState {
                 log.info("Snapshot sync apply is complete appliedTs={}, baseTs={}", metadataResponse.getSnapshotApplied(),
                         baseSnapshotTimestamp);
                 fsm.input(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_APPLY_COMPLETE,
-                        new LogReplicationEventMetadata(transitionSyncId, baseSnapshotTimestamp, baseSnapshotTimestamp), fsm));
-                return;
-            } else if (stopSnapshotApply.get()){
+                        new LogReplicationEventMetadata(transitionSyncId, baseSnapshotTimestamp, baseSnapshotTimestamp)));
                 return;
             } else {
                 log.debug("Snapshot sync apply is still in progress, appliedTs={}, baseTs={}, sync_id={}", metadataResponse.getSnapshotApplied(),
@@ -216,7 +207,7 @@ public class WaitSnapshotApplyState implements LogReplicationState {
     private void scheduleSnapshotApplyVerification() {
         log.debug("Schedule verification of snapshot sync apply id={}", transitionSyncId);
         fsm.inputWithDelay(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_APPLY_IN_PROGRESS,
-                new LogReplicationEventMetadata(transitionSyncId), fsm), SCHEDULE_APPLY_MONITOR_DELAY);
+                new LogReplicationEventMetadata(transitionSyncId)), SCHEDULE_APPLY_MONITOR_DELAY);
     }
 
     @Override
