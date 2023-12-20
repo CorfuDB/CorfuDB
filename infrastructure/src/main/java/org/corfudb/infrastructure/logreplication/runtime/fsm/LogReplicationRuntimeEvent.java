@@ -3,7 +3,6 @@ package org.corfudb.infrastructure.logreplication.runtime.fsm;
 import lombok.Data;
 import lombok.Getter;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent;
-import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
 import org.corfudb.util.Utils;
 
 import java.util.UUID;
@@ -45,9 +44,6 @@ public class LogReplicationRuntimeEvent {
     private boolean isConnectionStarter;
 
     @Getter
-    private CorfuLogReplicationRuntime runtimeFsm;
-
-    @Getter
     // Used in the FsmTaskManager to ensure the order of consumption of events for a session
     private UUID eventId;
 
@@ -58,9 +54,8 @@ public class LogReplicationRuntimeEvent {
      *
      * @param type runtime event type
      */
-    public LogReplicationRuntimeEvent(LogReplicationRuntimeEventType type, CorfuLogReplicationRuntime runtimeFsm) {
+    public LogReplicationRuntimeEvent(LogReplicationRuntimeEventType type) {
         this.type = type;
-        this.runtimeFsm = runtimeFsm;
         this.eventId = Utils.genPseudorandomUUID();
     }
 
@@ -69,11 +64,9 @@ public class LogReplicationRuntimeEvent {
      *
      * @param type runtime event type
      */
-    public LogReplicationRuntimeEvent(LogReplicationRuntimeEventType type, boolean isConnectionStarter,
-                                      CorfuLogReplicationRuntime runtimeFsm) {
+    public LogReplicationRuntimeEvent(LogReplicationRuntimeEventType type, boolean isConnectionStarter) {
         this.type = type;
         this.isConnectionStarter = isConnectionStarter;
-        this.runtimeFsm = runtimeFsm;
         this.eventId = Utils.genPseudorandomUUID();
     }
 
@@ -82,11 +75,9 @@ public class LogReplicationRuntimeEvent {
      *
      * @param type runtime event type
      */
-    public LogReplicationRuntimeEvent(LogReplicationRuntimeEventType type, String nodeId,
-                                      CorfuLogReplicationRuntime runtimeFsm) {
+    public LogReplicationRuntimeEvent(LogReplicationRuntimeEventType type, String nodeId) {
         this.type = type;
         this.nodeId = nodeId;
-        this.runtimeFsm = runtimeFsm;
         this.eventId = Utils.genPseudorandomUUID();
     }
 
@@ -96,11 +87,9 @@ public class LogReplicationRuntimeEvent {
      * @param type runtime event type
      * @param negotiationResult negotiation result
      */
-    public LogReplicationRuntimeEvent(LogReplicationRuntimeEventType type, LogReplicationEvent negotiationResult,
-                                      CorfuLogReplicationRuntime runtimeFsm) {
+    public LogReplicationRuntimeEvent(LogReplicationRuntimeEventType type, LogReplicationEvent negotiationResult) {
         this.type = type;
         this.negotiationResult = negotiationResult;
-        this.runtimeFsm = runtimeFsm;
         this.eventId = Utils.genPseudorandomUUID();
     }
 
@@ -110,11 +99,9 @@ public class LogReplicationRuntimeEvent {
      * @param type runtime event type
      * @param t throwable for this error
      */
-    public LogReplicationRuntimeEvent(LogReplicationRuntimeEventType type, Throwable t,
-                                      CorfuLogReplicationRuntime runtimeFsm) {
+    public LogReplicationRuntimeEvent(LogReplicationRuntimeEventType type, Throwable t) {
         this.type = type;
         this.t = t;
-        this.runtimeFsm = runtimeFsm;
         this.eventId = Utils.genPseudorandomUUID();
     }
 

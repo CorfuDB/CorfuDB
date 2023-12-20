@@ -135,14 +135,14 @@ public class NegotiatingState implements LogReplicationRuntimeState {
             } else {
                 log.debug("No leader found during negotiation.");
                 // No leader found at the time of negotiation
-                fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.REMOTE_LEADER_LOSS, fsm));
+                fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.REMOTE_LEADER_LOSS));
             }
         } catch (LogReplicationNegotiationException | TimeoutException ex) {
             log.error("Negotiation failed. Retry, until negotiation succeeds or connection is marked as down.", ex);
-            fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.NEGOTIATION_FAILED, fsm));
+            fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.NEGOTIATION_FAILED));
         } catch (Exception e) {
             log.error("Unexpected exception during negotiation, retry.", e);
-            fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.NEGOTIATION_FAILED, fsm));
+            fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.NEGOTIATION_FAILED));
         } finally {
             log.debug("Exit :: negotiate");
         }
@@ -254,8 +254,7 @@ public class NegotiatingState implements LogReplicationRuntimeState {
             fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.NEGOTIATION_COMPLETE,
                     new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_TRANSFER_COMPLETE,
                             new LogReplicationEventMetadata(LogReplicationEventMetadata.getNIL_UUID(), negotiationResponse.getSnapshotStart(),
-                                    negotiationResponse.getSnapshotTransferred()),
-                            fsm.getSourceManager().getLogReplicationFSM()), fsm));
+                                    negotiationResponse.getSnapshotTransferred()))));
             return;
         }
 
@@ -286,8 +285,7 @@ public class NegotiatingState implements LogReplicationRuntimeState {
                         new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.LOG_ENTRY_SYNC_REQUEST,
                                 new LogReplicationEventMetadata(LogReplicationEventMetadata.getNIL_UUID(),
                                         negotiationResponse.getLastLogEntryTimestamp(),
-                                        negotiationResponse.getSnapshotApplied()),
-                                fsm.getSourceManager().getLogReplicationFSM()), fsm));
+                                        negotiationResponse.getSnapshotApplied()))));
             } else {
                 // TODO: it is OK for a first phase, but this might not be efficient/accurate, as the next (+1)
                 //  might not really be the next entry (as that is a globalAddress and the +1 might not even belong to
@@ -310,13 +308,11 @@ public class NegotiatingState implements LogReplicationRuntimeState {
         log.warn("Could not recognize the sink cluster state according to the response {}, will restart with a snapshot full sync event" ,
                 negotiationResponse);
         fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.NEGOTIATION_COMPLETE,
-                new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_SYNC_REQUEST,
-                        fsm.getSourceManager().getLogReplicationFSM()), fsm));
+                new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_SYNC_REQUEST)));
     }
 
     private void startSnapshotSync() {
         fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.NEGOTIATION_COMPLETE,
-                new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_SYNC_REQUEST,
-                        fsm.getSourceManager().getLogReplicationFSM()), fsm));
+                new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_SYNC_REQUEST)));
     }
 }

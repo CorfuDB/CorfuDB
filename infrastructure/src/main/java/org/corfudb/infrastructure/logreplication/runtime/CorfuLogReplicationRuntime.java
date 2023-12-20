@@ -196,7 +196,7 @@ public class CorfuLogReplicationRuntime {
             log.info("Log Replication Runtime State Machine has been stopped. No more events will be processed.");
             return;
         }
-        this.taskManager.addTask(event, FsmTaskManager.FsmEventType.LogReplicationRuntimeEvent, 0);
+        this.taskManager.addTask(event, FsmTaskManager.FsmEventType.LogReplicationRuntimeEvent, 0, this);
     }
 
     /**
@@ -250,6 +250,6 @@ public class CorfuLogReplicationRuntime {
      */
     public void stop() {
         input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.LOCAL_LEADER_LOSS,
-                        router.isConnectionStarterForSession(session), this));
+                        router.isConnectionStarterForSession(session)));
     }
 }

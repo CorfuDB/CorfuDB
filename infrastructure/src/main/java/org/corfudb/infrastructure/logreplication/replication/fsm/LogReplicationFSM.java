@@ -336,7 +336,7 @@ public class LogReplicationFSM {
         if (event.getType() != LogReplicationEventType.LOG_ENTRY_SYNC_CONTINUE) {
             log.trace("Enqueue event {} with ID {}", event.getType(), event.getEventId());
         }
-        this.fsmTaskManager.addTask(event, FsmTaskManager.FsmEventType.LogReplicationEvent, 0);
+        this.fsmTaskManager.addTask(event, FsmTaskManager.FsmEventType.LogReplicationEvent, 0, this);
     }
 
     /**
@@ -347,7 +347,7 @@ public class LogReplicationFSM {
      * @param event LogReplicationEvent to process.
      */
     public void inputWithDelay(LogReplicationEvent event, long delay) {
-        this.fsmTaskManager.addTask(event, FsmTaskManager.FsmEventType.LogReplicationEvent, delay);
+        this.fsmTaskManager.addTask(event, FsmTaskManager.FsmEventType.LogReplicationEvent, delay, this);
     }
 
     /**
