@@ -393,7 +393,7 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
                         log.error("Leader not found to remote cluster {}",
                                 sessionToRemoteClusterDescriptor.get(session).getClusterId());
                         runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent
-                                .LogReplicationRuntimeEventType.REMOTE_LEADER_LOSS, runtimeFSM));
+                                .LogReplicationRuntimeEventType.REMOTE_LEADER_LOSS));
                         throw new ChannelAdapterException(
                                 String.format("Leader not found to remote cluster %s",
                                         sessionToRemoteClusterDescriptor.get(session).getClusterId()));
@@ -439,11 +439,11 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
             if(outgoingSession.contains(session)) {
                 CorfuLogReplicationRuntime runtimeFsm = sessionToRuntimeFSM.get(session);
                 runtimeFsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent
-                        .LogReplicationRuntimeEventType.ON_CONNECTION_DOWN, nodeId, runtimeFsm));
+                        .LogReplicationRuntimeEventType.ON_CONNECTION_DOWN, nodeId));
             } else {
                 RemoteSourceLeadershipManager sourceLeadershipManager = sessionToRemoteSourceLeaderManager.get(session);
                 sourceLeadershipManager.input(new LogReplicationSinkEvent(
-                        LogReplicationSinkEvent.LogReplicationSinkEventType.ON_CONNECTION_DOWN, nodeId, sourceLeadershipManager));
+                        LogReplicationSinkEvent.LogReplicationSinkEventType.ON_CONNECTION_DOWN, nodeId));
             }
             throw ne;
         } catch(NullPointerException npe) {
@@ -513,8 +513,7 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
                     } else {
                         RemoteSourceLeadershipManager sourceLeadershipManager = sessionToRemoteSourceLeaderManager.get(session);
                         sourceLeadershipManager.input(new LogReplicationSinkEvent(
-                                LogReplicationSinkEvent.LogReplicationSinkEventType.REMOTE_LEADER_LOSS,
-                                sourceLeadershipManager));
+                                LogReplicationSinkEvent.LogReplicationSinkEventType.REMOTE_LEADER_LOSS));
                     }
                 }
             } catch(NullPointerException npe) {
@@ -533,7 +532,7 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
     public void inputRemoteSourceLeaderLoss(LogReplicationSession session) {
         RemoteSourceLeadershipManager sourceLeadershipManager = sessionToRemoteSourceLeaderManager.get(session);
         sourceLeadershipManager.input(new LogReplicationSinkEvent(
-                LogReplicationSinkEvent.LogReplicationSinkEventType.REMOTE_LEADER_LOSS, sourceLeadershipManager));
+                LogReplicationSinkEvent.LogReplicationSinkEventType.REMOTE_LEADER_LOSS));
     }
 
     @Override
@@ -548,11 +547,11 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
                     CorfuLogReplicationRuntime runtimeFsm = sessionToRuntimeFSM.get(session);
                     this.sessionToRuntimeFSM.get(session)
                             .input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent
-                                    .LogReplicationRuntimeEventType.REMOTE_LEADER_LOSS, nodeId, runtimeFsm));
+                                    .LogReplicationRuntimeEventType.REMOTE_LEADER_LOSS, nodeId));
                 } else {
                     RemoteSourceLeadershipManager sourceLeadershipManager = sessionToRemoteSourceLeaderManager.get(session);
                     sourceLeadershipManager.input(new LogReplicationSinkEvent(LogReplicationSinkEvent
-                                    .LogReplicationSinkEventType.REMOTE_LEADER_LOSS, nodeId, sourceLeadershipManager));
+                                    .LogReplicationSinkEventType.REMOTE_LEADER_LOSS, nodeId));
                 }
                 completeRequest(msg.getHeader().getSession(), msg.getHeader().getRequestId(),
                         msg.getPayload().getLrLeadershipLoss());
@@ -612,7 +611,7 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
                 RemoteSourceLeadershipManager sourceLeadershipManager = sessionToRemoteSourceLeaderManager.get(session);
                 sourceLeadershipManager.input(new LogReplicationSinkEvent(
                         LogReplicationSinkEvent.LogReplicationSinkEventType.REMOTE_LEADER_LOSS,
-                        message.getPayload().getLrLeadershipLoss().getNodeId(), sourceLeadershipManager));
+                        message.getPayload().getLrLeadershipLoss().getNodeId()));
                 // ack the leadership loss msg with an empty payload
                 CorfuMessage.ResponsePayloadMsg responsePayloadMsg = CorfuMessage.ResponsePayloadMsg.newBuilder()
                         .setLrEntryAck(LogReplication.LogReplicationEntryMsg.newBuilder().build()).build();
@@ -719,7 +718,7 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
         try {
             CorfuLogReplicationRuntime runtimeFsm = sessionToRuntimeFSM.get(session);
             sessionToRuntimeFSM.get(session).input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent
-                    .LogReplicationRuntimeEventType.ERROR, t, runtimeFsm));
+                    .LogReplicationRuntimeEventType.ERROR, t));
         } catch (NullPointerException npe) {
             log.info("RuntimeFSM not found for session {}", session);
         }
@@ -746,7 +745,7 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
             log.debug("Input Connection Up event for session {}", session);
             CorfuLogReplicationRuntime runtimeFsm = sessionToRuntimeFSM.get(session);
             runtimeFsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent
-                            .LogReplicationRuntimeEventType.ON_CONNECTION_UP, nodeId, runtimeFsm));
+                            .LogReplicationRuntimeEventType.ON_CONNECTION_UP, nodeId));
         } catch (NullPointerException npe) {
             log.info("runtimeFsm is not present for session {}", session);
         }
@@ -817,7 +816,7 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
         } else {
             RemoteSourceLeadershipManager sourceLeadershipManager = sessionToRemoteSourceLeaderManager.get(session);
             sourceLeadershipManager.input(new LogReplicationSinkEvent(
-                    LogReplicationSinkEvent.LogReplicationSinkEventType.ON_CONNECTION_UP, nodeId, sourceLeadershipManager));
+                    LogReplicationSinkEvent.LogReplicationSinkEventType.ON_CONNECTION_UP, nodeId));
         }
     }
 
@@ -833,11 +832,11 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
             if (outgoingSession.contains(session)) {
                 CorfuLogReplicationRuntime runtimeFsm = sessionToRuntimeFSM.get(session);
                 runtimeFsm.input(new LogReplicationRuntimeEvent(
-                        LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.ON_CONNECTION_DOWN, nodeId, runtimeFsm));
+                        LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.ON_CONNECTION_DOWN, nodeId));
             } else if (incomingSession.contains(session)){
                 RemoteSourceLeadershipManager sourceLeadershipManager = sessionToRemoteSourceLeaderManager.get(session);
                 sourceLeadershipManager.input(new LogReplicationSinkEvent(
-                        LogReplicationSinkEvent.LogReplicationSinkEventType.ON_CONNECTION_DOWN, nodeId, sourceLeadershipManager));
+                        LogReplicationSinkEvent.LogReplicationSinkEventType.ON_CONNECTION_DOWN, nodeId));
             }
         } catch (NullPointerException npe) {
             log.info("The replication components are already stopped for session {}", session);

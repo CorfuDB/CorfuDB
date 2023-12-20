@@ -32,19 +32,13 @@ public class LogReplicationSinkEvent {
     @Getter
     private UUID eventId;
 
-    @Getter
-    private RemoteSourceLeadershipManager sourceLeadershipManager;
-
-    public LogReplicationSinkEvent(LogReplicationSinkEvent.LogReplicationSinkEventType type, String nodeId,
-                                   RemoteSourceLeadershipManager sourceLeadershipManager) {
-        this(type, sourceLeadershipManager);
+    public LogReplicationSinkEvent(LogReplicationSinkEvent.LogReplicationSinkEventType type, String nodeId) {
+        this(type);
         this.nodeId = nodeId;
     }
 
-    public LogReplicationSinkEvent(LogReplicationSinkEvent.LogReplicationSinkEventType type,
-                                   RemoteSourceLeadershipManager sourceLeadershipManager) {
+    public LogReplicationSinkEvent(LogReplicationSinkEvent.LogReplicationSinkEventType type) {
         this.type = type;
-        this.sourceLeadershipManager = sourceLeadershipManager;
         this.eventId = Utils.genPseudorandomUUID();
     }
 

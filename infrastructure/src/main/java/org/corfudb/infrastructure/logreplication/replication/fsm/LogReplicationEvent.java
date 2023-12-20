@@ -60,8 +60,8 @@ public class LogReplicationEvent {
      *
      * @param type log replication event type
      */
-    public LogReplicationEvent(LogReplicationEventType type, LogReplicationFSM replicationFsm) {
-        this(type, LogReplicationEventMetadata.empty(), replicationFsm);
+    public LogReplicationEvent(LogReplicationEventType type) {
+        this(type, LogReplicationEventMetadata.empty());
     }
 
     /**
@@ -73,11 +73,10 @@ public class LogReplicationEvent {
      * @param type log replication event type
      * @param eventId event unique identifier
      */
-    public LogReplicationEvent(LogReplicationEventType type, UUID eventId, LogReplicationFSM replicationFsm) {
+    public LogReplicationEvent(LogReplicationEventType type, UUID eventId) {
         this.type = type;
         this.eventId = eventId;
         this.metadata = new LogReplicationEventMetadata(true);
-        this.replicationFsm = replicationFsm;
     }
 
     /**
@@ -87,11 +86,9 @@ public class LogReplicationEvent {
      * @param metadata log replication event metadata
      *
 \     */
-    public LogReplicationEvent(LogReplicationEventType type, LogReplicationEventMetadata metadata,
-                               LogReplicationFSM replicationFsm) {
+    public LogReplicationEvent(LogReplicationEventType type, LogReplicationEventMetadata metadata) {
         this.type = type;
         this.eventId = Utils.genPseudorandomUUID();
         this.metadata = metadata;
-        this.replicationFsm = replicationFsm;
     }
 }

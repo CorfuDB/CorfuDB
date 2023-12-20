@@ -1127,8 +1127,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         logReplicationSourceManager.getLogReplicationFSM().input(
                 new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.LOG_ENTRY_SYNC_REQUEST,
                         new LogReplicationEventMetadata(LogReplicationEventMetadata.getNIL_UUID(),
-                                negotiationResponse.getLastLogEntryTimestamp(), negotiationResponse.getSnapshotApplied()),
-                        logReplicationSourceManager.getLogReplicationFSM()));
+                                negotiationResponse.getLastLogEntryTimestamp(), negotiationResponse.getSnapshotApplied())));
 
         checkStateChange(logReplicationSourceManager.getLogReplicationFSM(),
                 LogReplicationStateType.IN_LOG_ENTRY_SYNC, true);
@@ -1251,8 +1250,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         log.info("****** Start Log Entry Sync with src tail " + srcDataRuntime.getAddressSpaceView().getLogTail()
                 + " dst tail " + dstDataRuntime.getAddressSpaceView().getLogTail());
         logReplicationSourceManager.startReplication(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.LOG_ENTRY_SYNC_REQUEST,
-                new LogReplicationEventMetadata(UUID.randomUUID(), -1, -1),
-                logReplicationSourceManager.getLogReplicationFSM()));
+                new LogReplicationEventMetadata(UUID.randomUUID(), -1, -1)));
 
         // Start TX's in parallel, while log entry sync is running
         if (injectTxData) {
@@ -1451,7 +1449,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         logReplicationSourceManager.getLogReplicationFSM().input(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.REPLICATION_STOP,
                 new LogReplicationEventMetadata(getUUID(ack.getMetadata().getSyncRequestId()), ack.getMetadata().getTimestamp(),
-                        ack.getMetadata().getSnapshotTimestamp()), logReplicationSourceManager.getLogReplicationFSM()));
+                        ack.getMetadata().getSnapshotTimestamp())));
 
         blockUntilFSMTransition.countDown();
     }

@@ -75,7 +75,7 @@ public class VerifyingRemoteSinkLeaderState implements LogReplicationRuntimeStat
         if (fsm.getRemoteLeaderNodeId().isPresent()) {
             fsm.input(new LogReplicationRuntimeEvent(
                     LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.REMOTE_LEADER_FOUND,
-                    fsm.getRemoteLeaderNodeId().get(), fsm)
+                    fsm.getRemoteLeaderNodeId().get())
             );
             log.debug("Exit :: leadership verification");
         } else if (router.isConnectionStarterForSession(fsm.session)){
