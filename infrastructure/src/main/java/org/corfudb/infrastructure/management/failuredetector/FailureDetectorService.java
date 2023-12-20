@@ -145,22 +145,12 @@ public class FailureDetectorService {
     private static class SequencerNotReadyCounter {
         private final long epoch;
         private int counter;
-
-        public void increment() {
-            counter += 1;
-        }
     }
 
     @Builder
     public static class SequencerBootstrapper {
         private static final CompletableFuture<DetectorTask> DETECTOR_TASK_SKIPPED
                 = CompletableFuture.completedFuture(DetectorTask.SKIPPED);
-
-        /**
-         * The management agent attempts to bootstrap a NOT_READY sequencer if the
-         * sequencerNotReadyCounter counter exceeds this value.
-         */
-        private final int sequencerNotReadyThreshold = 3;
 
         @NonNull
         private final ClusterStateContext clusterContext;
@@ -194,14 +184,6 @@ public class FailureDetectorService {
                 // If the epoch is different from the poll epoch, we reset the timeout state.
                 log.trace("Current epoch is different to layout epoch. Update current epoch to: {}", layout.getEpoch());
                 sequencerNotReadyCounter = new SequencerNotReadyCounter(layout.getEpoch(), 1);
-                return DETECTOR_TASK_SKIPPED;
-            }
-
-            // If the epoch is same as the epoch being tracked in the tuple, we need to
-            // increment the count and attempt to bootstrap the sequencer if the count has
-            // crossed the threshold.
-            sequencerNotReadyCounter.increment();
-            if (sequencerNotReadyCounter.getCounter() < sequencerNotReadyThreshold) {
                 return DETECTOR_TASK_SKIPPED;
             }
 
