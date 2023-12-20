@@ -83,7 +83,6 @@ public class ReplicationHandlerMethods {
      * @param req       The request message to handle.
      * @param r         The server router.
      */
-    @SuppressWarnings("unchecked")
     public void handle(CorfuMessage.RequestMsg req, CorfuMessage.ResponseMsg res, IClientServerRouter r) {
         final HandlerMethod handler = req != null ? getRequestHandler(req) : getResponseHandler(res);
 

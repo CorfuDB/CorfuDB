@@ -71,7 +71,6 @@ public class LayoutView extends AbstractView {
      * @throws OutrankedException outranked exception, i.e., higher rank.
      * @throws WrongEpochException wrong epoch number.
      */
-    @SuppressWarnings("unchecked")
     public void updateLayout(Layout layout, long rank)
             throws QuorumUnreachableException, OutrankedException, WrongEpochException {
         // Note this step is done because we have added the layout to the Epoch.

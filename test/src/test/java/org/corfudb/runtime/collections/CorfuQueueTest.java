@@ -61,7 +61,6 @@ public class CorfuQueueTest extends AbstractViewTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     public void basicQueueOrder() {
         CorfuRuntime runtime = createDefaultRuntime();
         CorfuQueue corfuQueue = new CorfuQueue(runtime, "test");

@@ -114,7 +114,6 @@ public class AddressSpaceViewTest extends AbstractViewTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     public void ensureStripingWorks() throws Exception {
         setupNodes();
         CorfuRuntime rt = getRuntime().connect();
@@ -197,7 +196,6 @@ public class AddressSpaceViewTest extends AbstractViewTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     public void ensureStripingReadAllWorks() throws Exception {
         setupNodes();
         CorfuRuntime rt = getRuntime().connect();

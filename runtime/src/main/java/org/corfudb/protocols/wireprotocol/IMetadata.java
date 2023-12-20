@@ -73,7 +73,6 @@ public interface IMetadata {
         getMetadataMap().put(LogUnitMetadataType.CLIENT_ID, clientId);
     }
 
-    @SuppressWarnings("unchecked")
     @Nullable
     default UUID getClientId() {
         return (UUID) getMetadataMap().getOrDefault(LogUnitMetadataType.CLIENT_ID, null);
@@ -83,7 +82,6 @@ public interface IMetadata {
         getMetadataMap().put(LogUnitMetadataType.THREAD_ID, threadId);
     }
 
-    @SuppressWarnings("unchecked")
     @Nullable
     default Long getThreadId() {
         return (Long) getMetadataMap().getOrDefault(LogUnitMetadataType.THREAD_ID, null);
@@ -94,7 +92,6 @@ public interface IMetadata {
      *
      * @return global address
      */
-    @SuppressWarnings("unchecked")
     default Long getGlobalAddress() {
         return Optional.ofNullable((Long) getMetadataMap()
                 .get(LogUnitMetadataType.GLOBAL_ADDRESS)).orElse(Address.NON_ADDRESS);

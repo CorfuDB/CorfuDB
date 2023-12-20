@@ -20,7 +20,6 @@ public class ChainReplicationViewTest extends AbstractViewTest {
 
 
     @Test
-    @SuppressWarnings("unchecked")
     public void canReadWriteToSingle()
             throws Exception {
         CorfuRuntime r = getDefaultRuntime();
@@ -40,7 +39,6 @@ public class ChainReplicationViewTest extends AbstractViewTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     public void canReadWriteToSingleConcurrent()
             throws Exception {
         CorfuRuntime r = getDefaultRuntime();
@@ -70,7 +68,6 @@ public class ChainReplicationViewTest extends AbstractViewTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     public void canReadWriteToMultiple()
             throws Exception {
 
@@ -112,7 +109,6 @@ public class ChainReplicationViewTest extends AbstractViewTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     public void ensureAllUnitsContainData()
             throws Exception {
 
