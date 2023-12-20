@@ -42,7 +42,9 @@ import java.lang.reflect.InvocationTargetException;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ConcurrentHashMap;
@@ -202,6 +204,10 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
                 pendingFullSyncsPerDestination.put(key.getSession().getSinkClusterId(), snapshotSyncDataTransmitter);
                 snapSyncProvider.provideFullStateData(snapshotSyncDataTransmitter);
             }
+        }
+
+        Map<String, LRFullStateReplicationContext> getPendingFullSyncs() {
+            return new HashMap<>(pendingFullSyncsPerDestination);
         }
 
         /**
@@ -487,6 +493,10 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
         } catch (InterruptedException e) {
             throw new UnrecoverableCorfuInterruptedError("requestGlobalSnapshotSync Runtime Exception", e);
         }
+    }
+
+    public Map<String, LRFullStateReplicationContext> getPendingFullSyncs() {
+        return fullSyncRequestor.getPendingFullSyncs();
     }
 
     // TODO pankti:  Move SnapshotSyncUtils to the 'runtime' package so that this method can be reused from there
