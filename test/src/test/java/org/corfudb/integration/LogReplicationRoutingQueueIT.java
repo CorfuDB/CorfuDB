@@ -71,9 +71,14 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
         openLogReplicationStatusTable();
     }
 
+    /**
+     * This test verifies successful snapshot and log entry sync replication for Routing Queue model
+     * @throws Exception
+     */
     @Test
     public void testRoutingQueueReplication() throws Exception {
-        // Register client and setup initial group destinations mapping
+
+        // Create the Routing Queue Sender client and subscribe a listener to get snapshot sync requests.
         CorfuRuntime clientRuntime = getClientRuntime();
         CorfuStore clientCorfuStore = new CorfuStore(clientRuntime);
         String clientName = DEFAULT_ROUTING_QUEUE_CLIENT;
@@ -86,19 +91,26 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
                     DefaultClusterConfig.getSourceClusterIds().get(0), clientName);
             sinkCorfuStores.get(0).subscribeRoutingQListener(listener);
             startReplicationServers();
+
+            // Wait till all snapshot data is provided by the replication client
             while (!snapshotProvider.isSnapshotSent) {
                 Thread.sleep(5000);
             }
-            generateData(clientCorfuStore, queueSenderClient);
+
+            // Generate some incremental updates which will get sent as Log Entry Sync
+            generateLogEntryData(clientCorfuStore, queueSenderClient);
+
+            // Wait until these updates are received on the Sink
             int numLogEntriesReceived = listener.logEntryMsgCnt;
-            while (numLogEntriesReceived < numLogEntryUpdates + 1) {
+            while (numLogEntriesReceived < numLogEntryUpdates) {
                 Thread.sleep(5000);
                 numLogEntriesReceived = listener.logEntryMsgCnt;
                 log.info("Entries got on receiver {}", numLogEntriesReceived);
             }
 
+            // Verify that all expected data through snapshot and log entry sync was received.
             log.info("Expected num entries on the Sink Received");
-            assertThat(listener.logEntryMsgCnt).isEqualTo(numLogEntryUpdates + 1);
+            assertThat(listener.logEntryMsgCnt).isEqualTo(numLogEntryUpdates);
             assertThat(listener.snapSyncMsgCnt).isEqualTo(5);
             log.info("Sink replicated queue size: {}", listener.snapSyncMsgCnt);
         } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
@@ -106,24 +118,32 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
         }
     }
 
+    /**
+     * This test verifies the behavior of snapshot sync requested through multiple workflows
+     * 1. Negotiation
+     * 2. Global snapshot sync(to all Sink clusters) via an LR tool
+     * 3. Application(client)-requested snapshot sync
+     * @throws Exception
+     */
     @Test
     public void testRoutingQueueFullSyncs() throws Exception {
 
-        // Register client and setup initial group destinations mapping
+        // Create the Routing Queue Sender client and subscribe a listener to get snapshot sync requests.
         CorfuRuntime clientRuntime = getClientRuntime();
         CorfuStore clientCorfuStore = new CorfuStore(clientRuntime);
         String sourceSiteId = DefaultClusterConfig.getSourceClusterIds().get(0);
         CorfuStoreBrowserEditor editor = new CorfuStoreBrowserEditor(clientRuntime, null, true);
         String clientName = DEFAULT_ROUTING_QUEUE_CLIENT;
         RoutingQueueSenderClient queueSenderClient = new RoutingQueueSenderClient(clientCorfuStore, clientName);
+
         // SnapshotProvider implements RoutingQueueSenderClient.LRTransmitterReplicationModule
         SnapshotProvider snapshotProvider = new SnapshotProvider(clientCorfuStore);
         queueSenderClient.startLRSnapshotTransmitter(snapshotProvider); // starts a listener on event table
 
-        // Open queue on sink
-
         log.info("Sink Queue name: {}", REPLICATED_RECV_Q_PREFIX + sourceSiteId);
         startReplicationServers();
+
+        // Wait till all snapshot data is provided by the replication client
         while (!snapshotProvider.isSnapshotSent) {
             Thread.sleep(5000);
         }
@@ -138,12 +158,14 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
             numFullSyncMsgsGot = listener.snapSyncMsgCnt;
             log.info("Entries got on receiver {}", numFullSyncMsgsGot);
         }
+        // Verify that all snapshot sync data was replicated.
         assertThat(listener.snapSyncMsgCnt).isEqualTo(5);
 
-        // Now request a full sync again for all sites!
+        // Now request a snapshot sync again for all sites!
         snapshotProvider.isSnapshotSent = false;
         editor.requestGlobalFullSync();
 
+        // Verify that all data was received from this cycle
         while (numFullSyncMsgsGot < 10) {
             Thread.sleep(5000);
             numFullSyncMsgsGot = listener.snapSyncMsgCnt;
@@ -156,19 +178,23 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
         queueSenderClient.requestSnapshotSync(DefaultClusterConfig.getSourceClusterIds().get(0),
             DefaultClusterConfig.getSinkClusterIds().get(0));
 
+        // Verify that all data was received on the Sink
         while (numFullSyncMsgsGot < 15) {
             Thread.sleep(5000);
             numFullSyncMsgsGot = listener.snapSyncMsgCnt;
             log.info("Entries got on receiver after 3rd full sync {}", numFullSyncMsgsGot);
         }
         assertThat(listener.snapSyncMsgCnt).isEqualTo(15);
-
     }
 
+    /**
+     * This test verifies the behavior of 2-way Snapshot sync, i.e., Cluster A -> B and B -> A
+     * @throws Exception
+     */
     @Test
     public void testRoutingQueue2way() throws Exception {
 
-        // Register client and setup initial group destinations mapping
+        // Create the Routing Queue Sender client and subscribe a listener to get snapshot sync requests.
         CorfuRuntime clientRuntime = getClientRuntime();
         CorfuStore clientCorfuStore = new CorfuStore(clientRuntime);
         String sourceSiteId = DefaultClusterConfig.getSourceClusterIds().get(0);
@@ -184,7 +210,7 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
         RoutingQSiteDiscoverer remoteSiteDiscoverer = new RoutingQSiteDiscoverer(clientCorfuStore,
                 LogReplication.ReplicationModel.ROUTING_QUEUES, clientName);
 
-        // Start up Full Sync providers on both sink sites to test reverse replication
+        // Start up snapshot sync providers on both sink sites to test reverse replication
         sinkCorfuStores.forEach(sinkCorfuStore -> {
             RoutingQueueSenderClient sinkSideQsender = null;
             sinkSideQsender = new RoutingQueueSenderClient(sinkCorfuStore, clientName);
@@ -223,10 +249,13 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
         });
     }
 
+    /**
+     * This test verifies the behavior when an ongoing snapshot sync gets cancelled.
+     * @throws Exception
+     */
     @Test
     public void testSnapshotSyncCancel() throws Exception {
-
-        // Register client and setup initial group destinations mapping
+        // Create the Routing Queue Sender client and subscribe a listener to get snapshot sync requests.
         CorfuRuntime clientRuntime = getClientRuntime();
         CorfuStore clientCorfuStore = new CorfuStore(clientRuntime);
         String sourceSiteId = DefaultClusterConfig.getSourceClusterIds().get(0);
@@ -272,7 +301,7 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
         assertThat(listener.snapSyncMsgCnt).isEqualTo(snapshotProvider.getNumFullSyncBatches());
     }
 
-    private void generateData(CorfuStore corfuStore, RoutingQueueSenderClient client) throws Exception {
+    private void generateLogEntryData(CorfuStore corfuStore, RoutingQueueSenderClient client) {
         String namespace = CORFU_SYSTEM_NAMESPACE;
 
         String streamTagFollowed =
@@ -300,13 +329,18 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
         }
     }
 
+    /**
+     * This test verifies the behavior of Snapshot and Log Entry Sync when using Scoped Transactions.
+     * @throws Exception
+     */
     @Test
     public void testRoutingQueueReplicationWithScopedTxn() throws Exception {
-        // Register client and setup initial group destinations mapping
+        // Create the Routing Queue Sender client and subscribe a listener to get snapshot sync requests.
         CorfuRuntime clientRuntime = getClientRuntime();
         CorfuStore clientCorfuStore = new CorfuStore(clientRuntime);
         String clientName = DEFAULT_ROUTING_QUEUE_CLIENT;
         RoutingQueueSenderClient queueSenderClient = new RoutingQueueSenderClient(clientCorfuStore, clientName);
+
         // SnapshotProvider implements RoutingQueueSenderClient.LRTransmitterReplicationModule
         ScopedSnapshotProvider snapshotProvider = new ScopedSnapshotProvider(clientCorfuStore);
 
@@ -322,8 +356,11 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
                 Thread.sleep(5000);
             }
             log.info("Snapshot Sent");
-            generateData(clientCorfuStore, queueSenderClient);
 
+            // Generate some incremental updates which will get sent as Log Entry Sync
+            generateLogEntryData(clientCorfuStore, queueSenderClient);
+
+            // Verify that all data generated through Snapshot and Log Entry Sync is received on the Sink cluster
             int numLogEntriesReceived = listener.logEntryMsgCnt;
             while (numLogEntriesReceived < 10) {
                 Thread.sleep(5000);
@@ -332,7 +369,7 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
             }
 
             log.info("Expected num entries on the Sink Received");
-            assertThat(listener.logEntryMsgCnt).isEqualTo(numLogEntryUpdates + 1);
+            assertThat(listener.logEntryMsgCnt).isEqualTo(numLogEntryUpdates);
             assertThat(listener.snapSyncMsgCnt).isEqualTo(5);
             log.info("Sink replicated queue size: {}", listener.snapSyncMsgCnt);
         } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
@@ -371,6 +408,7 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
                     Queue.RoutingTableEntryMsg message = Queue.RoutingTableEntryMsg.newBuilder()
                             .addDestinations(context.getDestinationSiteId())
                             .setOpaquePayload(ByteString.copyFromUtf8("opaquetxn"+recordId))
+                            .setReplicationType(Queue.ReplicationType.SNAPSHOT_SYNC)
                             .buildPartial();
                     recordId++;
                     context.transmit(message);
@@ -434,6 +472,7 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
                     Queue.RoutingTableEntryMsg message = Queue.RoutingTableEntryMsg.newBuilder()
                             .addDestinations(context.getDestinationSiteId())
                             .setOpaquePayload(ByteString.copyFromUtf8(entry.getPayload().getPayload()))
+                            .setReplicationType(Queue.ReplicationType.SNAPSHOT_SYNC)
                             .buildPartial();
                     context.transmit(message);
                     log.info("Transmitting full sync message{}", message);

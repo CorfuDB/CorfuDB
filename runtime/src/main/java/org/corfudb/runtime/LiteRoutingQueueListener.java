@@ -42,7 +42,7 @@ public abstract class LiteRoutingQueueListener extends StreamListenerResumeOrFul
     @Getter
     private String clientName;
 
-    protected ReplicationType currentReplicationType;
+    private ReplicationType currentReplicationType = LOG_ENTRY_SYNC;
 
     public LiteRoutingQueueListener(CorfuStore corfuStore, String sourceSiteId, String clientName) {
         super(corfuStore, CORFU_SYSTEM_NAMESPACE, REPLICATED_QUEUE_TAG,
@@ -50,7 +50,6 @@ public abstract class LiteRoutingQueueListener extends StreamListenerResumeOrFul
         this.corfuStore = corfuStore;
         this.sourceSiteId = sourceSiteId;
         this.clientName = clientName;
-        currentReplicationType = ReplicationType.LOG_ENTRY_SYNC;
         Table<Queue.CorfuGuidMsg, Queue.RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg> recvQLcl = null;
         int numRetries = 8;
         while (numRetries-- > 0) {
