@@ -20,11 +20,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 import static org.corfudb.runtime.LogReplicationUtils.REPLICATED_QUEUE_TAG;
 import static org.corfudb.runtime.Queue.ReplicationType.LAST_SNAPSHOT_SYNC_ENTRY;
 import static org.corfudb.runtime.Queue.ReplicationType.LOG_ENTRY_SYNC;
+import static org.corfudb.runtime.Queue.ReplicationType.SNAPSHOT_SYNC;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 // TODO: As the name suggests, this is a simplistic listener which delivers replicated data as received on LR Sink
@@ -80,13 +80,17 @@ public abstract class LiteRoutingQueueListener extends StreamListenerResumeOrFul
         log.debug("LRQListener received {} updates at address {}!", results.getEntries().size(), results.getTimestamp());
         List<CorfuStreamEntry> entries = results.getEntries().entrySet().stream().map(Map.Entry::getValue)
                 .findFirst().get();
+
         List<Table.CorfuQueueRecord> allEntries = new ArrayList<>(entries.size());
+        List<Queue.RoutingTableEntryMsg> allMsgs = new ArrayList<>();
 
         for (CorfuStreamEntry entry : entries) {
             // The Source always 'adds' replicated data to the queue.  So the op type must be UPDATE
             Preconditions.checkState(entry.getOperation() == CorfuStreamEntry.OperationType.UPDATE);
             Queue.CorfuGuidMsg key = (Queue.CorfuGuidMsg) entry.getKey();
             Queue.RoutingTableEntryMsg msg = (Queue.RoutingTableEntryMsg) entry.getPayload();
+            allMsgs.add(msg);
+
             Queue.CorfuQueueMetadataMsg metadataMsg = (Queue.CorfuQueueMetadataMsg) entry.getMetadata();
             allEntries.add(new Table.CorfuQueueRecord(key, metadataMsg, msg));
             currentReplicationType = msg.getReplicationType();
@@ -94,33 +98,16 @@ public abstract class LiteRoutingQueueListener extends StreamListenerResumeOrFul
         if (allEntries.isEmpty()) {
             return;
         }
-        boolean entriesProcessed = false;
+        int numEntriesProcessed;
         long now = System.currentTimeMillis();
         long whenQRecordWasCreated = CorfuGuid.getTimestampFromGuid(allEntries.get(0).getRecordId().getInstanceId(),
             now);
 
-        switch (currentReplicationType) {
-            case LOG_ENTRY_SYNC:
-                log.info("LRQRecvListener delivering {} LOG_ENTRY updates took {}ms end to end",
-                    allEntries.size(), now - whenQRecordWasCreated);
-                entriesProcessed = processUpdatesInLogEntrySync(allEntries.stream().map(q ->
-                    (Queue.RoutingTableEntryMsg) q.getEntry()).collect(Collectors.toList()));
-                break;
-            case SNAPSHOT_SYNC:
-                log.info("LRQRecvListener delivering {} SNAPSHOT SYNC updates took {}ms end to end",
-                    allEntries.size(), now - whenQRecordWasCreated);
-                entriesProcessed = processUpdatesInSnapshotSync(allEntries.stream().map(q ->
-                    (Queue.RoutingTableEntryMsg)q.getEntry()).collect(Collectors.toList()));
-                break;
-            case LAST_SNAPSHOT_SYNC_ENTRY:
-                log.info("Snapshot Sync completed.  Signalling the subscriber to end Snapshot Sync");
-                onSnapshotSyncComplete();
-                break;
-            default:
-                throw new IllegalStateException("Illegal replication type encountered " + currentReplicationType);
-        }
+        log.info("Delivering {} {} updates took {}ms end to end", allEntries.size(), currentReplicationType,
+            now - whenQRecordWasCreated);
+        numEntriesProcessed = processBatch(currentReplicationType, allMsgs);
 
-        if (entriesProcessed) {
+        if (numEntriesProcessed == allMsgs.size()) {
             try (TxnContext txnContext = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
                 List<UUID> noStreamTags = Collections.emptyList();
                 allEntries.forEach(q -> txnContext.logUpdateDelete(recvQ, q.getRecordId(), noStreamTags, corfuStore));
@@ -146,6 +133,8 @@ public abstract class LiteRoutingQueueListener extends StreamListenerResumeOrFul
             Queue.RoutingTableEntryMsg msg = (Queue.RoutingTableEntryMsg) q.getEntry();
 
             if (msg.getReplicationType() != currentReplicationType) {
+                log.info("LiteRecvQ::performFullSync delivering {} messages of type {}", batchOneOfAKind.size(),
+                    currentReplicationType);
                 entriesProcessed += processBatch(currentReplicationType, batchOneOfAKind);
 
                 // We have encountered a change in type, reset our batch..
@@ -182,13 +171,11 @@ public abstract class LiteRoutingQueueListener extends StreamListenerResumeOrFul
         int entriesProcessed = 0;
         switch (currentReplicationType) {
             case LOG_ENTRY_SYNC:
-                log.info("LiteRecvQ::performFullSync {} LOG_ENTRY messages", batch.size());
                 if (processUpdatesInLogEntrySync(batch)) {
                     entriesProcessed = batch.size();
                 }
                 break;
             case SNAPSHOT_SYNC:
-                log.info("LiteRecvQ::performFullSync {} SNAPSHOT messages", batch.size());
                 if (processUpdatesInSnapshotSync(batch)) {
                     entriesProcessed = batch.size();
                 }
@@ -198,8 +185,7 @@ public abstract class LiteRoutingQueueListener extends StreamListenerResumeOrFul
                 entriesProcessed++;
                 break;
             default:
-                throw new IllegalStateException("Unexpected replication type encountered " +
-                    currentReplicationType);
+                throw new IllegalStateException("Unexpected replication type encountered " + currentReplicationType);
         }
         return entriesProcessed;
     }
