@@ -23,7 +23,6 @@ public class MultiCheckpointWriter<T extends ICorfuTable<?, ?>> {
     private List<ICorfuSMR> tables = new ArrayList<>();
 
     /** Add a table to the list of tables to be checkpointed by this class. */
-    @SuppressWarnings("unchecked")
     public void addMap(T table) {
         this.tables.add((ICorfuSMR) table);
     }

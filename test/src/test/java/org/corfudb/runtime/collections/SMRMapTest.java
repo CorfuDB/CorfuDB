@@ -39,7 +39,6 @@ public class SMRMapTest extends AbstractViewTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     public void canReadWriteToSingle() throws Exception {
         PersistentCorfuTable<String, String> testTable = getRuntime()
                 .getObjectsView()
@@ -57,7 +56,6 @@ public class SMRMapTest extends AbstractViewTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     public void canReadWriteToSinglePrimitive() throws Exception {
         getRuntime().setCacheDisabled(true);
         PersistentCorfuTable<Long, Double> testTable = getRuntime()
@@ -82,7 +80,6 @@ public class SMRMapTest extends AbstractViewTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     public void canGetID() throws Exception {
         UUID id = UUID.randomUUID();
         ICorfuSMR testTable = getRuntime().getObjectsView()
@@ -95,7 +92,6 @@ public class SMRMapTest extends AbstractViewTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     public void loadsFollowedByGets() throws Exception {
         PersistentCorfuTable<String, String> testTable = getRuntime().getObjectsView()
                 .build()
@@ -115,7 +111,6 @@ public class SMRMapTest extends AbstractViewTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     public void canContainOtherCorfuObjects() throws Exception {
         PersistentCorfuTable<String, String> testTable = getRuntime().getObjectsView()
                 .build()
@@ -228,8 +223,7 @@ public class SMRMapTest extends AbstractViewTest {
     }
 
    @Test
-    @SuppressWarnings("unchecked")
-    public void canUpdateSingleObjectTransactionally() throws Exception {
+   public void canUpdateSingleObjectTransactionally() throws Exception {
        PersistentCorfuTable<String, String> testTable = getRuntime().getObjectsView()
                .build()
                .setStreamName("test")
@@ -250,7 +244,6 @@ public class SMRMapTest extends AbstractViewTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     public void multipleTXesAreApplied() throws Exception {
         PersistentCorfuTable<String, String> testTable = getRuntime().getObjectsView()
                 .build()
@@ -277,7 +270,6 @@ public class SMRMapTest extends AbstractViewTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     public void multipleTXesAreAppliedWOAccessors() throws Exception {
         PersistentCorfuTable<String, String> testTable = getRuntime().getObjectsView()
                 .build()
@@ -301,7 +293,6 @@ public class SMRMapTest extends AbstractViewTest {
 
 
     @Test
-    @SuppressWarnings("unchecked")
     public void mutatorFollowedByATransaction() throws Exception {
         PersistentCorfuTable<String, String> testTable = getRuntime().getObjectsView()
                 .build()
@@ -322,7 +313,6 @@ public class SMRMapTest extends AbstractViewTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     public void objectViewCorrectlyReportsInsideTX() throws Exception {
         assertThat(getRuntime().getObjectsView().TXActive()).isFalse();
         getRuntime().getObjectsView().TXBegin();
@@ -332,7 +322,6 @@ public class SMRMapTest extends AbstractViewTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     public void canUpdateSingleObjectTransactionallyWhenCached() throws Exception {
         r.setCacheDisabled(false);
 
@@ -355,7 +344,6 @@ public class SMRMapTest extends AbstractViewTest {
 
 
     @Test
-    @SuppressWarnings("unchecked")
     public void abortedTransactionsCannotBeReadOnSingleObject() throws Exception {
         PersistentCorfuTable<String, String> testTable = getRuntime().getObjectsView()
                 .build()
@@ -380,7 +368,6 @@ public class SMRMapTest extends AbstractViewTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     public void modificationDuringTransactionCausesAbort() throws Exception {
         PersistentCorfuTable<String, String> testTable = getRuntime().getObjectsView()
                 .build()
@@ -415,7 +402,6 @@ public class SMRMapTest extends AbstractViewTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     public void smrMapCanContainCustomObjects() throws Exception {
         PersistentCorfuTable<String, TestObject> testTable = getRuntime().getObjectsView()
                 .build()
@@ -429,7 +415,6 @@ public class SMRMapTest extends AbstractViewTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     public void smrMapCanContainCustomObjectsInsideTXes() throws Exception {
         PersistentCorfuTable<String, TestObject> testTable = getRuntime().getObjectsView()
                 .build()
@@ -504,7 +489,6 @@ public class SMRMapTest extends AbstractViewTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     public void concurrentAbortMultiViewInterleaved() throws Exception {
         final int numThreads = PARAMETERS.CONCURRENCY_SOME;
         final int numRecords = PARAMETERS.NUM_ITERATIONS_LOW;
@@ -522,7 +506,6 @@ public class SMRMapTest extends AbstractViewTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     public void concurrentAbortMultiViewThreaded() throws Exception {
         final int numThreads = PARAMETERS.CONCURRENCY_SOME;
         final int numRecords = PARAMETERS.NUM_ITERATIONS_LOW;
@@ -540,7 +523,6 @@ public class SMRMapTest extends AbstractViewTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     public void bulkReads() throws Exception {
         UUID stream = UUID.randomUUID();
         PersistentCorfuTable<String, String> testTable = getRuntime()

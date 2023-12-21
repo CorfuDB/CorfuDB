@@ -85,7 +85,6 @@ public class CorfuTableTest extends AbstractViewTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     public void canReadFromEachIndex() {
         PersistentCorfuTable<String, String>
                 corfuTable = getDefaultRuntime().getObjectsView().build()
@@ -141,7 +140,6 @@ public class CorfuTableTest extends AbstractViewTest {
      * when the index has never been specified for this CorfuTable.
      */
     @Test (expected = IllegalArgumentException.class)
-    @SuppressWarnings("unchecked")
     public void cannotLookupByIndexWhenIndexNotSpecified() {
         PersistentCorfuTable<String, String>
                 corfuTable = getDefaultRuntime().getObjectsView().build()
@@ -160,7 +158,6 @@ public class CorfuTableTest extends AbstractViewTest {
      * Can create create multiple index for the same value
      */
     @Test
-    @SuppressWarnings("unchecked")
     public void canReadFromMultipleIndices() {
         PersistentCorfuTable<String, String> corfuTable = getDefaultRuntime()
                 .getObjectsView()
@@ -180,7 +177,6 @@ public class CorfuTableTest extends AbstractViewTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     public void emptyIndexesReturnEmptyValues() {
         PersistentCorfuTable<String, String>
                 corfuTable = getDefaultRuntime().getObjectsView().build()
@@ -202,7 +198,6 @@ public class CorfuTableTest extends AbstractViewTest {
      * percolated all the way to the client.
      */
     @Test
-    @SuppressWarnings("unchecked")
     public void problematicIndexFunction() {
         PersistentCorfuTable<String, String>
                 corfuTable = getDefaultRuntime().getObjectsView().build()
@@ -223,7 +218,6 @@ public class CorfuTableTest extends AbstractViewTest {
      * percolated all the way to the client (TX flavour).
      */
     @Test
-    @SuppressWarnings("unchecked")
     @Ignore // TODO: Exception thrown from different location
     public void problematicIndexFunctionTx() {
         PersistentCorfuTable<String, String>
@@ -244,7 +238,6 @@ public class CorfuTableTest extends AbstractViewTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     public void canReadWithoutIndexes() {
         PersistentCorfuTable<String, String>
                 corfuTable = getDefaultRuntime().getObjectsView().build()
@@ -305,7 +298,7 @@ public class CorfuTableTest extends AbstractViewTest {
     }
 
     @Test
-    @SuppressWarnings({"unchecked", "checkstyle:magicnumber"})
+    @SuppressWarnings({"checkstyle:magicnumber"})
     public void canHandleHoleInTail() {
         UUID streamID = UUID.randomUUID();
 

@@ -54,7 +54,6 @@ public class PrimitiveSerializer implements ISerializer {
                 .forEach(i -> applyFunc.apply(b, (R) i));
     }
 
-    @SuppressWarnings("unchecked")
     static <T, R> T[] readArray(ByteBuf b, Function<ByteBuf, T> applyFunc,
                                 Function<Integer, T[]> arrayGen) {
         int length = b.readInt();
@@ -85,7 +84,6 @@ public class PrimitiveSerializer implements ISerializer {
      * @return The deserialized object.
      */
     @Override
-    @SuppressWarnings("unchecked")
     public Object deserialize(ByteBuf b, CorfuRuntime rt) {
         byte type = b.readByte();
         DeserializerFunction d = DeserializerMap.get(type);

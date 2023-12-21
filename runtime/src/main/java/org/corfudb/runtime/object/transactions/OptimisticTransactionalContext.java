@@ -136,7 +136,6 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
      *
      * @param tc The transaction to merge.
      */
-    @SuppressWarnings("unchecked")
     public void addTransaction(AbstractTransactionalContext tc) {
         log.trace("Merge[{}] adding {}", this, tc);
         // merge the conflict maps
@@ -157,7 +156,6 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
      * @throws TransactionAbortedException  If the transaction was aborted.
      */
     @Override
-    @SuppressWarnings("unchecked")
     public long commitTransaction() throws TransactionAbortedException {
         log.trace("TX[{}] request optimistic commit", this);
         return getConflictSetAndCommit(getReadSetInfo());

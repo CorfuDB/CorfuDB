@@ -41,7 +41,6 @@ public abstract class AbstractReplicationProtocolTest extends AbstractViewTest {
      * that was written.
      */
     @Test
-    @SuppressWarnings("unchecked")
     public void canWriteRead()
             throws Exception {
         setupNodes();
@@ -67,7 +66,6 @@ public abstract class AbstractReplicationProtocolTest extends AbstractViewTest {
      * the case of an unwritten address.
      */
     @Test
-    @SuppressWarnings("unchecked")
     public void readOnlyCommitted()
             throws Exception {
         setupNodes();
@@ -93,7 +91,6 @@ public abstract class AbstractReplicationProtocolTest extends AbstractViewTest {
      * written entry results in an OverwriteException.
      */
     @Test
-    @SuppressWarnings("unchecked")
     public void overwriteThrowsException()
             throws Exception {
         setupNodes();

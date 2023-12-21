@@ -83,7 +83,6 @@ public class RequestHandlerMethods {
      * @param ctx       The channel handler context.
      * @param r         The server router.
      */
-    @SuppressWarnings("unchecked")
     public void handle(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
         final HandlerMethod handler = getHandler(req);
         try {

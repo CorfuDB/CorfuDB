@@ -104,7 +104,6 @@ public class StreamViewTest extends AbstractViewTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     public void canReadWriteFromStream()
             throws Exception {
         UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
@@ -169,7 +168,6 @@ public class StreamViewTest extends AbstractViewTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     public void canReadWriteFromStreamConcurrent()
             throws Exception {
         UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
@@ -191,7 +189,6 @@ public class StreamViewTest extends AbstractViewTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     public void canReadWriteFromCachedStream()
             throws Exception {
         CorfuRuntime r = getDefaultRuntime().connect()
@@ -282,7 +279,6 @@ public class StreamViewTest extends AbstractViewTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     public void streamCanSurviveOverwriteException()
             throws Exception {
         UUID streamA = CorfuRuntime.getStreamID("stream A");
@@ -304,7 +300,6 @@ public class StreamViewTest extends AbstractViewTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     public void streamWillHoleFill()
             throws Exception {
         //begin tests
@@ -327,7 +322,6 @@ public class StreamViewTest extends AbstractViewTest {
 
 
     @Test
-    @SuppressWarnings("unchecked")
     public void streamWithHoleFill()
             throws Exception {
         UUID streamA = CorfuRuntime.getStreamID("stream A");
@@ -365,7 +359,6 @@ public class StreamViewTest extends AbstractViewTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     public void prefixTrimThrowsException()
             throws Exception {
         //begin tests

@@ -40,7 +40,6 @@ public class CorfuSMRObjectProxyTest extends AbstractObjectTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     public void canUseCustomSerializer() throws Exception {
         //Register a custom serializer and use it with an SMR object
         ISerializer customSerializer = new CustomSerializer((byte) (Serializers.SYSTEM_SERIALIZERS_COUNT + 1));

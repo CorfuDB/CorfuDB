@@ -26,7 +26,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 public class ObjectsViewTest extends AbstractViewTest {
 
     @Test
-    @SuppressWarnings("unchecked")
     public void canAbortNoTransaction()
             throws Exception {
         //begin tests
@@ -35,7 +34,6 @@ public class ObjectsViewTest extends AbstractViewTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     public void abortedTransactionDoesNotConflict()
             throws Exception {
         final String mapA = "map a";
@@ -135,7 +133,6 @@ public class ObjectsViewTest extends AbstractViewTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     public void unrelatedStreamDoesNotConflict()
             throws Exception {
         //begin tests
@@ -162,7 +159,6 @@ public class ObjectsViewTest extends AbstractViewTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     public void unrelatedTransactionDoesNotConflict()
             throws Exception {
         //begin tests
