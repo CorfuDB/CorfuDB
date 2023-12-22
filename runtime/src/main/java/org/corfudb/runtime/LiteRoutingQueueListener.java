@@ -82,14 +82,14 @@ public abstract class LiteRoutingQueueListener extends StreamListenerResumeOrFul
                 .findFirst().get();
 
         List<Table.CorfuQueueRecord> allEntries = new ArrayList<>(entries.size());
-        List<Queue.RoutingTableEntryMsg> allMsgs = new ArrayList<>();
+        List<Queue.RoutingTableEntryMsg> allRQMsgs = new ArrayList<>();
 
         for (CorfuStreamEntry entry : entries) {
             // The Source always 'adds' replicated data to the queue.  So the op type must be UPDATE
             Preconditions.checkState(entry.getOperation() == CorfuStreamEntry.OperationType.UPDATE);
             Queue.CorfuGuidMsg key = (Queue.CorfuGuidMsg) entry.getKey();
             Queue.RoutingTableEntryMsg msg = (Queue.RoutingTableEntryMsg) entry.getPayload();
-            allMsgs.add(msg);
+            allRQMsgs.add(msg);
 
             Queue.CorfuQueueMetadataMsg metadataMsg = (Queue.CorfuQueueMetadataMsg) entry.getMetadata();
             allEntries.add(new Table.CorfuQueueRecord(key, metadataMsg, msg));
@@ -105,9 +105,9 @@ public abstract class LiteRoutingQueueListener extends StreamListenerResumeOrFul
 
         log.info("Delivering {} {} updates took {}ms end to end", allEntries.size(), currentReplicationType,
             now - whenQRecordWasCreated);
-        numEntriesProcessed = processBatch(currentReplicationType, allMsgs);
+        numEntriesProcessed = processBatch(currentReplicationType, allRQMsgs);
 
-        if (numEntriesProcessed == allMsgs.size()) {
+        if (numEntriesProcessed == allRQMsgs.size()) {
             try (TxnContext txnContext = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
                 List<UUID> noStreamTags = Collections.emptyList();
                 allEntries.forEach(q -> txnContext.logUpdateDelete(recvQ, q.getRecordId(), noStreamTags, corfuStore));
@@ -133,6 +133,7 @@ public abstract class LiteRoutingQueueListener extends StreamListenerResumeOrFul
             Queue.RoutingTableEntryMsg msg = (Queue.RoutingTableEntryMsg) q.getEntry();
 
             if (msg.getReplicationType() != currentReplicationType) {
+
                 log.info("LiteRecvQ::performFullSync delivering {} messages of type {}", batchOneOfAKind.size(),
                     currentReplicationType);
                 entriesProcessed += processBatch(currentReplicationType, batchOneOfAKind);
@@ -169,6 +170,14 @@ public abstract class LiteRoutingQueueListener extends StreamListenerResumeOrFul
 
     private int processBatch(ReplicationType currentReplicationType, List<Queue.RoutingTableEntryMsg> batch) {
         int entriesProcessed = 0;
+
+        // On startup, currentReplicationType = LOG_ENTRY_SYNC.  So if the queue contains messages from
+        // snapshot sync or snapshot sync end, this method will get invoked with an empty batch.  Add a
+        // check to return in such a case.
+        if (batch.isEmpty()) {
+            return entriesProcessed;
+        }
+
         switch (currentReplicationType) {
             case LOG_ENTRY_SYNC:
                 if (processUpdatesInLogEntrySync(batch)) {
