@@ -169,7 +169,7 @@ public class FsmTaskManager {
 
         synchronized(sessionToRuntimeEventIdMap.get(sessionName)) {
             sessionToRuntimeEventIdMap.get(sessionName).remove(0);
-            fsm.notifyAll();
+            sessionToRuntimeEventIdMap.get(sessionName).notifyAll();
         }
     }
 
