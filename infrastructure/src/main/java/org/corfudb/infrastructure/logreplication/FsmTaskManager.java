@@ -185,13 +185,16 @@ public class FsmTaskManager {
         }
     }
 
-    private boolean canProcessEventForSession(LogReplicationSession session, UUID currEventId) {
+    private boolean cannotProcessEventForSession(LogReplicationSession session, UUID currEventId) {
+        // The order between the delayed list and the regular list is not maintained. But since only 1 thread is active
+        // at any time for a session, in a stable scenario, its guaranteed that a 0-delay event will not be generated
+        // before a delayed event is executed.
             return (sessionToReplicationEventIdMap.get(session) != null &&
                         !sessionToReplicationEventIdMap.get(session).isEmpty() &&
-                        sessionToReplicationEventIdMap.get(session).get(0).equals(currEventId)) ||
+                        sessionToReplicationEventIdMap.get(session).get(0) != currEventId) &&
                     (sessionToDelayedReplicationEventIdMap.get(session) != null &&
                             !sessionToDelayedReplicationEventIdMap.get(session).isEmpty() &&
-                            sessionToDelayedReplicationEventIdMap.get(session).get(0).equals(currEventId));
+                            sessionToDelayedReplicationEventIdMap.get(session).get(0) != currEventId);
     }
 
     private void processReplicationTask(LogReplicationEvent currEvent, LogReplicationFSM fsm) {
@@ -199,15 +202,11 @@ public class FsmTaskManager {
         // for a given session, the fsm events should be processed in the order they are queued. This snippets ensures
         // that in the event of 2 threads contending for the monitor, only the task submitted first would be processed.
         synchronized(fsm) {
-            while (true) {
-                if (canProcessEventForSession(session, currEvent.getEventId())) {
-                    break;
-                } else {
-                    try {
-                        fsm.wait();
-                    } catch (InterruptedException e) {
-                        log.error("Wait for session {} was interrupted {}", session, e.getMessage());
-                    }
+            while (cannotProcessEventForSession(session, currEvent.getEventId())) {
+                try {
+                    fsm.wait();
+                } catch (InterruptedException e) {
+                    log.error("Wait for session {} was interrupted {}", session, e.getMessage());
                 }
             }
 
@@ -232,6 +231,13 @@ public class FsmTaskManager {
                 // as it is used for update purposes but does not imply a transition.
                 if (!currEvent.getType().equals(LogReplicationEvent.LogReplicationEventType.LOG_ENTRY_SYNC_REPLICATED)) {
                     log.error("Illegal log replication event {} when in state {}", currEvent.getType(), currState.getType());
+                }
+            }
+
+            // For testing purpose to notify the event generator the stop of the event.
+            if (currEvent.getType() == LogReplicationEvent.LogReplicationEventType.REPLICATION_STOP) {
+                synchronized (currEvent) {
+                    currEvent.notifyAll();
                 }
             }
 

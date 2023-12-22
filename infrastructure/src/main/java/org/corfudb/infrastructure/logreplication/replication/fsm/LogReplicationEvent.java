@@ -52,9 +52,6 @@ public class LogReplicationEvent {
      */
     private LogReplicationEventMetadata metadata;
 
-    @Getter
-    private LogReplicationFSM replicationFsm;
-
     /**
      * Constructor
      *
