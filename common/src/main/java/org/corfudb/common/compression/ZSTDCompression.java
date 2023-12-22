@@ -31,13 +31,13 @@ public class ZSTDCompression implements Codec {
         Objects.requireNonNull(uncompressed);
         checkArgument(uncompressed.hasRemaining());
 
-        final int decompressedLength = uncompressed.remaining();
-        MicroMeterUtils.measure(decompressedLength, "logdata.decompressed.size");
-        final int maxCompressedLength = (int) Zstd.compressBound(decompressedLength);
+        final int uncompressedLength = uncompressed.remaining();
+        MicroMeterUtils.measure(uncompressedLength, "logdata.uncompressed.size");
+        final int maxCompressedLength = (int) Zstd.compressBound(uncompressedLength);
 
         byte[] compressed = new byte[maxCompressedLength + Integer.BYTES];
         ByteBuffer wrappedBuf = ByteBuffer.wrap(compressed);
-        wrappedBuf.putInt(decompressedLength);
+        wrappedBuf.putInt(uncompressedLength);
 
         long compressedLen = Zstd.compressByteArray(compressed, Integer.BYTES, maxCompressedLength,
                 uncompressed.array(), uncompressed.position(), uncompressed.remaining(),
@@ -47,7 +47,7 @@ public class ZSTDCompression implements Codec {
             throw new IllegalStateException("Compression failed with error code " + compressedLen);
         }
 
-        double compressionRatio = (double) decompressedLength/compressedLen;
+        double compressionRatio = (double) uncompressedLength/compressedLen;
         MicroMeterUtils.measure(compressionRatio, "logdata.compression.ratio");
         if (compressionRatio > EXPECTED_COMPRESSION_RATIO) {
             log.debug("High compression ratio: {}", compressionRatio);

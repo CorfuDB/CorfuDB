@@ -72,13 +72,6 @@ public class CheckpointWriter<T extends ICorfuTable<?, ?>> {
     @Setter
     private int batchSize;
 
-    /**
-     *  Max uncompressed checkpoint entry size: Maximum uncompressed size of a single Checkpoint CONTINUATION Entry.
-     */
-    @Getter
-    @Setter
-    private long maxUncompressedCpEntrySize;
-
     @SuppressWarnings("checkstyle:abbreviation")
     private final UUID checkpointStreamID;
     private final Map<CheckpointEntry.CheckpointDictKey, String> mdkv = new HashMap<>();
@@ -135,7 +128,6 @@ public class CheckpointWriter<T extends ICorfuTable<?, ?>> {
         checkpointId = UUID.randomUUID();
         checkpointStreamID = CorfuRuntime.getCheckpointStreamIdFromId(streamId);
         sv = rt.getStreamsView();
-        maxUncompressedCpEntrySize = rt.getParameters().getMaxUncompressedCpEntrySize();
         batchSize = rt.getParameters().getCheckpointBatchSize();
     }
 
@@ -351,11 +343,11 @@ public class CheckpointWriter<T extends ICorfuTable<?, ?>> {
             inputBuffer.clear();
 
             /* CheckpointEntry has some metadata and make the total size larger than the actual size
-             * of SMR entries. Its a safeguard against the smr entries amounting to the actual
+             * of SMR entries. It's a safeguard against the smr entries amounting to the actual
              * boundary limit.
              */
-            if (numBytesPerUncompressedCheckpointEntry > maxUncompressedCpEntrySize
-                    || numBytesPerCheckpointEntry > maxWriteSizeLimit || smrEntries.getUpdates().size() >= batchSize) {
+            if (numBytesPerUncompressedCheckpointEntry > rt.getParameters().getMaxUncompressedWriteSize() ||
+                numBytesPerCheckpointEntry > maxWriteSizeLimit || smrEntries.getUpdates().size() >= batchSize) {
                 convertAndAppendCheckpointEntry(smrEntries, kvCopy);
                 log.trace("Batched size of checkpoint log entry consists {} smr entries",
                         smrEntries.getUpdates().size());

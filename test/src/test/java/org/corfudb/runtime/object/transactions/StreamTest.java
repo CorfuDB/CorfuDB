@@ -1,5 +1,14 @@
 package org.corfudb.runtime.object.transactions;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import java.nio.charset.Charset;
+import java.util.ArrayList;
+import java.util.Random;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
+
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.LogUnitClient;
@@ -11,14 +20,6 @@ import org.corfudb.runtime.exceptions.AppendException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.junit.Test;
-
-import java.util.ArrayList;
-import java.util.Random;
-import java.util.UUID;
-import java.util.concurrent.atomic.AtomicInteger;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * These tests generate workloads with mixed reads/writes on multiple maps.
@@ -65,6 +66,42 @@ public class StreamTest extends AbstractTransactionsTest {
         assertThatThrownBy(() -> getRuntime().getStreamsView().append(
                 new byte[payloadSize], null, svId))
                 .isInstanceOf(AppendException.class);
+    }
+
+    @Test
+    public void testMaxWriteSizeLimitExceeded() {
+        ICorfuTable<String, String> map = instantiateCorfuObject(PersistentCorfuTable.class, "TestTable");
+
+        //Max uncompressed write size check
+        byte[] array1 = new byte[getRuntime().getParameters().getMaxUncompressedWriteSize()];
+        new Random().nextBytes(array1);
+        String payloadString = new String(array1, Charset.forName("UTF-8"));
+        boolean abortException = false;
+        try {
+            TXBegin();
+            map.insert(Integer.toString(0), payloadString);
+            TXEnd();
+        } catch (TransactionAbortedException tae) {
+            assertThat(tae.getAbortCause()).isEqualTo(AbortCause.SIZE_EXCEEDED);
+            abortException = true;
+        }
+        assertThat(abortException).isTrue();
+
+        //Max compressed write size check
+        byte[] array2 = new byte[getRuntime().getParameters().getMaxWriteSize()];
+        getRuntime().getParameters().setMaxWriteSize(1);
+        new Random().nextBytes(array2);
+        payloadString = new String(array2, Charset.forName("UTF-8"));
+        abortException = false;
+        try {
+            TXBegin();
+            map.insert(Integer.toString(0), payloadString);
+            TXEnd();
+        } catch (TransactionAbortedException tae) {
+            assertThat(tae.getAbortCause()).isEqualTo(AbortCause.SIZE_EXCEEDED);
+            abortException = true;
+        }
+        assertThat(abortException).isTrue();
     }
 
     @Test

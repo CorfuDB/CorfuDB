@@ -201,9 +201,14 @@ public class CorfuRuntime {
     public static class CorfuRuntimeParameters extends RuntimeParameters {
 
         /*
-         * Max size for a write request.
+         * Max uncompressed size for a write request.
          */
-        int maxWriteSize = Integer.MAX_VALUE;
+        int maxUncompressedWriteSize = 100 << 20;
+
+        /*
+         * Max compressed size for a write request.
+         */
+        int maxWriteSize = 25 << 20;
 
         /*
          * Set the bulk read size.
@@ -301,11 +306,6 @@ public class CorfuRuntime {
          * The maximum number of SMR entries that will be grouped in a CheckpointEntry.CONTINUATION
          */
         int checkpointBatchSize = 50;
-
-        /*
-         * The maximum size of an uncompressed CheckpointEntry.CONTINUATION that can be written
-         */
-        long maxUncompressedCpEntrySize = 100_000_000;
 
         /*
          * The maximum number of SMR entries that will be grouped in a MultiSMREntry during Restore
@@ -428,7 +428,11 @@ public class CorfuRuntime {
         }
 
         public static class CorfuRuntimeParametersBuilder extends RuntimeParametersBuilder {
-            private int maxWriteSize = Integer.MAX_VALUE;
+
+            //Max uncompressed size for a write request.
+            private int maxUncompressedWriteSize = 100 << 20;
+            //Max compressed size for a write request
+            private int maxWriteSize = 25 << 20;
             private int bulkReadSize = 10;
             private int holeFillRetry = 10;
             private Duration holeFillRetryThreshold = Duration.ofSeconds(1L);
@@ -446,7 +450,6 @@ public class CorfuRuntime {
             private int trimRetry = 2;
             private int checkpointRetries = 5;
             private int checkpointBatchSize = 50;
-            private long maxUncompressedCpEntrySize = 100_000_000;
             private int restoreBatchSize = 50;
             private int streamBatchSize = 10;
             private int checkpointReadBatchSize = 1;
@@ -617,6 +620,11 @@ public class CorfuRuntime {
                 return this;
             }
 
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder maxUncompressedWriteSize(int maxUncompressedWriteSize) {
+                this.maxUncompressedWriteSize = maxUncompressedWriteSize;
+                return this;
+            }
+
             public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder bulkReadSize(int bulkReadSize) {
                 this.bulkReadSize = bulkReadSize;
                 return this;
@@ -699,11 +707,6 @@ public class CorfuRuntime {
 
             public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder checkpointBatchSize(int checkpointBatchSize) {
                 this.checkpointBatchSize = checkpointBatchSize;
-                return this;
-            }
-
-            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder maxUncompressedCpEntrySize(long maxUncompressedCpEntrySize) {
-                this.maxUncompressedCpEntrySize = maxUncompressedCpEntrySize;
                 return this;
             }
 
@@ -806,6 +809,7 @@ public class CorfuRuntime {
                 corfuRuntimeParameters.setSystemDownHandler(systemDownHandler);
                 corfuRuntimeParameters.setBeforeRpcHandler(beforeRpcHandler);
                 corfuRuntimeParameters.setMaxWriteSize(maxWriteSize);
+                corfuRuntimeParameters.setMaxUncompressedWriteSize(maxUncompressedWriteSize);
                 corfuRuntimeParameters.setBulkReadSize(bulkReadSize);
                 corfuRuntimeParameters.setHoleFillRetry(holeFillRetry);
                 corfuRuntimeParameters.setHoleFillRetryThreshold(holeFillRetryThreshold);
@@ -823,7 +827,6 @@ public class CorfuRuntime {
                 corfuRuntimeParameters.setTrimRetry(trimRetry);
                 corfuRuntimeParameters.setCheckpointRetries(checkpointRetries);
                 corfuRuntimeParameters.setCheckpointBatchSize(checkpointBatchSize);
-                corfuRuntimeParameters.setMaxUncompressedCpEntrySize(maxUncompressedCpEntrySize);
                 corfuRuntimeParameters.setRestoreBatchSize(restoreBatchSize);
                 corfuRuntimeParameters.setStreamBatchSize(streamBatchSize);
                 corfuRuntimeParameters.setCheckpointReadBatchSize(checkpointReadBatchSize);

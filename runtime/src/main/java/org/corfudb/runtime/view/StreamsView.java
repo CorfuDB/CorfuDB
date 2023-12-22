@@ -2,7 +2,6 @@ package org.corfudb.runtime.view;
 
 import com.google.common.annotations.VisibleForTesting;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
@@ -22,6 +21,7 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Collectors;
@@ -150,19 +150,12 @@ public class StreamsView extends AbstractView {
         // The serialization here only serializes the payload because the token is not
         // acquired yet, thus metadata is incomplete. Once a token is acquired, the
         // writer will append the serialized metadata to the buffer.
-        try (ILogData.SerializationHandle sh = ld.getSerializedForm(serializeMetadata)) {
-            int payloadSize;
-            if (skipWriteSizeCheck) {
-                payloadSize = ld.getSizeEstimate();
-                if (log.isTraceEnabled()) {
-                    log.trace("append: payload size is {} bytes.", payloadSize);
-                }
-            } else {
-                payloadSize = ld.checkMaxWriteSize(runtime.getParameters().getMaxWriteSize());
-            }
+        try (ILogData.SerializationHandle sh = ld.getSerializedForm(serializeMetadata,
+                skipWriteSizeCheck ? Optional.empty() : Optional.of(runtime.getParameters().getMaxUncompressedWriteSize()))) {
 
-            MicroMeterUtils.measure(payloadSize, "logdata.payload.bytes", "clientId",
-                    runtime.getParameters().getClientId().toString());
+            int payloadSize = skipWriteSizeCheck ? ld.getSizeEstimate() :
+                    ld.checkMaxWriteSize(runtime.getParameters().getMaxWriteSize());
+
             for (int retry = 0; retry < runtime.getParameters().getWriteRetry(); retry++) {
                 // Go to the sequencer, grab a token to write.
                 tokenResponse = conflictInfo == null
@@ -213,11 +206,10 @@ public class StreamsView extends AbstractView {
                 }
             }
 
-            log.error("append[{}]: failed after {} retries, streams {}, write size {} bytes",
+            log.error("append[{}]: failed after {} retries, streams {}, write size {} bytes (compressed)",
                     tokenResponse == null ? -1 : tokenResponse.getSequence(),
                     runtime.getParameters().getWriteRetry(),
-                    Arrays.stream(streamIDs).map(Utils::toReadableId).collect(Collectors.toSet()),
-                    payloadSize);
+                    Arrays.stream(streamIDs).map(Utils::toReadableId).collect(Collectors.toSet()), payloadSize);
         }
 
         throw new AppendException();
