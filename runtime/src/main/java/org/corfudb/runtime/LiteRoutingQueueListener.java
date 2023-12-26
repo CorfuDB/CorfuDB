@@ -15,11 +15,9 @@ import org.corfudb.runtime.Queue.ReplicationType;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
-import java.util.UUID;
 
 import static org.corfudb.runtime.LogReplicationUtils.REPLICATED_QUEUE_TAG;
 import static org.corfudb.runtime.Queue.ReplicationType.LAST_SNAPSHOT_SYNC_ENTRY;
@@ -108,11 +106,7 @@ public abstract class LiteRoutingQueueListener extends StreamListenerResumeOrFul
         numEntriesProcessed = processBatch(currentReplicationType, allRQMsgs);
 
         if (numEntriesProcessed == allRQMsgs.size()) {
-            try (TxnContext txnContext = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-                List<UUID> noStreamTags = Collections.emptyList();
-                allEntries.forEach(q -> txnContext.logUpdateDelete(recvQ, q.getRecordId(), noStreamTags, corfuStore));
-                txnContext.commit();
-            }
+            deleteQueueEntries(allEntries);
             log.debug("Deleted {} messages from {}", allEntries.size(), recvQ.getFullyQualifiedTableName());
         }
     }
@@ -134,18 +128,19 @@ public abstract class LiteRoutingQueueListener extends StreamListenerResumeOrFul
 
             if (msg.getReplicationType() != currentReplicationType) {
 
-                log.info("LiteRecvQ::performFullSync delivering {} messages of type {}", batchOneOfAKind.size(),
-                    currentReplicationType);
-                entriesProcessed += processBatch(currentReplicationType, batchOneOfAKind);
+                // On startup, currentReplicationType = LOG_ENTRY_SYNC.  So if the queue contains messages from
+                // snapshot sync or snapshot sync end, this method will get invoked with an empty batch.  Add a
+                // check to skip processing in such a case.
+                if (!batchOneOfAKind.isEmpty()) {
+                    log.info("LiteRecvQ::performFullSync delivering {} messages of type {}", batchOneOfAKind.size(),
+                        currentReplicationType);
+                    entriesProcessed += processBatch(currentReplicationType, batchOneOfAKind);
 
-                // We have encountered a change in type, reset our batch..
-                batchOneOfAKind = new ArrayList<>();
-                currentReplicationType = msg.getReplicationType();
-
-                // If the current message is of type LAST_SNAPSHOT_SYNC_ENTRY, invoke the completion callback
-                if (msg.getReplicationType() == LAST_SNAPSHOT_SYNC_ENTRY) {
-                    onSnapshotSyncComplete();
+                    // We have encountered a change in type, reset our batch..
+                    batchOneOfAKind = new ArrayList<>();
                 }
+
+                currentReplicationType = msg.getReplicationType();
             }
             // Batch up message of the same kind so we can deliver in a batch
             batchOneOfAKind.add(msg);
@@ -158,10 +153,7 @@ public abstract class LiteRoutingQueueListener extends StreamListenerResumeOrFul
 
         if (entriesProcessed == allMsgs.size()) {
             log.info("LiteQRecv:performFullSync deleting {} messages", entriesProcessed);
-            try (TxnContext txnContext = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-                allMsgs.forEach(q -> txnContext.delete(recvQ, q.getRecordId()));
-                txnContext.commit();
-            }
+            deleteQueueEntries(allMsgs);
         }
         int finalQSize = recvQ.count();
         log.info("LiteQRecv:performFullSync completed at ts {} final Q size {}", ts, finalQSize);
@@ -170,13 +162,6 @@ public abstract class LiteRoutingQueueListener extends StreamListenerResumeOrFul
 
     private int processBatch(ReplicationType currentReplicationType, List<Queue.RoutingTableEntryMsg> batch) {
         int entriesProcessed = 0;
-
-        // On startup, currentReplicationType = LOG_ENTRY_SYNC.  So if the queue contains messages from
-        // snapshot sync or snapshot sync end, this method will get invoked with an empty batch.  Add a
-        // check to return in such a case.
-        if (batch.isEmpty()) {
-            return entriesProcessed;
-        }
 
         switch (currentReplicationType) {
             case LOG_ENTRY_SYNC:
@@ -190,13 +175,20 @@ public abstract class LiteRoutingQueueListener extends StreamListenerResumeOrFul
                 }
                 break;
             case LAST_SNAPSHOT_SYNC_ENTRY:
-                // Just increment entriesProcessed.  onSnapshotSyncComplete() callback was already made
-                entriesProcessed++;
+                onSnapshotSyncComplete();
+                entriesProcessed = batch.size();
                 break;
             default:
                 throw new IllegalStateException("Unexpected replication type encountered " + currentReplicationType);
         }
         return entriesProcessed;
+    }
+
+    private void deleteQueueEntries(List<Table.CorfuQueueRecord> queueEntries) {
+        try (TxnContext txnContext = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+            queueEntries.forEach(q -> txnContext.delete(recvQ, q.getRecordId()));
+            txnContext.commit();
+        }
     }
 
     protected abstract boolean processUpdatesInSnapshotSync(List<Queue.RoutingTableEntryMsg> updates);
