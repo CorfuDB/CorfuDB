@@ -97,13 +97,15 @@ public abstract class LogReplicationConfig {
             this.maxMsgSize = DEFAULT_MAX_DATA_MSG_SIZE;
             this.maxCacheSize = DEFAULT_MAX_CACHE_NUM_ENTRIES;
             this.maxSnapshotEntriesApplied = DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED;
+            this.maxTransferSize = Math.min(maxMsgSize,
+                CorfuRuntime.MAX_UNCOMPRESSED_WRITE_SIZE * DATA_FRACTION_OF_UNCOMPRESSED_WRITE_SIZE / 100);
         } else {
             this.maxNumMsgPerBatch = serverContext.getLogReplicationMaxNumMsgPerBatch();
             this.maxMsgSize = serverContext.getLogReplicationMaxDataMessageSize();
             this.maxCacheSize = serverContext.getLogReplicationCacheMaxSize();
             this.maxSnapshotEntriesApplied = serverContext.getMaxSnapshotEntriesApplied();
-        }
-        this.maxTransferSize = Math.min(maxMsgSize,
+            this.maxTransferSize = Math.min(maxMsgSize,
                 serverContext.getMaxUncompressedTxSize() * DATA_FRACTION_OF_UNCOMPRESSED_WRITE_SIZE / 100);
+        }
     }
 }
