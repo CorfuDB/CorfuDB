@@ -288,6 +288,7 @@ public class SessionManager {
         createOutgoingSessionsBySubscriber(subscriber);
         updateRouterWithNewSessions();
         createSourceFSMs();
+        logNewlyAddedSessionInfo();
         connectToRemoteClusters();
     }
 
@@ -335,7 +336,7 @@ public class SessionManager {
         return sessionsToAdd;
     }
 
-    public void createIncomingSessionsBySubscriber(ReplicationSubscriber subscriber) {
+    private void createIncomingSessionsBySubscriber(ReplicationSubscriber subscriber) {
         Set<LogReplicationSession> sessionsToAdd = new HashSet<>();
         try {
             String localClusterId = topology.getLocalClusterDescriptor().getClusterId();
@@ -375,7 +376,7 @@ public class SessionManager {
         configManager.generateConfig(sessionsToAdd, true);
     }
 
-    public synchronized void addSessionForClient(LogReplicationSession sessionFromSource) {
+    public synchronized void addSessionFromSource(LogReplicationSession sessionFromSource) {
         Set<LogReplicationSession> sessionsToAdd = new HashSet<>();
         try {
             IRetry.build(IntervalRetry.class, () -> {

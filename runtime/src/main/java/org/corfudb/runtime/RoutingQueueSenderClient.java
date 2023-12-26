@@ -67,7 +67,6 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
     // TODO (V2): This field should be removed after the rpc stream is added for Sink side session creation.
     public static final String DEFAULT_ROUTING_QUEUE_CLIENT = "00000000-0000-0000-0000-0000000000002";
 
-    public static final String DEFAULT_ROUTING_QUEUE_CONFIG_CLIENT = "00000000-0000-0000-0000-0000000000003";
 
     // TODO: Find a way to use these from a common location (they are in infrastructure currently)
     private static final String REPLICATION_EVENT_TABLE_NAME = "LogReplicationEventTable";

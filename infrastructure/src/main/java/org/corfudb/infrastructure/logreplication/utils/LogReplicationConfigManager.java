@@ -10,6 +10,7 @@ import org.corfudb.infrastructure.logreplication.config.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.config.LogReplicationFullTableConfig;
 import org.corfudb.infrastructure.logreplication.config.LogReplicationLogicalGroupConfig;
 import org.corfudb.infrastructure.logreplication.config.LogReplicationRoutingQueueConfig;
+import org.corfudb.infrastructure.logreplication.infrastructure.SessionManager;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
@@ -59,7 +60,6 @@ import static org.corfudb.runtime.LogReplicationLogicalGroupClient.LR_MODEL_META
 import static org.corfudb.runtime.LogReplicationLogicalGroupClient.LR_REGISTRATION_TABLE_NAME;
 import static org.corfudb.runtime.LogReplicationUtils.LOG_ENTRY_SYNC_QUEUE_NAME_SENDER;
 import static org.corfudb.runtime.RoutingQueueSenderClient.DEFAULT_ROUTING_QUEUE_CLIENT;
-import static org.corfudb.runtime.RoutingQueueSenderClient.DEFAULT_ROUTING_QUEUE_CONFIG_CLIENT;
 import static org.corfudb.runtime.LogReplicationLogicalGroupClient.DEFAULT_LOGICAL_GROUP_CLIENT;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
@@ -145,7 +145,7 @@ public class LogReplicationConfigManager {
 
     public static ReplicationSubscriber getDefaultRoutingQueueConfigSubscriber() {
         return ReplicationSubscriber.newBuilder()
-            .setClientName(DEFAULT_ROUTING_QUEUE_CONFIG_CLIENT)
+            .setClientName("00000000-0000-0000-0000-0000000000003")
             .setModel(ReplicationModel.ROUTING_QUEUES)
             .build();
     }
@@ -156,6 +156,7 @@ public class LogReplicationConfigManager {
                 .setModel(ReplicationModel.FULL_TABLE)
                 .build();
     }
+
     /**
      * Init config manager:
      * 1. Adding default subscriber to registeredSubscribers
@@ -282,6 +283,7 @@ public class LogReplicationConfigManager {
                 // Find streams to replicate for every logical group for this session
                 String logicalGroup = entry.getValue().getMetadata().getTableOptions()
                         .getReplicationGroup().getLogicalGroup();
+                // TODO (V2): Client name should be checked after the rpc stream is added for Sink side session creation.
                 //if (session.getSubscriber().getClientName().equals(clientReplicationSubscriber.getClientName()) &&
                 //clientReplicationSubscriber.getModel().equals(ReplicationModel.LOGICAL_GROUPS)) {
                 if (isSink || logicalGroupToStreams.containsKey(logicalGroup)) {
@@ -479,6 +481,39 @@ public class LogReplicationConfigManager {
                         registeredSubscribers.add(subscriber);
                     });
                     return txn.commit();
+                } catch (TransactionAbortedException tae) {
+                    log.error("Failed to preprocess client registration table due to Txn Abort, retrying", tae);
+                    throw new RetryNeededException();
+                }
+            }).run();
+        } catch (InterruptedException e) {
+            log.error("Unable to preprocess client configuration tables", e);
+            throw new UnrecoverableCorfuInterruptedError(e);
+        }
+    }
+
+    public CorfuStoreMetadata.Timestamp preprocessAndGetTailBeforeSubscribe(SessionManager sessionManager) {
+        try {
+            return IRetry.build(IntervalRetry.class, () -> {
+                try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+                    List<CorfuStoreEntry<ClientRegistrationId, ClientRegistrationInfo, Message>> registrationResults =
+                            txn.executeQuery(clientRegistrationTable, p -> true);
+                    registrationResults.forEach(entry -> {
+                        String clientName = entry.getKey().getClientName();
+                        ReplicationModel model = entry.getPayload().getModel();
+                        ReplicationSubscriber subscriber = ReplicationSubscriber.newBuilder()
+                                .setClientName(clientName).setModel(model).build();
+                        if ((model.equals(ReplicationModel.LOGICAL_GROUPS)
+                                || model.equals(ReplicationModel.ROUTING_QUEUES)) && sessionManager.getReplicationContext().getIsLeader().get()) {
+                            this.onNewClientRegister(subscriber);
+                        }
+                        registeredSubscribers.add(subscriber);
+                    });
+                    CorfuStoreMetadata.Timestamp ts = txn.commit();
+                    for (ReplicationSubscriber subscriber : registeredSubscribers) {
+                        sessionManager.createSessionsForClientRegister(subscriber);
+                    }
+                    return ts;
                 } catch (TransactionAbortedException tae) {
                     log.error("Failed to preprocess client registration table due to Txn Abort, retrying", tae);
                     throw new RetryNeededException();
