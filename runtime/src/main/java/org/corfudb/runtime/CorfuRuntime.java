@@ -15,6 +15,7 @@ import org.corfudb.common.compression.Codec;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider.MeterRegistryInitializer;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
+import org.corfudb.common.util.FileWatcher;
 import org.corfudb.runtime.clients.BaseClient;
 import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.clients.LayoutClient;
@@ -148,6 +149,9 @@ public class CorfuRuntime {
      */
     @Getter
     private NodeRouterPool nodeRouterPool;
+
+    @Getter
+    private FileWatcher sslCertWatcher;
 
     /**
      * A completable future containing a layout, when completed.
@@ -350,6 +354,11 @@ public class CorfuRuntime {
          */
         Duration runtimeGCPeriod = Duration.ofMinutes(20);
 
+        /**
+         * The period at which the file watcher will poll the file from disk
+         */
+        Duration fileWatcherPollPeriod = Duration.ofSeconds(10);
+
         /*
          * The {@link UUID} for the cluster this client is connecting to, or
          * {@code null} if the client should adopt the {@link UUID} of the first
@@ -454,6 +463,7 @@ public class CorfuRuntime {
             private int streamBatchSize = 10;
             private int checkpointReadBatchSize = 1;
             private Duration runtimeGCPeriod = Duration.ofMinutes(20);
+            private Duration fileWatcherPollPeriod = Duration.ofSeconds(10);
             private UUID clusterId = null;
             private int systemDownHandlerTriggerLimit = 20;
             private List<NodeLocator> layoutServers = new ArrayList<>();
@@ -746,6 +756,11 @@ public class CorfuRuntime {
                 return this;
             }
 
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder fileWatcherPollPeriod(Duration fileWatcherPollPeriod) {
+                this.fileWatcherPollPeriod = fileWatcherPollPeriod;
+                return this;
+            }
+
             public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder clusterId(UUID clusterId) {
                 this.clusterId = clusterId;
                 return this;
@@ -831,6 +846,7 @@ public class CorfuRuntime {
                 corfuRuntimeParameters.setStreamBatchSize(streamBatchSize);
                 corfuRuntimeParameters.setCheckpointReadBatchSize(checkpointReadBatchSize);
                 corfuRuntimeParameters.setRuntimeGCPeriod(runtimeGCPeriod);
+                corfuRuntimeParameters.setFileWatcherPollPeriod(fileWatcherPollPeriod);
                 corfuRuntimeParameters.setClusterId(clusterId);
                 corfuRuntimeParameters.setSystemDownHandlerTriggerLimit(systemDownHandlerTriggerLimit);
                 corfuRuntimeParameters.setLayoutServers(layoutServers);
@@ -964,6 +980,10 @@ public class CorfuRuntime {
         // Initializing the node router pool.
         nodeRouterPool = new NodeRouterPool(getRouterFunction);
 
+        // Start file watcher on Ssl certs
+        sslCertWatcher = this.parameters.getKeyStore() == null ? null :
+                new FileWatcher(this.parameters.getKeyStore(), this::reconnect, this.parameters.fileWatcherPollPeriod);
+
         if (parameters.metricsEnabled) {
             Logger logger = LoggerFactory.getLogger("org.corfudb.client.metricsdata");
             if (logger.isDebugEnabled()) {
@@ -1070,8 +1090,15 @@ public class CorfuRuntime {
      * Stop all routers associated with this Corfu Runtime.
      **/
     public void stop(boolean shutdown) {
+        if (sslCertWatcher != null) {
+            sslCertWatcher.close();
+        }
         nodeRouterPool.shutdown();
+
         if (!shutdown) {
+            sslCertWatcher = this.parameters.getKeyStore() == null ? null :
+                    new FileWatcher(this.parameters.getKeyStore(), this::reconnect,
+                            this.parameters.fileWatcherPollPeriod);
             nodeRouterPool = new NodeRouterPool(getRouterFunction);
         }
     }
