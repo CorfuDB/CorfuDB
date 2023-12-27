@@ -459,6 +459,8 @@ public class TxnContext
         MultiObjectSMREntry writeSet = rootContext.getWriteSetInfo().getWriteSet();
         final Map<String, List<CorfuStreamEntry>> mutations = new HashMap<>(crud.tablesUpdated.size());
         crud.tablesUpdated.forEach((uuid, table) -> {
+            // logUpdateEnqueue method doesn't need a table instance and hence 'table' can be null. The API is used only by
+            // LR for the ROUTING_QUEUE model.
             if (table == null) {
                 return;
             }
