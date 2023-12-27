@@ -224,11 +224,17 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
 
         for (SMREntry smrEntry : smrEntries) {
             if (session.getSubscriber().getModel().equals(ROUTING_QUEUES)) {
-                CorfuRecord<Queue.RoutingTableEntryMsg, Message> record =
-                        (CorfuRecord<Queue.RoutingTableEntryMsg, Message>)(replicationContext.getProtobufSerializer()
-                        .deserialize(Unpooled.wrappedBuffer((byte[])smrEntry.getSMRArguments()[1]), null));
-                txnContext.logUpdateEnqueue(replicatedRoutingQUuid, record.getPayload(),
-                        Collections.singletonList(replicatedRoutingQueueTag), metadataManager.getCorfuStore());
+                // create a new queue entry while writing to the actual streams, so the order of writes can be preserved
+                // even after CP/trim
+                if (phase.equals(Phase.APPLY_PHASE)) {
+                    CorfuRecord<Queue.RoutingTableEntryMsg, Message> record =
+                            (CorfuRecord<Queue.RoutingTableEntryMsg, Message>) (replicationContext.getProtobufSerializer()
+                                    .deserialize(Unpooled.wrappedBuffer((byte[]) smrEntry.getSMRArguments()[1]), null));
+                    txnContext.logUpdateEnqueue(replicatedRoutingQUuid, record.getPayload(),
+                            Collections.singletonList(replicatedRoutingQueueTag), metadataManager.getCorfuStore());
+                } else {
+                    txnContext.logUpdate(streamId, smrEntry, Collections.singletonList(replicatedRoutingQueueTag));
+                }
             } else {
                 txnContext.logUpdate(streamId, smrEntry, replicationContext.getConfig(session).getDataStreamToTagsMap().get(streamId));
             }
