@@ -1275,7 +1275,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         // This IT requires custom values to be set for the replication config.  Set these values so that the default
         // values are not used
         context.getConfig(session).setMaxNumMsgPerBatch(BATCH_SIZE);
-        context.getConfig(session).setMaxMsgSize(SMALL_MSG_SIZE);
         context.getConfig(session).setMaxTransferSize(SMALL_MSG_SIZE * LogReplicationConfig.DATA_FRACTION_OF_UNCOMPRESSED_WRITE_SIZE / 100);
 
         // Data Sender
