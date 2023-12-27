@@ -216,19 +216,19 @@ public class LogReplicationConfigManager {
      * @param session session for which to generate config.
      * @param updateGroupDestinationConfig True if group destination config needs to be updated.
      */
-    public void generateConfig(LogReplicationSession session, boolean updateGroupDestinationConfig, String sessionNameForLogging) {
+    public void generateConfig(LogReplicationSession session, boolean updateGroupDestinationConfig, String sessionName) {
         switch (session.getSubscriber().getModel()) {
             case FULL_TABLE:
-                log.debug("[{}]:: Generating FULL_TABLE config", sessionNameForLogging);
-                generateFullTableConfig(session, sessionNameForLogging);
+                log.debug("[{}]:: Generating FULL_TABLE config", sessionName);
+                generateFullTableConfig(session, sessionName);
                 break;
             case LOGICAL_GROUPS:
-                log.debug("[{}]:: Generating LOGICAL_GROUP config", sessionNameForLogging);
-                generateLogicalGroupConfig(session, updateGroupDestinationConfig, sessionNameForLogging);
+                log.debug("[{}]:: Generating LOGICAL_GROUP config", sessionName);
+                generateLogicalGroupConfig(session, updateGroupDestinationConfig, sessionName);
                 break;
             case ROUTING_QUEUES:
-                log.debug("[{}]:: Generating ROUTING_QUEUE config",sessionNameForLogging);
-                generateRoutingQueueConfig(session, sessionNameForLogging);
+                log.debug("[{}]:: Generating ROUTING_QUEUE config",sessionName);
+                generateRoutingQueueConfig(session, sessionName);
                 break;
             default:
                 throw new IllegalArgumentException("Invalid replication model: " +

@@ -420,7 +420,7 @@ public class SessionManager {
         int hash = 41;
         hash = (53 * hash) + session.getSourceClusterId().hashCode();
         hash = (53 * hash) + session.getSinkClusterId().hashCode();
-        hash = (53 * hash) + session.getSubscriber().getModel().hashCode();
+        hash = (53 * hash) + session.getSubscriber().getModel().toString().hashCode();
         hash = (53 * hash) + session.getSubscriber().getClientName().hashCode();
 
         return hash;

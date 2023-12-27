@@ -461,15 +461,9 @@ public class LogReplicationAckReader {
      * Start periodic replication status update task (completion percentage)
      */
     public void startSyncStatusUpdatePeriodicTask() {
-<<<<<<< HEAD
-        log.info("Start sync status update periodic task");
-        sessionToAckPollerFuture.put(session, lastAckedTsPoller.scheduleWithFixedDelay(new TsPollingTask(), 0, ACKED_TS_READ_INTERVAL_SECONDS,
-                TimeUnit.SECONDS));
-=======
         log.info("[{}]:: Start sync status update periodic task", sessionName);
         lastAckedTsPoller.scheduleWithFixedDelay(new TsPollingTask(), 0, ACKED_TS_READ_INTERVAL_SECONDS,
                 TimeUnit.SECONDS);
->>>>>>> b351fac91f6 (1. Generate unique name for session)
     }
 
     /**
@@ -490,7 +484,7 @@ public class LogReplicationAckReader {
                         metadataManager.updateRemainingEntriesToSend(session, entriesToSend, lastSyncType);
                     } catch (TransactionAbortedException tae) {
                         log.error("[{}]:: Error while attempting to set remaining entries for remote session {} with " +
-                                "lastSyncType {}.", session, lastSyncType, tae);
+                                "lastSyncType {}.", sessionName, lastSyncType, tae);
                         throw new RetryNeededException();
                     } finally {
                         lock.unlock();

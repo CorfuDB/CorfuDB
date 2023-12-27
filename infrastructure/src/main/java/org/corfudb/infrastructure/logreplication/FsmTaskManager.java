@@ -138,14 +138,14 @@ public class FsmTaskManager {
         // for a given session, The fsm event should be processed in the order they are queued. This condition ensures
         // that in the event of 2 threads contending for the monitor, only the task submitted first would be processed.
         synchronized (sessionToRuntimeEventIdMap.get(sessionName)) {
-                while (!sessionToRuntimeEventIdMap.get(sessionName).get(0).equals(event.getEventId())) {
-                    try {
-                        sessionToRuntimeEventIdMap.get(sessionName).wait();
-                    } catch (InterruptedException e) {
-                        log.error("[{}]:: Wait was interrupted {}", sessionName, e.getMessage());
-                    }
+            while (!sessionToRuntimeEventIdMap.get(sessionName).get(0).equals(event.getEventId())) {
+                try {
+                    sessionToRuntimeEventIdMap.get(sessionName).wait();
+                } catch (InterruptedException e) {
+                    log.error("[{}]:: Wait was interrupted {}", sessionName, e.getMessage());
                 }
             }
+        }
 
 
             LogReplicationRuntimeState currState = fsm.getState();

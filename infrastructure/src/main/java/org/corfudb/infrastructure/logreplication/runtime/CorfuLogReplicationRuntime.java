@@ -184,7 +184,7 @@ public class CorfuLogReplicationRuntime {
         states.put(LogReplicationRuntimeStateType.NEGOTIATING, new NegotiatingState(this, router, metadataManager));
         states.put(LogReplicationRuntimeStateType.REPLICATING, new ReplicatingState(this, sourceManager, router));
         states.put(LogReplicationRuntimeStateType.STOPPED, new StoppedState(sourceManager));
-        states.put(LogReplicationRuntimeStateType.UNRECOVERABLE, new UnrecoverableState(getSessionName()));
+        states.put(LogReplicationRuntimeStateType.UNRECOVERABLE, new UnrecoverableState(sessionName));
     }
 
     /**

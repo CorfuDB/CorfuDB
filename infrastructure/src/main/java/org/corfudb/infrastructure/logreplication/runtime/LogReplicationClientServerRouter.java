@@ -650,6 +650,7 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
             msgHandler.handleMessage(message, null, this);
         } catch (Throwable t) {
             log.error("[{}]:: channelRead: Handling {} failed due to {}:{}",
+                    sessionName,
                     message.getPayload().getPayloadCase(),
                     t.getClass().getSimpleName(),
                     t.getMessage(),
