@@ -189,12 +189,12 @@ public class FsmTaskManager {
         // The order between the delayed list and the regular list is not maintained. But since only 1 thread is active
         // at any time for a session, in a stable scenario, its guaranteed that a 0-delay event will not be generated
         // before a delayed event is executed.
-            return (sessionToReplicationEventIdMap.get(session) != null &&
-                        !sessionToReplicationEventIdMap.get(session).isEmpty() &&
-                        sessionToReplicationEventIdMap.get(session).get(0) != currEventId) &&
-                    (sessionToDelayedReplicationEventIdMap.get(session) != null &&
-                            !sessionToDelayedReplicationEventIdMap.get(session).isEmpty() &&
-                            sessionToDelayedReplicationEventIdMap.get(session).get(0) != currEventId);
+        return !(sessionToReplicationEventIdMap.get(session) != null &&
+                !sessionToReplicationEventIdMap.get(session).isEmpty() &&
+                sessionToReplicationEventIdMap.get(session).get(0).equals(currEventId) ||
+                (sessionToDelayedReplicationEventIdMap.get(session) != null &&
+                        !sessionToDelayedReplicationEventIdMap.get(session).isEmpty() &&
+                        sessionToDelayedReplicationEventIdMap.get(session).get(0).equals(currEventId)));
     }
 
     private void processReplicationTask(LogReplicationEvent currEvent, LogReplicationFSM fsm) {
