@@ -231,7 +231,7 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
 
     @Test
     public void testSnapshotSyncCancel() throws Exception {
-
+        setUp(DefaultClusterManager.TP_SINGLE_SOURCE_SINK_ROUTING_QUEUE);
         // Register client and setup initial group destinations mapping
         CorfuRuntime clientRuntime = getClientRuntime();
         CorfuStore clientCorfuStore = new CorfuStore(clientRuntime);
