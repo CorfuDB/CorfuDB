@@ -260,6 +260,7 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
      */
     @Test
     public void testSnapshotSyncCancel() throws Exception {
+        setUp(DefaultClusterManager.TP_SINGLE_SOURCE_SINK_ROUTING_QUEUE);
         // Create the Routing Queue Sender client and subscribe a listener to get snapshot sync requests.
         CorfuRuntime clientRuntime = getClientRuntime();
         CorfuStore clientCorfuStore = new CorfuStore(clientRuntime);
