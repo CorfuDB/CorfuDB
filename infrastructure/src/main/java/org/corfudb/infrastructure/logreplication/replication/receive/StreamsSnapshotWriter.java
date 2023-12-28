@@ -21,6 +21,7 @@ import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
+import org.corfudb.runtime.proto.RpcCommon.UuidMsg;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.StreamOptions;
 import org.corfudb.runtime.view.stream.OpaqueStream;
@@ -35,6 +36,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -153,31 +155,81 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
      */
     private void processUpdatesShadowStream(List<SMREntry> smrEntries, Long currentSeqNum, UUID shadowStreamUuid,
                                             UUID snapshotSyncId) {
-        CorfuStoreMetadata.Timestamp timestamp;
+        CorfuStoreMetadata.Timestamp timestamp = CorfuStoreMetadata.Timestamp.newBuilder().build();
 
-        try (TxnContext txn = metadataManager.getTxnContext()) {
-            updateLog(txn, smrEntries, shadowStreamUuid);
-            metadataManager.updateReplicationMetadataField(txn, session, ReplicationMetadata.LASTSNAPSHOTTRANSFERREDSEQNUMBER_FIELD_NUMBER, currentSeqNum);
-            timestamp = txn.commit();
+        int bufferSize = 0;
+        List<SMREntry> entriesInABatch = new ArrayList<>();
+
+        boolean timestampUpdatePending = true;
+
+        for (SMREntry entry : smrEntries) {
+            if (bufferSize + entry.getSerializedSize() >= metadataManager.getRuntime().getParameters().getMaxWriteSize()) {
+                log.info("Apply incoming updates partially for shadow stream {}.  Writing {} SMR entries.",
+                    shadowStreamUuid, entriesInABatch.size());
+                try (TxnContext txn = metadataManager.getTxnContext()) {
+                    updateLog(txn, entriesInABatch, shadowStreamUuid);
+                    CorfuStoreMetadata.Timestamp commitTimestamp = txn.commit();
+                    if (timestampUpdatePending) {
+                        timestamp = commitTimestamp;
+                        timestampUpdatePending = false;
+                    }
+                    bufferSize = entry.getSerializedSize();
+                    entriesInABatch.clear();
+                }
+            } else {
+                bufferSize += entry.getSerializedSize();
+            }
+            entriesInABatch.add(entry);
         }
 
-        if (!snapshotSyncStartMarker.isPresent()) {
+        if (!entriesInABatch.isEmpty()) {
             try (TxnContext txn = metadataManager.getTxnContext()) {
-                metadataManager.setSnapshotSyncStartMarker(txn, session, snapshotSyncId, timestamp);
-                snapshotSyncStartMarker = Optional.of(new SnapshotSyncStartMarker(snapshotSyncId, timestamp.getSequence()));
-                txn.commit();
+                updateLog(txn, entriesInABatch, shadowStreamUuid);
+                CorfuStoreMetadata.Timestamp commitTimestamp = txn.commit();
+                if (timestampUpdatePending) {
+                    timestamp = commitTimestamp;
+                }
             }
         }
 
-        log.debug("Process entries total={}, set sequence number {}", smrEntries.size(), currentSeqNum);
+        // Update all the required metadata fields atomically, validating for concurrent updates.
+        try (TxnContext txn = metadataManager.getTxnContext()) {
+            ReplicationMetadata metadata = metadataManager.queryReplicationMetadata(txn, session);
+            if (metadata.getTopologyConfigId() != topologyConfigId || metadata.getLastSnapshotStarted() != srcGlobalSnapshot) {
+                log.warn("Metadata mismatch detected.  In-memory topologyId/lastSnapshotStarted = {}/{}.  From " +
+                        "metadata table = {}/{}", topologyConfigId, srcGlobalSnapshot, metadata.getTopologyConfigId(),
+                        metadata.getLastSnapshotStarted());
+                throw new ReplicationWriterException("Metadata mismatch detected");
+            }
+
+            ReplicationMetadata.Builder metadataBuilder = metadata.toBuilder();
+            metadataBuilder.setLastSnapshotTransferredSeqNumber(currentSeqNum).setLastSnapshotStarted(srcGlobalSnapshot);
+
+            if (!snapshotSyncStartMarker.isPresent()) {
+                if (currentSnapshotSyncIdMismatch(metadata, snapshotSyncId)) {
+                    UuidMsg uuidMsg = UuidMsg.newBuilder()
+                            .setMsb(snapshotSyncId.getMostSignificantBits())
+                            .setLsb(snapshotSyncId.getLeastSignificantBits())
+                            .build();
+                    metadataBuilder.setCurrentCycleMinShadowStreamTs(timestamp.getSequence())
+                            .setCurrentSnapshotCycleId(uuidMsg);
+                }
+                snapshotSyncStartMarker = Optional.of(new SnapshotSyncStartMarker(snapshotSyncId,
+                        timestamp.getSequence()));
+            }
+            metadataManager.updateReplicationMetadata(txn, session, metadataBuilder.build());
+            txn.commit();
+        }
+
+        log.debug("Process entries total={}, set sequence number {}, buffer size = {}", smrEntries.size(),
+            currentSeqNum, bufferSize);
     }
 
-    /**
-     * Write a list of SMR entries to the specified stream log.
-     *
-     * @param smrEntries
-     * @param streamId
-     */
+    private boolean currentSnapshotSyncIdMismatch(ReplicationMetadata metadata, UUID snapshotSyncId) {
+        return !Objects.equals(new UUID(metadata.getCurrentSnapshotCycleId().getMsb(),
+                metadata.getCurrentSnapshotCycleId().getLsb()), snapshotSyncId);
+    }
+
     private void updateLog(TxnContext txnContext, List<SMREntry> smrEntries, UUID streamId) {
         ReplicationMetadata metadata = metadataManager.queryReplicationMetadata(txnContext, session);
         long persistedTopologyConfigId = metadata.getTopologyConfigId();
@@ -186,13 +238,10 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
 
         if (topologyConfigId != persistedTopologyConfigId || srcGlobalSnapshot != persistedSnapshotStart) {
             log.warn("Skip processing opaque entry. Current topologyConfigId={}, srcGlobalSnapshot={}, currentSeqNum={}, " +
-                            "persistedTopologyConfigId={}, persistedSnapshotStart={}, persistedLastSequenceNum={}", topologyConfigId,
-                    srcGlobalSnapshot, recvSeq, persistedTopologyConfigId, persistedSnapshotStart, persistedSequenceNum);
+                    "persistedTopologyConfigId={}, persistedSnapshotStart={}, persistedLastSequenceNum={}", topologyConfigId,
+                srcGlobalSnapshot, recvSeq, persistedTopologyConfigId, persistedSnapshotStart, persistedSequenceNum);
             return;
         }
-
-        metadataManager.updateReplicationMetadataField(txnContext, session, ReplicationMetadata.TOPOLOGYCONFIGID_FIELD_NUMBER, topologyConfigId);
-        metadataManager.updateReplicationMetadataField(txnContext, session, ReplicationMetadata.LASTSNAPSHOTSTARTED_FIELD_NUMBER, srcGlobalSnapshot);
 
         for (SMREntry smrEntry : smrEntries) {
             txnContext.logUpdate(streamId, smrEntry, replicationContext.getConfig(session).getDataStreamToTagsMap().get(streamId));
@@ -314,6 +363,9 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
 
         boolean shouldAddClearRecord = !MERGE_ONLY_STREAMS.contains(streamId);
 
+        // As the shadow stream has been written considering the max write size limit, it is possible to avoid
+        // chunking again here.  But the 'clear' entry and filtering of registry table entries make it impossible to
+        // write the smr entries directly, as read from the shadow stream.
         while (iterator.hasNext()) {
             // append a clear record at the beginning of every non-merge-only stream
             if(shouldAddClearRecord) {
@@ -371,8 +423,23 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
                 txnContext.commit();
             }
         }
+
+        try (TxnContext txn = metadataManager.getTxnContext()) {
+            ReplicationMetadata metadata = metadataManager.queryReplicationMetadata(txn, session);
+            if (metadata.getTopologyConfigId() != topologyConfigId || metadata.getLastSnapshotStarted() != srcGlobalSnapshot) {
+                log.warn("Metadata mismatch detected.  In-memory topologyId/lastSnapshotStarted = {}/{}.  From " +
+                        "metadata table = {}/{}", topologyConfigId, srcGlobalSnapshot, metadata.getTopologyConfigId(),
+                        metadata.getLastSnapshotStarted());
+                throw new ReplicationWriterException("Metadata mismatch detected");
+            }
+
+            ReplicationMetadata.Builder metadataBuilder = metadata.toBuilder();
+            metadataBuilder.setLastSnapshotStarted(srcGlobalSnapshot);
+            metadataManager.updateReplicationMetadata(txn, session, metadataBuilder.build());
+            txn.commit();
+        }
         log.debug("Completed applying updates to stream {}.  {} entries applied across {} transactions.  ", streamId,
-            smrEntries.size(), numBatches);
+                smrEntries.size(), numBatches);
     }
 
     private boolean maxEntriesLimitReached(UUID streamId, List<SMREntry> buffer) {
