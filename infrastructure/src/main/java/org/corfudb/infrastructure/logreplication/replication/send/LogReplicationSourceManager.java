@@ -64,7 +64,7 @@ public class LogReplicationSourceManager {
         Set<String> streamsToReplicate = replicationContext.getConfig(session).getStreamsToReplicate();
         if (streamsToReplicate == null || streamsToReplicate.isEmpty()) {
             // Avoid FSM being initialized if there are no streams to replicate
-            throw new IllegalArgumentException(sessionName+" Invalid Log Replication: Streams to replicate is EMPTY");
+            throw new IllegalArgumentException(sessionName + " Invalid Log Replication: Streams to replicate is EMPTY");
         }
 
         this.metadataManager = metadataManager;

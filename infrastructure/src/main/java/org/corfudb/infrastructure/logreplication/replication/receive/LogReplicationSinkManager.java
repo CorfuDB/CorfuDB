@@ -632,7 +632,7 @@ public class LogReplicationSinkManager implements DataReceiver {
         if (rxState == RxState.SNAPSHOT_SYNC) {
             if (snapshotWriter.getPhase() == StreamsSnapshotWriter.Phase.TRANSFER_PHASE) {
                 log.warn("[{}]:: Leadership lost while in TRANSFER phase. Trigger " +
-                    "snapshot sync plugin end, to avoid effects of" + "delayed restarts of snapshot sync.", sessionName);
+                    "snapshot sync plugin end, to avoid effects of delayed restarts of snapshot sync.", sessionName);
                 log.info("[{}]:: Run onSnapshotSyncEnd :: {}", sessionName, snapshotSyncPlugin.getClass().getSimpleName());
                 snapshotSyncPlugin.onSnapshotSyncEnd(runtime);
                 log.info("[{}]:: Completed onSnapshotSyncEnd :: {}", sessionName, snapshotSyncPlugin.getClass().getSimpleName());

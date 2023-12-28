@@ -83,7 +83,6 @@ public class SnapshotSender {
 
     private volatile AtomicBoolean stopSnapshotSync = new AtomicBoolean(false);
 
-
     public SnapshotSender(LogReplicationContext replicationContext, SnapshotReader snapshotReader, DataSender dataSender,
                           LogReplicationFSM fsm) {
         this.runtime = replicationContext.getCorfuRuntime();

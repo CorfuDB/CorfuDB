@@ -147,25 +147,24 @@ public class FsmTaskManager {
             }
         }
 
+        LogReplicationRuntimeState currState = fsm.getState();
+        if (currState.getType() == LogReplicationRuntimeStateType.STOPPED) {
+            log.info("[{}]:: Log Replication Communication State Machine has been stopped. " +
+                    "No more events will be processed.", sessionName);
+            return;
+        }
 
-            LogReplicationRuntimeState currState = fsm.getState();
-            if (currState.getType() == LogReplicationRuntimeStateType.STOPPED) {
-                log.info("[{}]:: Log Replication Communication State Machine has been stopped. " +
-                        "No more events will be processed.", sessionName);
-                return;
+
+        try {
+            LogReplicationRuntimeState newState = currState.processEvent(event);
+            if (newState != null) {
+                fsm.transition(currState, newState);
+                fsm.setState(newState);
+
             }
-
-
-            try {
-                LogReplicationRuntimeState newState = currState.processEvent(event);
-                if (newState != null) {
-                    fsm.transition(currState, newState);
-                    fsm.setState(newState);
-
-                }
-            } catch (IllegalRuntimeTransitionException illegalState) {
-                log.error("[{}]:: Illegal log replication event {} when in state {}", sessionName, event.getType(), currState.getType());
-            }
+        } catch (IllegalRuntimeTransitionException illegalState) {
+            log.error("[{}]:: Illegal log replication event {} when in state {}", sessionName, event.getType(), currState.getType());
+        }
 
         synchronized(sessionToRuntimeEventIdMap.get(sessionName)) {
             sessionToRuntimeEventIdMap.get(sessionName).remove(0);

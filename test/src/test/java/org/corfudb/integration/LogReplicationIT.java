@@ -84,7 +84,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     private static final String REMOTE_CLUSTER_ID = UUID.randomUUID().toString();
     private static final int CORFU_PORT = 9000;
     private static final String TABLE_PREFIX = "test";
-
+    private static final String SESSION_NAME = "session_1";
     private static final String TEST_NAMESPACE = "LR-Test";
 
     private static final String LOCAL_SOURCE_CLUSTER_ID = DefaultClusterConfig.getSourceClusterIds().get(0);
@@ -259,14 +259,14 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         LogReplicationContext destContext = new LogReplicationContext(new LogReplicationConfigManager(dstTestRuntime, session.getSinkClusterId()), 0,
                 "test" + SERVERS.PORT_0, true, pluginConfig, dstTestRuntime);
-        destContext.addSessionNameForLogging(session, "session_1");
+        destContext.addSessionNameForLogging(session, SESSION_NAME);
 
         destMetadataManager = new LogReplicationMetadataManager(dstTestRuntime, destContext);
         destMetadataManager.addSession(session, 0, true);
 
         LogReplicationContext srcContext = new LogReplicationContext(new LogReplicationConfigManager(srcTestRuntime, session.getSourceClusterId()), 0,
                 "test" + SERVERS.PORT_0, true, pluginConfig, srcTestRuntime);
-        srcContext.addSessionNameForLogging(session, "session_1");
+        srcContext.addSessionNameForLogging(session, SESSION_NAME);
 
         srcMetadataManager = new LogReplicationMetadataManager(srcTestRuntime, srcContext);
         srcMetadataManager.addSession(session, 0, true);
@@ -1285,9 +1285,9 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         TransitionSource function) throws InterruptedException {
 
         LogReplicationConfigManager sinkConfigManager = new LogReplicationConfigManager(dstTestRuntime, session.getSinkClusterId());
-        sinkConfigManager.generateConfig(session, false, "session_1");
+        sinkConfigManager.generateConfig(session, false, SESSION_NAME);
         LogReplicationContext sinkContext = new LogReplicationContext(sinkConfigManager, 0, DEFAULT_ENDPOINT, pluginConfig, dstTestRuntime);
-        sinkContext.addSessionNameForLogging(session, "session_1");
+        sinkContext.addSessionNameForLogging(session, SESSION_NAME);
         // This IT requires custom values to be set for the replication config.  Set these values so that the default
         // values are not used
         sinkContext.getConfig(session).setMaxNumMsgPerBatch(BATCH_SIZE);
@@ -1298,9 +1298,9 @@ public class LogReplicationIT extends AbstractIT implements Observer {
                 function, sinkContext, dstTestRuntime);
 
         LogReplicationConfigManager srcConfigManager = new LogReplicationConfigManager(srcTestRuntime, LOCAL_SOURCE_CLUSTER_ID);
-        srcConfigManager.generateConfig(session, false, "session_1");
+        srcConfigManager.generateConfig(session, false, SESSION_NAME);
         LogReplicationContext srcContext = new LogReplicationContext(srcConfigManager, 0, DEFAULT_ENDPOINT, pluginConfig, srcTestRuntime);
-        srcContext.addSessionNameForLogging(session, "session_1");
+        srcContext.addSessionNameForLogging(session, SESSION_NAME);
         // This IT requires custom values to be set for the replication config.  Set these values so that the default
         // values are not used
         srcContext.getConfig(session).setMaxNumMsgPerBatch(BATCH_SIZE);

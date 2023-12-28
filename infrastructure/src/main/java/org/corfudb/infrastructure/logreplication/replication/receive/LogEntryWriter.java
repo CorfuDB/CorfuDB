@@ -207,10 +207,10 @@ public class LogEntryWriter extends SinkWriter {
                     return null;
                 }).run();
             } catch (IllegalArgumentException e) {
-                log.error("[{}]:: Metadata mismatch detected in entry with sequence {}" + getSessionName(), opaqueEntry.getVersion(), e);
+                log.error("[{}]:: Metadata mismatch detected in entry with sequence {}", getSessionName(), opaqueEntry.getVersion(), e);
                 return false;
             } catch (InterruptedException e) {
-                log.error("[{}]:: Could not apply entry with sequence {}" + getSessionName(), opaqueEntry.getVersion(), e);
+                log.error("[{}]:: Could not apply entry with sequence {}", getSessionName(), opaqueEntry.getVersion(), e);
                 return false;
             }
         }
