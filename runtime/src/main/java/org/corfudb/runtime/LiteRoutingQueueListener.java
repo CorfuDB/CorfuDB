@@ -1,6 +1,5 @@
 package org.corfudb.runtime;
 
-import com.google.common.base.Preconditions;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.collections.CorfuStore;
@@ -83,8 +82,12 @@ public abstract class LiteRoutingQueueListener extends StreamListenerResumeOrFul
         List<Queue.RoutingTableEntryMsg> allRQMsgs = new ArrayList<>();
 
         for (CorfuStreamEntry entry : entries) {
-            // The Source always 'adds' replicated data to the queue.  So the op type must be UPDATE
-            Preconditions.checkState(entry.getOperation() == CorfuStreamEntry.OperationType.UPDATE);
+            // The Source always 'adds' replicated data to the queue.  So ignore all operations where type != UPDATE.
+            // Non-update entries are written by LR (CLEAR) and this listener itself (DELETE after successful
+            // processing).
+            if (entry.getOperation() != CorfuStreamEntry.OperationType.UPDATE) {
+                continue;
+            }
             Queue.CorfuGuidMsg key = (Queue.CorfuGuidMsg) entry.getKey();
             Queue.RoutingTableEntryMsg msg = (Queue.RoutingTableEntryMsg) entry.getPayload();
             allRQMsgs.add(msg);
