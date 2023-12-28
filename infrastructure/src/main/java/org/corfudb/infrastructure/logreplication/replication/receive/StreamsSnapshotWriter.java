@@ -226,7 +226,7 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
             if (session.getSubscriber().getModel().equals(ROUTING_QUEUES)) {
                 // create a new queue entry while writing to the actual streams, so the order of writes can be preserved
                 // even after CP/trim
-                if (phase.equals(Phase.APPLY_PHASE)) {
+                if (phase.equals(Phase.TRANSFER_PHASE)) {
                     CorfuRecord<Queue.RoutingTableEntryMsg, Message> record =
                             (CorfuRecord<Queue.RoutingTableEntryMsg, Message>) (replicationContext.getProtobufSerializer()
                                     .deserialize(Unpooled.wrappedBuffer((byte[]) smrEntry.getSMRArguments()[1]), null));
