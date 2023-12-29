@@ -67,12 +67,12 @@ public abstract class LogReplicationConfig {
     /**
      * The max size of replicated data payload transferred at a time.
      */
-    private int maxTransferSize;
+    private long maxTransferSize;
 
     /**
      * The max size of data payload written in a single transaction during the Apply phase of Snapshot Sync
      */
-    private int maxApplySize;
+    private long maxApplySize;
 
     /**
      * Max number of entries to be applied during a snapshot sync.  For special tables only.
