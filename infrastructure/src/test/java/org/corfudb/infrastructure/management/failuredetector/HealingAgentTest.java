@@ -1,7 +1,7 @@
 package org.corfudb.infrastructure.management.failuredetector;
 
 import org.corfudb.infrastructure.NodeNames;
-import org.corfudb.infrastructure.RemoteMonitoringService.DetectorTask;
+import org.corfudb.infrastructure.management.failuredetector.RemoteMonitoringService.DetectorTask;
 import org.corfudb.infrastructure.datastore.DataStore;
 import org.corfudb.infrastructure.management.PollReport;
 import org.corfudb.protocols.wireprotocol.ClusterState;
@@ -13,6 +13,7 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
 import static org.corfudb.infrastructure.management.NodeStateTestUtil.nodeState;
+import static org.corfudb.infrastructure.management.failuredetector.LayoutRateLimit.LayoutRateLimitParams.getDefaultParams;
 import static org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.ConnectionStatus.OK;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.anySet;
@@ -60,7 +61,7 @@ public class HealingAgentTest {
                 .when(agentSpy)
                 .handleHealing(same(pollReportMock), same(layoutMock), anySet(), same(localEndpoint));
 
-        CompletableFuture<DetectorTask> healingFailed = agentSpy.detectAndHandleHealing(pollReportMock, layoutMock, localEndpoint);
+        CompletableFuture<DetectorTask> healingFailed = agentSpy.detectAndHandleHealing(pollReportMock, layoutMock, localEndpoint, getDefaultParams());
 
         verify(agentSpy, times(1))
                 .handleHealing(same(pollReportMock), same(layoutMock), anySet(), same(localEndpoint));
@@ -84,7 +85,7 @@ public class HealingAgentTest {
                 .when(agentSpy)
                 .handleHealing(same(pollReportMock), same(layoutMock), anySet(), same(localEndpoint));
 
-        CompletableFuture<DetectorTask> healingFailed = agentSpy.detectAndHandleHealing(pollReportMock, layoutMock, localEndpoint);
+        CompletableFuture<DetectorTask> healingFailed = agentSpy.detectAndHandleHealing(pollReportMock, layoutMock, localEndpoint, getDefaultParams());
 
         assertEquals(DetectorTask.SKIPPED, healingFailed.join());
     }
@@ -108,7 +109,7 @@ public class HealingAgentTest {
                 .when(agentSpy)
                 .handleHealing(same(pollReportMock), same(layoutMock), anySet(), same(localEndpoint));
 
-        CompletableFuture<DetectorTask> healingFailed = agentSpy.detectAndHandleHealing(pollReportMock, layoutMock, localEndpoint);
+        CompletableFuture<DetectorTask> healingFailed = agentSpy.detectAndHandleHealing(pollReportMock, layoutMock, localEndpoint, getDefaultParams());
 
         verify(agentSpy, times(1))
                 .handleHealing(same(pollReportMock), same(layoutMock), anySet(), same(localEndpoint));

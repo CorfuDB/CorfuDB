@@ -8,7 +8,8 @@ import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.result.Result;
-import org.corfudb.infrastructure.RemoteMonitoringService.DetectorTask;
+import org.corfudb.infrastructure.management.failuredetector.LayoutRateLimit.LayoutRateLimitParams;
+import org.corfudb.infrastructure.management.failuredetector.RemoteMonitoringService.DetectorTask;
 import org.corfudb.infrastructure.management.ClusterStateContext;
 import org.corfudb.infrastructure.management.PollReport;
 import org.corfudb.protocols.wireprotocol.ClusterState;
@@ -53,7 +54,7 @@ public class FailureDetectorService {
      * @param pollReport cluster status
      * @return async detection task
      */
-    public CompletableFuture<DetectorTask> runFailureDetectorTask(PollReport pollReport, Layout ourLayout, String endpoint) {
+    public CompletableFuture<DetectorTask> runFailureDetectorTask(PollReport pollReport, Layout ourLayout, String endpoint, LayoutRateLimitParams layoutRateLimitParams) {
 
         // Corrects out of phase epoch issues if present in the report. This method
         // performs re-sealing of all nodes if required and catchup of a layout server to
@@ -107,7 +108,7 @@ public class FailureDetectorService {
                 return DetectorTask.COMPLETED;
             }
 
-            DetectorTask healing = healingAgent.detectAndHandleHealing(pollReport, ourLayout, endpoint).join();
+            DetectorTask healing = healingAgent.detectAndHandleHealing(pollReport, ourLayout, endpoint, layoutRateLimitParams).join();
 
             //If local node healed it causes change in the cluster state which means the layout is changed also.
             //If the cluster status is changed let failure detector detect the change on next iteration and

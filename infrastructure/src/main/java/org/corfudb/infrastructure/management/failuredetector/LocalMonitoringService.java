@@ -1,8 +1,10 @@
-package org.corfudb.infrastructure;
+package org.corfudb.infrastructure.management.failuredetector;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.ManagementService;
+import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.ServerNotReadyException;
@@ -23,7 +25,7 @@ import static org.corfudb.util.LambdaUtils.runSansThrow;
  * Created by zlokhandwala on 11/2/18.
  */
 @Slf4j
-class LocalMonitoringService implements ManagementService {
+public class LocalMonitoringService implements ManagementService {
     private static final CompletableFuture<SequencerMetrics> UNKNOWN = CompletableFuture
             .completedFuture(SequencerMetrics.UNKNOWN);
 
@@ -34,7 +36,7 @@ class LocalMonitoringService implements ManagementService {
 
     private final AtomicReference<CompletableFuture<SequencerMetrics>> sequencerMetricsHolder;
 
-    LocalMonitoringService(@NonNull ServerContext serverContext,
+    public LocalMonitoringService(@NonNull ServerContext serverContext,
                            @NonNull SingletonResource<CorfuRuntime> runtimeSingletonResource) {
         this.serverContext = serverContext;
         this.runtimeSingletonResource = runtimeSingletonResource;

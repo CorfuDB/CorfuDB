@@ -6,6 +6,7 @@ import io.netty.channel.ChannelHandlerContext;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.management.ClusterStateContext;
+import org.corfudb.infrastructure.management.ManagementAgent;
 import org.corfudb.infrastructure.management.ReconfigurationEventHandler;
 import org.corfudb.infrastructure.orchestrator.Orchestrator;
 import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
@@ -26,6 +27,7 @@ import org.corfudb.runtime.proto.service.Management.QueryNodeResponseMsg;
 import org.corfudb.runtime.view.IReconfigurationHandlerPolicy;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.Layout.ReplicationMode;
+import org.corfudb.runtime.view.LayoutProbe.LayoutStatus;
 import org.corfudb.util.concurrent.SingletonResource;
 import org.junit.Before;
 import org.junit.Rule;
@@ -143,7 +145,7 @@ public class ManagementServerTest {
         );
 
         return new Layout(layoutServers, sequencers,
-                Collections.singletonList(segment), unresponsiveServers, epoch, clusterId);
+                Collections.singletonList(segment), unresponsiveServers, LayoutStatus.empty(), epoch, clusterId);
     }
 
     /**

@@ -7,6 +7,9 @@ import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.runtime.view.Layout.LayoutSegment;
+import org.corfudb.runtime.view.Layout.LayoutStripe;
+import org.corfudb.runtime.view.LayoutProbe.LayoutStatus;
 import org.corfudb.runtime.view.RuntimeLayout;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.Utils;
@@ -48,40 +51,44 @@ public class UtilsTest {
   private Layout getLayout() {
     long epoch = 1;
     UUID uuid = UUID.randomUUID();
-    Layout.LayoutStripe stripe = new Layout.LayoutStripe(Arrays.asList(nodeA, nodeB, nodeC));
-    Layout.LayoutSegment segment =
-            new Layout.LayoutSegment(CHAIN_REPLICATION, 0L, -1L, Collections.singletonList(stripe));
+    LayoutStripe stripe = new LayoutStripe(Arrays.asList(nodeA, nodeB, nodeC));
+    LayoutSegment segment =
+            new LayoutSegment(CHAIN_REPLICATION, 0L, -1L, Collections.singletonList(stripe));
+
     return new Layout(
             Arrays.asList(nodeA, nodeB, nodeC),
             Arrays.asList(nodeA, nodeB, nodeC),
             Collections.singletonList(segment),
-            Collections.EMPTY_LIST,
+            Collections.emptyList(),
+            LayoutStatus.empty(),
             epoch,
-            uuid);
+            uuid
+    );
   }
 
   @SuppressWarnings("checkstyle:magicnumber")
   private Layout getSegmentedLayout() {
     long epoch = 1;
     UUID uuid = UUID.randomUUID();
-    Layout.LayoutStripe seg1Strip = new Layout.LayoutStripe(Arrays.asList(nodeA));
-    Layout.LayoutStripe seg2Strip = new Layout.LayoutStripe(Arrays.asList(nodeA, nodeB));
-    Layout.LayoutStripe seg3Strip = new Layout.LayoutStripe(Arrays.asList(nodeB, nodeA));
+    LayoutStripe seg1Strip = new LayoutStripe(Arrays.asList(nodeA));
+    LayoutStripe seg2Strip = new LayoutStripe(Arrays.asList(nodeA, nodeB));
+    LayoutStripe seg3Strip = new LayoutStripe(Arrays.asList(nodeB, nodeA));
 
-    Layout.LayoutSegment segment1 =
-            new Layout.LayoutSegment(
+    LayoutSegment segment1 =
+            new LayoutSegment(
                     CHAIN_REPLICATION, 0L, 100L, Collections.singletonList(seg1Strip));
-    Layout.LayoutSegment segment2 =
-            new Layout.LayoutSegment(
+    LayoutSegment segment2 =
+            new LayoutSegment(
                     CHAIN_REPLICATION, 100L, 200L, Collections.singletonList(seg2Strip));
-    Layout.LayoutSegment segment3 =
-            new Layout.LayoutSegment(
+    LayoutSegment segment3 =
+            new LayoutSegment(
                     CHAIN_REPLICATION, 200L, -1L, Collections.singletonList(seg3Strip));
     return new Layout(
             Arrays.asList(nodeA, nodeB, nodeC),
             Arrays.asList(nodeA, nodeB, nodeC),
             Arrays.asList(segment1, segment2, segment3),
             Collections.singletonList(nodeC),
+            LayoutStatus.empty(),
             epoch,
             uuid);
   }

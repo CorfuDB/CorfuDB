@@ -5,7 +5,10 @@ import com.google.common.collect.ImmutableSet;
 import lombok.Builder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.RemoteMonitoringService.DetectorTask;
+import org.corfudb.infrastructure.management.failuredetector.LayoutRateLimit.LayoutRateLimitParams;
+import org.corfudb.infrastructure.management.failuredetector.LayoutRateLimit.ProbeCalc;
+import org.corfudb.infrastructure.management.failuredetector.LayoutRateLimit.ProbeStatus;
+import org.corfudb.infrastructure.management.failuredetector.RemoteMonitoringService.DetectorTask;
 import org.corfudb.infrastructure.management.ClusterAdvisor;
 import org.corfudb.infrastructure.management.FileSystemAdvisor;
 import org.corfudb.infrastructure.management.PollReport;
@@ -25,7 +28,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.function.Supplier;
 
-import static org.corfudb.infrastructure.RemoteMonitoringService.DetectorTask.SKIPPED;
+import static org.corfudb.infrastructure.management.failuredetector.RemoteMonitoringService.DetectorTask.SKIPPED;
 
 /**
  * Healing algorithm
@@ -71,7 +74,7 @@ public class HealingAgent {
      * @param pollReport poll report
      * @param layout     current layout
      */
-    public CompletableFuture<DetectorTask> detectAndHandleHealing(PollReport pollReport, Layout layout, String localEndpoint) {
+    public CompletableFuture<DetectorTask> detectAndHandleHealing(PollReport pollReport, Layout layout, String localEndpoint, LayoutRateLimitParams layoutRateLimitParams) {
         log.trace("Handle healing, layout: {}", layout);
 
         Optional<NodeRankByPartitionAttributes> fsHealth = fsAdvisor.healedServer(pollReport.getClusterState());
@@ -84,6 +87,18 @@ public class HealingAgent {
                 .healedServer(pollReport.getClusterState(), localEndpoint)
                 .map(healedNode -> {
                     Set<String> healedNodes = ImmutableSet.of(healedNode.getEndpoint());
+
+                    ProbeCalc probeCalc = ProbeCalc.builder()
+                            .localEndpoint(localEndpoint)
+                            .layoutRateLimitParams(layoutRateLimitParams)
+                            .build();
+                    probeCalc.updateFromLayout(layout);
+
+                    ProbeStatus status = probeCalc.calcStatsForNewUpdate();
+                    if (!status.isAllowed()) {
+                        log.warn("Healing disabled due to timeout: probCalc {}, status {}", probeCalc, status);
+                        return skippedTask;
+                    }
 
                     return handleHealing(pollReport, layout, healedNodes, localEndpoint)
                             .thenApply(healingResult -> {

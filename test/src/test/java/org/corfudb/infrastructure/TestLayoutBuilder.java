@@ -4,6 +4,8 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.experimental.Accessors;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.runtime.view.LayoutProbe;
+import org.corfudb.runtime.view.LayoutProbe.LayoutStatus;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -19,6 +21,7 @@ public class TestLayoutBuilder {
     List<String> sequencerServers;
     List<String> layoutServers;
     List<String> unresponsiveServers;
+    List<LayoutProbe> healProbes;
     List<TestSegmentBuilder> segments;
 
     @Getter
@@ -33,6 +36,7 @@ public class TestLayoutBuilder {
         sequencerServers = new ArrayList<>();
         layoutServers = new ArrayList<>();
         unresponsiveServers = new ArrayList<>();
+        healProbes = new ArrayList<>();
         segments = new ArrayList<>();
         clusterId = Layout.INVALID_CLUSTER_ID;
     }
@@ -83,11 +87,14 @@ public class TestLayoutBuilder {
                 .map(TestSegmentBuilder::build)
                 .collect(Collectors.toList());
 
-        return new Layout(layoutServers,
+        return new Layout(
+                layoutServers,
                 sequencerServers,
                 segmentList,
                 unresponsiveServers,
-                epoch, clusterId);
+                LayoutStatus.empty(),
+                epoch, clusterId
+        );
     }
 
     @Accessors(chain = true)

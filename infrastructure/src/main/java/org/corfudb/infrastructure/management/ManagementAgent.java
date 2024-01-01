@@ -1,14 +1,21 @@
-package org.corfudb.infrastructure;
+package org.corfudb.infrastructure.management;
 
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.AutoCommitService;
+import org.corfudb.infrastructure.CompactorService;
+import org.corfudb.infrastructure.DynamicTriggerPolicy;
+import org.corfudb.infrastructure.InvokeCheckpointingJvm;
+import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.health.Component;
 import org.corfudb.infrastructure.health.HealthMonitor;
 import org.corfudb.infrastructure.health.Issue;
 import org.corfudb.infrastructure.management.ClusterStateContext;
 import org.corfudb.infrastructure.management.FailureDetector;
+import org.corfudb.infrastructure.management.failuredetector.LocalMonitoringService;
+import org.corfudb.infrastructure.management.failuredetector.RemoteMonitoringService;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.Layout;
@@ -112,7 +119,7 @@ public class ManagementAgent {
      * @param runtimeSingletonResource Singleton resource to fetch runtime.
      * @param serverContext            Server Context.
      */
-    ManagementAgent(@NonNull SingletonResource<CorfuRuntime> runtimeSingletonResource,
+    public ManagementAgent(@NonNull SingletonResource<CorfuRuntime> runtimeSingletonResource,
                     @NonNull ServerContext serverContext,
                     @NonNull ClusterStateContext clusterContext,
                     @NonNull FailureDetector failureDetector,

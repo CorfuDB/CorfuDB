@@ -5,6 +5,7 @@ import com.google.gson.JsonDeserializationContext;
 import com.google.gson.JsonDeserializer;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParseException;
+import org.corfudb.runtime.view.LayoutProbe.LayoutStatus;
 
 import java.lang.reflect.Type;
 import java.util.ArrayList;
@@ -29,13 +30,16 @@ public class LayoutDeserializer implements JsonDeserializer {
             unsafeLayout.unresponsiveServers = new ArrayList<>();
         }
 
+        if (unsafeLayout.status == null){
+            unsafeLayout.status = LayoutStatus.empty();
+        }
+
         /* Similar to a copy constructor. This constructor holds all the validation for
         constructing a layout. */
-        Layout safeLayout = new Layout(unsafeLayout.layoutServers, unsafeLayout.sequencers,
-                unsafeLayout.segments, unsafeLayout.unresponsiveServers, unsafeLayout.epoch,
-                unsafeLayout.clusterId);
 
-        return safeLayout;
+        return new Layout(unsafeLayout.layoutServers, unsafeLayout.sequencers,
+                unsafeLayout.segments, unsafeLayout.unresponsiveServers, unsafeLayout.status, unsafeLayout.epoch,
+                unsafeLayout.clusterId);
 
     }
 }

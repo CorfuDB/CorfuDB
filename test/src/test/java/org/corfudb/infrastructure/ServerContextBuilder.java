@@ -4,8 +4,13 @@ import com.google.common.collect.ImmutableMap;
 import lombok.Data;
 import lombok.experimental.Accessors;
 import org.corfudb.common.config.ConfigParamNames;
+import org.corfudb.infrastructure.management.failuredetector.LayoutRateLimit.LayoutRateLimitParams;
 import org.corfudb.security.tls.TlsUtils.CertStoreConfig.TrustStoreConfig;
 import org.corfudb.test.concurrent.TestThreadGroups;
+
+import static org.corfudb.common.config.ConfigParamNames.LAYOUT_RATE_LIMIT_COOLDOWN_MULTIPLIER;
+import static org.corfudb.common.config.ConfigParamNames.LAYOUT_RATE_LIMIT_RESET_MULTIPLIER;
+import static org.corfudb.common.config.ConfigParamNames.LAYOUT_RATE_LIMIT_TIMEOUT;
 
 /**
  * Created by mwei on 6/29/16.
@@ -33,6 +38,9 @@ public class ServerContextBuilder {
     String disableCertExpiryCheckFile = TrustStoreConfig.DEFAULT_DISABLE_CERT_EXPIRY_CHECK_FILE.toString();
 
     String implementation = "local";
+    String layoutRateLimitTimeout = String.valueOf(LayoutRateLimitParams.DEFAULT_TIMEOUT);
+    String layoutRateLimitResetMultiplier = String.valueOf(LayoutRateLimitParams.DEFAULT_LAYOUT_RATE_LIMIT_RESET_MULTIPLIER);
+    String layoutRateLimitCooldownMultiplier = String.valueOf(LayoutRateLimitParams.DEFAULT_LAYOUT_RATE_LIMIT_COOLDOWN_MULTIPLIER);
 
     String cacheSizeHeapRatio = "0.5";
     String address = "test";
@@ -90,6 +98,9 @@ public class ServerContextBuilder {
                  .put("--enable-sasl-plain-text-auth", saslPlainTextAuth)
                  .put("--cluster-id", clusterId)
                  .put("--implementation", implementation)
+                 .put(LAYOUT_RATE_LIMIT_TIMEOUT, layoutRateLimitTimeout)
+                 .put(LAYOUT_RATE_LIMIT_RESET_MULTIPLIER, layoutRateLimitResetMultiplier)
+                 .put(LAYOUT_RATE_LIMIT_COOLDOWN_MULTIPLIER, layoutRateLimitCooldownMultiplier)
                  .put("<port>", Integer.toString(port));
 
         // Set the prefix to the port number

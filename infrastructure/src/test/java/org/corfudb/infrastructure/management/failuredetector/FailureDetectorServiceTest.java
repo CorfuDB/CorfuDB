@@ -10,6 +10,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import static org.corfudb.infrastructure.management.failuredetector.LayoutRateLimit.LayoutRateLimitParams.getDefaultParams;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -41,7 +42,7 @@ class FailureDetectorServiceTest {
 
         String endpoint = "localhost";
 
-        fdService.runFailureDetectorTask(pollReportMock, layoutMock, endpoint).whenComplete((result, ex) -> {
+        fdService.runFailureDetectorTask(pollReportMock, layoutMock, endpoint, getDefaultParams()).whenComplete((result, ex) -> {
             assertEquals("Wrong epoch. [expected=123]", ex.getMessage());
         });
     }

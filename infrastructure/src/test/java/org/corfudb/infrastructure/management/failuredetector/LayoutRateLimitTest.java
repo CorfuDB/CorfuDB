@@ -1,0 +1,168 @@
+package org.corfudb.infrastructure.management.failuredetector;
+
+import org.corfudb.infrastructure.management.failuredetector.LayoutRateLimit.ClusterStabilityStatusCalc;
+import org.corfudb.infrastructure.management.failuredetector.LayoutRateLimit.LayoutRateLimitParams;
+import org.corfudb.infrastructure.management.failuredetector.LayoutRateLimit.ProbeCalc;
+import org.corfudb.infrastructure.management.failuredetector.LayoutRateLimit.ProbeStatus;
+import org.corfudb.infrastructure.management.failuredetector.LayoutRateLimit.TimeoutCalc;
+import org.corfudb.runtime.view.LayoutProbe;
+import org.corfudb.runtime.view.LayoutProbe.ClusterStabilityStatus;
+import org.junit.jupiter.api.Test;
+
+import java.time.Duration;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+class LayoutRateLimitTest {
+    private static final String LOCAL_ENDPOINT = "127.0.0.1:9000";
+    private static final int TIMEOUT = LayoutRateLimitParams.DEFAULT_TIMEOUT;
+    private static final double RESET_MULTIPLIER = LayoutRateLimitParams.DEFAULT_LAYOUT_RATE_LIMIT_RESET_MULTIPLIER;
+    private static final double COOLDOWN_MULTIPLIER = LayoutRateLimitParams.DEFAULT_LAYOUT_RATE_LIMIT_COOLDOWN_MULTIPLIER;
+    @Test
+    public void testCalcAndLayoutProb() {
+        TimeoutCalc calc = TimeoutCalc.builder()
+                .interval(Duration.ofSeconds(TIMEOUT))
+                .iteration(1)
+                .build();
+
+        assertEquals(Duration.ofSeconds(TIMEOUT), calc.getTimeout());
+
+        LayoutProbe probe = new LayoutProbe(LOCAL_ENDPOINT, 1, System.currentTimeMillis());
+        probe.increaseIteration();
+        assertEquals(2, probe.getIteration());
+
+        probe.decreaseIteration();
+        assertEquals(1, probe.getIteration());
+
+        probe.increaseIteration();
+        probe.increaseIteration();
+        probe.resetIteration();
+        assertEquals(1, probe.getIteration());
+    }
+
+    @Test
+    public void testIsAllowed() {
+        long startTime = System.currentTimeMillis();
+
+        ProbeCalc calc = ProbeCalc.builder()
+                .localEndpoint(LOCAL_ENDPOINT)
+                .layoutRateLimitParams(
+                        LayoutRateLimitParams.builder()
+                                .timeout(TIMEOUT)
+                                .resetMultiplier(RESET_MULTIPLIER)
+                                .cooldownMultiplier(COOLDOWN_MULTIPLIER)
+                                .build()
+                )
+                .build();
+
+
+        calc.update(new LayoutProbe(LOCAL_ENDPOINT, 1, startTime));
+        assertEquals(1, calc.size());
+
+        LayoutProbe update = new LayoutProbe(LOCAL_ENDPOINT, 1, startTime + Duration.ofSeconds(29).toMillis());
+        ProbeStatus probeStatus = calc.calcStats(update);
+        assertFalse(probeStatus.isAllowed());
+        // as the probe was lesser than 1 min, the iteration should not have been bumped up
+        // meaning we follow old timeouts
+        assertEquals(1, probeStatus.getNewProbe().get().getIteration());
+        assertEquals(1, calc.size());
+
+        update = new LayoutProbe(LOCAL_ENDPOINT, 1,startTime + Duration.ofSeconds(30).toMillis());
+        probeStatus = calc.calcStats(update);
+        assertTrue(probeStatus.isAllowed());
+        assertEquals(2, calc.size());
+
+        update = new LayoutProbe(LOCAL_ENDPOINT, 1,startTime + Duration.ofSeconds(31).toMillis());
+        probeStatus = calc.calcStats(update);
+        assertFalse(probeStatus.isAllowed());
+        assertEquals(2, calc.size());
+
+        update = new LayoutProbe(LOCAL_ENDPOINT, 1,startTime + Duration.ofSeconds(71).toMillis());
+        probeStatus = calc.calcStats(update);
+        assertFalse(probeStatus.isAllowed());
+        assertEquals(2, calc.size());
+
+        // 30s starTime + 90s timeout
+        update = new LayoutProbe(LOCAL_ENDPOINT, 1, startTime + Duration.ofSeconds(121).toMillis());
+        probeStatus = calc.calcStats(update);
+        assertTrue(probeStatus.isAllowed());
+        assertEquals(3, calc.size());
+
+        // 180 secs = false
+        update = new LayoutProbe(LOCAL_ENDPOINT, 1, startTime + Duration.ofMinutes(3).toMillis());
+        probeStatus = calc.calcStats(update);
+        assertFalse(probeStatus.isAllowed());
+        assertEquals(3, calc.size());
+
+        // 121 + 3.5 min
+        update = new LayoutProbe(LOCAL_ENDPOINT, 1, startTime + Duration.ofMinutes(6).toMillis());
+        probeStatus = calc.calcStats(update);
+        assertTrue(probeStatus.isAllowed());
+        assertEquals(3, probeStatus.getNewProbe().get().getIteration());
+        assertEquals(3, calc.size());
+
+        update = new LayoutProbe(LOCAL_ENDPOINT, 1, startTime + Duration.ofMinutes(7).toMillis());
+        probeStatus = calc.calcStats(update);
+        assertFalse(probeStatus.isAllowed());
+        assertEquals(3, probeStatus.getNewProbe().get().getIteration());
+        assertEquals(3, calc.size());
+
+        // 6 min + 3.5 min
+        long newTime;
+        newTime = startTime + Duration.ofMinutes(10).toMillis();
+        update = new LayoutProbe(LOCAL_ENDPOINT, 1, newTime);
+        probeStatus = calc.calcStats(update);
+        assertTrue(probeStatus.isAllowed());
+        assertEquals(3, probeStatus.getNewProbe().get().getIteration());
+        assertEquals(3, calc.size());
+
+        // Trying after 11 minutes should reduce the iteration number
+        // as it is greater than 1.5 * 3.5 min timeout ( = 5.25 min )
+        newTime = newTime + Duration.ofMinutes(6).toMillis();
+        update = new LayoutProbe(LOCAL_ENDPOINT, 1, newTime);
+        probeStatus = calc.calcStats(update);
+        assertTrue(probeStatus.isAllowed());
+        assertEquals(2, probeStatus.getNewProbe().get().getIteration());
+        assertEquals(3, calc.size());
+
+        // Trying after 100 minutes should reset the iteration number
+        // as it is greater than 2 * 3.5 min timeout ( = 7 min )
+        newTime = newTime + Duration.ofMinutes(10).toMillis();
+        update = new LayoutProbe(LOCAL_ENDPOINT, 1, newTime);
+        probeStatus = calc.calcStats(update);
+        assertTrue(probeStatus.isAllowed());
+        assertEquals(1, probeStatus.getNewProbe().get().getIteration());
+        assertEquals(3, calc.size());
+    }
+
+    @Test
+    public void testStabilityStatusCalc() {
+        final int threeIterationLimit = 3;
+        assertEquals(ClusterStabilityStatus.GREEN, ClusterStabilityStatusCalc.calc(threeIterationLimit, 1));
+        assertEquals(ClusterStabilityStatus.YELLOW, ClusterStabilityStatusCalc.calc(threeIterationLimit, 2));
+        assertEquals(ClusterStabilityStatus.RED, ClusterStabilityStatusCalc.calc(threeIterationLimit, 3));
+
+        final int fourIterationLimit = 4;
+        assertEquals(ClusterStabilityStatus.GREEN, ClusterStabilityStatusCalc.calc(fourIterationLimit, 1));
+        assertEquals(ClusterStabilityStatus.YELLOW, ClusterStabilityStatusCalc.calc(fourIterationLimit, 2));
+        assertEquals(ClusterStabilityStatus.RED, ClusterStabilityStatusCalc.calc(fourIterationLimit, 3));
+        assertEquals(ClusterStabilityStatus.RED, ClusterStabilityStatusCalc.calc(fourIterationLimit, 4));
+
+        final int fiveIterationLimit = 5;
+        assertEquals(ClusterStabilityStatus.GREEN, ClusterStabilityStatusCalc.calc(fiveIterationLimit, 1));
+        assertEquals(ClusterStabilityStatus.YELLOW, ClusterStabilityStatusCalc.calc(fiveIterationLimit, 2));
+        assertEquals(ClusterStabilityStatus.YELLOW, ClusterStabilityStatusCalc.calc(fiveIterationLimit, 3));
+        assertEquals(ClusterStabilityStatus.RED, ClusterStabilityStatusCalc.calc(fiveIterationLimit, 4));
+        assertEquals(ClusterStabilityStatus.RED, ClusterStabilityStatusCalc.calc(fiveIterationLimit, 5));
+
+        final int sixIterationLimit = 6;
+        assertEquals(ClusterStabilityStatus.GREEN, ClusterStabilityStatusCalc.calc(sixIterationLimit, 1));
+        assertEquals(ClusterStabilityStatus.GREEN, ClusterStabilityStatusCalc.calc(sixIterationLimit, 2));
+        assertEquals(ClusterStabilityStatus.YELLOW, ClusterStabilityStatusCalc.calc(sixIterationLimit, 3));
+        assertEquals(ClusterStabilityStatus.YELLOW, ClusterStabilityStatusCalc.calc(sixIterationLimit, 4));
+        assertEquals(ClusterStabilityStatus.RED, ClusterStabilityStatusCalc.calc(sixIterationLimit, 5));
+        assertEquals(ClusterStabilityStatus.RED, ClusterStabilityStatusCalc.calc(sixIterationLimit, 6));
+    }
+}

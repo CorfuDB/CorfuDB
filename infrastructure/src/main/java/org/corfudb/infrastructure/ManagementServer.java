@@ -11,6 +11,7 @@ import org.corfudb.infrastructure.health.HealthMonitor;
 import org.corfudb.infrastructure.health.Issue;
 import org.corfudb.infrastructure.management.ClusterStateContext;
 import org.corfudb.infrastructure.management.FailureDetector;
+import org.corfudb.infrastructure.management.ManagementAgent;
 import org.corfudb.infrastructure.management.ReconfigurationEventHandler;
 import org.corfudb.infrastructure.orchestrator.Orchestrator;
 import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
@@ -418,7 +419,7 @@ public class ManagementServer extends AbstractServer {
      * Servers periodically inspect cluster and ask each other of the connectivity/node state
      * (connection status between current node and all the others).
      * The node provides its current node state.
-     *
+     * <p>
      * Default NodeState has been providing unless the node is not bootstrapped.
      * Failure detector updates ClusterNodeState by current state then current NodeState can be provided to other nodes.
      *

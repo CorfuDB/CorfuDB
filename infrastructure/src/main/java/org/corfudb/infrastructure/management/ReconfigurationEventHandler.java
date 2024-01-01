@@ -107,11 +107,9 @@ public class ReconfigurationEventHandler {
                 Duration workflowTimeout = getStateTransferTimeoutEstimate(runtime);
                 log.info("handleHealing: Workflow to heal {} timeout set to {} ms", healedServer, workflowTimeout);
 
-                runtime.getManagementView().healNode(
-                        healedServer,
-                        workflowRetries,
-                        workflowTimeout,
-                        retryQueryTimeout);
+                runtime
+                        .getManagementView()
+                        .healNode(healedServer, workflowRetries, workflowTimeout, retryQueryTimeout);
             }
             return true;
         } catch (Exception e) {
