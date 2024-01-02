@@ -209,14 +209,12 @@ public class CorfuGuidGenerator implements OrderedGuidGenerator {
         return getCorrectedTimestamp().getLong();
     }
 
-    public long nextLong(TxnContext txnContext, Table queue) {
+    public long nextLong(TxnContext txnContext) {
         long txnIdForQueue = txnContext.getTxnIdForQueues();
         if (txnContext.getTxnIdForQueues() == 0) {
             txnIdForQueue = generateIdOncePerTxn(getInstanceId());
-            log.trace("Generating new txn id for queue {}: {}", queue.getFullyQualifiedTableName(), txnIdForQueue);
         } else {
             txnIdForQueue = generateNextIdInTxn(txnIdForQueue);
-            log.trace("Generating incremental id for queue {}: {}", queue.getFullyQualifiedTableName(), txnIdForQueue);
         }
         txnContext.setTxnIdForQueues(txnIdForQueue);
         return txnIdForQueue;
