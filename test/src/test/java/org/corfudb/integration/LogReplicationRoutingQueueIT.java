@@ -12,12 +12,10 @@ import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicat
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuOptions;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.ExampleSchemas;
 import org.corfudb.runtime.LogReplicationUtils;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
-import org.corfudb.runtime.collections.CorfuStreamEntry;
 import org.corfudb.runtime.collections.StreamListener;
 import org.corfudb.runtime.exceptions.LogReplicationClientException;
 import org.corfudb.runtime.view.TableRegistry;
@@ -359,6 +357,11 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
         }
     }
 
+    /**
+     * Test the order of the records on the SINK side using the entryList operation.
+     * This is effectively testing the order on cp/trim, even though the test is not really simulating a cp/trim. The
+     * reason being that the entryList operation is what will be used on an event of cp/trim.
+     */
     @Test
     public void testOrderOfDataOnReceiveQueue() throws Exception {
         CorfuRuntime runtime = getClientRuntime();
@@ -367,18 +370,16 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
         //open snapshot and delta queues on source
         Table<Queue.CorfuGuidMsg, Queue.RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg> logEntryQ;
         Table<Queue.CorfuGuidMsg, Queue.RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg> snapSyncQ;
-        Table<Queue.RoutingQSnapSyncHeaderKeyMsg, Queue.RoutingQSnapSyncHeaderMsg, Queue.CorfuQueueMetadataMsg> markerTable;
-        Table<LogReplication.ReplicationEventInfoKey, LogReplication.ReplicationEvent, Message> replicationEventTable;
 
         try {
             logEntryQ = corfuStore.openQueue(CORFU_SYSTEM_NAMESPACE, LOG_ENTRY_SYNC_QUEUE_NAME_SENDER,
                     Queue.RoutingTableEntryMsg.class, TableOptions.fromProtoSchema(Queue.RoutingTableEntryMsg.class));
             snapSyncQ = corfuStore.openQueue(CORFU_SYSTEM_NAMESPACE, SNAPSHOT_SYNC_QUEUE_NAME_SENDER,
                     Queue.RoutingTableEntryMsg.class, TableOptions.fromProtoSchema(Queue.RoutingTableEntryMsg.class));
-            markerTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, SNAP_SYNC_TXN_ENVELOPE_TABLE,
+            corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, SNAP_SYNC_TXN_ENVELOPE_TABLE,
                     Queue.RoutingQSnapSyncHeaderKeyMsg.class, Queue.RoutingQSnapSyncHeaderMsg.class, null,
                     TableOptions.fromProtoSchema(Queue.RoutingTableEntryMsg.class));
-            replicationEventTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, REPLICATION_EVENT_TABLE_NAME,
+            corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, REPLICATION_EVENT_TABLE_NAME,
                     LogReplication.ReplicationEventInfoKey.class,
                     LogReplication.ReplicationEvent.class,
                     null,
@@ -396,6 +397,7 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
         // start source/sink LR
         startReplicationServers();
 
+        // wait until the snapshot request is received from the LR source.
         snapshotSyncRequestReceived.await();
 
         // alternate writes between snapshot sync queue and the delta queue
@@ -403,7 +405,8 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
         String destinationId = DefaultClusterConfig.getSinkClusterIds().get(0);
 
 
-        for(int i = 0; i < numLogEntryUpdates; ++i) {
+        int numEntryUpdates = numLogEntryUpdates;
+        for(int i = 0; i < numEntryUpdates; ++i) {
             try(TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
 
                 if (i % 2 == 0) {
@@ -443,12 +446,12 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
                         CorfuOptions.SchemaOptions.newBuilder().addStreamTag(REPLICATED_QUEUE_TAG).build()).build());
 
         // wait until the recv side count == data written on source
-        while(recvQ.count() < (numLogEntryUpdates + 1)) {
+        while(recvQ.count() < (numEntryUpdates + 1)) {
 
         }
 
         // the "+1" is for the dummy record that is written at the end of snapshot sync
-        assertThat(recvQ.count()).isEqualTo(numLogEntryUpdates + 1);
+        assertThat(recvQ.count()).isEqualTo(numEntryUpdates + 1);
 
 
         AtomicBoolean snapshotSyncData = new AtomicBoolean(true);

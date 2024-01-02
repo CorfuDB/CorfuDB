@@ -1,8 +1,6 @@
 package org.corfudb.infrastructure.logreplication.replication.receive;
 
-import com.google.protobuf.Message;
 import com.google.protobuf.TextFormat;
-import io.netty.buffer.Unpooled;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.config.LogReplicationRoutingQueueConfig;
@@ -15,8 +13,6 @@ import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMetadataMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
-import org.corfudb.runtime.Queue;
-import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.TableRegistry;
@@ -27,7 +23,6 @@ import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.Re
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import javax.annotation.concurrent.NotThreadSafe;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -182,17 +177,12 @@ public class LogEntryWriter extends SinkWriter {
                                 }
                             }
 
-                            for (SMREntry smrEntry : smrEntries) {
-                                // If stream tags exist for the current stream, it means it's intended for streaming
-                                // on the Sink (receiver)
-                                if (session.getSubscriber().getModel().equals(LogReplication.ReplicationModel.ROUTING_QUEUES)) {
-                                    CorfuRecord<Queue.RoutingTableEntryMsg, Message> record =
-                                            (CorfuRecord<Queue.RoutingTableEntryMsg, Message>)(replicationContext.getProtobufSerializer()
-                                            .deserialize(Unpooled.wrappedBuffer((byte[])smrEntry.getSMRArguments()[1]), null));
-                                    txnContext.logUpdateEnqueue(replicatedRoutingQUuid, record.getPayload(),
-                                            Collections.singletonList(replicatedRoutingQueueStreamTag), metadataManager.getCorfuStore());
-
-                                } else {
+                            if (session.getSubscriber().getModel().equals(LogReplication.ReplicationModel.ROUTING_QUEUES)) {
+                                createAndWriteQueueRecord(txnContext, smrEntries, metadataManager.getCorfuStore());
+                            } else {
+                                for (SMREntry smrEntry : smrEntries) {
+                                    // If stream tags exist for the current stream, it means it's intended for streaming
+                                    // on the Sink (receiver)
                                     txnContext.logUpdate(streamId, smrEntry,
                                             replicationContext.getConfig(session).getDataStreamToTagsMap().get(streamId));
                                 }
