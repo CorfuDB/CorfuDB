@@ -288,7 +288,7 @@ public class Table<K extends Message, V extends Message, M extends Message> impl
     public K enqueue(V e) {
         // Obtain a cluster-wide unique 64-bit id to identify this entry in the queue.
         // long entryId = guidGenerator.nextLong();
-        long entryId = guidGenerator.nextLong(TransactionalContext.getRootContext().getTxnContext(), this);
+        long entryId = guidGenerator.nextLong(TransactionalContext.getRootContext().getTxnContext());
         // Embed this key into a protobuf.
         K keyOfQueueEntry = (K) Queue.CorfuGuidMsg.newBuilder().setInstanceId(entryId).build();
 
@@ -302,31 +302,34 @@ public class Table<K extends Message, V extends Message, M extends Message> impl
     /**
      * Appends the specified element to the end of this unbounded queue, without materializing the queue in memory.
      *
+     * @param streamUUID - Queue's underlying stream UUID
      * @param e the element to add
      * @param streamTags  - stream tags associated to the given stream id
      * @param corfuStore CorfuStore that gets the runtime for the serializer.
      * @throws IllegalArgumentException if some property of the specified
      *                                  element prevents it from being added to the queue.
      */
-    public K logUpdateEnqueue(V e, List<UUID> streamTags, CorfuStore corfuStore) {
+    public static <K extends Message, V extends Message>
+    K logUpdateEnqueue(UUID streamUUID, V e, List<UUID> streamTags, CorfuStore corfuStore) {
         /**
          * This is a callback that is placed into the root transaction's context on
          * the thread local stack which will be invoked right after this transaction
          * is deemed successful and has obtained a final sequence number to write.
          */
         // Obtain a cluster-wide unique 64-bit id to identify this entry in the queue.
-        long entryId = guidGenerator.nextLong(TransactionalContext.getRootContext().getTxnContext(), this);
+        long entryId = corfuStore.getCorfuGuidGenerator()
+                .nextLong(TransactionalContext.getRootContext().getTxnContext());
         // Embed this key into a protobuf.
         K keyOfQueueEntry = (K) Queue.CorfuGuidMsg.newBuilder().setInstanceId(entryId).build();
 
         // Prepare a partial record with the queue's payload and temporary metadata that will be overwritten
         // by the QueueEntryAddressGetter callback above when the transaction finally commits.
-        CorfuRecord<V, M> queueEntry = new CorfuRecord<>(e, (M) null);
+        CorfuRecord<V, Message> queueEntry = new CorfuRecord<>(e, null);
 
         Object[] smrArgs = new Object[2];
         smrArgs[0] = keyOfQueueEntry;
         smrArgs[1] = queueEntry;
-        TransactionalContext.getCurrentContext().logUpdate(this.getStreamUUID(), new SMREntry("put", smrArgs,
+        TransactionalContext.getCurrentContext().logUpdate(streamUUID, new SMREntry("put", smrArgs,
                 corfuStore.getRuntime().getSerializers().getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE)),
                 streamTags);
         return keyOfQueueEntry;

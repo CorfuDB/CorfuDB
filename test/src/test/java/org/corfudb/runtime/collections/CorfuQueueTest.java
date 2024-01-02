@@ -300,7 +300,7 @@ public class CorfuQueueTest extends AbstractViewTest {
                 RoutingTableEntryMsg.newBuilder().setOpaquePayload(ByteString.copyFrom(payload)).build()));
         List<UUID> tags = new ArrayList<>();
         tags.add(CorfuRuntime.getStreamID(LR_STATUS_STREAM_TAG));
-        executeTxn(corfuStore, namespace, (TxnContext tx) -> tx.logUpdateEnqueue(finalQ,
+        executeTxn(corfuStore, namespace, (TxnContext tx) -> tx.logUpdateEnqueue(finalQ.getStreamUUID(),
                 RoutingTableEntryMsg.newBuilder().setOpaquePayload(ByteString.copyFrom(payload)).build(),
                 tags, corfuStore));
 

@@ -106,7 +106,8 @@ public class RoutingQueuesSnapshotReaderTest extends AbstractViewTest {
                     .build();
 
             try (TxnContext txnContext = corfuStore.txn(namespace)) {
-                txnContext.logUpdateEnqueue(q, val, Arrays.asList(CorfuRuntime.getStreamID(streamTagFollowed)),
+                txnContext.logUpdateEnqueue(q.getStreamUUID(),
+                        val, Arrays.asList(CorfuRuntime.getStreamID(streamTagFollowed)),
                     corfuStore);
                 writeMarker(true, snapshotReqTimestamp, txnContext);
                 txnContext.commit();
