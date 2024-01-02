@@ -151,6 +151,13 @@ public abstract class BaseSnapshotReader extends SnapshotReader {
                                 currentEntrySize, DEFAULT_MAX_DATA_MSG_SIZE);
                             throw new IllegalSnapshotEntrySizeException(" The snapshot entry is bigger than the system supported");
                         } else if (currentEntrySize > maxTransferSize) {
+                            // TODO: As of now, there is no plan to allow applications to change the max uncompressed
+                            //  tx size. (CorfuRuntime.MAX_UNCOMPRESSED_WRITE_SIZE).  So the transfer size(85 MB)
+                            //  will be higher than DEFAULT_MAX_DATA_MSG_SIZE(64 MB).
+                            // However, if this behavior changes in future, it is possible that
+                            // currentEntrySize <= DEFAULT_MAX_DATA_MSG_SIZE but currentEntrySize > maxTransferSize.
+                            // In that case, split the transaction (right now currentEntrySize contains the size of all
+                            // SMR entries in the transaction).
                             observeBiggerMsg.setValue(observeBiggerMsg.getValue()+1);
                             log.warn("The current entry size {} is bigger than the configured transfer size {}",
                                 currentEntrySize, maxTransferSize);
