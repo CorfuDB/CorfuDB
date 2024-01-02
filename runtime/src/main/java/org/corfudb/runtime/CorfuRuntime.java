@@ -150,8 +150,11 @@ public class CorfuRuntime {
     @Getter
     private NodeRouterPool nodeRouterPool;
 
+    /**
+     * File watcher for SSL key store to support auto hot-swapping.
+     */
     @Getter
-    private FileWatcher sslCertWatcher;
+    private Optional<FileWatcher> sslCertWatcher;
 
     /**
      * A completable future containing a layout, when completed.
@@ -981,8 +984,7 @@ public class CorfuRuntime {
         nodeRouterPool = new NodeRouterPool(getRouterFunction);
 
         // Start file watcher on Ssl certs
-        sslCertWatcher = this.parameters.getKeyStore() == null ? null :
-                new FileWatcher(this.parameters.getKeyStore(), this::reconnect, this.parameters.fileWatcherPollPeriod);
+        sslCertWatcher = getSslCertWatcher();
 
         if (parameters.metricsEnabled) {
             Logger logger = LoggerFactory.getLogger("org.corfudb.client.metricsdata");
@@ -1039,6 +1041,20 @@ public class CorfuRuntime {
     }
 
     /**
+     * Get an optional of the FileWatcher on Keystore file
+     *
+     * @return The Optional of FileWatcher on Keystore file. Empty if keystore is not set in runtime.
+     */
+    private Optional<FileWatcher> getSslCertWatcher() {
+        String keyStorePath = this.parameters.getKeyStore();
+        if (keyStorePath == null || keyStorePath.isEmpty()) {
+            return Optional.empty();
+        }
+        FileWatcher sslWatcher = new FileWatcher(keyStorePath, this::reconnect, this.parameters.fileWatcherPollPeriod);
+        return Optional.of(sslWatcher);
+    }
+
+    /**
      * Shuts down the CorfuRuntime.
      * Stops async tasks from fetching the layout.
      * Cannot reuse the runtime once shutdown is called.
@@ -1090,15 +1106,11 @@ public class CorfuRuntime {
      * Stop all routers associated with this Corfu Runtime.
      **/
     public void stop(boolean shutdown) {
-        if (sslCertWatcher != null) {
-            sslCertWatcher.close();
-        }
+        sslCertWatcher.ifPresent(FileWatcher::close);
         nodeRouterPool.shutdown();
 
         if (!shutdown) {
-            sslCertWatcher = this.parameters.getKeyStore() == null ? null :
-                    new FileWatcher(this.parameters.getKeyStore(), this::reconnect,
-                            this.parameters.fileWatcherPollPeriod);
+            sslCertWatcher = getSslCertWatcher();
             nodeRouterPool = new NodeRouterPool(getRouterFunction);
         }
     }

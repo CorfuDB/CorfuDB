@@ -5,9 +5,6 @@ import lombok.Getter;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
-import org.corfudb.security.tls.TlsUtils.CertStoreConfig.KeyStoreConfig;
-
-import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLException;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -17,7 +14,6 @@ import java.nio.file.Paths;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
-import java.security.UnrecoverableKeyException;
 import java.security.cert.CertificateException;
 import java.util.function.Consumer;
 

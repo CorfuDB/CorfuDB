@@ -63,7 +63,7 @@ public class FileWatcher implements Closeable {
 
                 if (kind == StandardWatchEventKinds.OVERFLOW) {
                     log.warn("FileWatcher hit overflow and events might be lost!");
-                } else if (kind == java.nio.file.StandardWatchEventKinds.ENTRY_MODIFY
+                } else if (kind == StandardWatchEventKinds.ENTRY_MODIFY
                         && filename.toString().equals(file.getName())) {
                     log.info("FileWatcher: file {} changed. Invoking handler...", filename);
                     onChange.run();
