@@ -358,8 +358,9 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
     }
 
     /**
-     * Test the order of the records on the SINK side using the entryList operation.
-     * This is effectively testing the order on cp/trim, even though the test is not really simulating a cp/trim. The
+     * Test the order of the records on the SINK side using the entryList operation. The writes to snapshot sync queue
+     * and the log entry queue on SOURCE is interleaved, but verify that logs are reordered correctly on SINK.
+     * This test is effectively testing the order on cp/trim, even though the test is not really simulating a cp/trim. The
      * reason being that the entryList operation is what will be used on an event of cp/trim.
      */
     @Test
@@ -468,11 +469,14 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
                 countOfDeltaSyncData.incrementAndGet();
             }
             // flip the flag after all the snapshot sync data is received. From now, there should only be delta sync data
-            if(countOfSnapshotSyncData.get() == numLogEntryUpdates/2 && countOfDeltaSyncData.get() == 0) {
+            if(countOfSnapshotSyncData.get() == numEntryUpdates/2 && countOfDeltaSyncData.get() == 0) {
                 snapshotSyncData.set(false);
             }
 
         });
+
+        assertThat(countOfSnapshotSyncData.get()).isEqualTo(numEntryUpdates/ 2);
+        assertThat(countOfDeltaSyncData.get()).isEqualTo(numEntryUpdates/ 2 + 1);
     }
 
     class SnapshotRequestListener implements StreamListener {
@@ -661,7 +665,7 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
 
         @Override
         protected boolean processUpdatesInSnapshotSync(List<Queue.RoutingTableEntryMsg> updates) {
-            log.info("RQListener got {} FULL_SYNC updates from site {}", updates.size(), sourceSiteId);
+            System.out.println("RQListener got {} FULL_SYNC updates from site {}"+ updates.size());
             snapSyncMsgCnt += updates.size();
 
             updates.forEach(u -> {
@@ -672,7 +676,7 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
 
         @Override
         protected boolean processUpdatesInLogEntrySync(List<Queue.RoutingTableEntryMsg> updates) {
-            log.info("RQListener:: got LOG_ENTRY {} updates from site {}", updates.size(), sourceSiteId);
+            System.out.println("RQListener:: got LOG_ENTRY {} updates from site {}" + updates.size());
             logEntryMsgCnt += updates.size();
             updates.forEach(u -> {
                 log.info("LitQListener:logEntrySync update {} from {}", u, sourceSiteId);

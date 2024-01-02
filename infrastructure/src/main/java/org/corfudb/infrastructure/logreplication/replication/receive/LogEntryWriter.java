@@ -48,10 +48,6 @@ public class LogEntryWriter extends SinkWriter {
 
     private final LogReplicationMetadataManager metadataManager;
 
-    private final UUID replicatedRoutingQueueStreamTag;
-
-    private final UUID replicatedRoutingQUuid;;
-
     public LogEntryWriter(LogReplicationMetadataManager metadataManager,
                           LogReplicationSession session, LogReplicationContext replicationContext) {
         super(session, replicationContext);
@@ -62,19 +58,6 @@ public class LogEntryWriter extends SinkWriter {
         this.lastMsgTs = metadata.getLastLogEntryBatchProcessed();
         this.metadataManager = metadataManager;
         this.session = session;
-
-        if (session.getSubscriber().getModel() == LogReplication.ReplicationModel.ROUTING_QUEUES) {
-            replicatedRoutingQUuid = CorfuRuntime.getStreamID(
-                    TableRegistry.getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE,
-                            REPLICATED_RECV_Q_PREFIX + session.getSourceClusterId() + "_" +
-                                    session.getSubscriber().getClientName())
-            );
-            replicatedRoutingQueueStreamTag = ((LogReplicationRoutingQueueConfig) replicationContext.getConfig(session))
-                    .getSinkQueueStreamTag();
-        } else {
-            replicatedRoutingQUuid = null;
-            replicatedRoutingQueueStreamTag = null;
-        }
     }
 
     /**
