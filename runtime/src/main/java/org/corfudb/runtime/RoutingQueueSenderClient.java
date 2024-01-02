@@ -273,7 +273,7 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
             @Override
             public void transmit(RoutingTableEntryMsg message, int progress) throws CancellationException {
                 log.trace("Enqueuing message to snapshot sync queue, message: {}", message);
-                getTxn().logUpdateEnqueue(snapSyncQ, message, message.getDestinationsList().stream()
+                getTxn().logUpdateEnqueue(snapSyncQ.getStreamUUID(), message, message.getDestinationsList().stream()
                         .map(destination -> TableRegistry.getStreamIdForStreamTag(CORFU_SYSTEM_NAMESPACE,
                                 SNAPSHOT_SYNC_QUEUE_TAG_SENDER_PREFIX + destination + "_" + clientName))
                         .collect(Collectors.toList()), corfuStore);
@@ -375,7 +375,7 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
     @Override
     public void transmitDeltaMessage(TxnContext txn, RoutingTableEntryMsg message, CorfuStore corfuStore) throws Exception {
         log.trace("Enqueuing message to delta queue, message: {}", message);
-        txn.logUpdateEnqueue(logEntryQ, message, message.getDestinationsList().stream()
+        txn.logUpdateEnqueue(logEntryQ.getStreamUUID(), message, message.getDestinationsList().stream()
                 .map(destination -> {
                     UUID streamIdForTag = TableRegistry.getStreamIdForStreamTag(CORFU_SYSTEM_NAMESPACE,
                             LOG_ENTRY_SYNC_QUEUE_TAG_SENDER_PREFIX + destination + "_" + clientName);

@@ -257,7 +257,7 @@ public class TransactionCrud<T extends StoreTransaction<T>>
         @Override
         public void preCommitCallback(TokenResponse tokenResponse) {
             tablesUpdated.entrySet().forEach(e -> {
-                if (e.getValue().getGuidGenerator() == null) {
+                if (e.getValue() != null && e.getValue().getGuidGenerator() == null) {
                     return; // Transaction has an update to a table which is not a Queue, so ignore.
                 }
                 TransactionalContext.getRootContext().getWriteSetInfo().getWriteSet().getSMRUpdates(e.getKey())
@@ -302,7 +302,7 @@ public class TransactionCrud<T extends StoreTransaction<T>>
     /**
      * This API is used to add an entry to the CorfuQueue without materializing the queue in memory.
      *
-     * @param table  Table object to operate on the queue.
+     * @param queueUUID  queue ID
      * @param value Record to be added.
      * @param streamTags  - stream tags associated to the given stream id
      * @param corfuStore CorfuStore that gets the runtime for the serializer.
@@ -313,14 +313,17 @@ public class TransactionCrud<T extends StoreTransaction<T>>
      */
     @Nonnull
     public <K extends Message, V extends Message, M extends Message>
-    K logUpdateEnqueue(@Nonnull Table<K, V, M> table,
+    K logUpdateEnqueue(@Nonnull UUID queueUUID,
                        @Nonnull final V value, List<UUID> streamTags, CorfuStore corfuStore) {
 
         if (TransactionalContext.getRootContext().getPreCommitListeners().isEmpty()) {
-            TransactionalContext.getCurrentContext().addPreCommitListener(new QueueEntryAddressGetter());
+            TransactionalContext.getCurrentContext().addPreCommitListener(new QueueEntryAddressGetter<>());
         }
-        K ret = table.logUpdateEnqueue(value, streamTags, corfuStore);
-        tablesUpdated.putIfAbsent(table.getStreamUUID(), table);
+
+        K ret = Table.logUpdateEnqueue(queueUUID, value, streamTags, corfuStore);
+        // Table object is not instantiated in this path. The precommit-listener will know to run for updates where
+        // table object is null or when the table object has a guid generator.
+        tablesUpdated.put(queueUUID, null);
         return ret;
     }
 
