@@ -13,7 +13,6 @@ import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuOptions;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.ExampleSchemas;
-import org.corfudb.runtime.LogReplicationUtils;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
 import org.corfudb.runtime.collections.StreamListener;
@@ -277,6 +276,7 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
                 snapshotProvider.cancel(queueSenderClient.getPendingFullSyncs()
                         .get(DefaultClusterConfig.getSinkClusterIds().get(0)));
                 cancelledInitialSync = true;
+                System.out.println("============================ CANCELLING=============");
             }
 
             if (!sentDuplicateSync) {
@@ -286,7 +286,9 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
 
             numFullSyncMsgsGot = listener.snapSyncMsgCnt;
         }
-        assertThat(listener.snapSyncMsgCnt).isEqualTo(snapshotProvider.getNumFullSyncBatches());
+        // Since snapSyncMsgCnt is not reset on requesting a new snapshotSync, snapSyncMsgCnt value is not deterministic.
+        // One condition which is always true is that the value should be atleast snapshotProvider.getNumFullSyncBatches()
+        assertThat(listener.snapSyncMsgCnt).isGreaterThanOrEqualTo(snapshotProvider.getNumFullSyncBatches());
     }
 
     private void generateData(CorfuStore corfuStore, RoutingQueueSenderClient client) throws Exception {
@@ -442,13 +444,12 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
 
         // open the recvQ on SINK
         Table<Queue.CorfuGuidMsg, Queue.RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg> recvQ = sinkCorfuStores.get(0).openQueue(
-                CORFU_SYSTEM_NAMESPACE, LogReplicationUtils.REPLICATED_RECV_Q_PREFIX + DefaultClusterConfig.getSourceClusterIds().get(0) + "_" + DEFAULT_ROUTING_QUEUE_CLIENT,
+                CORFU_SYSTEM_NAMESPACE, REPLICATED_RECV_Q_PREFIX + DefaultClusterConfig.getSourceClusterIds().get(0) + "_" + DEFAULT_ROUTING_QUEUE_CLIENT,
                 Queue.RoutingTableEntryMsg.class, TableOptions.builder().schemaOptions(
                         CorfuOptions.SchemaOptions.newBuilder().addStreamTag(REPLICATED_QUEUE_TAG).build()).build());
 
-        // wait until the recv side count == data written on source
         while(recvQ.count() < (numEntryUpdates + 1)) {
-
+            // wait until the recv side count == data written on source
         }
 
         // the "+1" is for the dummy record that is written at the end of snapshot sync
@@ -665,7 +666,7 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
 
         @Override
         protected boolean processUpdatesInSnapshotSync(List<Queue.RoutingTableEntryMsg> updates) {
-            System.out.println("RQListener got {} FULL_SYNC updates from site {}"+ updates.size());
+            log.info("RQListener got {} FULL_SYNC updates from site {}"+ updates.size());
             snapSyncMsgCnt += updates.size();
 
             updates.forEach(u -> {
@@ -676,7 +677,7 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
 
         @Override
         protected boolean processUpdatesInLogEntrySync(List<Queue.RoutingTableEntryMsg> updates) {
-            System.out.println("RQListener:: got LOG_ENTRY {} updates from site {}" + updates.size());
+            log.info("RQListener:: got LOG_ENTRY {} updates from site {}" + updates.size());
             logEntryMsgCnt += updates.size();
             updates.forEach(u -> {
                 log.info("LitQListener:logEntrySync update {} from {}", u, sourceSiteId);
