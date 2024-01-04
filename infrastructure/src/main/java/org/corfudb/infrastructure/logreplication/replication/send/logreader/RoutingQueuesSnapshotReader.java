@@ -7,6 +7,7 @@ import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
+import org.corfudb.runtime.LogReplicationUtils;
 import org.corfudb.runtime.Queue;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuStore;
@@ -140,7 +141,13 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
         String endMarkerTableName = TableRegistry.getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE,
                 SNAP_SYNC_TXN_ENVELOPE_TABLE);
         snapSyncHeaderStreamId = CorfuRuntime.getStreamID(endMarkerTableName);
-        dataWaitTimeoutMs = replicationContext.getConfigManager().getServerContext().getSnapshotReadTimeout();
+
+        // Unit tests do not create a ServerContext as it creates netty event loop groups.
+        if (replicationContext.getConfigManager().getServerContext() == null) {
+            dataWaitTimeoutMs = LogReplicationUtils.SNAPSHOT_READ_TIMEOUT_MS;
+        } else {
+            dataWaitTimeoutMs = replicationContext.getConfigManager().getServerContext().getSnapshotReadTimeout();
+        }
     }
 
     // Create an opaque stream and iterator for the stream of interest, starting from lastReadTimestamp+1 to the global

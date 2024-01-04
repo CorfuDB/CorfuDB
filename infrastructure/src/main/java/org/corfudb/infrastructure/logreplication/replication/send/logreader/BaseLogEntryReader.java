@@ -70,10 +70,9 @@ public abstract class BaseLogEntryReader extends LogEntryReader {
 
     private StreamIteratorMetadata currentProcessedEntryMetadata;
 
-    protected LogReplication.LogReplicationSession session;
-
     public BaseLogEntryReader(LogReplication.LogReplicationSession replicationSession,
                               LogReplicationContext replicationContext) {
+        super(replicationSession, replicationContext);
         CorfuRuntime runtime = replicationContext.getCorfuRuntime();
         this.maxDataSizePerMsg = replicationContext.getConfig(replicationSession).getMaxMsgSize();
         this.currentProcessedEntryMetadata = new StreamIteratorMetadata(Address.NON_ADDRESS, false);
@@ -81,8 +80,6 @@ public abstract class BaseLogEntryReader extends LogEntryReader {
         this.deltaCounter = configureDeltaCounter();
         this.validDeltaCounter = configureValidDeltaCounter();
         this.opaqueEntryCounter = configureOpaqueEntryCounter();
-        this.session = replicationSession;
-        this.replicationContext = replicationContext;
 
         log.info("Total of {} streams to replicate at initialization. Streams to replicate={}, Session={}",
                 getStreamUUIDs().size(),

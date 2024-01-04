@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure.logreplication.replication.send;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
@@ -12,6 +13,7 @@ import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.LogReplication.SyncStatus;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.LogReplicationUtils;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.Address;
@@ -73,9 +75,16 @@ public class LogReplicationAckReader {
         this.runtime = replicationContext.getCorfuRuntime();
         this.session = session;
         this.replicationContext = replicationContext;
-        lastAckedTsPoller = Executors.newScheduledThreadPool(
+
+        // Unit tests do not create a ServerContext as it creates netty event loop groups.
+        if (replicationContext.getConfigManager().getServerContext() == null) {
+            lastAckedTsPoller = Executors.newScheduledThreadPool(LogReplicationUtils.DEFAULT_FSM_THREADS,
+                new ThreadFactoryBuilder().setNameFormat("ack-timestamp-reader-%d").build());
+        } else {
+            lastAckedTsPoller = Executors.newScheduledThreadPool(
                 replicationContext.getConfigManager().getServerContext().getAckReaderThreadCount(),
                 new ThreadFactoryBuilder().setNameFormat("ack-timestamp-reader-%d").build());
+        }
     }
 
     public void setAckedTsAndSyncType(long ackedTs, SyncType syncType) {

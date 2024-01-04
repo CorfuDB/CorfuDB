@@ -1,8 +1,10 @@
 package org.corfudb.infrastructure.logreplication.replication.fsm;
 
+import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.LogEntryReader;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.StreamsLogEntryReader;
-import org.corfudb.runtime.LogReplication;
+import org.corfudb.runtime.LogReplication.LogReplicationSession;
+import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.view.Address;
 
 import java.util.UUID;
@@ -12,8 +14,12 @@ import java.util.UUID;
  */
 public class TestLogEntryReader extends LogEntryReader {
 
+    public TestLogEntryReader(LogReplicationSession session, LogReplicationContext replicationContext) {
+        super(session, replicationContext);
+    }
+
     @Override
-    public LogReplication.LogReplicationEntryMsg read(UUID logEntryRequestId) {
+    public LogReplicationEntryMsg read(UUID logEntryRequestId) {
         return null;
     }
 

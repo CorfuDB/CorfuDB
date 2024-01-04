@@ -25,7 +25,6 @@ import org.corfudb.infrastructure.logreplication.replication.fsm.TestSnapshotRea
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationAckReader;
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationEventMetadata;
-import org.corfudb.infrastructure.logreplication.replication.send.logreader.DefaultReadProcessor;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.LogEntryReader;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.SnapshotReader;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.StreamsSnapshotReader;
@@ -64,7 +63,6 @@ import java.util.Queue;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.Executors;
 import java.util.concurrent.Semaphore;
 
 import static java.lang.Thread.sleep;
@@ -824,7 +822,6 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
     private void initLogReplicationFSM(ReaderImplementation readerImpl, boolean waitInSnapshotSync) {
 
         String fullyQualifiedStreamName = TableRegistry.getFullyQualifiedTableName(TEST_NAMESPACE, TEST_STREAM_NAME);
-        LogEntryReader logEntryReader = new TestLogEntryReader();
 
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(runtime, LOCAL_SOURCE_CLUSTER_ID);
         LogReplicationPluginConfig pluginConfig = new LogReplicationPluginConfig(pluginConfigFilePath);
@@ -864,6 +861,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
 
         context = new LogReplicationContext(configManager, TEST_TOPOLOGY_CONFIG_ID,
                 "test:" + SERVERS.PORT_0, true, pluginConfig, runtime);
+        LogEntryReader logEntryReader = new TestLogEntryReader(session, context);
         LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(runtime, context);
 
         // Manually initialize the replication status table, needed for tests that check the

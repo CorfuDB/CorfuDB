@@ -22,6 +22,7 @@ import org.corfudb.infrastructure.logreplication.replication.send.logreader.Rout
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.RoutingQueuesSnapshotReader;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.StreamsLogEntryReader;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.StreamsSnapshotReader;
+import org.corfudb.runtime.LogReplicationUtils;
 import org.corfudb.runtime.view.Address;
 
 import java.util.HashMap;
@@ -242,8 +243,7 @@ public class LogReplicationFSM {
         this.logEntrySender = new LogEntrySender(logEntryReader, dataSender, this);
         this.fsmTaskManager = replicationContext.getTaskManager();
         this.fsmTaskManager.createReplicationTaskManager("replicationFSM",
-            replicationContext.getConfigManager().getServerContext().getReplicationThreadCount());
-
+            LogReplicationUtils.DEFAULT_FSM_THREADS);
         init(dataSender, session);
     }
 

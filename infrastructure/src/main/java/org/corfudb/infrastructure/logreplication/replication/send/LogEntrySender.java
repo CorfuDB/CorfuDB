@@ -12,6 +12,7 @@ import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationF
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.LogEntryReader;
 import org.corfudb.infrastructure.logreplication.exceptions.MessageSizeExceededException;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
+import org.corfudb.runtime.LogReplicationUtils;
 import org.corfudb.runtime.exceptions.TrimmedException;
 
 import java.util.UUID;
@@ -72,12 +73,20 @@ public class LogEntrySender {
         this.logEntryReader = logEntryReader;
         this.logReplicationFSM = logReplicationFSM;
         this.dataSenderBufferManager = new LogEntrySenderBufferManager(dataSender, logReplicationFSM.getAckReader());
-        waitRetryDefaultMs = logEntryReader.replicationContext.getConfigManager().getServerContext()
+
+        // Unit tests do not create a ServerContext as it creates netty event loop groups.
+        if (logEntryReader.replicationContext.getConfigManager().getServerContext() == null) {
+            waitRetryDefaultMs = LogReplicationUtils.DEFAULT_LOG_ENTRY_READ_BACKOFF_TIME_MS;
+            waitRetryIncrementMs = LogReplicationUtils.DEFAULT_LOG_ENTRY_READ_BACKOFF_INCREMENT_MS;
+            waitRetryMaxMs = LogReplicationUtils.DEFAULT_LOG_ENTRY_READ_MAX_BACKOFF_MS;
+        } else {
+            waitRetryDefaultMs = logEntryReader.replicationContext.getConfigManager().getServerContext()
                 .getInitialLogEntryReadBackoff();
-        waitRetryIncrementMs = logEntryReader.replicationContext.getConfigManager().getServerContext()
+            waitRetryIncrementMs = logEntryReader.replicationContext.getConfigManager().getServerContext()
                 .getLogEntryReadBackoffIncrement();
-        waitRetryMaxMs = logEntryReader.replicationContext.getConfigManager().getServerContext()
+            waitRetryMaxMs = logEntryReader.replicationContext.getConfigManager().getServerContext()
                 .getLogEntryReadMaxBackoff();
+        }
         waitRetryRead = waitRetryDefaultMs;
     }
 

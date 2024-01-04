@@ -8,6 +8,10 @@ import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationCo
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationMetadata;
+import org.corfudb.infrastructure.logreplication.replication.send.logreader.LogEntryReader;
+import org.corfudb.infrastructure.logreplication.replication.send.logreader.SnapshotReader;
+import org.corfudb.infrastructure.logreplication.replication.send.logreader.StreamsLogEntryReader;
+import org.corfudb.infrastructure.logreplication.replication.send.logreader.StreamsSnapshotReader;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
 import org.corfudb.infrastructure.logreplication.proto.Sample.IntValue;
@@ -1300,9 +1304,13 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         srcContext.getConfig(session).setMaxNumMsgPerBatch(BATCH_SIZE);
         srcContext.getConfig(session).setMaxMsgSize(SMALL_MSG_SIZE);
 
+        // Create the test log entry and snapshot readers
+        LogEntryReader logEntryReader = new StreamsLogEntryReader(session, srcContext);
+        SnapshotReader snapshotReader = new StreamsSnapshotReader(session, srcContext);
+
         // Source Manager
         LogReplicationSourceManager logReplicationSourceManager = new LogReplicationSourceManager(srcMetadataManager,
-                sourceDataSender, session, srcContext);
+                sourceDataSender, session, srcContext, logEntryReader, snapshotReader);
 
         srcContext.getTaskManager().createReplicationTaskManager("replicationFSM", 2);
 
