@@ -86,7 +86,7 @@ public abstract class LiteRoutingQueueListener extends StreamListenerResumeOrFul
         // For snapshot sync, the first message will be CLEAR so get the next message, if any.
         // For log entry sync, get the first message.
         CorfuStreamEntry firstUpdateEntry = null;
-        if (entries.get(0).getOperation() == CorfuStreamEntry.OperationType.CLEAR  && entries.size() > 1) {
+        if (entries.get(0).getOperation() == CorfuStreamEntry.OperationType.CLEAR && entries.size() > 1) {
             firstUpdateEntry = entries.get(1);
         } else if (entries.get(0).getOperation() == CorfuStreamEntry.OperationType.UPDATE) {
             firstUpdateEntry = entries.get(0);
