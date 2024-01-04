@@ -192,11 +192,6 @@ public class WaitSnapshotApplyState implements LogReplicationState {
                 log.debug("Snapshot sync apply is still in progress, appliedTs={}, baseTs={}, sync_id={}", metadataResponse.getSnapshotApplied(),
                         baseSnapshotTimestamp, transitionSyncId);
             }
-        } catch (TimeoutException te) {
-            log.error("Snapshot sync apply verification timed out.", te);
-        } catch (ExecutionException ee) {
-            // Completable future completed exceptionally
-            log.error("Snapshot sync apply verification failed.", ee);
         } catch (Exception e) {
             log.error("Snapshot sync apply verification failed.", e);
         }

@@ -55,6 +55,13 @@ import lombok.extern.slf4j.Slf4j;
 
 /**
  * Snapshot reader implementation for Routing Queues Replication Model.
+ *
+ * This reader requests the client for data, and waits (for a specific timeout window) until the data is seen. The
+ * timeout window is a sliding window which moves forward when the client provides any data, irrespective of the session.
+ * This ensures that a session does not request for snapshot data when we know that the client is busy providing data
+ * for another session. This approach allows clients the freedom to decide on how to provide the data.
+ *
+ * If the window times out, the session requests data for itself from the client.
  */
 @Slf4j
 public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
