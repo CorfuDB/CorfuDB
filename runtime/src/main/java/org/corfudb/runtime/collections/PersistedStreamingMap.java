@@ -59,8 +59,14 @@ public class PersistedStreamingMap<K, V> implements ContextAwareMap<K, V> {
      */
     public static Options getPersistedStreamingMapOptions() {
         final int maxSizeAmplificationPercent = 50;
+        final long num_log_files = 2;
+        final long log_file_size = 1024 * 1024 * 5; // 5MB.
         final Options options = new Options();
 
+        // For long-running processes, limit the amount of space
+        // that the log files can occupy.
+        options.setKeepLogFileNum(num_log_files);
+        options.setMaxLogFileSize(log_file_size);
         options.setCreateIfMissing(true);
         options.setCompressionType(CompressionType.LZ4_COMPRESSION);
 
