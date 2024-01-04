@@ -26,9 +26,13 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * This class manages the tasks submitted by the runtime FSM, the replication FSM and for the sink tasks when SINK is
- * the connection starter.
+ * the connection starter. This is achieved by having 1 thread pool per FSM, and all the sessions traversing an FSM share
+ * the thread pool.
  *
- * The thread pools are shared by all the sessions traversing an FSM.
+ * The order of processing the enqueued events, for a given session, is guaranteed by maintaining a list of incoming
+ * events for session. Any new events get appended to the list.
+ * When a thread is assigned a task, we check against this list. If the task appears at index 0, the thread is allowed
+ * to process the event, otherwise, the thread waits until its notified by another thread processing the event at index 0.
  */
 @Slf4j
 public class FsmTaskManager {
@@ -40,31 +44,26 @@ public class FsmTaskManager {
     // Session -> list of runtime event IDs. This data structure is used to maintain the order of events processed for a given session.
     private final Map<LogReplicationSession, LinkedList<UUID>> sessionToRuntimeEventIdMap = new ConcurrentHashMap<>();
 
-    // Session -> list of replication event IDs. This data structure is used to maintain the order of events processed for a given session.
-    private final Map<LogReplicationSession, LinkedList<UUID>> sessionToReplicationEventIdMap = new ConcurrentHashMap<>();
-
-    // Session -> list of replication event IDs. This is different than the above in the way that the events in this
-    // structure are to be processed after a delay.
-    // Currently will have the snapshot-apply-verification events and (only relevant for routing queue model) the check for data event
-    private final Map<LogReplicationSession, LinkedList<UUID>> sessionToDelayedReplicationEventIdMap = new ConcurrentHashMap<>();
+    // Session -> ReplicationEventOrderManager. This data structure is used to maintain the order of events processed for a given session.
+    private final Map<LogReplicationSession, ReplicationEventOrderManager> sessionToReplicationEventOrderManager = new ConcurrentHashMap<>();
 
     // Session -> list of sink event IDs. This data structure is used to maintain the order of events processed for a given session.
     private final Map<LogReplicationSession, LinkedList<UUID>> sessionToSinkEventIdMap = new ConcurrentHashMap<>();
 
 
-    public void createRuntimeTaskManager(String threadName, int threadCount) {
+    public synchronized void createRuntimeTaskManager(String threadName, int threadCount) {
         if (runtimeWorker == null) {
             runtimeWorker = Executors.newScheduledThreadPool(threadCount, new ThreadFactoryBuilder().setNameFormat(threadName + "-%d").build());
         }
     }
 
-    public void createReplicationTaskManager(String threadName, int threadCount) {
+    public synchronized void createReplicationTaskManager(String threadName, int threadCount) {
         if (replicationWorker == null) {
             replicationWorker = Executors.newScheduledThreadPool(threadCount, new ThreadFactoryBuilder().setNameFormat(threadName + "-%d").build());
         }
     }
 
-    public void createSinkTaskManager(String threadName, int threadCount) {
+    public synchronized void createSinkTaskManager(String threadName, int threadCount) {
         if (sinkTaskWorker == null) {
             sinkTaskWorker = Executors.newScheduledThreadPool(threadCount, new ThreadFactoryBuilder().setNameFormat(threadName + "-%d").build());
         }
@@ -99,21 +98,8 @@ public class FsmTaskManager {
             });
         } else if (fsmType.equals(FsmEventType.LogReplicationEvent)){
             LogReplicationSession session = ((LogReplicationFSM) fsm).getSession();
-            if (delay > 0) {
-                sessionToDelayedReplicationEventIdMap.putIfAbsent(session, new LinkedList<>());
-                // makes the value part of the map thread safe.
-                sessionToDelayedReplicationEventIdMap.computeIfPresent(session, (sessionKey, eventList) -> {
-                    eventList.add(((LogReplicationEvent) event).getEventId());
-                    return eventList;
-                });
-            } else {
-                sessionToReplicationEventIdMap.putIfAbsent(session, new LinkedList<>());
-                // makes the value part of the map thread safe.
-                sessionToReplicationEventIdMap.computeIfPresent(session, (sessionKey, eventList) -> {
-                    eventList.add(((LogReplicationEvent) event).getEventId());
-                    return eventList;
-                });
-            }
+            sessionToReplicationEventOrderManager.putIfAbsent(session, new ReplicationEventOrderManager());
+            sessionToReplicationEventOrderManager.get(session).addEvent(((LogReplicationEvent) event).getEventId(), delay);
         } else if (fsmType.equals(FsmEventType.LogReplicationSinkEvent)){
             LogReplicationSession session = ((RemoteSourceLeadershipManager) fsm).getSession();
             sessionToSinkEventIdMap.putIfAbsent(session, new LinkedList<>());
@@ -185,75 +171,56 @@ public class FsmTaskManager {
         }
     }
 
-    private boolean cannotProcessEventForSession(LogReplicationSession session, UUID currEventId) {
-        // The order between the delayed list and the regular list is not maintained. But since only 1 thread is active
-        // at any time for a session, in a stable scenario, its guaranteed that a 0-delay event will not be generated
-        // before a delayed event is executed.
-        return !(sessionToReplicationEventIdMap.get(session) != null &&
-                !sessionToReplicationEventIdMap.get(session).isEmpty() &&
-                sessionToReplicationEventIdMap.get(session).get(0).equals(currEventId) ||
-                (sessionToDelayedReplicationEventIdMap.get(session) != null &&
-                        !sessionToDelayedReplicationEventIdMap.get(session).isEmpty() &&
-                        sessionToDelayedReplicationEventIdMap.get(session).get(0).equals(currEventId)));
-    }
-
     private void processReplicationTask(LogReplicationEvent currEvent, LogReplicationFSM fsm) {
         LogReplicationSession session = fsm.getSession();
         // for a given session, the fsm events should be processed in the order they are queued. This snippets ensures
         // that in the event of 2 threads contending for the monitor, only the task submitted first would be processed.
-        synchronized(fsm) {
-            while (cannotProcessEventForSession(session, currEvent.getEventId())) {
+        synchronized (fsm) {
+            while (sessionToReplicationEventOrderManager.get(session).cannotProcessEvent(currEvent.getEventId())) {
                 try {
                     fsm.wait();
                 } catch (InterruptedException e) {
                     log.error("Wait for session {} was interrupted {}", session, e.getMessage());
                 }
             }
+        }
 
-            LogReplicationState currState = fsm.getState();
-            if (currState.getType() == LogReplicationStateType.ERROR) {
-                log.info("Log Replication State Machine has been stopped. No more events will be processed.");
-                return;
+        LogReplicationState currState = fsm.getState();
+        if (currState.getType() == LogReplicationStateType.ERROR) {
+            log.info("Log Replication State Machine has been stopped. No more events will be processed.");
+            return;
+        }
+
+        // TODO (Anny): consider strategy for continuously failing snapshot sync (never ending cancellation)
+
+        try {
+            LogReplicationState newState = currState.processEvent(currEvent);
+            log.trace("Transition from {} to {}", currState, newState);
+
+            fsm.transition(currState, newState);
+            fsm.setState(newState);
+            fsm.getNumTransitions().setValue(fsm.getNumTransitions().getValue() + 1);
+
+        } catch (org.corfudb.infrastructure.logreplication.replication.fsm.IllegalTransitionException illegalState) {
+            // Ignore LOG_ENTRY_SYNC_REPLICATED events for logging purposes as they will likely come in frequently,
+            // as it is used for update purposes but does not imply a transition.
+            if (!currEvent.getType().equals(LogReplicationEvent.LogReplicationEventType.LOG_ENTRY_SYNC_REPLICATED)) {
+                log.error("Illegal log replication event {} when in state {}", currEvent.getType(), currState.getType());
             }
+        }
 
-            // TODO (Anny): consider strategy for continuously failing snapshot sync (never ending cancellation)
-
-            try {
-                LogReplicationState newState = currState.processEvent(currEvent);
-                log.trace("Transition from {} to {}", currState, newState);
-
-                fsm.transition(currState, newState);
-                fsm.setState(newState);
-                fsm.getNumTransitions().setValue(fsm.getNumTransitions().getValue() + 1);
-
-            } catch (org.corfudb.infrastructure.logreplication.replication.fsm.IllegalTransitionException illegalState) {
-                // Ignore LOG_ENTRY_SYNC_REPLICATED events for logging purposes as they will likely come in frequently,
-                // as it is used for update purposes but does not imply a transition.
-                if (!currEvent.getType().equals(LogReplicationEvent.LogReplicationEventType.LOG_ENTRY_SYNC_REPLICATED)) {
-                    log.error("Illegal log replication event {} when in state {}", currEvent.getType(), currState.getType());
-                }
+        // For testing purpose to notify the event generator the stop of the event.
+        if (currEvent.getType() == LogReplicationEvent.LogReplicationEventType.REPLICATION_STOP) {
+            synchronized (currEvent) {
+                currEvent.notifyAll();
             }
+        }
 
-            // For testing purpose to notify the event generator the stop of the event.
-            if (currEvent.getType() == LogReplicationEvent.LogReplicationEventType.REPLICATION_STOP) {
-                synchronized (currEvent) {
-                    currEvent.notifyAll();
-                }
-            }
-
-            removeReplicationEventIdFromMap(session, currEvent.getEventId());
+        synchronized (fsm) {
+            sessionToReplicationEventOrderManager.get(session).removeEventAfterProcessing(currEvent.getEventId());
             fsm.notifyAll();
         }
 
-    }
-
-    private void removeReplicationEventIdFromMap(LogReplicationSession session, UUID currEventID) {
-        if (sessionToReplicationEventIdMap.get(session) != null && !sessionToReplicationEventIdMap.get(session).isEmpty() &&
-                sessionToReplicationEventIdMap.get(session).get(0).equals(currEventID)) {
-            sessionToReplicationEventIdMap.get(session).remove(0);
-        } else {
-            sessionToDelayedReplicationEventIdMap.get(session).remove(0);
-        }
     }
 
     public void shutdown() {
@@ -282,5 +249,60 @@ public class FsmTaskManager {
         LogReplicationEvent,
         LogReplicationRuntimeEvent,
         LogReplicationSinkEvent
+    }
+
+    /**
+     * This class holds the enqueued LogReplicationEvent. Since replication events may run at 0-delay or non-zero delay,
+     * this wrapper class assists in determining if the current event picked by a thread can be processed.
+     * This also ensures that there is only 1 thread active for a session at any time.
+     */
+    private static class ReplicationEventOrderManager{
+        // Contains events with 0-delay. This list helps maintain the order of events processed.
+        private final LinkedList<UUID> processImmediately;
+
+        // This list has the same intention as above, but with a slight difference in kind of event it holds.
+        // This contains the events which have to be scheduled after a non-zero delay.
+        // Currently will have the snapshot-apply-verification events and (only relevant for routing queue model) the check for data function
+        private final LinkedList<UUID> processWithDelay;
+
+        // set to true when an event is being actively processed for the session
+        private boolean currentlyProcessingEvent;
+
+        ReplicationEventOrderManager() {
+            processImmediately = new LinkedList<>();
+            processWithDelay = new LinkedList<>();
+            currentlyProcessingEvent = false;
+        }
+
+        synchronized boolean cannotProcessEvent(UUID eventID) {
+            if (currentlyProcessingEvent) {
+                return true;
+            }
+            boolean cannotProcess = !(!processImmediately.isEmpty() && processImmediately.get(0).equals(eventID) ||
+                    !processWithDelay.isEmpty() && processWithDelay.get(0).equals(eventID));
+
+            if (!cannotProcess) {
+                // the current event will be processed.
+                currentlyProcessingEvent = true;
+            }
+            return cannotProcess;
+        }
+
+        synchronized void addEvent(UUID eventID, long delay) {
+            if (delay == 0) {
+                processImmediately.add(eventID);
+            } else {
+                processWithDelay.add(eventID);
+            }
+        }
+
+        synchronized void removeEventAfterProcessing(UUID eventID) {
+            if(!processImmediately.isEmpty() && processImmediately.get(0).equals(eventID)) {
+                processImmediately.remove(0);
+            } else {
+                processWithDelay.remove(0);
+            }
+            currentlyProcessingEvent = false;
+        }
     }
 }
