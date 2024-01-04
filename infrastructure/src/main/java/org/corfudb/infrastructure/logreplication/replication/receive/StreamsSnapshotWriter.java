@@ -157,7 +157,12 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
 
         try (TxnContext txn = metadataManager.getTxnContext()) {
             updateLog(txn, smrEntries, shadowStreamUuid);
-            metadataManager.updateReplicationMetadataField(txn, session, ReplicationMetadata.LASTSNAPSHOTTRANSFERREDSEQNUMBER_FIELD_NUMBER, currentSeqNum);
+            ReplicationMetadata metadata = metadataManager.queryReplicationMetadata(txn, session);
+            ReplicationMetadata updatedMetadata = metadata.toBuilder().setLastSnapshotStarted(srcGlobalSnapshot)
+                    .setLastSnapshotTransferredSeqNumber(currentSeqNum)
+                    .build();
+
+            metadataManager.updateReplicationMetadata(txn, session, updatedMetadata);
             timestamp = txn.commit();
         }
 
@@ -190,10 +195,6 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
                     srcGlobalSnapshot, recvSeq, persistedTopologyConfigId, persistedSnapshotStart, persistedSequenceNum);
             return;
         }
-
-        metadataManager.updateReplicationMetadataField(txnContext, session, ReplicationMetadata.TOPOLOGYCONFIGID_FIELD_NUMBER, topologyConfigId);
-        metadataManager.updateReplicationMetadataField(txnContext, session, ReplicationMetadata.LASTSNAPSHOTSTARTED_FIELD_NUMBER, srcGlobalSnapshot);
-
         for (SMREntry smrEntry : smrEntries) {
             txnContext.logUpdate(streamId, smrEntry, replicationContext.getConfig(session).getDataStreamToTagsMap().get(streamId));
         }
@@ -246,7 +247,6 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
 
         // Collect the streams that have evidenced data from source.
         replicatedStreamIds.add(regularStreamId);
-
         processUpdatesShadowStream(opaqueEntry.getEntries().get(regularStreamId),
             message.getMetadata().getSnapshotSyncSeqNum(),
             getShadowStreamId(regularStreamId),
@@ -340,16 +340,19 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
         int numBatches = 1;
 
         for (SMREntry smrEntry : smrEntries) {
-            // Apply all SMR entries in a single transaction as long as it does not exceed the max write size(25MB).
+            // Apply all SMR entries in a single transaction as long as it does not exceed maxApplySize(a fraction of
+            // the runtime's max uncompressed write size(100 MB by default).  The fraction is added as a buffer to
+            // account for extra bytes added during LogData.serialize()).
             // It was observed that special streams(ProtobufDescriptor table), can get a lot of updates, especially
             // due to schema updates during an upgrade.  If the table was not checkpointed and trimmed on the Source,
             // no de-duplication on these updates will occur.  As a result, the transaction size can be large.
-            // Although it is within the maxWriteSize limit, deserializing these entries to read the table can cause an
+            // Although it is within the maxApplySize limit, deserializing these entries to read the table can cause an
             // OOM on applications running with a small memory footprint.  So for such tables, introduce an
             // additional limit of max number of entries(50 by default) applied in a single transaction.  This
             // algorithm is in line with the limits imposed in Compaction and Restore workflows.
-            if (bufferSize + smrEntry.getSerializedSize() > metadataManager.getRuntime().getParameters()
-                    .getMaxWriteSize() || maxEntriesLimitReached(streamId, buffer)) {
+            if (bufferSize + smrEntry.getSerializedSize() > replicationContext.getConfig(session).getMaxApplySize()
+                    || maxEntriesLimitReached(streamId,
+                buffer)) {
                 try (TxnContext txnContext = metadataManager.getTxnContext()) {
                     updateLog(txnContext, buffer, streamId);
                     CorfuStoreMetadata.Timestamp ts = txnContext.commit();

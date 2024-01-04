@@ -56,7 +56,7 @@ public abstract class BaseLogEntryReader extends LogEntryReader {
     // the sequence number of the message based on the globalBaseSnapshot
     private long sequence;
 
-    private final int maxDataSizePerMsg;
+    private final long maxTransferSize;
 
     private final Optional<DistributionSummary> messageSizeDistributionSummary;
     private final Optional<Counter> deltaCounter;
@@ -77,7 +77,7 @@ public abstract class BaseLogEntryReader extends LogEntryReader {
     public BaseLogEntryReader(CorfuRuntime runtime, LogReplication.LogReplicationSession replicationSession,
                               LogReplicationContext replicationContext) {
         runtime.parseConfigurationString(runtime.getLayoutServers().get(0)).connect();
-        this.maxDataSizePerMsg = replicationContext.getConfig(replicationSession).getMaxDataSizePerMsg();
+        this.maxTransferSize = replicationContext.getConfig(replicationSession).getMaxTransferSize();
         this.currentProcessedEntryMetadata = new StreamIteratorMetadata(Address.NON_ADDRESS, false);
         this.messageSizeDistributionSummary = configureMessageSizeDistributionSummary();
         this.deltaCounter = configureDeltaCounter();
@@ -180,7 +180,7 @@ public abstract class BaseLogEntryReader extends LogEntryReader {
         int currentMsgSize = 0;
 
         try {
-            while (currentMsgSize < maxDataSizePerMsg) {
+            while (currentMsgSize < maxTransferSize) {
                 if (lastOpaqueEntry != null) {
 
                     if (lastOpaqueEntryValid) {
@@ -190,13 +190,13 @@ public abstract class BaseLogEntryReader extends LogEntryReader {
 
                         // If a message cannot be sent due to its size exceeding the maximum boundary,
                         // throw an exception and the replication will be stopped.
-                        if (currentEntrySize > maxDataSizePerMsg) {
+                        if (currentEntrySize > maxTransferSize) {
                             throw new MessageSizeExceededException();
                         }
 
                         // If it cannot fit into this message, skip appending this entry and it will
                         // be processed with the next message.
-                        if (currentEntrySize + currentMsgSize > maxDataSizePerMsg) {
+                        if (currentEntrySize + currentMsgSize > maxTransferSize) {
                             break;
                         }
 
@@ -221,8 +221,8 @@ public abstract class BaseLogEntryReader extends LogEntryReader {
                         lastOpaqueEntryValid);
             }
 
-            log.trace("Generate LogEntryDataMessage size {} with {} entries for maxDataSizePerMsg {}. lastEntry size {}",
-                currentMsgSize, opaqueEntryList.size(), maxDataSizePerMsg, lastOpaqueEntry == null ? 0 : currentEntrySize);
+            log.trace("Generate LogEntryDataMessage size {} with {} entries for maxTransferSize {}. lastEntry size {}",
+                currentMsgSize, opaqueEntryList.size(), maxTransferSize, lastOpaqueEntry == null ? 0 : currentEntrySize);
             final double currentMsgSizeSnapshot = currentMsgSize;
 
             messageSizeDistributionSummary.ifPresent(distribution -> distribution.record(currentMsgSizeSnapshot));

@@ -173,6 +173,8 @@ public class CorfuRuntime {
 
     public static final Marker LOG_NOT_IMPORTANT = MarkerFactory.getMarker("NOT_IMPORTANT");
 
+    public static final int MAX_UNCOMPRESSED_WRITE_SIZE = 100 << 20;
+
 
     /**
      * This thread is used by fetchLayout to find a new layout in the system
@@ -193,6 +195,8 @@ public class CorfuRuntime {
     @Getter
     private final Serializers serializers = new Serializers();
 
+
+
     /**
      * A class which holds parameters and settings for the {@link CorfuRuntime}.
      */
@@ -203,7 +207,7 @@ public class CorfuRuntime {
         /*
          * Max uncompressed size for a write request.
          */
-        int maxUncompressedWriteSize = 100 << 20;
+        int maxUncompressedWriteSize = MAX_UNCOMPRESSED_WRITE_SIZE;
 
         /*
          * Max compressed size for a write request.
@@ -430,7 +434,7 @@ public class CorfuRuntime {
         public static class CorfuRuntimeParametersBuilder extends RuntimeParametersBuilder {
 
             //Max uncompressed size for a write request.
-            private int maxUncompressedWriteSize = 100 << 20;
+            private int maxUncompressedWriteSize = MAX_UNCOMPRESSED_WRITE_SIZE;
             //Max compressed size for a write request
             private int maxWriteSize = 25 << 20;
             private int bulkReadSize = 10;
