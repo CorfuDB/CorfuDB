@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure.logreplication.replication.send.logreader;
 
+import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 
 import java.util.UUID;
@@ -12,6 +13,8 @@ import java.util.UUID;
 public abstract class LogEntryReader {
 
     protected long topologyConfigId;
+
+    public LogReplicationContext replicationContext;
 
     /**
      * Read a Log Entry.

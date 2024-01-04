@@ -72,8 +72,6 @@ public abstract class BaseLogEntryReader extends LogEntryReader {
 
     protected LogReplication.LogReplicationSession session;
 
-    protected LogReplicationContext replicationContext;
-
     public BaseLogEntryReader(LogReplication.LogReplicationSession replicationSession,
                               LogReplicationContext replicationContext) {
         CorfuRuntime runtime = replicationContext.getCorfuRuntime();

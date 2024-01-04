@@ -19,7 +19,7 @@ import java.util.UUID;
 import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
 
 /**
- * This class is responsible of managing the transmission of log entries,
+ * This class is responsible for managing the transmission of log entries,
  * i.e, reading and sending incremental updates to a remote cluster.
  * <p>
  * It reads log entries from the datastore through the LogEntryReader, and sends them
@@ -46,12 +46,11 @@ public class LogEntrySender {
 
     private volatile boolean taskActive = false;
 
-    // TODO V2: These values need to be tuned as to not add any unnecessary increase in latency
     // Duration in milliseconds to delay the execution of the next read + send operation.
-    private final long WAIT_RETRY_READ_DEFAULT_MS = 100;
-    private final long WAIT_RETRY_READ_INCREMENT_MS = 50;
-    private final long WAIT_RETRY_READ_MAX_MS = 200;
-    private long waitRetryRead = WAIT_RETRY_READ_DEFAULT_MS;
+    private long waitRetryDefaultMs;
+    private long waitRetryIncrementMs;
+    private long waitRetryMaxMs;
+    private long waitRetryRead;
 
     /**
      * Stop the send for Log Entry Sync
@@ -73,6 +72,13 @@ public class LogEntrySender {
         this.logEntryReader = logEntryReader;
         this.logReplicationFSM = logReplicationFSM;
         this.dataSenderBufferManager = new LogEntrySenderBufferManager(dataSender, logReplicationFSM.getAckReader());
+        waitRetryDefaultMs = logEntryReader.replicationContext.getConfigManager().getServerContext()
+                .getInitialLogEntryReadBackoff();
+        waitRetryIncrementMs = logEntryReader.replicationContext.getConfigManager().getServerContext()
+                .getLogEntryReadBackoffIncrement();
+        waitRetryMaxMs = logEntryReader.replicationContext.getConfigManager().getServerContext()
+                .getLogEntryReadMaxBackoff();
+        waitRetryRead = waitRetryDefaultMs;
     }
 
     /**
@@ -149,13 +155,13 @@ public class LogEntrySender {
         }
 
         if (taskActive) {
-            logReplicationFSM.input(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.LOG_ENTRY_SYNC_CONTINUE,
-                    new LogReplicationEventMetadata(logEntrySyncEventId), logReplicationFSM));
-            waitRetryRead = WAIT_RETRY_READ_DEFAULT_MS;
+            logReplicationFSM.input(new LogReplicationEvent(LogReplicationEventType.LOG_ENTRY_SYNC_CONTINUE,
+                    new LogReplicationEventMetadata(logEntrySyncEventId)));
+            waitRetryRead = waitRetryDefaultMs;
         } else {
-            logReplicationFSM.inputWithDelay(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.LOG_ENTRY_SYNC_CONTINUE,
-                    new LogReplicationEventMetadata(logEntrySyncEventId), logReplicationFSM), waitRetryRead);
-            waitRetryRead = Math.min(waitRetryRead + WAIT_RETRY_READ_INCREMENT_MS, WAIT_RETRY_READ_MAX_MS);
+            logReplicationFSM.inputWithDelay(new LogReplicationEvent(LogReplicationEventType.LOG_ENTRY_SYNC_CONTINUE,
+                    new LogReplicationEventMetadata(logEntrySyncEventId)), waitRetryRead);
+            waitRetryRead = Math.min(waitRetryRead + waitRetryIncrementMs, waitRetryMaxMs);
         }
     }
 

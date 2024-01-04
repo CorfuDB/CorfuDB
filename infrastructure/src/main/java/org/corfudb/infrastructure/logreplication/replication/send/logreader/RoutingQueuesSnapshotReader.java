@@ -1,4 +1,5 @@
 package org.corfudb.infrastructure.logreplication.replication.send.logreader;
+
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.infrastructure.logreplication.replication.send.IllegalSnapshotEntrySizeException;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
@@ -67,10 +68,8 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
 
     // Timeout value for which the reader waits for new data to arrive from the Client.  Once the timeout is
     // exceeded, the current snapshot sync gets cancelled and a new one is started all over again.
-    // TODO: The timeout is currently set to 2 mins.  This can be revisited later to determine a more appropriate
-    //  value.
     @VisibleForTesting
-    public static long dataWaitTimeoutMs = 120000;
+    public static long dataWaitTimeoutMs;
 
     private static long lastDataReceivedEpoch = 0;
 
@@ -141,6 +140,7 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
         String endMarkerTableName = TableRegistry.getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE,
                 SNAP_SYNC_TXN_ENVELOPE_TABLE);
         snapSyncHeaderStreamId = CorfuRuntime.getStreamID(endMarkerTableName);
+        dataWaitTimeoutMs = replicationContext.getConfigManager().getServerContext().getSnapshotReadTimeout();
     }
 
     // Create an opaque stream and iterator for the stream of interest, starting from lastReadTimestamp+1 to the global

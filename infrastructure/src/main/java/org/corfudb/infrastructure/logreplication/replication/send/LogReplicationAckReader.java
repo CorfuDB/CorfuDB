@@ -44,13 +44,9 @@ public class LogReplicationAckReader {
     // be read(calculateRemainingEntriesToSend) and written(setBaseSnapshot) concurrently.
     private long baseSnapshotTimestamp;
 
-    private static final int MAX_ACK_POLLER_THREAD_COUNT = 2;
-
     // Periodic Thread which reads the last acknowledged timestamp and writes it to the metadata table.
     // This thread pool is shared amongst all sessions
-    // TODO V2: tune the thread count
-    private static final ScheduledExecutorService lastAckedTsPoller = Executors.newScheduledThreadPool(MAX_ACK_POLLER_THREAD_COUNT,
-            new ThreadFactoryBuilder().setNameFormat("ack-timestamp-reader-%d").build());
+    private static ScheduledExecutorService lastAckedTsPoller;
 
     private static final Map<LogReplicationSession, ScheduledFuture> sessionToAckPollerFuture = new ConcurrentHashMap<>();
 
@@ -77,6 +73,9 @@ public class LogReplicationAckReader {
         this.runtime = replicationContext.getCorfuRuntime();
         this.session = session;
         this.replicationContext = replicationContext;
+        lastAckedTsPoller = Executors.newScheduledThreadPool(
+                replicationContext.getConfigManager().getServerContext().getAckReaderThreadCount(),
+                new ThreadFactoryBuilder().setNameFormat("ack-timestamp-reader-%d").build());
     }
 
     public void setAckedTsAndSyncType(long ackedTs, SyncType syncType) {

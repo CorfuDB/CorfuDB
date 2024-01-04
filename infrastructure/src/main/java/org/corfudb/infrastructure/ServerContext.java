@@ -322,6 +322,41 @@ public class ServerContext implements AutoCloseable {
         return Integer.parseInt(val);
     }
 
+    public int getReplicationThreadCount() {
+        String val = getServerConfig(String.class, "--replication_threads");
+        return Integer.parseInt(val);
+    }
+
+    public int getRuntimeThreadCount() {
+        String val = getServerConfig(String.class, "--runtime_threads");
+        return Integer.parseInt(val);
+    }
+
+    public int getAckReaderThreadCount() {
+        String val = getServerConfig(String.class, "--ack_reader_threads");
+        return Integer.parseInt(val);
+    }
+
+    public long getInitialLogEntryReadBackoff() {
+        String val = getServerConfig(String.class, "--initial_log_entry_read_backoff_time");
+        return Long.parseLong(val);
+    }
+
+    public long getLogEntryReadBackoffIncrement() {
+        String val = getServerConfig(String.class, "--log_entry_read_backoff_increment");
+        return Long.parseLong(val);
+    }
+
+    public long getLogEntryReadMaxBackoff() {
+        String val = getServerConfig(String.class, "--log_entry_read_max_backoff");
+        return Long.parseLong(val);
+    }
+
+    public long getSnapshotReadTimeout() {
+        String val = getServerConfig(String.class, "--snapshot_read_timeout");
+        return Long.parseLong(val);
+    }
+
     /**
      * Cleanup the DataStore files with names that are prefixes of the specified
      * fileName when so that the number of these files don't exceed the user-defined
