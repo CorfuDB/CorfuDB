@@ -461,14 +461,14 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
             // For Routing Queue replication model, write a dummy entry indicating the end of Snapshot sync
             // TODO: This is a temporary workaround according to the client behavior.  It must be removed in future.
             if (session.getSubscriber().getModel().equals(ROUTING_QUEUES)) {
-                writeDummyEntryToLogEntrySyncQueue();
+                writeLastSnapshotSyncEntry();
             }
         }
     }
 
-    private void writeDummyEntryToLogEntrySyncQueue() {
+    private void writeLastSnapshotSyncEntry() {
         try {
-            // For ROUTING_QUEUES model, write a dummy entry with type LOG_ENTRY_SYNC to indicate
+            // For ROUTING_QUEUES model, write a dummy entry with type LAST_SNAPSHOT_SYNC_ENTRY to indicate
             // subscribers to complete snapshot sync.
             IRetry.build(IntervalRetry.class, () -> {
                 try {
@@ -487,7 +487,7 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
                         Queue.RoutingTableEntryMsg dummyQueueMsg = Queue.RoutingTableEntryMsg.newBuilder()
                                 .setSourceClusterId(session.getSourceClusterId())
                                 .addAllDestinations(Collections.singleton(session.getSinkClusterId()))
-                                .setReplicationType(Queue.ReplicationType.LOG_ENTRY_SYNC).build();
+                                .setReplicationType(Queue.ReplicationType.LAST_SNAPSHOT_SYNC_ENTRY).build();
 
                         CorfuRecord<Queue.RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg> dummyEntry =
                                 new CorfuRecord<>(dummyQueueMsg,

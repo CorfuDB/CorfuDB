@@ -10,18 +10,18 @@ import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.LogReplicationClientException;
-import org.corfudb.runtime.view.CorfuGuid;
+import org.corfudb.runtime.Queue.ReplicationType;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
-import java.util.UUID;
-import java.util.stream.Collectors;
 
 import static org.corfudb.runtime.LogReplicationUtils.REPLICATED_QUEUE_TAG;
+import static org.corfudb.runtime.Queue.ReplicationType.LAST_SNAPSHOT_SYNC_ENTRY;
+import static org.corfudb.runtime.Queue.ReplicationType.LOG_ENTRY_SYNC;
+import static org.corfudb.runtime.Queue.ReplicationType.SNAPSHOT_SYNC;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 // TODO: As the name suggests, this is a simplistic listener which delivers replicated data as received on LR Sink
@@ -39,6 +39,8 @@ public abstract class LiteRoutingQueueListener extends StreamListenerResumeOrFul
     @Getter
     private String clientName;
 
+    private ReplicationType currentReplicationType = LOG_ENTRY_SYNC;
+
     public LiteRoutingQueueListener(CorfuStore corfuStore, String sourceSiteId, String clientName) {
         super(corfuStore, CORFU_SYSTEM_NAMESPACE, REPLICATED_QUEUE_TAG,
                 Arrays.asList(LogReplicationUtils.REPLICATED_RECV_Q_PREFIX + sourceSiteId + "_" + clientName));
@@ -52,7 +54,7 @@ public abstract class LiteRoutingQueueListener extends StreamListenerResumeOrFul
                 try {
                     recvQLcl = corfuStore.getTable(CORFU_SYSTEM_NAMESPACE,
                             LogReplicationUtils.REPLICATED_RECV_Q_PREFIX + sourceSiteId + "_" + clientName);
-                } catch(NoSuchElementException | IllegalArgumentException e) {
+                } catch (NoSuchElementException | IllegalArgumentException e) {
                     recvQLcl = corfuStore.openQueue(CORFU_SYSTEM_NAMESPACE,
                             LogReplicationUtils.REPLICATED_RECV_Q_PREFIX + sourceSiteId + "_" + clientName,
                             Queue.RoutingTableEntryMsg.class,
@@ -72,118 +74,143 @@ public abstract class LiteRoutingQueueListener extends StreamListenerResumeOrFul
 
     @Override
     public void onNext(CorfuStreamEntries results) {
-        log.debug("LRQListener received {} updates at address {}!",
-                results.getEntries().size(), results.getTimestamp());
-        List<CorfuStreamEntry> entries = results.getEntries().entrySet().stream()
-                .map(Map.Entry::getValue).findFirst().get();
+        log.debug("LRQListener received {} updates at address {}!", results.getEntries().size(), results.getTimestamp());
+        List<CorfuStreamEntry> entries = results.getEntries().entrySet().stream().map(Map.Entry::getValue)
+                .findFirst().get();
+
         List<Table.CorfuQueueRecord> allEntries = new ArrayList<>(entries.size());
-        Queue.ReplicationType currentType = Queue.ReplicationType.LAST_FULL_SYNC_ENTRY;
+        List<Queue.RoutingTableEntryMsg> allRQMsgs = new ArrayList<>();
+
+        // Capture the first message in this batch and compute the current replication type.  It will later be used
+        // for validation that all entries in a transaction belong to the same replication type.
+        // For snapshot sync, the first message will be CLEAR so get the next message, if any.
+        // For log entry sync, get the first message.
+        CorfuStreamEntry firstUpdateEntry = null;
+        if (entries.get(0).getOperation() == CorfuStreamEntry.OperationType.CLEAR && entries.size() > 1) {
+            firstUpdateEntry = entries.get(1);
+        } else if (entries.get(0).getOperation() == CorfuStreamEntry.OperationType.UPDATE) {
+            firstUpdateEntry = entries.get(0);
+        }
+
+        if (firstUpdateEntry != null) {
+            Queue.RoutingTableEntryMsg firstMsg = (Queue.RoutingTableEntryMsg) firstUpdateEntry.getPayload();
+            currentReplicationType = firstMsg.getReplicationType();
+        }
+
         for (CorfuStreamEntry entry : entries) {
-            if (!entry.getOperation().equals(CorfuStreamEntry.OperationType.UPDATE)) {
+            // The Source always 'adds' replicated data to the queue.  So ignore all operations where type != UPDATE.
+            // Non-update entries are written by LR (CLEAR) and this listener itself (DELETE after successful
+            // processing).
+            if (entry.getOperation() != CorfuStreamEntry.OperationType.UPDATE) {
                 continue;
             }
             Queue.CorfuGuidMsg key = (Queue.CorfuGuidMsg) entry.getKey();
             Queue.RoutingTableEntryMsg msg = (Queue.RoutingTableEntryMsg) entry.getPayload();
+
+            if (msg.getReplicationType() != currentReplicationType) {
+                throw new LogReplicationClientException("Not expecting mixed event types "+ currentReplicationType +" vs "
+                    + msg.getReplicationType());
+            }
+
+            allRQMsgs.add(msg);
             Queue.CorfuQueueMetadataMsg metadataMsg = (Queue.CorfuQueueMetadataMsg) entry.getMetadata();
             allEntries.add(new Table.CorfuQueueRecord(key, metadataMsg, msg));
-            if (currentType.equals(Queue.ReplicationType.LAST_FULL_SYNC_ENTRY)) {
-                currentType = msg.getReplicationType();
-            } else if (!currentType.equals(msg.getReplicationType())) {
-                throw new LogReplicationClientException("Not expecting mixed event types "+ currentType +" vs "
-                    +msg.getReplicationType());
-            }
         }
         if (allEntries.isEmpty()) {
             return;
         }
-        boolean entriesProcessed;
-        long now = System.currentTimeMillis();
-        long whenQrecordWasCreated = CorfuGuid.getTimestampFromGuid(allEntries.get(0).getRecordId().getInstanceId(), now);
-        if (currentType.equals(Queue.ReplicationType.LOG_ENTRY_SYNC)) {
-            log.info("LRQRecvListener delivering {} LOG_ENTRY updates took {}ms end to end",
-                    allEntries.size(), now - whenQrecordWasCreated);
-            entriesProcessed = processUpdatesInLogEntrySync(allEntries.stream().sorted().map(q ->
-                    (Queue.RoutingTableEntryMsg)q.getEntry()).collect(Collectors.toList()));
-        } else {
-            log.info("LRQRecvListener delivering {} FULLSYNC updates took {}ms end to end",
-                    allEntries.size(), now - whenQrecordWasCreated);
-            entriesProcessed = processUpdatesInSnapshotSync(allEntries.stream().sorted().map(q ->
-                    (Queue.RoutingTableEntryMsg)q.getEntry()).collect(Collectors.toList()));
-        }
+        int numEntriesProcessed;
+        numEntriesProcessed = processBatch(currentReplicationType, allRQMsgs);
 
-        if (entriesProcessed) {
-            try (TxnContext txnContext = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-                List<UUID> noStreamTags = Collections.emptyList();
-                allEntries.forEach(q -> txnContext.logUpdateDelete(recvQ, q.getRecordId(), noStreamTags, corfuStore)
-                );
-                txnContext.commit();
-            }
+        if (numEntriesProcessed == allRQMsgs.size()) {
+            deleteQueueEntries(allEntries);
             log.debug("Deleted {} messages from {}", allEntries.size(), recvQ.getFullyQualifiedTableName());
         }
     }
+
     @Override
     public CorfuStoreMetadata.Timestamp performFullSync() {
-        CorfuStoreMetadata.Timestamp ts = null;
+        CorfuStoreMetadata.Timestamp ts;
         List<Table.CorfuQueueRecord> allMsgs;
+
         try (TxnContext txnContext = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             allMsgs = txnContext.entryList(recvQ);
             ts = txnContext.commit();
         }
 
         List<Queue.RoutingTableEntryMsg> batchOneOfAKind = new ArrayList<>();
-        // TODO: Fix the enum once the receiver sets the type for full sync as well.
-        Queue.ReplicationType currentType = Queue.ReplicationType.LAST_FULL_SYNC_ENTRY;
         int entriesProcessed = 0;
         for (Table.CorfuQueueRecord q : allMsgs) {
             Queue.RoutingTableEntryMsg msg = (Queue.RoutingTableEntryMsg) q.getEntry();
-            if (!msg.getReplicationType().equals(currentType)) {
-                if (currentType.equals(Queue.ReplicationType.LAST_FULL_SYNC_ENTRY)) {
-                    currentType = msg.getReplicationType();
-                    batchOneOfAKind.add(msg);
-                    continue;
+
+            if (msg.getReplicationType() != currentReplicationType) {
+
+                // On startup, currentReplicationType = LOG_ENTRY_SYNC.  So if the queue contains messages from
+                // snapshot sync or snapshot sync end, this method will get invoked with an empty batch.  Add a
+                // check to skip processing in such a case.
+                if (!batchOneOfAKind.isEmpty()) {
+                    log.info("LiteRecvQ::performFullSync delivering {} messages of type {}", batchOneOfAKind.size(),
+                        currentReplicationType);
+                    entriesProcessed += processBatch(currentReplicationType, batchOneOfAKind);
+
+                    // We have encountered a change in type, reset our batch..
+                    batchOneOfAKind = new ArrayList<>();
                 }
-                if (currentType.equals(Queue.ReplicationType.LOG_ENTRY_SYNC)) {
-                    log.info("LiteRecvQ::performFullSync {} LOG_ENTRY messages", batchOneOfAKind.size());
-                    if (processUpdatesInLogEntrySync(batchOneOfAKind)) {
-                        entriesProcessed = entriesProcessed + batchOneOfAKind.size();
-                    }
-                } else {
-                    log.info("LiteRecvQ::performFullSync {} SNAPSHOT messages", batchOneOfAKind.size());
-                    if (processUpdatesInSnapshotSync(batchOneOfAKind)) {
-                        entriesProcessed = entriesProcessed + batchOneOfAKind.size();
-                    }
-                } // else we have encountered a change in type, reset our batch..
-                batchOneOfAKind = new ArrayList<>();
-                currentType = msg.getReplicationType();
-            } // else batch up message of the same kind so we can deliver in a batch
+
+                currentReplicationType = msg.getReplicationType();
+            }
+            // Batch up message of the same kind so we can deliver in a batch
             batchOneOfAKind.add(msg);
         }
+
+        // Process any remaining entries
         if (!batchOneOfAKind.isEmpty()) {
-            if (currentType.equals(Queue.ReplicationType.LOG_ENTRY_SYNC)) {
-                log.info("LiteRecvQ::performFullSync {} LOG_ENTRY messages", batchOneOfAKind.size());
-                if (processUpdatesInLogEntrySync(batchOneOfAKind)) {
-                    entriesProcessed = entriesProcessed + batchOneOfAKind.size();
-                }
-            } else {
-                log.info("LiteRecvQ::performFullSync {} SNAPSHOT messages", batchOneOfAKind.size());
-                if (processUpdatesInSnapshotSync(batchOneOfAKind)) {
-                    entriesProcessed = entriesProcessed + batchOneOfAKind.size();
-                }
-            }
+            entriesProcessed += processBatch(currentReplicationType, batchOneOfAKind);
         }
+
         if (entriesProcessed == allMsgs.size()) {
             log.info("LiteQRecv:performFullSync deleting {} messages", entriesProcessed);
-            try (TxnContext txnContext = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-                allMsgs.forEach(q -> txnContext.delete(recvQ, q.getRecordId()));
-                txnContext.commit();
-            }
+            deleteQueueEntries(allMsgs);
         }
         int finalQSize = recvQ.count();
         log.info("LiteQRecv:performFullSync completed at ts {} final Q size {}", ts, finalQSize);
         return ts;
     }
 
+    private int processBatch(ReplicationType currentReplicationType, List<Queue.RoutingTableEntryMsg> batch) {
+        int entriesProcessed = 0;
+
+        switch (currentReplicationType) {
+            case LOG_ENTRY_SYNC:
+                if (processUpdatesInLogEntrySync(batch)) {
+                    entriesProcessed = batch.size();
+                }
+                break;
+            case SNAPSHOT_SYNC:
+                if (processUpdatesInSnapshotSync(batch)) {
+                    entriesProcessed = batch.size();
+                }
+                break;
+            case LAST_SNAPSHOT_SYNC_ENTRY:
+                onSnapshotSyncComplete();
+                entriesProcessed = batch.size();
+                break;
+            default:
+                throw new IllegalStateException("Unexpected replication type encountered " + currentReplicationType);
+        }
+        return entriesProcessed;
+    }
+
+    private void deleteQueueEntries(List<Table.CorfuQueueRecord> queueEntries) {
+        try (TxnContext txnContext = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+            queueEntries.forEach(q -> txnContext.delete(recvQ, q.getRecordId()));
+            txnContext.commit();
+        }
+    }
+
     protected abstract boolean processUpdatesInSnapshotSync(List<Queue.RoutingTableEntryMsg> updates);
 
     protected abstract boolean processUpdatesInLogEntrySync(List<Queue.RoutingTableEntryMsg> updates);
+
+    protected abstract void onSnapshotSyncComplete();
 }
