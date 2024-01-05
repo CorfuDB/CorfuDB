@@ -3,6 +3,7 @@ package org.corfudb.infrastructure.logreplication.replication.send;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
+import com.google.protobuf.TextFormat;
 import io.micrometer.core.instrument.Tag;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;

@@ -4,6 +4,7 @@ import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.CorfuTestParameters;
 import org.corfudb.common.util.ObservableValue;
+import org.corfudb.infrastructure.logreplication.config.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
@@ -1292,11 +1293,13 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         LogReplicationConfigManager srcConfigManager = new LogReplicationConfigManager(srcTestRuntime, LOCAL_SOURCE_CLUSTER_ID);
         srcConfigManager.generateConfig(Collections.singleton(session), false);
-        LogReplicationContext srcContext = new LogReplicationContext(srcConfigManager, 0, DEFAULT_ENDPOINT, pluginConfig, srcTestRuntime);
+        LogReplicationContext srcContext = new LogReplicationContext(srcConfigManager, 0, DEFAULT_ENDPOINT,
+            pluginConfig, srcTestRuntime);
+
         // This IT requires custom values to be set for the replication config.  Set these values so that the default
         // values are not used
         srcContext.getConfig(session).setMaxNumMsgPerBatch(BATCH_SIZE);
-        srcContext.getConfig(session).setMaxMsgSize(SMALL_MSG_SIZE);
+        srcContext.getConfig(session).setMaxTransferSize(SMALL_MSG_SIZE);
 
         // Source Manager
         LogReplicationSourceManager logReplicationSourceManager = new LogReplicationSourceManager(srcMetadataManager,
