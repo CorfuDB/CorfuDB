@@ -24,9 +24,12 @@ public class ReloadableKeyManager implements X509KeyManager {
 
     private long keysLastModifiedTime;
 
+    private boolean lastReloadSucceeded;
+
     public ReloadableKeyManager(TlsUtils.CertStoreConfig.KeyStoreConfig keyStoreConfig) {
         this.keyStoreConfig = keyStoreConfig;
         this.keysLastModifiedTime = 0;
+        this.lastReloadSucceeded = false;
         reloadKeyStoreWrapper();
     }
 
@@ -77,6 +80,11 @@ public class ReloadableKeyManager implements X509KeyManager {
 
     private void reloadKeyStoreWrapper() {
         try {
+            if (!hasKeysChanged() && lastReloadSucceeded) {
+                log.debug("Key store file hasn't changed since last successful reload at {}. Skip reloading.",
+                        keysLastModifiedTime);
+                return;
+            }
             reloadKeyStore();
         } catch (SSLException e) {
             String message = "Unable to reload key store " + keyStoreConfig.getKeyStoreFile() + ".";
@@ -85,13 +93,9 @@ public class ReloadableKeyManager implements X509KeyManager {
     }
 
     private void reloadKeyStore() throws SSLException {
-        if (!hasKeysChanged()) {
-            log.debug("Key store certs hasn't changed. Skip reloading.");
-            return;
-        }
-
         log.info("Reloading key store from {}", keyStoreConfig.getKeyStoreFile());
 
+        lastReloadSucceeded = false;
         KeyStore keyStore = TlsUtils.openCertStore(keyStoreConfig);
         String keyStorePassword = TlsUtils.getKeyStorePassword(keyStoreConfig.getPasswordFile());
 
@@ -114,6 +118,7 @@ public class ReloadableKeyManager implements X509KeyManager {
         for (KeyManager km : kmf.getKeyManagers()) {
             if (km instanceof X509KeyManager) {
                 keyManager = (X509KeyManager) km;
+                lastReloadSucceeded = true;
                 return;
             }
         }
