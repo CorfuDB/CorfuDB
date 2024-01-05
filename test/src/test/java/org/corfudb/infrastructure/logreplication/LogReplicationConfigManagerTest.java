@@ -134,7 +134,7 @@ public class LogReplicationConfigManagerTest extends AbstractViewTest {
         LogReplication.LogReplicationSession sampleSession = LogReplication.LogReplicationSession.newBuilder()
                 .setSourceClusterId(LOCAL_SOURCE_CLUSTER_ID)
                 .setSinkClusterId(REMOTE_SINK_CLUSTER_ID)
-                .setSubscriber(DefaultClusterConfig.getDefaultSubscriber())
+                .setSubscriber(DefaultClusterConfig.getDefaultFullTableSubscriber())
                 .build();
         configManager.generateConfig(Collections.singleton(sampleSession), true);
         verifyExpectedConfigGenerated((LogReplicationFullTableConfig) configManager.getSessionToConfigMap()
@@ -153,7 +153,7 @@ public class LogReplicationConfigManagerTest extends AbstractViewTest {
         LogReplication.LogReplicationSession sampleSession = LogReplication.LogReplicationSession.newBuilder()
                 .setSourceClusterId(LOCAL_SOURCE_CLUSTER_ID)
                 .setSinkClusterId(REMOTE_SINK_CLUSTER_ID)
-                .setSubscriber(DefaultClusterConfig.getDefaultSubscriber())
+                .setSubscriber(DefaultClusterConfig.getDefaultFullTableSubscriber())
                 .build();
         configManager.generateConfig(Collections.singleton(sampleSession), true);
         verifyExpectedConfigGenerated((LogReplicationFullTableConfig) configManager.getSessionToConfigMap()

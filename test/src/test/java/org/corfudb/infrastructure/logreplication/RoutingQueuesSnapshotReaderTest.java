@@ -54,7 +54,7 @@ public class RoutingQueuesSnapshotReaderTest extends AbstractViewTest {
         lrRuntime = getDefaultRuntime();
         clientRuntime = getNewRuntime(getDefaultNode()).connect();
         corfuStore = new CorfuStore(clientRuntime);
-        session = DefaultClusterConfig.getRoutingQueueSessions().get(0);
+        session = DefaultClusterConfig.getSpecificSession(0,0, "sampleClient", LogReplication.ReplicationModel.ROUTING_QUEUES);
 
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(lrRuntime,
             session.getSourceClusterId());

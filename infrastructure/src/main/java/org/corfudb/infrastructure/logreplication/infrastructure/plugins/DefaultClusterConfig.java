@@ -5,7 +5,6 @@ import com.google.protobuf.Timestamp;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
-import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.ExampleSchemas;
 import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
@@ -21,7 +20,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -35,8 +33,6 @@ import static org.corfudb.runtime.LogReplication.ReplicationModel.FULL_TABLE;
 import static org.corfudb.runtime.LogReplication.ReplicationModel.LOGICAL_GROUPS;
 import static org.corfudb.runtime.LogReplication.ReplicationModel.ROUTING_QUEUES;
 import static org.corfudb.runtime.LogReplicationClient.LR_REGISTRATION_TABLE_NAME;
-import static org.corfudb.runtime.LogReplicationLogicalGroupClient.DEFAULT_LOGICAL_GROUP_CLIENT;
-import static org.corfudb.runtime.RoutingQueueSenderClient.DEFAULT_ROUTING_QUEUE_CLIENT;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 @Slf4j
@@ -156,46 +152,29 @@ public final class DefaultClusterConfig {
                 sessions.add(LogReplicationSession.newBuilder()
                         .setSourceClusterId(sourceClusterId)
                         .setSinkClusterId(sinkClusterId)
-                        .setSubscriber(getDefaultSubscriber())
+                        .setSubscriber(getDefaultFullTableSubscriber())
                         .build());
             }
         }
         return sessions;
     }
 
-    public static LogReplication.ReplicationSubscriber getDefaultSubscriber() {
+    public static LogReplication.ReplicationSubscriber getDefaultFullTableSubscriber() {
         return LogReplication.ReplicationSubscriber.newBuilder()
                 .setClientName(LogReplicationConfigManager.getDEFAULT_CLIENT())
                 .setModel(LogReplication.ReplicationModel.FULL_TABLE)
                 .build();
     }
 
-    public static LogReplication.ReplicationSubscriber getDefaultLogicalGroupSubscriber() {
-        return LogReplication.ReplicationSubscriber.newBuilder()
-                .setClientName(DEFAULT_LOGICAL_GROUP_CLIENT)
-                .setModel(LogReplication.ReplicationModel.LOGICAL_GROUPS)
+    public static LogReplicationSession getSpecificSession(int sourceIdx, int sinkIdx, String clientName, LogReplication.ReplicationModel model) {
+        return LogReplicationSession.newBuilder()
+                .setSourceClusterId(sourceClusterIds.get(sourceIdx))
+                .setSinkClusterId(sinkClusterIds.get(sinkIdx))
+                .setSubscriber(LogReplication.ReplicationSubscriber.newBuilder()
+                        .setClientName(clientName)
+                        .setModel(model)
+                        .build())
                 .build();
-    }
-
-    public static LogReplication.ReplicationSubscriber getDefaultRoutingQueueSubscriber() {
-        return LogReplication.ReplicationSubscriber.newBuilder()
-                .setClientName(DEFAULT_ROUTING_QUEUE_CLIENT)
-                .setModel(LogReplication.ReplicationModel.ROUTING_QUEUES)
-                .build();
-    }
-
-    public static List<LogReplicationSession> getRoutingQueueSessions() {
-        List<LogReplicationSession> sessions = new LinkedList<>();
-        for(String sourceClusterId : sourceClusterIds) {
-            for(String sinkClusterId : sinkClusterIds) {
-                sessions.add(LogReplicationSession.newBuilder()
-                    .setSourceClusterId(sourceClusterId)
-                    .setSinkClusterId(sinkClusterId)
-                    .setSubscriber(getDefaultRoutingQueueSubscriber())
-                    .build());
-            }
-        }
-        return sessions;
     }
 
     public String getDefaultNodeId(String endpoint) {

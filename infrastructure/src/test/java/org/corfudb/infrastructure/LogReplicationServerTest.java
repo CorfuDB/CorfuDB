@@ -30,8 +30,6 @@ import org.junit.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 
-import java.util.HashSet;
-import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
@@ -69,7 +67,7 @@ public class LogReplicationServerTest {
     LogReplicationSession session = LogReplicationSession.newBuilder()
             .setSourceClusterId(sourceClusterId)
             .setSinkClusterId(SINK_CLUSTER_ID)
-            .setSubscriber(DefaultClusterConfig.getDefaultSubscriber())
+            .setSubscriber(DefaultClusterConfig.getDefaultFullTableSubscriber())
             .build();
 
     /**

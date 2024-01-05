@@ -381,7 +381,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
             if (logReplicationEventListener != null) {
                 logReplicationEventListener.stop();
             }
-            sessionManager.stopClientConfigListener();
+            sessionManager.stopClientRegistrationListener();
         }
 
         // If the current cluster is a Source and a leader, start the listeners
@@ -389,8 +389,11 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
             if (logReplicationEventListener == null) {
                 logReplicationEventListener = new LogReplicationEventListener(this, runtime);
             }
+            // The order of starting the below 2 listeners is important, specially so for upgrade scenarios where the
+            // enforce_snapshot_sync event would be added to the event table after the source cluster upgrades.
+            // If the sessions are not created by then, we miss processing the event on the existing subscribers.
+            sessionManager.startClientRegistrationListener();
             logReplicationEventListener.start();
-            sessionManager.startClientConfigListener();
         }
     }
 

@@ -31,13 +31,10 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.METADATA_TABLE_NAME;
-import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.addLegacyTypesToSerializer;
 import static org.corfudb.runtime.LogReplicationUtils.REPLICATION_STATUS_TABLE_NAME;
 
 /**
@@ -60,7 +57,7 @@ public class SessionManager {
 
     private final LogReplicationConfigManager configManager;
 
-    private final LogReplicationClientRegisterListener clientConfigListener;
+    private final LogReplicationClientRegisterListener clientRegistrationListener;
 
     private final Set<LogReplicationSession> incomingSessions = ConcurrentHashMap.newKeySet();
 
@@ -99,7 +96,7 @@ public class SessionManager {
 
         this.configManager = new LogReplicationConfigManager(corfuRuntime, serverContext,
                 topology.getLocalClusterDescriptor().getClusterId());
-        this.clientConfigListener = new LogReplicationClientRegisterListener(this,
+        this.clientRegistrationListener = new LogReplicationClientRegisterListener(this,
                 configManager, corfuStore);
         this.replicationContext = new LogReplicationContext(configManager, topology.getTopologyConfigId(),
                 localCorfuEndpoint, pluginConfig, corfuRuntime);
@@ -135,7 +132,7 @@ public class SessionManager {
             .build();
         this.localCorfuEndpoint = lrNodeLocator.toEndpointUrl();
         this.configManager = new LogReplicationConfigManager(corfuRuntime, topology.getLocalClusterDescriptor().getClusterId());
-        this.clientConfigListener = new LogReplicationClientRegisterListener(this, configManager, corfuStore);
+        this.clientRegistrationListener = new LogReplicationClientRegisterListener(this, configManager, corfuStore);
         this.replicationContext = new LogReplicationContext(configManager, topology.getTopologyConfigId(),
                 localCorfuEndpoint, pluginConfig, corfuRuntime);
         this.metadataManager = new LogReplicationMetadataManager(corfuRuntime, replicationContext);
@@ -147,11 +144,11 @@ public class SessionManager {
     /**
      * Start client config listener from discovery service upon leadership acquired.
      */
-    public void startClientConfigListener() {
-        if (!this.clientConfigListener.listenerStarted()) {
-            this.clientConfigListener.start();
+    public void startClientRegistrationListener() {
+        if (!this.clientRegistrationListener.listenerStarted()) {
+            this.clientRegistrationListener.start();
         } else {
-            log.warn("Client config listener already started on node {}", topology.getLocalNodeDescriptor().getNodeId());
+            log.warn("Client registration listener already started on node {}", topology.getLocalNodeDescriptor().getNodeId());
         }
     }
 
@@ -159,10 +156,10 @@ public class SessionManager {
      * Stop client config listener from discovery service upon leadership lost. Client config listener was running
      * on this node if it was the leader node.
      */
-    public void stopClientConfigListener() {
-        if (this.clientConfigListener.listenerStarted()) {
-            log.debug("Stopping client config listener on node {}", topology.getLocalNodeDescriptor().getNodeId());
-            this.clientConfigListener.stop();
+    public void stopClientRegistrationListener() {
+        if (this.clientRegistrationListener.listenerStarted()) {
+            log.debug("Stopping client registration listener on node {}", topology.getLocalNodeDescriptor().getNodeId());
+            this.clientRegistrationListener.stop();
         }
     }
 
@@ -436,7 +433,7 @@ public class SessionManager {
     public void stopReplication() {
         log.info("Stopping log replication.");
         // Stop config listener if required
-        stopClientConfigListener();
+        stopClientRegistrationListener();
         stopReplication(mergeIncomingOutgoingSessions());
     }
 

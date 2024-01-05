@@ -101,6 +101,7 @@ public class CorfuReplicationMultiSourceSinkIT extends AbstractIT {
     // Listens to replication status updates on a Sink cluster
     private List<ReplicationStatusListener> replicationStatusListeners = new ArrayList<>();
 
+    @Getter
     private ExampleSchemas.ClusterUuidMsg topologyType;
 
     protected void setUp(int numSourceClusters, int numSinkClusters, ExampleSchemas.ClusterUuidMsg topologyType) throws Exception {

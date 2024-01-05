@@ -295,7 +295,7 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
         return LogReplicationSession.newBuilder()
                 .setSinkClusterId(SINK_CLUSTER_ID)
                 .setSourceClusterId(SOURCE_CLUSTER_ID)
-                .setSubscriber(DefaultClusterConfig.getDefaultSubscriber())
+                .setSubscriber(DefaultClusterConfig.getDefaultFullTableSubscriber())
                 .build();
     }
 
