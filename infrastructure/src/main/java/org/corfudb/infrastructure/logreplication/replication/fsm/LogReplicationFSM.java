@@ -22,6 +22,7 @@ import org.corfudb.infrastructure.logreplication.replication.send.logreader.Rout
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.RoutingQueuesSnapshotReader;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.StreamsLogEntryReader;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.StreamsSnapshotReader;
+import org.corfudb.runtime.LogReplicationUtils;
 import org.corfudb.runtime.view.Address;
 
 import java.util.HashMap;
@@ -189,9 +190,6 @@ public class LogReplicationFSM {
     @Getter
     private final LogReplicationSession session;
 
-    //TODO v2: tune thread count;
-    private static final int MAX_REPLICATION_WORKER_THREAD_COUNT = 2;
-
     private final FsmTaskManager fsmTaskManager;
 
 
@@ -215,7 +213,8 @@ public class LogReplicationFSM {
         this.logEntrySender = new LogEntrySender(logEntryReader, dataSender, this);
 
         this.fsmTaskManager = replicationContext.getTaskManager();
-        this.fsmTaskManager.createReplicationTaskManager("replicationFSM", MAX_REPLICATION_WORKER_THREAD_COUNT);
+        this.fsmTaskManager.createReplicationTaskManager("replicationFSM",
+            replicationContext.getConfigManager().getServerContext().getReplicationThreadCount());
 
         init(dataSender, session);
         setTopologyConfigId(replicationContext.getTopologyConfigId());
@@ -243,8 +242,8 @@ public class LogReplicationFSM {
         this.snapshotSender = new SnapshotSender(replicationContext, snapshotReader, dataSender, this);
         this.logEntrySender = new LogEntrySender(logEntryReader, dataSender, this);
         this.fsmTaskManager = replicationContext.getTaskManager();
-        this.fsmTaskManager.createReplicationTaskManager("replicationFSM", MAX_REPLICATION_WORKER_THREAD_COUNT);
-
+        this.fsmTaskManager.createReplicationTaskManager("replicationFSM",
+            LogReplicationUtils.DEFAULT_FSM_THREADS);
         init(dataSender, session);
     }
 

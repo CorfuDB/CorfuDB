@@ -1,4 +1,5 @@
 package org.corfudb.infrastructure.logreplication.replication.send.logreader;
+
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.infrastructure.logreplication.replication.send.IllegalSnapshotEntrySizeException;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
@@ -6,6 +7,7 @@ import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
+import org.corfudb.runtime.LogReplicationUtils;
 import org.corfudb.runtime.Queue;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuStore;
@@ -67,10 +69,8 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
 
     // Timeout value for which the reader waits for new data to arrive from the Client.  Once the timeout is
     // exceeded, the current snapshot sync gets cancelled and a new one is started all over again.
-    // TODO: The timeout is currently set to 2 mins.  This can be revisited later to determine a more appropriate
-    //  value.
     @VisibleForTesting
-    public static long dataWaitTimeoutMs = 120000;
+    public static long dataWaitTimeoutMs;
 
     private static long lastDataReceivedEpoch = 0;
 
@@ -141,6 +141,13 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
         String endMarkerTableName = TableRegistry.getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE,
                 SNAP_SYNC_TXN_ENVELOPE_TABLE);
         snapSyncHeaderStreamId = CorfuRuntime.getStreamID(endMarkerTableName);
+
+        // Unit tests do not create a ServerContext as it creates netty event loop groups.
+        if (replicationContext.getConfigManager().getServerContext() == null) {
+            dataWaitTimeoutMs = LogReplicationUtils.SNAPSHOT_READ_TIMEOUT_MS;
+        } else {
+            dataWaitTimeoutMs = replicationContext.getConfigManager().getServerContext().getSnapshotReadTimeout();
+        }
     }
 
     // Create an opaque stream and iterator for the stream of interest, starting from lastReadTimestamp+1 to the global

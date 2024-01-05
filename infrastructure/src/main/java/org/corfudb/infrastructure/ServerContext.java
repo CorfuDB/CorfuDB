@@ -21,6 +21,7 @@ import org.corfudb.infrastructure.datastore.KvDataStore.KvRecord;
 import org.corfudb.infrastructure.paxos.PaxosDataStore;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
+import org.corfudb.runtime.LogReplicationUtils;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.proto.service.CorfuMessage.PriorityLevel;
 import org.corfudb.runtime.view.ConservativeFailureHandlerPolicy;
@@ -320,6 +321,41 @@ public class ServerContext implements AutoCloseable {
     public int getCorfuServerConnectionPort() {
         String val = getServerConfig(String.class, "--corfu-port-for-lr");
         return Integer.parseInt(val);
+    }
+
+    public int getReplicationThreadCount() {
+        String val = getServerConfig(String.class, "--replication_threads");
+        return val == null ? LogReplicationUtils.DEFAULT_FSM_THREADS : Integer.parseInt(val);
+    }
+
+    public int getRuntimeThreadCount() {
+        String val = getServerConfig(String.class, "--runtime_threads");
+        return val == null ? LogReplicationUtils.DEFAULT_FSM_THREADS : Integer.parseInt(val);
+    }
+
+    public int getAckReaderThreadCount() {
+        String val = getServerConfig(String.class, "--ack_reader_threads");
+        return val == null ? LogReplicationUtils.DEFAULT_FSM_THREADS : Integer.parseInt(val);
+    }
+
+    public long getInitialLogEntryReadBackoff() {
+        String val = getServerConfig(String.class, "--initial_log_entry_read_backoff_time");
+        return val == null ? LogReplicationUtils.DEFAULT_LOG_ENTRY_READ_BACKOFF_TIME_MS : Long.parseLong(val);
+    }
+
+    public long getLogEntryReadBackoffIncrement() {
+        String val = getServerConfig(String.class, "--log_entry_read_backoff_increment");
+        return val == null ? LogReplicationUtils.DEFAULT_LOG_ENTRY_READ_BACKOFF_INCREMENT_MS : Long.parseLong(val);
+    }
+
+    public long getLogEntryReadMaxBackoff() {
+        String val = getServerConfig(String.class, "--log_entry_read_max_backoff");
+        return val == null ? LogReplicationUtils.DEFAULT_LOG_ENTRY_READ_MAX_BACKOFF_MS : Long.parseLong(val);
+    }
+
+    public long getSnapshotReadTimeout() {
+        String val = getServerConfig(String.class, "--snapshot_read_timeout");
+        return val == null ? LogReplicationUtils.SNAPSHOT_READ_TIMEOUT_MS : Long.parseLong(val);
     }
 
     /**

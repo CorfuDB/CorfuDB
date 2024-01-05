@@ -77,8 +77,6 @@ public final class LogReplicationUtils {
 
     public static final String SNAP_SYNC_TXN_ENVELOPE_TABLE = "LRQ_SnapSyncHeader";
 
-    // ---- End RoutingQueue Model constants -------/
-
     public static final UUID lrLogEntrySendQId = CorfuRuntime.getStreamID(TableRegistry
             .getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, LOG_ENTRY_SYNC_QUEUE_NAME_SENDER));
     public static final UUID lrFullSyncSendQId = CorfuRuntime.getStreamID(TableRegistry
@@ -86,6 +84,18 @@ public final class LogReplicationUtils {
 
     public static final UUID lrSnapSyncTxnEnvelopeStreamId = CorfuRuntime.getStreamID(TableRegistry
             .getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, SNAP_SYNC_TXN_ENVELOPE_TABLE));
+
+    public static final long SNAPSHOT_READ_TIMEOUT_MS = 120000;
+
+    // ---- End RoutingQueue Model constants -------/
+
+    public static final int DEFAULT_FSM_THREADS = 2;
+
+    public static final long DEFAULT_LOG_ENTRY_READ_BACKOFF_TIME_MS = 100;
+
+    public static final long DEFAULT_LOG_ENTRY_READ_BACKOFF_INCREMENT_MS = 50;
+
+    public static final long DEFAULT_LOG_ENTRY_READ_MAX_BACKOFF_MS = 200;
 
     public static boolean skipCheckpointFor(UUID streamId) {
         return streamId.equals(lrLogEntrySendQId) || streamId.equals(lrFullSyncSendQId)

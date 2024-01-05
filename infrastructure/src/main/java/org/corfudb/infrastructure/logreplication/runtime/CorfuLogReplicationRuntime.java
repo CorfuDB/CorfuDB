@@ -104,13 +104,7 @@ import java.util.Set;
 @Slf4j
 public class CorfuLogReplicationRuntime {
 
-    // TODO(Anny): add cluster_role_flip event... probably we need a new state called finishing_ongoing_replication...
-    //   and go to stopped...
-
     public static final int DEFAULT_TIMEOUT = 5000;
-
-    //TODO v2: tune thread count;
-    private static final int MAX_REPLICATION_RUNTIME_WORKER_THREAD_COUNT = 2;
 
     /**
      * Current state of the FSM.
@@ -158,7 +152,8 @@ public class CorfuLogReplicationRuntime {
         this.replicationContext = replicationContext;
 
         this.taskManager = replicationContext.getTaskManager();
-        this.taskManager.createRuntimeTaskManager("runtimeFSM", MAX_REPLICATION_RUNTIME_WORKER_THREAD_COUNT);
+        this.taskManager.createRuntimeTaskManager("runtimeFSM",
+            replicationContext.getConfigManager().getServerContext().getRuntimeThreadCount());
 
         initializeStates(metadataManager);
         this.state = states.get(LogReplicationRuntimeStateType.WAITING_FOR_CONNECTIVITY);

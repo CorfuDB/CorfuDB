@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure.logreplication.replication.send;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
@@ -12,6 +13,7 @@ import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.LogReplication.SyncStatus;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.LogReplicationUtils;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.Address;
@@ -44,13 +46,9 @@ public class LogReplicationAckReader {
     // be read(calculateRemainingEntriesToSend) and written(setBaseSnapshot) concurrently.
     private long baseSnapshotTimestamp;
 
-    private static final int MAX_ACK_POLLER_THREAD_COUNT = 2;
-
     // Periodic Thread which reads the last acknowledged timestamp and writes it to the metadata table.
     // This thread pool is shared amongst all sessions
-    // TODO V2: tune the thread count
-    private static final ScheduledExecutorService lastAckedTsPoller = Executors.newScheduledThreadPool(MAX_ACK_POLLER_THREAD_COUNT,
-            new ThreadFactoryBuilder().setNameFormat("ack-timestamp-reader-%d").build());
+    private static ScheduledExecutorService lastAckedTsPoller;
 
     private static final Map<LogReplicationSession, ScheduledFuture> sessionToAckPollerFuture = new ConcurrentHashMap<>();
 
@@ -77,6 +75,16 @@ public class LogReplicationAckReader {
         this.runtime = replicationContext.getCorfuRuntime();
         this.session = session;
         this.replicationContext = replicationContext;
+
+        // Unit tests do not create a ServerContext as it creates netty event loop groups.
+        if (replicationContext.getConfigManager().getServerContext() == null) {
+            lastAckedTsPoller = Executors.newScheduledThreadPool(LogReplicationUtils.DEFAULT_FSM_THREADS,
+                new ThreadFactoryBuilder().setNameFormat("ack-timestamp-reader-%d").build());
+        } else {
+            lastAckedTsPoller = Executors.newScheduledThreadPool(
+                replicationContext.getConfigManager().getServerContext().getAckReaderThreadCount(),
+                new ThreadFactoryBuilder().setNameFormat("ack-timestamp-reader-%d").build());
+        }
     }
 
     public void setAckedTsAndSyncType(long ackedTs, SyncType syncType) {

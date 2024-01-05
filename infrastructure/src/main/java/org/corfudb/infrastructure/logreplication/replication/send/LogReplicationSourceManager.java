@@ -12,7 +12,9 @@ import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationF
 import org.corfudb.infrastructure.logreplication.replication.fsm.ObservableAckMsg;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.DefaultReadProcessor;
+import org.corfudb.infrastructure.logreplication.replication.send.logreader.LogEntryReader;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.ReadProcessor;
+import org.corfudb.infrastructure.logreplication.replication.send.logreader.SnapshotReader;
 import org.corfudb.infrastructure.logreplication.transport.IClientServerRouter;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 
@@ -51,12 +53,6 @@ public class LogReplicationSourceManager {
     public LogReplicationSourceManager(IClientServerRouter router,
                                        LogReplicationMetadataManager metadataManager,
                                        LogReplicationSession session, LogReplicationContext replicationContext) {
-        this(metadataManager, new CorfuDataSender(router, session), session, replicationContext);
-    }
-
-    @VisibleForTesting
-    public LogReplicationSourceManager(LogReplicationMetadataManager metadataManager, DataSender dataSender,
-                                       LogReplicationSession session, LogReplicationContext replicationContext) {
 
         Set<String> streamsToReplicate = replicationContext.getConfig(session).getStreamsToReplicate();
         if (streamsToReplicate == null || streamsToReplicate.isEmpty()) {
@@ -67,8 +63,29 @@ public class LogReplicationSourceManager {
 
         // Ack Reader for Snapshot and LogEntry Sync
         this.ackReader = new LogReplicationAckReader(this.metadataManager, session, replicationContext);
+        DataSender dataSender = new CorfuDataSender(router, session);
 
         this.logReplicationFSM = new LogReplicationFSM(dataSender, ackReader, session, replicationContext);
+        this.ackReader.setLogEntryReader(this.logReplicationFSM.getLogEntryReader());
+        this.ackReader.setLogEntrySender(this.logReplicationFSM.getLogEntrySender());
+    }
+
+    @VisibleForTesting
+    public LogReplicationSourceManager(LogReplicationMetadataManager metadataManager, DataSender dataSender,
+                                       LogReplicationSession session, LogReplicationContext replicationContext,
+                                       LogEntryReader logEntryReader, SnapshotReader snapshotReader) {
+        Set<String> streamsToReplicate = replicationContext.getConfig(session).getStreamsToReplicate();
+        if (streamsToReplicate == null || streamsToReplicate.isEmpty()) {
+            // Avoid FSM being initialized if there are no streams to replicate
+            throw new IllegalArgumentException("Invalid Log Replication: Streams to replicate is EMPTY");
+        }
+        this.metadataManager = metadataManager;
+
+        // Ack Reader for Snapshot and LogEntry Sync
+        this.ackReader = new LogReplicationAckReader(this.metadataManager, session, replicationContext);
+
+        this.logReplicationFSM = new LogReplicationFSM(snapshotReader, dataSender, logEntryReader, ackReader, session,
+            replicationContext);
         this.ackReader.setLogEntryReader(this.logReplicationFSM.getLogEntryReader());
         this.ackReader.setLogEntrySender(this.logReplicationFSM.getLogEntrySender());
     }
