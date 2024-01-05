@@ -70,8 +70,6 @@ public class SnapshotSender {
     // This flag will indicate the start of a snapshot sync, so start snapshot marker is sent once.
     private boolean startSnapshotSync = true;
 
-    private boolean completed = false;
-
     @Getter
     @VisibleForTesting
     // For testing purposes, used to count the number of messages sent in order to interrupt snapshot sync
@@ -108,14 +106,6 @@ public class SnapshotSender {
      * @param snapshotSyncEventId identifier of the event that initiated the snapshot sync
      */
     public void transmit(UUID snapshotSyncEventId, boolean forcedSnapshotSync) {
-        if (snapshotCompleted) {
-            // Since FSM is a perpetually running machine, InSnapshotSync.onEntry() is called even when an incoming
-            // event is ignored for any reason.
-            // This translates to transmit() being called even if the data has been successfully transferred. So we check
-            // the flag and return immediately to avoid sending any un-required data
-            log.info("The snapshot sync data for {} has already been sent to remote.", snapshotSyncEventId);
-            return;
-        }
 
         boolean cancel = false;     // Flag indicating snapshot sync needs to be canceled
         int messagesSent = 0;       // Limit the number of messages to maxNumSnapshotMsgPerBatch. The reason we need to limit
@@ -130,7 +120,7 @@ public class SnapshotSender {
             dataSenderBufferManager.resend();
 
             while (messagesSent < maxNumSnapshotMsgPerBatch && !dataSenderBufferManager.getPendingMessages().isFull() &&
-                    !snapshotCompleted && !stopSnapshotSync.get()) {
+                !snapshotCompleted && !stopSnapshotSync.get()) {
 
                 log.info("Running snapshot sync for {} on baseSnapshot {}", snapshotSyncEventId,
                         baseSnapshotTimestamp);
@@ -147,14 +137,14 @@ public class SnapshotSender {
                     cancel = true;
                     break;
                 } catch (ReplicationReaderException e) {
-                   if (e.getCause() instanceof TimeoutException &&
-                       fsm.getSession().getSubscriber().getModel() == LogReplication.ReplicationModel.ROUTING_QUEUES) {
-                       log.info("Snapshot sync timed out waiting for data.  Will request a new snapshot sync");
-                       snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.UNKNOWN, true, forcedSnapshotSync);
-                   } else {
-                       log.error("Replication Reader Exception thrown from an unkown path", e);
-                       snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.UNKNOWN, false, forcedSnapshotSync);
-                   }
+                    if (e.getCause() instanceof TimeoutException &&
+                        fsm.getSession().getSubscriber().getModel() == LogReplication.ReplicationModel.ROUTING_QUEUES) {
+                        log.info("Snapshot sync timed out waiting for data.  Will request a new snapshot sync");
+                        snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.UNKNOWN, true, forcedSnapshotSync);
+                    } else {
+                        log.error("Replication Reader Exception thrown from an unkown path", e);
+                        snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.UNKNOWN, false, forcedSnapshotSync);
+                    }
                     cancel = true;
                     break;
                 } catch (Exception e) {
@@ -170,33 +160,12 @@ public class SnapshotSender {
                 observedCounter.setValue(messagesSent);
             }
 
-            if (snapshotCompleted) {
-                // Block until ACK from last sent message is received
-                try {
-                    // TODO V2: the fix to retry for the last msg incase of ack timeout is present in
-                    //  "routing-q-bidirectional" branch
-                    LogReplicationEntryMsg ack = snapshotSyncAck.get(DEFAULT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
-                    if (ack.getMetadata().getSnapshotTimestamp() == baseSnapshotTimestamp &&
-                            ack.getMetadata().getEntryType().equals(LogReplicationEntryType.SNAPSHOT_TRANSFER_COMPLETE)) {
-                        // Snapshot Sync Transfer Completed
-                        log.info("Snapshot sync transfer completed for {} on timestamp={}, ack={}", snapshotSyncEventId,
-                                baseSnapshotTimestamp, TextFormat.shortDebugString(ack.getMetadata()));
-                        snapshotSyncTransferComplete(snapshotSyncEventId);
-                    } else {
-                        log.warn("Expected ack for {}, but received for a different snapshot {}", baseSnapshotTimestamp,
-                                ack.getMetadata());
-                        throw new Exception("Wrong base snapshot ack");
-                    }
-                } catch (Exception e) {
-                    log.error("Exception caught while blocking on snapshot sync {}, ack for {}",
-                            snapshotSyncEventId, baseSnapshotTimestamp, e);
-                    if (snapshotSyncAck.isCompletedExceptionally()) {
-                        log.error("Snapshot Sync completed exceptionally", e);
-                    }
-                    snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.UNKNOWN, false, forcedSnapshotSync);
-                } finally {
-                    snapshotSyncAck = null;
-                }
+            if (snapshotCompleted && dataSenderBufferManager.pendingMessages.isEmpty()) {
+                // Snapshot Sync Transfer Completed
+                log.info("Snapshot sync transfer completed for {} on timestamp={}", snapshotSyncEventId,
+                    baseSnapshotTimestamp);
+                snapshotSyncTransferComplete(snapshotSyncEventId);
+                snapshotCompleted = false;
             } else if (!cancel && !stopSnapshotSync.get()) {
                 // Maximum number of batch messages sent. This snapshot sync needs to continue.
 
@@ -205,7 +174,7 @@ public class SnapshotSender {
                 // a round robin fashion.
                 log.trace("Snapshot sync continue for {} on timestamp {}", snapshotSyncEventId, baseSnapshotTimestamp);
                 fsm.input(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_CONTINUE,
-                        new LogReplicationEventMetadata(snapshotSyncEventId)));
+                    new LogReplicationEventMetadata(snapshotSyncEventId)));
             }
         } else {
             log.info("Snapshot sync completed for {} as there is no data in the log.", snapshotSyncEventId);
