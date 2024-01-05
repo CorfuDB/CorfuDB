@@ -131,7 +131,7 @@ public class InSnapshotSyncState implements LogReplicationState {
                     if (event.getMetadata().isTimeoutException()) {
                         requestSnapshotSyncDataForRoutingQModel();
                     }
-                    fsm.getAckReader().markSnapshotSyncInfoOngoing(forcedSnapshotSync, transitionEventId);
+                    fsm.getAckReader().markSnapshotSyncInfoOngoing(forcedSnapshotSync, transitionSyncId);
                     return inSnapshotSyncState;
                 }
 
@@ -167,7 +167,7 @@ public class InSnapshotSyncState implements LogReplicationState {
                 fsm.getAckReader().setSyncType(SyncType.SNAPSHOT);
                 snapshotSender.reset();
                 requestSnapshotSyncDataForRoutingQModel();
-                fsm.getAckReader().markSnapshotSyncInfoOngoing(forcedSnapshotSync, transitionEventId);
+                fsm.getAckReader().markSnapshotSyncInfoOngoing(forcedSnapshotSync, transitionSyncId);
                 snapshotSyncTransferTimerSample = MeterRegistryProvider.getInstance().map(Timer::start);
             }
             transmitFuture = fsm.getLogReplicationFSMWorkers()
@@ -179,7 +179,8 @@ public class InSnapshotSyncState implements LogReplicationState {
 
     private void requestSnapshotSyncDataForRoutingQModel() {
         if (fsm.getSession().getSubscriber().getModel() == LogReplication.ReplicationModel.ROUTING_QUEUES) {
-            snapshotSender.requestClientForSnapshotData(transitionEventId);
+            // TODO v2: Evaluate if a new sync id should be generated here
+            snapshotSender.requestClientForSnapshotData(transitionSyncId);
         }
     }
 

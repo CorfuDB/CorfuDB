@@ -1,4 +1,5 @@
 package org.corfudb.infrastructure.logreplication.replication.send.logreader;
+
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.infrastructure.logreplication.replication.send.IllegalSnapshotEntrySizeException;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
@@ -54,6 +55,8 @@ import io.netty.buffer.Unpooled;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+
+
 /**
  * Snapshot reader implementation for Routing Queues Replication Model.
  */
@@ -326,7 +329,7 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
         log.info("Enter next of Snapshot reader");
 
         try {
-            while (currentMsgSize < maxDataSizePerMsg) {
+            while (currentMsgSize < maxTransferSize) {
                 if (lastEntry != null) {
 
                     // Maximum 2 tables entries should be found - Snapshot Sync Routing Queue and Start/End Marker table
@@ -350,14 +353,14 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
                                 log.error("The current entry size {} is bigger than the maxDataSizePerMsg {} supported",
                                         currentEntrySize, DEFAULT_MAX_DATA_MSG_SIZE);
                                 throw new IllegalSnapshotEntrySizeException(" The snapshot entry is bigger than the system supported");
-                            } else if (currentEntrySize > maxDataSizePerMsg) {
+                            } else if (currentEntrySize > maxTransferSize) {
                                 observeBiggerMsg.setValue(observeBiggerMsg.getValue() + 1);
                                 log.warn("The current entry size {} is bigger than the configured maxDataSizePerMsg {}",
-                                        currentEntrySize, maxDataSizePerMsg);
+                                        currentEntrySize, maxTransferSize);
                             }
 
                             // Skip append this entry in this message. Will process it first at the next round.
-                            if (currentEntrySize + currentMsgSize > maxDataSizePerMsg && currentMsgSize != 0) {
+                            if (currentEntrySize + currentMsgSize > maxTransferSize && currentMsgSize != 0) {
                                 break;
                             }
 
@@ -383,7 +386,7 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
             throw e;
         }
 
-        log.info("CurrentMsgSize {}  maxDataSizePerMsg {}", currentMsgSize, maxDataSizePerMsg);
+        log.info("CurrentMsgSize {}  maxDataSizePerMsg {}", currentMsgSize, maxTransferSize);
         return new SMREntryList(currentMsgSize, smrList);
     }
 
@@ -405,7 +408,7 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
                 ", lastReadTimestamp=" + lastReadTimestamp +
                 ", replicatedQueueId=" + replicatedQueueId +
                 ", endMarkerStreamId=" + snapSyncHeaderStreamId +
-                ", maxDataSizePerMsg=" + maxDataSizePerMsg +
+                ", maxDataSizePerMsg=" + maxTransferSize +
                 ", rt=" + rt +
                 ", snapshotTimestamp=" + snapshotTimestamp +
                 ", streams=" + streams +
