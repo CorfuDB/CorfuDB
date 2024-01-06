@@ -148,7 +148,7 @@ public class SnapshotSender {
                     cancel = true;
                     break;
                 } catch (Exception e) {
-                    log.error("Caught exception during snapshot sync", e);
+                    log.error("Caught exception during snapshot sync {}", e);
                     snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.UNKNOWN, false, forcedSnapshotSync);
                     cancel = true;
                     break;
@@ -165,7 +165,6 @@ public class SnapshotSender {
                 log.info("Snapshot sync transfer completed for {} on timestamp={}", snapshotSyncEventId,
                     baseSnapshotTimestamp);
                 snapshotSyncTransferComplete(snapshotSyncEventId);
-                snapshotCompleted = false;
             } else if (!cancel && !stopSnapshotSync.get()) {
                 // Maximum number of batch messages sent. This snapshot sync needs to continue.
 
