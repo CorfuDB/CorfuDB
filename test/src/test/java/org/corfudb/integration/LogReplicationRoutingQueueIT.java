@@ -47,6 +47,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager.TP_SINGLE_SOURCE_SINK_ROUTING_QUEUE;
 import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.REPLICATION_EVENT_TABLE_NAME;
 import static org.corfudb.runtime.LogReplication.ReplicationEvent.ReplicationEventType.SERVER_REQUESTED_SNAPSHOT_SYNC;
 import static org.corfudb.runtime.LogReplicationUtils.LOG_ENTRY_SYNC_QUEUE_NAME_SENDER;
@@ -95,7 +96,7 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
      */
     @Test
     public void testRoutingQueueReplication() throws Exception {
-        setUp(DefaultClusterManager.TP_SINGLE_SOURCE_SINK_ROUTING_QUEUE);
+        setUp(TP_SINGLE_SOURCE_SINK_ROUTING_QUEUE);
         // Create the Routing Queue Sender client and subscribe a listener to get snapshot sync requests.
         CorfuRuntime clientRuntime = getClientRuntime();
         CorfuStore clientCorfuStore = new CorfuStore(clientRuntime);
@@ -145,7 +146,7 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
      */
     @Test
     public void testRoutingQueueFullSyncs() throws Exception {
-        setUp(DefaultClusterManager.TP_SINGLE_SOURCE_SINK_ROUTING_QUEUE);
+        setUp(TP_SINGLE_SOURCE_SINK_ROUTING_QUEUE);
         // Create the Routing Queue Sender client and subscribe a listener to get snapshot sync requests.
         CorfuRuntime clientRuntime = getClientRuntime();
         CorfuStore clientCorfuStore = new CorfuStore(clientRuntime);
@@ -211,7 +212,7 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
      */
     @Test
     public void testRoutingQueue2way() throws Exception {
-        setUp(DefaultClusterManager.TP_SINGLE_SOURCE_SINK_ROUTING_QUEUE);
+        setUp(TP_SINGLE_SOURCE_SINK_ROUTING_QUEUE);
         // Create the Routing Queue Sender client and subscribe a listener to get snapshot sync requests.
         CorfuRuntime clientRuntime = getClientRuntime();
         CorfuStore clientCorfuStore = new CorfuStore(clientRuntime);
@@ -273,7 +274,7 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
      */
     @Test
     public void testSnapshotSyncCancel() throws Exception {
-        setUp(DefaultClusterManager.TP_SINGLE_SOURCE_SINK_ROUTING_QUEUE);
+        setUp(TP_SINGLE_SOURCE_SINK_ROUTING_QUEUE);
         // Create the Routing Queue Sender client and subscribe a listener to get snapshot sync requests.
         CorfuRuntime clientRuntime = getClientRuntime();
         CorfuStore clientCorfuStore = new CorfuStore(clientRuntime);
@@ -432,7 +433,7 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
      */
     @Test
     public void testRoutingQueueReplicationWithScopedTxn() throws Exception {
-        setUp(DefaultClusterManager.TP_SINGLE_SOURCE_SINK_ROUTING_QUEUE);
+        setUp(TP_SINGLE_SOURCE_SINK_ROUTING_QUEUE);
         // Create the Routing Queue Sender client and subscribe a listener to get snapshot sync requests.
         CorfuRuntime clientRuntime = getClientRuntime();
         CorfuStore clientCorfuStore = new CorfuStore(clientRuntime);
