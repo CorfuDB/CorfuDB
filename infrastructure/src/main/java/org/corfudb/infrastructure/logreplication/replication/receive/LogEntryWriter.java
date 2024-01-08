@@ -3,12 +3,10 @@ package org.corfudb.infrastructure.logreplication.replication.receive;
 import com.google.protobuf.TextFormat;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.logreplication.config.LogReplicationRoutingQueueConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.service.CorfuProtocolLogReplication;
-import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMetadataMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
@@ -22,7 +20,6 @@ import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.Re
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import javax.annotation.concurrent.NotThreadSafe;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -46,11 +43,6 @@ public class LogEntryWriter extends SinkWriter {
 
     private final LogReplicationMetadataManager metadataManager;
 
-    // For routing queue replication model, the stream id and tag of the incoming replicated queue
-    private final UUID replicatedRoutingQueueStreamId;
-
-    private final UUID replicatedRoutingQueueStreamTag;
-
     public LogEntryWriter(LogReplicationMetadataManager metadataManager,
                           LogReplicationSession session, LogReplicationContext replicationContext) {
         super(session, replicationContext);
@@ -61,17 +53,6 @@ public class LogEntryWriter extends SinkWriter {
         this.lastMsgTs = metadata.getLastLogEntryBatchProcessed();
         this.metadataManager = metadataManager;
         this.session = session;
-
-        if (session.getSubscriber().getModel() == LogReplication.ReplicationModel.ROUTING_QUEUES) {
-            String replicatedQueueName = ((LogReplicationRoutingQueueConfig) replicationContext.getConfig(session))
-                    .getSinkQueueName();
-            replicatedRoutingQueueStreamId = CorfuRuntime.getStreamID(replicatedQueueName);
-            replicatedRoutingQueueStreamTag = ((LogReplicationRoutingQueueConfig) replicationContext.getConfig(session))
-                    .getSinkQueueStreamTag();
-        } else {
-            replicatedRoutingQueueStreamId = null;
-            replicatedRoutingQueueStreamTag = null;
-        }
     }
 
     /**
@@ -174,13 +155,12 @@ public class LogEntryWriter extends SinkWriter {
                                 }
                             }
 
-                            for (SMREntry smrEntry : smrEntries) {
-                                // If stream tags exist for the current stream, it means it's intended for streaming
-                                // on the Sink (receiver)
-                                if (session.getSubscriber().getModel().equals(LogReplication.ReplicationModel.ROUTING_QUEUES)) {
-                                    txnContext.logUpdate(replicatedRoutingQueueStreamId, smrEntry, Collections.singletonList(
-                                            replicatedRoutingQueueStreamTag));
-                                } else {
+                            if (session.getSubscriber().getModel().equals(LogReplication.ReplicationModel.ROUTING_QUEUES)) {
+                                createAndWriteQueueRecord(txnContext, smrEntries, metadataManager.getCorfuStore());
+                            } else {
+                                for (SMREntry smrEntry : smrEntries) {
+                                    // If stream tags exist for the current stream, it means it's intended for streaming
+                                    // on the Sink (receiver)
                                     txnContext.logUpdate(streamId, smrEntry,
                                             replicationContext.getConfig(session).getDataStreamToTagsMap().get(streamId));
                                 }

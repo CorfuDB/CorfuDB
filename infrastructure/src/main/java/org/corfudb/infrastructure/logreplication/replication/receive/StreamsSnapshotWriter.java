@@ -19,7 +19,6 @@ import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMetadataMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
-import org.corfudb.runtime.LogReplicationUtils;
 import org.corfudb.runtime.Queue;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.TxnContext;
@@ -27,7 +26,6 @@ import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.StreamOptions;
-import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.runtime.view.stream.OpaqueStream;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalRetry;
@@ -51,7 +49,6 @@ import static org.corfudb.infrastructure.logreplication.config.LogReplicationCon
 import static org.corfudb.infrastructure.logreplication.config.LogReplicationConfig.REGISTRY_TABLE_ID;
 import static org.corfudb.infrastructure.logreplication.config.LogReplicationConfig.PROTOBUF_TABLE_ID;
 import static org.corfudb.runtime.LogReplication.ReplicationModel.ROUTING_QUEUES;
-import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 /**
  * This class represents the entity responsible for writing streams' snapshots into the sink cluster DB.
@@ -94,8 +91,6 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
     @Getter
     private Phase phase;
 
-    private final UUID replicatedRoutingQueueTag;
-
     public StreamsSnapshotWriter(CorfuRuntime rt, LogReplicationMetadataManager metadataManager,
                                  LogReplicationSession session, LogReplicationContext replicationContext) {
         super(session, replicationContext);
@@ -103,13 +98,6 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
         this.metadataManager = metadataManager;
         this.phase = Phase.TRANSFER_PHASE;
         this.snapshotSyncStartMarker = Optional.empty();
-
-        if (session.getSubscriber().getModel() == ROUTING_QUEUES) {
-            replicatedRoutingQueueTag = TableRegistry.getStreamIdForStreamTag(CORFU_SYSTEM_NAMESPACE,
-                LogReplicationUtils.REPLICATED_QUEUE_TAG);
-        } else {
-            replicatedRoutingQueueTag = null;
-        }
 
         // Serialize the clear entry once to access its constant size on each subsequent use
         serializeClearEntry();
@@ -212,11 +200,18 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
         metadataManager.updateReplicationMetadataField(txnContext, session, ReplicationMetadata.TOPOLOGYCONFIGID_FIELD_NUMBER, topologyConfigId);
         metadataManager.updateReplicationMetadataField(txnContext, session, ReplicationMetadata.LASTSNAPSHOTSTARTED_FIELD_NUMBER, srcGlobalSnapshot);
 
-        for (SMREntry smrEntry : smrEntries) {
-            if (session.getSubscriber().getModel().equals(ROUTING_QUEUES)) {
-                txnContext.logUpdate(streamId, smrEntry, Collections.singletonList(replicatedRoutingQueueTag));
-            } else {
-                txnContext.logUpdate(streamId, smrEntry, replicationContext.getConfig(session).getDataStreamToTagsMap().get(streamId));
+        // Since the routing queue model requires the data to maintain the "write" order on the SINK, create a new
+        // queue entry to embed the sequence number used by the SINK.
+        // Transfer phase was chosen to retain the simplicity of the code.
+        if (session.getSubscriber().getModel().equals(ROUTING_QUEUES) && phase.equals(Phase.TRANSFER_PHASE)) {
+            createAndWriteQueueRecord(txnContext, smrEntries, metadataManager.getCorfuStore());
+        } else {
+            for (SMREntry smrEntry : smrEntries) {
+                if (session.getSubscriber().getModel().equals(ROUTING_QUEUES)) {
+                    txnContext.logUpdate(streamId, smrEntry, Collections.singletonList(replicatedRoutingQueueTag));
+                } else {
+                    txnContext.logUpdate(streamId, smrEntry, replicationContext.getConfig(session).getDataStreamToTagsMap().get(streamId));
+                }
             }
         }
     }

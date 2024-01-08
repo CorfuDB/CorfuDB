@@ -103,9 +103,6 @@ public class SnapshotSender {
      */
     public void transmit(UUID snapshotSyncEventId) {
 
-        log.info("Running snapshot sync for {} on baseSnapshot {}", snapshotSyncEventId,
-                baseSnapshotTimestamp);
-
         boolean cancel = false;     // Flag indicating snapshot sync needs to be canceled
         int messagesSent = 0;       // Limit the number of messages to maxNumSnapshotMsgPerBatch. The reason we need to limit
         // is because by design several state machines can share the same thread pool,
@@ -120,6 +117,9 @@ public class SnapshotSender {
 
             while (messagesSent < maxNumSnapshotMsgPerBatch && !dataSenderBufferManager.getPendingMessages().isFull() &&
                     !completed && !stopSnapshotSync.get()) {
+
+                log.info("Running snapshot sync for {} on baseSnapshot {}", snapshotSyncEventId,
+                        baseSnapshotTimestamp);
 
                 try {
                     snapshotReadMessage = snapshotReader.read(snapshotSyncEventId);
