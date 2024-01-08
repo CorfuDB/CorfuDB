@@ -149,7 +149,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
     @Test
     public void testLogReplicationFSMTransitions() throws Exception {
 
-        initLogReplicationFSM(ReaderImplementation.STREAMS, false);
+        initLogReplicationFSM(ReaderImplementation.EMPTY, false);
 
         // Initial state: Initialized
         LogReplicationState initState = fsm.getState();
@@ -162,32 +162,27 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
 
         // Transition #2: Log Entry Sync Start
         transition(LogReplicationEventType.LOG_ENTRY_SYNC_REQUEST, LogReplicationStateType.IN_LOG_ENTRY_SYNC);
-        log.info("Verified 1");
 
         // Transition #3: Snapshot Sync Request
-        UUID snapshotSyncId = transition(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST, LogReplicationStateType.IN_LOG_ENTRY_SYNC, true);
-        log.info("Verified 2");
+        UUID snapshotSyncId = transition(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST, LogReplicationStateType.IN_SNAPSHOT_SYNC, true);
 
         // Transition #4: Snapshot Sync Continue
-        /*transition(LogReplicationEventType.SNAPSHOT_SYNC_CONTINUE, LogReplicationStateType.IN_SNAPSHOT_SYNC, snapshotSyncId, true);
-        log.info("Verified 3");
+        transition(LogReplicationEventType.SNAPSHOT_SYNC_CONTINUE, LogReplicationStateType.IN_SNAPSHOT_SYNC, snapshotSyncId, true);
 
         // Transition #5: Snapshot Sync Transfer Complete
         transition(LogReplicationEventType.SNAPSHOT_TRANSFER_COMPLETE, LogReplicationStateType.WAIT_SNAPSHOT_APPLY, snapshotSyncId, true);
-        log.info("Verified 4");
 
         // Transition #6: Snapshot Sync Apply still in progress
-        transition(LogReplicationEventType.SNAPSHOT_APPLY_IN_PROGRESS, LogReplicationStateType.WAIT_SNAPSHOT_APPLY, true);
-        log.info("Verified 5");
+        transition(LogReplicationEventType.SNAPSHOT_APPLY_IN_PROGRESS, LogReplicationStateType.WAIT_SNAPSHOT_APPLY,
+            snapshotSyncId, true);
 
         // Transition #7: Snapshot Sync Apply Complete
         transition(LogReplicationEventType.SNAPSHOT_APPLY_COMPLETE, LogReplicationStateType.IN_LOG_ENTRY_SYNC, snapshotSyncId, true);
-        log.info("Verified 6");
 
         // Transition #8: Stop Replication
         // Next transition might not be to INITIALIZED, as IN_LOG_ENTRY_SYNC state might have enqueued
         // a continuation before the stop is enqueued.
-        transition(LogReplicationEventType.REPLICATION_STOP, LogReplicationStateType.INITIALIZED, true);*/
+        transition(LogReplicationEventType.REPLICATION_STOP, LogReplicationStateType.INITIALIZED, true);
     }
 
     /**
@@ -1036,7 +1031,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         // Wait until the expected state
         while (waitUntilExpected) {
             if (fsm.getState().getType() == expectedState) {
-                return event.getEventId();
+                return event.getMetadata().getSyncId();
             } else {
                 transitionAvailable.acquire();
             }
