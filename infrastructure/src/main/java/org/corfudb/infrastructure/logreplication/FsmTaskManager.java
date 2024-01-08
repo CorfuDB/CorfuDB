@@ -2,6 +2,7 @@ package org.corfudb.infrastructure.logreplication;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.replication.fsm.IllegalTransitionException;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent;
@@ -16,13 +17,17 @@ import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRunti
 import org.corfudb.infrastructure.logreplication.runtime.fsm.sink.LogReplicationSinkEvent;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.sink.RemoteSourceLeadershipManager;
 
+import java.util.Collections;
 import java.util.LinkedList;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * This class manages the tasks submitted by the runtime FSM, the replication FSM and for the sink tasks when SINK is
@@ -41,13 +46,27 @@ public class FsmTaskManager {
     private ScheduledExecutorService replicationWorker = null;
     private ScheduledExecutorService sinkTaskWorker = null;
 
-    // Session -> list of runtime event IDs. This data structure is used to maintain the order of events processed for a given session.
+    // This data structure is used to maintain the order of events processed for a given session.
+    //
+    // The key is a sessionName instead of the session because protobuf's hashcode is not consistent. If a same session is
+    // stopped and started, the hashcode may change. Since we synchronize within a session to guarantee the order of
+    // events being processed, the inconsistency of the hashcode can block a thread for ever causing the fsm to freeze.
     private final Map<String, LinkedList<UUID>> sessionToRuntimeEventIdMap = new ConcurrentHashMap<>();
 
-    // Session -> ReplicationEventOrderManager. This data structure is used to maintain the order of events processed for a given session.
-    private final Map<String, ReplicationEventOrderManager> sessionToReplicationEventOrderManager = new ConcurrentHashMap<>();
+    //This data structure is used to maintain the order of events processed for a given session.
+    // In order for the replication event processing method to look similar to that of runtime's processing method, the
+    // value of this data structure is a list containing only 1 object per session.
+    //
+    // The key is a sessionName instead of the session because protobuf's hashcode is not consistent. If a same session is
+    // stopped and started, the hashcode may change. Since we synchronize within a session to guarantee the order of
+    // events being processed, the inconsistency of the hashcode can block a thread for ever causing the fsm to freeze.
+    private final Map<String, List<ReplicationEventOrderManager>> sessionToReplicationEventOrderManager = new ConcurrentHashMap<>();
 
-    // Session -> list of sink event IDs. This data structure is used to maintain the order of events processed for a given session.
+    // SessionName -> list of sink event IDs. This data structure is used to maintain the order of events processed for a given session.
+    //
+    // The key is a sessionName instead of the session because protobuf's hashcode is not consistent. If a same session is
+    // stopped and started, the hashcode may change. Since we synchronize within a session to guarantee the order of
+    // events being processed, the inconsistency of the hashcode can block a thread for ever causing the fsm to freeze.
     private final Map<String, LinkedList<UUID>> sessionToSinkEventIdMap = new ConcurrentHashMap<>();
 
 
@@ -98,8 +117,8 @@ public class FsmTaskManager {
             });
         } else if (fsmType.equals(FsmEventType.LogReplicationEvent)){
             String sessionName = ((LogReplicationFSM) fsm).getSessionName();
-            sessionToReplicationEventOrderManager.putIfAbsent(sessionName, new ReplicationEventOrderManager());
-            sessionToReplicationEventOrderManager.get(sessionName).addEvent(((LogReplicationEvent) event).getEventId(), delay);
+            sessionToReplicationEventOrderManager.putIfAbsent(sessionName, Collections.singletonList(new ReplicationEventOrderManager()));
+            sessionToReplicationEventOrderManager.get(sessionName).get(0).addEvent(((LogReplicationEvent) event).getEventId(), delay);
         } else if (fsmType.equals(FsmEventType.LogReplicationSinkEvent)){
             String sessionName = ((RemoteSourceLeadershipManager) fsm).getSessionName();
             sessionToSinkEventIdMap.putIfAbsent(sessionName, new LinkedList<>());
@@ -176,10 +195,10 @@ public class FsmTaskManager {
         String sessionName = fsm.getSessionName();
         // for a given session, the fsm events should be processed in the order they are queued. This snippets ensures
         // that in the event of 2 threads contending for the monitor, only the task submitted first would be processed.
-        synchronized (fsm) {
-            while (sessionToReplicationEventOrderManager.get(sessionName).cannotProcessEvent(currEvent.getEventId())) {
+        synchronized (sessionToReplicationEventOrderManager.get(sessionName)) {
+            while (sessionToReplicationEventOrderManager.get(sessionName).get(0).cannotProcessEvent(currEvent.getEventId())) {
                 try {
-                    fsm.wait();
+                    sessionToReplicationEventOrderManager.get(sessionName).wait();
                 } catch (InterruptedException e) {
                     log.error("[{}]:: Wait was interrupted {}", sessionName, e.getMessage());
                 }
@@ -217,9 +236,9 @@ public class FsmTaskManager {
             }
         }
 
-        synchronized (fsm) {
-            sessionToReplicationEventOrderManager.get(sessionName).removeEventAfterProcessing(currEvent.getEventId());
-            fsm.notifyAll();
+        synchronized (sessionToReplicationEventOrderManager.get(sessionName)) {
+            sessionToReplicationEventOrderManager.get(sessionName).get(0).removeEventAfterProcessing(currEvent.getEventId());
+            sessionToReplicationEventOrderManager.get(sessionName).notifyAll();
         }
 
     }
