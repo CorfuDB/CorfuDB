@@ -489,19 +489,25 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
             // wait until the recv side count == data written on source
         }
 
-        // the "+1" is for the dummy record that is written at the end of snapshot sync
+        // the "+1" is for LAST_SNAPSHOT_SYNC_ENTRY that is written at the end of snapshot sync
         assertThat(recvQ.count()).isEqualTo(numEntryUpdates + 1);
 
 
         AtomicBoolean snapshotSyncData = new AtomicBoolean(true);
         AtomicInteger countOfSnapshotSyncData = new AtomicInteger(0);
         AtomicInteger countOfDeltaSyncData = new AtomicInteger(0);
+        AtomicBoolean verifyLastSnapshotSyncEntry = new AtomicBoolean(true);
 
         // validate that the order is maintained.
         recvQ.entryList().forEach(entry -> {
             if (snapshotSyncData.get()) {
                 assertEquals(((Queue.RoutingTableEntryMsg) entry.getEntry()).getReplicationType(), Queue.ReplicationType.SNAPSHOT_SYNC);
                 countOfSnapshotSyncData.incrementAndGet();
+            } else if (verifyLastSnapshotSyncEntry.get()) {
+                // All snapshot sync data has been received.  Now verify LAST_SNAPSHOT_SYNC_ENTRY which marks the
+                // completion of snapshot sync
+                assertEquals(((Queue.RoutingTableEntryMsg) entry.getEntry()).getReplicationType(), Queue.ReplicationType.LAST_SNAPSHOT_SYNC_ENTRY);
+                verifyLastSnapshotSyncEntry.set(false);
             } else {
                 assertEquals(((Queue.RoutingTableEntryMsg) entry.getEntry()).getReplicationType(), Queue.ReplicationType.LOG_ENTRY_SYNC);
                 countOfDeltaSyncData.incrementAndGet();
@@ -510,11 +516,10 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
             if(countOfSnapshotSyncData.get() == numEntryUpdates/2 && countOfDeltaSyncData.get() == 0) {
                 snapshotSyncData.set(false);
             }
-
         });
 
         assertThat(countOfSnapshotSyncData.get()).isEqualTo(numEntryUpdates/ 2);
-        assertThat(countOfDeltaSyncData.get()).isEqualTo(numEntryUpdates/ 2 + 1);
+        assertThat(countOfDeltaSyncData.get()).isEqualTo(numEntryUpdates/ 2);
     }
 
     class SnapshotRequestListener implements StreamListener {

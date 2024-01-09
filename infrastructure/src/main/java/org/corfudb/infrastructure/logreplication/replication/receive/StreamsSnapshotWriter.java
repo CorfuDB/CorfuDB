@@ -202,9 +202,6 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
             return;
         }
 
-        metadataManager.updateReplicationMetadataField(txnContext, session, ReplicationMetadata.TOPOLOGYCONFIGID_FIELD_NUMBER, topologyConfigId);
-        metadataManager.updateReplicationMetadataField(txnContext, session, ReplicationMetadata.LASTSNAPSHOTSTARTED_FIELD_NUMBER, srcGlobalSnapshot);
-
         // Since the routing queue model requires the data to maintain the "write" order on the SINK, create a new
         // queue entry to embed the sequence number used by the SINK.
         // Transfer phase was chosen to retain the simplicity of the code.
@@ -478,25 +475,13 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
                         UUID replicatedQueueTag = ((LogReplicationRoutingQueueConfig) replicationContext
                                 .getConfig(session)).getSinkQueueStreamTag();
 
-
-                        long dummyEntryId = 0;
-                        // Embed this key into a protobuf.
-                        Queue.CorfuGuidMsg keyOfQueueEntry =
-                            Queue.CorfuGuidMsg.newBuilder().setInstanceId(dummyEntryId).build();
-                        Queue.RoutingTableEntryMsg dummyQueueMsg = Queue.RoutingTableEntryMsg.newBuilder()
+                        Queue.RoutingTableEntryMsg lastSnapshotSyncMsg = Queue.RoutingTableEntryMsg.newBuilder()
                                 .setSourceClusterId(session.getSourceClusterId())
                                 .addAllDestinations(Collections.singleton(session.getSinkClusterId()))
                                 .setReplicationType(Queue.ReplicationType.LAST_SNAPSHOT_SYNC_ENTRY).build();
 
-                        CorfuRecord<Queue.RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg> dummyEntry =
-                                new CorfuRecord<>(dummyQueueMsg,
-                                    Queue.CorfuQueueMetadataMsg.newBuilder().setTxSequence(Address.MAX).build());
-                        Object[] smrArgs = new Object[2];
-                        smrArgs[0] = keyOfQueueEntry;
-                        smrArgs[1] = dummyEntry;
-
-                        SMREntry smrEntry = new SMREntry("put", smrArgs, replicationContext.getProtobufSerializer());
-                        txnContext.logUpdate(streamId, smrEntry, Collections.singletonList(replicatedQueueTag));
+                        txnContext.logUpdateEnqueue(streamId, lastSnapshotSyncMsg,
+                                Collections.singletonList(replicatedQueueTag), metadataManager.getCorfuStore());
                         txnContext.commit();
                     }
                 } catch (Exception e) {
