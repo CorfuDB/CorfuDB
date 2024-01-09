@@ -392,7 +392,7 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
             assertThat(listener.snapSyncMsgCnt).isEqualTo(5);
             log.info("Sink replicated queue size: {}", listener.snapSyncMsgCnt);
         } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
-            throw new RuntimeException(e);
+            throw new LogReplicationClientException(e);
         }
     }
 
@@ -426,7 +426,7 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
                     TableOptions.fromProtoSchema(LogReplication.ReplicationEvent.class));
         } catch (InvocationTargetException | IllegalAccessException | NoSuchMethodException e) {
             log.error("Failed to open table/queue", e);
-            throw new RuntimeException(e);
+            throw new LogReplicationClientException(e);
         }
 
         //subscribe to eventTable

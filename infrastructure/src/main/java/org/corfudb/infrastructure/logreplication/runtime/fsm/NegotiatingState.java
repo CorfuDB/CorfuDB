@@ -7,10 +7,8 @@ import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicat
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationEventMetadata;
 import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientServerRouter;
-import org.corfudb.infrastructure.logreplication.utils.SnapshotSyncUtils;
 import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
-import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.proto.service.CorfuMessage;
 import org.corfudb.runtime.view.Address;
 
