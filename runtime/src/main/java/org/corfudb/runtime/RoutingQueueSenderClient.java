@@ -46,6 +46,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
@@ -68,11 +69,9 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
     // TODO (V2): This field should be removed after the rpc stream is added for Sink side session creation.
     public static final String DEFAULT_ROUTING_QUEUE_CLIENT = "00000000-0000-0000-0000-0000000000002";
 
-    public static final String DEFAULT_ROUTING_QUEUE_CONFIG_CLIENT = "00000000-0000-0000-0000-0000000000003";
 
     // TODO: Find a way to use these from a common location (they are in infrastructure currently)
     private static final String REPLICATION_EVENT_TABLE_NAME = "LogReplicationEventTable";
-
     private static final String LR_STREAM_TAG = "log_replication";
 
     private Table<CorfuGuidMsg, RoutingTableEntryMsg, CorfuQueueMetadataMsg> logEntryQ;
@@ -89,7 +88,7 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
      * @throws NoSuchMethodException    NoSuchMethodException.
      * @throws IllegalAccessException   IllegalAccessException.
      */
-    public RoutingQueueSenderClient(CorfuStore corfuStore, String clientName) {
+    public RoutingQueueSenderClient(CorfuStore corfuStore, String clientName) throws Exception {
         Preconditions.checkArgument(isValid(clientName), "clientName is null or empty.");
 
         this.corfuStore = corfuStore;
@@ -118,9 +117,7 @@ public class RoutingQueueSenderClient extends LogReplicationClient implements Lo
 
         this.logEntryQ = logEntryQLocal;
         this.snapSyncQ = snapSyncQLocal;
-
-        // TODO: Register this client once the DEFAULT CLIENT implementation is no longer needed
-        // register(corfuStore, clientName);
+        register(corfuStore, clientName, ReplicationModel.ROUTING_QUEUES);
     }
 
     public void startLRSnapshotTransmitter(LRTransmitterReplicationModule snapSyncProvider) {

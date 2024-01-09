@@ -10,6 +10,7 @@ import org.corfudb.infrastructure.logreplication.config.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.config.LogReplicationFullTableConfig;
 import org.corfudb.infrastructure.logreplication.config.LogReplicationLogicalGroupConfig;
 import org.corfudb.infrastructure.logreplication.config.LogReplicationRoutingQueueConfig;
+import org.corfudb.infrastructure.logreplication.infrastructure.SessionManager;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
@@ -55,12 +56,11 @@ import java.util.stream.Collectors;
 import static org.corfudb.infrastructure.logreplication.config.LogReplicationConfig.MERGE_ONLY_STREAMS;
 import static org.corfudb.infrastructure.logreplication.config.LogReplicationConfig.REGISTRY_TABLE_ID;
 import static org.corfudb.infrastructure.logreplication.replication.send.logreader.LogicalGroupLogEntryReader.CLIENT_CONFIG_TABLE_ID;
-import static org.corfudb.runtime.LogReplicationLogicalGroupClient.DEFAULT_LOGICAL_GROUP_CLIENT;
 import static org.corfudb.runtime.LogReplicationLogicalGroupClient.LR_MODEL_METADATA_TABLE_NAME;
 import static org.corfudb.runtime.LogReplicationLogicalGroupClient.LR_REGISTRATION_TABLE_NAME;
 import static org.corfudb.runtime.LogReplicationUtils.LOG_ENTRY_SYNC_QUEUE_NAME_SENDER;
 import static org.corfudb.runtime.RoutingQueueSenderClient.DEFAULT_ROUTING_QUEUE_CLIENT;
-import static org.corfudb.runtime.RoutingQueueSenderClient.DEFAULT_ROUTING_QUEUE_CONFIG_CLIENT;
+import static org.corfudb.runtime.LogReplicationLogicalGroupClient.DEFAULT_LOGICAL_GROUP_CLIENT;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 /**
@@ -129,7 +129,6 @@ public class LogReplicationConfigManager {
         init();
     }
 
-    // TODO (V2): This builder should be removed after the rpc stream is added for Sink side session creation.
     public static ReplicationSubscriber getDefaultLogicalGroupSubscriber() {
         return ReplicationSubscriber.newBuilder()
                 .setClientName(DEFAULT_LOGICAL_GROUP_CLIENT)
@@ -146,7 +145,7 @@ public class LogReplicationConfigManager {
 
     public static ReplicationSubscriber getDefaultRoutingQueueConfigSubscriber() {
         return ReplicationSubscriber.newBuilder()
-            .setClientName(DEFAULT_ROUTING_QUEUE_CONFIG_CLIENT)
+            .setClientName("00000000-0000-0000-0000-0000000000003")
             .setModel(ReplicationModel.ROUTING_QUEUES)
             .build();
     }
@@ -166,10 +165,6 @@ public class LogReplicationConfigManager {
      */
     private void init() {
         registeredSubscribers.add(getDefaultSubscriber());
-        // TODO (V2): This builder should be removed after the rpc stream is added for Sink side session creation.
-        //  and logical group subscribers should come from client registration.
-        registeredSubscribers.add(getDefaultLogicalGroupSubscriber());
-        registeredSubscribers.add(getDefaultRoutingQueueSubscriber());
         registeredSubscribers.add(getDefaultRoutingQueueConfigSubscriber());
         openClientConfigTables();
         syncWithRegistryTable();
@@ -289,7 +284,8 @@ public class LogReplicationConfigManager {
                 String logicalGroup = entry.getValue().getMetadata().getTableOptions()
                         .getReplicationGroup().getLogicalGroup();
                 // TODO (V2): Client name should be checked after the rpc stream is added for Sink side session creation.
-                // if (session.getSubscriber().getClientName().equals(clientName) && groups.contains(logicalGroup)) {
+                //if (session.getSubscriber().getClientName().equals(clientReplicationSubscriber.getClientName()) &&
+                //clientReplicationSubscriber.getModel().equals(ReplicationModel.LOGICAL_GROUPS)) {
                 if (isSink || logicalGroupToStreams.containsKey(logicalGroup)) {
                     streamsToReplicate.add(tableName);
                     Set<String> relatedStreams = logicalGroupToStreams.getOrDefault(logicalGroup, new HashSet<>());
@@ -479,15 +475,45 @@ public class LogReplicationConfigManager {
                         ReplicationModel model = entry.getPayload().getModel();
                         ReplicationSubscriber subscriber = ReplicationSubscriber.newBuilder()
                                 .setClientName(clientName).setModel(model).build();
-                        // TODO (V2): currently we don't support customized client name, default logical group subscriber
-                        //  should be removed after the grpc stream for Sink session creation is created.
                         if (model.equals(ReplicationModel.LOGICAL_GROUPS)) {
                             subscriber = getDefaultLogicalGroupSubscriber();
                         }
                         registeredSubscribers.add(subscriber);
                     });
-
                     return txn.commit();
+                } catch (TransactionAbortedException tae) {
+                    log.error("Failed to preprocess client registration table due to Txn Abort, retrying", tae);
+                    throw new RetryNeededException();
+                }
+            }).run();
+        } catch (InterruptedException e) {
+            log.error("Unable to preprocess client configuration tables", e);
+            throw new UnrecoverableCorfuInterruptedError(e);
+        }
+    }
+
+    public CorfuStoreMetadata.Timestamp preprocessAndGetTailBeforeSubscribe(SessionManager sessionManager) {
+        try {
+            return IRetry.build(IntervalRetry.class, () -> {
+                try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+                    List<CorfuStoreEntry<ClientRegistrationId, ClientRegistrationInfo, Message>> registrationResults =
+                            txn.executeQuery(clientRegistrationTable, p -> true);
+                    registrationResults.forEach(entry -> {
+                        String clientName = entry.getKey().getClientName();
+                        ReplicationModel model = entry.getPayload().getModel();
+                        ReplicationSubscriber subscriber = ReplicationSubscriber.newBuilder()
+                                .setClientName(clientName).setModel(model).build();
+                        if ((model.equals(ReplicationModel.LOGICAL_GROUPS)
+                                || model.equals(ReplicationModel.ROUTING_QUEUES)) && sessionManager.getReplicationContext().getIsLeader().get()) {
+                            this.onNewClientRegister(subscriber);
+                        }
+                        registeredSubscribers.add(subscriber);
+                    });
+                    CorfuStoreMetadata.Timestamp ts = txn.commit();
+                    for (ReplicationSubscriber subscriber : registeredSubscribers) {
+                        sessionManager.createSessionsForClientRegister(subscriber);
+                    }
+                    return ts;
                 } catch (TransactionAbortedException tae) {
                     log.error("Failed to preprocess client registration table due to Txn Abort, retrying", tae);
                     throw new RetryNeededException();
@@ -507,8 +533,6 @@ public class LogReplicationConfigManager {
             log.warn("Client {} with model {} already registered!", subscriber.getClientName(), subscriber.getModel());
             return;
         }
-        // TODO (V2): Currently we add a default subscriber for logical group use case instead of listening on client
-        //  registration. Subscriber should be added upon registration after grpc stream for session creation is added.
         registeredSubscribers.add(subscriber);
     }
 

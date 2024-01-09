@@ -86,7 +86,7 @@ public class LogReplicationServerTest {
         LogReplicationContext replicationContext = new LogReplicationContext(mock(LogReplicationConfigManager.class),
                 0L, SAMPLE_HOSTNAME, true, mock(LogReplicationPluginConfig.class), mock(CorfuRuntime.class));
         lrServer = spy(new LogReplicationServer(context, sessionSet, metadataManager, SINK_NODE_ID, SINK_CLUSTER_ID,
-                replicationContext));
+                replicationContext, sessionManager));
         lrServer.getSessionToSinkManagerMap().put(session, sinkManager);
         mockHandlerContext = mock(ChannelHandlerContext.class);
         mockServerRouter = mock(IClientServerRouter.class);

@@ -229,7 +229,11 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
         // Start up snapshot sync providers on both sink sites to test reverse replication
         sinkCorfuStores.forEach(sinkCorfuStore -> {
             RoutingQueueSenderClient sinkSideQsender = null;
-            sinkSideQsender = new RoutingQueueSenderClient(sinkCorfuStore, clientName);
+            try {
+                sinkSideQsender = new RoutingQueueSenderClient(sinkCorfuStore, clientName);
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
             // SnapshotProvider implements RoutingQueueSenderClient.LRTransmitterReplicationModule
             SnapshotProvider sinkSideSnapProvider = new SnapshotProvider(sinkCorfuStore);
             sinkSideQsender.startLRSnapshotTransmitter(sinkSideSnapProvider); // starts a listener on event table

@@ -111,7 +111,7 @@ public class SessionManager {
 
         this.incomingMsgHandler = new LogReplicationServer(serverContext, sessions, metadataManager,
                 topology.getLocalNodeDescriptor().getNodeId(), topology.getLocalNodeDescriptor().getClusterId(),
-                replicationContext);
+                replicationContext, this);
 
         this.router = new LogReplicationClientServerRouter(replicationManager,
                 topology.getLocalNodeDescriptor().getClusterId(), topology.getLocalNodeDescriptor().getNodeId(),
@@ -180,7 +180,6 @@ public class SessionManager {
      * @param newTopology   the new discovered topology
      */
     public synchronized void refresh(@Nonnull TopologyDescriptor newTopology) {
-
         Set<String> newRemoteSources = newTopology.getRemoteSourceClusters().keySet();
         Set<String> currentRemoteSources = topology.getRemoteSourceClusters().keySet();
         Set<String> remoteSourcesToRemove = Sets.difference(currentRemoteSources, newRemoteSources);
@@ -285,7 +284,15 @@ public class SessionManager {
         logNewlyAddedSessionInfo();
     }
 
-    private void createOutgoingSessionsBySubscriber(ReplicationSubscriber subscriber) {
+    public void createSessionsForClientRegister(ReplicationSubscriber subscriber) {
+        createOutgoingSessionsBySubscriber(subscriber);
+        updateRouterWithNewSessions();
+        createSourceFSMs();
+        logNewlyAddedSessionInfo();
+        connectToRemoteClusters();
+    }
+
+    private Set<LogReplicationSession> createOutgoingSessionsBySubscriber(ReplicationSubscriber subscriber) {
         Set<LogReplicationSession> sessionsToAdd = new HashSet<>();
         try {
             String localClusterId = topology.getLocalClusterDescriptor().getClusterId();
@@ -326,6 +333,7 @@ public class SessionManager {
                 subscriber, sessionsToAdd);
 
         configManager.generateConfig(sessionsToAdd, true);
+        return sessionsToAdd;
     }
 
     private void createIncomingSessionsBySubscriber(ReplicationSubscriber subscriber) {
@@ -365,7 +373,33 @@ public class SessionManager {
         incomingSessions.addAll(sessionsToAdd);
         log.info("Total of {} incoming sessions created with subscriber {}, sessions={}", sessionsToAdd.size(),
                 subscriber, sessionsToAdd);
+        configManager.generateConfig(sessionsToAdd, true);
+    }
 
+    public synchronized void addSessionFromSource(LogReplicationSession sessionFromSource) {
+        Set<LogReplicationSession> sessionsToAdd = new HashSet<>();
+        try {
+            IRetry.build(IntervalRetry.class, () -> {
+                try (TxnContext txn = corfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
+                    if (!sessions.contains(sessionFromSource)) {
+                        sessionsToAdd.add(sessionFromSource);
+                        metadataManager.addSession(txn, sessionFromSource, topology.getTopologyConfigId(), true);
+                    }
+                    txn.commit();
+                    return null;
+                } catch (TransactionAbortedException e) {
+                    log.error("Failed to create sessions. Retrying.", e);
+                    sessionsToAdd.clear();
+                    throw new RetryNeededException();
+                }
+            }).run();
+        } catch (InterruptedException e) {
+            log.error("Unrecoverable Corfu Error when creating the sessions", e);
+            throw new UnrecoverableCorfuInterruptedError(e);
+        }
+        newSessionsDiscovered.addAll(sessionsToAdd);
+        sessions.addAll(sessionsToAdd);
+        incomingSessions.addAll(sessionsToAdd);
         configManager.generateConfig(sessionsToAdd, true);
     }
 
@@ -513,14 +547,7 @@ public class SessionManager {
                 .filter(session -> topology.getRemoteClusterEndpoints().containsKey(session.getSourceClusterId()) ||
                         topology.getRemoteClusterEndpoints().containsKey(session.getSinkClusterId()))
                 .forEach(session -> {
-                    if (outgoingSessions.contains(session)) {
-                        // initiate connection to remote Sink cluster
-                        router.connect(topology.getAllClustersInTopology().get(session.getSinkClusterId()), session);
-                    } else {
-                        // initiate connection to remote Source cluster
-                        router.connect(topology.getAllClustersInTopology().get(session.getSourceClusterId()), session);
-                    }
-
+                    connect(session);
                 });
     }
 
@@ -579,5 +606,14 @@ public class SessionManager {
     public void notifyLeadershipChange() {
         incomingMsgHandler.leadershipChanged();
     }
-}
 
+    private void connect(LogReplicationSession session) {
+        if (router.isConnectionStarterForSession(session)) {
+            // initiate connection to remote Sink cluster
+            router.connect(topology.getAllClustersInTopology().get(session.getSinkClusterId()), session);
+        } else {
+            // initiate connection to remote Source cluster
+            router.connect(topology.getAllClustersInTopology().get(session.getSourceClusterId()), session);
+        }
+    }
+}

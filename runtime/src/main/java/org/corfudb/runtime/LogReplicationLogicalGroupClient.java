@@ -36,7 +36,7 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
  */
 @Slf4j
 public class LogReplicationLogicalGroupClient extends LogReplicationClient{
-    // TODO (V2): This field should be removed after the rpc stream is added for Sink side session creation.
+
     public static final String DEFAULT_LOGICAL_GROUP_CLIENT = "00000000-0000-0000-0000-0000000000001";
 
     /**
@@ -67,8 +67,7 @@ public class LogReplicationLogicalGroupClient extends LogReplicationClient{
         Preconditions.checkArgument(isValid(clientName), "clientName is null or empty.");
 
         this.corfuStore = new CorfuStore(runtime);
-        // TODO (V2): client name cannot be customized as Sink side does not have a way to create sessions for now
-        this.clientName = DEFAULT_LOGICAL_GROUP_CLIENT;
+        this.clientName = clientName;
 
         try {
             this.sourceMetadataTable = corfuStore.getTable(CORFU_SYSTEM_NAMESPACE, LR_MODEL_METADATA_TABLE_NAME);
