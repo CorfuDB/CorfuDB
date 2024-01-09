@@ -301,7 +301,7 @@ public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
 
         log.info("isEndMarker is called from next of snapshot reader. snapshot sync request {} {}", entry.getKey(), entry.getPayload());
         // The protocol is the end marker is represented by the Full Sync Request Id but negated.
-        return (entry.getPayload().getSnapshotStartTimestamp() == -requestSnapSyncId);
+        return entry.getPayload().getSnapshotStartTimestamp() == -requestSnapSyncId;
     }
 
     private boolean validateSnapSyncEntry(OpaqueEntry opaqueEntry) {
