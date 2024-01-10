@@ -942,7 +942,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(runtime, LOCAL_SOURCE_CLUSTER_ID);
         LogReplicationPluginConfig pluginConfig = new LogReplicationPluginConfig(pluginConfigFilePath);
         LogReplicationSession session = DefaultClusterConfig.getSessions().get(0);
-        configManager.generateConfig(Collections.singleton(session), false);
+        configManager.generateConfig(session, false, "session_1");
 
         switch(readerImpl) {
             case EMPTY:
@@ -966,9 +966,10 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
                 break;
             case STREAMS:
                 CorfuRuntime runtime = getNewRuntime(getDefaultNode()).connect();
-                snapshotReader = new StreamsSnapshotReader(DEFAULT_SESSION,
-                        new LogReplicationContext(configManager, TEST_TOPOLOGY_CONFIG_ID,
-                                "test:" + SERVERS.PORT_0, pluginConfig, runtime));
+                LogReplicationContext context = new LogReplicationContext(configManager, TEST_TOPOLOGY_CONFIG_ID,
+                        "test:" + SERVERS.PORT_0, pluginConfig, runtime);
+                context.addSessionNameForLogging(session, "session_1");
+                snapshotReader = new StreamsSnapshotReader(DEFAULT_SESSION,context);
                 dataSender = new TestDataSender(waitInSnapshotSync);
                 break;
             default:
@@ -977,12 +978,13 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
 
         context = new LogReplicationContext(configManager, TEST_TOPOLOGY_CONFIG_ID,
                 "test:" + SERVERS.PORT_0, true, pluginConfig, runtime);
+        context.addSessionNameForLogging(DEFAULT_SESSION, "session_1");
         LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(runtime, context);
 
         // Manually initialize the replication status table, needed for tests that check the
         // source status so incoming needs to be set to false
         metadataManager.addSession(DEFAULT_SESSION, 0, false);
-        
+
         ackReader = new LogReplicationAckReader(metadataManager, DEFAULT_SESSION, context);
         fsm = new LogReplicationFSM(snapshotReader, dataSender, logEntryReader,
                 ackReader, DEFAULT_SESSION, context);

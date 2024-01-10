@@ -51,7 +51,7 @@ public class NegotiatingState implements LogReplicationRuntimeState {
     }
 
     @Override
-    public LogReplicationRuntimeState processEvent(LogReplicationRuntimeEvent event) throws IllegalTransitionException {
+    public LogReplicationRuntimeState processEvent(LogReplicationRuntimeEvent event) throws IllegalRuntimeTransitionException {
         switch (event.getType()) {
             case ON_CONNECTION_DOWN:
                 String nodeIdDown = event.getNodeId();
@@ -71,7 +71,7 @@ public class NegotiatingState implements LogReplicationRuntimeState {
                 fsm.updateConnectedNodes(event.getNodeId());
                 return null;
             case NEGOTIATION_COMPLETE:
-                log.info("Negotiation complete, result={}", event.getNegotiationResult());
+                log.info("[{}]:: Negotiation complete, result={}", fsm.getSessionName(), event.getNegotiationResult());
                 ((ReplicatingState)fsm.getStates().get(LogReplicationRuntimeStateType.REPLICATING)).setReplicationEvent(event.getNegotiationResult());
                 return fsm.getStates().get(LogReplicationRuntimeStateType.REPLICATING);
             case NEGOTIATION_FAILED:
@@ -94,21 +94,21 @@ public class NegotiatingState implements LogReplicationRuntimeState {
                 ((UnrecoverableState)fsm.getStates().get(LogReplicationRuntimeStateType.UNRECOVERABLE)).setThrowableCause(event.getT().getCause());
                 return fsm.getStates().get(LogReplicationRuntimeStateType.UNRECOVERABLE);
             default: {
-                log.warn("Unexpected communication event {} when in init state.", event.getType());
-                throw new IllegalTransitionException(event.getType(), getType());
+                log.warn("[{}]:: Unexpected communication event {} when in init state.", fsm.getSessionName(), event.getType());
+                throw new IllegalRuntimeTransitionException(event.getType(), getType());
             }
         }
     }
 
     @Override
     public void onEntry(LogReplicationRuntimeState from) {
-        log.debug("OnEntry :: negotiating state from {}", from.getType());
+        log.debug("[{}]:: OnEntry :: negotiating state from {}", fsm.getSessionName(), from.getType());
         negotiate();
     }
 
     private void negotiate() {
 
-        log.debug("Enter :: negotiate");
+        log.debug("[{}]:: Enter :: negotiate", fsm.getSessionName());
 
         try {
             if(fsm.getRemoteLeaderNodeId().isPresent()) {
@@ -131,18 +131,18 @@ public class NegotiatingState implements LogReplicationRuntimeState {
                     router.getSessionToLeaderConnectionFuture().get(fsm.getSession()).complete(null);
                 }
             } else {
-                log.debug("No leader found during negotiation.");
+                log.debug("[{}]:: No leader found during negotiation.", fsm.getSessionName());
                 // No leader found at the time of negotiation
                 fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.REMOTE_LEADER_LOSS));
             }
         } catch (LogReplicationNegotiationException | TimeoutException ex) {
-            log.error("Negotiation failed. Retry, until negotiation succeeds or connection is marked as down.", ex);
+            log.error("[{}]:: Negotiation failed. Retry, until negotiation succeeds or connection is marked as down.", fsm.getSessionName(), ex);
             fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.NEGOTIATION_FAILED));
         } catch (Exception e) {
-            log.error("Unexpected exception during negotiation, retry.", e);
+            log.error("[{}]:: Unexpected exception during negotiation, retry.", fsm.getSessionName(), e);
             fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.NEGOTIATION_FAILED));
         } finally {
-            log.debug("Exit :: negotiate");
+            log.debug("[{}]:: Exit :: negotiate", fsm.getSessionName());
         }
     }
 
@@ -166,7 +166,7 @@ public class NegotiatingState implements LogReplicationRuntimeState {
     private void processNegotiationResponse(LogReplicationMetadataResponseMsg negotiationResponse)
             throws LogReplicationNegotiationException {
 
-        log.debug("Process negotiation response {} from {}", negotiationResponse, fsm.getRemoteClusterId());
+        log.debug("[{}]:: Process negotiation response {} from {}", fsm.getSessionName(), negotiationResponse, fsm.getRemoteClusterId());
 
         long topologyConfigId = metadataManager.getReplicationContext().getTopologyConfigId();
 
@@ -175,8 +175,8 @@ public class NegotiatingState implements LogReplicationRuntimeState {
          * getting a new notification of the site config change if this sink is in the new config.
          */
         if (negotiationResponse.getTopologyConfigID() < topologyConfigId) {
-            log.error("The source site configID {} is bigger than the sink configID {} ",
-                topologyConfigId, negotiationResponse.getTopologyConfigID());
+            log.error("[{}]:: The source site configID {} is bigger than the sink configID {} ", fsm.getSessionName(),
+                    topologyConfigId, negotiationResponse.getTopologyConfigID());
             throw new LogReplicationNegotiationException("Mismatch of configID");
         }
 
@@ -185,8 +185,8 @@ public class NegotiatingState implements LogReplicationRuntimeState {
          * it will be triggered by a notification of the site config change.
          */
         if (negotiationResponse.getTopologyConfigID() > topologyConfigId) {
-            log.error("The source site configID {} is smaller than the sink configID {} ",
-                topologyConfigId, negotiationResponse.getTopologyConfigID());
+            log.error("[{}]:: The source site configID {} is smaller than the sink configID {} ", fsm.getSessionName(),
+                    topologyConfigId, negotiationResponse.getTopologyConfigID());
             throw new LogReplicationNegotiationException("Mismatch of configID");
         }
 
@@ -207,7 +207,7 @@ public class NegotiatingState implements LogReplicationRuntimeState {
          * "lastLogEntryProcessed": "-1"
          */
         if (negotiationResponse.getSnapshotStart() == Address.NON_ADDRESS) {
-            log.info("No snapshot available in remote. Initiate SNAPSHOT sync to {}", fsm.getSession());
+            log.info("[{}]:: No snapshot available in remote. Initiate SNAPSHOT sync", fsm.getSessionName());
             startSnapshotSync();
             return;
         }
@@ -224,8 +224,8 @@ public class NegotiatingState implements LogReplicationRuntimeState {
          * "lastLogEntryProcessed": "-1"
          */
         if (negotiationResponse.getSnapshotStart() > negotiationResponse.getSnapshotTransferred()) {
-            log.info("Previous Snapshot Sync transfer did not complete. Restart SNAPSHOT sync, snapshotStart={}, snapshotTransferred={}",
-                    negotiationResponse.getSnapshotStart(), negotiationResponse.getSnapshotTransferred());
+            log.info("[{}]:: Previous Snapshot Sync transfer did not complete. Restart SNAPSHOT sync, snapshotStart={}, snapshotTransferred={}",
+                    fsm.getSessionName(), negotiationResponse.getSnapshotStart(), negotiationResponse.getSnapshotTransferred());
             startSnapshotSync();
             return;
         }
@@ -246,8 +246,8 @@ public class NegotiatingState implements LogReplicationRuntimeState {
          */
         if (negotiationResponse.getSnapshotStart() == negotiationResponse.getSnapshotTransferred() &&
                 negotiationResponse.getSnapshotTransferred() > negotiationResponse.getSnapshotApplied()) {
-            log.info("Previous Snapshot Sync transfer complete. Apply in progress, wait. snapshotStart={}, " +
-                            "snapshotTransferred={}, snapshotApply={}", negotiationResponse.getSnapshotStart(),
+            log.info("[{}]:: Previous Snapshot Sync transfer complete. Apply in progress, wait. snapshotStart={}, " +
+                            "snapshotTransferred={}, snapshotApply={}", fsm.getSessionName(), negotiationResponse.getSnapshotStart(),
                     negotiationResponse.getSnapshotTransferred(), negotiationResponse.getSnapshotApplied());
             fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.NEGOTIATION_COMPLETE,
                     new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_TRANSFER_COMPLETE,
@@ -277,8 +277,8 @@ public class NegotiatingState implements LogReplicationRuntimeState {
              * otherwise, start snapshot full sync.
              */
             if (logHead <= negotiationResponse.getLastLogEntryTimestamp() + 1) {
-                log.info("Resume LOG ENTRY sync. Address space has not been trimmed, deltas are guaranteed to be available. " +
-                        "logHead={}, lastLogProcessed={}", logHead, negotiationResponse.getLastLogEntryTimestamp());
+                log.info("[{}]:: Resume LOG ENTRY sync. Address space has not been trimmed, deltas are guaranteed to be available. " +
+                        "logHead={}, lastLogProcessed={}", fsm.getSessionName(), logHead, negotiationResponse.getLastLogEntryTimestamp());
                 fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.NEGOTIATION_COMPLETE,
                         new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.LOG_ENTRY_SYNC_REQUEST,
                                 new LogReplicationEventMetadata(LogReplicationEventMetadata.getNIL_UUID(),
@@ -290,8 +290,8 @@ public class NegotiatingState implements LogReplicationRuntimeState {
                 //  the stream to replicate). So we might be doing a Snapshot (full) sync when next entry really
                 //  falls beyond the logHead. A more accurate approach would be to look for the next available entry
                 //  in the the transaction stream.
-                log.info(" Start SNAPSHOT sync. LOG ENTRY Sync cannot resume, address space has been trimmed." +
-                        "logHead={}, lastLogProcessed={}", logHead, negotiationResponse.getLastLogEntryTimestamp());
+                log.info("[{}]::  Start SNAPSHOT sync. LOG ENTRY Sync cannot resume, address space has been trimmed." +
+                        "logHead={}, lastLogProcessed={}", fsm.getSessionName(), logHead, negotiationResponse.getLastLogEntryTimestamp());
                 startSnapshotSync();
             }
 
@@ -303,8 +303,8 @@ public class NegotiatingState implements LogReplicationRuntimeState {
         /*
          * For other scenarios, the sink site is in a non-recognizable state, trigger a snapshot full sync.
          */
-        log.warn("Could not recognize the sink cluster state according to the response {}, will restart with a snapshot full sync event" ,
-                negotiationResponse);
+        log.warn("[{}]:: Could not recognize the sink cluster state according to the response {}, will restart with a snapshot full sync event" ,
+                fsm.getSessionName(), negotiationResponse);
         fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.NEGOTIATION_COMPLETE,
                 new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_SYNC_REQUEST)));
     }

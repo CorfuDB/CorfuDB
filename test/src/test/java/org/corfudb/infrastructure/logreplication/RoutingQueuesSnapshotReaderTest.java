@@ -65,7 +65,7 @@ public class RoutingQueuesSnapshotReaderTest extends AbstractViewTest {
             session.getSourceClusterId());
         replicationContext = new LogReplicationContext(configManager, 5,
             session.getSourceClusterId(), true, new LogReplicationPluginConfig(""), lrRuntime);
-        configManager.generateConfig(Collections.singleton(session), false);
+        configManager.generateConfig(session, false, "session_1");
         snapshotReader = new RoutingQueuesSnapshotReader(session, replicationContext);
         snapshotReader.reset(lrRuntime.getAddressSpaceView().getLogTail());
     }
@@ -89,7 +89,7 @@ public class RoutingQueuesSnapshotReaderTest extends AbstractViewTest {
 
         // 2. Write data to a different session and read for that session, ensure the timeout window moves.
         LogReplication.LogReplicationSession anotherSession = DefaultClusterConfig.getRoutingQueueSessions().get(1);
-        configManager.generateConfig(Collections.singleton(anotherSession), false);
+        configManager.generateConfig(anotherSession, false, "session_1");
         BaseSnapshotReader anotherSnapshotReader = new RoutingQueuesSnapshotReader(anotherSession, replicationContext);
 
         generateData(anotherSession);

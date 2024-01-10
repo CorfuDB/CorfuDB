@@ -3,6 +3,8 @@ package org.corfudb.infrastructure.logreplication.replication.receive;
 import com.google.protobuf.Message;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import lombok.Generated;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.config.LogReplicationFullTableConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
@@ -48,10 +50,14 @@ public abstract class SinkWriter {
 
     final UUID replicatedRoutingQUuid;
 
+    @Getter
+    private final String sessionName;
+
     // Limit the initialization of this class only to its children classes.
     SinkWriter(LogReplicationSession session, LogReplicationContext replicationContext) {
         this.session = session;
         this.replicationContext = replicationContext;
+        this.sessionName = replicationContext.getSessionName(session);
 
         // The CorfuRuntime in LogReplicationConfigManager used to get the config fields from registry
         // table, and the protobufSerializer is guaranteed to be registered before initializing SinkWriter.

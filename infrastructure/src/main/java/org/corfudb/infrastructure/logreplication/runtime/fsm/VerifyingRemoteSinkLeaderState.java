@@ -32,14 +32,14 @@ public class VerifyingRemoteSinkLeaderState implements LogReplicationRuntimeStat
     }
 
     @Override
-    public LogReplicationRuntimeState processEvent(LogReplicationRuntimeEvent event) throws IllegalTransitionException {
+    public LogReplicationRuntimeState processEvent(LogReplicationRuntimeEvent event) throws IllegalRuntimeTransitionException {
         switch (event.getType()) {
             case REMOTE_LEADER_FOUND:
                 ((NegotiatingState)fsm.getStates().get(LogReplicationRuntimeStateType.NEGOTIATING)).setLeaderNodeId(event.getNodeId());
                 return fsm.getStates().get(LogReplicationRuntimeStateType.NEGOTIATING);
             case ON_CONNECTION_DOWN:
                 String nodeIdDown = event.getNodeId();
-                log.debug("Detected connection down from node={}", nodeIdDown);
+                log.debug("[{}]:: Detected connection down from node={}", fsm.getSessionName(), nodeIdDown);
                 fsm.updateDisconnectedNodes(nodeIdDown);
 
                 // If no connection exists, return to init state, until a connection is established.
@@ -50,7 +50,7 @@ public class VerifyingRemoteSinkLeaderState implements LogReplicationRuntimeStat
             case REMOTE_LEADER_NOT_FOUND:
                 return this;
             case ON_CONNECTION_UP:
-                log.debug("Detected connection up from endpoint={}", event.getNodeId());
+                log.debug("[{}]:: Detected connection up from endpoint={}", fsm.getSessionName(), event.getNodeId());
                 // Add new connected node, for leadership verification
                 fsm.updateConnectedNodes(event.getNodeId());
                 return this;
@@ -60,15 +60,15 @@ public class VerifyingRemoteSinkLeaderState implements LogReplicationRuntimeStat
                 }
                 return null;
             default: {
-                log.warn("Unexpected communication event {} when in init state.", event.getType());
-                throw new IllegalTransitionException(event.getType(), getType());
+                log.warn("[{}]:: Unexpected communication event {} when in init state.", fsm.getSessionName(), event.getType());
+                throw new IllegalRuntimeTransitionException(event.getType(), getType());
             }
         }
     }
 
     @Override
     public void onEntry(LogReplicationRuntimeState from) {
-        log.debug("onEntry :: Verifying Remote Leader, transition from {}", from.getType());
+        log.debug("[{}]:: onEntry :: Verifying Remote Leader, transition from {}", fsm.getSessionName(), from.getType());
 
         // Proceed if remoteLeader is known. Only if local is connection starter for the session and the remoteLeader is
         // not known, verify Leadership on connected nodes
@@ -77,11 +77,11 @@ public class VerifyingRemoteSinkLeaderState implements LogReplicationRuntimeStat
                     LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.REMOTE_LEADER_FOUND,
                     fsm.getRemoteLeaderNodeId().get())
             );
-            log.debug("Exit :: leadership verification");
+            log.debug("[{}]:: Exit :: leadership verification", fsm.getSessionName());
         } else if (router.isConnectionStarterForSession(fsm.session)){
             // Leadership verification is done only if connection starter.
             verifyRemoteLeader(fsm, fsm.getConnectedNodes(), fsm.getRemoteClusterId(), router,
-                    CorfuLogReplicationRuntime.class);
+                    CorfuLogReplicationRuntime.class, fsm.getSessionName());
         }
     }
 }

@@ -144,6 +144,9 @@ public class CorfuLogReplicationRuntime {
     private final FsmTaskManager taskManager;
 
 
+    @Getter
+    private final String sessionName;
+
     /**
      * Default Constructor
      */
@@ -151,6 +154,7 @@ public class CorfuLogReplicationRuntime {
                                       LogReplicationContext replicationContext, LogReplicationClientServerRouter router) {
         this.remoteClusterId = session.getSinkClusterId();
         this.session = session;
+        this.sessionName = replicationContext.getSessionName(session);
         this.router = router;
         this.sourceManager = new LogReplicationSourceManager(router, metadataManager,
                 session, replicationContext);
@@ -163,7 +167,7 @@ public class CorfuLogReplicationRuntime {
         initializeStates(metadataManager);
         this.state = states.get(LogReplicationRuntimeStateType.WAITING_FOR_CONNECTIVITY);
 
-        log.info("Log Replication Runtime State Machine initialized");
+        log.info("[{}]:: Log Replication Runtime State Machine initialized", sessionName);
     }
 
     /**
@@ -180,7 +184,7 @@ public class CorfuLogReplicationRuntime {
         states.put(LogReplicationRuntimeStateType.NEGOTIATING, new NegotiatingState(this, router, metadataManager));
         states.put(LogReplicationRuntimeStateType.REPLICATING, new ReplicatingState(this, sourceManager, router));
         states.put(LogReplicationRuntimeStateType.STOPPED, new StoppedState(sourceManager));
-        states.put(LogReplicationRuntimeStateType.UNRECOVERABLE, new UnrecoverableState());
+        states.put(LogReplicationRuntimeStateType.UNRECOVERABLE, new UnrecoverableState(sessionName));
     }
 
     /**
@@ -206,7 +210,7 @@ public class CorfuLogReplicationRuntime {
      * @param to   final state
      */
     public void transition(LogReplicationRuntimeState from, LogReplicationRuntimeState to) {
-        log.trace("Transition from {} to {}", from, to);
+        log.trace("[{}]:: Transition from {} to {}", sessionName, from, to);
         from.onExit(to);
         to.clear();
         to.onEntry(from);
@@ -221,17 +225,17 @@ public class CorfuLogReplicationRuntime {
     }
 
     public synchronized void setRemoteLeaderNodeId(String leaderId) {
-        log.debug("Set remote leader node id {}", leaderId);
+        log.debug("[{}]:: Set remote leader node id {}", sessionName, leaderId);
         leaderNodeId = Optional.ofNullable(leaderId);
     }
 
     public synchronized void resetRemoteLeaderNodeId() {
-        log.debug("Reset remote leader node id");
+        log.debug("[{}]:: Reset remote leader node id", sessionName);
         leaderNodeId = Optional.empty();
     }
 
     public synchronized Optional<String> getRemoteLeaderNodeId() {
-        log.trace("Retrieve remote leader node id {}", leaderNodeId);
+        log.trace("[{}]:: Retrieve remote leader node id {}", sessionName, leaderNodeId);
         return leaderNodeId;
     }
 
@@ -240,7 +244,7 @@ public class CorfuLogReplicationRuntime {
     }
 
     public synchronized void refresh(ClusterDescriptor clusterDescriptor, long topologyConfigId) {
-        log.warn("Update router's cluster descriptor {}", clusterDescriptor);
+        log.warn("[{}]:: Update router's cluster descriptor {}", sessionName, clusterDescriptor);
         router.onClusterChange(clusterDescriptor);
         sourceManager.getLogReplicationFSM().setTopologyConfigId(topologyConfigId);
     }

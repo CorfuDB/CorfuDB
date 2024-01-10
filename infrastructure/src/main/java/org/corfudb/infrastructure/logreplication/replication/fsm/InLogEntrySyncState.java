@@ -83,7 +83,7 @@ public class InLogEntrySyncState implements LogReplicationState {
                     log.debug("Log Entry Sync ACK, update last ack timestamp to {}", event.getMetadata().getLastLogEntrySyncedTimestamp());
                     fsm.setAckedTimestamp(event.getMetadata().getLastLogEntrySyncedTimestamp());
                 }
-                // Do not return a new state as there is no actual transition, the IllegalTransitionException
+                // Do not return a new state as there is no actual transition, the IllegalRuntimeTransitionException
                 // will allow us to avoid any transition from this state given the event.
                 break;
             case LOG_ENTRY_SYNC_CONTINUE:
