@@ -3,7 +3,6 @@ package org.corfudb.infrastructure.logreplication.replication.send;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
-import com.google.protobuf.TextFormat;
 import io.micrometer.core.instrument.Tag;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -106,6 +105,10 @@ public class SnapshotSender {
      * @param snapshotSyncEventId identifier of the event that initiated the snapshot sync
      */
     public void transmit(UUID snapshotSyncEventId, boolean forcedSnapshotSync) {
+
+        // TODO: snapshotCompleted currently tracks if SNAPSHOT_END has been read.  Add another variable which
+        //  checks if all messages were transmitted and acknowledged.  If this method is invoked for the current
+        //  snapshot sync cycle after that point, it is a no-op and return immediately.
 
         boolean cancel = false;     // Flag indicating snapshot sync needs to be canceled
         int messagesSent = 0;       // Limit the number of messages to maxNumSnapshotMsgPerBatch. The reason we need to limit
