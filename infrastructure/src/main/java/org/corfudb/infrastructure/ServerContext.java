@@ -661,11 +661,11 @@ public class ServerContext implements AutoCloseable {
         return resetEpoch == null ? Layout.INVALID_EPOCH : resetEpoch;
     }
 
-    public synchronized void setLogUnitMetadata(Map<UUID, String> streamAddressSpace) {
+    public void setLogUnitMetadata(Map<UUID, String> streamAddressSpace) {
         dataStore.put(LOG_UNIT_METADATA_RECORD, streamAddressSpace);
     }
 
-    public synchronized Map<UUID, String> getLogUnitMetadata() {
+    public Map<UUID, String> getLogUnitMetadata() {
         return (Map<UUID, String>)dataStore.get(LOG_UNIT_METADATA_RECORD);
     }
 
