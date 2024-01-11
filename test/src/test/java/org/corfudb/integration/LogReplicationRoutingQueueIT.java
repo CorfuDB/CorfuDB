@@ -484,6 +484,7 @@ public class LogReplicationRoutingQueueIT extends CorfuReplicationMultiSourceSin
      */
     @Test
     public void testOrderOfDataOnReceiveQueue() throws Exception {
+        setUp(TP_SINGLE_SOURCE_SINK_ROUTING_QUEUE);
         CorfuRuntime runtime = getClientRuntime();
         CorfuStore corfuStore = new CorfuStore(runtime);
 
