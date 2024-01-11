@@ -441,10 +441,9 @@ public class LogReplicationConfigManager {
                         ReplicationModel model = entry.getPayload().getModel();
                         ReplicationSubscriber subscriber = ReplicationSubscriber.newBuilder()
                                 .setClientName(clientName).setModel(model).build();
-                        if (!registeredSubscribers.contains(subscriber)) {
-                            registeredSubscribers.add(subscriber);
-                            newSubscribers.add(subscriber);
-                        }
+                        registeredSubscribers.add(subscriber);
+                        newSubscribers.add(subscriber);
+
                     });
                     CorfuStoreMetadata.Timestamp ts = txn.commit();
                     return Pair.of(newSubscribers, ts);
