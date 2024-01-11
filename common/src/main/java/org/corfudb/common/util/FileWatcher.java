@@ -43,7 +43,7 @@ public class FileWatcher implements Closeable {
         reloadNewWatchService();
         watcher.scheduleAtFixedRate(
                 this::poll,
-                pollPeriod.toMillis(),
+                0,
                 pollPeriod.toMillis(),
                 TimeUnit.MILLISECONDS);
     }
@@ -97,7 +97,7 @@ public class FileWatcher implements Closeable {
         try {
             this.watchService.close();
         } catch (IOException ioe) {
-            throw new IllegalStateException("FileWatcher failed to close the watch service!.", ioe);
+            throw new IllegalStateException("FileWatcher failed to close the watch service!", ioe);
         }
     }
 }

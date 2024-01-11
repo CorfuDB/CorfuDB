@@ -81,7 +81,7 @@ public class ReloadableKeyManager implements X509KeyManager {
     private void reloadKeyStoreWrapper() {
         try {
             if (!hasKeysChanged() && lastReloadSucceeded) {
-                log.debug("Key store file hasn't changed since last successful reload at {}. Skip reloading.",
+                log.info("Key store file hasn't changed since last successful reload at {}. Skip reloading.",
                         keysLastModifiedTime);
                 return;
             }
@@ -93,7 +93,8 @@ public class ReloadableKeyManager implements X509KeyManager {
     }
 
     private void reloadKeyStore() throws SSLException {
-        log.info("Reloading key store from {}", keyStoreConfig.getKeyStoreFile());
+        log.info("Reloading key store from {}. lastReloadSucceeded: {}, keysLastModifiedTime: {}.",
+                keyStoreConfig.getKeyStoreFile(), lastReloadSucceeded, keysLastModifiedTime);
 
         lastReloadSucceeded = false;
         KeyStore keyStore = TlsUtils.openCertStore(keyStoreConfig);

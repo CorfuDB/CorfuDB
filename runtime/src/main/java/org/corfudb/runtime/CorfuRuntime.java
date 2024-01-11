@@ -1118,7 +1118,7 @@ public class CorfuRuntime {
     /**
      * Reestablish the netty connections to corfu servers
      */
-    public void reconnect() {
+    private void reconnect() {
         nodeRouterPool.reconnect();
     }
 

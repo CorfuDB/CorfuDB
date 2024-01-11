@@ -10,6 +10,7 @@ import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.common.config.ConfigParamsHelper;
+import org.corfudb.common.util.FileWatcher;
 import org.corfudb.infrastructure.BaseServer;
 import org.corfudb.infrastructure.CorfuServerNode;
 import org.corfudb.infrastructure.NettyServerRouter;
@@ -19,6 +20,7 @@ import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.clients.NettyCommTestUtil.CertificateManager;
 import org.corfudb.security.tls.TlsUtils.CertStoreConfig.CertManagementConfig;
 import org.corfudb.util.NodeLocator;
+import org.junit.Assume;
 import org.junit.Test;
 
 import javax.annotation.Nonnull;
@@ -30,6 +32,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
+import java.time.Duration;
 import java.util.Random;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -602,6 +605,70 @@ public class NettyCommTest extends AbstractCorfuTest {
         TimeUnit.SECONDS.sleep(1);
         assertThat(getBaseClient(clientRouter).pingSync()).isTrue();
 
+        clientRouter.close();
+
+        serverData.shutdownServer();
+        serverData.serverContext.close();
+    }
+
+    @Test
+    public void testFileWatcherTriggeredReloadSslCerts() throws Exception {
+        // NIO WatchService does not work properly on macOS
+        Assume.assumeTrue(System.getProperty("os.name").contains("Linux"));
+
+        int port = findRandomOpenPort();
+
+        Path certDir = Paths.get(PARAMETERS.TEST_TEMP_DIR);
+
+        // Start corfu server
+        CertificateManager serverCertManager = CertificateManager.buildSHA384withEcDsa(certDir);
+        NettyServerData serverData = new NettyServerData(buildServerContext(port, serverCertManager.certManagementConfig));
+        serverData.bootstrapServer();
+
+        // Happy path
+        CertificateManager clientCertManager = CertificateManager.buildSHA384withEcDsa(certDir);
+        clientCertManager.trustStoreManager.addCertificate(serverCertManager);
+        clientCertManager.trustStoreManager.save();
+        serverCertManager.trustStoreManager.addCertificate(clientCertManager);
+        serverCertManager.trustStoreManager.save();
+        NettyClientRouter clientRouter = new NettyClientRouter(
+                NodeLocator.builder().host("localhost").port(port).build(),
+                buildRuntimeParams(clientCertManager.certManagementConfig)
+        );
+        clientRouter.getConnectionFuture().join();
+        assertThat(getBaseClient(clientRouter).pingSync()).isTrue();
+
+        FileWatcher fileWatcher = new FileWatcher(
+                clientCertManager.keyStoreConfig.getKeyStoreFile().toString(),
+                clientRouter::reconnect, Duration.ofSeconds(1));
+        TimeUnit.SECONDS.sleep(1);
+
+        // Copy original keystore
+        Path keyStoreFilePath = clientCertManager.keyStoreConfig.getKeyStoreFile();
+        Path keyStoreFilePathCopy = keyStoreFilePath.resolveSibling(keyStoreFilePath.getFileName() + ".copy");
+        Files.copy(keyStoreFilePath, keyStoreFilePathCopy, StandardCopyOption.REPLACE_EXISTING);
+
+        // Corrupt the keystore by appending random chars
+        byte[] randomBytes = new byte[100];
+        Random random = new Random();
+        random.nextBytes(randomBytes);
+        Files.write(keyStoreFilePath, randomBytes,
+                StandardOpenOption.WRITE, StandardOpenOption.CREATE,
+                StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.SYNC);
+
+        // Verify ssl is auto-reloaded
+        TimeUnit.SECONDS.sleep(2);
+        log.info("Testing connection after corrupting the keystore");
+        assertThat(getBaseClient(clientRouter).pingSync()).isFalse();
+
+        // Restore the correct cert
+        Files.copy(keyStoreFilePathCopy, keyStoreFilePath, StandardCopyOption.REPLACE_EXISTING);
+
+        // Verify ssl is auto-reloaded
+        TimeUnit.SECONDS.sleep(2);
+        assertThat(getBaseClient(clientRouter).pingSync()).isTrue();
+
+        fileWatcher.close();
         clientRouter.close();
 
         serverData.shutdownServer();
