@@ -14,10 +14,10 @@
         <rollingPolicy class="ch.qos.logback.core.rolling.FixedWindowRollingPolicy">
             <fileNamePattern>${LOG_DIRECTORY}/corfu.9000.%i.log.gz</fileNamePattern>
             <minIndex>1</minIndex>
-            <maxIndex>25</maxIndex>
+            <maxIndex>50</maxIndex>
         </rollingPolicy>
         <triggeringPolicy class="ch.qos.logback.core.rolling.SizeBasedTriggeringPolicy">
-            <maxFileSize>100MB</maxFileSize>
+            <maxFileSize>50MB</maxFileSize>
         </triggeringPolicy>
         <encoder>
             <pattern>
@@ -63,14 +63,14 @@
         <rollingPolicy class="ch.qos.logback.core.rolling.FixedWindowRollingPolicy">
             <fileNamePattern>${LOG_DIRECTORY}/tx-log.%i.log.gz</fileNamePattern>
             <minIndex>1</minIndex>
-            <maxIndex>75</maxIndex>
+            <maxIndex>100</maxIndex>
         </rollingPolicy>
         <triggeringPolicy class="ch.qos.logback.core.rolling.SizeBasedTriggeringPolicy">
-            <maxFileSize>200MB</maxFileSize>
+            <maxFileSize>100MB</maxFileSize>
         </triggeringPolicy>
         <encoder>
             <pattern>
-                %date{yyyy-MM-dd'T'HH:mm:ss.SSSXXX, UTC} | %30.30thread | %msg%n%xException
+                %date{yyyy-MM-dd'T'HH:mm:ss.SSSXXX, UTC} | %11.11thread | %msg%n%xException
             </pattern>
         </encoder>
     </appender>
