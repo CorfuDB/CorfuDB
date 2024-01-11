@@ -30,9 +30,8 @@ import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
- * This class manages the tasks submitted by the runtime FSM, the replication FSM and for the sink tasks when SINK is
- * the connection starter. This is achieved by having 1 thread pool per FSM, and all the sessions traversing an FSM share
- * the thread pool.
+ * This class is a singleton that manages the tasks submitted by the runtime FSM, the replication FSM and also for the
+ * sink tasks when SINK is the connection starter. All sessions share the same thread pool per fsm type.
  *
  * The order of processing the enqueued events, for a given session, is guaranteed by maintaining a list of incoming
  * events for session. Any new events get appended to the list.
@@ -46,14 +45,14 @@ public class FsmTaskManager {
     private ScheduledExecutorService replicationWorker = null;
     private ScheduledExecutorService sinkTaskWorker = null;
 
-    // This data structure is used to maintain the order of events processed for a given session.
+    // This data structure is used to maintain the order of runtime fsm events processed for a given session.
     //
     // The key is a sessionName instead of the session because protobuf's hashcode is not consistent. If a same session is
     // stopped and started, the hashcode may change. Since we synchronize within a session to guarantee the order of
     // events being processed, the inconsistency of the hashcode can block a thread for ever causing the fsm to freeze.
     private final Map<String, LinkedList<UUID>> sessionToRuntimeEventIdMap = new ConcurrentHashMap<>();
 
-    //This data structure is used to maintain the order of events processed for a given session.
+    //This data structure is used to maintain the order of replication fsm events processed for a given session.
     // In order for the replication event processing method to look similar to that of runtime's processing method, the
     // value of this data structure is a list containing only 1 object per session.
     //
@@ -62,7 +61,7 @@ public class FsmTaskManager {
     // events being processed, the inconsistency of the hashcode can block a thread for ever causing the fsm to freeze.
     private final Map<String, List<ReplicationEventOrderManager>> sessionToReplicationEventOrderManager = new ConcurrentHashMap<>();
 
-    // SessionName -> list of sink event IDs. This data structure is used to maintain the order of events processed for a given session.
+    // This data structure is used to maintain the order of sink events processed for a given session.
     //
     // The key is a sessionName instead of the session because protobuf's hashcode is not consistent. If a same session is
     // stopped and started, the hashcode may change. Since we synchronize within a session to guarantee the order of
@@ -276,7 +275,7 @@ public class FsmTaskManager {
      * this wrapper class assists in determining if the current event picked by a thread can be processed.
      * This also ensures that there is only 1 thread active for a session at any time.
      */
-    private static class ReplicationEventOrderManager{
+    private class ReplicationEventOrderManager{
         // Contains events with 0-delay. This list helps maintain the order of events processed.
         private final LinkedList<UUID> processImmediately;
 
