@@ -63,8 +63,6 @@ public class SessionManager {
 
     private final Set<LogReplicationSession> outgoingSessions = ConcurrentHashMap.newKeySet();
 
-    private final Set<ReplicationSubscriber> processedSubscribers = ConcurrentHashMap.newKeySet();
-
     @Getter
     private TopologyDescriptor topology;
 
@@ -296,7 +294,6 @@ public class SessionManager {
                             if (!outgoingSessions.contains(session)) {
                                 newSessions.add(session);
                                 metadataManager.addSession(txn, session, topology.getTopologyConfigId(), false);
-                                processedSubscribers.add(subscriber);
                             } else {
                                 log.warn("Trying to create an existed session: {}", TextFormat.shortDebugString(session));
                             }
@@ -457,7 +454,6 @@ public class SessionManager {
             }
             this.outgoingSessions.remove(session);
             this.incomingSessions.remove(session);
-            this.processedSubscribers.remove(session.getSubscriber());
         });
 
     }
