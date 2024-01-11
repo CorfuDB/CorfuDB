@@ -425,8 +425,9 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object> imple
     public void reconnect() {
         // Close the channel and auto-trigger the reconnection callback.
         log.info("NettyClientRouter reconnecting. Closing the existing channel.");
-        if (channel != null && channel.isOpen()) {
-            channel.close();
+        Channel channelCopy = channel;
+        if (channelCopy != null && channelCopy.isOpen()) {
+            channelCopy.close();
         }
     }
 
