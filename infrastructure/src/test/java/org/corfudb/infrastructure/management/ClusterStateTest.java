@@ -20,6 +20,29 @@ import static org.junit.Assert.assertEquals;
 
 public class ClusterStateTest {
 
+    @Test
+    public void isReady() {
+        final String localEndpoint = A;
+        final long epoch1 = 1;
+        final long epoch2 = 2;
+
+        ClusterState invalidClusterState = ClusterState.buildClusterState(
+                localEndpoint,
+                ImmutableList.of(),
+                nodeState(localEndpoint, epoch1, OK),
+                nodeState(B, epoch2, OK)
+        );
+        assertThat(invalidClusterState.isReady()).isFalse();
+
+        ClusterState validClusterState = ClusterState.buildClusterState(
+                localEndpoint,
+                ImmutableList.of(),
+                nodeState(localEndpoint, epoch1, OK),
+                nodeState(B, epoch1, OK)
+        );
+        assertThat(validClusterState.isReady()).isTrue();
+    }
+
     /**
      * Ensure that {@link ClusterState#getPingResponsiveNodes()} returns all nodes that have
      * responded to our ping, despite the face that all nodes are marked as unresponsive by the

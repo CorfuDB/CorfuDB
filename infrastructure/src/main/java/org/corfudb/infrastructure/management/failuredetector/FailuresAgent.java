@@ -56,10 +56,11 @@ public class FailuresAgent {
 
             if (clusterState.size() != layout.getAllServers().size()) {
                 throw FailureDetectorException.layoutMismatch(clusterState, layout);
-
             }
+
             DecisionMakerAgent decisionMakerAgent = new DecisionMakerAgent(clusterState, advisor);
             Optional<String> maybeDecisionMaker = decisionMakerAgent.findDecisionMaker();
+
             if (maybeDecisionMaker.isPresent()) {
                 String decisionMaker = maybeDecisionMaker.get();
 

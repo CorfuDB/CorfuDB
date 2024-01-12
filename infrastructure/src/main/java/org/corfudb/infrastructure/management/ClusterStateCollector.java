@@ -44,11 +44,11 @@ public class ClusterStateCollector {
      * @return cluster state
      */
     public ClusterState collectClusterState(
-            ImmutableList<String> unresponsiveNodes, SequencerMetrics sequencerMetrics, long epoch) {
+            ImmutableList<String> unresponsiveNodes, SequencerMetrics sequencerMetrics) {
 
         Map<String, NodeState> nodeStates = new HashMap<>();
 
-        nodeStates.put(localEndpoint, collectLocalNodeState(sequencerMetrics, epoch));
+        nodeStates.put(localEndpoint, collectLocalNodeState(sequencerMetrics));
         nodeStates.putAll(collectRemoteStates());
 
         return ClusterState.builder()
@@ -104,7 +104,7 @@ public class ClusterStateCollector {
         return nodeStates;
     }
 
-    private NodeState collectLocalNodeState(SequencerMetrics sequencerMetrics, long epoch) {
+    private NodeState collectLocalNodeState(SequencerMetrics sequencerMetrics) {
         log.trace("Get local node state");
 
         Map<String, ConnectionStatus> localNodeConnections = new HashMap<>();
@@ -127,7 +127,7 @@ public class ClusterStateCollector {
 
         //Build local NodeState based on pings.
         NodeConnectivity localConnectivity = NodeConnectivity.connectivity(
-                localEndpoint, ImmutableMap.copyOf(localNodeConnections), epoch
+                localEndpoint, ImmutableMap.copyOf(localNodeConnections)
         );
 
         return NodeState.builder()

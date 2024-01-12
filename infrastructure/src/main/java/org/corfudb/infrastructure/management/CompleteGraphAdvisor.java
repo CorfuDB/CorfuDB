@@ -94,6 +94,7 @@ public class CompleteGraphAdvisor implements ClusterAdvisor {
 
         ImmutableList<String> unresponsiveNodes = clusterState.getUnresponsiveNodes();
         if (unresponsiveNodes.isEmpty()) {
+            log.trace("All nodes responsive. Nothing to heal");
             return Optional.empty();
         }
 
@@ -101,9 +102,10 @@ public class CompleteGraphAdvisor implements ClusterAdvisor {
             log.trace("Local node is responsive. Nothing to heal");
             return Optional.empty();
         }
+
         //Transform a ClusterState to the ClusterGraph and make it symmetric (symmetric failures)
         ClusterGraph symmetricGraph = ClusterGraph.toClusterGraph(clusterState).toSymmetric();
-        log.debug("Symmetric graph: {}", symmetricGraph);
+
         //See if local node is healed.
         return symmetricGraph.findFullyConnectedNode(localEndpoint);
     }
@@ -124,9 +126,7 @@ public class CompleteGraphAdvisor implements ClusterAdvisor {
         ClusterGraph symmetric = ClusterGraph
                 .toClusterGraph(clusterState)
                 .toSymmetric();
-        log.info("Symmetric: {}", symmetric);
-        final Optional<NodeRank> decisionMaker = symmetric.getDecisionMaker(healthyNodes);
-        log.info("Decision maker: {}", decisionMaker);
-        return decisionMaker;
+
+        return symmetric.getDecisionMaker(healthyNodes);
     }
 }
