@@ -72,6 +72,11 @@ public class ClusterState {
             return false;
         }
 
+        if (!checkEpochs()) {
+            log.info("ClusterState is not consistent: {}", nodes);
+            return false;
+        }
+
         //if at least one node is not ready then entire cluster is not ready to provide correct information
         for (NodeState nodeState : nodes.values()) {
             if (nodeState.getConnectivity().getType() == NodeConnectivityType.NOT_READY) {
@@ -79,6 +84,23 @@ public class ClusterState {
             }
         }
 
+        return true;
+    }
+
+    private boolean checkEpochs() {
+        long currentEpoch = -1;
+
+        for (NodeState nodeState : nodes.values()) {
+            NodeConnectivity connectivity = nodeState.getConnectivity();
+            if (currentEpoch == -1) {
+                currentEpoch = connectivity.getEpoch();
+                continue;
+            }
+
+            if (connectivity.getEpoch() != currentEpoch) {
+                return false;
+            }
+        }
         return true;
     }
 

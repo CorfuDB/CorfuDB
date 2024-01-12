@@ -115,6 +115,7 @@ public class StateTransferIT extends AbstractIT {
         verifyStateTransferWithNodeRestart(SECOND_NODE_ID);
     }
 
+
     /**
      * A cluster of two nodes is started - 9000, 9001.
      * Then a block of data entries is written to the cluster.
