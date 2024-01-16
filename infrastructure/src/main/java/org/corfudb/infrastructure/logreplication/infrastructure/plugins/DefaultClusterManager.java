@@ -170,7 +170,7 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
     }
 
     @Override
-    public void register(CorfuReplicationDiscoveryServiceAdapter corfuReplicationDiscoveryServiceAdapter) {
+    public void register(CorfuReplicationDiscoveryServiceAdapter corfuReplicationDiscoveryServiceAdapter, CorfuRuntime runtime) {
         this.corfuReplicationDiscoveryServiceAdapter = corfuReplicationDiscoveryServiceAdapter;
         String localEndPoint = this.corfuReplicationDiscoveryServiceAdapter.getLocalEndpoint();
         localNodeId = topology.getDefaultNodeId(localEndPoint);
@@ -519,6 +519,12 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
 
         log.debug("new topology :: role changed : source: {}, sink: {}",
                 remoteSourceToReplicationModels, remoteSinkToReplicationModels);
+
+        try {
+            DefaultClusterConfig.unregisterFullTableClient(corfuStore);
+        } catch (Exception e) {
+            log.error("Error during unregistering FULL TABLE client ", e);
+        }
 
         return new TopologyDescriptor(++configId, remoteSinkToReplicationModels, remoteSourceToReplicationModels,
                 oldTopology.getAllClustersInTopology(), localNodeId);

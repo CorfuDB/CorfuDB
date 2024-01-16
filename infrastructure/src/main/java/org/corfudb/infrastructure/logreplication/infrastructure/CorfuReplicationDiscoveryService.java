@@ -265,7 +265,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         // topology cannot be discovered and therefore LR cannot start, for this reason, connection
         // should be attempted indefinitely.
         try {
-            clusterManagerAdapter.register(this);
+            clusterManagerAdapter.register(this, runtime);
 
             IRetry.build(IntervalRetry.class, () -> {
                 try {

@@ -9,17 +9,21 @@ import org.corfudb.runtime.ExampleSchemas;
 import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.collections.CorfuStore;
+import org.corfudb.runtime.collections.CorfuStoreEntry;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
 
+import java.lang.reflect.InvocationTargetException;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Set;
 
@@ -198,13 +202,7 @@ public final class DefaultClusterConfig {
     public static void registerWithLR(CorfuStore store,
                                       HashMap<LogReplication.ReplicationModel, Set<String>> modelToClients) throws  Exception {
 
-        Table<LogReplication.ClientRegistrationId, LogReplication.ClientRegistrationInfo, Message> replicationRegistrationTable =
-                store.openTable(CORFU_SYSTEM_NAMESPACE, LR_REGISTRATION_TABLE_NAME,
-                        LogReplication.ClientRegistrationId.class,
-                        LogReplication.ClientRegistrationInfo.class,
-                        null,
-                        TableOptions.fromProtoSchema(LogReplication.ClientRegistrationInfo.class));
-
+        Table<LogReplication.ClientRegistrationId, LogReplication.ClientRegistrationInfo, Message> finalReplicationRegistrationTable = openClientRegistrationTable(store);
         modelToClients.entrySet().forEach(e -> {
             e.getValue().forEach(client -> {
                 log.info("Registering client {} for model {}", client, e.getKey());
@@ -221,7 +219,7 @@ public final class DefaultClusterConfig {
                         .build();
 
                 try (TxnContext txn = store.txn(CORFU_SYSTEM_NAMESPACE)) {
-                    txn.putRecord(replicationRegistrationTable, clientKey, clientInfo, null);
+                    txn.putRecord(finalReplicationRegistrationTable, clientKey, clientInfo, null);
                     txn.commit();
                 }
             });
@@ -253,5 +251,43 @@ public final class DefaultClusterConfig {
         }
 
         return allSessions;
+    }
+
+    public static void unregisterFullTableClient(CorfuStore corfuStore) throws Exception {
+        openClientRegistrationTable(corfuStore);
+        List<CorfuStoreEntry<LogReplication.ClientRegistrationId, LogReplication.ClientRegistrationInfo, Message>> clientRegistrationRecords;
+        try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+             clientRegistrationRecords = txn.executeQuery(LR_REGISTRATION_TABLE_NAME, p -> true);
+        }
+        List<LogReplication.ClientRegistrationId> keysToDelete = new ArrayList<>();
+        for (CorfuStoreEntry<LogReplication.ClientRegistrationId, LogReplication.ClientRegistrationInfo, Message> e : clientRegistrationRecords) {
+            if (e.getPayload().getModel().equals(FULL_TABLE)) {
+                keysToDelete.add(e.getKey());
+            }
+        }
+
+        for (LogReplication.ClientRegistrationId keyToDelete : keysToDelete) {
+            try(TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+                txn.delete(LR_REGISTRATION_TABLE_NAME, keyToDelete);
+            }
+        }
+    }
+
+    private static Table<LogReplication.ClientRegistrationId, LogReplication.ClientRegistrationInfo, Message>
+    openClientRegistrationTable(CorfuStore store) throws InvocationTargetException, NoSuchMethodException, IllegalAccessException {
+        Table<LogReplication.ClientRegistrationId, LogReplication.ClientRegistrationInfo, Message> replicationRegistrationTable;
+
+        try {
+            replicationRegistrationTable = store.getTable(CORFU_SYSTEM_NAMESPACE, LR_REGISTRATION_TABLE_NAME);
+        } catch (NoSuchElementException | IllegalArgumentException e) {
+            replicationRegistrationTable =
+                    store.openTable(CORFU_SYSTEM_NAMESPACE, LR_REGISTRATION_TABLE_NAME,
+                            LogReplication.ClientRegistrationId.class,
+                            LogReplication.ClientRegistrationInfo.class,
+                            null,
+                            TableOptions.fromProtoSchema(LogReplication.ClientRegistrationInfo.class));
+        }
+
+        return replicationRegistrationTable;
     }
 }

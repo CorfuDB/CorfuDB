@@ -121,17 +121,20 @@ public class LogReplicationClientRegisterListener extends StreamListenerResumeOr
         }
 
         for (CorfuStreamEntry entry : registrationTableEntries) {
+            String clientName = ((ClientRegistrationId) entry.getKey()).getClientName();
+            ReplicationModel model = ((ClientRegistrationInfo) entry.getPayload()).getModel();
+            LogReplication.ReplicationSubscriber subscriber = LogReplication.ReplicationSubscriber.newBuilder()
+                    .setClientName(clientName).setModel(model).build();
+
             if (entry.getOperation().equals(CorfuStreamEntry.OperationType.UPDATE)) {
-                String clientName = ((ClientRegistrationId) entry.getKey()).getClientName();
-                ReplicationModel model = ((ClientRegistrationInfo) entry.getPayload()).getModel();
-                LogReplication.ReplicationSubscriber subscriber = LogReplication.ReplicationSubscriber.newBuilder()
-                        .setClientName(clientName).setModel(model).build();
                 configManager.onNewClientRegister(subscriber);
                 sessionManager.createSessions(subscriber);
                 log.info("New client {} registered with model {}", clientName, model);
             } else if (entry.getOperation().equals(CorfuStreamEntry.OperationType.DELETE)) {
-                // TODO (V2 / Chris/Shreay): add unregister API for clients
-                String clientName = ((ClientRegistrationId) entry.getKey()).getClientName();
+                // TODO (V2 / Chris/Shreay): add unregister API for clients.
+                //  Currently the in-memory subscriber info will be removed so that in the event of of a switchover
+                //  the old active (new standby) doesn't have the subscriber information
+                configManager.getRegisteredSubscribers().remove(subscriber);
                 log.info("Client {} unregistered", clientName);
             }
         }
