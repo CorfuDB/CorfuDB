@@ -144,7 +144,7 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
                     .setSourceClusterId(getUUID(request.getHeader().getClusterId()).toString())
                     .setSinkClusterId(localClusterId)
                     .setSubscriber(LogReplication.ReplicationSubscriber.newBuilder()
-                            .setClientName(LogReplicationConfigManager.getDEFAULT_CLIENT())
+                            .setClientName(LogReplicationConfigManager.DEFAULT_CLIENT)
                             .setModel(LogReplication.ReplicationModel.FULL_TABLE)
                             .build())
                     .build();

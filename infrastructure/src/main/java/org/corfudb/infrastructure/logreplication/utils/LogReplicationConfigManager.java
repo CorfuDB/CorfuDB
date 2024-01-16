@@ -74,8 +74,7 @@ public class LogReplicationConfigManager {
 
     // Represents default client for LR V1, i.e., use case where tables are tagged with
     // 'is_federated' flag, yet no client is specified in proto
-    @Getter
-    private static final String DEFAULT_CLIENT = "00000000-0000-0000-0000-000000000000";
+    public static final String DEFAULT_CLIENT = "00000000-0000-0000-0000-000000000000";
 
     @Getter
     private final CorfuRuntime runtime;

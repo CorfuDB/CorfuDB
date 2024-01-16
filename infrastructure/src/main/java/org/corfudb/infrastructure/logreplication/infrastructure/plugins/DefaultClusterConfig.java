@@ -165,7 +165,7 @@ public final class DefaultClusterConfig {
 
     public static LogReplication.ReplicationSubscriber getDefaultFullTableSubscriber() {
         return LogReplication.ReplicationSubscriber.newBuilder()
-                .setClientName(LogReplicationConfigManager.getDEFAULT_CLIENT())
+                .setClientName(LogReplicationConfigManager.DEFAULT_CLIENT)
                 .setModel(LogReplication.ReplicationModel.FULL_TABLE)
                 .build();
     }

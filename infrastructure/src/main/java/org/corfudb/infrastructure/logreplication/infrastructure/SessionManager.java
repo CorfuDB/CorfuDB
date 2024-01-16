@@ -185,7 +185,7 @@ public class SessionManager {
         Set<LogReplicationSession> sessionsToRemove = new HashSet<>();
         Set<LogReplicationSession> sessionsUnchanged = new HashSet<>();
 
-        Set<LogReplicationSession> allSessions = mergeIncomingOutgoingSessions();
+        Set<LogReplicationSession> allSessions = fetchAllSessions();
 
         try {
             IRetry.build(IntervalRetry.class, () -> {
@@ -238,7 +238,7 @@ public class SessionManager {
         }
     }
 
-    private Set<LogReplicationSession> mergeIncomingOutgoingSessions() {
+    private Set<LogReplicationSession> fetchAllSessions() {
         Set<LogReplicationSession> allSessions = new HashSet<>();
         allSessions.addAll(outgoingSessions);
         allSessions.addAll(incomingSessions);
@@ -431,7 +431,7 @@ public class SessionManager {
         log.info("Stopping log replication.");
         // Stop config listener if required
         stopClientRegistrationListener();
-        stopReplication(mergeIncomingOutgoingSessions());
+        stopReplication(fetchAllSessions());
     }
 
     /**
