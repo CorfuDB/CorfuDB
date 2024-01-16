@@ -43,17 +43,19 @@ public class FileWatcher implements Closeable {
         reloadNewWatchService();
         watcher.scheduleAtFixedRate(
                 this::poll,
-                pollPeriod.toMillis(),
+                0,
                 pollPeriod.toMillis(),
                 TimeUnit.MILLISECONDS);
     }
 
     private void poll() {
         try {
+            log.info("FileWatcher poll cycle");
             WatchKey key = watchService.poll();
             if (key == null) {
                 return;
             }
+            log.info("poll cycle found an event!");
 
             for (WatchEvent<?> event : key.pollEvents()) {
                 WatchEvent.Kind<?> kind = event.kind();

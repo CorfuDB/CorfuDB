@@ -41,6 +41,7 @@ import static org.assertj.core.api.Assertions.fail;
 import static org.awaitility.Awaitility.await;
 import static org.corfudb.common.config.ConfigParamsHelper.TlsCiphers.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384;
 import static org.corfudb.common.config.ConfigParamsHelper.TlsCiphers.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256;
+import static org.corfudb.infrastructure.utils.Persistence.syncDirectory;
 
 @Slf4j
 public class NettyCommTest extends AbstractCorfuTest {
@@ -635,25 +636,35 @@ public class NettyCommTest extends AbstractCorfuTest {
         assertThat(getBaseClient(clientRouter).pingSync()).isTrue();
 
         FileWatcher fileWatcher = new FileWatcher(
-                serverCertManager.certManagementConfig.getKeyStoreConfig().getKeyStoreFile().toString(),
+                clientCertManager.keyStoreConfig.getKeyStoreFile().toString(),
                 clientRouter::reconnect, Duration.ofSeconds(1));
+        TimeUnit.SECONDS.sleep(1);
 
-        // Corrupt client cert
+        // Copy original keystore
         Path keyStoreFilePath = clientCertManager.keyStoreConfig.getKeyStoreFile();
         Path keyStoreFilePathCopy = keyStoreFilePath.resolveSibling(keyStoreFilePath.getFileName() + ".copy");
-        Files.move(keyStoreFilePath, keyStoreFilePathCopy, StandardCopyOption.ATOMIC_MOVE);
+        Files.copy(keyStoreFilePath, keyStoreFilePathCopy, StandardCopyOption.REPLACE_EXISTING);
 
+        // Corrupt the keystore by appending random chars
         byte[] randomBytes = new byte[100];
         Random random = new Random();
         random.nextBytes(randomBytes);
-        Files.write(keyStoreFilePath, randomBytes, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
+        Files.write(keyStoreFilePath, randomBytes,
+                StandardOpenOption.WRITE, StandardOpenOption.CREATE,
+                StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.SYNC);
+        syncDirectory(keyStoreFilePath.getParent().toString());
+
+        log.info("Keystore changes written to {}", keyStoreFilePath);
+        log.info("Keystore copied to to {}", keyStoreFilePathCopy);
+        log.info("FileWatcher registered on file {}", clientCertManager.keyStoreConfig.getKeyStoreFile().toString());
 
         // Verify ssl is auto-reloaded
-        TimeUnit.SECONDS.sleep(2);
+        TimeUnit.SECONDS.sleep(5);
+        log.info("Testing connection after corrupting the keystore");
         assertThat(getBaseClient(clientRouter).pingSync()).isFalse();
 
         // Restore the correct cert
-        Files.move(keyStoreFilePathCopy, keyStoreFilePath, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        Files.copy(keyStoreFilePathCopy, keyStoreFilePath, StandardCopyOption.REPLACE_EXISTING);
 
         // Verify ssl is auto-reloaded
         TimeUnit.SECONDS.sleep(2);
