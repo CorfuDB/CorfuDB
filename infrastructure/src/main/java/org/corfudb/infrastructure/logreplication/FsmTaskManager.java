@@ -2,9 +2,7 @@ package org.corfudb.infrastructure.logreplication;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.logreplication.replication.fsm.IllegalTransitionException;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationFSM;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationState;
@@ -26,8 +24,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.locks.Condition;
-import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * This class is a singleton that manages the tasks submitted by the runtime FSM, the replication FSM and also for the
@@ -47,23 +43,22 @@ public class FsmTaskManager {
 
     // This data structure is used to maintain the order of runtime fsm events processed for a given session.
     //
-    // The key is a sessionName instead of the session because protobuf's hashcode is not consistent. If a same session is
+    // The key is a sessionName instead of the session object because protobuf's hashcode is not consistent. If a same session is
     // stopped and started, the hashcode may change. Since we synchronize within a session to guarantee the order of
     // events being processed, the inconsistency of the hashcode can block a thread for ever causing the fsm to freeze.
     private final Map<String, LinkedList<UUID>> sessionToRuntimeEventIdMap = new ConcurrentHashMap<>();
 
     //This data structure is used to maintain the order of replication fsm events processed for a given session.
-    // In order for the replication event processing method to look similar to that of runtime's processing method, the
-    // value of this data structure is a list containing only 1 object per session.
+    // ReplicationEventOrderManager helps maintain the order of events which may or may-not have a delay.
     //
-    // The key is a sessionName instead of the session because protobuf's hashcode is not consistent. If a same session is
+    // The key is a sessionName instead of the session object because protobuf's hashcode is not consistent. If a same session is
     // stopped and started, the hashcode may change. Since we synchronize within a session to guarantee the order of
     // events being processed, the inconsistency of the hashcode can block a thread for ever causing the fsm to freeze.
     private final Map<String, List<ReplicationEventOrderManager>> sessionToReplicationEventOrderManager = new ConcurrentHashMap<>();
 
     // This data structure is used to maintain the order of sink events processed for a given session.
     //
-    // The key is a sessionName instead of the session because protobuf's hashcode is not consistent. If a same session is
+    // The key is a sessionName instead of the session object because protobuf's hashcode is not consistent. If a same session is
     // stopped and started, the hashcode may change. Since we synchronize within a session to guarantee the order of
     // events being processed, the inconsistency of the hashcode can block a thread for ever causing the fsm to freeze.
     private final Map<String, LinkedList<UUID>> sessionToSinkEventIdMap = new ConcurrentHashMap<>();
@@ -297,14 +292,14 @@ public class FsmTaskManager {
             if (currentlyProcessingEvent) {
                 return true;
             }
-            boolean cannotProcess = !(!processImmediately.isEmpty() && processImmediately.get(0).equals(eventID) ||
-                    !processWithDelay.isEmpty() && processWithDelay.get(0).equals(eventID));
+            boolean canProcess = !processImmediately.isEmpty() && processImmediately.get(0).equals(eventID) ||
+                    !processWithDelay.isEmpty() && processWithDelay.get(0).equals(eventID);
 
-            if (!cannotProcess) {
+            if (canProcess) {
                 // the current event will be processed.
                 currentlyProcessingEvent = true;
             }
-            return cannotProcess;
+            return !canProcess;
         }
 
         synchronized void addEvent(UUID eventID, long delay) {
