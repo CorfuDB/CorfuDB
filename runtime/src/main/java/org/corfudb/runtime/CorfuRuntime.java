@@ -15,7 +15,7 @@ import org.corfudb.common.compression.Codec;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider.MeterRegistryInitializer;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
-import org.corfudb.common.util.FileWatcher;
+import org.corfudb.util.FileWatcher;
 import org.corfudb.runtime.clients.BaseClient;
 import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.clients.LayoutClient;
@@ -148,7 +148,7 @@ public class CorfuRuntime {
      * Node Router Pool.
      */
     @Getter
-    private NodeRouterPool nodeRouterPool;
+    private volatile NodeRouterPool nodeRouterPool;
 
     /**
      * File watcher for SSL key store to support auto hot-swapping.

@@ -10,7 +10,7 @@ import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.common.config.ConfigParamsHelper;
-import org.corfudb.common.util.FileWatcher;
+import org.corfudb.util.FileWatcher;
 import org.corfudb.infrastructure.BaseServer;
 import org.corfudb.infrastructure.CorfuServerNode;
 import org.corfudb.infrastructure.NettyServerRouter;

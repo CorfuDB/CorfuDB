@@ -1,4 +1,4 @@
-package org.corfudb.common.util;
+package org.corfudb.util;
 
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
@@ -37,12 +37,13 @@ public class FileWatcher implements Closeable {
 
         this.watcher = Executors.newSingleThreadScheduledExecutor(
                 new ThreadFactoryBuilder()
+                        .setDaemon(true)
                         .setNameFormat("FileWatcher-")
                         .build());
 
         reloadNewWatchService();
         watcher.scheduleAtFixedRate(
-                this::poll,
+                () -> LambdaUtils.runSansThrow(this::poll),
                 0,
                 pollPeriod.toMillis(),
                 TimeUnit.MILLISECONDS);
@@ -99,5 +100,6 @@ public class FileWatcher implements Closeable {
         } catch (IOException ioe) {
             throw new IllegalStateException("FileWatcher failed to close the watch service!", ioe);
         }
+        log.info("Closed FileWatcher.");
     }
 }
