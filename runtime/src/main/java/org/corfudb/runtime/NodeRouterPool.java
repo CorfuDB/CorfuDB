@@ -55,4 +55,13 @@ public class NodeRouterPool {
             r.stop();
         }
     }
+
+    /**
+     * Reestablish all connections in the pool.
+     */
+    public void reconnect() {
+        for (IClientRouter r : nodeRouters.values()) {
+            r.reconnect();
+        }
+    }
 }

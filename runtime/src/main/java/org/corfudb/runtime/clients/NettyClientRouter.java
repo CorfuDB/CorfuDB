@@ -419,6 +419,19 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object> imple
     }
 
     /**
+     * Reestablish the netty connection.
+     */
+    @Override
+    public void reconnect() {
+        // Close the channel and auto-trigger the reconnection callback.
+        log.info("NettyClientRouter reconnecting. Closing the existing channel.");
+        Channel channelCopy = channel;
+        if (channelCopy != null && channelCopy.isOpen()) {
+            channelCopy.close();
+        }
+    }
+
+    /**
      * Send a request message and get a completable future to be fulfilled by the reply.
      *
      * @param payload         Payload message of the pending request.
