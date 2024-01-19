@@ -328,6 +328,9 @@ public class LogReplicationAckReader {
     }
 
     public void shutdown() {
+        if (lastAckedTsPoller == null) {
+            return;
+        }
         // Stop accepting any new updates
         lastAckedTsPoller.shutdown();
         try {

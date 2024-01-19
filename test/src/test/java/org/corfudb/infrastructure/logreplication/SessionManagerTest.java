@@ -77,6 +77,12 @@ public class SessionManagerTest extends AbstractViewTest {
         SessionManager sessionManager = new SessionManager(topology, corfuRuntime, replicationManager, router,
                 msgHandler, pluginConfig);
         sessionManager.refresh(topology);
+        Assert.assertEquals(0, sessionManager.getOutgoingSessions().size());
+        Assert.assertEquals(0, sessionManager.getIncomingSessions().size());
+
+
+        sessionManager.getReplicationContext().setIsLeader(true);
+        sessionManager.refresh(topology);
         String sourceClusterId = DefaultClusterConfig.getSourceClusterIds().get(0);
         int numSinkCluster = topology.getRemoteSinkClusters().size();
 
@@ -99,6 +105,7 @@ public class SessionManagerTest extends AbstractViewTest {
 
         SessionManager sessionManager = new SessionManager(topology, corfuRuntime, replicationManager, router,
                 msgHandler, pluginConfig);
+        sessionManager.getReplicationContext().setIsLeader(true);
         sessionManager.refresh(topology);
         String sinkClusterId = DefaultClusterConfig.getSinkClusterIds().get(0);
         int numSourceCluster = topology.getRemoteSourceClusters().size();
@@ -124,6 +131,7 @@ public class SessionManagerTest extends AbstractViewTest {
 
         SessionManager sessionManager = new SessionManager(topology, corfuRuntime, replicationManager, router,
                 msgHandler, pluginConfig);
+        sessionManager.getReplicationContext().setIsLeader(true);
         sessionManager.refresh(topology);
         String sourceClusterId = DefaultClusterConfig.getSourceClusterIds().get(0);
         int numSinkCluster = topology.getRemoteSinkClusters().size();
