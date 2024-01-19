@@ -18,6 +18,7 @@ import java.time.Duration;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 @Slf4j
 public class FileWatcher implements Closeable {
@@ -29,6 +30,8 @@ public class FileWatcher implements Closeable {
     private final ScheduledExecutorService watcher;
 
     private volatile WatchService watchService;
+
+    private final AtomicBoolean isRegistered = new AtomicBoolean(false);
 
 
     public FileWatcher(String filePath, Runnable onChange, Duration pollPeriod){
@@ -42,6 +45,7 @@ public class FileWatcher implements Closeable {
                         .build());
 
         reloadNewWatchService();
+
         watcher.scheduleAtFixedRate(
                 () -> LambdaUtils.runSansThrow(this::poll),
                 0,
@@ -51,6 +55,11 @@ public class FileWatcher implements Closeable {
 
     private void poll() {
         try {
+            if (!isRegistered.get()) {
+                log.warn("FileWatcher doesn't have directory registered inside the poll cycle!");
+                reloadNewWatchService();
+            }
+
             WatchKey key = watchService.poll();
             if (key == null) {
                 return;
@@ -86,8 +95,10 @@ public class FileWatcher implements Closeable {
             watchService = FileSystems.getDefault().newWatchService();
             Path path = file.toPath().getParent();
             path.register(watchService, StandardWatchEventKinds.ENTRY_MODIFY);
+            isRegistered.set(true);
             log.info("FileWatcher: parent dir {} for file {} registered.", path, file.getAbsoluteFile());
         } catch (IOException ioe) {
+            isRegistered.set(false);
             throw new IllegalStateException("Failed to start a new watch service!", ioe);
         }
     }
