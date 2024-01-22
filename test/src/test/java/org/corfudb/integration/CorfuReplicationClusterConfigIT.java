@@ -2,7 +2,6 @@ package org.corfudb.integration;
 
 import com.google.common.reflect.TypeToken;
 import com.google.protobuf.Message;
-import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager;
@@ -22,7 +21,6 @@ import org.corfudb.runtime.CorfuOptions;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.ExampleSchemas.ClusterUuidMsg;
-import org.corfudb.runtime.LogReplicationUtils;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.CorfuDynamicKey;
 import org.corfudb.runtime.collections.CorfuDynamicRecord;
@@ -61,7 +59,6 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -75,7 +72,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
 import static org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager.TP_SINGLE_SOURCE_SINK;
 import static org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager.TP_SINGLE_SOURCE_SINK_REV_CONNECTION;
-import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.METADATA_TABLE_NAME;
 import static org.corfudb.runtime.LogReplicationUtils.LR_STATUS_STREAM_TAG;
 import static org.corfudb.runtime.LogReplicationUtils.REPLICATION_STATUS_TABLE_NAME;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
@@ -821,8 +817,9 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
      * 6. Add an entry to the lock table, simulting the node acquiring the lock
      * 7. Validate the data is still not replicated
      * 8. Clear the lock table simulating the node loosing the lock
-     * 9. Add default entries to the replicationStatus table on the source. This is to simulate another node (Leader) creating a new session
-     * 10. Change the topology to ACTIVE/STANDBY and ensure data gets replicated
+     * 9. Change the topology to ACTIVE/STANDBY
+     * 10. Add default entries to the replicationStatus table on the source. This is to simulate another node (Leader) creating a new session
+     * 10. Add an entry in the lock table simulating the local node acquring the lock, ensure that the data is now replicated
      *
      * @throws Exception
      */
@@ -868,7 +865,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
                 pluginConfigPath, transportType);
 
         CountDownLatch countDownLatch = new CountDownLatch(1);
-        dataConsistencyListener listener = new dataConsistencyListener(countDownLatch);
+        DataConsistencyListener listener = new DataConsistencyListener(countDownLatch);
         sinkCorfuStore.subscribeListener(listener, LogReplicationMetadataManager.NAMESPACE,
                 LR_STATUS_STREAM_TAG);
 
@@ -952,6 +949,16 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
 
         clearLockTable(true);
 
+
+        try (TxnContext txn = sourceCorfuStore.txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
+            txn.putRecord(configTable, DefaultClusterManager.OP_RESUME, DefaultClusterManager.OP_RESUME, DefaultClusterManager.OP_RESUME);
+            txn.commit();
+        }
+        assertThat(configTable.count()).isEqualTo(2);
+        log.info("Resume topology!");
+        TimeUnit.SECONDS.sleep(mediumInterval);
+
+        // simulate a different node as the leader and it processing the topology a bit later than the local node.
         try (TxnContext txnContext = sourceCorfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             ReplicationStatus defaultSourceStatus = ReplicationStatus.newBuilder()
                     .setSourceStatus(LogReplication.SourceReplicationStatus.newBuilder()
@@ -967,13 +974,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
             txnContext.putRecord(sourceStatusTable, sessionKey, defaultSourceStatus, null);
             txnContext.commit();
         }
-
-        try (TxnContext txn = sourceCorfuStore.txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
-            txn.putRecord(configTable, DefaultClusterManager.OP_RESUME, DefaultClusterManager.OP_RESUME, DefaultClusterManager.OP_RESUME);
-            txn.commit();
-        }
-        assertThat(configTable.count()).isEqualTo(2);
-        log.info("Resume topology!");
+        // This sleep to ensure that SOURCE is fine after processing the topology before the LEADER node
         TimeUnit.SECONDS.sleep(mediumInterval);
 
         try (TxnContext txnContext = sourceCorfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
@@ -1014,8 +1015,9 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
      * 6. Add an entry to the lock table, simulating the node acquiring the lock
      * 7. Validate the data is still not replicated
      * 8. Clear the lock table simulating the node loosing the lock
-     * 9. Add default entries to the replicationStatus and metadata table on the sink. This is to simulate another node (Leader) creating a new session
-     * 10. Change the topology to ACTIVE/STANDBY and sink gets all the data from the source
+     * 9. Change the topology to ACTIVE/STANDBY. But since the local node is not yet the leader, it will not replicate
+     * 10.Add default entries to the replicationStatus and metadata table on the sink. This is to simulate another node (Leader) creating a new session
+     * 11. Add an entry to the lock table and ensure that the data is now replicated
      *
      * @throws Exception
      */
@@ -1061,7 +1063,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
                 pluginConfigPath, transportType);
 
         CountDownLatch countDownLatch = new CountDownLatch(1);
-        dataConsistencyListener listener = new dataConsistencyListener(countDownLatch);
+        DataConsistencyListener listener = new DataConsistencyListener(countDownLatch);
         sinkCorfuStore.subscribeListener(listener, LogReplicationMetadataManager.NAMESPACE,
                 LR_STATUS_STREAM_TAG);
 
@@ -1145,14 +1147,17 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
 
         clearLockTable(false);
 
-//        Table<LogReplicationSession, LogReplicationMetadata.ReplicationMetadata, Message> metadataTable =
-//                sinkCorfuStore.openTable(LogReplicationMetadataManager.NAMESPACE,
-//                        METADATA_TABLE_NAME,
-//                LogReplicationSession.class,
-//                        LogReplicationMetadata.ReplicationMetadata.class,
-//                null,
-//                TableOptions.fromProtoSchema(ReplicationStatus.class));
+        try (TxnContext txn = sourceCorfuStore.txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
+            txn.putRecord(configTable, DefaultClusterManager.OP_RESUME, DefaultClusterManager.OP_RESUME, DefaultClusterManager.OP_RESUME);
+            txn.commit();
+        }
+        assertThat(configTable.count()).isEqualTo(2);
+        log.info("Resume topology!");
+        TimeUnit.SECONDS.sleep(mediumInterval);
 
+        Assert.assertEquals(0, sinkLockTable.count());
+
+        // Add data to LR metadata table simulating a leader node processing the topology update later than the local node
         try (TxnContext txnContext = sourceCorfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             LogReplicationMetadata.ReplicationMetadata defaultMetadata = LogReplicationMetadata.ReplicationMetadata.newBuilder()
                     .setTopologyConfigId(2)
@@ -1181,12 +1186,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
             txnContext.commit();
         }
 
-        try (TxnContext txn = sourceCorfuStore.txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
-            txn.putRecord(configTable, DefaultClusterManager.OP_RESUME, DefaultClusterManager.OP_RESUME, DefaultClusterManager.OP_RESUME);
-            txn.commit();
-        }
-        assertThat(configTable.count()).isEqualTo(2);
-        log.info("Resume topology!");
+        // This sleep to ensure that SOURCE is fine after processing the topology before the LEADER node
         TimeUnit.SECONDS.sleep(mediumInterval);
 
         try (TxnContext txnContext = sinkCorfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
@@ -2422,11 +2422,11 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
     }
 
 
-    protected class dataConsistencyListener implements StreamListener {
+    protected class DataConsistencyListener implements StreamListener {
 
         private final CountDownLatch countDownLatch;
 
-        public dataConsistencyListener(CountDownLatch countdownLatch) {
+        public DataConsistencyListener(CountDownLatch countdownLatch) {
             this.countDownLatch = countdownLatch;
         }
 
