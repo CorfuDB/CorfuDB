@@ -139,6 +139,9 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
 
     private static String transportType = "GRPC";
 
+    private  static String LOCK_GROUP = "Log_Replication_Group";
+    final  static  String LOCK_NAME = "Log_Replication_Lock";
+
     Table<LogReplicationSession, ReplicationStatus, Message> sourceStatusTable;
     Table<LogReplicationSession, ReplicationStatus, Message> sinkStatusTable;
 
@@ -149,8 +152,8 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
     @Parameterized.Parameters
     public static List<ClusterUuidMsg> input() {
         return Arrays.asList(
-                TP_SINGLE_SOURCE_SINK
-//                TP_SINGLE_SOURCE_SINK_REV_CONNECTION
+                TP_SINGLE_SOURCE_SINK,
+                TP_SINGLE_SOURCE_SINK_REV_CONNECTION
         );
 
     }
@@ -825,7 +828,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
      */
     @Test
     public void testSessionCreationOnNonLeaderSource() throws Exception {
-        if (topologyType == TP_SINGLE_SOURCE_SINK_REV_CONNECTION) {
+        if (topologyType.equals(TP_SINGLE_SOURCE_SINK_REV_CONNECTION)) {
             return;
         }
         //check snapshot sync
@@ -878,13 +881,9 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
 
         assertThat(sinkStatus.getSinkStatus().getDataConsistent()).isTrue();
 
-        // get the lock data for future
-        final String lockGroup = "Log_Replication_Group";
-        final String lockName = "Log_Replication_Lock";
-
         LockDataTypes.LockId lockId = LockDataTypes.LockId.newBuilder()
-                .setLockGroup(lockGroup)
-                .setLockName(lockName)
+                .setLockGroup(LOCK_GROUP)
+                .setLockName(LOCK_NAME)
                 .build();
         CorfuStoreEntry lockTableRecord;
         try (TxnContext txnContext = sourceCorfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
@@ -892,7 +891,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
             txnContext.commit();
         }
 
-       // Release Source's lock by deleting the lock table
+        // Release Source's lock by deleting the lock table
         clearLockTable(true);
         log.info("Source's lock table cleared!");
 
@@ -907,7 +906,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
                 TableOptions.fromProtoSchema(ReplicationStatus.class));
 
         try(TxnContext txn = sourceCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
-            txn.delete( sourceStatusTable, sessionKey);
+            txn.delete(sourceStatusTable, sessionKey);
             txn.delete(metadataTable, sessionKey);
             txn.commit();
         }
@@ -1023,7 +1022,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
      */
     @Test
     public void testSessionCreationOnNonLeaderSink() throws Exception {
-        if (topologyType == TP_SINGLE_SOURCE_SINK_REV_CONNECTION) {
+        if (topologyType.equals(TP_SINGLE_SOURCE_SINK_REV_CONNECTION)) {
             return;
         }
         //check snapshot sync
@@ -1076,13 +1075,9 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
 
         assertThat(sinkStatus.getSinkStatus().getDataConsistent()).isTrue();
 
-        // get the lock data for future
-        final String lockGroup = "Log_Replication_Group";
-        final String lockName = "Log_Replication_Lock";
-
         LockDataTypes.LockId lockId = LockDataTypes.LockId.newBuilder()
-                .setLockGroup(lockGroup)
-                .setLockName(lockName)
+                .setLockGroup(LOCK_GROUP)
+                .setLockName(LOCK_NAME)
                 .build();
         CorfuStoreEntry lockTableRecord;
         try (TxnContext txnContext = sinkCorfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
@@ -2055,12 +2050,9 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         sourceCorfuStore.subscribeListener(listener, LogReplicationMetadataManager.NAMESPACE,
             LR_STATUS_STREAM_TAG);
 
-        final String lockGroup = "Log_Replication_Group";
-        final String lockName = "Log_Replication_Lock";
-
         LockDataTypes.LockId lockId = LockDataTypes.LockId.newBuilder()
-                .setLockGroup(lockGroup)
-                .setLockName(lockName)
+                .setLockGroup(LOCK_GROUP)
+                .setLockName(LOCK_NAME)
                 .build();
         CorfuStoreEntry lockTableRecord;
         try (TxnContext txnContext = sourceCorfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
