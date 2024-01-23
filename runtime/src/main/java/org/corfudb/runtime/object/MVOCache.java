@@ -11,13 +11,16 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.PersistedCorfuTable;
+import org.rocksdb.OptimisticTransactionDB;
 
 import javax.annotation.Nonnull;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 
@@ -76,7 +79,21 @@ public class MVOCache<S extends SnapshotGenerator<S>> {
 
     public void handleEviction(RemovalNotification<VersionedObjectIdentifier, SMRSnapshot<S>> notification) {
         log.trace("handleEviction: evicting {} cause {}", notification.getKey(), notification.getCause());
-        notification.getValue().release();
+        if (!notification.getValue().release()) {
+            log.warn("handleEviction: evicting {} cause {}", notification.getKey(), notification.getCause());
+            log.warn("Total number of entries in the cache: {}", objectCache.size());
+
+            Map<UUID, Long> streams = objectCache.asMap().keySet().stream().map(VersionedObjectIdentifier::getObjectId)
+                    .collect(Collectors.groupingBy(Function.identity(), Collectors.counting()));
+            Map<Long, Long> counts = objectCache.asMap().values().stream()
+                    .filter(c -> c instanceof DiskBackedSMRSnapshot)
+                    .map(c -> (DiskBackedSMRSnapshot) c)
+                    .map(DiskBackedSMRSnapshot::getRocksDb)
+                    .map(OptimisticTransactionDB::getNativeHandle)
+                    .collect(Collectors.groupingBy(Function.identity(), Collectors.counting()));
+            streams.forEach((key, value) -> log.warn("{} -> {}", key.toString(), value));
+            counts.forEach((key, value) -> log.warn("{} -> {}", key, value));
+        }
     }
 
     /**
@@ -110,6 +127,10 @@ public class MVOCache<S extends SnapshotGenerator<S>> {
         }
 
         objectCache.put(voId, object);
+    }
+
+    public long size() {
+        return objectCache.size();
     }
 
     /**

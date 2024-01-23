@@ -24,7 +24,8 @@ public class AlwaysLatestSnapshot<S extends SnapshotGenerator<S>> implements SMR
     }
 
     @Override
-    public void release() {
+    public boolean release() {
         // No-op.
+        return true;
     }
 }
