@@ -155,8 +155,8 @@ public abstract class SinkWriter {
     // even after CP/trim
     void createAndWriteQueueRecord(TxnContext txnContext, List<SMREntry> smrEntries, CorfuStore corfuStore) {
         for (SMREntry smrEntry : smrEntries) {
-            CorfuRecord<Queue.RoutingTableEntryMsg, Message> currRecord =
-                    (CorfuRecord<Queue.RoutingTableEntryMsg, Message>) (replicationContext.getProtobufSerializer()
+            CorfuRecord<Queue.RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg> currRecord =
+                    (CorfuRecord<Queue.RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg>) (protobufSerializer
                             .deserialize(Unpooled.wrappedBuffer((byte[]) smrEntry.getSMRArguments()[1]), null));
             txnContext.logUpdateEnqueue(replicatedRoutingQUuid, currRecord.getPayload(),
                     Collections.singletonList(replicatedRoutingQueueTag), corfuStore);

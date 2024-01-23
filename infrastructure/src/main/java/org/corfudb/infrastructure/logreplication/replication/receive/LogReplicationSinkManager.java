@@ -216,6 +216,8 @@ public class LogReplicationSinkManager implements DataReceiver {
                 tableRegistry.registerTable(CORFU_SYSTEM_NAMESPACE, replicatedQName, Queue.CorfuGuidMsg.class,
                         Queue.RoutingTableEntryMsg.class, Queue.CorfuQueueMetadataMsg.class,
                         tableOptions);
+                tableRegistry.addTypeToClassMap(Queue.RoutingTableEntryMsg.getDefaultInstance());
+                tableRegistry.addTypeToClassMap(Queue.CorfuQueueMetadataMsg.getDefaultInstance());
             } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
                 throw new ReplicationWriterException(e);
             }
