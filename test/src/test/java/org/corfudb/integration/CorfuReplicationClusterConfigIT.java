@@ -1087,20 +1087,20 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
 
         // Release Source's lock by deleting the lock table
         clearLockTable(false);
-        log.info("Source's lock table cleared!");
+        log.info("Sink's lock table cleared!");
 
         countDownLatch.await();
 
         Table<LogReplicationSession, LogReplicationMetadata.ReplicationMetadata, Message> metadataTable =
-                sourceCorfuStore.openTable(LogReplicationMetadataManager.NAMESPACE,
+                sinkCorfuStore.openTable(LogReplicationMetadataManager.NAMESPACE,
                         REPLICATION_STATUS_TABLE,
                         LogReplicationSession.class,
                         LogReplicationMetadata.ReplicationMetadata.class,
                         null,
                         TableOptions.fromProtoSchema(ReplicationStatus.class));
 
-        try(TxnContext txn = sourceCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
-            txn.delete( sourceStatusTable, sessionKey);
+        try(TxnContext txn = sinkCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
+            txn.delete(sinkStatusTable, sessionKey);
             txn.delete(metadataTable, sessionKey);
             txn.commit();
         }
@@ -1135,7 +1135,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         }
 
         Assert.assertEquals(1, sinkLockTable.count());
-        log.info("Source's lock table has a lock entry");
+        log.info("Sink's lock table has a lock entry");
 
         assertThat(mapSink.count()).isEqualTo(firstBatch);
 
@@ -1153,7 +1153,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         Assert.assertEquals(0, sinkLockTable.count());
 
         // Add data to LR metadata table simulating a leader node processing the topology update later than the local node
-        try (TxnContext txnContext = sourceCorfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+        try (TxnContext txnContext = sinkCorfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             LogReplicationMetadata.ReplicationMetadata defaultMetadata = LogReplicationMetadata.ReplicationMetadata.newBuilder()
                     .setTopologyConfigId(2)
                     .setLastLogEntryApplied(Address.NON_ADDRESS)
