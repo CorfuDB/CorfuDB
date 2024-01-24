@@ -43,7 +43,7 @@ public class FileWatcher implements Closeable {
     private ExecutorService newExecutorService() {
         ThreadFactory threadFactory = new ThreadFactoryBuilder()
                 .setDaemon(true)
-                .setNameFormat("FileWatcher")
+                .setNameFormat("FileWatcher-%d")
                 .build();
 
         return Executors.newSingleThreadExecutor(threadFactory);

@@ -144,7 +144,7 @@ public class ServerContext implements AutoCloseable {
     private final EventLoopGroup clientGroup;
 
     @Getter
-    private final EventLoopGroup workerGroup;
+    private EventLoopGroup workerGroup;
 
     @Getter (AccessLevel.PACKAGE)
     @Setter
@@ -392,6 +392,7 @@ public class ServerContext implements AutoCloseable {
                 .saslPlainTextEnabled((Boolean) serverConfig.get("--enable-sasl-plain-text-auth"))
                 .usernameFile((String) serverConfig.get("--sasl-plain-text-username-file"))
                 .passwordFile((String) serverConfig.get("--sasl-plain-text-password-file"))
+                .disableFileWatcher(true)
                 .bulkReadSize(Integer.parseInt((String) serverConfig.get("--batch-size")))
                 .clientName("CorfuServer")
                 .checkpointTriggerFreqMillis(checkpointTriggerFreqMs)
@@ -681,6 +682,15 @@ public class ServerContext implements AutoCloseable {
         } else {
             return null;
         }
+    }
+
+    public void refreshWorkerGroup() {
+        log.trace("workerGroup isShuttingDown {}, isShutdown {}, isTerminated {}", workerGroup.isShuttingDown(), workerGroup.isShutdown(), workerGroup.isTerminated());
+        if (!workerGroup.isShutdown() || !workerGroup.isTerminated() || workerGroup.isShuttingDown()) {
+            workerGroup.shutdownNow();
+        }
+        log.info("refreshWorkerGroup: Refreshing workerGroup threads.");
+        workerGroup = getNewWorkerGroup();
     }
 
     /**

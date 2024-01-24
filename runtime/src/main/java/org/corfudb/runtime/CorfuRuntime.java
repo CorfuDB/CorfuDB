@@ -360,6 +360,11 @@ public class CorfuRuntime {
          * The period at which the runtime will run garbage collection
          */
         Duration runtimeGCPeriod = Duration.ofMinutes(20);
+        
+        /**
+         * Disable the above filewatcher
+         */
+        boolean disableFileWatcher = false;
 
         /*
          * The {@link UUID} for the cluster this client is connecting to, or
@@ -466,6 +471,7 @@ public class CorfuRuntime {
             private int checkpointReadBatchSize = 1;
             private Duration runtimeGCPeriod = Duration.ofMinutes(20);
             private UUID clusterId = null;
+            private boolean disableFileWatcher = false;
             private int systemDownHandlerTriggerLimit = 20;
             private List<NodeLocator> layoutServers = new ArrayList<>();
             private int invalidateRetry = 5;
@@ -757,6 +763,11 @@ public class CorfuRuntime {
                 return this;
             }
 
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder disableFileWatcher(boolean disableFileWatcher) {
+                this.disableFileWatcher = disableFileWatcher;
+                return this;
+            }
+
             public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder clusterId(UUID clusterId) {
                 this.clusterId = clusterId;
                 return this;
@@ -843,6 +854,7 @@ public class CorfuRuntime {
                 corfuRuntimeParameters.setCheckpointReadBatchSize(checkpointReadBatchSize);
                 corfuRuntimeParameters.setRuntimeGCPeriod(runtimeGCPeriod);
                 corfuRuntimeParameters.setClusterId(clusterId);
+                corfuRuntimeParameters.setDisableFileWatcher(disableFileWatcher);
                 corfuRuntimeParameters.setSystemDownHandlerTriggerLimit(systemDownHandlerTriggerLimit);
                 corfuRuntimeParameters.setLayoutServers(layoutServers);
                 corfuRuntimeParameters.setInvalidateRetry(invalidateRetry);
@@ -1038,6 +1050,10 @@ public class CorfuRuntime {
      * @return The Optional of FileWatcher on Keystore file. Empty if keystore is not set in runtime.
      */
     private Optional<FileWatcher> getSslCertWatcher() {
+        if (parameters.disableFileWatcher) {
+            return Optional.empty();
+        }
+
         String keyStorePath = this.parameters.getKeyStore();
         if (keyStorePath == null || keyStorePath.isEmpty()) {
             return Optional.empty();

@@ -111,6 +111,7 @@ public class TlsUtils {
         @Getter
         @ToString
         class KeyStoreConfig implements CertStoreConfig {
+            public static final int DEFAULT_FILE_WATCHER_POLL_PERIOD = 60;
             private final Path keyStoreFile;
             private final Path passwordFile;
 
