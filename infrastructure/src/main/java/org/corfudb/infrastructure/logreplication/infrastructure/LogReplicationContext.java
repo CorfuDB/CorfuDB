@@ -3,6 +3,7 @@ package org.corfudb.infrastructure.logreplication.infrastructure;
 import com.google.common.annotations.VisibleForTesting;
 import lombok.Getter;
 import lombok.Setter;
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.config.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
@@ -21,6 +22,7 @@ import static org.corfudb.util.serializer.ProtobufSerializer.PROTOBUF_SERIALIZER
  *
  * @author amartinezman
  */
+@Slf4j
 public class LogReplicationContext {
 
     @Getter
@@ -62,6 +64,7 @@ public class LogReplicationContext {
     }
 
     public void setIsLeader(boolean newValue) {
+        log.info("Shama, lock is {}", newValue);
         this.isLeader.set(newValue);
     }
 

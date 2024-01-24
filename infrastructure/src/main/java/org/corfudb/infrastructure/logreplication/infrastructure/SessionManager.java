@@ -277,6 +277,7 @@ public class SessionManager {
             log.debug("Current Node is not the leader. Skipping session creation");
             return;
         }
+        log.info("Shama, creating the session since isleader {}", replicationContext.getIsLeader().get());
         newSessionsDiscovered.clear();
         for (ReplicationSubscriber subscriber : configManager.getRegisteredSubscribers()) {
             createOutgoingSessionsBySubscriber(subscriber);
