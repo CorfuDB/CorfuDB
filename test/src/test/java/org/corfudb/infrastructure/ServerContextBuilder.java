@@ -7,6 +7,8 @@ import org.corfudb.common.config.ConfigParamNames;
 import org.corfudb.security.tls.TlsUtils.CertStoreConfig.TrustStoreConfig;
 import org.corfudb.test.concurrent.TestThreadGroups;
 
+import static org.corfudb.security.tls.TlsUtils.CertStoreConfig.KeyStoreConfig.DEFAULT_FILE_WATCHER_POLL_PERIOD;
+
 /**
  * Created by mwei on 6/29/16.
  */
@@ -31,6 +33,7 @@ public class ServerContextBuilder {
     String truststore = "";
     String truststorePasswordFile = "";
     String disableCertExpiryCheckFile = TrustStoreConfig.DEFAULT_DISABLE_CERT_EXPIRY_CHECK_FILE.toString();
+    String fileWatcherPollPeriod = String.valueOf(DEFAULT_FILE_WATCHER_POLL_PERIOD);
 
     String implementation = "local";
 
@@ -87,6 +90,7 @@ public class ServerContextBuilder {
                  .put(ConfigParamNames.TRUST_STORE, truststore)
                  .put(ConfigParamNames.TRUST_STORE_PASS_FILE, truststorePasswordFile)
                  .put(ConfigParamNames.DISABLE_CERT_EXPIRY_CHECK_FILE, disableCertExpiryCheckFile)
+                 .put(ConfigParamNames.FILE_WATCHER_POLL_PERIOD, fileWatcherPollPeriod)
                  .put("--enable-sasl-plain-text-auth", saslPlainTextAuth)
                  .put("--cluster-id", clusterId)
                  .put("--implementation", implementation)
