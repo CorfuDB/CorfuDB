@@ -475,7 +475,6 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
      */
     public void processLockRelease() {
         log.debug("Lock released");
-        log.info("Shama, getting lock release");
         sessionManager.getReplicationContext().setIsLeader(false);
         sessionManager.notifyLeadershipChange();
         stopLogReplication(true);

@@ -345,8 +345,6 @@ public class LogReplicationMetadataManager {
         if(replicationContext.getIsLeader().get()) {
             log.info("Add entry to metadata manager, session={}, config_id={}, incoming={}", session, topologyConfigId, incoming);
             initializeMetadata(txn, session, incoming, topologyConfigId);
-        } else {
-            log.info("Shama, not the leader");
         }
     }
 
