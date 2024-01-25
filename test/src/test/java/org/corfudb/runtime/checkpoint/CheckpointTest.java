@@ -17,12 +17,14 @@ import org.corfudb.runtime.object.PersistenceOptions;
 import org.corfudb.runtime.object.PersistenceOptions.PersistenceOptionsBuilder;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.proto.service.CorfuMessage;
+import org.corfudb.util.Sleep;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Before;
 import org.junit.Test;
 
 import java.nio.file.Paths;
+import java.time.Duration;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -762,6 +764,72 @@ public class CheckpointTest extends AbstractObjectTest {
                     table.entryStream().iterator())).isTrue();
             assertThat(table.size()).isEqualTo(numKeys);
 
+        }
+    }
+
+    /**
+     * Test that validates that a DiskBacked CorfuTable can correctly serve snapshots
+     * after encountering a TrimmedException from the stream layer, even in the presence
+     * of EXPIRED snapshots in the MVOCache.
+     */
+    @Test
+    public void persistedCorfuTableCheckpointTrimTest() {
+        final String path = PARAMETERS.TEST_TEMP_DIR;
+        final int mvoCacheExpirySeconds = 1;
+
+        CorfuRuntime rt = getDefaultRuntime();
+        rt.getParameters().setMvoCacheExpiry(Duration.ofSeconds(mvoCacheExpirySeconds));
+
+        final UUID tableId = UUID.randomUUID();
+        final PersistenceOptionsBuilder persistenceOptions = PersistenceOptions.builder()
+                .dataPath(Paths.get(path + tableId + "reader"));
+
+        try (PersistedCorfuTable<String, String> tableRef = rt.getObjectsView()
+                .build()
+                .setTypeToken(PersistedCorfuTable.<String, String>getTypeToken())
+                .setStreamID(tableId)
+                .setSerializer(Serializers.JSON)
+                .setArguments(persistenceOptions.build(), Serializers.JSON)
+                .open()) {
+
+            // Populate initial data in the CorfuTable.
+            final int numKeys = 100;
+            for (int i = 0; i < numKeys; i++) {
+                tableRef.insert(Integer.toString(i), Integer.toString(i));
+            }
+
+            // Perform a read and populate the MVOCache.
+            assertThat(tableRef.size()).isEqualTo(numKeys);
+
+            CorfuRuntime cpRt = getNewRuntime();
+            persistenceOptions.dataPath(Paths.get(path + tableId + "cpWriter"));
+
+            // Perform Checkpoint/Trim cycles to induce a TrimmedException from
+            // the streaming layer in the first runtime during the next read.
+            try (PersistedCorfuTable<String, String> tableRef2 = cpRt.getObjectsView().build()
+                    .setTypeToken(PersistedCorfuTable.<String, String>getTypeToken())
+                    .setStreamID(tableId)
+                    .setSerializer(Serializers.JSON)
+                    .setArguments(persistenceOptions.build(), Serializers.JSON)
+                    .open()) {
+
+                for (int y = 0; y < 3; y++) {
+                    MultiCheckpointWriter mcw = new MultiCheckpointWriter();
+                    mcw.addMap(tableRef2);
+                    Token token = mcw.appendCheckpoints(cpRt, "cp");
+                    cpRt.getAddressSpaceView().prefixTrim(token);
+                    cpRt.getAddressSpaceView().gc();
+                }
+            }
+
+            cpRt.shutdown();
+
+            // Allow enough time so that existing snapshots in the MVOCache become EXPIRED.
+            Sleep.sleepUninterruptibly(Duration.ofSeconds(2*mvoCacheExpirySeconds));
+
+            // Validate that table operations can still be performed correctly without crashing/exceptions.
+            assertThat(tableRef.size()).isEqualTo(numKeys);
+            rt.shutdown();
         }
     }
 }
