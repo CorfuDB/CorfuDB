@@ -221,7 +221,7 @@ public class SessionManager {
                 stopReplication(sessionsToRemove);
                 updateTopology(newTopology);
                 updateReplicationParameters(Sets.intersection(sessionsUnchanged, outgoingSessions));
-                createSessions();
+                createSessionsWhenLeader();
                 return null;
             }).run();
         } catch (InterruptedException e) {
@@ -272,7 +272,11 @@ public class SessionManager {
      *     Source side: invoke session creation method from client config listener
      *     Sink side: assigned grpc stream for subscriber registration
      */
-    private void createSessions() {
+    private void createSessionsWhenLeader() {
+        if (!replicationContext.getIsLeader().get()) {
+            log.debug("Current Node is not the leader. Skipping session creation");
+            return;
+        }
         newSessionsDiscovered.clear();
         for (ReplicationSubscriber subscriber : configManager.getRegisteredSubscribers()) {
             createOutgoingSessionsBySubscriber(subscriber);

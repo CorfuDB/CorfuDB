@@ -5,7 +5,9 @@ import com.google.protobuf.Message;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
+import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.ReplicationStatus;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
 import org.corfudb.infrastructure.logreplication.proto.Sample.IntValue;
@@ -19,7 +21,6 @@ import org.corfudb.runtime.CorfuOptions;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.ExampleSchemas.ClusterUuidMsg;
-import org.corfudb.runtime.LogReplicationUtils;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.CorfuDynamicKey;
 import org.corfudb.runtime.collections.CorfuDynamicRecord;
@@ -27,6 +28,7 @@ import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStoreEntry;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
+import org.corfudb.runtime.collections.CorfuStreamEntry;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.collections.StreamListener;
 import org.corfudb.runtime.collections.Table;
@@ -38,6 +40,7 @@ import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.LogReplication.SyncStatus;
 import org.corfudb.runtime.LogReplication.SyncType;
 import org.corfudb.runtime.LogReplication.SnapshotSyncInfo;
+import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.util.Sleep;
@@ -70,6 +73,7 @@ import static org.assertj.core.api.Assertions.fail;
 import static org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager.TP_SINGLE_SOURCE_SINK;
 import static org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager.TP_SINGLE_SOURCE_SINK_REV_CONNECTION;
 import static org.corfudb.runtime.LogReplicationUtils.LR_STATUS_STREAM_TAG;
+import static org.corfudb.runtime.LogReplicationUtils.REPLICATION_STATUS_TABLE_NAME;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 
@@ -103,7 +107,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
     private static final String sinkCorfuEndpoint = DEFAULT_HOST + ":" + sinkClusterCorfuPort;
     private static final String backupCorfuEndpoint = DEFAULT_HOST + ":" + backupClusterCorfuPort;
 
-    private static final String REPLICATION_STATUS_TABLE = LogReplicationUtils.REPLICATION_STATUS_TABLE_NAME;
+    private static final String REPLICATION_STATUS_TABLE = REPLICATION_STATUS_TABLE_NAME;
 
     private Process sourceCorfuServer = null;
     private Process sinkCorfuServer = null;
@@ -134,6 +138,12 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
     private ClusterUuidMsg topologyType;
 
     private static String transportType = "GRPC";
+
+    private  static String LOCK_GROUP = "Log_Replication_Group";
+    final  static  String LOCK_NAME = "Log_Replication_Lock";
+
+    Table<LogReplicationSession, ReplicationStatus, Message> sourceStatusTable;
+    Table<LogReplicationSession, ReplicationStatus, Message> sinkStatusTable;
 
     public CorfuReplicationClusterConfigIT(ClusterUuidMsg topologyType) {
         this.topologyType = topologyType;
@@ -226,14 +236,14 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
                 null,
                 TableOptions.fromProtoSchema(LockDataTypes.LockData.class));
 
-        sourceCorfuStore.openTable(LogReplicationMetadataManager.NAMESPACE,
+        sourceStatusTable = sourceCorfuStore.openTable(LogReplicationMetadataManager.NAMESPACE,
                 REPLICATION_STATUS_TABLE,
                 LogReplicationSession.class,
                 ReplicationStatus.class,
                 null,
                 TableOptions.fromProtoSchema(ReplicationStatus.class));
 
-        sinkCorfuStore.openTable(LogReplicationMetadataManager.NAMESPACE,
+        sinkStatusTable = sinkCorfuStore.openTable(LogReplicationMetadataManager.NAMESPACE,
                 REPLICATION_STATUS_TABLE,
                 LogReplicationSession.class,
                 ReplicationStatus.class,
@@ -798,6 +808,408 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         cpRuntime.getAddressSpaceView().invalidateClientCache();
         cpRuntime.getAddressSpaceView().invalidateServerCaches();
         cpRuntime.getAddressSpaceView().gc();
+    }
+
+    /**
+     * Test session creation and E2E flow on non-leader node on SOURCE. Steps are:
+     * 1. setup an ACTIVE/STANDBY topology and validate data gets replicated
+     * 2. Clear the lock table simulating node loosing the lock
+     * 3. Change the topology to an invalid topology, so the session created in (1) needs to be removed.
+     * 4. clear the entries from LR's internal tables to simulate another (Leader) node removeing session information
+     * 5. Write some data and ensure replication doesn't happen
+     * 6. Add an entry to the lock table, simulting the node acquiring the lock
+     * 7. Validate the data is still not replicated
+     * 8. Clear the lock table simulating the node loosing the lock
+     * 9. Change the topology to ACTIVE/STANDBY
+     * 10. Add default entries to the replicationStatus table on the source. This is to simulate another node (Leader) creating a new session
+     * 10. Add an entry in the lock table simulating the local node acquring the lock, ensure that the data is now replicated
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testSessionCreationOnNonLeaderSource() throws Exception {
+        if (topologyType.equals(TP_SINGLE_SOURCE_SINK_REV_CONNECTION)) {
+            return;
+        }
+        //check snapshot sync
+        // Write 'N' entries to source map (to ensure nothing happens wrt. the status, as LR is not started on source)
+        for (int i = 0; i < firstBatch; i++) {
+            try (TxnContext txn = sourceCorfuStore.txn(NAMESPACE)) {
+                txn.putRecord(mapSource, StringKey.newBuilder().setKey(String.valueOf(i)).build(),
+                        IntValue.newBuilder().setValue(i).build(), null);
+                txn.commit();
+            }
+        }
+
+        LogReplicationSession sessionKey = LogReplicationSession.newBuilder()
+                .setSourceClusterId(new DefaultClusterConfig().getSourceClusterIds().get(0))
+                .setSinkClusterId(new DefaultClusterConfig().getSinkClusterIds().get(0))
+                .setSubscriber(LogReplicationConfigManager.getDefaultSubscriber())
+                .build();
+
+        ReplicationStatus sinkStatus;
+        try(TxnContext txn = sinkCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
+            sinkStatus = (ReplicationStatus) txn.getRecord(REPLICATION_STATUS_TABLE_NAME, sessionKey).getPayload();
+            txn.commit();
+        }
+
+        assertThat(sinkStatus).isNull();
+
+        CountDownLatch replicationStopLatch = new CountDownLatch(1);
+        ReplicationStopListener replicationStoplistener = new ReplicationStopListener(replicationStopLatch);
+        sourceCorfuStore.subscribeListener(replicationStoplistener, LogReplicationMetadataManager.NAMESPACE,
+                LR_STATUS_STREAM_TAG);
+
+
+        sourceReplicationServer = runReplicationServer(sourceReplicationServerPort, sourceClusterCorfuPort,
+                pluginConfigPath, transportType);
+
+        sinkReplicationServer = runReplicationServer(sinkReplicationServerPort, sinkClusterCorfuPort,
+                pluginConfigPath, transportType);
+
+        CountDownLatch countDownLatch = new CountDownLatch(1);
+        DataConsistencyListener listener = new DataConsistencyListener(countDownLatch);
+        sinkCorfuStore.subscribeListener(listener, LogReplicationMetadataManager.NAMESPACE,
+                LR_STATUS_STREAM_TAG);
+
+        countDownLatch.await();
+
+        try(TxnContext txn = sinkCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
+            sinkStatus = (ReplicationStatus) txn.getRecord(REPLICATION_STATUS_TABLE_NAME, sessionKey).getPayload();
+            txn.commit();
+        }
+
+        assertThat(sinkStatus.getSinkStatus().getDataConsistent()).isTrue();
+
+        LockDataTypes.LockId lockId = LockDataTypes.LockId.newBuilder()
+                .setLockGroup(LOCK_GROUP)
+                .setLockName(LOCK_NAME)
+                .build();
+        CorfuStoreEntry lockTableRecord;
+        try (TxnContext txnContext = sourceCorfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+            lockTableRecord = txnContext.getRecord(sourceLockTable, lockId);
+            txnContext.commit();
+        }
+
+        // Release Source's lock by deleting the lock table
+        clearLockTable(true);
+        log.info("Source's lock table cleared!");
+
+        countDownLatch.await();
+
+        Table<LogReplicationSession, LogReplicationMetadata.ReplicationMetadata, Message> metadataTable =
+                sourceCorfuStore.openTable(LogReplicationMetadataManager.NAMESPACE,
+                REPLICATION_STATUS_TABLE,
+                LogReplicationSession.class,
+                LogReplicationMetadata.ReplicationMetadata.class,
+                null,
+                TableOptions.fromProtoSchema(ReplicationStatus.class));
+
+        try(TxnContext txn = sourceCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
+            txn.delete(sourceStatusTable, sessionKey);
+            txn.delete(metadataTable, sessionKey);
+            txn.commit();
+        }
+
+        // Perform a config update with all sink
+        try (TxnContext txn = sourceCorfuStore.txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
+            txn.putRecord(configTable, DefaultClusterManager.OP_ALL_SINK, DefaultClusterManager.OP_ALL_SINK, DefaultClusterManager.OP_ALL_SINK);
+            txn.commit();
+        }
+        assertThat(configTable.count()).isOne();
+        log.info("New topology config applied! All the clsuters are sink");
+        TimeUnit.SECONDS.sleep(mediumInterval);
+
+        log.info("Adding 2nd batch");
+
+        for (int i = firstBatch; i < secondBatch; i++) {
+            try (TxnContext txn = sourceCorfuStore.txn(NAMESPACE)) {
+                txn.putRecord(mapSource, StringKey.newBuilder().setKey(String.valueOf(i)).build(),
+                        IntValue.newBuilder().setValue(i).build(), null);
+                txn.commit();
+            }
+        }
+        assertThat(mapSource.count()).isEqualTo(secondBatch);
+
+        try (TxnContext txnContext = sourceCorfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+            LockDataTypes.LockData oldLockData = LockDataTypes.LockData.newBuilder().mergeFrom(lockTableRecord.getPayload()).build();
+            txnContext.putRecord(sourceLockTable, lockId,
+                    LockDataTypes.LockData.newBuilder().mergeFrom(oldLockData)
+                            .setLeaseAcquisitionNumber(oldLockData.getLeaseAcquisitionNumber() + 1)
+                            .setLeaseRenewalNumber(oldLockData.getLeaseRenewalNumber() + 1).build(), null);
+            txnContext.commit();
+        }
+
+        Assert.assertEquals(1, sourceLockTable.count());
+        log.info("Source's lock table has a lock entry");
+
+        assertThat(mapSink.count()).isEqualTo(firstBatch);
+
+
+        clearLockTable(true);
+
+
+        try (TxnContext txn = sourceCorfuStore.txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
+            txn.putRecord(configTable, DefaultClusterManager.OP_RESUME, DefaultClusterManager.OP_RESUME, DefaultClusterManager.OP_RESUME);
+            txn.commit();
+        }
+        assertThat(configTable.count()).isEqualTo(2);
+        log.info("Resume topology!");
+        TimeUnit.SECONDS.sleep(mediumInterval);
+
+        // simulate a different node as the leader and it processing the topology a bit later than the local node.
+        try (TxnContext txnContext = sourceCorfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+            ReplicationStatus defaultSourceStatus = ReplicationStatus.newBuilder()
+                    .setSourceStatus(LogReplication.SourceReplicationStatus.newBuilder()
+                            .setRemainingEntriesToSend(-1L)
+                            .setReplicationInfo(LogReplication.ReplicationInfo.newBuilder()
+                                    .setStatus(SyncStatus.NOT_STARTED)
+                                    .setSnapshotSyncInfo(SnapshotSyncInfo.newBuilder()
+                                            .setStatus(SyncStatus.NOT_STARTED)
+                                            .build())
+                                    .build())
+                            .build())
+                    .build();
+            txnContext.putRecord(sourceStatusTable, sessionKey, defaultSourceStatus, null);
+            txnContext.commit();
+        }
+        // This sleep to ensure that SOURCE is fine after processing the topology before the LEADER node
+        TimeUnit.SECONDS.sleep(mediumInterval);
+
+        try (TxnContext txnContext = sourceCorfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+            LockDataTypes.LockData oldLockData = LockDataTypes.LockData.newBuilder().mergeFrom(lockTableRecord.getPayload()).build();
+            txnContext.putRecord(sourceLockTable, lockId,
+                    LockDataTypes.LockData.newBuilder().mergeFrom(oldLockData)
+                            .setLeaseAcquisitionNumber(oldLockData.getLeaseAcquisitionNumber() + 2)
+                            .setLeaseRenewalNumber(oldLockData.getLeaseRenewalNumber() + 2).build(), null);
+            txnContext.commit();
+        }
+        Assert.assertEquals(1, sourceLockTable.count());
+
+        log.info("Adding 3rd batch");
+
+        for (int i = secondBatch; i < thirdBatch; i++) {
+            try (TxnContext txn = sourceCorfuStore.txn(NAMESPACE)) {
+                txn.putRecord(mapSource, StringKey.newBuilder().setKey(String.valueOf(i)).build(),
+                        IntValue.newBuilder().setValue(i).build(), null);
+                txn.commit();
+            }
+        }
+
+        assertThat(mapSource.count()).isEqualTo(thirdBatch);
+
+        // Wait until the third batch is replicated to sink
+        waitForReplication(size -> size == thirdBatch, mapSink, thirdBatch);
+
+        assertThat(mapSink.count()).isEqualTo(thirdBatch);
+    }
+
+    /**
+     * Test session creation and E2E flow on non-leader node on SINK. Steps are:
+     * 1. setup an ACTIVE/STANDBY topology and validate data gets replicated
+     * 2. Clear the lock table simulating node loosing the lock
+     * 3. Change the topology to an invalid topology, so the session created in (1) needs to be removed.
+     * 4. clear the entries from LR's internal tables to simulate another (Leader) node removing session information
+     * 5. Write some data and ensure replication doesn't happen
+     * 6. Add an entry to the lock table, simulating the node acquiring the lock
+     * 7. Validate the data is still not replicated
+     * 8. Clear the lock table simulating the node loosing the lock
+     * 9. Change the topology to ACTIVE/STANDBY. But since the local node is not yet the leader, it will not replicate
+     * 10.Add default entries to the replicationStatus and metadata table on the sink. This is to simulate another node (Leader) creating a new session
+     * 11. Add an entry to the lock table and ensure that the data is now replicated
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testSessionCreationOnNonLeaderSink() throws Exception {
+        if (topologyType.equals(TP_SINGLE_SOURCE_SINK_REV_CONNECTION)) {
+            return;
+        }
+        //check snapshot sync
+        // Write 'N' entries to source map (to ensure nothing happens wrt. the status, as LR is not started on source)
+        for (int i = 0; i < firstBatch; i++) {
+            try (TxnContext txn = sourceCorfuStore.txn(NAMESPACE)) {
+                txn.putRecord(mapSource, StringKey.newBuilder().setKey(String.valueOf(i)).build(),
+                        IntValue.newBuilder().setValue(i).build(), null);
+                txn.commit();
+            }
+        }
+
+        LogReplicationSession sessionKey = LogReplicationSession.newBuilder()
+                .setSourceClusterId(new DefaultClusterConfig().getSourceClusterIds().get(0))
+                .setSinkClusterId(new DefaultClusterConfig().getSinkClusterIds().get(0))
+                .setSubscriber(LogReplicationConfigManager.getDefaultSubscriber())
+                .build();
+
+        ReplicationStatus sinkStatus;
+        try(TxnContext txn = sinkCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
+            sinkStatus = (ReplicationStatus) txn.getRecord(REPLICATION_STATUS_TABLE_NAME, sessionKey).getPayload();
+            txn.commit();
+        }
+
+        assertThat(sinkStatus).isNull();
+
+        CountDownLatch replicationStopLatch = new CountDownLatch(1);
+        ReplicationStopListener replicationStoplistener = new ReplicationStopListener(replicationStopLatch);
+        sourceCorfuStore.subscribeListener(replicationStoplistener, LogReplicationMetadataManager.NAMESPACE,
+                LR_STATUS_STREAM_TAG);
+
+
+        sourceReplicationServer = runReplicationServer(sourceReplicationServerPort, sourceClusterCorfuPort,
+                pluginConfigPath, transportType);
+
+        sinkReplicationServer = runReplicationServer(sinkReplicationServerPort, sinkClusterCorfuPort,
+                pluginConfigPath, transportType);
+
+        CountDownLatch countDownLatch = new CountDownLatch(1);
+        DataConsistencyListener listener = new DataConsistencyListener(countDownLatch);
+        sinkCorfuStore.subscribeListener(listener, LogReplicationMetadataManager.NAMESPACE,
+                LR_STATUS_STREAM_TAG);
+
+        countDownLatch.await();
+
+        try(TxnContext txn = sinkCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
+            sinkStatus = (ReplicationStatus) txn.getRecord(REPLICATION_STATUS_TABLE_NAME, sessionKey).getPayload();
+            txn.commit();
+        }
+
+        assertThat(sinkStatus.getSinkStatus().getDataConsistent()).isTrue();
+
+        LockDataTypes.LockId lockId = LockDataTypes.LockId.newBuilder()
+                .setLockGroup(LOCK_GROUP)
+                .setLockName(LOCK_NAME)
+                .build();
+        CorfuStoreEntry lockTableRecord;
+        try (TxnContext txnContext = sinkCorfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+            lockTableRecord = txnContext.getRecord(sinkLockTable, lockId);
+            txnContext.commit();
+        }
+
+        // Release Source's lock by deleting the lock table
+        clearLockTable(false);
+        log.info("Sink's lock table cleared!");
+
+        countDownLatch.await();
+
+        Table<LogReplicationSession, LogReplicationMetadata.ReplicationMetadata, Message> metadataTable =
+                sinkCorfuStore.openTable(LogReplicationMetadataManager.NAMESPACE,
+                        REPLICATION_STATUS_TABLE,
+                        LogReplicationSession.class,
+                        LogReplicationMetadata.ReplicationMetadata.class,
+                        null,
+                        TableOptions.fromProtoSchema(ReplicationStatus.class));
+
+        try(TxnContext txn = sinkCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
+            txn.delete(sinkStatusTable, sessionKey);
+            txn.delete(metadataTable, sessionKey);
+            txn.commit();
+        }
+
+        // Perform a config update with all sink
+        try (TxnContext txn = sourceCorfuStore.txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
+            txn.putRecord(configTable, DefaultClusterManager.OP_ALL_SINK, DefaultClusterManager.OP_ALL_SINK, DefaultClusterManager.OP_ALL_SINK);
+            txn.commit();
+        }
+        assertThat(configTable.count()).isOne();
+        log.info("New topology config applied! All the clsuters are sink");
+        TimeUnit.SECONDS.sleep(mediumInterval);
+
+        log.info("Adding 2nd batch");
+
+        for (int i = firstBatch; i < secondBatch; i++) {
+            try (TxnContext txn = sourceCorfuStore.txn(NAMESPACE)) {
+                txn.putRecord(mapSource, StringKey.newBuilder().setKey(String.valueOf(i)).build(),
+                        IntValue.newBuilder().setValue(i).build(), null);
+                txn.commit();
+            }
+        }
+        assertThat(mapSource.count()).isEqualTo(secondBatch);
+
+        try (TxnContext txnContext = sinkCorfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+            LockDataTypes.LockData oldLockData = LockDataTypes.LockData.newBuilder().mergeFrom(lockTableRecord.getPayload()).build();
+            txnContext.putRecord(sinkLockTable, lockId,
+                    LockDataTypes.LockData.newBuilder().mergeFrom(oldLockData)
+                            .setLeaseAcquisitionNumber(oldLockData.getLeaseAcquisitionNumber() + 1)
+                            .setLeaseRenewalNumber(oldLockData.getLeaseRenewalNumber() + 1).build(), null);
+            txnContext.commit();
+        }
+
+        Assert.assertEquals(1, sinkLockTable.count());
+        log.info("Sink's lock table has a lock entry");
+
+        assertThat(mapSink.count()).isEqualTo(firstBatch);
+
+
+        clearLockTable(false);
+
+        try (TxnContext txn = sourceCorfuStore.txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
+            txn.putRecord(configTable, DefaultClusterManager.OP_RESUME, DefaultClusterManager.OP_RESUME, DefaultClusterManager.OP_RESUME);
+            txn.commit();
+        }
+        assertThat(configTable.count()).isEqualTo(2);
+        log.info("Resume topology!");
+        TimeUnit.SECONDS.sleep(mediumInterval);
+
+        Assert.assertEquals(0, sinkLockTable.count());
+
+        // Add data to LR metadata table simulating a leader node processing the topology update later than the local node
+        try (TxnContext txnContext = sinkCorfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+            LogReplicationMetadata.ReplicationMetadata defaultMetadata = LogReplicationMetadata.ReplicationMetadata.newBuilder()
+                    .setTopologyConfigId(2)
+                    .setLastLogEntryApplied(Address.NON_ADDRESS)
+                    .setLastLogEntryBatchProcessed(Address.NON_ADDRESS)
+                    .setLastSnapshotTransferredSeqNumber(Address.NON_ADDRESS)
+                    .setLastSnapshotApplied(Address.NON_ADDRESS)
+                    .setLastSnapshotTransferred(Address.NON_ADDRESS)
+                    .setLastSnapshotStarted(Address.NON_ADDRESS)
+                    .setCurrentCycleMinShadowStreamTs(Address.NON_ADDRESS)
+                    .build();
+            txnContext.putRecord(metadataTable, sessionKey, defaultMetadata, null);
+
+            ReplicationStatus defaultSinkStatus = ReplicationStatus.newBuilder()
+                    .setSinkStatus(LogReplication.SinkReplicationStatus.newBuilder()
+                            .setDataConsistent(false)
+                            .setReplicationInfo(LogReplication.ReplicationInfo.newBuilder()
+                                    .setStatus(SyncStatus.NOT_STARTED)
+                                    .setSnapshotSyncInfo(SnapshotSyncInfo.newBuilder()
+                                            .setStatus(SyncStatus.NOT_STARTED)
+                                            .build())
+                                    .build())
+                            .build())
+                    .build();
+            txnContext.putRecord(sinkStatusTable, sessionKey, defaultSinkStatus, null);
+            txnContext.commit();
+        }
+
+        // This sleep to ensure that SOURCE is fine after processing the topology before the LEADER node
+        TimeUnit.SECONDS.sleep(mediumInterval);
+
+        try (TxnContext txnContext = sinkCorfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+            LockDataTypes.LockData oldLockData = LockDataTypes.LockData.newBuilder().mergeFrom(lockTableRecord.getPayload()).build();
+            txnContext.putRecord(sinkLockTable, lockId,
+                    LockDataTypes.LockData.newBuilder().mergeFrom(oldLockData)
+                            .setLeaseAcquisitionNumber(oldLockData.getLeaseAcquisitionNumber() + 2)
+                            .setLeaseRenewalNumber(oldLockData.getLeaseRenewalNumber() + 2).build(), null);
+            txnContext.commit();
+        }
+        Assert.assertEquals(1, sinkLockTable.count());
+
+        log.info("Adding 3rd batch");
+
+        for (int i = secondBatch; i < thirdBatch; i++) {
+            try (TxnContext txn = sourceCorfuStore.txn(NAMESPACE)) {
+                txn.putRecord(mapSource, StringKey.newBuilder().setKey(String.valueOf(i)).build(),
+                        IntValue.newBuilder().setValue(i).build(), null);
+                txn.commit();
+            }
+        }
+
+        assertThat(mapSource.count()).isEqualTo(thirdBatch);
+
+        // Wait until the third batch is replicated to sink
+        waitForReplication(size -> size == thirdBatch, mapSink, thirdBatch);
+
+        assertThat(mapSink.count()).isEqualTo(thirdBatch);
     }
 
     /**
@@ -1638,12 +2050,9 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         sourceCorfuStore.subscribeListener(listener, LogReplicationMetadataManager.NAMESPACE,
             LR_STATUS_STREAM_TAG);
 
-        final String lockGroup = "Log_Replication_Group";
-        final String lockName = "Log_Replication_Lock";
-
         LockDataTypes.LockId lockId = LockDataTypes.LockId.newBuilder()
-                .setLockGroup(lockGroup)
-                .setLockName(lockName)
+                .setLockGroup(LOCK_GROUP)
+                .setLockName(LOCK_NAME)
                 .build();
         CorfuStoreEntry lockTableRecord;
         try (TxnContext txnContext = sourceCorfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
@@ -2001,6 +2410,35 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
             String errorMsg = "Error in ReplicationStopListener: ";
             log.error(errorMsg, throwable);
             fail(errorMsg + throwable.toString());
+        }
+    }
+
+
+    protected class DataConsistencyListener implements StreamListener {
+
+        private final CountDownLatch countDownLatch;
+
+        public DataConsistencyListener(CountDownLatch countdownLatch) {
+            this.countDownLatch = countdownLatch;
+        }
+
+        @Override
+        public void onNext(CorfuStreamEntries results) {
+            // Only consider updates where data consistent changed to 'true' for counting the latch down.
+            // Ignore 'clear' and 'delete' operations which get sent on a role change and have no payload (to avoid NPE)
+            results.getEntries().forEach((schema, entries) -> entries.forEach(e -> {
+                if (e.getOperation() != CorfuStreamEntry.OperationType.CLEAR &&
+                        e.getOperation() != CorfuStreamEntry.OperationType.DELETE &&
+                        ((ReplicationStatus)e.getPayload()).getSinkStatus().getDataConsistent()) {
+                    countDownLatch.countDown();
+                }
+            }));
+        }
+
+        @Override
+        public void onError(Throwable throwable) {
+            log.error("Error: ", throwable);
+            fail("onError for ReplicationStatusListener");
         }
     }
 }
