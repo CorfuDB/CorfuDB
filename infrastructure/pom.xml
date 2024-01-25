@@ -194,45 +194,6 @@
                     </execution>
                 </executions>
             </plugin>
-            <plugin>
-                <groupId>org.codehaus.mojo</groupId>
-                <artifactId>exec-maven-plugin</artifactId>
-                <version>1.6.0</version>
-                <executions>
-                    <execution>
-                        <id>Docker login</id>
-                        <phase>deploy</phase>
-                        <goals>
-                            <goal>exec</goal>
-                        </goals>
-                        <configuration>
-                            <executable>docker</executable>
-                            <arguments>
-                                <argument>login</argument>
-                                <argument>--username=${env.DOCKER_USERNAME}</argument>
-                                <argument>--password=${env.DOCKER_PASSWORD}</argument>
-                            </arguments>
-                        </configuration>
-                    </execution>
-
-                    <execution>
-                        <id>Docker push</id>
-                        <phase>deploy</phase>
-                        <goals>
-                            <goal>exec</goal>
-                        </goals>
-                        <configuration>
-                            <executable>docker</executable>
-                            <arguments>
-                                <argument>push</argument>
-                                <argument>
-                                    corfudb/corfu-server:${project.version}
-                                </argument>
-                            </arguments>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
         </plugins>
     </build>
 
@@ -253,6 +214,11 @@
             <version>${project.version}</version>
         </dependency>
         <!-- External Dependencies-->
+        <dependency>
+            <groupId>javax.annotation</groupId>
+            <artifactId>javax.annotation-api</artifactId>
+            <version>1.3.2</version>
+        </dependency>
         <dependency>
             <groupId>com.offbytwo</groupId>
             <artifactId>docopt</artifactId>

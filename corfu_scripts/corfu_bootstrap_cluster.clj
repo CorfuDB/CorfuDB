@@ -1,16 +1,19 @@
 ; Setup a cluster with the layout passed as the argument.
 (in-ns 'org.corfudb.shell) ; so our IDE knows what NS we are using
-
 (import org.docopt.Docopt) ; parse some cmdline opts
 (require 'clojure.pprint)
 (require 'clojure.java.shell)
 (import org.corfudb.runtime.view.Layout)
+(import org.corfudb.runtime.BootstrapUtil)
+(import java.time.Duration)
 (import java.util.UUID)
 (def usage "corfu_bootstrap_cluster, setup the Corfu cluster from nodes that have NOT been previously bootstrapped.
 Usage:
-  corfu_bootstrap_cluster -l <layout> [-e [-u <keystore> -f <keystore_password_file>] [-r <truststore> -w <truststore_password_file>] [-g -o <username_file> -j <password_file>]]
+  corfu_bootstrap_cluster -l <layout> --connection-timeout <timeout> [-e [-u <keystore> -f <keystore_password_file> -n <node>] [-r <truststore> -w <truststore_password_file>] [-g -o <username_file> -j <password_file>]]
 Options:
-  -l <layout>, --layout <layout>              JSON layout file to be bootstrapped.
+  -l <layout>, --layout <layout>                                                         JSON layout file to be bootstrapped.
+  -n <node>, --node <node>                                                               Particular node to bootstrap.
+  --connection-timeout <timeout>                                                         Connection timeout in milliseconds.
   -e, --enable-tls                                                                       Enable TLS.
   -u <keystore>, --keystore=<keystore>                                                   Path to the key store.
   -f <keystore_password_file>, --keystore-password-file=<keystore_password_file>         Path to the file containing the key store password.
@@ -21,34 +24,49 @@ Options:
   -j <password_file>, --sasl-plain-text-password-file=<password_file>                    Path to the file containing the password for SASL Plain Text Authentication.
   -h, --help     Show this screen.
 ")
-
 ; Parse the incoming docopt options.
 (def localcmd (.. (new Docopt usage) (parse *args)))
 
+(def retries 3)
+(def timeout (Duration/ofSeconds 3))
+
+(defn configure-router [server]
+      [server (get-router server localcmd)])
+
+(defn create-router-map [layout]
+      (into (sorted-map) (map configure-router (.getLayoutServers layout))))
+
+(defn create-router-map-for-server [server]
+      (apply hash-map (configure-router server)))
+
+(defn bootstrap-node-with-layout [layout-file server]
+      (do (let [router-map (create-router-map-for-server server)
+                new-layout (Layout/fromJSONString (str (slurp layout-file)))]
+               (BootstrapUtil/bootstrapWithRouterMap router-map new-layout retries timeout))
+          (println "New layout installed successfully for this node!")))
+
 (defn bootstrap-cluster [layout-file]
-               (do ; read in the new layout
-                 (let [unvalidated-layout (Layout/fromJSONString (str (slurp layout-file)))]
-                   (let [new-layout
-                         (if
-                           (nil? (.getClusterId unvalidated-layout))
-                           (new Layout
-                             (.getLayoutServers unvalidated-layout)
-                             (.getSequencers unvalidated-layout)
-                             (.getSegments unvalidated-layout)
-                             (.getUnresponsiveServers unvalidated-layout)
-                             (.getEpoch unvalidated-layout)
-                             (UUID/randomUUID))
-                           unvalidated-layout)]
-                      (do
-                        (doseq [server (.getLayoutServers new-layout)]
-                           (do
-                             (let [router (get-router server localcmd)]
-                               (.get (.bootstrapLayout (get-layout-client router (.getEpoch new-layout) (.getClusterId new-layout)) new-layout))
-                               (.get (.bootstrapManagement (get-management-client router (.getEpoch new-layout) (.getClusterId new-layout)) new-layout))
-                            )))
-                        (println "New layout installed!")
-                        )))))
+      (do ; read in the new layout
+        (let [unvalidated-layout (Layout/fromJSONString (str (slurp layout-file)))]
+             (let [new-layout
+                   (if
+                     (nil? (.getClusterId unvalidated-layout))
+                     (new Layout
+                          (.getLayoutServers unvalidated-layout)
+                          (.getSequencers unvalidated-layout)
+                          (.getSegments unvalidated-layout)
+                          (.getUnresponsiveServers unvalidated-layout)
+                          (.getEpoch unvalidated-layout)
+                          (UUID/randomUUID))
+                     unvalidated-layout)]
+                  (do
+                    (let [router-map (create-router-map new-layout)]
+                         (BootstrapUtil/bootstrapWithRouterMap router-map new-layout retries timeout))
+                    (println "New layout installed successfully!"))))))
+
 
 ; determine whether to read or write
-(cond (.. localcmd (get "--layout")) (bootstrap-cluster (.. localcmd (get "--layout")))
-                                       :else (println "Unknown arguments."))
+(cond
+  (.. localcmd (get "--node")) (bootstrap-node-with-layout (.. localcmd (get "--layout")) (.. localcmd (get "--node")))
+  (.. localcmd (get "--layout")) (bootstrap-cluster (.. localcmd (get "--layout")))
+      :else (println "Unknown arguments."))

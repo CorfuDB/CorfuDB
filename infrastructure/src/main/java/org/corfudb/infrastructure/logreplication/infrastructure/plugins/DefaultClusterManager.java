@@ -10,16 +10,12 @@ import org.corfudb.infrastructure.logreplication.infrastructure.TopologyDescript
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.ClusterRole;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.TopologyConfigurationMsg;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.ExampleSchemas.ClusterUuidMsg;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
 import org.corfudb.runtime.collections.CorfuStreamEntry;
 import org.corfudb.runtime.collections.StreamListener;
-import org.corfudb.runtime.collections.Table;
-import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
-import org.corfudb.runtime.view.Address;
 
 import java.io.File;
 import java.io.FileReader;
@@ -31,7 +27,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.LinkedBlockingQueue;
 
 /**
@@ -85,42 +80,11 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
 
     private ConfigStreamListener configStreamListener;
 
-    private String corfuEndpoint = "localhost:9000";
-
     public void start() {
         configId = 0L;
         shutdown = false;
         topologyConfig = constructTopologyConfigMsg();
-        clusterManagerCallback = new ClusterManagerCallback(this);
-        corfuRuntime = CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder().build())
-                .parseConfigurationString(corfuEndpoint)
-                .connect();
-        corfuStore = new CorfuStore(corfuRuntime);
-        long trimMark = Address.NON_ADDRESS;
-        try {
-            // Subscribe from the earliest point in the log.
-            trimMark = corfuRuntime.getLayoutView().getRuntimeLayout().getLogUnitClient(corfuRuntime.getLayoutServers().get(0)).getTrimMark().get();
-        } catch (ExecutionException | InterruptedException e) {
-            log.error("Exception caught while attempting to fetch trim mark. Subscription might fail.", e);
-        }
-        CorfuStoreMetadata.Timestamp ts = CorfuStoreMetadata.Timestamp.newBuilder()
-                .setEpoch(corfuRuntime.getLayoutView().getRuntimeLayout().getLayout().getEpoch())
-                .setSequence(trimMark).build();
-        try {
-            Table<ClusterUuidMsg, ClusterUuidMsg, ClusterUuidMsg> table = corfuStore.openTable(
-                    CONFIG_NAMESPACE, CONFIG_TABLE_NAME,
-                    ClusterUuidMsg.class, ClusterUuidMsg.class, ClusterUuidMsg.class,
-                    TableOptions.fromProtoSchema(ClusterUuidMsg.class)
-            );
-            table.clearAll();
-        } catch (Exception e) {
-            log.error("Exception caught while opening {} table", CONFIG_TABLE_NAME);
-            throw new RuntimeException(e);
-        }
-        configStreamListener = new ConfigStreamListener(this);
-        corfuStore.subscribeListener(configStreamListener, CONFIG_NAMESPACE, "cluster_manager_test", ts);
-        Thread thread = new Thread(clusterManagerCallback);
-        thread.start();
+        updateTopologyConfig(topologyConfig);
     }
 
     @Override
@@ -198,7 +162,7 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
             standbySiteName = DefaultClusterConfig.getStandbyClusterId();
             standbyCorfuPort = DefaultClusterConfig.getStandbyCorfuPort();
             standbyLogReplicationPort = DefaultClusterConfig.getStandbyLogReplicationPort();
-            standbyNodeNames.addAll(DefaultClusterConfig.getActiveNodeNames());
+            standbyNodeNames.addAll(DefaultClusterConfig.getStandbyNodeNames());
             standbyNodeHosts.addAll(DefaultClusterConfig.getStandbyIpAddresses());
             standbyNodeIds.addAll(DefaultClusterConfig.getStandbyNodesUuid());
         }
