@@ -1,6 +1,7 @@
 package org.corfudb.runtime.object;
 
 import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.collections.RocksDbEntryIterator;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.util.serializer.ISerializer;
@@ -16,9 +17,11 @@ import java.util.WeakHashMap;
 import java.util.concurrent.locks.StampedLock;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 import static org.corfudb.runtime.collections.RocksDbEntryIterator.LOAD_VALUES;
 
+@Slf4j
 public class DiskBackedSMRSnapshot<S extends SnapshotGenerator<S>> implements SMRSnapshot<S> {
 
     private final VersionedObjectIdentifier version;
@@ -48,10 +51,24 @@ public class DiskBackedSMRSnapshot<S extends SnapshotGenerator<S>> implements SM
         this.set = Collections.newSetFromMap(new WeakHashMap<>());
     }
 
+    private boolean isInvalid() {
+        if (!this.readOptions.isOwningHandle()) {
+            return true; // The snapshot has already been released.
+        }
+
+        if (!this.rocksDb.isOwningHandle()) {
+            log.error("Invalid RocksDB instance {} for snapshot {}.",
+                    rocksDb.getNativeHandle(), version);
+            return true; // RocksDB instance has already been closed.
+        }
+
+        return false;
+    }
+
     public <V> V executeInSnapshot(Function<ReadOptions, V> function) {
         long stamp = lock.readLock();
         try {
-            if (!this.readOptions.isOwningHandle()) {
+            if (isInvalid()) {
                 throw new TrimmedException("Snapshot is not longer active " + version);
             }
             return function.apply(this.readOptions);
@@ -63,7 +80,7 @@ public class DiskBackedSMRSnapshot<S extends SnapshotGenerator<S>> implements SM
     public void executeInSnapshot(Consumer<ReadOptions> consumer) {
         long stamp = lock.readLock();
         try {
-            if (!this.readOptions.isOwningHandle()) {
+            if (isInvalid()) {
                 throw new TrimmedException("Snapshot is not longer active " + version);
             }
             consumer.accept(this.readOptions);
@@ -72,15 +89,28 @@ public class DiskBackedSMRSnapshot<S extends SnapshotGenerator<S>> implements SM
         }
     }
 
+    public <V> V executeUnderWriteLock(Supplier<V> supplier) {
+        long stamp = lock.writeLock();
+        try {
+            if (isInvalid()) {
+                throw new TrimmedException("Snapshot is not longer active " + version);
+            }
+            return supplier.get();
+        } finally {
+            lock.unlockWrite(stamp);
+        }
+    }
+
     public S consume() {
-        return viewGenerator.newView(new RocksDbTx<>(rocksDb, writeOptions, this, columnFamilyRegistry));
+        return executeUnderWriteLock(() ->
+                viewGenerator.newView(new RocksDbTx<>(rocksDb, writeOptions, this, columnFamilyRegistry)));
     }
 
     public void release() {
         long stamp = lock.writeLock();
         try {
-            if (!this.readOptions.isOwningHandle()) {
-                return; // The snapshot has already been released.
+            if (isInvalid()) {
+                return;
             }
             rocksDb.releaseSnapshot(snapshot);
             set.forEach(RocksDbEntryIterator::invalidateIterator);
