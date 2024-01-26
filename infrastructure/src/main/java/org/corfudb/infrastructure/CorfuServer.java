@@ -6,6 +6,8 @@ import ch.qos.logback.classic.LoggerContext;
 import ch.qos.logback.core.joran.spi.JoranException;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.ChannelFuture;
+import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
 import org.corfudb.common.util.URLUtils.NetworkInterfaceVersion;
@@ -41,6 +43,8 @@ import static org.corfudb.util.NetworkUtils.getAddressFromInterfaceName;
 public class CorfuServer {
     private static final Duration TIMEOUT = Duration.ofSeconds(3);
 
+    @Getter
+    @Setter
     private static volatile CountDownLatch resetLatch;
     // Active Corfu Server.
     private static volatile CorfuServerNode activeServer;
@@ -49,6 +53,8 @@ public class CorfuServer {
     private static volatile boolean shutdownServer = false;
     // If set to true - triggers a reset of the server by wiping off all the data.
     private static volatile boolean cleanupServer = false;
+    @Getter
+    @Setter
     private static boolean keepServerComponents = false;
     // Error code required to detect an ungraceful shutdown.
     static final int EXIT_ERROR_CODE = 100;
@@ -146,9 +152,8 @@ public class CorfuServer {
                     // reset keepServerComponents to false for next iterations
                     keepServerComponents = false;
                 } else {
-                    serverContext.refreshWorkerGroup();
-                    log.info("main: Skipping resetting server components" +
-                            " and restarting the server Channel.");
+                    log.info("main: Restarting the server Channel without resetting the " +
+                            "server components.");
                 }
             } catch (DataCorruptionException ex) {
                 log.error("Failed starting server", ex);
@@ -307,7 +312,8 @@ public class CorfuServer {
     /**
      * Resets the corfu channel without resetting any of the server components
      * CorfuRuntime will auto-reconnect to the server using
-     * {@link org.corfudb.runtime.clients.NettyClientRouter#channelConnectionFutureHandler(ChannelFuture, Bootstrap)}.
+     * {@link org.corfudb.runtime.clients.NettyClientRouter
+     * #channelConnectionFutureHandler(ChannelFuture, Bootstrap)}.
      *
      */
     static void restartServerChannel() {
