@@ -1042,16 +1042,17 @@ public class CorfuRuntime {
      */
     private Optional<FileWatcher> initializeSslCertWatcher() {
 
+        // If the filewatcher is disabled for this Runtime, then skip the registration.
+        // This is required for CorfuServer's ManagementAgent's CorfuRuntime, which uses same certs
+        // as the Corfu Server. Duplicate filewatcher is not required as the server already restarts
+        // connections when those certs are changed, leading to client reconnection with the new certs.
         if (parameters.disableFileWatcher) {
             return Optional.empty();
         }
 
         String keyStorePath = this.parameters.getKeyStore();
-        if (keyStorePath == null || keyStorePath.isEmpty()) {
-            return Optional.empty();
-        }
-        FileWatcher sslWatcher = new FileWatcher(keyStorePath, this::reconnect);
-        return Optional.of(sslWatcher);
+        return FileWatcher.newInstance(keyStorePath,
+                this::reconnect);
     }
 
     /**

@@ -15,6 +15,7 @@ import java.nio.file.WatchEvent;
 import java.nio.file.WatchKey;
 import java.nio.file.WatchService;
 import java.util.concurrent.ExecutorService;
+import java.util.Optional;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -25,7 +26,7 @@ public class FileWatcher implements Closeable {
     private final File file;
 
     private final Runnable onChange;
-    
+
     private volatile WatchService watchService;
 
     private ExecutorService executorService;
@@ -145,5 +146,24 @@ public class FileWatcher implements Closeable {
         }
         this.executorService.shutdownNow();
         log.info("Closed FileWatcher.");
+    }
+
+    /**
+     * Create and get an optional of FileWatcher on keyStorePath file
+     *
+     * @param filePath The file path to register the File Watcher on.
+     * @param onChange Runnable callback method to call after a change is detected by the watcher.
+     *
+     * @return The Optional of FileWatcher on the filePath. Empty if the filePath is not set.
+     */
+    public static Optional<FileWatcher> newInstance(
+            String filePath,
+            Runnable onChange
+    ) {
+        if (filePath == null || filePath.isEmpty()) {
+            return Optional.empty();
+        }
+        FileWatcher sslWatcher = new FileWatcher(filePath, onChange);
+        return Optional.of(sslWatcher);
     }
 }

@@ -1,5 +1,7 @@
 package org.corfudb.infrastructure;
 
+import static org.corfudb.common.util.URLUtils.getVersionFormattedHostAddress;
+
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.channel.EventLoopGroup;
@@ -667,12 +669,39 @@ public class ServerContext implements AutoCloseable {
         }
     }
 
-    public void refreshWorkerGroup() {
-        log.trace("workerGroup isShuttingDown {}, isShutdown {}, isTerminated {}", workerGroup.isShuttingDown(), workerGroup.isShutdown(), workerGroup.isTerminated());
-        if (!workerGroup.isShutdown() || !workerGroup.isTerminated() || workerGroup.isShuttingDown()) {
+    /**
+     * Shuts down the workerGroup and spawns a new one
+     */
+    public void refreshWorkerGroupThreads() {
+        CorfuRuntime.CorfuRuntimeParameters params = getManagementRuntimeParameters();
+
+        workerGroup.shutdownGracefully(
+                params.getNettyShutdownQuitePeriod(),
+                params.getNettyShutdownTimeout(),
+                TimeUnit.MILLISECONDS
+        );
+
+        try {
+            // Wait a while for existing tasks to terminate
+            if (!workerGroup.awaitTermination(params.getNettyShutdownTimeout(), TimeUnit.MILLISECONDS)) {
+                log.error("refreshWorkerGroup: Executor Pool workerGroup did not terminate.");
+            } else {
+                log.info("refreshWorkerGroup: Executor Pool workerGroup terminated successfully.");
+            }
+        } catch (InterruptedException ie) {
+            // (Re-)Cancel if current thread also interrupted
             workerGroup.shutdownNow();
+            // Preserve interrupt status on the current thread
+            Thread.currentThread().interrupt();
         }
-        log.info("refreshWorkerGroup: Refreshing workerGroup threads.");
+
+        log.trace("refreshWorkerGroup: workerGroup isShuttingDown {}," +
+                " isShutdown {}, isTerminated {}",
+                workerGroup.isShuttingDown(),
+                workerGroup.isShutdown(),
+                workerGroup.isTerminated());
+
+        log.info("refreshWorkerGroup: Creating new workerGroup threads.");
         workerGroup = getNewWorkerGroup();
     }
 
