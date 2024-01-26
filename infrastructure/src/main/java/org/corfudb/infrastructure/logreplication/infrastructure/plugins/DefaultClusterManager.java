@@ -77,6 +77,9 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
     public static final ClusterUuidMsg TP_MULTI_SINK = ClusterUuidMsg.newBuilder().setLsb(8L).setMsb(8L).build();
     public static final ClusterUuidMsg TP_MULTI_SOURCE = ClusterUuidMsg.newBuilder().setLsb(9L).setMsb(9L).build();
     public static final ClusterUuidMsg TP_MIXED_MODEL_THREE_SINK = ClusterUuidMsg.newBuilder().setLsb(10L).setMsb(10L).build();
+
+    public static final ClusterUuidMsg OP_TWO_SINK_MIXED = ClusterUuidMsg.newBuilder().setLsb(14L).setMsb(14L).build();
+
     public static final ClusterUuidMsg TP_SINGLE_SOURCE_SINK_ROUTING_QUEUE = ClusterUuidMsg.newBuilder().setLsb(15L).setMsb(15L).build();
 
     @Getter
@@ -742,6 +745,9 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
             } else if (entry.getKey().equals(OP_BACKUP)) {
                 clusterManager.getClusterManagerCallback()
                         .applyNewTopologyConfig(clusterManager.generateConfigWithBackup());
+            } else if (entry.getKey().equals(OP_TWO_SINK_MIXED)) {
+                clusterManager.getClusterManagerCallback()
+                        .applyNewTopologyConfig(clusterManager.generateTwoSinkMixedModelTopology());
             } else if (entry.getKey().equals(TP_SINGLE_SOURCE_SINK)) {
                 clusterManager.initSingleSourceSinkTopology();
             } else if (entry.getKey().equals(TP_MULTI_SINK)) {

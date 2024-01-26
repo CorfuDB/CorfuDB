@@ -66,8 +66,6 @@ public class LogReplicationLogicalGroupIT extends CorfuReplicationMultiSourceSin
 
     private static final int PLUGIN_UPDATES_PER_SNAPSHOT_SYNC = 2;
 
-    private static final String SAMPLE_CLIENT_NAME = "SAMPLE_CLIENT";
-
     private static final String GROUP_A = "groupA";
 
     private static final String GROUP_B = "groupB";
@@ -223,7 +221,7 @@ public class LogReplicationLogicalGroupIT extends CorfuReplicationMultiSourceSin
         // Register client without initializing group destinations mapping
         CorfuRuntime clientRuntime = getClientRuntime();
         LogReplicationLogicalGroupClient logicalGroupClient =
-                new LogReplicationLogicalGroupClient(clientRuntime, SAMPLE_CLIENT_NAME);
+                new LogReplicationLogicalGroupClient(clientRuntime, logicalGroupClientName);
 
         // Open tables on both side
         int numTables = 2;
@@ -368,7 +366,7 @@ public class LogReplicationLogicalGroupIT extends CorfuReplicationMultiSourceSin
         // Register client and initialize group destinations
         CorfuRuntime clientRuntime = getClientRuntime();
         LogReplicationLogicalGroupClient logicalGroupClient =
-                new LogReplicationLogicalGroupClient(clientRuntime, SAMPLE_CLIENT_NAME);
+                new LogReplicationLogicalGroupClient(clientRuntime, logicalGroupClientName);
         logicalGroupClient.setDestinations(GROUP_A,
                 Collections.singletonList(DefaultClusterConfig.getSinkClusterIds().get(SINK2_INDEX)));
         logicalGroupClient.setDestinations(GROUP_B,
@@ -450,7 +448,7 @@ public class LogReplicationLogicalGroupIT extends CorfuReplicationMultiSourceSin
         // Register client and initialize group destinations
         CorfuRuntime clientRuntime = getClientRuntime();
         LogReplicationLogicalGroupClient logicalGroupClient =
-                new LogReplicationLogicalGroupClient(clientRuntime, SAMPLE_CLIENT_NAME);
+                new LogReplicationLogicalGroupClient(clientRuntime, logicalGroupClientName);
         logicalGroupClient.setDestinations(GROUP_A,
                 Collections.singletonList(DefaultClusterConfig.getSinkClusterIds().get(SINK2_INDEX)));
         logicalGroupClient.setDestinations(GROUP_B,
@@ -525,7 +523,7 @@ public class LogReplicationLogicalGroupIT extends CorfuReplicationMultiSourceSin
         // Register client and initialize group destinations
         CorfuRuntime clientRuntime = getClientRuntime();
         LogReplicationLogicalGroupClient logicalGroupClient =
-                new LogReplicationLogicalGroupClient(clientRuntime, SAMPLE_CLIENT_NAME);
+                new LogReplicationLogicalGroupClient(clientRuntime, logicalGroupClientName);
         logicalGroupClient.setDestinations(GROUP_A,
                 Collections.singletonList(DefaultClusterConfig.getSinkClusterIds().get(SINK2_INDEX)));
         logicalGroupClient.setDestinations(GROUP_B,
@@ -578,7 +576,7 @@ public class LogReplicationLogicalGroupIT extends CorfuReplicationMultiSourceSin
         // Register client and add group destinations
         CorfuRuntime clientRuntime = getClientRuntime();
         LogReplicationLogicalGroupClient logicalGroupClient =
-                new LogReplicationLogicalGroupClient(clientRuntime, SAMPLE_CLIENT_NAME);
+                new LogReplicationLogicalGroupClient(clientRuntime, logicalGroupClientName);
         logicalGroupClient.setDestinations(GROUP_A,
                 Collections.singletonList(DefaultClusterConfig.getSinkClusterIds().get(SINK2_INDEX)));
         logicalGroupClient.setDestinations(GROUP_B,
@@ -695,7 +693,7 @@ public class LogReplicationLogicalGroupIT extends CorfuReplicationMultiSourceSin
         // Register client and add group destinations
         CorfuRuntime clientRuntime = getClientRuntime();
         LogReplicationLogicalGroupClient logicalGroupClient =
-                new LogReplicationLogicalGroupClient(clientRuntime, SAMPLE_CLIENT_NAME);
+                new LogReplicationLogicalGroupClient(clientRuntime, logicalGroupClientName);
         logicalGroupClient.setDestinations(GROUP_A,
                 Arrays.asList(
                         DefaultClusterConfig.getSinkClusterIds().get(SINK2_INDEX),
@@ -807,7 +805,7 @@ public class LogReplicationLogicalGroupIT extends CorfuReplicationMultiSourceSin
         // Register client and add group destinations
         CorfuRuntime clientRuntime = getClientRuntime();
         LogReplicationLogicalGroupClient logicalGroupClient =
-                new LogReplicationLogicalGroupClient(clientRuntime, SAMPLE_CLIENT_NAME);
+                new LogReplicationLogicalGroupClient(clientRuntime, logicalGroupClientName);
         logicalGroupClient.setDestinations(GROUP_A,
                 Arrays.asList(
                         DefaultClusterConfig.getSinkClusterIds().get(SINK2_INDEX),
@@ -925,7 +923,7 @@ public class LogReplicationLogicalGroupIT extends CorfuReplicationMultiSourceSin
         // Register client and add group destinations
         CorfuRuntime clientRuntime = getClientRuntime();
         LogReplicationLogicalGroupClient logicalGroupClient =
-                new LogReplicationLogicalGroupClient(clientRuntime, SAMPLE_CLIENT_NAME);
+                new LogReplicationLogicalGroupClient(clientRuntime, logicalGroupClientName);
         logicalGroupClient.setDestinations(GROUP_A,
                 Arrays.asList(
                         DefaultClusterConfig.getSinkClusterIds().get(SINK2_INDEX),
@@ -1045,7 +1043,7 @@ public class LogReplicationLogicalGroupIT extends CorfuReplicationMultiSourceSin
         // Register client and initialize group destinations
         CorfuRuntime clientRuntime = getClientRuntime();
         LogReplicationLogicalGroupClient logicalGroupClient =
-                new LogReplicationLogicalGroupClient(clientRuntime, SAMPLE_CLIENT_NAME);
+                new LogReplicationLogicalGroupClient(clientRuntime, logicalGroupClientName);
         logicalGroupClient.setDestinations(GROUP_A,
                 Collections.singletonList(DefaultClusterConfig.getSinkClusterIds().get(SINK2_INDEX)));
         logicalGroupClient.setDestinations(GROUP_B,
@@ -1160,7 +1158,7 @@ public class LogReplicationLogicalGroupIT extends CorfuReplicationMultiSourceSin
         // Register client and initialize group destinations
         CorfuRuntime clientRuntime = getClientRuntime();
         LogReplicationLogicalGroupClient logicalGroupClient =
-                new LogReplicationLogicalGroupClient(clientRuntime, SAMPLE_CLIENT_NAME);
+                new LogReplicationLogicalGroupClient(clientRuntime, logicalGroupClientName);
         logicalGroupClient.setDestinations(GROUP_A,
                 Collections.singletonList(DefaultClusterConfig.getSinkClusterIds().get(SINK2_INDEX)));
         logicalGroupClient.setDestinations(GROUP_B,
@@ -1269,7 +1267,7 @@ public class LogReplicationLogicalGroupIT extends CorfuReplicationMultiSourceSin
         // Register client and initialize group destinations
         CorfuRuntime clientRuntime = getClientRuntime();
         LogReplicationLogicalGroupClient logicalGroupClient =
-                new LogReplicationLogicalGroupClient(clientRuntime, SAMPLE_CLIENT_NAME);
+                new LogReplicationLogicalGroupClient(clientRuntime, logicalGroupClientName);
         logicalGroupClient.setDestinations(GROUP_A,
                 Collections.singletonList(DefaultClusterConfig.getSinkClusterIds().get(SINK2_INDEX)));
         logicalGroupClient.setDestinations(GROUP_B,
@@ -1326,7 +1324,11 @@ public class LogReplicationLogicalGroupIT extends CorfuReplicationMultiSourceSin
         Table<ExampleSchemas.ClusterUuidMsg, ExampleSchemas.ClusterUuidMsg, ExampleSchemas.ClusterUuidMsg> configTable =
                 sourceCorfuStores.get(SOURCE_INDEX).getTable(DefaultClusterManager.CONFIG_NAMESPACE,
                         DefaultClusterManager.CONFIG_TABLE_NAME);
-        // Shama, there was a line here to make sink connection starter. Check if removal keeps the test same
+        try (TxnContext txn = sourceCorfuStores.get(SOURCE_INDEX).txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
+            txn.putRecord(configTable, DefaultClusterManager.OP_TWO_SINK_MIXED,
+                    DefaultClusterManager.OP_TWO_SINK_MIXED, DefaultClusterManager.OP_TWO_SINK_MIXED);
+            txn.commit();
+        }
 
         // Insert a sleep interval to let the new topology take effect
         TimeUnit.SECONDS.sleep(SLEEP_INTERVAL);
@@ -1361,7 +1363,7 @@ public class LogReplicationLogicalGroupIT extends CorfuReplicationMultiSourceSin
         // Register client and initialize group destinations
         CorfuRuntime clientRuntime = getClientRuntime();
         LogReplicationLogicalGroupClient logicalGroupClient =
-                new LogReplicationLogicalGroupClient(clientRuntime, SAMPLE_CLIENT_NAME);
+                new LogReplicationLogicalGroupClient(clientRuntime, logicalGroupClientName);
         logicalGroupClient.setDestinations(GROUP_A,
                 Collections.singletonList(DefaultClusterConfig.getSinkClusterIds().get(SINK2_INDEX)));
         logicalGroupClient.setDestinations(GROUP_B,
@@ -1472,7 +1474,7 @@ public class LogReplicationLogicalGroupIT extends CorfuReplicationMultiSourceSin
         // Register client and add group destinations
         CorfuRuntime clientRuntime = getClientRuntime();
         LogReplicationLogicalGroupClient logicalGroupClient =
-                new LogReplicationLogicalGroupClient(clientRuntime, SAMPLE_CLIENT_NAME);
+                new LogReplicationLogicalGroupClient(clientRuntime, logicalGroupClientName);
         logicalGroupClient.setDestinations(GROUP_A,
                 Collections.singletonList(DefaultClusterConfig.getSinkClusterIds().get(SINK2_INDEX)));
         logicalGroupClient.setDestinations(GROUP_B,
