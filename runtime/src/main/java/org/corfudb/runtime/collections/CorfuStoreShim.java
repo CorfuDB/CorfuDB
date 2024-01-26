@@ -263,7 +263,7 @@ public class CorfuStoreShim {
     @Nonnull
     @Deprecated
     public ManagedTxnContext txn(@Nonnull final String namespace) {
-        TxnContext txnContext = StoreTransaction.getMyTxnContext();
+        TxnContext txnContext = TxnContext.getMyTxnContext();
         boolean isNested = true;
         if (txnContext == null) {
             txnContext = new TxnContext(corfuStore.getRuntime().getObjectsView(),

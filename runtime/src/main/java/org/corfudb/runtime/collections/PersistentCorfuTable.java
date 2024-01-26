@@ -19,7 +19,6 @@ public class PersistentCorfuTable<K, V> implements
     private ICorfuSMRProxy<ImmutableCorfuTable<K, V>> proxy;
     private ICorfuSMRProxyMetadata proxyMetadata;
 
-
     private final Map<String, ICorfuSMRUpcallTarget<ImmutableCorfuTable<K, V>>> upcallTargetMap
         = ImmutableMap.<String, ICorfuSMRUpcallTarget<ImmutableCorfuTable<K, V>>>builder()
             .put("put", (obj, args) -> obj.put((K) args[0], (V) args[1]))
@@ -32,10 +31,6 @@ public class PersistentCorfuTable<K, V> implements
     }
 
     public PersistentCorfuTable() {}
-
-    public PersistentCorfuTable(ICorfuSMRProxy<ImmutableCorfuTable<K, V>> proxy) {
-        this.proxy = proxy;
-    }
 
     public PersistentCorfuTable(ICorfuSMRProxy<ImmutableCorfuTable<K, V>> proxy,
                                 ICorfuSMRProxyMetadata proxyMetadata) {
