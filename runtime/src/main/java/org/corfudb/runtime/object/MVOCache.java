@@ -126,6 +126,12 @@ public class MVOCache<S extends SnapshotGenerator<S>> {
                         .filter(voId -> objectId.equals(voId.getObjectId()))
                         .collect(Collectors.toList());
         objectCache.invalidateAll(voIdsToInvalidate);
+
+        // Force cleanup of invalidated and EXPIRED cache entries. Despite still being part of certain
+        // internal cache data structures, note that EXPIRED entries do not appear in the asMap() view.
+        // Moreover, unlike the invalidateAll() variant of this API, these EXPIRED entries are not
+        // removed when invalidateAll(Iterable<? extends Object> keys) is invoked.
+        objectCache.cleanUp();
     }
 
     @VisibleForTesting
