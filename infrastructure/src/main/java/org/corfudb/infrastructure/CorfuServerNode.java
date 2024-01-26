@@ -27,7 +27,6 @@ import org.corfudb.infrastructure.health.HealthMonitor;
 import org.corfudb.infrastructure.health.HttpServerInitializer;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageDecoder;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageEncoder;
-import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.security.sasl.plaintext.PlainTextSaslNettyServer;
@@ -50,7 +49,6 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Pattern;
 
@@ -82,7 +80,7 @@ public class CorfuServerNode implements AutoCloseable {
     private ChannelFuture httpServerFuture;
 
     private HTTPServer metricsServer;
-    private Optional<FileWatcher> sslCertWatcher;
+    private final Optional<FileWatcher> sslCertWatcher;
 
     /**
      * Corfu Server initialization.
@@ -112,6 +110,7 @@ public class CorfuServerNode implements AutoCloseable {
         this.serverMap = serverMap;
         this.router = new NettyServerRouter(serverMap.values().asList(), serverContext);
         this.serverContext.setServerRouter(router);
+
         // If the node is started in the single node setup and was bootstrapped,
         // set the server epoch as well.
         Optional<Layout> maybeCurrentLayout = serverContext.findCurrentLayout();
@@ -124,13 +123,14 @@ public class CorfuServerNode implements AutoCloseable {
 
         this.close = new AtomicBoolean(false);
         // Initialize the getSslCertWatcher
-        sslCertWatcher = getSslCertWatcher(
+        sslCertWatcher = FileWatcher.newInstance(
                 serverContext.getServerConfig(String.class, ConfigParamNames.KEY_STORE),
+                this::restartServerChannel,
                 Duration.ofSeconds(
                         serverContext
-                        .<String>getServerConfig(ConfigParamNames.FILE_WATCHER_POLL_PERIOD)
-                        .map(Integer::parseInt)
-                        .orElse(KeyStoreConfig.DEFAULT_FILE_WATCHER_POLL_PERIOD)
+                                .<String>getServerConfig(ConfigParamNames.FILE_WATCHER_POLL_PERIOD)
+                                .map(Integer::parseInt)
+                                .orElse(KeyStoreConfig.DEFAULT_FILE_WATCHER_POLL_PERIOD)
                 )
         );
     }
@@ -200,19 +200,6 @@ public class CorfuServerNode implements AutoCloseable {
         this.start().channel().closeFuture().syncUninterruptibly();
     }
 
-    /**
-     * Get an optional of the FileWatcher on Keystore file
-     *
-     * @return The Optional of FileWatcher on Keystore file. Empty if keystore is not set in runtime.
-     */
-    private Optional<FileWatcher> getSslCertWatcher(String keyStorePath, Duration fileWatcherPollPeriod) {
-        if (keyStorePath == null || keyStorePath.isEmpty()) {
-            return Optional.empty();
-        }
-        FileWatcher sslWatcher = new FileWatcher(keyStorePath, this::restartServerChannel, fileWatcherPollPeriod);
-        return Optional.of(sslWatcher);
-    }
-
     public void restartServerChannel() {
         log.info("restartServerChannel: Stopping Corfu Server channels.");
 
@@ -224,38 +211,12 @@ public class CorfuServerNode implements AutoCloseable {
             httpServerFuture.channel().close().syncUninterruptibly();
         }
 
-        shutdownAndAwaitTermination(serverContext.getWorkerGroup());
-
-        // Call reconnect method in CorfuServer to signal
-        // the Corfu Server's while loop to continue using latch countdown()
-        CorfuServer.restartServerChannel();
+        serverContext.refreshWorkerGroupThreads();
 
         log.info("restartServerChannel: Reinitializing Corfu Server channels.");
-    }
-
-    /**
-     * Shut down an Executor Service and wait for termination.
-     * @param deadPool ExecutorService thread pool to shut down
-     */
-    void shutdownAndAwaitTermination(ExecutorService deadPool) {
-        CorfuRuntime.CorfuRuntimeParameters params = serverContext.getManagementRuntimeParameters();
-
-        deadPool.shutdown(); // Disable new tasks from being submitted
-        try {
-            // Wait a while for existing tasks to terminate
-            if (!deadPool.awaitTermination(params.getNettyShutdownQuitePeriod(), TimeUnit.MILLISECONDS)) {
-                deadPool.shutdownNow(); // Cancel currently executing tasks
-                // Wait a while for tasks to respond to being cancelled
-                if (!deadPool.awaitTermination(params.getNettyShutdownQuitePeriod(), TimeUnit.MILLISECONDS)) {
-                    log.error("shutdownAndAwaitTermination: Executor Pool did not terminate");
-                }
-            }
-        } catch (InterruptedException ie) {
-            // (Re-)Cancel if current thread also interrupted
-            deadPool.shutdownNow();
-            // Preserve interrupt status on the current thread
-            Thread.currentThread().interrupt();
-        }
+        // Invoke restartServerChannel method in CorfuServer to signal
+        // the Corfu Server's while loop to continue using latch countdown()
+        CorfuServer.restartServerChannel();
     }
 
     /**
