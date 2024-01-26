@@ -705,14 +705,16 @@ public class CorfuStoreIT extends AbstractIT {
 
     @Test
     public void testScopedTransaction() throws Exception {
-        startCorfu();
+        Process corfuServer = startCorfu();
 
         // Define a namespace for the table and table name
         final String namespace = "corfu-namespace";
         final String tableName1 = "Table1";
         final String tableName2 = "Table2";
         final String tableName3 = "Table3";
+        final String tableNameNoWrites = "NoWritesTable";
         final int numUpdates1 = 100;
+        final long OFFSET = 5L;
 
         // Create & Register the table.
         Table<Uuid, Uuid, ManagedResources> table1 = corfuStore.openTable(
@@ -731,8 +733,7 @@ public class CorfuStoreIT extends AbstractIT {
                 ManagedResources.class,
                 TableOptions.builder().build());
 
-        // Open table3
-        corfuStore.openTable(
+        Table<Uuid, SampleSchema.EventInfo, ManagedResources> table3 = corfuStore.openTable(
                 namespace,
                 tableName3,
                 Uuid.class,

@@ -5,10 +5,12 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
+import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.util.retry.IRetry;
+import org.corfudb.util.retry.IntervalRetry;
+import org.corfudb.util.retry.RetryNeededException;
 
 import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -22,11 +24,12 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 @Slf4j
-public class ScopedTransaction implements StoreTransaction<TxnContext>,
-        AutoCloseable, CommitApi {
+public class ScopedTransaction implements
+        ReadTransactionApi, AutoCloseable {
 
-    private final TransactionCrud<TxnContext> crud;
+    private final ReadTransactionApi crud;
     private final CorfuRuntime runtime;
+    private final String namespace;
 
     @Getter
     private final Token txnSnapshot;
@@ -34,21 +37,45 @@ public class ScopedTransaction implements StoreTransaction<TxnContext>,
             Table<? extends Message, ? extends Message, ? extends Message>,
             Table> mapping;
 
-    public ScopedTransaction(
+    ScopedTransaction(
             @Nonnull final CorfuRuntime runtime,
             @Nonnull final String namespace,
             @Nonnull final IsolationLevel isolationLevel,
             Table<?, ?, ?>... tables) {
-        this.crud = new TransactionCrud<>(namespace, this::txAbort);
+        this.crud = new ReadTransaction();
         this.runtime = runtime;
+        this.namespace = namespace;
         this.txnSnapshot = txBeginInternal(isolationLevel);
         this.mapping = Arrays.stream(tables).collect(Collectors.toMap(
                         table -> table,
                         table -> table.generateImmutableView(txnSnapshot.getSequence())));
     }
 
+    public static ScopedTransaction newScopedTransaction(
+            @Nonnull final CorfuRuntime runtime,
+            @Nonnull final String namespace,
+            @Nonnull final IsolationLevel isolationLevel,
+            Table<?, ?, ?>... tables) {
+        try {
+            return IRetry.build(IntervalRetry.class, () -> {
+                try {
+                    return new ScopedTransaction(
+                            runtime,
+                            namespace,
+                            isolationLevel,
+                            tables);
+                } catch (TrimmedException e) {
+                    log.error("Error while attempting to snapshot tables {}.", tables, e);
+                    throw new RetryNeededException();
+                }
+            }).run();
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     private Token txBeginInternal(IsolationLevel isolationLevel) {
-        log.trace("TxnContext: begin transaction in namespace {}", crud.namespace);
+        log.trace("TxnContext: begin transaction in namespace {}", namespace);
 
         if (isolationLevel.getTimestamp() != Token.UNINITIALIZED) {
             return isolationLevel.getTimestamp();
@@ -60,13 +87,11 @@ public class ScopedTransaction implements StoreTransaction<TxnContext>,
                 .getToken();
     }
 
+    @Nonnull
     @Override
-    public Timestamp commit() {
-        throw new UnsupportedOperationException("This is a read only transaction.");
-    }
-
-    @Override
-    public void txAbort() {
+    public <K extends Message, V extends Message, M extends Message> CorfuStoreEntry<K, V, M>
+    getRecord(@Nonnull Table<K, V, M> table, @Nonnull K key) {
+        return crud.getRecord(getTableSnapshot(table), key);
     }
 
     @Override
@@ -77,57 +102,6 @@ public class ScopedTransaction implements StoreTransaction<TxnContext>,
     Table<K, V, M> getTableSnapshot(Table<K, V, M> table) {
         return Optional.of(mapping.get(table)).orElseThrow(
                 () -> new IllegalStateException("Table not specified during TX build."));
-    }
-
-    @Override
-    public <K extends Message, V extends Message, M extends Message>
-    void putRecord(@Nonnull Table<K, V, M> table,
-                   @Nonnull K key,
-                   @Nonnull V value,
-                   @Nullable M metadata) {
-        crud.putRecord(getTableSnapshot(table), key, value, metadata);
-    }
-
-    @Override
-    public <K extends Message, V extends Message, M extends Message>
-    void merge(@Nonnull Table<K, V, M> table,
-               @Nonnull K key,
-               @Nonnull MergeCallback mergeCallback,
-               @Nonnull CorfuRecord<V, M> recordDelta) {
-        crud.merge(getTableSnapshot(table), key, mergeCallback, recordDelta);
-    }
-
-    @Override
-    public <K extends Message, V extends Message, M extends Message>
-    void touch(@Nonnull Table<K, V, M> table, @Nonnull K key) {
-        crud.touch(getTableSnapshot(table), key);
-    }
-
-    @Override
-    public <K extends Message, V extends Message, M extends Message>
-    void clear(@Nonnull Table<K, V, M> table) {
-        crud.clear(getTableSnapshot(table));
-    }
-
-    @Nonnull
-    @Override
-    public <K extends Message, V extends Message, M extends Message>
-    TxnContext delete(@Nonnull Table<K, V, M> table, @Nonnull K key) {
-        return crud.delete(getTableSnapshot(table), key);
-    }
-
-    @Nonnull
-    @Override
-    public <K extends Message, V extends Message, M extends Message>
-    K enqueue(@Nonnull Table<K, V, M> table, @Nonnull V value) {
-        return crud.enqueue(getTableSnapshot(table), value);
-    }
-
-    @Nonnull
-    @Override
-    public <K extends Message, V extends Message, M extends Message> CorfuStoreEntry<K, V, M>
-    getRecord(@Nonnull Table<K, V, M> table, @Nonnull K key) {
-        return crud.getRecord(getTableSnapshot(table), key);
     }
 
     @Nonnull

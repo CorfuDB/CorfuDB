@@ -183,6 +183,7 @@ public class SessionManagerTest extends AbstractViewTest {
 
         SessionManager sessionManager = new SessionManager(topology, corfuRuntime, replicationManager, router,
                 msgHandler, pluginConfig);
+        sessionManager.getReplicationContext().setIsLeader(true);
         sessionManager.refresh(topology);
         sessionManager.connectToRemoteClusters();
         Mockito.verify(clientChannelAdapter, Mockito.times(3)).connectAsync(ArgumentMatchers.any(), ArgumentMatchers.any());
