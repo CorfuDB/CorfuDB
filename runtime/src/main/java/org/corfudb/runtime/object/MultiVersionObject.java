@@ -489,7 +489,13 @@ public class MultiVersionObject<S extends SnapshotGenerator<S> & ConsistencyView
         resolvedUpTo = Address.NON_ADDRESS;
 
         snapshotFifo.forEach(SMRSnapshot::release);
+
+        long cacheSize = mvoCache.size();
         mvoCache.invalidateAllVersionsOf(getSmrStream().getID());
+        long newCacheSize = mvoCache.size();
+        log.info("MVO Cache size before and after invalidation ({}, {}).",
+                cacheSize, newCacheSize);
+
         snapshotFifo = new ArrayDeque<>(snapshotFifoSize);
         currentObject.close();
         currentObject = newObjectFn.get();

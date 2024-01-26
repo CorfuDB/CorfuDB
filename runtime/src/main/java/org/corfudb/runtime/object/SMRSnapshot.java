@@ -25,5 +25,5 @@ public interface SMRSnapshot<T> {
      * <p>
      * WARNING: This method needs to be idempotent.
      */
-    void release();
+    boolean release();
 }

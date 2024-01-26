@@ -3,6 +3,7 @@ package org.corfudb.runtime.object;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
 import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.collections.RocksDbEntryIterator;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.serializer.ISerializer;
@@ -24,6 +25,7 @@ import java.util.stream.Collectors;
  *
  * @param <S> extends SnapshotGenerator
  */
+@Slf4j
 public class RocksDbTx<S extends SnapshotGenerator<S>> implements RocksDbApi {
 
     private final OptimisticTransactionDB rocksDb;
@@ -168,6 +170,7 @@ public class RocksDbTx<S extends SnapshotGenerator<S>> implements RocksDbApi {
 
     @Override
     public void close() throws RocksDBException {
+        log.info("Closing RocksDbTx {}", rocksDb.getNativeHandle());
         txn.rollback();
         // This function should be called manually, or even better, called implicitly using a
         // try-with-resources statement, when you are finished with the object. It is no longer

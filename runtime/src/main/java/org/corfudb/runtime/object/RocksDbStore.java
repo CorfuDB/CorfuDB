@@ -39,6 +39,7 @@ public class RocksDbStore<S extends SnapshotGenerator<S>> implements
         RocksDbSnapshotGenerator<S>,
         ColumnFamilyRegistry {
 
+    private boolean valid = true;
     private final OptimisticTransactionDB rocksDb;
     private final String absolutePathString;
     private final WriteOptions writeOptions;
@@ -88,6 +89,8 @@ public class RocksDbStore<S extends SnapshotGenerator<S>> implements
             this.secondaryIndexColumnFamily = this.rocksDb.createColumnFamily(
                     new ColumnFamilyDescriptor("secondary-indexes".getBytes(), columnFamilyOptions));
         }
+
+        log.info("Opened RocksDB Table {} on {}", rocksDb.getNativeHandle(), absolutePathString);
     }
 
     @Override
@@ -188,9 +191,10 @@ public class RocksDbStore<S extends SnapshotGenerator<S>> implements
 
     @Override
     public void close() throws RocksDBException {
+        valid = false;
         rocksDb.close();
         RocksDB.destroyDB(absolutePathString, rocksDbOptions);
-        log.info("Cleared RocksDB data on {}", absolutePathString);
+        log.info("Cleared RocksDB Table {} on {}", rocksDb.getNativeHandle(), absolutePathString);
     }
 
     /**
@@ -205,6 +209,9 @@ public class RocksDbStore<S extends SnapshotGenerator<S>> implements
     @Override
     public SMRSnapshot<S> getSnapshot(@NonNull ViewGenerator<S> viewGenerator,
                                       @NonNull VersionedObjectIdentifier version) {
+        if (!valid) {
+            log.warn("Creating a snapshot using an invalid store {}.", rocksDb.getNativeHandle());
+        }
         return new DiskBackedSMRSnapshot<>(rocksDb, writeOptions, version, viewGenerator, this);
     }
 

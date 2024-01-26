@@ -24,7 +24,8 @@ public class InMemorySMRSnapshot<T> implements SMRSnapshot<T> {
      * {@inheritDoc}
      */
     @Override
-    public void release() {
+    public boolean release() {
         // No-Op.
+        return true;
     }
 }
