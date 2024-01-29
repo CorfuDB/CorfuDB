@@ -247,11 +247,9 @@ public class ObjectsView extends AbstractView {
     @AllArgsConstructor
     @EqualsAndHashCode
     @SuppressWarnings({"checkstyle:abbreviation"})
-    public static class ObjectID<T> {
+    public static class ObjectID {
         final UUID streamID;
-
-        @EqualsAndHashCode.Exclude
-        final Class<T> type;
+        final Class<?> type;
 
         public String toString() {
             return "[" + streamID + ", " + type.getSimpleName() + "]";

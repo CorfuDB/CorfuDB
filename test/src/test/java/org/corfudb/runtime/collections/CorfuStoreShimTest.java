@@ -29,7 +29,7 @@ import org.corfudb.runtime.proto.RpcCommon;
 import org.corfudb.runtime.proto.RpcCommon.UuidMsg;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.Address;
-import org.corfudb.runtime.view.ObjectsView;
+import org.corfudb.runtime.view.ObjectsView.ObjectID;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.test.SampleSchema;
@@ -248,7 +248,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
 
         // By some future bug should the table disappear from the object cache ensure that
         // the method still fails gracefully with a NoSuchElementException
-        ObjectsView.ObjectID oid = new ObjectsView.ObjectID(table.getStreamUUID(), PersistentCorfuTable.class);
+        ObjectID oid = new ObjectID(table.getStreamUUID(), PersistentCorfuTable.class);
         corfuRuntime.getObjectsView().getObjectCache().remove(oid);
         assertThatThrownBy(() -> shimStore.freeTableData(someNamespace, tableName))
                 .isExactlyInstanceOf(NoSuchElementException.class);
@@ -1444,6 +1444,49 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         assertThat(options.getStreamTag(0)).isEqualTo("sample_streamer_4");
         assertThat(options.getSecondaryKeyCount()).isEqualTo(1);
         assertThat(options.getSecondaryKey(0).getIndexPath()).isEqualTo("event_time");
+    }
+
+    /**
+     * Ensure that {@link ObjectID}'s type is used during object cache operations.
+     */
+    @Test
+    public void testTableType() throws Exception {
+        // Get a Corfu Runtime instance.
+        CorfuRuntime corfuRuntime = getDefaultRuntime();
+
+        // Creating Corfu Store using a connected corfu client.
+        CorfuStoreShim shimStore = new CorfuStoreShim(corfuRuntime);
+
+        // Define a namespace for the table.
+        final String someNamespace = "some-namespace";
+        // Define table name.
+        final String tableName = "DiskTable";
+        final String dataPath = Files.createTempDirectory(tableName).toString();
+
+        PersistenceOptions persistenceOptions = PersistenceOptions.newBuilder()
+                .setDataPath(dataPath)
+                .build();
+
+        final Table<?, ?, ?> inMemoryTable = shimStore.openTable(
+                someNamespace,
+                tableName,
+                SampleSchema.Uuid.class,
+                SampleSchema.SampleTableAMsg.class,
+                ManagedResources.class,
+                TableOptions.builder().build());
+        assertThat(inMemoryTable.getUnderlyingType()).isEqualTo(PersistentCorfuTable.class);
+
+        final Table<?, ?, ?> diskBackedTable = shimStore.openTable(
+                someNamespace,
+                tableName,
+                SampleSchema.Uuid.class,
+                SampleSchema.SampleTableAMsg.class,
+                ManagedResources.class,
+                TableOptions.builder().persistenceOptions(persistenceOptions).build());
+        assertThat(diskBackedTable.getUnderlyingType()).isEqualTo(PersistedCorfuTable.class);
+
+        inMemoryTable.close();
+        diskBackedTable.close();
     }
 
     @Test

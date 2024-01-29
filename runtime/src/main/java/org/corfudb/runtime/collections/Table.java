@@ -207,12 +207,12 @@ public class Table<K extends Message, V extends Message, M extends Message> impl
             throw new IllegalStateException("Cannot reset a table opened with NO_CACHE option.");
         }
 
-
         // PersistentCorfuTable
-        ObjectID<?> oid = ObjectID.builder().streamID(getStreamUUID()).build();
+        ObjectID oid = ObjectID.builder()
+                .streamID(getStreamUUID())
+                .type(getUnderlyingType())
+                .build();
 
-        // Evict all versions of this Table from MVOCache
-        runtime.getObjectsView().getMvoCache().invalidateAllVersionsOf(getStreamUUID());
         corfuTable.close();
 
         Object tableObject = runtime.getObjectsView().getObjectCache().remove(oid);
