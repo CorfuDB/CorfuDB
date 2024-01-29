@@ -1,10 +1,13 @@
 package org.corfudb.protocols.wireprotocol;
 
+import org.corfudb.common.util.Memory;
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.runtime.CorfuRuntime;
 
 import java.util.Optional;
 import java.util.UUID;
+
+import static java.lang.Math.toIntExact;
 
 /**
  * An interface to log data entries.
@@ -135,6 +138,11 @@ public interface ILogData extends IMetadata, Comparable<ILogData> {
      * @return An estimate on the size of this object, in bytes.
      */
     int getSizeEstimate();
+
+    default int getTotalSize() {
+        int metaDadaSize = toIntExact(Memory.sizeOf.deepSizeOf(getMetadataMap()));
+        return Math.addExact(getSizeEstimate(), metaDadaSize);
+    }
 
     /**
      * Assign a given token to this log data.
