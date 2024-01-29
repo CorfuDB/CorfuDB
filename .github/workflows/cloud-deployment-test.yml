@@ -6,7 +6,7 @@ on:
 
 jobs:
 
-  could-deployment-test:
+  could_deployment_test:
     runs-on: ubuntu-latest
 
     strategy:
