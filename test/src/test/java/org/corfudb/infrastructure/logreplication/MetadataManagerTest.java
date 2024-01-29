@@ -53,6 +53,7 @@ public class MetadataManagerTest extends AbstractViewTest {
         replicationContext = new LogReplicationContext(new LogReplicationConfigManager(corfuRuntime,
                 LOCAL_SOURCE_CLUSTER_ID), topologyConfigId, getEndpoint(SERVERS.PORT_0), true,
                 Mockito.mock(LogReplicationPluginConfig.class), corfuRuntime);
+        replicationContext.addSessionNameForLogging(defaultSession, "session_1");
         metadataManager = new LogReplicationMetadataManager(corfuRuntime, replicationContext);
         metadataManager.addSession(defaultSession, topologyConfigId, true);
     }
@@ -70,6 +71,7 @@ public class MetadataManagerTest extends AbstractViewTest {
     public void testMetadataAfterLogEntrySync() {
         LogReplicationContext context = new LogReplicationContext(configManager, topologyConfigId,
                 getEndpoint(SERVERS.PORT_0), Mockito.mock(LogReplicationPluginConfig.class), corfuRuntime);
+        context.addSessionNameForLogging(defaultSession, "session_1");
         LogEntryWriter writer = new LogEntryWriter(metadataManager, defaultSession, context);
 
         long numOpaqueEntries = 3L;
@@ -127,6 +129,7 @@ public class MetadataManagerTest extends AbstractViewTest {
         metadataManager.addSession(defaultSession, topologyConfigId, true);
         LogReplicationContext context = new LogReplicationContext(configManager, 0,
                 defaultSession.getSourceClusterId(), Mockito.mock(LogReplicationPluginConfig.class), corfuRuntime);
+        context.addSessionNameForLogging(defaultSession, "session_1");
         LogEntryWriter writer = new LogEntryWriter(metadataManager, defaultSession, context);
 
         // Create a message with 50 opaque entries

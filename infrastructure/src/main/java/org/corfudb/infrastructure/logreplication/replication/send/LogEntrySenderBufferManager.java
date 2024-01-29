@@ -25,8 +25,8 @@ public class LogEntrySenderBufferManager extends SenderBufferManager {
      * Constructor
      * @param dataSender
      */
-    public LogEntrySenderBufferManager(DataSender dataSender, LogReplicationAckReader ackReader) {
-        super(dataSender, configureAcksCounter());
+    public LogEntrySenderBufferManager(DataSender dataSender, LogReplicationAckReader ackReader, String sessionName) {
+        super(dataSender, configureAcksCounter(), sessionName);
         this.ackReader = ackReader;
     }
 

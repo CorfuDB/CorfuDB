@@ -47,7 +47,7 @@ public class LogEntrySinkBufferManager extends SinkBufferManager {
                 .mergeFrom(entry.getMetadata())
                 .setEntryType(LogReplicationEntryType.LOG_ENTRY_REPLICATED)
                 .setTimestamp(lastProcessedSeq).build();
-        log.debug("Sink Buffer lastProcessedSeq {}", lastProcessedSeq);
+        log.debug("[{}]:: Sink Buffer lastProcessedSeq {}", sinkManager.getSessionName(), lastProcessedSeq);
         return metadata;
     }
 
@@ -59,7 +59,7 @@ public class LogEntrySinkBufferManager extends SinkBufferManager {
     @Override
     public boolean verifyMessageType(LogReplicationEntryMsg entry) {
         if (entry.getMetadata().getEntryType() != type) {
-            log.warn("Got msg type {} but expecting type {}",
+            log.warn("[{}]:: Got msg type {} but expecting type {}", sinkManager.getSessionName(),
                     entry.getMetadata().getEntryType(), type);
             return false;
         }

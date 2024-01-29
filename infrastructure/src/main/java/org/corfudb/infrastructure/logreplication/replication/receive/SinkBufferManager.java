@@ -124,7 +124,7 @@ public abstract class SinkBufferManager {
     public LogReplicationEntryMsg processMsgAndBuffer(LogReplicationEntryMsg dataMessage) {
 
         if (!verifyMessageType(dataMessage)) {
-            log.warn("Received invalid message type {}", dataMessage.getMetadata());
+            log.warn("[{}]:: Received invalid message type {}", sinkManager.getSessionName(), dataMessage.getMetadata());
             return null;
         }
 
@@ -133,14 +133,15 @@ public abstract class SinkBufferManager {
 
         // This message contains entries that haven't been applied yet
         if (preTs <= lastProcessedSeq && currentTs > lastProcessedSeq) {
-            log.debug("Received in order message={}, lastProcessed={}", currentTs, lastProcessedSeq);
+            log.debug("[{}]:: Received in order message={}, lastProcessed={}", sinkManager.getSessionName(), currentTs, lastProcessedSeq);
             if (sinkManager.processMessage(dataMessage)) {
                 ackCnt++;
                 lastProcessedSeq = getCurrentSeq(dataMessage);
             }
             processBuffer();
         } else if (currentTs > lastProcessedSeq && buffer.size() < maxSize) {
-            log.debug("Received unordered message, currentTs={}, lastProcessed={}", currentTs, lastProcessedSeq);
+            log.debug("[{}]:: Received unordered message, currentTs={}, lastProcessed={}", sinkManager.getSessionName(),
+                    currentTs, lastProcessedSeq);
             buffer.put(preTs, dataMessage);
         }
 

@@ -42,8 +42,9 @@ public class CorfuReplicationManager {
     /**
      * Create Log Replication Runtime for a session, if not already created.
      */
-    public void createAndStartRuntime(ClusterDescriptor remote, LogReplicationSession replicationSession,
-                                      LogReplicationClientServerRouter router) {
+    public void createReplicationRuntime(ClusterDescriptor remote, LogReplicationSession replicationSession,
+                                         LogReplicationClientServerRouter router) {
+        String sessionName = replicationContext.getSessionName(replicationSession);
         try {
             CorfuLogReplicationRuntime replicationRuntime;
             if (!sessionRuntimeMap.containsKey(replicationSession)) {
@@ -51,14 +52,13 @@ public class CorfuReplicationManager {
                 replicationRuntime = new CorfuLogReplicationRuntime(metadataManager, replicationSession, replicationContext, router);
                 sessionRuntimeMap.put(replicationSession, replicationRuntime);
                 router.addRuntimeFSM(replicationSession, replicationRuntime);
-                replicationRuntime.start();
             } else {
                 log.warn("Log Replication Runtime to remote session {}, already exists. Skipping init.",
-                        replicationSession);
+                        sessionName);
                 return;
             }
         } catch (Exception e) {
-            log.error("Caught exception, stop log replication runtime to {}", replicationSession, e);
+            log.error("Caught exception, stop log replication runtime to {}", sessionName, e);
             stopLogReplicationRuntime(replicationSession);
         }
     }
@@ -88,16 +88,18 @@ public class CorfuReplicationManager {
 
     private void stopLogReplicationRuntime(LogReplicationSession session) {
         CorfuLogReplicationRuntime logReplicationRuntime = sessionRuntimeMap.get(session);
+        String sessionName = replicationContext.getSessionName(session);
         if (logReplicationRuntime != null) {
             try {
-                log.info("Stop log replication runtime for session {}", session);
+                log.info("Stop log replication runtime for session {}", sessionName);
                 logReplicationRuntime.stop();
 
             } catch(Exception e) {
-                log.warn("Failed to stop log replication runtime to remote cluster id={}", session.getSinkClusterId());
+                log.warn("Failed to stop log replication runtime to remote cluster id={} for session {}",
+                        session.getSinkClusterId(), sessionName);
             }
         } else {
-            log.warn("Runtime not found for session {}", session);
+            log.warn("Runtime not found for session {}", sessionName);
         }
     }
 
@@ -112,11 +114,11 @@ public class CorfuReplicationManager {
      */
     public void enforceSnapshotSync(DiscoveryServiceEvent event) {
         CorfuLogReplicationRuntime runtime = sessionRuntimeMap.get(event.getSession());
+        String sessionName = replicationContext.getSessionName(event.getSession());
         if (runtime == null) {
-            log.warn("Failed to enforce snapshot sync for session {}",
-                event.getSession());
+            log.warn("Failed to enforce snapshot sync for session {}", sessionName);
         } else {
-            log.info("Enforce snapshot sync for remote session {}", event.getSession());
+            log.info("Enforce snapshot sync for remote session {}", sessionName);
             runtime.getSourceManager().stopLogReplication();
             runtime.getSourceManager().startForcedSnapshotSync(event.getEventId());
         }

@@ -286,20 +286,22 @@ public class LogReplicationMetadataManager {
      */
     public void updateReplicationMetadataField(TxnContext txn, LogReplicationSession session, int fieldNumber, Object value) {
         Descriptors.FieldDescriptor fd = ReplicationMetadata.getDescriptor().findFieldByNumber(fieldNumber);
+        String sessionName = replicationContext.getSessionName(session);
         if (fd == null) {
-            log.error("Failed to find metadata field number {} in ReplicationMetadata object. Metadata is not UPDATED!", fieldNumber);
+            log.error("[{}]:: Failed to find metadata field number {} in ReplicationMetadata object. Metadata is not UPDATED!",
+                    sessionName, fieldNumber);
             return;
         }
         CorfuStoreEntry<LogReplicationSession, ReplicationMetadata, Message> entry = txn.getRecord(metadataTable, session);
 
         if(entry.getPayload() == null) {
-            log.warn("Entry not found for session={} - skipping update", session);
+            log.warn("[{}]:: Entry not found for the session - skipping update", sessionName);
             return;
         }
         ReplicationMetadata updatedMetadata = entry.getPayload().toBuilder().setField(fd, value).build();
         txn.putRecord(metadataTable, session, updatedMetadata, null);
 
-        log.debug("Update metadata field {}, value={}, session={}", fd.getFullName(), value, session);
+        log.debug("[{}]:: Update metadata field {}, value={}", sessionName, fd.getFullName(), value);
     }
 
     /**
@@ -317,13 +319,13 @@ public class LogReplicationMetadataManager {
                     updateReplicationMetadataField(txn, session, fieldNumber, value);
                     txn.commit();
                 } catch (TransactionAbortedException tae) {
-                    log.error("Error while attempting to update replication metadata", tae);
+                    log.error("[{}]:: Error while attempting to update replication metadata", replicationContext.getSessionName(session), tae);
                     throw new RetryNeededException();
                 }
                 return null;
             }).run();
         } catch (InterruptedException e) {
-            log.error("Unrecoverable exception when attempting to update replication metadata", e);
+            log.error("[{}]:: Unrecoverable exception when attempting to update replication metadata", replicationContext.getSessionName(session), e);
             throw new UnrecoverableCorfuInterruptedError(e);
         }
     }
@@ -422,8 +424,9 @@ public class LogReplicationMetadataManager {
      *         false, otherwise
      */
     public boolean setBaseSnapshotStart(LogReplicationSession session, long topologyConfigId, long snapshotStartTs) {
+        String sessionName = replicationContext.getSessionName(session);
         if(!replicationContext.getIsLeader().get()) {
-            log.debug("The node is not the leader. Skip updating the metadata table");
+            log.debug("[{}]:: The node is not the leader. Skip updating the metadata table", sessionName);
             return false;
         }
 
@@ -433,13 +436,13 @@ public class LogReplicationMetadataManager {
 
             metadata = queryReplicationMetadata(txn, session);
 
-            log.debug("Set snapshotStart topologyConfigId={}, ts={}, persistedTopologyConfigID={}, persistedSnapshotStart={}",
-                    topologyConfigId, snapshotStartTs, metadata.getTopologyConfigId(), metadata.getLastSnapshotStarted());
+            log.debug("[{}]:: Set snapshotStart topologyConfigId={}, ts={}, persistedTopologyConfigID={}, persistedSnapshotStart={}",
+                    sessionName, topologyConfigId, snapshotStartTs, metadata.getTopologyConfigId(), metadata.getLastSnapshotStarted());
 
             // It means the cluster config has changed, ignore the update operation.
             if (topologyConfigId != metadata.getTopologyConfigId()) {
-                log.warn("Config differs between source and sink, Source[topologyConfigId={}, ts={}]" +
-                        " Sink[topologyConfigId={}, snapshotStart={}]", topologyConfigId,
+                log.warn("[{}]:: Config differs between source and sink, Source[topologyConfigId={}, ts={}]" +
+                        " Sink[topologyConfigId={}, snapshotStart={}]", sessionName, topologyConfigId,
                         snapshotStartTs, metadata.getTopologyConfigId(), metadata.getLastSnapshotStarted());
                 txn.commit();
                 return false;
@@ -458,8 +461,8 @@ public class LogReplicationMetadataManager {
             updateReplicationMetadata(txn, session, updatedMetadata);
             txn.commit();
 
-            log.debug("Commit. Set snapshotStart topologyConfigId={}, ts={}, persistedTopologyConfigID={}, " +
-                    "persistedSnapshotStart={}", topologyConfigId, snapshotStartTs, metadata.getTopologyConfigId(),
+            log.debug("[{}]:: Commit. Set snapshotStart topologyConfigId={}, ts={}, persistedTopologyConfigID={}, " +
+                    "persistedSnapshotStart={}", sessionName, topologyConfigId, snapshotStartTs, metadata.getTopologyConfigId(),
                     metadata.getLastSnapshotStarted());
         }
         return true;
@@ -477,14 +480,14 @@ public class LogReplicationMetadataManager {
             long persistedTopologyConfigId = metadata.getTopologyConfigId();
             long persistedSnapshotStart = metadata.getLastSnapshotStarted();
 
-            log.debug("Update last snapshot transfer completed, topologyConfigId={}, transferCompleteTs={}," +
-                            " persistedTopologyConfigID={}, persistedSnapshotStart={}", topologyConfigId, ts,
-                    persistedTopologyConfigId, persistedSnapshotStart);
+            log.debug("[{}]:: Update last snapshot transfer completed, topologyConfigId={}, transferCompleteTs={}," +
+                            " persistedTopologyConfigID={}, persistedSnapshotStart={}", replicationContext.getSessionName(session),
+                    topologyConfigId, ts, persistedTopologyConfigId, persistedSnapshotStart);
 
             // It means the cluster config has changed, ignore the update operation.
             if (topologyConfigId != persistedTopologyConfigId || ts < persistedSnapshotStart) {
-                log.warn("Metadata mismatch, persisted={}, intended={}. Snapshot Transfer complete timestamp {} " +
-                                "will not be persisted, current={}",
+                log.warn("[{}]:: Metadata mismatch, persisted={}, intended={}. Snapshot Transfer complete timestamp {} " +
+                                "will not be persisted, current={}", replicationContext.getSessionName(session),
                         persistedTopologyConfigId, topologyConfigId, ts, persistedSnapshotStart);
                 return;
             }
@@ -499,7 +502,8 @@ public class LogReplicationMetadataManager {
             txn.commit();
         }
 
-        log.debug("Commit snapshot transfer complete timestamp={}, for topologyConfigId={}", ts, topologyConfigId);
+        log.debug("[{}]:: Commit snapshot transfer complete timestamp={}, for topologyConfigId={}",
+                replicationContext.getSessionName(session), ts, topologyConfigId);
     }
 
     public void setSnapshotAppliedComplete(LogReplicationEntryMsg entry, LogReplicationSession session) {
@@ -514,8 +518,9 @@ public class LogReplicationMetadataManager {
 
             if (topologyConfigId != metadata.getTopologyConfigId() || ts != persistedSnapshotStart
                     || ts != persistedSnapshotTransferComplete) {
-                log.warn("Metadata mismatch, persisted={}, intended={}. Entry timestamp={}, while persisted start={}, transfer={}",
-                        metadata.getTopologyConfigId(), topologyConfigId, ts, persistedSnapshotStart, persistedSnapshotTransferComplete);
+                log.warn("[{}]:: Metadata mismatch, persisted={}, intended={}. Entry timestamp={}, while persisted start={}, transfer={}",
+                        replicationContext.getSessionName(session), metadata.getTopologyConfigId(), topologyConfigId, ts,
+                        persistedSnapshotStart, persistedSnapshotTransferComplete);
                 return;
             }
 
@@ -544,7 +549,8 @@ public class LogReplicationMetadataManager {
             txn.putRecord(statusTable, session, statusValue, null);
             txn.commit();
 
-            log.debug("Commit snapshot apply complete timestamp={}, for topologyConfigId={}", ts, topologyConfigId);
+            log.debug("[{}]:: Commit snapshot apply complete timestamp={}, for topologyConfigId={}",
+                    replicationContext.getSessionName(session), ts, topologyConfigId);
         }
     }
 
@@ -658,8 +664,8 @@ public class LogReplicationMetadataManager {
         // Start the timer for log replication snapshot sync duration metrics.
         snapshotSyncTimerSample = MeterRegistryProvider.getInstance().map(Timer::start);
 
-        log.debug("syncStatus :: set snapshot sync status to ONGOING, session: {}, syncInfo: [{}]",
-                session, syncInfo);
+        log.debug("[{}]:: syncStatus :: set snapshot sync status to ONGOING, syncInfo: [{}]",
+                replicationContext.getSessionName(session), syncInfo);
     }
 
     /**
@@ -704,8 +710,8 @@ public class LogReplicationMetadataManager {
 
                 txn.putRecord(statusTable, session, current, null);
 
-                log.debug("syncStatus :: set snapshot sync to COMPLETED and log entry ONGOING, session: {}," +
-                        " syncInfo: [{}]", session, currentSyncInfo);
+                log.debug("[{}]:: syncStatus :: set snapshot sync to COMPLETED and log entry ONGOING syncInfo: [{}]",
+                        replicationContext.getSessionName(session), currentSyncInfo);
             }
 
             txn.commit();
@@ -738,8 +744,8 @@ public class LogReplicationMetadataManager {
             // has already been deleted.
             // (STOPPED status is used for other FSM states as well, so cannot rely only on the incoming status)
             if (entry.getPayload() == null && status == SyncStatus.STOPPED) {
-                log.debug("syncStatus :: ignoring update for session {} to syncType {} and status {} as no record " +
-                        "exists for the same", session, lastSyncType, status);
+                log.debug("[{}]:: syncStatus :: ignoring update to syncType {} and status {} as no record " +
+                        "exists for the same", replicationContext.getSessionName(session), lastSyncType, status);
                 txn.commit();
                 return;
             }
@@ -771,7 +777,7 @@ public class LogReplicationMetadataManager {
             txn.commit();
         }
 
-        log.debug("syncStatus :: Update, session: {}, type: {}, status: {}", session, lastSyncType, status);
+        log.debug("[{}]:: syncStatus :: Update, type: {}, status: {}", replicationContext.getSessionName(session), lastSyncType, status);
     }
 
     /**
@@ -796,8 +802,8 @@ public class LogReplicationMetadataManager {
                     (previous.getSourceStatus().getReplicationInfo().getStatus().equals(SyncStatus.STOPPED) ||
                             previousSnapshotSyncInfo.getStatus().equals(SyncStatus.STOPPED))) {
                 // Skip update of sync status, it will be updated once replication is resumed or started
-                log.info("syncStatusPoller :: skip remaining entries update, replication status is {}",
-                        previous.getSourceStatus().getReplicationInfo().getStatus());
+                log.info("[{}]:: syncStatusPoller :: skip remaining entries update, replication status is {}",
+                        replicationContext.getSessionName(session), previous.getSourceStatus().getReplicationInfo().getStatus());
                 txn.commit();
                 return;
             }
@@ -810,8 +816,8 @@ public class LogReplicationMetadataManager {
             txn.putRecord(statusTable, session, current, null);
             txn.commit();
 
-            log.debug("syncStatusPoller :: remaining entries updated for {}, session: {}, remainingEntries: {}" +
-                    "snapshotSyncInfo: {}", type, session, remainingEntries, previousSnapshotSyncInfo);
+            log.debug("[{}]:: syncStatusPoller :: remaining entries updated for {}, remainingEntries: {}" +
+                    "snapshotSyncInfo: {}", replicationContext.getSessionName(session), type, remainingEntries, previousSnapshotSyncInfo);
         }
     }
 
@@ -831,8 +837,8 @@ public class LogReplicationMetadataManager {
             LogReplicationSession session = entry.getKey();
             ReplicationStatus status = entry.getPayload();
             replicationStatusMap.put(session, status);
-            log.debug("getReplicationRemainingEntries: session={}, remainingEntriesToSend={}, " +
-                            "syncType={}", session, status.getSourceStatus().getRemainingEntriesToSend(),
+            log.debug("[{}]:: getReplicationRemainingEntries: remainingEntriesToSend={}, " +
+                            "syncType={}", replicationContext.getSessionName(session), status.getSourceStatus().getRemainingEntriesToSend(),
                     status.getSourceStatus().getReplicationInfo().getSyncType());
         }
 
@@ -862,7 +868,8 @@ public class LogReplicationMetadataManager {
             txn.commit();
         }
 
-        log.debug("setDataConsistentOnSink: localClusterId: {}, isConsistent: {}", session.getSinkClusterId(),
+        log.debug("[{}]:: setDataConsistentOnSink: localClusterId: {}, isConsistent: {}",
+                replicationContext.getSessionName(session), session.getSinkClusterId(),
             isConsistent);
     }
 
@@ -877,7 +884,7 @@ public class LogReplicationMetadataManager {
 
         // Initially, snapshot sync is pending so the data is not consistent.
         if (entry.getPayload() == null) {
-            log.warn("DataConsistent status is not set for session {}", session);
+            log.warn("[{}]:: DataConsistent status is not set", replicationContext.getSessionName(session));
             status = SinkReplicationStatus.newBuilder().setDataConsistent(false).build();
         } else {
             status = entry.getPayload().getSinkStatus();
@@ -885,7 +892,7 @@ public class LogReplicationMetadataManager {
         Map<LogReplicationSession, SinkReplicationStatus> dataConsistentMap = new HashMap<>();
         dataConsistentMap.put(session, status);
 
-        log.debug("getDataConsistentOnSink: session: {}, status: {}", session, status);
+        log.debug("[{}]:: getDataConsistentOnSink: status: {}", replicationContext.getSessionName(session), status);
 
         return dataConsistentMap;
     }

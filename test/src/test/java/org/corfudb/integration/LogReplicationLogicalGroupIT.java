@@ -123,7 +123,7 @@ public class LogReplicationLogicalGroupIT extends CorfuReplicationMultiSourceSin
      */
     @Before
     public void setUp() throws Exception {
-        setUp(numSource, numSink, DefaultClusterManager.TP_MIXED_MODEL_THREE_SINK);
+        setUp(numSource, numSink, DefaultClusterManager.TP_MIXED_MODEL_LOGICAL_GROUP_THREE_SINK);
         openLogReplicationStatusTable();
     }
 
@@ -1104,8 +1104,8 @@ public class LogReplicationLogicalGroupIT extends CorfuReplicationMultiSourceSin
                         TableOptions.fromProtoSchema(ExampleSchemas.ClusterUuidMsg.class)
                 );
         try (TxnContext txn = sourceCorfuStores.get(SOURCE_INDEX).txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
-            txn.putRecord(configTable, DefaultClusterManager.TP_MIXED_MODEL_THREE_SINK,
-                    DefaultClusterManager.TP_MIXED_MODEL_THREE_SINK, DefaultClusterManager.TP_MIXED_MODEL_THREE_SINK);
+            txn.putRecord(configTable, DefaultClusterManager.TP_MIXED_MODEL_LOGICAL_GROUP_THREE_SINK,
+                    DefaultClusterManager.TP_MIXED_MODEL_LOGICAL_GROUP_THREE_SINK, DefaultClusterManager.TP_MIXED_MODEL_LOGICAL_GROUP_THREE_SINK);
             txn.commit();
         }
 
@@ -1214,8 +1214,8 @@ public class LogReplicationLogicalGroupIT extends CorfuReplicationMultiSourceSin
                         TableOptions.fromProtoSchema(ExampleSchemas.ClusterUuidMsg.class)
                 );
         try (TxnContext txn = sourceCorfuStores.get(SOURCE_INDEX).txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
-            txn.putRecord(configTable, DefaultClusterManager.TP_MIXED_MODEL_THREE_SINK,
-                    DefaultClusterManager.TP_MIXED_MODEL_THREE_SINK, DefaultClusterManager.TP_MIXED_MODEL_THREE_SINK);
+            txn.putRecord(configTable, DefaultClusterManager.TP_MIXED_MODEL_LOGICAL_GROUP_THREE_SINK,
+                    DefaultClusterManager.TP_MIXED_MODEL_LOGICAL_GROUP_THREE_SINK, DefaultClusterManager.TP_MIXED_MODEL_LOGICAL_GROUP_THREE_SINK);
             txn.commit();
         }
 

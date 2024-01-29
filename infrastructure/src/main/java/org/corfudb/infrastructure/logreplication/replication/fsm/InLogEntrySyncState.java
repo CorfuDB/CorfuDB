@@ -26,13 +26,8 @@ public class InLogEntrySyncState implements LogReplicationState {
     private LogEntrySender logEntrySender;
 
     /**
-     * A future on the log entry send, send call.
-     */
-    private Future<?> logEntrySyncFuture = CompletableFuture.completedFuture(null);
-
-    /**
-     * Uniquely identifies the sync that caused the transition to this state.
-     * This is required to validate if the incoming FSM event is for the current sync.
+     * Unique Identifier of the event that caused the transition to this state,
+     * i.e., current event/request being processed.
      */
     private UUID transitionSyncId;
 
@@ -88,7 +83,7 @@ public class InLogEntrySyncState implements LogReplicationState {
                     log.debug("Log Entry Sync ACK, update last ack timestamp to {}", event.getMetadata().getLastLogEntrySyncedTimestamp());
                     fsm.setAckedTimestamp(event.getMetadata().getLastLogEntrySyncedTimestamp());
                 }
-                // Do not return a new state as there is no actual transition, the IllegalTransitionException
+                // Do not return a new state as there is no actual transition, the IllegalRuntimeTransitionException
                 // will allow us to avoid any transition from this state given the event.
                 break;
             case LOG_ENTRY_SYNC_CONTINUE:
@@ -124,13 +119,6 @@ public class InLogEntrySyncState implements LogReplicationState {
         // for log entry sync and snapshot sync (app can handle this)
         logEntrySender.stop();
         logEntrySender.getDataSenderBufferManager().getPendingMessages().clear();
-        if (!logEntrySyncFuture.isDone()) {
-            try {
-                logEntrySyncFuture.get();
-            } catch (Exception e) {
-                log.warn("Exception while waiting on log entry sync to complete.", e);
-            }
-        }
         log.info("Log Entry sync has been canceled due to {}", cancelCause);
     }
 
@@ -151,8 +139,7 @@ public class InLogEntrySyncState implements LogReplicationState {
                 fsm.getAckReader().markSnapshotSyncInfoCompleted();
             }
 
-            logEntrySyncFuture = fsm.getLogReplicationFSMWorkers().submit(() ->
-                    logEntrySender.send(transitionSyncId));
+            logEntrySender.send(transitionSyncId);
 
         } catch (Throwable t) {
             log.error("Error on entry of InLogEntrySyncState", t);

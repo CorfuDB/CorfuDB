@@ -21,8 +21,8 @@ import java.util.stream.Collectors;
 public class SnapshotSenderBufferManager extends SenderBufferManager {
     private LogReplicationAckReader ackReader;
 
-    public SnapshotSenderBufferManager(DataSender dataSender, LogReplicationAckReader ackReader) {
-        super(dataSender, configureAcksCounter());
+    public SnapshotSenderBufferManager(DataSender dataSender, LogReplicationAckReader ackReader, String sessionName) {
+        super(dataSender, configureAcksCounter(), sessionName);
         this.ackReader = ackReader;
     }
 
@@ -34,7 +34,7 @@ public class SnapshotSenderBufferManager extends SenderBufferManager {
     @Override
     public void updateAck(Long newAck) {
         if (maxAckTimestamp < newAck) {
-            log.debug("Ack Received for Snapshot Sync {}", newAck);
+            log.debug("[{}]:: Ack Received for Snapshot Sync {}", sessionName, newAck);
             maxAckTimestamp = newAck;
             pendingMessages.evictAccordingToSeqNum(maxAckTimestamp);
             pendingCompletableFutureForAcks = pendingCompletableFutureForAcks.entrySet().stream()

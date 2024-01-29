@@ -136,7 +136,7 @@ public class LogReplicationConfigManagerTest extends AbstractViewTest {
                 .setSinkClusterId(REMOTE_SINK_CLUSTER_ID)
                 .setSubscriber(LogReplicationConfigManager.getDefaultSubscriber())
                 .build();
-        configManager.generateConfig(Collections.singleton(sampleSession), true);
+        configManager.generateConfig(sampleSession, true, "session_1");
         verifyExpectedConfigGenerated((LogReplicationFullTableConfig) configManager.getSessionToConfigMap()
                 .get(sampleSession));
     }
@@ -155,21 +155,24 @@ public class LogReplicationConfigManagerTest extends AbstractViewTest {
                 .setSinkClusterId(REMOTE_SINK_CLUSTER_ID)
                 .setSubscriber(LogReplicationConfigManager.getDefaultSubscriber())
                 .build();
-        configManager.generateConfig(Collections.singleton(sampleSession), true);
+        String sessionName = "session_1";
+        configManager.generateConfig(sampleSession, true, sessionName);
         verifyExpectedConfigGenerated((LogReplicationFullTableConfig) configManager.getSessionToConfigMap()
                 .get(sampleSession));
 
         // Open new tables and update the expected streams to replicate map, streams to drop and stream tags
         setupStreamsToReplicateAndTagsMap(Collections.singleton(TABLE5), SampleSchema.ValueFieldTagOne.class);
         setupStreamsToDrop(Collections.singleton(TABLE6), SampleSchema.Uuid.class);
-        configManager.getUpdatedConfig(sampleSession, true);
-        configManager.generateConfig(Collections.singleton(sampleSession), true);
+
+        configManager.getUpdatedConfig(sampleSession, true, sessionName);
+        configManager.generateConfig(sampleSession, true, sessionName);
         // After synchronization with RegistryTable, these 2 streams will be found in streamsToDrop field of
         // FULL_TABLE log replication config
         streamsToDrop.add(CorfuRuntime.getStreamID(TableRegistry.getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE,
                 GUID_STREAM_NAME)));
         streamsToDrop.add(CorfuRuntime.getStreamID(TableRegistry.getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE,
                 LOG_ENTRY_SYNC_QUEUE_NAME_SENDER)));
+
         verifyExpectedConfigGenerated((LogReplicationFullTableConfig) configManager.getSessionToConfigMap()
                 .get(sampleSession));
     }

@@ -50,9 +50,10 @@ public class LogEntryWriterTest extends AbstractViewTest {
             getDefaultSession());
         Mockito.doReturn(getDefaultMetadata()).when(metadataManager).getReplicationMetadata(getDefaultSession());
 
-        logEntryWriter = new LogEntryWriter(metadataManager, getDefaultSession(),
-                new LogReplicationContext(new LogReplicationConfigManager(corfuRuntime, LOCAL_SINK_CLUSTER_ID), topologyConfigId,
-                        getEndpoint(SERVERS.PORT_0), Mockito.mock(LogReplicationPluginConfig.class), corfuRuntime));
+        LogReplicationContext context = new LogReplicationContext(new LogReplicationConfigManager(corfuRuntime, LOCAL_SINK_CLUSTER_ID), topologyConfigId,
+                getEndpoint(SERVERS.PORT_0), Mockito.mock(LogReplicationPluginConfig.class), corfuRuntime);
+        logEntryWriter = new LogEntryWriter(metadataManager, getDefaultSession(), context);
+        context.addSessionNameForLogging(getDefaultSession(), "session_1");
     }
 
     @After
