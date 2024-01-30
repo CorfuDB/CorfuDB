@@ -596,6 +596,46 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
     }
 
     /**
+     * Ensure that JVM does not crash under an invalid RocksDB instance.
+     */
+    @Property(tries = NUM_OF_TRIES)
+    void invalidRocksDbInstanceConsumeRelease() {
+        resetTests();
+        final PersistedCorfuTable<String, String> table = setupTable();
+
+        table.insert(defaultNewMapEntry, defaultNewMapEntry);
+        assertThat(table.get(defaultNewMapEntry)).isEqualTo(defaultNewMapEntry);
+        table.close();
+
+        // Invalid RocksDB instance via consume().
+        assertThatThrownBy(() -> table.get(defaultNewMapEntry)).isInstanceOf(TrimmedException.class);
+
+        // Invalid RocksDB instance via release().
+        table.close();
+    }
+
+    /**
+     * Ensure that JVM does not crash under an invalid RocksDB instance.
+     */
+    @Property(tries = NUM_OF_TRIES)
+    void invalidRocksDbInstanceExecuteRelease() {
+        resetTests();
+        final PersistedCorfuTable<String, String> table = setupTable();
+        table.insert(defaultNewMapEntry, defaultNewMapEntry);
+        assertThat(table.get(defaultNewMapEntry)).isEqualTo(defaultNewMapEntry);
+        executeTx(() -> {
+            table.get(defaultNewMapEntry);
+            table.close();
+            // Invalid RocksDB instance via executeInSnapshot().
+            assertThatThrownBy(() -> table.get(defaultNewMapEntry))
+                    .isInstanceOf(TransactionAbortedException.class)
+                    .hasCauseInstanceOf(TrimmedException.class);
+        });
+        // Invalid RocksDB instance via release().
+        table.close();
+    }
+
+    /**
      * After encountering TrimmedException while syncing the object,
      * ensure that all snapshots are released.
      */

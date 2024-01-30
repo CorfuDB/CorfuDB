@@ -88,6 +88,8 @@ public class RocksDbStore<S extends SnapshotGenerator<S>> implements
             this.secondaryIndexColumnFamily = this.rocksDb.createColumnFamily(
                     new ColumnFamilyDescriptor("secondary-indexes".getBytes(), columnFamilyOptions));
         }
+
+        log.info("Opened RocksDB instance {} at {}.", rocksDb.getNativeHandle(), absolutePathString);
     }
 
     @Override
@@ -190,7 +192,7 @@ public class RocksDbStore<S extends SnapshotGenerator<S>> implements
     public void close() throws RocksDBException {
         rocksDb.close();
         RocksDB.destroyDB(absolutePathString, rocksDbOptions);
-        log.info("Cleared RocksDB data on {}", absolutePathString);
+        log.info("Closed RocksDB instance {} at {}.", rocksDb.getNativeHandle(), absolutePathString);
     }
 
     /**

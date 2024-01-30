@@ -481,15 +481,21 @@ public class MultiVersionObject<S extends SnapshotGenerator<S> & ConsistencyView
     }
 
     /**
+     * Release all snapshots associated with this object.
+     */
+    private void releaseSnapshots() {
+        snapshotFifo.forEach(SMRSnapshot::release);
+        mvoCache.invalidateAllVersionsOf(getSmrStream().getID());
+    }
+
+    /**
      * Reset the state of this object to an uninitialized state.
      */
     private void resetUnsafe() {
         log.debug("Reset[{}]", Utils.toReadableId(getID()));
         materializedUpTo = Address.NON_ADDRESS;
         resolvedUpTo = Address.NON_ADDRESS;
-
-        snapshotFifo.forEach(SMRSnapshot::release);
-        mvoCache.invalidateAllVersionsOf(getSmrStream().getID());
+        releaseSnapshots();
         snapshotFifo = new ArrayDeque<>(snapshotFifoSize);
         currentObject.close();
         currentObject = newObjectFn.get();
@@ -507,7 +513,7 @@ public class MultiVersionObject<S extends SnapshotGenerator<S> & ConsistencyView
 
         try {
             lockTs = lock.writeLock();
-            snapshotFifo.forEach(SMRSnapshot::release);
+            releaseSnapshots();
             currentObject.close();
         } finally {
             lock.unlock(lockTs);
