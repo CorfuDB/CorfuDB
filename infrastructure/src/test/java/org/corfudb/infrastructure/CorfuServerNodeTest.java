@@ -50,7 +50,7 @@ public class CorfuServerNodeTest {
         CountDownLatch countDownLatch = spy(new CountDownLatch(1));
 
         CorfuServer.setResetLatch(countDownLatch);
-        CorfuServer.setKeepServerComponents(false);
+        CorfuServer.setReloadServerComponents(true);
         node.restartServerChannel();
 
         // Wait for the latch to be signalled from restartServerChannel()
@@ -64,6 +64,6 @@ public class CorfuServerNodeTest {
         // Verify spy CountDownLatch invocations
         verify(countDownLatch,times(1)).countDown();
         verify(countDownLatch,times(1)).await();
-        Assertions.assertThat(CorfuServer.isKeepServerComponents()).isTrue();
+        Assertions.assertThat(CorfuServer.isReloadServerComponents()).isFalse();
     }
 }

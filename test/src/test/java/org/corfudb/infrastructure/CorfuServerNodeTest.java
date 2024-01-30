@@ -2,6 +2,8 @@ package org.corfudb.infrastructure;
 
 import org.junit.Test;
 
+import java.util.concurrent.CountDownLatch;
+
 import static org.assertj.core.api.Assertions.assertThatCode;
 
 
@@ -22,6 +24,7 @@ public class CorfuServerNodeTest {
         final int port = 9000;
         ServerContext context = ServerContextBuilder.defaultContext(port);
         CorfuServerNode node = new CorfuServerNode(context);
+        CorfuServer.setResetLatch(new CountDownLatch(1));
 
         node.restartServerChannel();
 
