@@ -38,17 +38,16 @@ public class LogReplicationFsmUtil {
         log.debug("Verify leader on remote cluster {}", remoteClusterId);
 
         try {
+            LogReplication.LogReplicationSession session = (LogReplication.LogReplicationSession) clazz.getMethod("getSession").invoke(fsm);
             for (String nodeId : connectedNodes) {
                 log.debug("Verify leadership status for node {}", nodeId);
                 // Check Leadership
                 CorfuMessage.RequestPayloadMsg payload =
                         CorfuMessage.RequestPayloadMsg.newBuilder().setLrLeadershipQuery(
-                                LogReplication.LogReplicationLeadershipRequestMsg.newBuilder().build()
+                                LogReplication.LogReplicationLeadershipRequestMsg.newBuilder().setSession(session).build()
                         ).build();
                 CompletableFuture<LogReplication.LogReplicationLeadershipResponseMsg> leadershipRequestCf =
-                        router.sendRequestAndGetCompletable(
-                                (LogReplication.LogReplicationSession) clazz.getMethod("getSession").invoke(fsm),
-                                payload, nodeId);
+                        router.sendRequestAndGetCompletable(session, payload, nodeId);
                 pendingLeadershipQueries.put(nodeId, leadershipRequestCf);
             }
 
@@ -115,6 +114,12 @@ public class LogReplicationFsmUtil {
 
     private static <T> void enqueueLeaderNotFound(Object fsm, Class<T> clazz, String leader) throws NoSuchMethodException,
             InvocationTargetException, IllegalAccessException {
+        // wait for a while before enqueuing
+        try {
+            new CompletableFuture<>().get(CorfuLogReplicationRuntime.DEFAULT_TIMEOUT, TimeUnit.MILLISECONDS);
+        } catch (Exception e) {
+            log.trace("Exception occurred while waiting to enqueue REMOTE_LEADER_NOT_FOUND");
+        }
 
         if (clazz.getName().equals(CorfuLogReplicationRuntime.class.getName())) {
             clazz.getMethod("input", LogReplicationRuntimeEvent.class).invoke(fsm,

@@ -511,8 +511,6 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
                             .input(new LogReplicationSinkEvent(LogReplicationSinkEvent
                                     .LogReplicationSinkEventType.REMOTE_LEADER_LOSS, nodeId));
                 }
-                completeRequest(msg.getHeader().getSession(), msg.getHeader().getRequestId(),
-                        msg.getPayload().getLrLeadershipLoss());
                 return;
             }
 
@@ -758,10 +756,22 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
             }
         } catch (NullPointerException npe) {
             log.info("The replication components are already stopped for session {}", session);
+            return;
         }
 
-        if (isConnectionStarterForSession(session)) {
-            this.clientChannelAdapter.connectAsync(sessionToRemoteClusterDescriptor.get(session), nodeId, session);
+        try {
+            IRetry.build(IntervalRetry.class, () -> {
+                try {
+                    this.clientChannelAdapter.connectAsync(sessionToRemoteClusterDescriptor.get(session), nodeId, session);
+                } catch (Exception e) {
+                    log.error("Failed to connect to remote node {} for session {}. Retry after 1 second. Exception {}.",
+                            nodeId, session, e);
+                    throw new RetryNeededException();
+                }
+                return null;
+            }).run();
+        } catch (InterruptedException e) {
+            log.error("Unrecoverable exception when attempting to connect to remote node {}.", nodeId, e);
         }
     }
 
@@ -786,5 +796,11 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
      */
     public void updateTopologyConfigId(long topologyId) {
         msgHandler.updateTopologyConfigId(topologyId);
+    }
+
+    public void resetRemoteLeader(LogReplicationSession session) {
+        if (isConnectionStarterForSession(session)) {
+            this.clientChannelAdapter.resetRemoteLeader();
+        }
     }
 }

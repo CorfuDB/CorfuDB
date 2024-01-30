@@ -145,7 +145,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
     }
 
     @Override
-    public void connectAsync(ClusterDescriptor remoteCluster, String nodeId, LogReplicationSession session) {
+    public void connectAsync(ClusterDescriptor remoteCluster, String nodeId, LogReplicationSession session) throws Exception {
         Optional<String> endpoint = remoteCluster.getNodeDescriptors()
                 .stream()
                 .filter(nodeDescriptor -> nodeDescriptor.getNodeId().toString().equals(nodeId))

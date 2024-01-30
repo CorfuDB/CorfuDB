@@ -39,6 +39,7 @@ message LogReplicationLeadershipLossMsg {
 }
 
 message LogReplicationLeadershipRequestMsg {
+  LogReplicationSession session = 1;
 }
 
 message LogReplicationLeadershipResponseMsg {
