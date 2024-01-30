@@ -1,5 +1,9 @@
 GCParameters:
   UseConcMarkSweepGC: yes
+  PrintGCDetails: yes
+  PrintGCTimeStamps: yes
+  UseGCLogFileRotation: yes
+  GCLogFileSize: 1M
   Logpath: /var/log/corfu/compactor-gc.log
   NumberOfGCLogFiles: 10
 
