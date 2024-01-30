@@ -141,7 +141,7 @@ public class ServerContext implements AutoCloseable {
     private final EventLoopGroup clientGroup;
 
     @Getter
-    private EventLoopGroup workerGroup;
+    private volatile EventLoopGroup workerGroup;
 
     @Getter (AccessLevel.PACKAGE)
     @Setter

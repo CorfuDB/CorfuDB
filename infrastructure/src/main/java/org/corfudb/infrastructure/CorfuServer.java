@@ -4,8 +4,6 @@ import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.LoggerContext;
 import ch.qos.logback.core.joran.spi.JoranException;
-import io.netty.bootstrap.Bootstrap;
-import io.netty.channel.ChannelFuture;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
@@ -53,9 +51,11 @@ public class CorfuServer {
     private static volatile boolean shutdownServer = false;
     // If set to true - triggers a reset of the server by wiping off all the data.
     private static volatile boolean cleanupServer = false;
+    // If reload is true, server loads new server components
+    // If false, server restarts channel and reuse the old server components
     @Getter
     @Setter
-    private static boolean keepServerComponents = false;
+    private static volatile boolean reloadServerComponents = true;
     // Error code required to detect an ungraceful shutdown.
     static final int EXIT_ERROR_CODE = 100;
 
@@ -141,16 +141,18 @@ public class CorfuServer {
         while (!shutdownServer) {
             resetLatch = new CountDownLatch(1);
             try {
-                // If keepServerComponents is true, then just initiate the server channel
+                // If serverComponentsReloadable is false, then just initiate the server channel
                 // without resetting any of the server components
-                if (!keepServerComponents || serverContext == null) {
+                if (reloadServerComponents || serverContext == null) {
                     serverContext = new ServerContext(opts);
                     configureMetrics(opts, serverContext.getLocalEndpoint());
                     configureHealthMonitor(opts);
                     activeServer = new CorfuServerNode(serverContext);
 
-                    // reset keepServerComponents to false for next iterations
-                    keepServerComponents = false;
+                    // reset serverComponentsReloadable to true for next iterations
+                    reloadServerComponents = true;
+                    log.info("main: Restarting the server Channel with resetting the " +
+                            "server components.");
                 } else {
                     log.info("main: Restarting the server Channel without resetting the " +
                             "server components.");
@@ -162,6 +164,9 @@ public class CorfuServer {
             }
 
             try {
+                // For thread-safety, reset the value to default (true)
+                // once again here i.e. reload all components.
+                reloadServerComponents = true;
                 activeServer.startAndListen();
             } catch (Throwable th) {
                 log.error("CorfuServer: Server exiting due to unrecoverable error: ", th);
@@ -317,7 +322,7 @@ public class CorfuServer {
      *
      */
     static void restartServerChannel() {
-        keepServerComponents = true;
+        reloadServerComponents = false;
         resetLatch.countDown();
         log.info("main: Signalled restart of corfu server channels");
     }

@@ -49,6 +49,7 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Pattern;
 
@@ -80,6 +81,7 @@ public class CorfuServerNode implements AutoCloseable {
     private ChannelFuture httpServerFuture;
 
     private HTTPServer metricsServer;
+
     private final Optional<FileWatcher> sslCertWatcher;
 
     /**
@@ -209,6 +211,26 @@ public class CorfuServerNode implements AutoCloseable {
 
         if (httpServerFuture != null) {
             httpServerFuture.channel().close().syncUninterruptibly();
+        }
+
+        // Check if channels are active and
+        // add closure with await for thread safety
+        if (bindFuture != null
+                && bindFuture.channel() != null
+                && bindFuture.channel().isActive()) {
+                bindFuture.channel().close().awaitUninterruptibly(
+                        serverContext.getManagementRuntimeParameters().getNettyShutdownTimeout(),
+                        TimeUnit.MILLISECONDS
+                );
+        }
+
+        if (httpServerFuture != null
+                && httpServerFuture.channel() != null
+                && httpServerFuture.channel().isActive()) {
+                httpServerFuture.channel().close().awaitUninterruptibly(
+                        serverContext.getManagementRuntimeParameters().getNettyShutdownTimeout(),
+                        TimeUnit.MILLISECONDS
+                );
         }
 
         serverContext.refreshWorkerGroupThreads();
