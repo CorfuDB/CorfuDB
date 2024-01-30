@@ -54,8 +54,11 @@ import org.rocksdb.RocksDBException;
 import org.rocksdb.SstFileManager;
 import org.slf4j.Logger;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.io.InvalidObjectException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;
@@ -98,6 +101,46 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
     private static final String defaultNewMapEntry = "newEntry";
     private static final boolean ENABLE_READ_YOUR_WRITES = true;
     private static final boolean EXACT_SIZE = true;
+    private static final String STATM_PATH = "/proc/self/statm";
+    private static final long TABLE_OVERHEAD = 5 * 1024 * 1024;
+
+    private static boolean isProcFilesystemSupported() {
+        Path path = Paths.get("/proc/self/statm");
+        return Files.exists(path);
+    }
+
+    private static long getRssInBytes() throws IOException, InterruptedException {
+        if (!isProcFilesystemSupported()) {
+            throw new UnsupportedOperationException(STATM_PATH + " not supported on this platform.");
+        }
+        long pageSize = getPageSize();
+        long rssPages = readRssPages();
+        return pageSize * rssPages;
+    }
+
+    private static long getPageSize() throws IOException, InterruptedException {
+        ProcessBuilder pb = new ProcessBuilder("getconf", "PAGESIZE");
+        Process process = pb.start();
+        process.waitFor();
+
+        if (process.exitValue() != 0) {
+            throw new UnsupportedOperationException("getconf PAGESIZE not supported on this platform.");
+        }
+
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+            String output = reader.readLine().trim();
+            return Long.parseLong(output);
+        }
+    }
+
+    private static long readRssPages() throws IOException {
+        Path filePath = Paths.get(STATM_PATH);
+        List<String> lines = Files.readAllLines(filePath);
+        String content = lines.get(0);
+        String[] parts = content.split("\\s+");
+        return Long.parseLong(parts[1]); // RSS is the second value in /proc/self/statm
+    }
+
 
     @Captor
     private ArgumentCaptor<String> logCaptor;
@@ -771,6 +814,30 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
                 table.insert(defaultNewMapEntry, defaultNewMapEntry);
                 assertThat(table.get(defaultNewMapEntry)).isNull();
             });
+        }
+    }
+
+    @Property(tries = NUM_OF_TRIES)
+    void verifyRss() throws IOException, InterruptedException {
+        resetTests();
+        try {
+            final PersistedCorfuTable<String, String> tableA = setupTable("A", ENABLE_READ_YOUR_WRITES);
+            long firstRss = getRssInBytes();
+            final PersistedCorfuTable<String, String> tableB = setupTable("B", ENABLE_READ_YOUR_WRITES);
+            long secondRss = getRssInBytes();
+
+            assertThat(secondRss - firstRss).isLessThan(TABLE_OVERHEAD);
+
+            final PersistedCorfuTable<String, String> tableC = setupTable("C", ENABLE_READ_YOUR_WRITES);
+            long thirdRss = getRssInBytes();
+
+            assertThat(thirdRss - secondRss).isLessThan(TABLE_OVERHEAD);
+
+            tableA.close();
+            tableB.close();
+            tableC.close();
+        } catch (UnsupportedOperationException ignore) {
+            // Not supported on this platform.
         }
     }
 
