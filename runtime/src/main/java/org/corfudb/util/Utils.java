@@ -1,8 +1,5 @@
 package org.corfudb.util;
 
-import jdk.internal.org.objectweb.asm.util.Printer;
-import jdk.internal.org.objectweb.asm.util.Textifier;
-import jdk.internal.org.objectweb.asm.util.TraceMethodVisitor;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
@@ -41,9 +38,6 @@ public class Utils {
         // prevent instantiation of this class
     }
 
-    private static final Printer printer = new Textifier();
-    private static final TraceMethodVisitor mp = new TraceMethodVisitor(printer);
-
     private static final char[] hexArray = "0123456789ABCDEF".toCharArray();
 
 
@@ -59,12 +53,14 @@ public class Utils {
         return new UUID(msb, lsb);
     }
 
-    /** Convert a byte array to a hex string.
+    /**
+     * Convert a byte array to a hex string.
      * Source:
-     * https://stackoverflow.com/questions/9655181/
+     * <a href="https://stackoverflow.com/questions/9655181/">stackoverflow</a>
      * how-to-convert-a-byte-array-to-a-hex-string-in-java
+     *
      * @param bytes Byte array to convert
-     * @return      Hex string representation.
+     * @return Hex string representation.
      */
     public static String bytesToHex(byte[] bytes) {
         if (bytes == null) {
@@ -102,7 +98,10 @@ public class Utils {
 
     /**
      * Convert to byte string representation.
-     * from http://stackoverflow.com/questions/3758606/how-to-convert-byte-size-into-human-readable-format-in-java
+     * from
+     * <a href="http://stackoverflow.com/questions/3758606/how-to-convert-byte-size-into-human-readable-format-in-java">
+     *     stackoverflow
+     * </a>
      *
      * @param value The value to convert.
      * @return A string for bytes (i.e, 10GB).
