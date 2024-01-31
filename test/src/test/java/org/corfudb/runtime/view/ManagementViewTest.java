@@ -26,9 +26,11 @@ import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
 import org.corfudb.runtime.view.ClusterStatusReport.ConnectivityStatus;
 import org.corfudb.runtime.view.ClusterStatusReport.NodeStatus;
 import org.corfudb.runtime.view.stream.IStreamView;
+import org.corfudb.util.Sleep;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -1681,5 +1683,73 @@ public class ManagementViewTest extends AbstractViewTest {
         addClientRule(corfuRuntime, new TestRule().requestMatches(msg ->
                 msg.getPayload().getPayloadCase().equals(PayloadCase.BOOTSTRAP_MANAGEMENT_REQUEST)).drop());
         assertThat(corfuRuntime.getLayoutManagementView().bootstrapNewNode(SERVERS.ENDPOINT_1).join()).isTrue();
+    }
+
+    /**
+     * Test that a 3-node cluster can recover when one node is marked unresponsive,
+     * but that COMMIT_LAYOUT is *only* received by this unresponsive node after prior
+     * consensus steps are complete. Thw two remaining responsive nodes will have
+     * the older layout with a stale epoch.
+     */
+    @Test
+    public void testPartialCommitSameNodeUnresponsive() throws Exception {
+        // Bootstrap a 3-node cluster where all nodes are responsive and on the same epoch.
+        final Layout startingLayout  = get3NodeLayout();
+        final long startingEpoch = startingLayout.getEpoch();
+        final int numWrites = 200;
+
+        final ICorfuTable<String, String> testTable = getCorfuRuntime().getObjectsView()
+                .build()
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setStreamID(UUID.randomUUID())
+                .open();
+
+        for (int i = 0; i < numWrites; i++) {
+            getCorfuRuntime().getObjectsView().TXBegin();
+            testTable.insert(Integer.toString(i), Integer.toString(i));
+            getCorfuRuntime().getObjectsView().TXEnd();
+        }
+
+        // Block PORT_0 from receiving SEAL, PREPARE_LAYOUT, PROPOSE_LAYOUT, COMMIT_LAYOUT and BOOTSTRAP_SEQUENCER.
+        addServerRule(SERVERS.PORT_0, new TestRule().requestMatches(msg ->
+                msg.getPayload().getPayloadCase().equals(PayloadCase.SEAL_REQUEST)).drop());
+        addServerRule(SERVERS.PORT_0, new TestRule().requestMatches(msg ->
+                msg.getPayload().getPayloadCase().equals(PayloadCase.PREPARE_LAYOUT_REQUEST)).drop());
+        addServerRule(SERVERS.PORT_0, new TestRule().requestMatches(msg ->
+                msg.getPayload().getPayloadCase().equals(PayloadCase.PROPOSE_LAYOUT_REQUEST)).drop());
+        addServerRule(SERVERS.PORT_0, new TestRule().requestMatches(msg ->
+                msg.getPayload().getPayloadCase().equals(PayloadCase.COMMIT_LAYOUT_REQUEST)).drop());
+        addServerRule(SERVERS.PORT_0, new TestRule().requestMatches(msg ->
+                msg.getPayload().getPayloadCase().equals(PayloadCase.BOOTSTRAP_SEQUENCER_REQUEST)).drop());
+
+        // Block PORT_1 from receiving COMMIT_LAYOUT.
+        addServerRule(SERVERS.PORT_1, new TestRule().requestMatches(msg ->
+                msg.getPayload().getPayloadCase().equals(PayloadCase.COMMIT_LAYOUT_REQUEST)).drop());
+
+        // Induce a failure on PORT_2.
+        addServerRule(SERVERS.PORT_2, new TestRule().requestMatches(msg ->
+                msg.getPayload().getPayloadCase().equals(PayloadCase.QUERY_NODE_REQUEST)).drop());
+
+        // Wait for a layout change.
+        waitForLayoutChange(l -> l.getEpoch() == startingEpoch + 1, getCorfuRuntime());
+
+        // Allow the failure detector to fail enough times and invalidate its layout.
+        Sleep.sleepUninterruptibly(Duration.ofSeconds(20));
+
+        // Allow failure detection and consensus to resume normally.
+        clearServerRules(SERVERS.PORT_0);
+        clearServerRules(SERVERS.PORT_1);
+        clearServerRules(SERVERS.PORT_2);
+
+        // Perform additional reads and writes - These should not timeout.
+        for (int i = numWrites; i < 2*numWrites; i++) {
+            getCorfuRuntime().getObjectsView().TXBegin();
+            testTable.insert(Integer.toString(i), Integer.toString(i));
+            getCorfuRuntime().getObjectsView().TXEnd();
+        }
+
+        getCorfuRuntime().getObjectsView().TXBegin();
+        assertThat(testTable.size()).isEqualTo(2*numWrites);
+        getCorfuRuntime().getObjectsView().TXEnd();
     }
 }
