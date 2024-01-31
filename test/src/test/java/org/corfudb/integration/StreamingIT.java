@@ -4,7 +4,10 @@ import com.google.protobuf.Message;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
+import org.corfudb.runtime.LogReplicationUtils;
+import org.corfudb.runtime.Queue;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStoreEntry;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
@@ -36,9 +39,11 @@ import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.fail;
 
@@ -1054,7 +1059,66 @@ public class StreamingIT extends AbstractIT {
         assertThat(listener.getUpdates().size()).isEqualTo(totalUpdates*2);
     }
 
+    /**
+     * Test to ensure that LogReplicator's RoutingQs lose data safely on checkpointing.
+     */
+    @Test
+    public void testSafeDataLossOnRoutingQs() throws Exception {
+        // Run a corfu server & initialize CorfuStore
+        initializeCorfu();
+        final String systemNamespace = CORFU_SYSTEM_NAMESPACE;
+        final String logEntryQName = LogReplicationUtils.LOG_ENTRY_SYNC_QUEUE_NAME_SENDER;
+        final String snapSyncQName = LogReplicationUtils.SNAPSHOT_SYNC_QUEUE_NAME_SENDER;
 
+        final Table<Queue.CorfuGuidMsg, Queue.RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg> logEntryQ =
+                store.openQueue(systemNamespace, logEntryQName,
+                        Queue.RoutingTableEntryMsg.class,
+                        TableOptions.fromProtoSchema(Queue.RoutingTableEntryMsg.class));
+        final Table<Queue.CorfuGuidMsg, Queue.RoutingTableEntryMsg, Queue.CorfuQueueMetadataMsg> fullSyncQ =
+                store.openQueue(systemNamespace, snapSyncQName,
+                        Queue.RoutingTableEntryMsg.class,
+                        TableOptions.fromProtoSchema(Queue.RoutingTableEntryMsg.class));
+
+        final int numEntries = PARAMETERS.NUM_ITERATIONS_VERY_LOW;
+        for (int i = 0; i < numEntries; i++) {
+            try (TxnContext tx = store.txn(CORFU_SYSTEM_NAMESPACE)) {
+                Queue.RoutingTableEntryMsg entry = Queue.RoutingTableEntryMsg.newBuilder()
+                        .addDestinations(tx.getNamespace()).build();
+                tx.enqueue(logEntryQ, entry);
+                tx.enqueue(fullSyncQ, entry);
+                tx.commit();
+            }
+        }
+        // Validate that the queues do have entries before checkpointing
+        try (TxnContext tx = store.txn(CORFU_SYSTEM_NAMESPACE)) {
+            assertThat(tx.entryList(logEntryQ).size()).isEqualTo(numEntries);
+            assertThat(tx.entryList(fullSyncQ).size()).isEqualTo(numEntries);
+        } // This will load up the table's map with all entries
+
+        // Now run a round of checkpoint and trim (Queue's data will be purged)
+        List<String> allRegisteredTablesAndQs = store.getRuntime().getTableRegistry().listTables().stream().map(
+                CorfuStoreMetadata.TableName::getTableName
+        ).collect(Collectors.toList());
+        checkpointAndTrim(store.getRuntime(), CORFU_SYSTEM_NAMESPACE, allRegisteredTablesAndQs, false);
+
+        // Since the original data is cached in-memory, it should still be readable.
+        try (TxnContext tx = store.txn(CORFU_SYSTEM_NAMESPACE)) {
+            assertThat(tx.entryList(logEntryQ).size()).isEqualTo(numEntries);
+            assertThat(tx.entryList(fullSyncQ).size()).isEqualTo(numEntries);
+        }
+
+        // Now release the memory occupied by the Queue
+        store.freeTableData(systemNamespace, logEntryQName);
+        store.freeTableData(systemNamespace, snapSyncQName);
+
+        // The next access will read from checkpoint but checkpoint has no data, so a safe data loss.
+        try (TxnContext tx = store.txn(CORFU_SYSTEM_NAMESPACE)) {
+            // This operation should not throw a trimmed exception
+            assertThat(tx.entryList(logEntryQ).size()).isEqualTo(0);
+            // Yet all the entries should disappear
+            assertThat(tx.entryList(fullSyncQ).size()).isEqualTo(0);
+        }
+    }
 
     /**
      * Confirm client exceptions (during onNext processing) are not wrapped as corfu unrecoverable streaming exceptions.

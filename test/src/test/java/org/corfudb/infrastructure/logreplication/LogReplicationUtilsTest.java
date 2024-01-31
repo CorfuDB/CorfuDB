@@ -56,6 +56,7 @@ public class LogReplicationUtilsTest extends AbstractViewTest {
         testSubscribe(true, true);
     }
 
+
     /**
      * Test the behavior of subscribe() when LR Snapshot sync is complete.  The flags and variables on the listener
      * must be updated correctly.

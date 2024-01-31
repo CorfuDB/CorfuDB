@@ -11,15 +11,15 @@ import org.corfudb.infrastructure.logreplication.infrastructure.DiscoveryService
 import org.corfudb.infrastructure.logreplication.infrastructure.utils.CorfuSaasEndpointProvider;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.CorfuReplicationClusterManagerAdapter;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEventInfoKey;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEvent;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEvent.ReplicationEventType;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.RetryExhaustedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.LogReplication.ReplicationStatus;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
+import org.corfudb.runtime.LogReplication.ReplicationEventInfoKey;
+import org.corfudb.runtime.LogReplication.ReplicationEvent.ReplicationEventType;
+import org.corfudb.runtime.LogReplication.ReplicationEvent;
 import org.corfudb.util.retry.ExponentialBackoffRetry;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalRetry;
@@ -696,6 +696,10 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
 
         if (sessionManager != null) {
             sessionManager.shutdown();
+        }
+
+        if (!runtime.isShutdown()) {
+            runtime.shutdown();
         }
 
         serverContext.close();

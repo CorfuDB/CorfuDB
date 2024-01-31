@@ -46,6 +46,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
  * using the backup file generated from the source server.
  */
 @Slf4j
+@SuppressWarnings("checkstyle:magicnumber")
 public class BackupRestoreIT extends AbstractIT {
 
     public static final int numEntries = 123;

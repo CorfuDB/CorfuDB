@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure.logreplication.replication.send;
 
 import lombok.Getter;
+import lombok.Setter;
 
 import java.util.UUID;
 
@@ -31,6 +32,9 @@ public class LogReplicationEventMetadata {
     private long lastTransferredBaseSnapshot;
 
     private boolean forceSnapshotSync = false;
+
+    @Setter
+    private boolean timeoutException = false;
 
     /**
      * Constructor
@@ -87,5 +91,9 @@ public class LogReplicationEventMetadata {
     }
 
     public boolean isForcedSnapshotSync() { return this.forceSnapshotSync; }
+
+    public boolean isTimeoutException() {
+        return timeoutException;
+    }
 }
 

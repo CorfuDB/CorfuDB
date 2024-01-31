@@ -1,7 +1,6 @@
 package org.corfudb.runtime.view;
 
 import com.google.protobuf.Message;
-import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.Queue.CorfuGuidMsg;
@@ -13,97 +12,19 @@ import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 
 import java.lang.reflect.InvocationTargetException;
-import java.time.Instant;
+import java.util.NoSuchElementException;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-
-/**
- * Globally Unique Identity generator that returns ids
- * with weak comparable ordering with minimal distributed state sync.
- * On startup increment a globally unique id via Corfu Object.
- * Use this id with locally incrementing values to return unique ids.
- *
- * Created by Sundar Sridharan on 5/22/19.
- */
-
-class CorfuGuid {
-    public static final int MAX_CORRECTION = 0xF;
-    private final long timestamp;
-    private final int driftCorrection;
-    private final int resolutionCorrection;
-    @Getter
-    private final long uniqueInstanceId;
-
-    CorfuGuid(long UTCtimestamp, int driftCorrection,
-              int resolutionCorrection, long uniqueInstanceId) {
-        this.timestamp = UTCtimestamp;
-        this.driftCorrection = driftCorrection;
-        this.resolutionCorrection = resolutionCorrection;
-        this.uniqueInstanceId = uniqueInstanceId;
-    }
-
-    private static final long TIMESTAMP_MSB_MASK = 0x0000007FffFF0000L;
-    private static final long TIMESTAMP_LSB_MASK = 0x000000000000FFffL;
-    private static final long INSTANCE_ID_MASK   = 0x000000000000FFffL;
-    private static final int CORRECTION_MASK     = MAX_CORRECTION;
-
-    private static final long TIMESTAMP_MSB_SHIFT = 24;
-    private static final long DRIFT_ADJUST_SHIFT  = 36;
-    private static final long TIMESTAMP_LSB_SHIFT = 20;
-    private static final long INSTANCE_ID_SHIFT   = 4;
-
-    /**
-     * Construct the CorfuGuid with the UTC + GloballyUniqueCounter + Corrections
-     * There are 2 types of corrections necessary to ensure uniqueness:
-     * 1. UTC wall clock time can drift backwards - Drift Adjust.
-     * 2. UTC resolution may be coarse if many threads try to generate a
-     *    guid simultaneously - Resolution Adjust.
-     *
-     * Can tolerate up to 16 NTP time adjustments without global state sync.
-     * Can tolerate up to 65 seconds of time drifts without loss of ordering.
-     * +---------------+--------------+---------------+-------------+-------------------+
-     * | Timestamp MSB | Drift Adjust | Timestamp LSB | Instance ID | Resolution Adjust |
-     * +---------------+--------------+---------------+-------------+-------------------+
-     * <----24 bits----><----4 bits---><----16 bits---><---16 bits--><-------4 bits----->
-     * @return - build the guid out of the timestamp from parts as shown above
-     */
-    public long getLong() {
-        final long timestampMSB     = timestamp & TIMESTAMP_MSB_MASK;
-        final long driftAdjust      = driftCorrection & CORRECTION_MASK;
-        final long timestampLSB     = timestamp & TIMESTAMP_LSB_MASK;
-        final long instanceId       = uniqueInstanceId & INSTANCE_ID_MASK;
-        final long resolutionAdjust = resolutionCorrection & CORRECTION_MASK;
-
-        return ((timestampMSB     << TIMESTAMP_MSB_SHIFT) |
-                (driftAdjust      << DRIFT_ADJUST_SHIFT)  |
-                (timestampLSB     << TIMESTAMP_LSB_SHIFT) |
-                (instanceId       << INSTANCE_ID_SHIFT)   |
-                resolutionAdjust);
-    }
-
-    CorfuGuid(long encodedTs) {
-        long currentTimestamp = System.currentTimeMillis();
-        final long timestampMSB = (encodedTs >> TIMESTAMP_MSB_SHIFT) & TIMESTAMP_MSB_MASK;
-        final long timestampLSB = (encodedTs >> TIMESTAMP_LSB_SHIFT) & TIMESTAMP_LSB_MASK;
-        timestamp = (currentTimestamp & (~(TIMESTAMP_MSB_MASK | TIMESTAMP_LSB_MASK)))
-                | timestampMSB  | timestampLSB;
-        driftCorrection = (int)((encodedTs >> DRIFT_ADJUST_SHIFT) & CORRECTION_MASK);
-        uniqueInstanceId = (int)((encodedTs >> INSTANCE_ID_SHIFT) & INSTANCE_ID_MASK);
-        resolutionCorrection = (int)(encodedTs & CORRECTION_MASK);
-    }
-
-    public String toString() {
-        return String.format("%s: drift: %d resolution: %d instanceId %d",
-                Instant.ofEpochMilli(timestamp).toString(),
-                driftCorrection, resolutionCorrection, uniqueInstanceId);
-    }
-}
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicLong;
 
 @Slf4j
 public class CorfuGuidGenerator implements OrderedGuidGenerator {
-    private final String GUID_STREAM_NAME = "CORFU_GUID_COUNTER_STREAM";
+    public static final String GUID_STREAM_NAME = "CORFU_GUID_COUNTER_STREAM";
 
     private Table<CorfuGuidMsg, CorfuGuidMsg, Message> distributedCounter;
 
@@ -116,34 +37,101 @@ public class CorfuGuidGenerator implements OrderedGuidGenerator {
     private int driftCorrection = CorfuGuid.MAX_CORRECTION;
     private int resolutionCorrection = CorfuGuid.MAX_CORRECTION;
     private long previousTimestamp = Long.MAX_VALUE;
-    private long instanceId = 0L;
+    private volatile long instanceId = 0L;
+    private AtomicLong txnCounter = new AtomicLong();
 
     private static CorfuGuidGenerator singletonCorfuGuidGenerator;
 
-    private CorfuGuidGenerator(CorfuRuntime rt) {
+    private CompletableFuture<Void> instanceIdGetterFuture;
+
+    // 8388608 (~8.3M) new transactions involving Q writes while an old txn is still running before overflow can occur
+    public static final long MAX_TXN_ID = 1L << 23;
+    // 1048576 (~1M) new jvms restarts while the oldest is still operational before overflow can occur
+    public static final long MAX_INSTANCE_ID = 1L << 20;
+    public static final long TXN_ID_SHIFT = 40;
+    public static final long TXN_ID_MASK = 0x7fFFff0000000000L;
+    public static final long INSTANCE_ID_MASK = 0x000000FffFF00000L;
+    public static final long TXN_COUNTER_MASK = 0x00000000000FffFFL;
+    public static final long INSTANCE_ID_SHIFT = 20;
+    // 1048576 (~1M) write operations per transaction before an error is thrown
+    public static final long MAX_TXN_Q_ELEMENTS = 1L << 20;
+    // SIGN bit|23 bits of txn id| 20 bits instance id| 20 bits local counter
+
+    public CorfuGuidGenerator(CorfuRuntime rt) {
         corfuStore = new CorfuStore((rt));
-        ExecutorService executorService = Executors.newSingleThreadExecutor();
-        boolean success;
+        instanceIdGetterFuture = CompletableFuture.runAsync(this::generateNewInstanceId);
+
         try {
-            success = executorService.submit(() -> {
+            instanceIdGetterFuture.get(5, TimeUnit.SECONDS);
+        } catch (InterruptedException | ExecutionException e) {
+            throw new RuntimeException("Failed to get instance id", e);
+        } catch (TimeoutException e) {
+            log.warn("Not going to wait more than 5 seconds for a new instance id");
+        }
+    }
+
+    private void generateNewInstanceId() {
+        long reasonableNumberOfRetries = 64;
+        long newInstanceId;
+        Table<CorfuGuidMsg, CorfuGuidMsg, Message> distributedCounterTable = null;
+        while (reasonableNumberOfRetries-- > 0) {
+            try {
+                distributedCounterTable = corfuStore.getTable(
+                        TableRegistry.CORFU_SYSTEM_NAMESPACE, GUID_STREAM_NAME);
+            } catch (IllegalArgumentException | NoSuchElementException e) {
                 try {
-                    distributedCounter = corfuStore.openTable(TableRegistry.CORFU_SYSTEM_NAMESPACE, GUID_STREAM_NAME,
+                    distributedCounterTable = corfuStore.openTable(
+                            TableRegistry.CORFU_SYSTEM_NAMESPACE, GUID_STREAM_NAME,
                             CorfuGuidMsg.class,
                             CorfuGuidMsg.class,
                             null,
                             TableOptions.builder().build());
-                } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
+                } catch (InvocationTargetException | NoSuchMethodException | IllegalAccessException ee) {
                     log.error("CorfuGuidGenerator: failed to open the instanceId table", e);
-                    return false;
+                    continue;
                 }
-                return true;
-            }).get();
-        } catch (InterruptedException | ExecutionException e) {
-            log.error("CorfuGuidGenerator: failed to initialize", e);
-            success = false;
+            }
+            distributedCounter = distributedCounterTable;
+
+            try (TxnContext txn = corfuStore.txn(TableRegistry.CORFU_SYSTEM_NAMESPACE)) {
+                final int GUID_INSTANCE_ID_KEY = 0xdeadbeef;
+                CorfuGuidMsg key = CorfuGuidMsg.newBuilder()
+                        .setInstanceId(GUID_INSTANCE_ID_KEY).build();
+
+                CorfuStoreEntry<CorfuGuidMsg, CorfuGuidMsg, Message> prevEntry;
+                prevEntry = txn.getRecord(distributedCounterTable, key);
+                if (prevEntry.getPayload() == null) {
+                    newInstanceId = 1L; // Starting value should not be zero
+                    txn.putRecord(distributedCounterTable, key,
+                            CorfuGuidMsg.newBuilder().setInstanceId(newInstanceId).build(),
+                            null);
+                    txn.commit();
+                    this.instanceId = newInstanceId;
+                    return;
+                }
+                newInstanceId = (prevEntry.getPayload().getInstanceId() + 1) % MAX_INSTANCE_ID;
+                txn.putRecord(distributedCounterTable, key,
+                        CorfuGuidMsg.newBuilder().setInstanceId(newInstanceId)
+                                .build(),
+                        null);
+                txn.commit();
+                this.instanceId = newInstanceId;
+                return;
+            } catch (TransactionAbortedException e) {
+                log.error("updateInstanceId: Transaction aborted while updating GUID counter", e);
+            }
         }
-        if (!success) {
-            throw new RuntimeException("Unable to initialize the Guid Generator");
+    }
+
+    public long getInstanceId() {
+        if (instanceId != 0) {
+            return instanceId;
+        }
+        try {
+            instanceIdGetterFuture.get();
+            return instanceId;
+        } catch (InterruptedException | ExecutionException e) {
+            throw new RuntimeException("CorfuGuidGenerator unable to get Id ", e);
         }
     }
 
@@ -219,6 +207,34 @@ public class CorfuGuidGenerator implements OrderedGuidGenerator {
     @Override
     public long nextLong() {
         return getCorrectedTimestamp().getLong();
+    }
+
+    public long nextLong(TxnContext txnContext) {
+        long txnIdForQueue = txnContext.getTxnIdForQueues();
+        if (txnContext.getTxnIdForQueues() == 0) {
+            txnIdForQueue = generateIdOncePerTxn(getInstanceId());
+        } else {
+            txnIdForQueue = generateNextIdInTxn(txnIdForQueue);
+        }
+        txnContext.setTxnIdForQueues(txnIdForQueue);
+        return txnIdForQueue;
+    }
+
+    private long generateIdOncePerTxn(long instId) {
+        long newTxnId = txnCounter.incrementAndGet();
+        newTxnId = (newTxnId<<TXN_ID_SHIFT) & TXN_ID_MASK;
+        newTxnId = newTxnId | ((instId<< INSTANCE_ID_SHIFT)&INSTANCE_ID_MASK);
+        return newTxnId;
+    }
+
+    private long generateNextIdInTxn(long lastQId) {
+        long nextQId = lastQId & TXN_COUNTER_MASK;
+        nextQId = nextQId + 1;
+        if (nextQId >= MAX_TXN_Q_ELEMENTS) {
+            throw new UnsupportedOperationException("More than "+MAX_TXN_Q_ELEMENTS+" not supported in 1 txn");
+        }
+        nextQId = (lastQId & (~TXN_COUNTER_MASK)) | nextQId;
+        return nextQId;
     }
 
     /**

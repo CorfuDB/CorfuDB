@@ -4,8 +4,11 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.logreplication.config.LogReplicationRoutingQueueConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationMetadata;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.protocols.CorfuProtocolCommon;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
@@ -13,11 +16,10 @@ import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.service.CorfuProtocolLogReplication;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
-import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMetadataMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
+import org.corfudb.runtime.Queue;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
@@ -32,17 +34,20 @@ import org.corfudb.util.serializer.Serializers;
 import javax.annotation.concurrent.NotThreadSafe;
 import java.lang.reflect.Array;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.corfudb.infrastructure.logreplication.config.LogReplicationConfig.MERGE_ONLY_STREAMS;
 import static org.corfudb.infrastructure.logreplication.config.LogReplicationConfig.REGISTRY_TABLE_ID;
 import static org.corfudb.infrastructure.logreplication.config.LogReplicationConfig.PROTOBUF_TABLE_ID;
+import static org.corfudb.runtime.LogReplication.ReplicationModel.ROUTING_QUEUES;
 
 /**
  * This class represents the entity responsible for writing streams' snapshots into the sink cluster DB.
@@ -195,8 +200,20 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
                     srcGlobalSnapshot, recvSeq, persistedTopologyConfigId, persistedSnapshotStart, persistedSequenceNum);
             return;
         }
-        for (SMREntry smrEntry : smrEntries) {
-            txnContext.logUpdate(streamId, smrEntry, replicationContext.getConfig(session).getDataStreamToTagsMap().get(streamId));
+
+        // Since the routing queue model requires the data to maintain the "write" order on the SINK, create a new
+        // queue entry to embed the sequence number used by the SINK.
+        // Transfer phase was chosen to retain the simplicity of the code.
+        if (session.getSubscriber().getModel().equals(ROUTING_QUEUES) && phase.equals(Phase.TRANSFER_PHASE)) {
+            createAndWriteQueueRecord(txnContext, smrEntries, metadataManager.getCorfuStore());
+        } else {
+            for (SMREntry smrEntry : smrEntries) {
+                if (session.getSubscriber().getModel().equals(ROUTING_QUEUES)) {
+                    txnContext.logUpdate(streamId, smrEntry, Collections.singletonList(replicatedRoutingQueueTag));
+                } else {
+                    txnContext.logUpdate(streamId, smrEntry, replicationContext.getConfig(session).getDataStreamToTagsMap().get(streamId));
+                }
+            }
         }
     }
 
@@ -397,13 +414,24 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
         // Sync the config with registry table after applying its entries
         replicationContext.refreshConfig(session, true);
 
-        for (String stream : replicationContext.getConfig(session).getStreamsToReplicate()) {
-            UUID regularStreamId = CorfuRuntime.getStreamID(stream);
-            if (regularStreamId.equals(REGISTRY_TABLE_ID)) {
+        // TODO: Temporary fix for routing queue model, will need more complete fix to getStreamsToReplicate() for
+        // this model.
+        // Use replicatedStreamIds if model is routing queues
+        List<UUID> replicatedStreams = new ArrayList<>();
+        if (session.getSubscriber().getModel() == ROUTING_QUEUES) {
+            replicatedStreams.addAll(replicatedStreamIds);
+        } else {
+            replicatedStreams.addAll(replicationContext.getConfig(session)
+                    .getStreamsToReplicate().stream()
+                    .map(CorfuRuntime::getStreamID).collect(Collectors.toList()));
+        }
+
+        for (UUID stream : replicatedStreams) {
+            if (stream.equals(REGISTRY_TABLE_ID)) {
                 // Skip registry table as it has been applied in advance
                 continue;
             }
-            applyShadowStream(regularStreamId, snapshot);
+            applyShadowStream(stream, snapshot);
         }
 
         // Invalidate client cache after snapshot sync is completed, as shadow streams are
@@ -424,6 +452,46 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
         if (sequenceNumber != Address.NON_ADDRESS) {
             log.debug("Start applying shadow streams, seqNum={}", sequenceNumber);
             applyShadowStreams();
+
+            // For Routing Queue replication model, write a dummy entry indicating the end of Snapshot sync
+            // TODO: This is a temporary workaround according to the client behavior.  It must be removed in future.
+            if (session.getSubscriber().getModel().equals(ROUTING_QUEUES)) {
+                writeLastSnapshotSyncEntry();
+            }
+        }
+    }
+
+    private void writeLastSnapshotSyncEntry() {
+        try {
+            // For ROUTING_QUEUES model, write a dummy entry with type LAST_SNAPSHOT_SYNC_ENTRY to indicate
+            // subscribers to complete snapshot sync.
+            IRetry.build(IntervalRetry.class, () -> {
+                try {
+                    try (TxnContext txnContext = metadataManager.getTxnContext()) {
+                        String replicatedQueueName = ((LogReplicationRoutingQueueConfig) replicationContext
+                                .getConfig(session)).getSinkQueueName();
+                        UUID streamId = CorfuRuntime.getStreamID(replicatedQueueName);
+                        UUID replicatedQueueTag = ((LogReplicationRoutingQueueConfig) replicationContext
+                                .getConfig(session)).getSinkQueueStreamTag();
+
+                        Queue.RoutingTableEntryMsg lastSnapshotSyncMsg = Queue.RoutingTableEntryMsg.newBuilder()
+                                .setSourceClusterId(session.getSourceClusterId())
+                                .addAllDestinations(Collections.singleton(session.getSinkClusterId()))
+                                .setReplicationType(Queue.ReplicationType.LAST_SNAPSHOT_SYNC_ENTRY).build();
+
+                        txnContext.logUpdateEnqueue(streamId, lastSnapshotSyncMsg,
+                                Collections.singletonList(replicatedQueueTag), metadataManager.getCorfuStore());
+                        txnContext.commit();
+                    }
+                } catch (Exception e) {
+                    log.error("Error while attempting to connect to cluster manager. Retry.", e);
+                    throw new RetryNeededException();
+                }
+                return null;
+            }).run();
+        } catch (InterruptedException e) {
+            log.error("Unrecoverable Error when writing dummy entry to log entry queue", e);
+            throw new ReplicationWriterException(e);
         }
     }
 

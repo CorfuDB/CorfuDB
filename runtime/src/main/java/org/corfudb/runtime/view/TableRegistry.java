@@ -97,6 +97,10 @@ public class TableRegistry {
     private volatile StreamingManager streamingManager;
 
     /**
+     * Corfu Guid generator to create globally unique short Ids with very high concurrency.
+     */
+    private volatile CorfuGuidGenerator corfuGuidGenerator;
+    /**
      * Cache of tables allowing the user to fetch a table by fullyQualified table name without the other options.
      */
     private final ConcurrentMap<String, Table<Message, Message, Message>> tableMap;
@@ -197,7 +201,9 @@ public class TableRegistry {
      * @throws InvocationTargetException If this is not a protobuf message.
      * @throws IllegalAccessException    If this is not a protobuf message.
      */
-    private <K extends Message, V extends Message, M extends Message>
+    // TODO: Log Replication code currently invokes this method and has a TODO for eliminating it.  After it is
+    //  addressed, make the method private.
+    public <K extends Message, V extends Message, M extends Message>
     void registerTable(@Nonnull String namespace,
                        @Nonnull String tableName,
                        @Nonnull Class<K> keyClass,
@@ -550,7 +556,18 @@ public class TableRegistry {
      * @return stream Id in UUID
      */
     public static UUID getStreamIdForStreamTag(String namespace, String streamTag) {
-        return CorfuRuntime.getStreamID(STREAM_TAG_PREFIX + namespace + streamTag);
+        return CorfuRuntime.getStreamID(getStreamTagFullStreamName(namespace, streamTag));
+    }
+
+    /**
+     * Return fully qualified stream name for the given tag
+     *
+     * @param namespace namespace of this stream tag
+     * @param streamTag the tag without the namespace
+     * @return the fully qualified stream name of this stream tag
+     */
+    public static String getStreamTagFullStreamName(String namespace, String streamTag) {
+        return STREAM_TAG_PREFIX + namespace + streamTag;
     }
 
     /**
@@ -865,6 +882,15 @@ public class TableRegistry {
                 new HashSet<>(Collections.singletonList(LOG_REPLICATOR_STREAM_INFO.getStreamId())));
     }
 
+    /**
+     * Create a new guid generator specific to this corfu cluster
+     */
+    public synchronized CorfuGuidGenerator getCorfuGuidGenerator() {
+        if (corfuGuidGenerator == null) {
+            corfuGuidGenerator = new CorfuGuidGenerator(runtime);
+        }
+        return corfuGuidGenerator;
+    }
     /**
      * Register a streaming subscription manager as a singleton.
      */

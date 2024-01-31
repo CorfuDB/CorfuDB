@@ -7,6 +7,7 @@ import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationCo
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.service.CorfuProtocolLogReplication;
+import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMetadataMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
@@ -154,11 +155,15 @@ public class LogEntryWriter extends SinkWriter {
                                 }
                             }
 
-                            for (SMREntry smrEntry : smrEntries) {
-                                // If stream tags exist for the current stream, it means its intended for streaming
-                                // on the Sink (receiver)
-                                txnContext.logUpdate(streamId, smrEntry,
-                                    replicationContext.getConfig(session).getDataStreamToTagsMap().get(streamId));
+                            if (session.getSubscriber().getModel().equals(LogReplication.ReplicationModel.ROUTING_QUEUES)) {
+                                createAndWriteQueueRecord(txnContext, smrEntries, metadataManager.getCorfuStore());
+                            } else {
+                                for (SMREntry smrEntry : smrEntries) {
+                                    // If stream tags exist for the current stream, it means it's intended for streaming
+                                    // on the Sink (receiver)
+                                    txnContext.logUpdate(streamId, smrEntry,
+                                            replicationContext.getConfig(session).getDataStreamToTagsMap().get(streamId));
+                                }
                             }
                         }
                         txnContext.commit();

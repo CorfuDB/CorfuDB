@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure.logreplication.replication.receive;
 
+import com.google.protobuf.Message;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import lombok.extern.slf4j.Slf4j;
@@ -12,13 +13,22 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.TableDescriptors;
 import org.corfudb.runtime.CorfuStoreMetadata.TableMetadata;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
+import org.corfudb.runtime.LogReplicationUtils;
+import org.corfudb.runtime.Queue;
 import org.corfudb.runtime.collections.CorfuRecord;
+import org.corfudb.runtime.collections.CorfuStore;
+import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.util.serializer.ISerializer;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
+
+import static org.corfudb.runtime.LogReplication.ReplicationModel.ROUTING_QUEUES;
+import static org.corfudb.runtime.LogReplicationUtils.REPLICATED_RECV_Q_PREFIX;
+import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 /**
  * A parent class for Sink side StreamsSnapshotWriter and LogEntryWriter, which contains some common
@@ -34,6 +44,10 @@ public abstract class SinkWriter {
     // Replication context that provides configuration for LR in Source / Sink cluster.
     final LogReplicationContext replicationContext;
 
+    final UUID replicatedRoutingQueueTag;
+
+    final UUID replicatedRoutingQUuid;
+
     // Limit the initialization of this class only to its children classes.
     SinkWriter(LogReplicationSession session, LogReplicationContext replicationContext) {
         this.session = session;
@@ -42,6 +56,19 @@ public abstract class SinkWriter {
         // The CorfuRuntime in LogReplicationConfigManager used to get the config fields from registry
         // table, and the protobufSerializer is guaranteed to be registered before initializing SinkWriter.
         this.protobufSerializer = replicationContext.getProtobufSerializer();
+
+        if (session.getSubscriber().getModel() == ROUTING_QUEUES) {
+            replicatedRoutingQUuid = CorfuRuntime.getStreamID(
+                    TableRegistry.getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE,
+                            REPLICATED_RECV_Q_PREFIX + session.getSourceClusterId() + "_" +
+                                    session.getSubscriber().getClientName())
+            );
+            replicatedRoutingQueueTag = TableRegistry.getStreamIdForStreamTag(CORFU_SYSTEM_NAMESPACE,
+                    LogReplicationUtils.REPLICATED_QUEUE_TAG);
+        } else {
+            replicatedRoutingQUuid = null;
+            replicatedRoutingQueueTag = null;
+        }
     }
 
     /**
@@ -122,5 +149,17 @@ public abstract class SinkWriter {
             log.warn("Unexpected path for the sink writer of current replication session {}", session);
         }
         return false;
+    }
+
+    // create a new queue entry while writing on SINK, so the order of writes can be preserved
+    // even after CP/trim
+    void createAndWriteQueueRecord(TxnContext txnContext, List<SMREntry> smrEntries, CorfuStore corfuStore) {
+        for (SMREntry smrEntry : smrEntries) {
+            CorfuRecord<Queue.RoutingTableEntryMsg, Message> currRecord =
+                    (CorfuRecord<Queue.RoutingTableEntryMsg, Message>) (replicationContext.getProtobufSerializer()
+                            .deserialize(Unpooled.wrappedBuffer((byte[]) smrEntry.getSMRArguments()[1]), null));
+            txnContext.logUpdateEnqueue(replicatedRoutingQUuid, currRecord.getPayload(),
+                    Collections.singletonList(replicatedRoutingQueueTag), corfuStore);
+        }
     }
 }
