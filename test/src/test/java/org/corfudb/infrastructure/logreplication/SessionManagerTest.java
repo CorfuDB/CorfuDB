@@ -3,6 +3,7 @@ package org.corfudb.infrastructure.logreplication;
 import com.google.common.collect.Sets;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.infrastructure.logreplication.infrastructure.CorfuReplicationManager;
+import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.infrastructure.logreplication.infrastructure.SessionManager;
 import org.corfudb.infrastructure.logreplication.infrastructure.TopologyDescriptor;
 import org.corfudb.infrastructure.logreplication.infrastructure.msghandlers.LogReplicationServer;
@@ -56,7 +57,7 @@ public class SessionManagerTest extends AbstractViewTest {
 
         replicationManager = Mockito.mock(CorfuReplicationManager.class);
         Mockito.doNothing().when(replicationManager).refreshRuntime(any(), any(), anyLong());
-        Mockito.doNothing().when(replicationManager).createAndStartRuntime(any(), any(), any());
+        Mockito.doNothing().when(replicationManager).createReplicationRuntime(any(), any(), any());
 
         pluginConfig = Mockito.mock(LogReplicationPluginConfig.class);
     }
@@ -169,13 +170,15 @@ public class SessionManagerTest extends AbstractViewTest {
 
         IClientChannelAdapter clientChannelAdapter = Mockito.mock(IClientChannelAdapter.class);
         IServerChannelAdapter serverChannelAdapter = Mockito.mock(IServerChannelAdapter.class);
+        LogReplicationContext context = Mockito.mock(LogReplicationContext.class);
         this.router = new LogReplicationClientServerRouter(0L,
                 topology.getLocalNodeDescriptor().getClusterId(), topology.getLocalNodeDescriptor().getNodeId(),
-                new HashSet<>(), new HashSet<>(), msgHandler, clientChannelAdapter, serverChannelAdapter);
+                new HashSet<>(), new HashSet<>(), msgHandler, clientChannelAdapter, serverChannelAdapter, context);
 
         SessionManager sessionManager = new SessionManager(topology, corfuRuntime, replicationManager, router,
                 msgHandler, pluginConfig);
         sessionManager.refresh(topology);
+        addSessionNames(sessionManager.getSessions(), context);
         sessionManager.connectToRemoteClusters();
         Mockito.verify(clientChannelAdapter, Mockito.times(3)).connectAsync(ArgumentMatchers.any(), ArgumentMatchers.any());
 
@@ -192,14 +195,24 @@ public class SessionManagerTest extends AbstractViewTest {
                 topology.getRemoteSourceClusterToReplicationModels(), newAllClusters, newRemoteClusterEndpoints,
                 topology.getLocalNodeDescriptor().getNodeId());
         sessionManager.refresh(newTopology);
+        addSessionNames(sessionManager.getSessions(), context);
         Assert.assertTrue(router.getConnectedSessions().size() == 2);
 
         Mockito.clearInvocations(clientChannelAdapter);
         //simulate adding a cluster back to topology. ConnectAsync should be called for the newly added cluster only.
         sessionManager.refresh(topology);
+        addSessionNames(sessionManager.getSessions(), context);
         sessionManager.connectToRemoteClusters();
         Mockito.verify(clientChannelAdapter, Mockito.times(1)).connectAsync(ArgumentMatchers.any(), ArgumentMatchers.any());
 
+    }
+
+    private void addSessionNames(Set<LogReplication.LogReplicationSession> sessions, LogReplicationContext context) {
+        int counter = 0;
+        for(LogReplication.LogReplicationSession session : sessions) {
+            context.addSessionNameForLogging(session, "session_"+counter);
+            ++counter;
+        }
     }
 }
 

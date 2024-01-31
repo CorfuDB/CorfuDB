@@ -10,6 +10,7 @@ import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerThreadFactory;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.infrastructure.logreplication.infrastructure.CorfuReplicationManager;
+import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.infrastructure.logreplication.infrastructure.TopologyDescriptor;
 import org.corfudb.infrastructure.logreplication.infrastructure.msghandlers.LogReplicationServer;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
@@ -181,6 +182,10 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
     @Getter
     private Set<LogReplicationSession> connectedSessions = ConcurrentHashMap.newKeySet();
 
+    @Getter
+    private LogReplicationContext replicationContext;
+
+
 
 
     /**
@@ -199,7 +204,7 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
                                             Set<LogReplicationSession> outgoingSession,
                                             LogReplicationServer msgHandler,
                                             ServerContext serverContext,
-                                            LogReplicationPluginConfig pluginConfig) {
+                                            LogReplicationPluginConfig pluginConfig, LogReplicationContext replicationContext) {
         this.timeoutResponse = replicationManager.getReplicationContext().getCorfuRuntime().getParameters().getRequestTimeout().toMillis();
         this.localClusterId = localClusterId;
         this.localNodeId = localNodeId;
@@ -207,6 +212,7 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
         this.incomingSession = incomingSession;
         this.outgoingSession = outgoingSession;
         this.msgHandler = msgHandler;
+        this.replicationContext = replicationContext;
 
         this.sessionToRemoteClusterDescriptor = new ConcurrentHashMap<>();
         this.sessionToRequestIdCounter = new ConcurrentHashMap<>();
@@ -225,13 +231,14 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
                                             Set<LogReplicationSession> outgoingSession,
                                             LogReplicationServer msgHandler,
                                             IClientChannelAdapter clientChannelAdapter,
-                                            IServerChannelAdapter serverChannelAdapter) {
+                                            IServerChannelAdapter serverChannelAdapter, LogReplicationContext replicationContext) {
         this.timeoutResponse = timeout;
         this.localClusterId = localClusterId;
         this.localNodeId = localNodeId;
         this.incomingSession = incomingSession;
         this.outgoingSession = outgoingSession;
         this.msgHandler = msgHandler;
+        this.replicationContext = replicationContext;
 
         this.sessionToRemoteClusterDescriptor = new ConcurrentHashMap<>();
         this.sessionToRequestIdCounter = new ConcurrentHashMap<>();
@@ -336,9 +343,9 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
             @Nonnull LogReplicationSession session,
             @Nonnull CorfuMessage.RequestPayloadMsg payload,
             @Nonnull String nodeId) {
-
+        String sessionName = replicationContext.getSessionName(session);
         if (!isValidMessage(payload)) {
-            log.error("Invalid message type {}. Currently only log replication messages are processed.",
+            log.error("[{}]:: Invalid message type {}. Currently only log replication messages are processed.", sessionName,
                     payload.getPayloadCase());
             CompletableFuture<T> f = new CompletableFuture<>();
             f.completeExceptionally(new Throwable("Invalid message type"));
@@ -390,7 +397,7 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
                     if (runtimeFSM.getRemoteLeaderNodeId().isPresent()) {
                         nodeId = runtimeFSM.getRemoteLeaderNodeId().get();
                     } else {
-                        log.error("Leader not found to remote cluster {}",
+                        log.error("[{}]:: Leader not found to remote cluster {}", sessionName,
                                 sessionToRemoteClusterDescriptor.get(session).getClusterId());
                         runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent
                                 .LogReplicationRuntimeEventType.REMOTE_LEADER_LOSS));
@@ -406,15 +413,15 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
             // In the case the message is intended for a specific endpoint, we do not
             // block on connection future, this is the case of leader verification.
             if(isConnectionStarterForSession(session)) {
-                log.info("Send requestID/payload {}/{} via clientChannelAdapter for session {}", header.getRequestId(),
-                        payload.getPayloadCase(), session);
+                log.info("[{}]:: Send requestID/payload {}/{} via clientChannelAdapter", sessionName, header.getRequestId(),
+                        payload.getPayloadCase());
                 clientChannelAdapter.send(nodeId, getRequestMsg(header.build(), payload));
             } else {
                 // connection endpoints do not send leadership_query msgs.
                 Preconditions.checkArgument(!payload.getPayloadCase().equals(
                         CorfuMessage.RequestPayloadMsg.PayloadCase.LR_LEADERSHIP_QUERY));
-                log.info("Send requestID/payload {}/{} via serverChannelAdapter for session {}", header.getRequestId(),
-                        payload.getPayloadCase(), session);
+                log.info("[{}]:: Send requestID/payload {}/{} via serverChannelAdapter", sessionName, header.getRequestId(),
+                        payload.getPayloadCase());
                 serverChannelAdapter.send(getRequestMsg(header.build(), payload));
             }
 
@@ -426,8 +433,9 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
             cfTimeout.exceptionally(e -> {
                 if (e.getCause() instanceof TimeoutException) {
                     sessionToOutstandingRequests.get(session).remove(finalRequestId);
-                    log.debug("sendMessageAndGetCompletable: Remove request {} to {} due to timeout! Message:{}",
-                            finalRequestId, sessionToRemoteClusterDescriptor.get(session).getClusterId(), payload.getPayloadCase());
+                    log.debug("[{}]:: sendMessageAndGetCompletable: Remove request {} to {} due to timeout! Message:{}",
+                            sessionName, finalRequestId, sessionToRemoteClusterDescriptor.get(session).getClusterId(),
+                            payload.getPayloadCase());
                 }
                 return null;
             });
@@ -435,24 +443,26 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
             return cfTimeout;
 
         } catch (NetworkException ne) {
-            log.error("Caught Network Exception while trying to send message to remote leader {}", nodeId);
+            log.error("[{}]:: Caught Network Exception while trying to send message to remote leader {}", sessionName, nodeId);
             if(outgoingSession.contains(session)) {
-                sessionToRuntimeFSM.get(session).input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent
+                CorfuLogReplicationRuntime runtimeFsm = sessionToRuntimeFSM.get(session);
+                runtimeFsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent
                         .LogReplicationRuntimeEventType.ON_CONNECTION_DOWN, nodeId));
             } else {
-                sessionToRemoteSourceLeaderManager.get(session).input(new LogReplicationSinkEvent(
+                RemoteSourceLeadershipManager sourceLeadershipManager = sessionToRemoteSourceLeaderManager.get(session);
+                sourceLeadershipManager.input(new LogReplicationSinkEvent(
                         LogReplicationSinkEvent.LogReplicationSinkEventType.ON_CONNECTION_DOWN, nodeId));
             }
             throw ne;
         } catch(NullPointerException npe) {
-            log.info("components are not found for session {}, Error::{}", session, npe.getMessage());
+            log.info("[{}]:: components are not found, Error::{}", sessionName, npe.getMessage());
             // clear the potential stale data generated in this method for the potential stale session.
             // This is done so the session information can be consistent when another thread might be working on stopping
             // the replication for the session
             removeSessionInfo(session);
         } catch (Exception e) {
             sessionToOutstandingRequests.get(session).remove(requestId);
-            log.error("sendMessageAndGetCompletable: Remove request {} to {} due to exception! Message:{}",
+            log.error("[{}]:: sendMessageAndGetCompletable: Remove request {} to {} due to exception! Message:{}", sessionName,
                     requestId, sessionToRemoteClusterDescriptor.get(session).getClusterId(), payload.getPayloadCase(), e);
             cf.completeExceptionally(e);
         }
@@ -462,11 +472,12 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
     @Override
     public synchronized <T> void completeRequest(LogReplicationSession session, long requestID, T completion) {
         try {
-            log.trace("Complete request: {}...outstandingRequests {}", requestID, sessionToOutstandingRequests.get(session));
+            log.trace("[{}]:: Complete request: {}...outstandingRequests {}", replicationContext.getSessionName(session),
+                    requestID, sessionToOutstandingRequests.get(session));
             CompletableFuture<T> cf = (CompletableFuture<T>) sessionToOutstandingRequests.get(session).remove(requestID);
             cf.complete(completion);
         } catch (NullPointerException npe) {
-            log.warn("Attempted to complete request {}, but request not outstanding!", requestID);
+            log.warn("[{}]:: Attempted to complete request {}, but request not outstanding!", replicationContext.getSessionName(session), requestID);
         }
     }
 
@@ -475,11 +486,12 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
         try {
             CompletableFuture cf = sessionToOutstandingRequests.get(session).remove(requestID);
             cf.completeExceptionally(cause);
-            log.debug("completeExceptionally: Remove request {} to {} due to {}.", requestID,
+            log.debug("[{}]:: completeExceptionally: Remove request {} to {} due to {}.",
+                    replicationContext.getSessionName(session), requestID,
                     sessionToRemoteClusterDescriptor.get(session).getClusterId(), cause.getClass().getSimpleName(), cause);
         } catch (NullPointerException npe) {
-            log.warn("Attempted to exceptionally complete request {}, but request not outstanding!",
-                    requestID);
+            log.warn("[{}]:: Attempted to exceptionally complete request {}, but request not outstanding!",
+                    replicationContext.getSessionName(session), requestID);
         }
     }
 
@@ -501,51 +513,56 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
 
     @Override
     public void sendResponse(CorfuMessage.ResponseMsg response) {
-        log.trace("Ready to send response {}", response.getPayload().getPayloadCase());
         LogReplicationSession session = response.getHeader().getSession();
+        String sessionName = replicationContext.getSessionName(session);
+
+        log.trace("[{}]:: Ready to send response {}", sessionName, response.getPayload().getPayloadCase());
         if (isConnectionStarterForSession(session)) {
             try {
                 if (incomingSession.contains(session)) {
                     if (sessionToRemoteSourceLeaderManager.get(session).getRemoteLeaderNodeId().isPresent()) {
                         clientChannelAdapter.send(sessionToRemoteSourceLeaderManager.get(session).getRemoteLeaderNodeId().get(), response);
                     } else {
-                        sessionToRemoteSourceLeaderManager.get(session).input(
-                                new LogReplicationSinkEvent(LogReplicationSinkEvent.LogReplicationSinkEventType.REMOTE_LEADER_LOSS));
+                        RemoteSourceLeadershipManager sourceLeadershipManager = sessionToRemoteSourceLeaderManager.get(session);
+                        sourceLeadershipManager.input(new LogReplicationSinkEvent(
+                                LogReplicationSinkEvent.LogReplicationSinkEventType.REMOTE_LEADER_LOSS));
                     }
                 }
             } catch(NullPointerException npe) {
-                log.info("RemoteSourceLeadershipManager not found for session {}", session);
+                log.info("[{}]:: RemoteSourceLeadershipManager not found", sessionName);
             }
         } else {
             try {
                 this.serverChannelAdapter.send(response);
-                log.trace("Sent response: {}", response);
+                log.trace("[{}]:: Sent response: {}", sessionName, response);
             } catch (IllegalArgumentException e) {
-                log.warn("Illegal response type. Ignoring message.", e);
+                log.warn("[{}]:: Illegal response type. Ignoring message.", sessionName, e);
             }
         }
     }
 
     public void inputRemoteSourceLeaderLoss(LogReplicationSession session) {
-        sessionToRemoteSourceLeaderManager.get(session).input(
-                new LogReplicationSinkEvent(LogReplicationSinkEvent.LogReplicationSinkEventType.REMOTE_LEADER_LOSS));
+        RemoteSourceLeadershipManager sourceLeadershipManager = sessionToRemoteSourceLeaderManager.get(session);
+        sourceLeadershipManager.input(new LogReplicationSinkEvent(
+                LogReplicationSinkEvent.LogReplicationSinkEventType.REMOTE_LEADER_LOSS));
     }
 
     @Override
     public void receive(CorfuMessage.ResponseMsg msg) {
+        LogReplicationSession session = msg.getHeader().getSession();
+        String sessionName = replicationContext.getSessionName(session);
         try {
-            LogReplicationSession session = msg.getHeader().getSession();
-
             // If it is a Leadership Loss Message re-trigger leadership discovery
             if (msg.getPayload().getPayloadCase() == CorfuMessage.ResponsePayloadMsg.PayloadCase.LR_LEADERSHIP_LOSS) {
                 String nodeId = msg.getPayload().getLrLeadershipLoss().getNodeId();
                 if (outgoingSession.contains(session)) {
+                    CorfuLogReplicationRuntime runtimeFsm = sessionToRuntimeFSM.get(session);
                     this.sessionToRuntimeFSM.get(session)
                             .input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent
                                     .LogReplicationRuntimeEventType.REMOTE_LEADER_LOSS, nodeId));
                 } else {
-                    sessionToRemoteSourceLeaderManager.get(session)
-                            .input(new LogReplicationSinkEvent(LogReplicationSinkEvent
+                    RemoteSourceLeadershipManager sourceLeadershipManager = sessionToRemoteSourceLeaderManager.get(session);
+                    sourceLeadershipManager.input(new LogReplicationSinkEvent(LogReplicationSinkEvent
                                     .LogReplicationSinkEventType.REMOTE_LEADER_LOSS, nodeId));
                 }
                 completeRequest(msg.getHeader().getSession(), msg.getHeader().getRequestId(),
@@ -557,7 +574,7 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
                 // As creation of runtimeFSM and receiving of LR_REVERSE_REPLICATE_MSG is async, buffer the msg until
                 // the runtimeFSM is ready.
                 if(!sessionToRuntimeFSM.containsKey(session)) {
-                    log.info("RuntimeFSM not present. Buffering the msg for session {}", session);
+                    log.info("[{}]:: RuntimeFSM not present. Buffering the msg", sessionName);
                     reverseReplicateInitMsgBuffer.put(session, msg);
                     return;
                 }
@@ -566,7 +583,7 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
                 // Start runtimeFSM
                 addConnectionUpEvent(session, remoteLeaderId);
             } else if (isAckForLocalLeaderLoss(msg)) {
-                log.debug("Received an ACK for requestID/payload {}/{}", msg.getHeader().getRequestId(),
+                log.debug("[{}]:: Received an ACK for requestID/payload {}/{}", sessionName, msg.getHeader().getRequestId(),
                         msg.getPayload().getPayloadCase());
                 // the ACK for leadership loss msg from SOURCE is completed with null
                 completeRequest(msg.getHeader().getSession(), msg.getHeader().getRequestId(), null);
@@ -575,15 +592,15 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
             } else {
                 // Route the message to the handler.
                 if (log.isTraceEnabled()) {
-                    log.trace("Message routed to {}}: {}", msgHandler.getClass().getSimpleName(), msg);
+                    log.trace("[{}]:: Message routed to {}}: {}", sessionName, msgHandler.getClass().getSimpleName(), msg);
                 }
                 msgHandler.handleMessage(null, msg, this);
             }
         } catch (NullPointerException npe) {
-            log.info("Either runtimeFSM or remoteSourceLeadershipManager is not found when msg of type {} is received " +
-                    "for session {}", msg.getPayload().getPayloadCase(), msg.getHeader().getSession());
+            log.info("[{}]:: Either runtimeFSM or remoteSourceLeadershipManager is not found when msg of type {} is received ",
+                    sessionName, msg.getPayload().getPayloadCase());
         } catch (Exception e) {
-            log.error("Exception caught while receiving message of type {}",
+            log.error("[{}]:: Exception caught while receiving message of type {}", sessionName,
                     msg.getPayload().getPayloadCase(), e);
         }
     }
@@ -595,15 +612,16 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
 
     @Override
     public void receive(CorfuMessage.RequestMsg message) {
-        log.debug("Received request message {}", message.getPayload().getPayloadCase());
+        LogReplicationSession session = message.getHeader().getSession();
+        String sessionName = replicationContext.getSessionName(session);
+        log.debug("[{}]:: Received request message {}", sessionName, message.getPayload().getPayloadCase());
         try {
             if (message.getPayload().getPayloadCase().equals(CorfuMessage.RequestPayloadMsg.PayloadCase.LR_LEADERSHIP_LOSS)) {
 
                 // Leadership Loss is received as a request only if the local cluster is Sink and connection starter.
-                LogReplicationSession session = message.getHeader().getSession();
-
                 this.clientChannelAdapter.processLeadershipLoss(session);
-                sessionToRemoteSourceLeaderManager.get(session).input(new LogReplicationSinkEvent(
+                RemoteSourceLeadershipManager sourceLeadershipManager = sessionToRemoteSourceLeaderManager.get(session);
+                sourceLeadershipManager.input(new LogReplicationSinkEvent(
                         LogReplicationSinkEvent.LogReplicationSinkEventType.REMOTE_LEADER_LOSS,
                         message.getPayload().getLrLeadershipLoss().getNodeId()));
                 // ack the leadership loss msg with an empty payload
@@ -619,20 +637,20 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
                 return;
             }
         } catch (NullPointerException npe) {
-            log.error("Ignoring the leadership_loss msg. The replication components has already been stopped for " +
-                    "session {} ", message.getHeader().getSession());
+            log.error("[{}]:: Ignoring the leadership_loss msg. The replication components has already been stopped for ", sessionName);
             return;
         }
 
         // Route the message to the handler.
         if (log.isTraceEnabled()) {
-            log.trace("Message routed to {}: {}", msgHandler.getClass().getSimpleName(), message);
+            log.trace("[{}]:: Message routed to {}: {}", sessionName, msgHandler.getClass().getSimpleName(), message);
         }
 
         try {
             msgHandler.handleMessage(message, null, this);
         } catch (Throwable t) {
-            log.error("channelRead: Handling {} failed due to {}:{}",
+            log.error("[{}]:: channelRead: Handling {} failed due to {}:{}",
+                    sessionName,
                     message.getPayload().getPayloadCase(),
                     t.getClass().getSimpleName(),
                     t.getMessage(),
@@ -710,10 +728,11 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
      */
     public synchronized void onError(Throwable t, LogReplicationSession session) {
         try {
+            CorfuLogReplicationRuntime runtimeFsm = sessionToRuntimeFSM.get(session);
             sessionToRuntimeFSM.get(session).input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent
                     .LogReplicationRuntimeEventType.ERROR, t));
         } catch (NullPointerException npe) {
-            log.info("RuntimeFSM not found for session {}", session);
+            log.info("[{}]:: RuntimeFSM not found", replicationContext.getSessionName(session));
         }
     }
 
@@ -735,12 +754,12 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
      */
     private void addConnectionUpEvent(LogReplicationSession session, String nodeId) {
         try {
-            log.debug("Input Connection Up event for session {}", session);
-            sessionToRuntimeFSM.get(session)
-                    .input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent
+            log.debug("[{}]:: Input Connection Up event", replicationContext.getSessionName(session));
+            CorfuLogReplicationRuntime runtimeFsm = sessionToRuntimeFSM.get(session);
+            runtimeFsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent
                             .LogReplicationRuntimeEventType.ON_CONNECTION_UP, nodeId));
         } catch (NullPointerException npe) {
-            log.info("runtimeFsm is not present for session {}", session);
+            log.info("[{}]:: runtimeFsm is not present", replicationContext.getSessionName(session));
         }
     }
 
@@ -765,19 +784,21 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
      * @param session session information
      */
     public void connect(ClusterDescriptor remoteClusterDescriptor, LogReplicationSession session) {
+
+        String sessionName = replicationContext.getSessionName(session);
         //TODO v2: check if this if condition is needed.
         if (!isConnectionStarterForSession(session)) {
-            log.error("Not the connection starter for session: {}", session);
+            log.error("[{}]:: Not the connection starter for session", sessionName);
             return;
         }
 
         if (connectedSessions.contains(session)) {
-            log.trace("Skipping as connection is already established for session {}", session);
+            log.trace("[{}]:: Skipping as connection is already established for session", sessionName);
             return;
         }
 
-        log.info("Connect asynchronously to remote cluster {} and session {} ", remoteClusterDescriptor.getClusterId(),
-                session);
+        log.info("[{}]:: Connect asynchronously to remote cluster {}", sessionName,
+                remoteClusterDescriptor.getClusterId());
 
         try {
             IRetry.build(IntervalRetry.class, () -> {
@@ -785,14 +806,14 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
                     this.clientChannelAdapter.connectAsync(remoteClusterDescriptor, session);
                     connectedSessions.add(session);
                 } catch (Exception e) {
-                    log.error("Failed to connect to remote cluster for session {}. Retry after 1 second. Exception {}.",
-                            session, e);
+                    log.error("[{}]:: Failed to connect to remote cluster. Retry after 1 second. Exception {}.",
+                            sessionName, e);
                     throw new RetryNeededException();
                 }
                 return null;
             }).run();
         } catch (InterruptedException e) {
-            log.error("Unrecoverable exception when attempting to connect to remote session.", e);
+            log.error("[{}]:: Unrecoverable exception when attempting to connect to remote session.", sessionName, e);
         }
     }
 
@@ -803,11 +824,12 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
      * @param session session which will use the established connection
      */
     public void onConnectionUp(String nodeId, LogReplicationSession session) {
-        log.info("Connection established to remote node {} for session {}.", nodeId, session);
+        log.info("[{}]:: Connection established to remote node {}.", replicationContext.getSessionName(session), nodeId);
         if (outgoingSession.contains(session)) {
             addConnectionUpEvent(session, nodeId);
         } else {
-            sessionToRemoteSourceLeaderManager.get(session).input(new LogReplicationSinkEvent(
+            RemoteSourceLeadershipManager sourceLeadershipManager = sessionToRemoteSourceLeaderManager.get(session);
+            sourceLeadershipManager.input(new LogReplicationSinkEvent(
                     LogReplicationSinkEvent.LogReplicationSinkEventType.ON_CONNECTION_UP, nodeId));
         }
     }
@@ -820,16 +842,18 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
      */
     public void onConnectionDown(String nodeId, LogReplicationSession session) {
         try {
-            log.info("Connection lost to remote node {} for session {}", nodeId, session);
+            log.info("[{}]:: Connection lost to remote node {}", replicationContext.getSessionName(session), nodeId);
             if (outgoingSession.contains(session)) {
-                sessionToRuntimeFSM.get(session).input(new LogReplicationRuntimeEvent(
+                CorfuLogReplicationRuntime runtimeFsm = sessionToRuntimeFSM.get(session);
+                runtimeFsm.input(new LogReplicationRuntimeEvent(
                         LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.ON_CONNECTION_DOWN, nodeId));
             } else if (incomingSession.contains(session)){
-                sessionToRemoteSourceLeaderManager.get(session).input(new LogReplicationSinkEvent(
+                RemoteSourceLeadershipManager sourceLeadershipManager = sessionToRemoteSourceLeaderManager.get(session);
+                sourceLeadershipManager.input(new LogReplicationSinkEvent(
                         LogReplicationSinkEvent.LogReplicationSinkEventType.ON_CONNECTION_DOWN, nodeId));
             }
         } catch (NullPointerException npe) {
-            log.info("The replication components are already stopped for session {}", session);
+            log.info("[{}]:: The replication components are already stopped", replicationContext.getSessionName(session));
             return;
         }
 
@@ -857,13 +881,11 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
         try {
             remoteLeader = sessionToRuntimeFSM.get(session).getRemoteLeaderNodeId();
         } catch (NullPointerException npe) {
-            log.info("Runtime FSM is not present for session {}", session);
+            log.info("[{}]:: Runtime FSM is not present", replicationContext.getSessionName(session));
             remoteLeader = Optional.empty();
         }
 
-        if(remoteLeader.isPresent()) {
-            onConnectionDown(remoteLeader.get(), session);
-        }
+        remoteLeader.ifPresent(leader -> onConnectionDown(leader, session));
     }
 
     /**

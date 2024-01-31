@@ -2,7 +2,6 @@ package org.corfudb.infrastructure.logreplication.utils;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.Message;
-import com.google.protobuf.TextFormat;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.ServerContext;
@@ -214,46 +213,41 @@ public class LogReplicationConfigManager {
     /**
      * Generate LogReplicationConfig for all given sessions based on there replication model.
      *
-     * @param sessions set of sessions for which to generate config.
+     * @param session session for which to generate config.
      * @param updateGroupDestinationConfig True if group destination config needs to be updated.
      */
-    public void generateConfig(Set<LogReplicationSession> sessions, boolean updateGroupDestinationConfig) {
-        sessions.forEach(session -> {
-                switch (session.getSubscriber().getModel()) {
-                    case FULL_TABLE:
-                        log.debug("Generating FULL_TABLE config for session {}",
-                                TextFormat.shortDebugString(session));
-                        generateFullTableConfig(session);
-                        break;
-                    case LOGICAL_GROUPS:
-                        log.debug("Generating LOGICAL_GROUP config for session {}",
-                                TextFormat.shortDebugString(session));
-                        generateLogicalGroupConfig(session, updateGroupDestinationConfig);
-                        break;
-                    case ROUTING_QUEUES:
-                        log.debug("Generating ROUTING_QUEUE config for session {}",
-                                TextFormat.shortDebugString(session));
-                        generateRoutingQueueConfig(session);
-                        break;
-                    default:
-                        throw new IllegalArgumentException("Invalid replication model: " +
-                                session.getSubscriber().getModel());
-                }
-        });
+    public void generateConfig(LogReplicationSession session, boolean updateGroupDestinationConfig, String sessionName) {
+        switch (session.getSubscriber().getModel()) {
+            case FULL_TABLE:
+                log.debug("[{}]:: Generating FULL_TABLE config", sessionName);
+                generateFullTableConfig(session, sessionName);
+                break;
+            case LOGICAL_GROUPS:
+                log.debug("[{}]:: Generating LOGICAL_GROUP config", sessionName);
+                generateLogicalGroupConfig(session, updateGroupDestinationConfig, sessionName);
+                break;
+            case ROUTING_QUEUES:
+                log.debug("[{}]:: Generating ROUTING_QUEUE config",sessionName);
+                generateRoutingQueueConfig(session, sessionName);
+                break;
+            default:
+                throw new IllegalArgumentException("Invalid replication model: " +
+                        session.getSubscriber().getModel());
+        }
     }
 
-    private void generateRoutingQueueConfig(LogReplicationSession session) {
+    private void generateRoutingQueueConfig(LogReplicationSession session, String sessionName) {
         if (!sessionToConfigMap.containsKey(session)) {
             LogReplicationRoutingQueueConfig routingQueueConfig =
                     new LogReplicationRoutingQueueConfig(session, serverContext);
             sessionToConfigMap.put(session, routingQueueConfig);
-            log.info("Routing queue session {} config generated.", session);
+            log.info("[{}]:: Routing queue config generated.", sessionName);
         } else {
-            log.warn("Routing queue config for session {} already exists!", session);
+            log.warn("[{}]:: Routing queue config already exists!", sessionName);
         }
     }
 
-    private void generateLogicalGroupConfig(LogReplicationSession session, boolean updateGroupDestinationConfig) {
+    private void generateLogicalGroupConfig(LogReplicationSession session, boolean updateGroupDestinationConfig, String sessionName) {
         Map<UUID, List<UUID>> streamToTagsMap = new HashMap<>();
         Set<String> streamsToReplicate = new HashSet<>();
         // Check if the local cluster is the Sink for this session. Sink side will honor whatever Source side send
@@ -271,7 +265,7 @@ public class LogReplicationConfigManager {
                     .filter(entry -> entry.getValue().contains(session.getSinkClusterId()))
                     .map(Map.Entry::getKey)
                     .forEach(group -> logicalGroupToStreams.put(group, new HashSet<>()));
-            log.debug("Targeted logical groups={}", logicalGroupToStreams.keySet());
+            log.debug("[{}]:: Targeted logical groups={}", sessionName, logicalGroupToStreams.keySet());
         }
 
         registryTableEntries.forEach(entry -> {
@@ -310,18 +304,18 @@ public class LogReplicationConfigManager {
             config.setStreamsToReplicate(streamsToReplicate);
             config.setDataStreamToTagsMap(streamToTagsMap);
             config.setLogicalGroupToStreams(logicalGroupToStreams);
-            log.info("LogReplicationLogicalGroupConfig updated for session={}, streams to replicate={}, groups={}",
-                    TextFormat.shortDebugString(session), streamsToReplicate, logicalGroupToStreams);
+            log.info("[{}]:: LogReplicationLogicalGroupConfig updated, streams to replicate={}, groups={}",
+                    sessionName, streamsToReplicate, logicalGroupToStreams);
         } else {
             LogReplicationLogicalGroupConfig logicalGroupConfig = new LogReplicationLogicalGroupConfig(session,
                     streamsToReplicate, streamToTagsMap, serverContext, logicalGroupToStreams);
             sessionToConfigMap.put(session, logicalGroupConfig);
-            log.info("LogReplicationLogicalGroupConfig generated for session={}, streams to replicate={}, groups={}",
-                    TextFormat.shortDebugString(session), streamsToReplicate, logicalGroupToStreams);
+            log.info("[{}]:: LogReplicationLogicalGroupConfig generated, streams to replicate={}, groups={}",
+                    sessionName, streamsToReplicate, logicalGroupToStreams);
         }
     }
 
-    private void generateFullTableConfig(LogReplicationSession session) {
+    private void generateFullTableConfig(LogReplicationSession session, String sessionName) {
         Map<UUID, List<UUID>> streamToTagsMap = new HashMap<>();
         Set<UUID> streamsToDrop = new HashSet<>();
         Set<String> streamsToReplicate = new HashSet<>();
@@ -355,14 +349,14 @@ public class LogReplicationConfigManager {
             config.setStreamsToReplicate(streamsToReplicate);
             config.setDataStreamToTagsMap(streamToTagsMap);
             config.setStreamsToDrop(streamsToDrop);
-            log.info("LogReplicationFullTableConfig updated for session={}, streams to replicate={}, streamsToDrop={}",
-                    TextFormat.shortDebugString(session), streamsToReplicate, streamsToDrop);
+            log.info("[{}]:: LogReplicationFullTableConfig updated, streams to replicate={}, streamsToDrop={}",
+                    sessionName, streamsToReplicate, streamsToDrop);
         } else {
             LogReplicationFullTableConfig fullTableConfig = new LogReplicationFullTableConfig(session, streamsToReplicate,
                     streamToTagsMap, serverContext, streamsToDrop);
             sessionToConfigMap.put(session, fullTableConfig);
-            log.info("LogReplicationFullTableConfig generated for session={}, streams to replicate={}, streamsToDrop={}",
-                    TextFormat.shortDebugString(session), streamsToReplicate, streamsToDrop);
+            log.info("[{}]:: LogReplicationFullTableConfig generated, streams to replicate={}, streamsToDrop={}",
+                    sessionName, streamsToReplicate, streamsToDrop);
         }
     }
 
@@ -372,19 +366,19 @@ public class LogReplicationConfigManager {
      * @param session LogReplicationSession to get updated config for.
      * @param updateGroupDestinationConfig True if group destination config needs to be updated.
      */
-    public void getUpdatedConfig(LogReplicationSession session, boolean updateGroupDestinationConfig) {
+    public void getUpdatedConfig(LogReplicationSession session, boolean updateGroupDestinationConfig, String sessionName) {
         syncWithRegistryTable();
 
         switch (session.getSubscriber().getModel()) {
             case FULL_TABLE:
-                generateConfig(Collections.singleton(session), updateGroupDestinationConfig);
+                generateConfig(session, updateGroupDestinationConfig, sessionName);
                 break;
             case LOGICAL_GROUPS:
                 syncWithClientConfigTable();
-                generateConfig(Collections.singleton(session), updateGroupDestinationConfig);
+                generateConfig(session, updateGroupDestinationConfig, sessionName);
                 break;
             case ROUTING_QUEUES:
-                generateRoutingQueueConfig(session);
+                generateRoutingQueueConfig(session, sessionName);
                 break;
             default:
                 throw new IllegalArgumentException("Invalid replication model: " +

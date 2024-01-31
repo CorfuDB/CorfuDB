@@ -73,11 +73,14 @@ public abstract class BaseLogEntryReader extends LogEntryReader {
     protected LogReplication.LogReplicationSession session;
 
     protected LogReplicationContext replicationContext;
+    
+    private final String sessionName;
 
     public BaseLogEntryReader(LogReplication.LogReplicationSession replicationSession,
                               LogReplicationContext replicationContext) {
         CorfuRuntime runtime = replicationContext.getCorfuRuntime();
         this.maxTransferSize = replicationContext.getConfig(replicationSession).getMaxTransferSize();
+        this.sessionName = replicationContext.getSessionName(replicationSession);
         this.currentProcessedEntryMetadata = new StreamIteratorMetadata(Address.NON_ADDRESS, false);
         this.messageSizeDistributionSummary = configureMessageSizeDistributionSummary();
         this.deltaCounter = configureDeltaCounter();
@@ -86,10 +89,9 @@ public abstract class BaseLogEntryReader extends LogEntryReader {
         this.session = replicationSession;
         this.replicationContext = replicationContext;
 
-        log.info("Total of {} streams to replicate at initialization. Streams to replicate={}, Session={}",
-                getStreamUUIDs().size(),
-                replicationContext.getConfig(session).getStreamsToReplicate(),
-                TextFormat.shortDebugString(session));
+        log.info("[{}]:: Total of {} streams to replicate at initialization. Streams to replicate={}",
+                sessionName, getStreamUUIDs().size(),
+                replicationContext.getConfig(session).getStreamsToReplicate());
 
         //create an opaque stream for transaction stream
         modelBasedOpaqueStream = new ModelBasedOpaqueStream(runtime);
@@ -114,8 +116,8 @@ public abstract class BaseLogEntryReader extends LogEntryReader {
 
         preMsgTs = currentMsgTs;
         sequence++;
-        log.trace("Generate a log entry message {} with {} transactions ",
-            TextFormat.shortDebugString(txMessage.getMetadata()), opaqueEntryList.size());
+        log.trace("[{}]:: Generate a log entry message {} with {} transactions ", sessionName,
+                TextFormat.shortDebugString(txMessage.getMetadata()), opaqueEntryList.size());
         return txMessage;
     }
 
@@ -137,7 +139,7 @@ public abstract class BaseLogEntryReader extends LogEntryReader {
 
         // Sanity Check: discard if transaction stream opaque entry is empty (no streams are present)
         if (txEntryStreamIds.isEmpty()) {
-            log.debug("TX Stream entry[{}] :: EMPTY [ignored]", entry.getVersion());
+            log.debug("[{}]:: TX Stream entry[{}] :: EMPTY [ignored]", sessionName, entry.getVersion());
             return false;
         }
 
@@ -145,20 +147,20 @@ public abstract class BaseLogEntryReader extends LogEntryReader {
         // was initialized. So these streams will be missing from the list of streams to replicate. Check the registry
         // table and add them to the list in that case.
         if (!getStreamUUIDs().containsAll(txEntryStreamIds)) {
-            log.info("There could be additional streams to replicate in tx stream. Checking with registry table.");
+            log.info("[{}]:: There could be additional streams to replicate in tx stream. Checking with registry table.", sessionName);
             replicationContext.refreshConfig(session, false);
             // TODO: Add log message here for the newly found streams when we support incremental refresh.
         }
         // If none of the streams in the transaction entry are specified to be replicated, this is an invalid entry, skip
         if (Collections.disjoint(getStreamUUIDs(), txEntryStreamIds)) {
-            log.trace("TX Stream entry[{}] :: contains none of the streams of interest, streams={} [ignored]",
-                    entry.getVersion(), txEntryStreamIds);
+            log.trace("[{}]:: TX Stream entry[{}] :: contains none of the streams of interest, streams={} [ignored]",
+                    sessionName, entry.getVersion(), txEntryStreamIds);
             return false;
         } else {
             Set<UUID> ignoredTxStreams = txEntryStreamIds.stream().filter(id -> !getStreamUUIDs().contains(id))
                 .collect(Collectors.toSet());
             txEntryStreamIds.removeAll(ignoredTxStreams);
-            log.debug("TX Stream entry[{}] :: replicate[{}]={}, ignore[{}]={} [valid]", entry.getVersion(),
+            log.debug("[{}]:: TX Stream entry[{}] :: replicate[{}]={}, ignore[{}]={} [valid]", sessionName, entry.getVersion(),
                 txEntryStreamIds.size(), txEntryStreamIds, ignoredTxStreams.size(), ignoredTxStreams);
             return true;
         }
@@ -167,7 +169,7 @@ public abstract class BaseLogEntryReader extends LogEntryReader {
     public void setGlobalBaseSnapshot(long snapshot, long ackTimestamp) {
         globalBaseSnapshot = snapshot;
         preMsgTs = Math.max(snapshot, ackTimestamp);
-        log.info("snapshot {} ackTimestamp {} preMsgTs {} seek {}", snapshot, ackTimestamp, preMsgTs, preMsgTs + 1);
+        log.info("[{}]:: snapshot {} ackTimestamp {} preMsgTs {} seek {}", sessionName, snapshot, ackTimestamp, preMsgTs, preMsgTs + 1);
         modelBasedOpaqueStream.seek(preMsgTs + 1);
         sequence = 0;
     }
@@ -221,8 +223,8 @@ public abstract class BaseLogEntryReader extends LogEntryReader {
                         lastOpaqueEntryValid);
             }
 
-            log.trace("Generate LogEntryDataMessage size {} with {} entries for maxTransferSize {}. lastEntry size {}",
-                currentMsgSize, opaqueEntryList.size(), maxTransferSize, lastOpaqueEntry == null ? 0 : currentEntrySize);
+            log.trace("[{}]:: Generate LogEntryDataMessage size {} with {} entries for maxDataSizePerMsg {}. lastEntry size {}",
+                    sessionName, currentMsgSize, opaqueEntryList.size(), maxTransferSize, lastOpaqueEntry == null ? 0 : currentEntrySize);
             final double currentMsgSizeSnapshot = currentMsgSize;
 
             messageSizeDistributionSummary.ifPresent(distribution -> distribution.record(currentMsgSizeSnapshot));
@@ -238,7 +240,7 @@ public abstract class BaseLogEntryReader extends LogEntryReader {
             return txMessage;
 
         } catch (Exception e) {
-            log.warn("Caught an exception while reading transaction stream", e);
+            log.warn("[{}]:: Caught an exception while reading transaction stream", sessionName, e);
             throw e;
         }
     }
@@ -324,7 +326,7 @@ public abstract class BaseLogEntryReader extends LogEntryReader {
          * @param snapshot
          */
         private void streamUpTo(long snapshot) {
-            log.trace("StreamUpTo {}", snapshot);
+            log.trace("[{}]:: StreamUpTo {}", sessionName, snapshot);
             iterator = opaqueStream.streamUpTo(snapshot).iterator();
         }
 
@@ -354,7 +356,7 @@ public abstract class BaseLogEntryReader extends LogEntryReader {
             }
 
             OpaqueEntry opaqueEntry = (OpaqueEntry) iterator.next();
-            log.trace("Address {} OpaqueEntry {}", opaqueEntry.getVersion(), opaqueEntry);
+            log.trace("[{}]:: Address {} OpaqueEntry {}", sessionName, opaqueEntry.getVersion(), opaqueEntry);
             return opaqueEntry;
         }
 
@@ -365,7 +367,7 @@ public abstract class BaseLogEntryReader extends LogEntryReader {
          * @param firstAddress
          */
         public void seek(long firstAddress) {
-            log.trace("seek head {}", firstAddress);
+            log.trace("[{}]:: seek head {}", sessionName, firstAddress);
             opaqueStream.seek(firstAddress);
             streamUpTo();
         }

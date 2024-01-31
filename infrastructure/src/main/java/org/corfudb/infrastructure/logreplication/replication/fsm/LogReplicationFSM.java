@@ -1,13 +1,13 @@
 package org.corfudb.infrastructure.logreplication.replication.fsm;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.logreplication.DataSender;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
+import org.corfudb.infrastructure.logreplication.FsmTaskManager;
 import org.corfudb.runtime.LogReplication.ReplicationModel;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationAckReader;
@@ -18,20 +18,15 @@ import org.corfudb.infrastructure.logreplication.replication.send.logreader.LogE
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.SnapshotReader;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.LogicalGroupLogEntryReader;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.LogicalGroupSnapshotReader;
-import org.corfudb.infrastructure.logreplication.replication.send.logreader.ReadProcessor;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.RoutingQueuesLogEntryReader;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.RoutingQueuesSnapshotReader;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.StreamsLogEntryReader;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.StreamsSnapshotReader;
-import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Address;
 
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.LinkedBlockingQueue;
 
 
 /**
@@ -134,6 +129,7 @@ public class LogReplicationFSM {
      * Current state of the FSM.
      */
     @Getter
+    @Setter
     private volatile LogReplicationState state;
 
     /**
@@ -141,22 +137,6 @@ public class LogReplicationFSM {
      */
     @Getter
     private final Map<LogReplicationStateType, LogReplicationState> states = new HashMap<>();
-
-    /**
-     * Executor service for FSM state tasks (it can be shared across several LogReplicationFSMs)
-     */
-    @Getter
-    private final ExecutorService logReplicationFSMWorkers;
-
-    /**
-     * Executor service for FSM event queue consume
-     */
-    private final ExecutorService logReplicationFSMConsumer;
-
-    /**
-     * A queue of events.
-     */
-    private final LinkedBlockingQueue<LogReplicationEvent> eventQueue = new LinkedBlockingQueue<>();
 
     /**
      * An observable object on the number of transitions of this state machine (for testing & visibility)
@@ -212,31 +192,39 @@ public class LogReplicationFSM {
     @Getter
     private final LogReplicationSession session;
 
+    //TODO v2: tune thread count;
+    private static final int MAX_REPLICATION_WORKER_THREAD_COUNT = 2;
+
+    private final FsmTaskManager fsmTaskManager;
+
+
+    @Getter
+    private final String sessionName;
+
     /**
      * Constructor for LogReplicationFSM, custom read processor for data transformation.
      *
      * @param dataSender        implementation of a data sender, both snapshot and log entry, this represents
      *                          the application callback for data transmission
-     * @param workers           FSM executor service for state tasks
      * @param ackReader         AckReader which listens to acks from the Sink and updates the replication status accordingly
      * @param session           Replication Session to the remote(Sink) cluster
      * @param replicationContext Replication context
      */
-    public LogReplicationFSM(DataSender dataSender,ExecutorService workers, LogReplicationAckReader ackReader,
+    public LogReplicationFSM(DataSender dataSender, LogReplicationAckReader ackReader,
                              LogReplicationSession session, LogReplicationContext replicationContext) {
         this.snapshotReader = createSnapshotReader(session, replicationContext);
         this.logEntryReader = createLogEntryReader(session, replicationContext);
 
+        this.sessionName = replicationContext.getSessionName(session);
         this.ackReader = ackReader;
         this.session = session;
         this.snapshotSender = new SnapshotSender(replicationContext, snapshotReader, dataSender, this);
         this.logEntrySender = new LogEntrySender(logEntryReader, dataSender, this);
-        this.logReplicationFSMWorkers = workers;
-        this.logReplicationFSMConsumer = Executors.newSingleThreadExecutor(new
-            ThreadFactoryBuilder().setNameFormat("replication-fsm-consumer-" + session.hashCode())
-            .build());
 
-        init(dataSender, session);
+        this.fsmTaskManager = replicationContext.getTaskManager();
+        this.fsmTaskManager.createReplicationTaskManager("replicationFSM", MAX_REPLICATION_WORKER_THREAD_COUNT);
+
+        init(dataSender);
         setTopologyConfigId(replicationContext.getTopologyConfigId());
     }
 
@@ -247,28 +235,25 @@ public class LogReplicationFSM {
      * @param snapshotReader snapshot logreader implementation
      * @param dataSender application callback for snapshot and log entry sync messages
      * @param logEntryReader log entry logreader implementation
-     * @param workers FSM executor service for state tasks
      * @param ackReader AckReader which listens to acks from the Sink and updates the replication status accordingly
      * @param session   Replication Session to the remote(Sink) cluster
      * @param replicationContext Replication context
      */
     @VisibleForTesting
     public LogReplicationFSM(SnapshotReader snapshotReader, DataSender dataSender,
-                             LogEntryReader logEntryReader, ExecutorService workers, LogReplicationAckReader ackReader,
+                             LogEntryReader logEntryReader, LogReplicationAckReader ackReader,
                              LogReplicationSession session, LogReplicationContext replicationContext) {
-
+        this.sessionName = replicationContext.getSessionName(session);
         this.snapshotReader = snapshotReader;
         this.logEntryReader = logEntryReader;
         this.ackReader = ackReader;
         this.session = session;
         this.snapshotSender = new SnapshotSender(replicationContext, snapshotReader, dataSender, this);
         this.logEntrySender = new LogEntrySender(logEntryReader, dataSender, this);
-        this.logReplicationFSMWorkers = workers;
-        this.logReplicationFSMConsumer = Executors.newSingleThreadExecutor(new
-                ThreadFactoryBuilder().setNameFormat("replication-fsm-consumer-" + session.hashCode())
-                .build());
+        this.fsmTaskManager = replicationContext.getTaskManager();
+        this.fsmTaskManager.createReplicationTaskManager("replicationFSM", MAX_REPLICATION_WORKER_THREAD_COUNT);
 
-        init(dataSender, session);
+        init(dataSender);
     }
 
     private SnapshotReader createSnapshotReader(LogReplicationSession session, LogReplicationContext replicationContext) {
@@ -288,7 +273,7 @@ public class LogReplicationFSM {
                 break;
 
             default:
-                log.error("Unsupported replication model found: {}", model);
+                log.error("[{}]:: Unsupported replication model found: {}",sessionName, model);
                 throw new IllegalArgumentException("Unsupported replication model found: " + model);
 
         }
@@ -312,19 +297,18 @@ public class LogReplicationFSM {
                 break;
 
             default:
-                log.error("Unsupported Replication Model Found: {}", model);
+                log.error("[{}]:: Unsupported Replication Model Found: {}", sessionName, model);
                 throw new IllegalArgumentException("Unsupported Replication Model Found: " +
                         session.getSubscriber().getModel());
         }
         return logEntryReader;
     }
 
-    private void init(DataSender dataSender, LogReplicationSession session) {
+    private void init(DataSender dataSender) {
         // Initialize Log Replication 5 FSM states - single instance per state
         initializeStates(snapshotSender, logEntrySender, dataSender);
         this.state = states.get(LogReplicationStateType.INITIALIZED);
-        logReplicationFSMConsumer.submit(this::consume);
-        log.info("Log Replication FSM initialized for session={}", session);
+        log.info("[{}]:: Log Replication FSM initialized", sessionName);
     }
 
     /**
@@ -352,65 +336,26 @@ public class LogReplicationFSM {
      *
      * @param event LogReplicationEvent to process.
      */
-    public synchronized void input(LogReplicationEvent event) {
-        try {
-            if (state.getType().equals(LogReplicationStateType.ERROR)) {
-                // Log: not accepting events, in stopped state
-                return;
-            }
-            if (event.getType() != LogReplicationEventType.LOG_ENTRY_SYNC_CONTINUE) {
-                log.trace("Enqueue event {} with ID {}", event.getType(), event.getEventId());
-            }
-            eventQueue.put(event);
-        } catch (InterruptedException ex) {
-            log.error("Log Replication interrupted Exception: ", ex);
+    public void input(LogReplicationEvent event) {
+        if (state.getType().equals(LogReplicationStateType.ERROR)) {
+            log.warn("[{}]:: Not accepting event {} as current state is {}", sessionName, event.getType(), state.getType());
+            return;
         }
+        if (event.getType() != LogReplicationEventType.LOG_ENTRY_SYNC_CONTINUE) {
+            log.trace("[{}]:: Enqueue event {} with ID {}", sessionName, event.getType(), event.getEventId());
+        }
+        this.fsmTaskManager.addTask(event, FsmTaskManager.FsmEventType.LogReplicationEvent, 0, this);
     }
 
     /**
-     * Consumer of the eventQueue.
+     * Input function of the FSM.
      *
-     * This method consumes the log replication events and does the state transition.
+     * This method enqueues log replication events for further processing.
+     *
+     * @param event LogReplicationEvent to process.
      */
-    private void consume() {
-        try {
-            if (state.getType() == LogReplicationStateType.ERROR) {
-                log.info("Log Replication State Machine has been stopped. No more events will be processed.");
-                return;
-            }
-
-            // TODO (Anny): consider strategy for continuously failing snapshot sync (never ending cancellation)
-            // Block until an event shows up in the queue.
-            LogReplicationEvent event = eventQueue.take();
-
-            try {
-                LogReplicationState newState = state.processEvent(event);
-                log.trace("Transition from {} to {}", state, newState);
-                transition(state, newState);
-                state = newState;
-                numTransitions.setValue(numTransitions.getValue() + 1);
-            } catch (IllegalTransitionException illegalState) {
-                // Ignore LOG_ENTRY_SYNC_REPLICATED events for logging purposes as they will likely come in frequently,
-                // as it is used for update purposes but does not imply a transition.
-                if (!event.getType().equals(LogReplicationEventType.LOG_ENTRY_SYNC_REPLICATED)) {
-                    log.error("Illegal log replication event {} when in state {}", event.getType(), state.getType());
-                }
-            }
-
-            // For testing purpose to notify the event generator the stop of the event.
-            if (event.getType() == LogReplicationEventType.REPLICATION_STOP) {
-                synchronized (event) {
-                    event.notifyAll();
-                }
-            }
-
-            // Consume one event in the queue and re-submit, this is done so events are consumed in
-            // a round-robin fashion for the case of multi-cluster replication.
-            logReplicationFSMConsumer.submit(this::consume);
-
-        } catch (Throwable t) {
-            log.error("Error on event consumer: ", t);
-        }
+    public void inputWithDelay(LogReplicationEvent event, long delay) {
+        this.fsmTaskManager.addTask(event, FsmTaskManager.FsmEventType.LogReplicationEvent, delay, this);
     }
 
     /**
@@ -419,7 +364,7 @@ public class LogReplicationFSM {
      * @param from initial state
      * @param to final state
      */
-    void transition(LogReplicationState from, LogReplicationState to) {
+    public void transition(LogReplicationState from, LogReplicationState to) {
         from.onExit(to);
         to.clear();
         to.onEntry(from);
@@ -432,16 +377,7 @@ public class LogReplicationFSM {
         snapshotSender.updateTopologyConfigId(topologyConfigId);
         logEntrySender.updateTopologyConfigId(topologyConfigId);
     }
-
-    /**
-     * Shutdown Log Replication FSM
-     */
-    public void shutdown() {
-        this.ackReader.shutdown();
-        this.logReplicationFSMConsumer.shutdown();
-        this.logReplicationFSMWorkers.shutdown();
-    }
-
+    
     public boolean isValidTransition(UUID currentSyncId, UUID newSyncID) {
         return currentSyncId.equals(newSyncID);
     }

@@ -38,7 +38,7 @@ public class ReplicatingState implements LogReplicationRuntimeState {
     }
 
     @Override
-    public LogReplicationRuntimeState processEvent(LogReplicationRuntimeEvent event) throws IllegalTransitionException {
+    public LogReplicationRuntimeState processEvent(LogReplicationRuntimeEvent event) throws IllegalRuntimeTransitionException {
         switch (event.getType()) {
             case ON_CONNECTION_DOWN:
                 String nodeIdDown = event.getNodeId();
@@ -47,7 +47,7 @@ public class ReplicatingState implements LogReplicationRuntimeState {
 
                 // If the leader is the node that became unavailable, verify new leader and attempt to reconnect.
                 if (fsm.getRemoteLeaderNodeId().isPresent() && fsm.getRemoteLeaderNodeId().get().equals(nodeIdDown)) {
-                    log.warn("Connection to remote leader id={} is down. Attempt to reconnect ONLY if connection starter.", nodeIdDown);
+                    log.warn("[{}]:: Connection to remote leader id={} is down. Attempt to reconnect ONLY if connection starter.", fsm.getSessionName(), nodeIdDown);
                     fsm.resetRemoteLeaderNodeId();
                     // If remaining connections verify leadership on connected endpoints, otherwise, return to init
                     // state, until a connection is available.
@@ -55,12 +55,12 @@ public class ReplicatingState implements LogReplicationRuntimeState {
                             fsm.getStates().get(LogReplicationRuntimeStateType.VERIFYING_REMOTE_LEADER);
                 }
 
-                log.debug("Connection lost to non-leader node {}", nodeIdDown);
+                log.debug("[{}]:: Connection lost to non-leader node {}", fsm.getSessionName(), nodeIdDown);
                 // If a non-leader node loses connectivity, reconnect async and continue.
                 return null;
             case REMOTE_LEADER_LOSS:
                 if (fsm.getRemoteLeaderNodeId().get().equals(event.getNodeId())) {
-                    log.warn("Remote node {} lost leadership, stop replication & discover new leader.", event.getNodeId());
+                    log.warn("[{}]:: Remote node {} lost leadership, stop replication & discover new leader.", fsm.getSessionName(), event.getNodeId());
                     fsm.resetRemoteLeaderNodeId();
                     replicationSourceManager.stopLogReplication();
                     return fsm.getStates().get(LogReplicationRuntimeStateType.VERIFYING_REMOTE_LEADER);
@@ -76,8 +76,8 @@ public class ReplicatingState implements LogReplicationRuntimeState {
                 }
                 return null;
             default: {
-                log.warn("Unexpected communication event {} when in init state.", event.getType());
-                throw new IllegalTransitionException(event.getType(), getType());
+                log.warn("[{}]:: Unexpected communication event {} when in init state.", fsm.getSessionName(), event.getType());
+                throw new IllegalRuntimeTransitionException(event.getType(), getType());
             }
         }
     }
@@ -88,29 +88,29 @@ public class ReplicatingState implements LogReplicationRuntimeState {
         switch (replicationEvent.getType()) {
             case SNAPSHOT_SYNC_REQUEST:
                 UUID snapshotSyncRequestId = replicationSourceManager.startSnapshotSync();
-                log.trace("Start Snapshot Sync[{}]", snapshotSyncRequestId);
+                log.trace("[{}]:: Start Snapshot Sync[{}]", fsm.getSessionName(), snapshotSyncRequestId);
                 break;
             case SNAPSHOT_TRANSFER_COMPLETE:
                 replicationSourceManager.resumeSnapshotSync(replicationEvent.getMetadata());
-                log.trace("Wait Snapshot Sync to complete, request={}", replicationEvent.getMetadata().getSyncId());
+                log.trace("[{}]:: Wait Snapshot Sync to complete, request={}", fsm.getSessionName(), replicationEvent.getMetadata().getSyncId());
                 break;
             case LOG_ENTRY_SYNC_REQUEST:
                 replicationSourceManager.startReplication(replicationEvent);
-                log.trace("Start Log Entry Sync Replication");
+                log.trace("[{}]:: Start Log Entry Sync Replication", fsm.getSessionName());
                 break;
             default:
-                log.info("Invalid Negotiation result. Re-trigger discovery.");
+                log.info("[{}]:: Invalid Negotiation result. Re-trigger discovery.", fsm.getSessionName());
                 break;
         }
     }
 
     @Override
     public void onExit(LogReplicationRuntimeState to) {
-        log.debug("Transition to {} from replicating state.", to.getType());
+        log.debug("[{}]:: Transition to {} from replicating state.", fsm.getSessionName(), to.getType());
         switch (to.getType()) {
             case VERIFYING_REMOTE_LEADER:
             case WAITING_FOR_CONNECTIVITY:
-                log.debug("onExit :: transition to {} state", to.getType());
+                log.debug("[{}]:: onExit :: transition to {} state", fsm.getSessionName(), to.getType());
                 replicationSourceManager.stopLogReplication();
                 break;
             default:

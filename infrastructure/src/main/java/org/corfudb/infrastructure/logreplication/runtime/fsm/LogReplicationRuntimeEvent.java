@@ -3,6 +3,9 @@ package org.corfudb.infrastructure.logreplication.runtime.fsm;
 import lombok.Data;
 import lombok.Getter;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent;
+import org.corfudb.util.Utils;
+
+import java.util.UUID;
 
 /**
  * This class represents a Log Replication Runtime Event, i.e., an action which
@@ -40,6 +43,12 @@ public class LogReplicationRuntimeEvent {
     @Getter
     private boolean isConnectionStarter;
 
+    @Getter
+    // Used in the FsmTaskManager to ensure the order of consumption of events for a session
+    private UUID eventId;
+
+
+
     /**
      * Constructor
      *
@@ -47,6 +56,7 @@ public class LogReplicationRuntimeEvent {
      */
     public LogReplicationRuntimeEvent(LogReplicationRuntimeEventType type) {
         this.type = type;
+        this.eventId = Utils.genPseudorandomUUID();
     }
 
     /**
@@ -57,6 +67,7 @@ public class LogReplicationRuntimeEvent {
     public LogReplicationRuntimeEvent(LogReplicationRuntimeEventType type, boolean isConnectionStarter) {
         this.type = type;
         this.isConnectionStarter = isConnectionStarter;
+        this.eventId = Utils.genPseudorandomUUID();
     }
 
     /**
@@ -67,6 +78,7 @@ public class LogReplicationRuntimeEvent {
     public LogReplicationRuntimeEvent(LogReplicationRuntimeEventType type, String nodeId) {
         this.type = type;
         this.nodeId = nodeId;
+        this.eventId = Utils.genPseudorandomUUID();
     }
 
     /**
@@ -78,6 +90,7 @@ public class LogReplicationRuntimeEvent {
     public LogReplicationRuntimeEvent(LogReplicationRuntimeEventType type, LogReplicationEvent negotiationResult) {
         this.type = type;
         this.negotiationResult = negotiationResult;
+        this.eventId = Utils.genPseudorandomUUID();
     }
 
     /**
@@ -89,6 +102,7 @@ public class LogReplicationRuntimeEvent {
     public LogReplicationRuntimeEvent(LogReplicationRuntimeEventType type, Throwable t) {
         this.type = type;
         this.t = t;
+        this.eventId = Utils.genPseudorandomUUID();
     }
 
 }

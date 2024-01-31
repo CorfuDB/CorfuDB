@@ -4,6 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientServerRouter;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.sink.LogReplicationSinkEvent;
+import org.corfudb.infrastructure.logreplication.runtime.fsm.sink.RemoteSourceLeadershipManager;
 import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.proto.service.CorfuMessage;
 
@@ -27,19 +28,19 @@ public class LogReplicationFsmUtil {
      * If no leader is found, the verification will be attempted for LEADERSHIP_RETRIES times.
      */
     public static synchronized <T> void verifyRemoteLeader(Object fsm, Set<String> connectedNodes, String remoteClusterId,
-                                     LogReplicationClientServerRouter router, Class<T> clazz) {
-        log.debug("Enter :: leadership verification");
+                                     LogReplicationClientServerRouter router, Class<T> clazz, String sessionName) {
+        log.debug("[{}]:: Enter :: leadership verification", sessionName);
 
         String leader = "";
 
         Map<String, CompletableFuture<LogReplication.LogReplicationLeadershipResponseMsg>> pendingLeadershipQueries = new HashMap<>();
 
         // Verify leadership on remote cluster, only if no leader is currently selected.
-        log.debug("Verify leader on remote cluster {}", remoteClusterId);
+        log.debug("[{}]:: Verify leader on remote cluster {}", sessionName, remoteClusterId);
 
         try {
             for (String nodeId : connectedNodes) {
-                log.debug("Verify leadership status for node {}", nodeId);
+                log.debug("[{}]:: Verify leadership status for node {}", sessionName, nodeId);
                 // Check Leadership
                 CorfuMessage.RequestPayloadMsg payload =
                         CorfuMessage.RequestPayloadMsg.newBuilder().setLrLeadershipQuery(
@@ -61,7 +62,7 @@ public class LogReplicationFsmUtil {
                                 .get(CorfuLogReplicationRuntime.DEFAULT_TIMEOUT, TimeUnit.MILLISECONDS);
 
                 if (leadershipResponse.getIsLeader()) {
-                    log.info("Received Leadership Response :: leader for remote cluster, node={}", leadershipResponse.getNodeId());
+                    log.info("[{}]:: Received Leadership Response :: leader for remote cluster, node={}", sessionName, leadershipResponse.getNodeId());
                     leader = leadershipResponse.getNodeId();
                     clazz.getMethod("setRemoteLeaderNodeId",String.class).invoke(fsm, leader);
 
@@ -71,10 +72,10 @@ public class LogReplicationFsmUtil {
                     // A new leader has been found, start negotiation, to determine log replication
                     // continuation or start point
                     enqueueLeaderFound(fsm, clazz, leader);
-                    log.debug("Exit :: leadership verification");
+                    log.debug("[{}]:: Exit :: leadership verification", sessionName);
                     return;
                 } else {
-                    log.debug("Received Leadership Response :: node {} is not the leader", leadershipResponse.getNodeId());
+                    log.debug("[{}]:: Received Leadership Response :: node {} is not the leader", sessionName, leadershipResponse.getNodeId());
 
                     // Remove CF for completed request
                     pendingLeadershipQueries.remove(leadershipResponse.getNodeId());
@@ -87,14 +88,14 @@ public class LogReplicationFsmUtil {
         } catch (Exception ex) {
             try {
                 enqueueLeaderNotFound(fsm, clazz, leader);
-                log.warn("Exception caught while verifying remote leader.", ex);
+                log.warn("[{}]:: Exception caught while verifying remote leader.", sessionName, ex);
             } catch (Exception e) {
                 // The FSM will not move ahead if enqueuing events were unsuccessful.
-                log.warn("Exception caught while attempting to enqueue REMOTE_LEADER_NOT_FOUND event.", ex);
+                log.warn("[{}]:: Exception caught while attempting to enqueue REMOTE_LEADER_NOT_FOUND event.", sessionName, ex);
             }
         }
 
-        log.debug("Exit :: leadership verification");
+        log.debug("[{}]:: Exit :: leadership verification", sessionName);
     }
 
     private static <T> void enqueueLeaderFound(Object fsm, Class<T> clazz, String leader) throws NoSuchMethodException,
@@ -155,12 +156,12 @@ public class LogReplicationFsmUtil {
      */
     private static boolean sendLeadershipLossRequestMsg(LogReplicationClientServerRouter router, CorfuLogReplicationRuntime fsm) {
         if(fsm.getReplicationContext().getIsLeader().get()) {
-            log.debug("the local node acquired the leadership. Stop sending Leadership_loss msg");
+            log.debug("[{}]:: the local node acquired the leadership. Stop sending Leadership_loss msg", fsm.getSessionName());
             // do not transition to another state
             return false;
         }
         try {
-            log.debug("Sending LEADERSHIP_LOSS msg for session {}", fsm.getSession());
+            log.debug("[{}]:: Sending LEADERSHIP_LOSS msg", fsm.getSessionName());
             CompletableFuture<LogReplication.LogReplicationMetadataResponseMsg> cf = router
                     .sendRequestAndGetCompletable(fsm.session,
                             getLeadershipLossRequestPayloadMsg(router.getLocalNodeId()),
@@ -168,12 +169,13 @@ public class LogReplicationFsmUtil {
             cf.get(CorfuLogReplicationRuntime.DEFAULT_TIMEOUT, TimeUnit.MILLISECONDS);
             return true;
         } catch(TimeoutException | ExecutionException | InterruptedException ex) {
-            log.error("Retry sending leadership loss msg until an ACK is received ", ex);
-            fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.LOCAL_LEADER_LOSS, false));
+            log.error("[{}]:: Retry sending leadership loss msg until an ACK is received ", fsm.getSessionName(), ex);
+            fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.LOCAL_LEADER_LOSS,
+                    false));
         } catch (Exception ex) {
             // error occurring due to transport/network layer failure can be ignored as the remote will be notified. The
             // remote will then initiate a new connection. In this case, its safe to transition FSM to STOPPED state
-            log.error("Sending leadership loss msg failed. Transitioning the FSM to STOPPED state. ", ex);
+            log.error("[{}]:: Sending leadership loss msg failed. Transitioning the FSM to STOPPED state. ", fsm.getSessionName(), ex);
             return true;
         }
         return false;

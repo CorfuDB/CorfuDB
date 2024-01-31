@@ -101,11 +101,13 @@ public abstract class SenderBufferManager {
     @Setter
     Map<Long, CompletableFuture<LogReplicationEntryMsg>> pendingCompletableFutureForAcks;
 
+    protected final String sessionName;
+
     /**
      * Constructor
      * @param dataSender
      */
-    public SenderBufferManager(DataSender dataSender) {
+    public SenderBufferManager(DataSender dataSender, String sessionName) {
         maxRetry = DefaultClusterConfig.getLogSenderRetryCount();
         maxBufferSize = DefaultClusterConfig.getLogSenderBufferSize();
         msgTimer = DefaultClusterConfig.getLogSenderResendTimer();
@@ -116,10 +118,11 @@ public abstract class SenderBufferManager {
         pendingMessages = new SenderPendingMessageQueue(maxBufferSize);
         pendingCompletableFutureForAcks = new HashMap<>();
         this.dataSender = dataSender;
+        this.sessionName = sessionName;
     }
 
-    public SenderBufferManager(DataSender dataSender, Optional<AtomicLong> counter) {
-        this(dataSender);
+    public SenderBufferManager(DataSender dataSender, Optional<AtomicLong> counter, String sessionName) {
+        this(dataSender, sessionName);
         this.ackCounter = counter;
     }
 
@@ -167,7 +170,7 @@ public abstract class SenderBufferManager {
             if (ack != null) {
                 updateAck(ack);
                 ackCounter.ifPresent(ac -> ac.addAndGet(pendingCompletableFutureForAcks.size()));
-                log.info("Received ack {} total pending log entry acks {} for timestamps {}",
+                log.info("[{}]:: Received ack {} total pending log entry acks {} for timestamps {}", sessionName,
                         ack == null ? "null" : TextFormat.shortDebugString(ack.getMetadata()),
                         pendingCompletableFutureForAcks.size(), pendingCompletableFutureForAcks.keySet());
             }
@@ -226,17 +229,17 @@ public abstract class SenderBufferManager {
             ack = processAcks();
         } catch (TimeoutException te) {
             // Exceptions thrown directly from the CompletableFuture.anyOf(cfs)
-            log.warn("Caught a timeout exception while processing ACKs", te);
+            log.warn("[{}]:: Caught a timeout exception while processing ACKs", sessionName, te);
             force = true;
         } catch (ExecutionException ee) {
             // Exceptions thrown from the send message completable future will be wrapped around ExecutionException
-            log.warn("Caught an execution exception while processing ACKs", ee);
+            log.warn("[{}]:: Caught an execution exception while processing ACKs", sessionName, ee);
             final Throwable cause = ee.getCause();
             if (cause instanceof TimeoutException) {
                 force = true;
             }
         } catch (Exception e) {
-            log.warn("Caught an exception while processing ACKs.", e);
+            log.warn("[{}]:: Caught an exception while processing ACKs.", sessionName, e);
         }
 
         for (int i = 0; i < pendingMessages.getSize(); i++) {
@@ -250,7 +253,7 @@ public abstract class SenderBufferManager {
                 CompletableFuture<LogReplicationEntryMsg> cf = dataSender
                         .send(overrideMetadata(entry.getData(), metadata));
                 addCFToAcked(entry.getData(), cf);
-                log.debug("Resend message {}[ts={}, snapshotSyncNum={}]",
+                log.debug("[{}]:: Resend message {}[ts={}, snapshotSyncNum={}]", sessionName,
                         entry.getData().getMetadata().getEntryType(),
                         entry.getData().getMetadata().getTimestamp(),
                         entry.getData().getMetadata().getSnapshotSyncSeqNum());

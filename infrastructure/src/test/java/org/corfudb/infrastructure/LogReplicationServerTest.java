@@ -80,11 +80,11 @@ public class LogReplicationServerTest {
         metadataManager = mock(LogReplicationMetadataManager.class);
         sessionManager = mock(SessionManager.class);
         sinkManager = mock(LogReplicationSinkManager.class);
-        Mockito.when(sinkManager.getIsShutdown()).thenReturn(new AtomicBoolean(false));
         Set<LogReplicationSession> sessionSet = new HashSet<>();
         sessionSet.add(session);
         LogReplicationContext replicationContext = new LogReplicationContext(mock(LogReplicationConfigManager.class),
-                0L, SAMPLE_HOSTNAME, true, mock(LogReplicationPluginConfig.class), mock(CorfuRuntime.class));
+                0L, SAMPLE_HOSTNAME, true, mock(LogReplicationPluginConfig.class),
+                mock(CorfuRuntime.class));
         lrServer = spy(new LogReplicationServer(context, sessionSet, metadataManager, SINK_NODE_ID, SINK_CLUSTER_ID,
                 replicationContext));
         lrServer.getSessionToSinkManagerMap().put(session, sinkManager);

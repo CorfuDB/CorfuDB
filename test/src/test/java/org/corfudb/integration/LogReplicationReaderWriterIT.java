@@ -72,6 +72,7 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
     private static final String SINK_CLUSTER_ID = "Cluster-London";
     private static final String SHADOW_SUFFIX = "_SHADOW";
     private static final String TEST_NAMESPACE = "LR-Test";
+    private static final String SESSION_NAME = "session_1";
     private static final String LOCAL_SOURCE_CLUSTER_ID = DefaultClusterConfig.getSourceClusterIds().get(0);
     private static final String LOCAL_SINK_CLUSTER_ID = DefaultClusterConfig.getSinkClusterIds().get(0);
 
@@ -230,9 +231,10 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
     public static void readSnapshotMsgs(List<LogReplicationEntryMsg> msgQ, CorfuRuntime rt, boolean blockOnSem) {
         int cnt = 0;
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(rt, LOCAL_SOURCE_CLUSTER_ID);
-        configManager.generateConfig(Collections.singleton(getDefaultSession()), false);
+        configManager.generateConfig(getDefaultSession(), false, SESSION_NAME);
         LogReplicationContext context = new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT,
                 Mockito.mock(LogReplicationPluginConfig.class), rt);
+        context.addSessionNameForLogging(getDefaultSession(), SESSION_NAME);
 
         StreamsSnapshotReader reader = new StreamsSnapshotReader(getDefaultSession(), context);
 
@@ -264,15 +266,17 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
     public void writeSnapshotMsgs(List<LogReplicationEntryMsg> msgQ, CorfuRuntime rt) {
 
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(rt, LOCAL_SINK_CLUSTER_ID);
-        configManager.generateConfig(Collections.singleton(getDefaultSession()), false);
+        configManager.generateConfig(getDefaultSession(), false, SESSION_NAME);
 
         LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt,
                 getReplicationContext(configManager, 0, "test", true, rt));
         logReplicationMetadataManager.addSession(getDefaultSession(), 0, true);
 
+        LogReplicationContext context = new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT,
+                Mockito.mock(LogReplicationPluginConfig.class), rt);
+        context.addSessionNameForLogging(getDefaultSession(), SESSION_NAME);
         StreamsSnapshotWriter writer = new StreamsSnapshotWriter(rt, logReplicationMetadataManager,
-            getDefaultSession(), new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT,
-                Mockito.mock(LogReplicationPluginConfig.class), rt));
+            getDefaultSession(), context);
 
         if (msgQ.isEmpty()) {
             log.debug("msgQ is empty");
@@ -303,11 +307,12 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
                                         boolean blockOnce) throws TrimmedException {
 
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(rt, LOCAL_SOURCE_CLUSTER_ID);
-        configManager.generateConfig(Collections.singleton(getDefaultSession()), false);
+        configManager.generateConfig(getDefaultSession(), false, SESSION_NAME);
 
-        StreamsLogEntryReader reader = new StreamsLogEntryReader(getDefaultSession(),
-                new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT,
-                        Mockito.mock(LogReplicationPluginConfig.class), rt));
+        LogReplicationContext context = new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT,
+                Mockito.mock(LogReplicationPluginConfig.class), rt);
+        context.addSessionNameForLogging(getDefaultSession(), SESSION_NAME);
+        StreamsLogEntryReader reader = new StreamsLogEntryReader(getDefaultSession(), context);
         reader.setGlobalBaseSnapshot(Address.NON_ADDRESS, Address.NON_ADDRESS);
 
         LogReplicationEntryMsg entry;
@@ -338,14 +343,15 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
     private void writeLogEntryMsgs(List<LogReplicationEntryMsg> msgQ, CorfuRuntime rt) {
 
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(rt, LOCAL_SINK_CLUSTER_ID);
-        configManager.generateConfig(Collections.singleton(getDefaultSession()), false);
+        configManager.generateConfig(getDefaultSession(), false, SESSION_NAME);
 
         LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt,
                 getReplicationContext(configManager, 0, "test", true, rt));
         logReplicationMetadataManager.addSession(getDefaultSession(),0, true);
-        LogEntryWriter writer = new LogEntryWriter(logReplicationMetadataManager, getDefaultSession(),
-                new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT,
-                        Mockito.mock(LogReplicationPluginConfig.class), rt));
+        LogReplicationContext context = new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT,
+                Mockito.mock(LogReplicationPluginConfig.class), rt);
+        context.addSessionNameForLogging(getDefaultSession(), SESSION_NAME);
+        LogEntryWriter writer = new LogEntryWriter(logReplicationMetadataManager, getDefaultSession(), context);
 
         if (msgQ.isEmpty()) {
             log.debug("msgQ is EMPTY");
@@ -358,8 +364,10 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
 
     private LogReplicationContext getReplicationContext(LogReplicationConfigManager configManager, long topologyConfigId,
                                                         String localCorfuEndpoint, boolean isLeader, CorfuRuntime rt) {
-        return new LogReplicationContext(configManager, topologyConfigId, localCorfuEndpoint, isLeader,
+        LogReplicationContext context = new LogReplicationContext(configManager, topologyConfigId, localCorfuEndpoint, isLeader,
                 Mockito.mock(LogReplicationPluginConfig.class), rt);
+        context.addSessionNameForLogging(getDefaultSession(), SESSION_NAME);
+        return context;
     }
 
     private void accessTxStream(Iterator<ILogData> iterator, int num) {
