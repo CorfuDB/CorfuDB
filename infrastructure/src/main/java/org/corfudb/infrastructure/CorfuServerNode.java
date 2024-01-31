@@ -214,7 +214,7 @@ public class CorfuServerNode implements AutoCloseable {
         }
 
         // Check if channels are active and
-        // add closure with await for thread safety
+        // close them with await for thread safety
         if (bindFuture != null
                 && bindFuture.channel() != null
                 && bindFuture.channel().isActive()) {
