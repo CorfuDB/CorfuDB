@@ -1,9 +1,11 @@
 package org.corfudb.runtime.object;
 
+import com.google.common.annotations.VisibleForTesting;
 import io.netty.buffer.ByteBuf;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.runtime.collections.DiskBackedCorfuTable;
 import org.corfudb.runtime.collections.RocksDbEntryIterator;
 import org.corfudb.util.serializer.ISerializer;
 import org.rocksdb.BlockBasedTableConfig;
@@ -58,7 +60,7 @@ public class RocksDbStore<S extends SnapshotGenerator<S>> implements
 
         // Open the RocksDB instance
         RocksDB.destroyDB(this.absolutePathString, this.rocksDbOptions);
-        this.rocksDb = OptimisticTransactionDB.open(rocksDbOptions, absolutePathString);
+        this.rocksDb = OptimisticTransactionDB.open(this.rocksDbOptions, absolutePathString);
         this.defaultColumnFamily = this.rocksDb.getDefaultColumnFamily();
 
         // There is no need to override default options and customize
@@ -78,7 +80,6 @@ public class RocksDbStore<S extends SnapshotGenerator<S>> implements
             // prefix extractor is provided.
             tableConfig.setIndexType(IndexType.kHashSearch);
             columnFamilyOptions.setTableFormatConfig(tableConfig);
-
 
             // Use hash-map-based memtables to avoid binary search costs in memtables.
             // BUG: Memtable doesn't concurrent writes (allow_concurrent_memtable_write)
@@ -222,5 +223,10 @@ public class RocksDbStore<S extends SnapshotGenerator<S>> implements
     public SMRSnapshot<S> getImplicitSnapshot(
             @NonNull ViewGenerator<S> viewGenerator) {
         return new AlwaysLatestSnapshot<>(rocksDb, viewGenerator);
+    }
+
+    @VisibleForTesting
+    public Options getRocksDbOptions() {
+        return rocksDbOptions;
     }
 }

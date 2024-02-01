@@ -48,6 +48,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
+import org.rocksdb.BlockBasedTableConfig;
 import org.rocksdb.Env;
 import org.rocksdb.OptimisticTransactionDB;
 import org.rocksdb.Options;
@@ -57,11 +58,8 @@ import org.rocksdb.SstFileManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.io.InvalidObjectException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;
@@ -85,6 +83,7 @@ import java.util.stream.StreamSupport;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy;
 import static org.corfudb.common.metrics.micrometer.MeterRegistryProvider.MeterRegistryInitializer.initClientMetrics;
+import static org.corfudb.test.TestUtils.getRssInBytes;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.times;
 
@@ -107,46 +106,7 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
     private static final String defaultNewMapEntry = "newEntry";
     private static final boolean ENABLE_READ_YOUR_WRITES = true;
     private static final boolean EXACT_SIZE = true;
-    private static final String STATM_PATH = "/proc/self/statm";
     private static final long TABLE_OVERHEAD = 5 * 1024 * 1024;
-
-    private static boolean isProcFilesystemSupported() {
-        Path path = Paths.get("/proc/self/statm");
-        return Files.exists(path);
-    }
-
-    private static long getRssInBytes() throws IOException, InterruptedException {
-        if (!isProcFilesystemSupported()) {
-            throw new UnsupportedOperationException(STATM_PATH + " not supported on this platform.");
-        }
-        long pageSize = getPageSize();
-        long rssPages = readRssPages();
-        return pageSize * rssPages;
-    }
-
-    private static long getPageSize() throws IOException, InterruptedException {
-        ProcessBuilder pb = new ProcessBuilder("getconf", "PAGESIZE");
-        Process process = pb.start();
-        process.waitFor();
-
-        if (process.exitValue() != 0) {
-            throw new UnsupportedOperationException("getconf PAGESIZE not supported on this platform.");
-        }
-
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-            String output = reader.readLine().trim();
-            return Long.parseLong(output);
-        }
-    }
-
-    private static long readRssPages() throws IOException {
-        Path filePath = Paths.get(STATM_PATH);
-        List<String> lines = Files.readAllLines(filePath);
-        String content = lines.get(0);
-        String[] parts = content.split("\\s+");
-        return Long.parseLong(parts[1]); // RSS is the second value in /proc/self/statm
-    }
-
 
     @Captor
     private ArgumentCaptor<String> logCaptor;
@@ -181,6 +141,31 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
 
     private PersistedCorfuTable<String, String> setupTable(Index.Registry<String, String> registry) {
         return setupTable(defaultTableName, registry, defaultOptions, defaultSerializer);
+    }
+
+    private <V> DiskBackedCorfuTable<String, V> setupTableInternal(String streamName) {
+        return setupTableInternal(streamName, ENABLE_READ_YOUR_WRITES, !EXACT_SIZE,
+                defaultOptions, defaultSerializer);
+    }
+
+    private <V> DiskBackedCorfuTable<String, V> setupTableInternal(
+            String streamName, boolean readYourWrites, boolean exact_size,
+            Options options, ISerializer serializer) {
+
+        PersistenceOptionsBuilder persistenceOptions = PersistenceOptions.builder()
+                .dataPath(Paths.get(diskBackedDirectory, streamName));
+        if (!readYourWrites) {
+            persistenceOptions.consistencyModel(ConsistencyModel.READ_COMMITTED);
+        }
+
+        if (exact_size) {
+            persistenceOptions.sizeComputationModel(SizeComputationModel.EXACT_SIZE);
+        } else {
+            persistenceOptions.sizeComputationModel(SizeComputationModel.ESTIMATE_NUM_KEYS);
+        }
+
+        getDefaultRuntime().getSerializers().registerSerializer(serializer);
+        return new DiskBackedCorfuTable<>(persistenceOptions.build(), options, serializer);
     }
 
     private <V> PersistedCorfuTable<String, V> setupTable(
@@ -864,25 +849,104 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
     void verifyRss() throws IOException, InterruptedException {
         resetTests();
         try {
-            final PersistedCorfuTable<String, String> tableA = setupTable("A", ENABLE_READ_YOUR_WRITES);
-            long firstRss = getRssInBytes();
-            final PersistedCorfuTable<String, String> tableB = setupTable("B", ENABLE_READ_YOUR_WRITES);
-            long secondRss = getRssInBytes();
+            long firstRss;
+            long secondRss;
+            long heapDelta;
+
+            // Warm-up phase.
+            final DiskBackedCorfuTable<String, String> tableA = setupTableInternal("A");
+
+            // We need to keep heap consumption constant during our measurement,
+            // otherwise, we do not know how much memory is consumed by RocksDB
+            // and how much by the JVM.
+            do {
+                long heapStart = Runtime.getRuntime().totalMemory();
+                firstRss = getRssInBytes();
+
+                final DiskBackedCorfuTable<String, String> table = setupTableInternal("B");
+                long heapEnd = Runtime.getRuntime().totalMemory();
+                secondRss = getRssInBytes();
+
+                heapDelta = heapEnd - heapStart;
+
+                tableA.close();
+                table.close();
+            } while (heapDelta != 0);
 
             assertThat(secondRss - firstRss).isLessThan(TABLE_OVERHEAD);
-
-            final PersistedCorfuTable<String, String> tableC = setupTable("C", ENABLE_READ_YOUR_WRITES);
-            long thirdRss = getRssInBytes();
-
-            assertThat(thirdRss - secondRss).isLessThan(TABLE_OVERHEAD);
-
-            tableA.close();
-            tableB.close();
-            tableC.close();
         } catch (UnsupportedOperationException ignore) {
             // Not supported on this platform.
         }
     }
+
+    private void populateTable(DiskBackedCorfuTable<String, String> table, long count) {
+        final int GC_INTERVAL_ITERATION = 1024;
+        final int VALUE_SIZE = 1024;
+
+        String randomString = RandomStringUtils.random(VALUE_SIZE);
+        for (int i = 0; i < count; i++) {
+            table.put(String.valueOf(i), randomString);
+            if (i % GC_INTERVAL_ITERATION == 0) {
+                // To ensure that heap size does not grow,
+                // periodically perform GC.
+                System.gc();
+            }
+        }
+        System.gc();
+    }
+
+    @Property(tries = NUM_OF_TRIES)
+    void verifyWriteBufferLimit() throws IOException, InterruptedException {
+        final long writeBufferSize = 4 * 1024 * 1024;
+        final long maxWriteBuffers = 2;
+        final long maxValueNum = 20 * 1024;
+        final long fudgeFactor = 2;
+
+        final Options options = new Options(defaultOptions);
+        options.setWriteBufferSize(writeBufferSize);
+        options.setTableFormatConfig(new BlockBasedTableConfig().setNoBlockCache(false));
+
+        resetTests();
+
+        long firstRss;
+        long secondRss;
+        long heapDelta;
+
+        do {
+            final DiskBackedCorfuTable<String, String> table =
+                    setupTableInternal("A", !ENABLE_READ_YOUR_WRITES, !EXACT_SIZE,
+                    options, defaultSerializer);
+            long heapStart = Runtime.getRuntime().totalMemory();
+
+            firstRss = getRssInBytes();
+            populateTable(table, maxValueNum);
+            secondRss = getRssInBytes();
+
+            long heapEnd = Runtime.getRuntime().totalMemory();
+            heapDelta = heapEnd - heapStart;
+            table.close();
+
+            if (heapDelta != 0) {
+                table.close();
+                log.info("Heap size has changed. Retrying...");
+                continue;
+            }
+
+
+            long rssDelta = secondRss - firstRss;
+            double rssDeltaMb = 1.0 * rssDelta / 1024 / 1024;
+            log.info("{} - {} = {} ({})", secondRss, firstRss, rssDelta, rssDeltaMb);
+            System.out.println("DELTA: " + rssDeltaMb);
+
+            assertThat(rssDelta).isPositive();
+            if (rssDelta < writeBufferSize * maxWriteBuffers * fudgeFactor) {
+                break;
+            }
+
+        } while (true);
+
+    }
+
 
     /**
      * Verify RocksDB persisted cache is cleaned up
