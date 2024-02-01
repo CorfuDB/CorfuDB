@@ -2,20 +2,33 @@ package org.corfudb.runtime.clients;
 
 import lombok.AllArgsConstructor;
 import org.apache.commons.lang.RandomStringUtils;
+import org.bouncycastle.cert.X509CertificateHolder;
+import org.bouncycastle.cert.X509v3CertificateBuilder;
+import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
+import org.bouncycastle.operator.ContentSigner;
+import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.security.tls.TlsUtils.CertStoreConfig.CertManagementConfig;
 import org.corfudb.security.tls.TlsUtils.CertStoreConfig.KeyStoreConfig;
 import org.corfudb.security.tls.TlsUtils.CertStoreConfig.TrustStoreConfig;
-import sun.security.tools.keytool.CertAndKeyGen;
-import sun.security.x509.X500Name;
 
+import javax.security.auth.x500.X500Principal;
+import java.io.ByteArrayInputStream;
 import java.io.OutputStream;
+import java.math.BigInteger;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.security.GeneralSecurityException;
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
 import java.security.KeyStore;
 import java.security.PrivateKey;
-import java.security.cert.X509Certificate;
+import java.security.SecureRandom;
+import java.security.Security;
+import java.security.cert.Certificate;
+import java.security.cert.CertificateFactory;
 import java.time.Duration;
 import java.util.Base64;
 import java.util.Date;
@@ -35,10 +48,8 @@ public interface NettyCommTestUtil {
     class CertificateManager {
         private static final Random RND = new Random();
 
-        public final CertAndKeyGen gen;
-        public final X500Name certName;
-        public final X509Certificate[] chain;
-        public final X509Certificate cert;
+        public final Certificate[] chain;
+        public final Certificate cert;
         public final KeyStore keyStore;
         public final String password;
         public final String alias;
@@ -67,20 +78,47 @@ public interface NettyCommTestUtil {
             return build(keyType, sigAlg, PASSWORD, certDir, alias, validity, firstDate);
         }
 
+        private static KeyPair generateKeyPair(String keyType) {
+            final int keyBits = 384;
+            try {
+                KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance(keyType);
+                keyPairGenerator.initialize(keyBits, new SecureRandom());
+                return keyPairGenerator.generateKeyPair();
+            } catch (GeneralSecurityException var2) {
+                throw new AssertionError(var2);
+            }
+        }
+
         public static CertificateManager build(
                 String keyType, String sigAlg, String password, Path certDir, String alias,
                 Duration validity, Date firstDate) throws Exception {
 
+            Security.addProvider(new BouncyCastleProvider());
+            X500Principal signedByPrincipal = new X500Principal("CN=ROOT");
+            KeyPair signedByKeyPair = generateKeyPair(keyType);
+
+            X509v3CertificateBuilder certBuilder = new JcaX509v3CertificateBuilder(
+                    signedByPrincipal,
+                    BigInteger.ONE,
+                    firstDate,
+                    new Date(firstDate.getTime() + validity.toMillis()),
+                    signedByPrincipal,
+                    signedByKeyPair.getPublic()
+            );
+
+            ContentSigner signer = new JcaContentSignerBuilder(sigAlg)
+                    .build(signedByKeyPair.getPrivate());
+
+            X509CertificateHolder certHolder = certBuilder.build(signer);
+
+            Certificate newCert = CertificateFactory
+                    .getInstance("X.509")
+                    .generateCertificate(new ByteArrayInputStream(certHolder.getEncoded()));
+
             Path jksPath = certDir.resolve(String.format("keystore-%s.jks", generateRandom()));
 
-            CertAndKeyGen gen = new CertAndKeyGen(keyType, sigAlg);
-            X500Name certName = new X500Name("CN=ROOT");
-            final int keyBits = 384;
-            gen.generate(keyBits);
-
-            X509Certificate cert = gen.getSelfCertificate(certName, firstDate, validity.getSeconds());
-            X509Certificate[] chain = new X509Certificate[1];
-            chain[0] = cert;
+            Certificate[] chain = new Certificate[1];
+            chain[0] = newCert;
 
             KeyStore keyStore = KeyStore.getInstance("JKS");
             if (Files.exists(jksPath)) {
@@ -89,7 +127,7 @@ public interface NettyCommTestUtil {
                 keyStore.load(null, null);
             }
 
-            PrivateKey privateKey = gen.getPrivateKey();
+            PrivateKey privateKey = signedByKeyPair.getPrivate();
             keyStore.setKeyEntry(alias, privateKey, password.toCharArray(), chain);
             try (OutputStream storeFile = Files.newOutputStream(jksPath)) {
                 keyStore.store(storeFile, password.toCharArray());
@@ -102,7 +140,7 @@ public interface NettyCommTestUtil {
 
             Path trustStorePath = certDir.resolve("truststore-" + generateRandom() + ".jks");
             TrustStoreManager trustStoreManager = TrustStoreManager.build(trustStorePath);
-            trustStoreManager.trustStore.setCertificateEntry(alias, cert);
+            trustStoreManager.trustStore.setCertificateEntry(alias, newCert);
             trustStoreManager.save();
 
             CertManagementConfig cfg = new CertManagementConfig(
@@ -111,8 +149,7 @@ public interface NettyCommTestUtil {
             );
 
             return new CertificateManager(
-                    gen, certName, chain, cert, keyStore, password, alias, jksPath, keyStoreConfig,
-                    trustStoreManager, cfg
+                    chain, newCert, keyStore, password, alias, jksPath, keyStoreConfig, trustStoreManager, cfg
             );
         }
 

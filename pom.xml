@@ -45,7 +45,7 @@
         <netty.tcnative.version>2.0.56.Final</netty.tcnative.version>
         <protobuf.version>3.21.7</protobuf.version>
         <commons.io.version>2.11.0</commons.io.version>
-        <lombok.version>1.18.24</lombok.version>
+        <lombok.version>1.18.30</lombok.version>
         <guava.version>32.1.2-jre</guava.version>
         <junit.jupiter.version>5.10.1</junit.jupiter.version>
         <mockito.version>4.11.0</mockito.version>
@@ -347,11 +347,9 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.10.1</version>
+                <version>3.11.0</version>
                 <configuration>
-                    <compilerVersion>1.8</compilerVersion>
-                    <source>1.8</source>
-                    <target>1.8</target>
+                    <release>11</release>
                     <encoding>${project.build.sourceEncoding}</encoding>
                     <showDeprecation>false</showDeprecation>
                     <compilerArgs>
