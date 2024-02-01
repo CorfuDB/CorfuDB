@@ -364,7 +364,7 @@ public class CorfuRuntime {
         /**
          * The period at which the file watcher will poll the file from disk
          */
-        Duration fileWatcherPollPeriod = Duration.ofMinutes(1);
+        Duration fileWatcherPollPeriod = Duration.ofSeconds(10);
 
         /*
          * The {@link UUID} for the cluster this client is connecting to, or
@@ -470,7 +470,7 @@ public class CorfuRuntime {
             private int streamBatchSize = 10;
             private int checkpointReadBatchSize = 1;
             private Duration runtimeGCPeriod = Duration.ofMinutes(20);
-            private Duration fileWatcherPollPeriod = Duration.ofMinutes(1);
+            private Duration fileWatcherPollPeriod = Duration.ofSeconds(10);
             private UUID clusterId = null;
             private int systemDownHandlerTriggerLimit = 20;
             private List<NodeLocator> layoutServers = new ArrayList<>();
