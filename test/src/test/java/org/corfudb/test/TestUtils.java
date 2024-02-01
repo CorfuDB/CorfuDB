@@ -4,6 +4,13 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.Sleep;
 
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.List;
 import java.util.function.Predicate;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -53,4 +60,66 @@ public class TestUtils {
         assertThat(verifier.test(refreshedLayout)).isTrue();
     }
 
+    private static boolean isProcFilesystemSupported() {
+        Path path = Paths.get("/proc/self/statm");
+        return Files.exists(path);
+    }
+
+    public static long getRssInBytes() throws IOException, InterruptedException {
+        String os = System.getProperty("os.name").toLowerCase();
+        if (os.contains("mac")) {
+            return getRssBytesMac();
+        } else if (os.contains("linux")) {
+            return getRssBytesMacLinux();
+        } else {
+            throw new UnsupportedOperationException("Unable to get RSS using this platform.");
+        }
+    }
+
+    private static long getRssBytesMac() throws IOException, InterruptedException {
+        String[] command = new String[]{"sh", "-c", "ps -o rss= -p " + ProcessHandle.current().pid()};
+        Process process = Runtime.getRuntime().exec(command);
+        process.waitFor();
+        BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+        String line = reader.readLine();
+        if (line != null) {
+            return Long.parseLong(line.trim()) * 1024; // Convert KB to Bytes
+        } else {
+            throw new IOException("Could not get RSS");
+        }
+    }
+
+    private static final String STATM_PATH = "/proc/self/statm";
+
+    public static long getRssBytesMacLinux() throws IOException, InterruptedException {
+        if (!isProcFilesystemSupported()) {
+            throw new UnsupportedOperationException(STATM_PATH + " not supported on this platform.");
+        }
+        long pageSize = getPageSize();
+        long rssPages = readRssPages();
+        return pageSize * rssPages;
+    }
+
+    private static long getPageSize() throws IOException, InterruptedException {
+        ProcessBuilder pb = new ProcessBuilder("getconf", "PAGESIZE");
+        Process process = pb.start();
+        process.waitFor();
+
+        if (process.exitValue() != 0) {
+            throw new UnsupportedOperationException("getconf PAGESIZE not supported on this platform.");
+        }
+
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+            String output = reader.readLine().trim();
+            return Long.parseLong(output);
+        }
+    }
+
+    private static long readRssPages() throws IOException {
+        Path filePath = Paths.get(STATM_PATH);
+        List<String> lines = Files.readAllLines(filePath);
+        String content = lines.get(0);
+        String[] parts = content.split("\\s+");
+        return Long.parseLong(parts[1]); // RSS is the second value in /proc/self/statm
+    }
 }

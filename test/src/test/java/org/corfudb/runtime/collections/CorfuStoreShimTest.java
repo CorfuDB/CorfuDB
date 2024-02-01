@@ -6,6 +6,8 @@ import com.google.protobuf.Any;
 import com.google.protobuf.DynamicMessage;
 import com.google.protobuf.Message;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.RandomStringUtils;
+import org.assertj.core.api.AssertionsForClassTypes;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.protocols.wireprotocol.Token;
@@ -22,6 +24,7 @@ import org.corfudb.runtime.LogReplication.LogReplicationEntryMetadataMsg;
 import org.corfudb.runtime.Queue;
 import org.corfudb.runtime.exceptions.StaleRevisionUpdateException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.object.RocksDbStore;
 import org.corfudb.runtime.object.VersionedObjectIdentifier;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
@@ -30,6 +33,7 @@ import org.corfudb.runtime.proto.RpcCommon.UuidMsg;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.ObjectsView;
+import org.corfudb.runtime.view.ObjectsView.ObjectID;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.test.SampleSchema;
@@ -39,7 +43,13 @@ import org.corfudb.util.retry.RetryNeededException;
 import org.junit.Assert;
 import org.junit.Ignore;
 import org.junit.Test;
+import org.rocksdb.BlockBasedTableConfig;
+import org.rocksdb.Cache;
+import org.rocksdb.LRUCache;
+import org.rocksdb.MutableColumnFamilyOptions;
+import org.rocksdb.Options;
 
+import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -64,6 +74,9 @@ import static com.google.protobuf.Descriptors.DescriptorValidationException;
 import static com.google.protobuf.Descriptors.FileDescriptor;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.corfudb.runtime.object.PersistenceOptions.DISABLE_BLOCK_CACHE;
+import static org.corfudb.runtime.object.PersistenceOptions.getBlockCAche;
+import static org.corfudb.runtime.object.PersistenceOptions.newBlockCache;
 import static org.corfudb.test.SampleAppliance.Appliance;
 import static org.corfudb.test.SampleSchema.FirewallRule;
 import static org.corfudb.test.SampleSchema.ManagedResources;
@@ -262,7 +275,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
 
         // By some future bug should the table disappear from the object cache ensure that
         // the method still fails gracefully with a NoSuchElementException
-        ObjectsView.ObjectID oid = new ObjectsView.ObjectID(table.getStreamUUID(), PersistentCorfuTable.class);
+        ObjectID oid = new ObjectID(table.getStreamUUID(), PersistentCorfuTable.class);
         corfuRuntime.getObjectsView().getObjectCache().remove(oid);
         assertThatThrownBy(() -> shimStore.freeTableData(someNamespace, tableName))
                 .isExactlyInstanceOf(NoSuchElementException.class);
@@ -1460,6 +1473,122 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         assertThat(options.getSecondaryKey(0).getIndexPath()).isEqualTo("event_time");
     }
 
+    public static long getMaxMemory() {
+        return Runtime.getRuntime().maxMemory();
+    }
+
+    public static long getUsedMemory() {
+        return getMaxMemory() - getFreeMemory();
+    }
+
+    public static long getTotalMemory() {
+        return Runtime.getRuntime().totalMemory();
+    }
+
+    public static long getFreeMemory() {
+        return Runtime.getRuntime().freeMemory();
+    }
+
+    private Options getRocksDbOptions(Table<?, ?, ?> table) {
+        final ObjectID<?> thisId = ObjectID.builder()
+                .type((Class<Object>) PersistedCorfuTable.getTypeToken().getRawType())
+                .streamID(table.getStreamUUID()).build();
+        final PersistedCorfuTable<?, ?> persistedTable = (PersistedCorfuTable<?, ?>) getRuntime().getObjectsView()
+                .getObjectCache().get(thisId);
+        final DiskBackedCorfuTable<?, ?> diskTable = (DiskBackedCorfuTable<?, ?>) persistedTable
+                .getCorfuSMRProxy().getUnderlyingMVO().getCurrentObject();
+        final RocksDbStore<?> rocksStore = (RocksDbStore<?>) diskTable.getRocksApi();
+        return rocksStore.getRocksDbOptions();
+    }
+
+    private Cache getBlockCache(Options options) throws NoSuchFieldException, IllegalAccessException {
+        final BlockBasedTableConfig tableConfig = (BlockBasedTableConfig) options.tableFormatConfig();
+        final Field field = BlockBasedTableConfig.class.getDeclaredField("blockCache");
+        field.setAccessible(true);
+        return (Cache) field.get(tableConfig);
+    }
+
+    @Test
+    public void testDiskBackedTableMemLimit() throws Exception {
+        // Get a Corfu Runtime instance.
+        CorfuRuntime corfuRuntime = getDefaultRuntime();
+
+        // Creating Corfu Store using a connected corfu client.
+        CorfuStoreShim shimStore = new CorfuStoreShim(corfuRuntime);
+
+        // Define a namespace for the table.
+        final String someNamespace = "some-namespace";
+
+        {
+            final String tableName = "InvalidTable";
+            final String dataPath = Files.createTempDirectory(tableName).toString();
+            final int INVALID_CACHE_INDEX = 100;
+            final int writeBufferSize = 2 * 1024 * 1024; // 2MB
+            PersistenceOptions persistenceOptions = PersistenceOptions.newBuilder()
+                    .setDataPath(dataPath)
+                    .setWriteBufferSize(writeBufferSize)
+                    .setBlockCacheIndex(INVALID_CACHE_INDEX)
+                    .build();
+
+            AssertionsForClassTypes.assertThatThrownBy(() -> shimStore.openTable(someNamespace, tableName,
+                            SampleSchema.Uuid.class,
+                            SampleSchema.SampleTableAMsg.class,
+                            ManagedResources.class,
+                            TableOptions.builder().persistenceOptions(persistenceOptions).build()))
+                    .isInstanceOf(NoSuchElementException.class);
+        }
+
+        {
+            final int writeBufferSize = 4 * 1024 * 1024; // 2MB
+            final int blockCacheSize = 4 * 1024 * 1024; // 2MB
+            final int blockCacheIndex = newBlockCache(blockCacheSize);
+            final String tableName = "DiskTable";
+            final String dataPath = Files.createTempDirectory(tableName).toString();
+            PersistenceOptions persistenceOptions = PersistenceOptions.newBuilder()
+                    .setDataPath(dataPath)
+                    .setWriteBufferSize(writeBufferSize)
+                    .setBlockCacheIndex(blockCacheIndex)
+                    .build();
+
+            try (Table<SampleSchema.SampleTableAMsg, SampleSchema.SampleTableAMsg, ManagedResources> table =
+                    shimStore.openTable(someNamespace, tableName,
+                            SampleSchema.SampleTableAMsg.class,
+                            SampleSchema.SampleTableAMsg.class,
+                            ManagedResources.class,
+                            TableOptions.builder().persistenceOptions(persistenceOptions).build())) {
+                final Options rocksDbOptions = getRocksDbOptions(table);
+                assertThat(rocksDbOptions.writeBufferSize()).isEqualTo(writeBufferSize);
+                final BlockBasedTableConfig tableConfig = (BlockBasedTableConfig) rocksDbOptions.tableFormatConfig();
+                assertThat(tableConfig.noBlockCache()).isEqualTo(false);
+                final Cache cache = getBlockCache(rocksDbOptions);
+                assertThat(getBlockCAche(blockCacheIndex)).isEqualTo(cache);
+            }
+        }
+
+        {
+            final int writeBufferSize = 4 * 1024 * 1024; // 4MB
+            final String tableName = "NewDiskTable";
+            final String dataPath = Files.createTempDirectory(tableName).toString();
+            PersistenceOptions persistenceOptions = PersistenceOptions.newBuilder()
+                    .setDataPath(dataPath)
+                    .setWriteBufferSize(writeBufferSize)
+                    .setBlockCacheIndex(DISABLE_BLOCK_CACHE)
+                    .build();
+
+            try (Table<SampleSchema.SampleTableAMsg, SampleSchema.SampleTableAMsg, ManagedResources> table =
+                         shimStore.openTable(someNamespace, tableName,
+                                 SampleSchema.SampleTableAMsg.class,
+                                 SampleSchema.SampleTableAMsg.class,
+                                 ManagedResources.class,
+                                 TableOptions.builder().persistenceOptions(persistenceOptions).build())) {
+
+                final Options rocksDbOptions = getRocksDbOptions(table);
+                assertThat(rocksDbOptions.writeBufferSize()).isEqualTo(writeBufferSize);
+                final BlockBasedTableConfig tableConfig = (BlockBasedTableConfig) rocksDbOptions.tableFormatConfig();
+                assertThat(tableConfig.noBlockCache()).isEqualTo(true);
+            }
+        }
+    }
     @Test
     public void testDiskBackedTable() throws Exception {
         final int numEntries = 1000;

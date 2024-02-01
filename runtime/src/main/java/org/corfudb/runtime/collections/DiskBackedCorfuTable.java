@@ -1,5 +1,6 @@
 package org.corfudb.runtime.collections;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Streams;
 import com.google.common.hash.HashFunction;
 import com.google.common.hash.Hashing;
@@ -116,7 +117,12 @@ public class DiskBackedCorfuTable<K, V> implements
 
     @Getter
     private final Statistics statistics;
+
+    @Getter
+    @VisibleForTesting
     private final RocksDbApi rocksApi;
+    private final Options rocksDbOptions;
+
     private final RocksDbSnapshotGenerator<DiskBackedCorfuTable<K, V>> rocksDbSnapshotGenerator;
     private final ColumnFamilyRegistry columnFamilyRegistry;
     private final ISerializer serializer;
@@ -138,6 +144,7 @@ public class DiskBackedCorfuTable<K, V> implements
         this.secondaryIndexesAliasToPath = new HashMap<>();
         this.indexToId = new HashMap<>();
         this.indexSpec = new HashSet<>();
+        this.rocksDbOptions = new Options(rocksDbOptions);
 
         byte indexId = 0;
         for (Index.Spec<K, V, ?> index : indices) {
@@ -149,11 +156,19 @@ public class DiskBackedCorfuTable<K, V> implements
         try {
             this.statistics = new Statistics();
             this.statistics.setStatsLevel(StatsLevel.ALL);
-            rocksDbOptions.setStatistics(statistics);
-            persistenceOptions.getWriteBufferSize().map(rocksDbOptions::setWriteBufferSize);
+            this.rocksDbOptions.setStatistics(statistics);
+            persistenceOptions.getWriteBufferSize().map(this.rocksDbOptions::setWriteBufferSize);
+
+            final BlockBasedTableConfig tableConfig = new BlockBasedTableConfig();
+            if (persistenceOptions.isDisableBlockCache()) {
+                tableConfig.setNoBlockCache(true);
+            } else {
+                persistenceOptions.getBlockCache().map(tableConfig::setBlockCache);
+            }
+            this.rocksDbOptions.setTableFormatConfig(tableConfig);
 
             final RocksDbStore<DiskBackedCorfuTable<K, V>> rocksDbStore = new RocksDbStore<>(
-                    persistenceOptions.getDataPath(), rocksDbOptions, writeOptions);
+                    persistenceOptions.getDataPath(), this.rocksDbOptions, writeOptions);
 
             this.rocksApi = rocksDbStore;
             this.columnFamilyRegistry = rocksDbStore;
@@ -487,6 +502,7 @@ public class DiskBackedCorfuTable<K, V> implements
 
         try {
             this.rocksApi.close();
+            this.rocksDbOptions.close();
         } catch (RocksDBException e) {
             throw new UnrecoverableCorfuError(e);
         } finally {

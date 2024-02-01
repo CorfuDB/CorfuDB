@@ -40,6 +40,8 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
+import static org.corfudb.runtime.object.PersistenceOptions.DISABLE_BLOCK_CACHE;
+
 /**
  * Wrapper over the CorfuTable.
  * It accepts a primary key - which is a protobuf message.
@@ -239,6 +241,15 @@ public class Table<K extends Message, V extends Message, M extends Message> impl
             }
             if (tableParameters.getPersistenceOptions().hasWriteBufferSize()) {
                 persistenceOptions.writeBufferSize(Optional.of(tableParameters.getPersistenceOptions().getWriteBufferSize()));
+            }
+
+            if (tableParameters.getPersistenceOptions().hasBlockCacheIndex()) {
+                final int blockCacheIndex = tableParameters.getPersistenceOptions().getBlockCacheIndex();
+                if (blockCacheIndex == DISABLE_BLOCK_CACHE) {
+                    persistenceOptions.disableBlockCache(true);
+                } else {
+                    persistenceOptions.blockCache(Optional.of(PersistenceOptions.getBlockCAche(blockCacheIndex)));
+                }
             }
 
             ISerializer safeSerializer = new SafeProtobufSerializer(serializer);

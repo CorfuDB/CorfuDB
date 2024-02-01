@@ -38,6 +38,7 @@ message PersistenceOptions {
     optional ConsistencyModel consistencyModel = 2;
     optional SizeComputationModel sizeComputationModel = 3;
     optional int64 writeBufferSize = 4; // In bytes.
+    optional int32 blockCacheIndex = 5; // In bytes.
 }
 
 message ReplicationLogicalGroup {
