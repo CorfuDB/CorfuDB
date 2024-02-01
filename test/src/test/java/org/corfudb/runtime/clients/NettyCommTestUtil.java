@@ -84,8 +84,8 @@ public interface NettyCommTestUtil {
                 KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance(keyType);
                 keyPairGenerator.initialize(keyBits, new SecureRandom());
                 return keyPairGenerator.generateKeyPair();
-            } catch (GeneralSecurityException var2) {
-                throw new AssertionError(var2);
+            } catch (GeneralSecurityException ex) {
+                throw new IllegalStateException(ex);
             }
         }
 
