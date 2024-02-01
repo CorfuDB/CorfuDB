@@ -73,7 +73,7 @@ public interface NettyCommTestUtil {
         public static CertificateManager buildSHA384withEcDsa(Path certDir, String alias, Duration validity,
                                                               Date firstDate) throws Exception {
 
-            final String keyType = "EC";
+            final KeyType keyType = KeyType.EC;
             final String sigAlg = "SHA384withECDSA";
             return build(keyType, sigAlg, PASSWORD, certDir, alias, validity, firstDate);
         }
@@ -90,12 +90,12 @@ public interface NettyCommTestUtil {
         }
 
         public static CertificateManager build(
-                String keyType, String sigAlg, String password, Path certDir, String alias,
+                KeyType keyType, String sigAlg, String password, Path certDir, String alias,
                 Duration validity, Date firstDate) throws Exception {
 
             Security.addProvider(new BouncyCastleProvider());
             X500Principal signedByPrincipal = new X500Principal("CN=ROOT");
-            KeyPair signedByKeyPair = generateKeyPair(keyType);
+            KeyPair signedByKeyPair = generateKeyPair(keyType.keyType);
 
             X509v3CertificateBuilder certBuilder = new JcaX509v3CertificateBuilder(
                     signedByPrincipal,
@@ -218,6 +218,16 @@ public interface NettyCommTestUtil {
             try (OutputStream truststoreFile = Files.newOutputStream(truststorePath)) {
                 trustStore.store(truststoreFile, password.toCharArray());
             }
+        }
+    }
+
+    enum KeyType {
+        EC("EC"), RSA("RSA");
+
+        private final String keyType;
+
+        KeyType(String keyType) {
+            this.keyType = keyType;
         }
     }
 }
