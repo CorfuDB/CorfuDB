@@ -1,6 +1,5 @@
 package org.corfudb.util;
 
-
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.extern.slf4j.Slf4j;
 
@@ -14,10 +13,9 @@ import java.nio.file.StandardWatchEventKinds;
 import java.nio.file.WatchEvent;
 import java.nio.file.WatchKey;
 import java.nio.file.WatchService;
-import java.time.Duration;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 @Slf4j
@@ -26,31 +24,36 @@ public class FileWatcher implements Closeable {
     private final File file;
 
     private final Runnable onChange;
-
-    private final ScheduledExecutorService watcher;
-
+    
     private volatile WatchService watchService;
+
+    private final ExecutorService executorService = newExecutorService();
+
+    private final AtomicBoolean isStopped = new AtomicBoolean(false);
 
     private final AtomicBoolean isRegistered = new AtomicBoolean(false);
 
 
-    public FileWatcher(String filePath, Runnable onChange, Duration pollPeriod){
+    public FileWatcher(String filePath, Runnable onChange){
         this.file = Paths.get(filePath).toFile();
         this.onChange = onChange;
+        executorService.submit(this::start);
+    }
 
-        this.watcher = Executors.newSingleThreadScheduledExecutor(
-                new ThreadFactoryBuilder()
-                        .setDaemon(true)
-                        .setNameFormat("FileWatcher-")
-                        .build());
+    private ExecutorService newExecutorService() {
+        ThreadFactory threadFactory = new ThreadFactoryBuilder()
+                .setDaemon(true)
+                .setNameFormat("FileWatcher")
+                .build();
 
+        return Executors.newSingleThreadExecutor(threadFactory);
+    }
+
+    private void start() {
         reloadNewWatchService();
-
-        watcher.scheduleAtFixedRate(
-                () -> LambdaUtils.runSansThrow(this::poll),
-                0,
-                pollPeriod.toMillis(),
-                TimeUnit.MILLISECONDS);
+        while (!isStopped.get()) {
+            LambdaUtils.runSansThrow(this::poll);
+        }
     }
 
     private void poll() {
@@ -60,7 +63,8 @@ public class FileWatcher implements Closeable {
                 reloadNewWatchService();
             }
 
-            WatchKey key = watchService.poll();
+            // Blocked until a key is returned
+            WatchKey key = watchService.take();
             if (key == null) {
                 return;
             }
@@ -91,6 +95,11 @@ public class FileWatcher implements Closeable {
     }
 
     private void reloadNewWatchService() {
+        if (isStopped.get()) {
+            log.info("Watch service is stopped. Skip reloading new watch service.");
+            return;
+        }
+
         try {
             if (watchService != null) {
                 watchService.close();
@@ -108,12 +117,14 @@ public class FileWatcher implements Closeable {
 
     @Override
     public void close() {
-        this.watcher.shutdownNow();
+        isStopped.set(true);
+
         try {
             this.watchService.close();
         } catch (IOException ioe) {
             throw new IllegalStateException("FileWatcher failed to close the watch service!", ioe);
         }
+        this.executorService.shutdownNow();
         log.info("Closed FileWatcher.");
     }
 }
