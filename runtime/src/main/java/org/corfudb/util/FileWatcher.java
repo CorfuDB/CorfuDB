@@ -75,12 +75,14 @@ public class FileWatcher implements Closeable {
                 WatchEvent<Path> ev = (WatchEvent<Path>) event;
                 Path filename = ev.context();
 
-                log.info("FileWatcher: event kind: {}, filename: {}, watched file: {}",
+                log.info("FileWatcher: event kind: {}, event filename: {}, watched file: {}",
                         kind.toString(), filename.toString(), file.getName());
 
                 if (kind == StandardWatchEventKinds.OVERFLOW) {
                     log.warn("FileWatcher hit overflow and events might be lost!");
-                } else if ((kind == StandardWatchEventKinds.ENTRY_MODIFY || kind == StandardWatchEventKinds.ENTRY_CREATE)
+                } else if ((kind == StandardWatchEventKinds.ENTRY_MODIFY ||
+                        kind == StandardWatchEventKinds.ENTRY_CREATE ||
+                        kind == StandardWatchEventKinds.ENTRY_DELETE)
                         && filename.toString().equals(file.getName())) {
                     log.info("FileWatcher: file {} changed. Invoking handler...", filename);
                     onChange.run();
@@ -106,7 +108,8 @@ public class FileWatcher implements Closeable {
             }
             watchService = FileSystems.getDefault().newWatchService();
             Path path = file.toPath().getParent();
-            path.register(watchService, StandardWatchEventKinds.ENTRY_MODIFY, StandardWatchEventKinds.ENTRY_CREATE);
+            path.register(watchService, StandardWatchEventKinds.ENTRY_CREATE,
+                    StandardWatchEventKinds.ENTRY_DELETE, StandardWatchEventKinds.ENTRY_MODIFY);
             isRegistered.set(true);
             log.info("FileWatcher: parent dir {} for file {} registered.", path, file.getAbsoluteFile());
         } catch (IOException ioe) {
