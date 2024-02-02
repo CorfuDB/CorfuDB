@@ -50,7 +50,6 @@ public class FileWatcher implements Closeable {
     }
 
     private void start() {
-        reloadNewWatchService();
         while (!isStopped.get()) {
             LambdaUtils.runSansThrow(this::poll);
         }
@@ -97,6 +96,7 @@ public class FileWatcher implements Closeable {
     }
 
     private void reloadNewWatchService() {
+        isRegistered.set(false);
         if (isStopped.get()) {
             log.info("Watch service is stopped. Skip reloading new watch service.");
             return;
@@ -113,7 +113,6 @@ public class FileWatcher implements Closeable {
             isRegistered.set(true);
             log.info("FileWatcher: parent dir {} for file {} registered.", path, file.getAbsoluteFile());
         } catch (IOException ioe) {
-            isRegistered.set(false);
             throw new IllegalStateException("Failed to start a new watch service!", ioe);
         }
     }
