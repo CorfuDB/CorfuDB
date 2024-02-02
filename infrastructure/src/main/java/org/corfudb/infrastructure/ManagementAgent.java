@@ -192,9 +192,6 @@ public class ManagementAgent {
                 Thread.currentThread().interrupt();
                 throw new IllegalStateException(ie);
             }
-            catch (RuntimeException re) {
-                log.error("Hit exception when trying immediate recovery", re);
-            }
 
         }
         log.warn("Failed to recover immediately after the restart. The recovery will be completed " +
