@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure.logreplication.runtime;
 
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import lombok.Getter;
 import lombok.Setter;
@@ -170,6 +171,16 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
      */
     private Map<LogReplicationSession, CorfuMessage.ResponseMsg> reverseReplicateInitMsgBuffer;
 
+    /**
+     * Keeps track of sessions connection has been established once the local node became the leader. This is for the
+     * optimization that connection is not retriggered for sessions where there is a quick leadership loass and acquire.
+     *
+     * This data structure does not track any transient failure in connection. That is handled by the state machine's
+     * retry logic.
+     */
+    @Getter
+    private Set<LogReplicationSession> connectedSessions = ConcurrentHashMap.newKeySet();
+
 
 
     /**
@@ -189,7 +200,7 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
                                             LogReplicationServer msgHandler,
                                             ServerContext serverContext,
                                             LogReplicationPluginConfig pluginConfig) {
-        this.timeoutResponse = replicationManager.getCorfuRuntime().getParameters().getRequestTimeout().toMillis();
+        this.timeoutResponse = replicationManager.getReplicationContext().getCorfuRuntime().getParameters().getRequestTimeout().toMillis();
         this.localClusterId = localClusterId;
         this.localNodeId = localNodeId;
         this.sessionToRuntimeFSM = replicationManager.getSessionRuntimeMap();
@@ -205,6 +216,32 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
         this.reverseReplicateInitMsgBuffer = new ConcurrentHashMap<>();
         createTransportServerAdapter(serverContext, pluginConfig);
         createTransportClientAdapter(pluginConfig);
+    }
+
+    @VisibleForTesting
+    public LogReplicationClientServerRouter(long timeout,
+                                            String localClusterId, String localNodeId,
+                                            Set<LogReplicationSession> incomingSession,
+                                            Set<LogReplicationSession> outgoingSession,
+                                            LogReplicationServer msgHandler,
+                                            IClientChannelAdapter clientChannelAdapter,
+                                            IServerChannelAdapter serverChannelAdapter) {
+        this.timeoutResponse = timeout;
+        this.localClusterId = localClusterId;
+        this.localNodeId = localNodeId;
+        this.incomingSession = incomingSession;
+        this.outgoingSession = outgoingSession;
+        this.msgHandler = msgHandler;
+
+        this.sessionToRemoteClusterDescriptor = new ConcurrentHashMap<>();
+        this.sessionToRequestIdCounter = new ConcurrentHashMap<>();
+        this.sessionToOutstandingRequests = new ConcurrentHashMap<>();
+        this.sessionToLeaderConnectionFuture = new ConcurrentHashMap<>();
+        this.sessionToRemoteSourceLeaderManager = new ConcurrentHashMap<>();
+        this.reverseReplicateInitMsgBuffer = new ConcurrentHashMap<>();
+        this.sessionToRuntimeFSM = new ConcurrentHashMap<>();
+        this.clientChannelAdapter = clientChannelAdapter;
+        this.serverChannelAdapter = serverChannelAdapter;
     }
 
     /**
@@ -423,7 +460,7 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
     }
 
     @Override
-    public <T> void completeRequest(LogReplicationSession session, long requestID, T completion) {
+    public synchronized <T> void completeRequest(LogReplicationSession session, long requestID, T completion) {
         try {
             log.trace("Complete request: {}...outstandingRequests {}", requestID, sessionToOutstandingRequests.get(session));
             CompletableFuture<T> cf = (CompletableFuture<T>) sessionToOutstandingRequests.get(session).remove(requestID);
@@ -610,8 +647,30 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
      * @return true if the session is a connection starter, false otherwise
      */
     public boolean isConnectionStarterForSession(LogReplicationSession session) {
-        return topology.getRemoteClusterEndpoints().containsKey(session.getSinkClusterId()) ||
-                topology.getRemoteClusterEndpoints().containsKey(session.getSourceClusterId());
+        // For routing queue model, bidirectional replication takes place and 2 sessions between the same pair of
+        // clusters are created, as follows:
+        // Session 1:
+        // Source: A
+        // Sink: B
+        // Client: X
+        // Remote endpoint for A: B
+        //
+        // Session 2:
+        // Source: B
+        // Sink: A
+        // Client: X
+        // Remote endpoint for B: A
+        //
+        // The current way to detect connection starter is to check if the remote endpoint is the Source OR Sink.
+        // This will make both A and B become connection starters for both sessions, which is incorrect.  So for this
+        // model, the connection starter is always the Source cluster.
+        // TODO: Instead of below fix, consider providing more information with the remote cluster endpoints to
+        //  determine if a node is the connection starter for a given session.
+        if (session.getSubscriber().getModel() == LogReplication.ReplicationModel.ROUTING_QUEUES) {
+            return topology.getRemoteClusterEndpoints().containsKey(session.getSinkClusterId());
+        }
+        return topology.getRemoteClusterEndpoints().containsKey(session.getSinkClusterId())
+            || topology.getRemoteClusterEndpoints().containsKey(session.getSourceClusterId());
     }
 
     private void removeSessionInfo(LogReplicationSession session) {
@@ -621,6 +680,7 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
         sessionToRemoteClusterDescriptor.remove(session);
         sessionToRequestIdCounter.remove(session);
         sessionToLeaderConnectionFuture.remove(session);
+        connectedSessions.remove(session);
     }
 
     public void shutDownMsgHandlerServer() {
@@ -705,6 +765,17 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
      * @param session session information
      */
     public void connect(ClusterDescriptor remoteClusterDescriptor, LogReplicationSession session) {
+        //TODO v2: check if this if condition is needed.
+        if (!isConnectionStarterForSession(session)) {
+            log.error("Not the connection starter for session: {}", session);
+            return;
+        }
+
+        if (connectedSessions.contains(session)) {
+            log.trace("Skipping as connection is already established for session {}", session);
+            return;
+        }
+
         log.info("Connect asynchronously to remote cluster {} and session {} ", remoteClusterDescriptor.getClusterId(),
                 session);
 
@@ -712,6 +783,7 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
             IRetry.build(IntervalRetry.class, () -> {
                 try {
                     this.clientChannelAdapter.connectAsync(remoteClusterDescriptor, session);
+                    connectedSessions.add(session);
                 } catch (Exception e) {
                     log.error("Failed to connect to remote cluster for session {}. Retry after 1 second. Exception {}.",
                             session, e);
@@ -758,10 +830,25 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
             }
         } catch (NullPointerException npe) {
             log.info("The replication components are already stopped for session {}", session);
+            return;
         }
 
         if (isConnectionStarterForSession(session)) {
-            this.clientChannelAdapter.connectAsync(sessionToRemoteClusterDescriptor.get(session), nodeId, session);
+            log.info("Reconnect to remote cluster for session {}", session);
+            try {
+                IRetry.build(IntervalRetry.class, () -> {
+                    try {
+                        this.clientChannelAdapter.connectAsync(sessionToRemoteClusterDescriptor.get(session), session);
+                    } catch (Exception e) {
+                        log.error("Failed to connect to remote cluster for session {}. Retry after 1 second. Exception {}.",
+                                session, e);
+                        throw new RetryNeededException();
+                    }
+                    return null;
+                }).run();
+            } catch (InterruptedException e) {
+                log.error("Unrecoverable exception when attempting to connect to remote session.", e);
+            }
         }
     }
 

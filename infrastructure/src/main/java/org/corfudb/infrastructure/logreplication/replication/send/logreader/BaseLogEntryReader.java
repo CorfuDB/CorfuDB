@@ -74,9 +74,9 @@ public abstract class BaseLogEntryReader extends LogEntryReader {
 
     protected LogReplicationContext replicationContext;
 
-    public BaseLogEntryReader(CorfuRuntime runtime, LogReplication.LogReplicationSession replicationSession,
+    public BaseLogEntryReader(LogReplication.LogReplicationSession replicationSession,
                               LogReplicationContext replicationContext) {
-        runtime.parseConfigurationString(runtime.getLayoutServers().get(0)).connect();
+        CorfuRuntime runtime = replicationContext.getCorfuRuntime();
         this.maxTransferSize = replicationContext.getConfig(replicationSession).getMaxTransferSize();
         this.currentProcessedEntryMetadata = new StreamIteratorMetadata(Address.NON_ADDRESS, false);
         this.messageSizeDistributionSummary = configureMessageSizeDistributionSummary();
@@ -249,7 +249,7 @@ public abstract class BaseLogEntryReader extends LogEntryReader {
      * @param opaqueEntry opaque entry to parse.
      * @return filtered opaque entry
      */
-    private OpaqueEntry filterTransactionEntry(OpaqueEntry opaqueEntry) {
+    protected OpaqueEntry filterTransactionEntry(OpaqueEntry opaqueEntry) {
         Map<UUID, List<SMREntry>> filteredTxEntryMap = opaqueEntry.getEntries().entrySet().stream()
             .filter(entry -> getStreamUUIDs().contains(entry.getKey()))
             .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
@@ -314,7 +314,7 @@ public abstract class BaseLogEntryReader extends LogEntryReader {
         public ModelBasedOpaqueStream(CorfuRuntime rt) {
             this.rt = rt;
             opaqueStream = new OpaqueStream(rt.getStreamsView().get(replicationContext.getConfigManager()
-                    .getOpaqueStreamToTrack(session.getSubscriber())));
+                    .getLogEntrySyncOpaqueStream(session)));
             streamUpTo();
         }
 

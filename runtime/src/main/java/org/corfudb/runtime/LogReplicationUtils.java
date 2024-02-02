@@ -7,12 +7,13 @@ import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
+import org.corfudb.runtime.LogReplication.ReplicationModel;
 import org.corfudb.runtime.LogReplication.ReplicationStatus;
 import org.corfudb.runtime.collections.CorfuStore;
-import org.corfudb.runtime.collections.CorfuStoreEntry;
 import org.corfudb.runtime.collections.Table;
-import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.runtime.collections.CorfuStoreEntry;
+import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.RetryExhaustedException;
 import org.corfudb.runtime.exceptions.StreamingException;
@@ -47,10 +48,49 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
  */
 @Slf4j
 public final class LogReplicationUtils {
+
     public static final String LR_STATUS_STREAM_TAG = "lr_status";
 
     // Retain the old name from LR v1 to avoid polluting the registry table with stale entries.
     public static final String REPLICATION_STATUS_TABLE_NAME = "LogReplicationStatus";
+
+    // /-------Constants specific to the RoutingQueue Model --------/
+
+    // Name of shared queue on the sender where log entry sync updates are placed transactionally
+    public static final String LOG_ENTRY_SYNC_QUEUE_NAME_SENDER = "LRQ_Send_LogEntries";
+
+    // Prefix of destination specific stream tag applied to entries on LOG_ENTRY_SYNC_QUEUE_NAME_SENDER
+    public static final String LOG_ENTRY_SYNC_QUEUE_TAG_SENDER_PREFIX = "lrq_logentry_";
+
+    // Name of shared queue on the sender where snapshot sync updates are placed
+    public static final String SNAPSHOT_SYNC_QUEUE_NAME_SENDER = "LRQ_Send_SnapSync";
+
+    // Prefix of destination specific stream tag applied to entries on SNAPSHOT_SYNC_QUEUE_NAME_SENDER
+    public static final String SNAPSHOT_SYNC_QUEUE_TAG_SENDER_PREFIX = "lrq_snapsync_";
+
+    // Prefix of the name of queue as it will appear on the receiver after replicated.  The suffix will be the Sender
+    // (Source) cluster id followed by the client name
+    public static final String REPLICATED_RECV_Q_PREFIX = "LRQ_Recv_";
+
+    // Stream tag applied to the replicated queue on the receiver
+    public static final String REPLICATED_QUEUE_TAG = "lrq_recv";
+
+    public static final String SNAP_SYNC_TXN_ENVELOPE_TABLE = "LRQ_SnapSyncHeader";
+
+    // ---- End RoutingQueue Model constants -------/
+
+    public static final UUID lrLogEntrySendQId = CorfuRuntime.getStreamID(TableRegistry
+            .getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, LOG_ENTRY_SYNC_QUEUE_NAME_SENDER));
+    public static final UUID lrFullSyncSendQId = CorfuRuntime.getStreamID(TableRegistry
+            .getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, SNAPSHOT_SYNC_QUEUE_NAME_SENDER));
+
+    public static final UUID lrSnapSyncTxnEnvelopeStreamId = CorfuRuntime.getStreamID(TableRegistry
+            .getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, SNAP_SYNC_TXN_ENVELOPE_TABLE));
+
+    public static boolean skipCheckpointFor(UUID streamId) {
+        return streamId.equals(lrLogEntrySendQId) || streamId.equals(lrFullSyncSendQId)
+                || streamId.equals(lrSnapSyncTxnEnvelopeStreamId);
+    }
 
     private LogReplicationUtils() { }
 
@@ -188,7 +228,7 @@ public final class LogReplicationUtils {
                         List<CorfuStoreEntry<LogReplicationSession, ReplicationStatus, Message>> entries =
                                 txnContext.executeQuery(replicationStatusTable,
                                         entry -> entry.getKey().getSubscriber().getModel()
-                                                .equals(LogReplication.ReplicationModel.LOGICAL_GROUPS) &&
+                                                .equals(ReplicationModel.LOGICAL_GROUPS) &&
                                                 Objects.equals(entry.getKey().getSubscriber().getClientName(),
                                                         listener.getClientName()));
 

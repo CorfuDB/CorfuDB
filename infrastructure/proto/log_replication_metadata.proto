@@ -119,20 +119,13 @@ message ReplicationEventKey {
   string key = 1;
 }
 
-/*------- Key Schema V2 ----------*/
-message ReplicationEventInfoKey {
-  org.corfudb.runtime.LogReplicationSession session = 1;
-}
-
 message ReplicationEvent {
   option (org.corfudb.runtime.table_schema).stream_tag = "log_replication";
 
   enum ReplicationEventType {
     FORCE_SNAPSHOT_SYNC = 0;
-    UPGRADE_COMPLETION_FORCE_SNAPSHOT_SYNC = 1; // Intent to queue force sync for all sessions
   }
   string clusterId = 1;
   string eventId = 2;
   ReplicationEventType type = 3;
-  google.protobuf.Timestamp eventTimestamp = 4;
 }

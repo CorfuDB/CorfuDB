@@ -6,6 +6,7 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.infrastructure.logreplication.replication.send.SnapshotSender;
+import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.SyncStatus;
 import org.corfudb.runtime.LogReplication.SyncType;
 
@@ -127,6 +128,9 @@ public class InSnapshotSyncState implements LogReplicationState {
                     // Retain the 'forced' information in the subsequent snapshot syncs
                     ((InSnapshotSyncState)inSnapshotSyncState).setForcedSnapshotSync(event.getMetadata().isForcedSnapshotSync());
                     snapshotSender.reset();
+                    if (event.getMetadata().isTimeoutException()) {
+                        requestSnapshotSyncDataForRoutingQModel();
+                    }
                     fsm.getAckReader().markSnapshotSyncInfoOngoing(forcedSnapshotSync, transitionSyncId);
                     return inSnapshotSyncState;
                 }
@@ -162,6 +166,7 @@ public class InSnapshotSyncState implements LogReplicationState {
             if (from != this) {
                 fsm.getAckReader().setSyncType(SyncType.SNAPSHOT);
                 snapshotSender.reset();
+                requestSnapshotSyncDataForRoutingQModel();
                 fsm.getAckReader().markSnapshotSyncInfoOngoing(forcedSnapshotSync, transitionSyncId);
                 snapshotSyncTransferTimerSample = MeterRegistryProvider.getInstance().map(Timer::start);
             }
@@ -169,6 +174,13 @@ public class InSnapshotSyncState implements LogReplicationState {
                     .submit(() -> snapshotSender.transmit(transitionSyncId, forcedSnapshotSync));
         } catch (Throwable t) {
             log.error("Error on entry of InSnapshotSyncState.", t);
+        }
+    }
+
+    private void requestSnapshotSyncDataForRoutingQModel() {
+        if (fsm.getSession().getSubscriber().getModel() == LogReplication.ReplicationModel.ROUTING_QUEUES) {
+            // TODO v2: Evaluate if a new sync id should be generated here
+            snapshotSender.requestClientForSnapshotData(transitionSyncId);
         }
     }
 

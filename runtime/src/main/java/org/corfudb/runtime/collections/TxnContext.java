@@ -2,11 +2,14 @@ package org.corfudb.runtime.collections;
 
 import com.google.protobuf.Message;
 import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
+import org.corfudb.runtime.Queue;
 import org.corfudb.runtime.exceptions.TransactionAlreadyStartedException;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.object.transactions.Transaction;
@@ -24,14 +27,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.function.BiFunction;
-import java.util.function.BiPredicate;
-import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
-
-import static org.corfudb.runtime.collections.QueryOptions.DEFAULT_OPTIONS;
 
 /**
  * TxnContext is the access layer for binding all the CorfuStore CRUD operations.
@@ -42,8 +39,9 @@ import static org.corfudb.runtime.collections.QueryOptions.DEFAULT_OPTIONS;
  * Created by hisundar, @wenbinzhu, @pankti-m on 2020-09-15
  */
 @Slf4j
-public class TxnContext implements AutoCloseable {
-
+public class TxnContext
+        extends ReadTransaction
+        implements TableStringApi, CommitApi, AutoCloseable {
     private final ObjectsView objectsView;
     private final TableRegistry tableRegistry;
     @Getter
@@ -55,6 +53,10 @@ public class TxnContext implements AutoCloseable {
     private boolean iDidNotStartCorfuTxn;
 
     private final Map<UUID, Table> tablesUpdated;
+
+    @Getter
+    @Setter
+    private long txnIdForQueues = 0;
 
     /**
      * Creates a new TxnContext.
@@ -432,6 +434,51 @@ public class TxnContext implements AutoCloseable {
 
     // ************************** Queue API ***************************************/
 
+    class QueueEntryAddressGetter<V extends Message, M extends Message>
+            implements TransactionalContext.PreCommitListener {
+        final int smrIndexOfValue = 1;
+        public QueueEntryAddressGetter() {}
+        /**
+         * If we are in a transaction, determine the commit address and fix it up in
+         * the queue entry's metadata.
+         * @param tokenResponse - the sequencer's token response returned.
+         */
+        @Override
+        public void preCommitCallback(TokenResponse tokenResponse) {
+            tablesUpdated.entrySet().forEach(e -> {
+                if (e.getValue() != null && e.getValue().getGuidGenerator() == null) {
+                    return; // Transaction has an update to a table which is not a Queue, so ignore.
+                }
+                TransactionalContext.getRootContext().getWriteSetInfo().getWriteSet().getSMRUpdates(e.getKey())
+                        .forEach(smrEntry -> {
+                            if (smrEntry.getSMRArguments().length > smrIndexOfValue) {
+                                CorfuRecord<V, M> queueRecord =
+                                        (CorfuRecord<V, M>) smrEntry.getSMRArguments()[smrIndexOfValue];
+                                queueRecord.setMetadata((M)
+                                        Queue.CorfuQueueMetadataMsg
+                                                .newBuilder().setTxSequence(tokenResponse.getSequence())
+                                                .build());
+                            }
+                        });
+            });
+        }
+    }
+
+    public <K extends Message, V extends Message, M extends Message>
+    K logUpdateEnqueue(@Nonnull UUID queueUUID,
+                       @Nonnull final V value, List<UUID> streamTags, CorfuStore corfuStore) {
+        if (TransactionalContext.getRootContext().getPreCommitListeners().isEmpty()) {
+            TransactionalContext.getCurrentContext().addPreCommitListener(new QueueEntryAddressGetter<>());
+        }
+
+        K ret = Table.logUpdateEnqueue(queueUUID, value, streamTags, corfuStore);
+        // Table object is not instantiated in this path. The precommit-listener will know to run for updates where
+        // table object is null or when the table object has a guid generator.
+        tablesUpdated.put(queueUUID, null);
+        return ret;
+    }
+
+
     /**
      * Enqueue a message object into the CorfuQueue.
      *
@@ -447,32 +494,17 @@ public class TxnContext implements AutoCloseable {
     K enqueue(@Nonnull Table<K, V, M> table,
               @Nonnull final V record) {
         validateWrite(table);
+        if (TransactionalContext.getRootContext().getPreCommitListeners().isEmpty()) {
+            TransactionalContext.getCurrentContext().addPreCommitListener(new QueueEntryAddressGetter());
+        }
+
+        validateWrite(table);
         K ret = table.enqueue(record);
         tablesUpdated.putIfAbsent(table.getStreamUUID(), table);
         return ret;
     }
 
     // *************************** READ API *****************************************
-
-    /**
-     * get the full record from the table given a key.
-     * If this is invoked on a Read-Your-Writes transaction, it will result in starting a corfu transaction
-     * and applying all the updates done so far.
-     *
-     * @param table Table object to retrieve the record from
-     * @param key   Key of the record.
-     * @return CorfuStoreEntry<Key, Value, Metadata> instance.
-     */
-    @Nonnull
-    public <K extends Message, V extends Message, M extends Message>
-    CorfuStoreEntry<K, V, M> getRecord(@Nonnull Table<K, V, M> table,
-                                       @Nonnull final K key) {
-        CorfuRecord<V, M> record = table.get(key);
-        if (record == null) {
-            return new CorfuStoreEntry<K, V, M>(key, null, null);
-        }
-        return new CorfuStoreEntry<K, V, M>(key, record.getPayload(), record.getMetadata());
-    }
 
     /**
      * get the full record from the table given a key.
@@ -488,25 +520,6 @@ public class TxnContext implements AutoCloseable {
     CorfuStoreEntry getRecord(@Nonnull final String tableName,
                               @Nonnull final K key) {
         return this.getRecord(getTable(tableName), key);
-    }
-
-    /**
-     * Query by a secondary index.
-     *
-     * @param table     Table object.
-     * @param indexName Index name. In case of protobuf-defined secondary index it is the field name.
-     * @param indexKey  Key to query.
-     * @param <K>       Type of Key.
-     * @param <V>       Type of Value.
-     * @param <I>       Type of index/secondary key.
-     * @return Result of the query.
-     */
-    @Nonnull
-    public <K extends Message, V extends Message, M extends Message, I>
-    List<CorfuStoreEntry<K, V, M>> getByIndex(@Nonnull Table<K, V, M> table,
-                                              @Nonnull final String indexName,
-                                              @Nonnull final I indexKey) {
-        return table.getByIndex(indexName, indexKey);
     }
 
     /**
@@ -531,44 +544,11 @@ public class TxnContext implements AutoCloseable {
     /**
      * Gets the count of records in the table at a particular timestamp.
      *
-     * @param table - the table whose count is requested.
-     * @return Count of records.
-     */
-    public <K extends Message, V extends Message, M extends Message>
-    int count(@Nonnull final Table<K, V, M> table) {
-        return table.count();
-    }
-
-    /**
-     * Gets the count of records in the table at a particular timestamp.
-     *
      * @param tableName - the namespace+table name of the table.
      * @return Count of records.
      */
     public int count(@Nonnull final String tableName) {
         return this.count(this.getTable(tableName));
-    }
-
-    /**
-     * Gets all the keys of a table.
-     *
-     * @param table - the table whose keys are requested.
-     * @return keyset of the table
-     */
-    public <K extends Message, V extends Message, M extends Message>
-    Set<K> keySet(@Nonnull final Table<K, V, M> table) {
-        return table.keySet();
-    }
-
-    /**
-     * Gets all entries in the table in form of a stream.
-     *
-     * @param table - the table whose entrires are requested.
-     * @return stream of entries in the table
-     */
-    public <K extends Message, V extends Message, M extends Message>
-    Stream<CorfuStoreEntry<K, V, M>> entryStream(@Nonnull final Table<K, V, M> table) {
-        return table.entryStream();
     }
 
     /**
@@ -585,19 +565,6 @@ public class TxnContext implements AutoCloseable {
     /**
      * Scan and filter by entry.
      *
-     * @param table          Table< K, V, M > object on which the scan must be done.
-     * @param entryPredicate Predicate to filter the entries.
-     * @return Collection of filtered entries.
-     */
-    public <K extends Message, V extends Message, M extends Message>
-    List<CorfuStoreEntry<K, V, M>> executeQuery(@Nonnull final Table<K, V, M> table,
-                                                @Nonnull final Predicate<CorfuStoreEntry<K, V, M>> entryPredicate) {
-        return table.scanAndFilterByEntry(entryPredicate);
-    }
-
-    /**
-     * Scan and filter by entry.
-     *
      * @param tableName      fullyQualified tablename to filter the entries on.
      * @param entryPredicate Predicate to filter the entries.
      * @return Collection of filtered entries.
@@ -608,94 +575,6 @@ public class TxnContext implements AutoCloseable {
         return this.executeQuery(this.getTable(tableName), entryPredicate);
     }
 
-    /**
-     * Execute a join of 2 tables.
-     *
-     * @param table1         First table in the join query.
-     * @param table2         Second table to join with the first.
-     * @param query1         Predicate to filter entries in table 1.
-     * @param query2         Predicate to filter entries in table 2.
-     * @param joinPredicate  Predicate to filter entries during the join.
-     * @param joinFunction   Function to merge entries.
-     * @param joinProjection Project the merged entries.
-     * @param <V1>           Type of Value in table 1.
-     * @param <V2>           Type of Value in table 2.
-     * @param <T>            Type of resultant value after merging type V and type W.
-     * @param <U>            Type of value projected from T.
-     * @return Result of query.
-     */
-    @Nonnull
-    public <K1 extends Message, K2 extends Message,
-            V1 extends Message, V2 extends Message,
-            M1 extends Message, M2 extends Message, T, U>
-    QueryResult<U> executeJoinQuery(
-            @Nonnull final Table<K1, V1, M1> table1,
-            @Nonnull final Table<K2, V2, M2> table2,
-            @Nonnull final Predicate<CorfuStoreEntry<K1, V1, M1>> query1,
-            @Nonnull final Predicate<CorfuStoreEntry<K2, V2, M2>> query2,
-            @Nonnull final BiPredicate<V1, V2> joinPredicate,
-            @Nonnull final BiFunction<V1, V2, T> joinFunction,
-            final Function<T, U> joinProjection) {
-        return executeJoinQuery(table1, table2, query1, query2,
-                DEFAULT_OPTIONS, DEFAULT_OPTIONS, joinPredicate,
-                joinFunction, joinProjection);
-    }
-
-    /**
-     * Execute a join of 2 tables.
-     *
-     * @param table1         First table object.
-     * @param table2         Second table to join with the first one.
-     * @param query1         Predicate to filter entries in table 1.
-     * @param query2         Predicate to filter entries in table 2.
-     * @param queryOptions1  Query options to transform table 1 filtered values.
-     * @param queryOptions2  Query options to transform table 2 filtered values.
-     * @param joinPredicate  Predicate to filter entries during the join.
-     * @param joinFunction   Function to merge entries.
-     * @param joinProjection Project the merged entries.
-     * @param <V1>           Type of Value in table 1.
-     * @param <V2>           Type of Value in table 2.
-     * @param <R>            Type of projected values from table 1 from type V.
-     * @param <S>            Type of projected values from table 2 from type W.
-     * @param <T>            Type of resultant value after merging type R and type S.
-     * @param <U>            Type of value projected from T.
-     * @return Result of query.
-     */
-    @Nonnull
-    public <K1 extends Message, K2 extends Message,
-            V1 extends Message, V2 extends Message,
-            M1 extends Message, M2 extends Message,
-            R, S, T, U>
-    QueryResult<U> executeJoinQuery(
-            @Nonnull final Table<K1, V1, M1> table1,
-            @Nonnull final Table<K2, V2, M2> table2,
-            @Nonnull final Predicate<CorfuStoreEntry<K1, V1, M1>> query1,
-            @Nonnull final Predicate<CorfuStoreEntry<K2, V2, M2>> query2,
-            @Nonnull final QueryOptions<K1, V1, M1, R> queryOptions1,
-            @Nonnull final QueryOptions<K2, V2, M2, S> queryOptions2,
-            @Nonnull final BiPredicate<R, S> joinPredicate,
-            @Nonnull final BiFunction<R, S, T> joinFunction,
-            final Function<T, U> joinProjection) {
-        return JoinQuery.executeJoinQuery(table1, table2,
-                query1, query2, queryOptions1,
-                queryOptions2, joinPredicate, joinFunction, joinProjection);
-    }
-
-    /**
-     * Test if a record exists in a table.
-     *
-     * @param table - table object to test if record exists
-     * @param key   - key or identifier to test for existence.
-     * @param <K>   - type of the key
-     * @param <V>   - type of payload or value
-     * @param <M>   - type of metadata
-     * @return true if record exists and false if record does not exist.
-     */
-    public <K extends Message, V extends Message, M extends Message>
-    boolean isExists(@Nonnull Table<K, V, M> table, @Nonnull final K key) {
-        CorfuStoreEntry<K, V, M> record = getRecord(table, key);
-        return record.getPayload() != null;
-    }
 
     /**
      * Variant of isExists that works on tableName instead of the table object.
@@ -710,19 +589,6 @@ public class TxnContext implements AutoCloseable {
     public <K extends Message, V extends Message, M extends Message>
     boolean isExists(@Nonnull String tableName, @Nonnull final K key) {
         return this.isExists(getTable(tableName), key);
-    }
-
-    /**
-     * Return all the Queue entries ordered by their parent transaction.
-     * <p>
-     * Note that the key in these entries would be the CorfuQueueIdMsg.
-     *
-     * @param table Table< K, V, M > object aka queue on which the scan must be done.
-     * @return Collection of filtered entries.
-     */
-    public <K extends Message, V extends Message, M extends Message>
-    List<Table.CorfuQueueRecord> entryList(@Nonnull final Table<K, V, M> table) {
-        return table.entryList();
     }
 
     /**
@@ -801,6 +667,11 @@ public class TxnContext implements AutoCloseable {
         MultiObjectSMREntry writeSet = rootContext.getWriteSetInfo().getWriteSet();
         final Map<String, List<CorfuStreamEntry>> mutations = new HashMap<>(tablesUpdated.size());
         tablesUpdated.forEach((uuid, table) -> {
+            // logUpdateEnqueue method doesn't need a table instance and hence 'table' can be null. The API is used only by
+            // LR for the ROUTING_QUEUE model.
+            if (table == null) {
+                return;
+            }
             List<CorfuStreamEntry> writesInTable = writeSet.getSMRUpdates(uuid).stream()
                     .map(CorfuStreamEntry::fromSMREntry).collect(Collectors.toList());
             mutations.put(table.getFullyQualifiedTableName(), writesInTable);

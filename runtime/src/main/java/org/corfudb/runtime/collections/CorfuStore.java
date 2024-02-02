@@ -5,17 +5,21 @@ import com.google.protobuf.Message;
 import io.micrometer.core.instrument.Timer;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
+import org.corfudb.runtime.LiteRoutingQueueListener;
 import org.corfudb.runtime.LogReplicationListener;
 import org.corfudb.runtime.LogReplicationUtils;
 import org.corfudb.runtime.Queue;
 import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.view.CorfuGuidGenerator;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.Utils;
@@ -23,6 +27,8 @@ import org.corfudb.util.Utils;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.lang.reflect.InvocationTargetException;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -30,6 +36,10 @@ import java.util.NavigableSet;
 import java.util.Optional;
 import java.util.TreeSet;
 import java.util.UUID;
+
+import static org.corfudb.runtime.LogReplicationUtils.REPLICATED_QUEUE_TAG;
+import static org.corfudb.runtime.collections.ScopedTransaction.newScopedTransaction;
+import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 /**
  * CorfuStore is a protobuf API layer that provides all the features of CorfuDB.
@@ -47,6 +57,12 @@ public class CorfuStore {
     private final CorfuRuntime runtime;
 
     private final CorfuStoreMetrics corfuStoreMetrics;
+
+    /** Until the first request to access this guid generator is made,
+     *  Do not attempt to instantiate the guid generator.
+     */
+    @Getter(lazy = true)
+    private final CorfuGuidGenerator corfuGuidGenerator = new CorfuGuidGenerator(runtime);
 
     /**
      * Creates a new CorfuStore.
@@ -74,23 +90,53 @@ public class CorfuStore {
     }
 
     /**
-     * Creates and registers a table.
-     * A table needs to be registered before it is used.
-     *
-     * @param namespace    Namespace of the table.
-     * @param tableName    Table name.
-     * @param kClass       Class of the Key Model.
-     * @param vClass       Class of the Value Model.
-     * @param mClass       Class of the Metadata Model.
-     * @param tableOptions Table options.
-     * @param <K>          Key type.
-     * @param <V>          Value type.
-     * @param <M>          Type of Metadata.
-     * @return Table instance.
-     * @throws NoSuchMethodException     Thrown if key/value class are not protobuf classes.
-     * @throws InvocationTargetException Thrown if key/value class are not protobuf classes.
-     * @throws IllegalAccessException    Thrown if key/value class are not protobuf classes.
+     * Subscribe to the routing queue notifications arriving from a remote cluster.
      */
+    public void subscribeRoutingQListener(@Nonnull LiteRoutingQueueListener routingQueueListener) {
+        Timestamp ts = routingQueueListener.performFullSync();
+        this.subscribeListener(routingQueueListener, CORFU_SYSTEM_NAMESPACE, REPLICATED_QUEUE_TAG,
+                Arrays.asList(LogReplicationUtils.REPLICATED_RECV_Q_PREFIX + routingQueueListener.getSourceSiteId() +
+                    "_" + routingQueueListener.getClientName()), ts);
+    }
+
+    public static <K extends Message, V extends Message, M extends Message>
+    ScopedTransaction snapshotFederatedTables(String namespace, CorfuRuntime runtime) {
+        ArrayList<Table> federatedTables = new ArrayList<>();
+        runtime.getTableRegistry().getAllOpenTables().forEach(t -> {
+            String tableNameWithoutNs = StringUtils.substringAfter(t.getFullyQualifiedTableName(),
+                    t.getNamespace() + "$");
+            CorfuStoreMetadata.TableName tableName = CorfuStoreMetadata.TableName.newBuilder()
+                    .setNamespace(t.getNamespace())
+                    .setTableName(tableNameWithoutNs).build();
+            CorfuRecord<CorfuStoreMetadata.TableDescriptors, CorfuStoreMetadata.TableMetadata> tableRecord =
+                    runtime.getTableRegistry().getRegistryTable().get(tableName);
+            if (tableRecord.getMetadata().getTableOptions().getIsFederated()) {
+                federatedTables.add(t);
+            }
+        });
+        return newScopedTransaction(runtime, namespace,
+                IsolationLevel.snapshot(), federatedTables.toArray(new Table[federatedTables.size()]));
+    }
+
+
+        /**
+         * Creates and registers a table.
+         * A table needs to be registered before it is used.
+         *
+         * @param namespace    Namespace of the table.
+         * @param tableName    Table name.
+         * @param kClass       Class of the Key Model.
+         * @param vClass       Class of the Value Model.
+         * @param mClass       Class of the Metadata Model.
+         * @param tableOptions Table options.
+         * @param <K>          Key type.
+         * @param <V>          Value type.
+         * @param <M>          Type of Metadata.
+         * @return Table instance.
+         * @throws NoSuchMethodException     Thrown if key/value class are not protobuf classes.
+         * @throws InvocationTargetException Thrown if key/value class are not protobuf classes.
+         * @throws IllegalAccessException    Thrown if key/value class are not protobuf classes.
+         */
     @Nonnull
     public <K extends Message, V extends Message, M extends Message>
     Table<K, V, M> openTable(@Nonnull final String namespace,
@@ -214,6 +260,17 @@ public class CorfuStore {
                 namespace,
                 isolationLevel,
                 false);
+    }
+
+    @Nonnull
+    public ScopedTransaction scopedTxn(
+            @Nonnull final String namespace, IsolationLevel isolationLevel,
+            Table<?, ?, ?>... tables) {
+        return newScopedTransaction(
+                this.runtime,
+                namespace,
+                isolationLevel,
+                tables);
     }
 
     /**
@@ -408,9 +465,9 @@ public class CorfuStore {
      * Note: If memory is a consideration, consider using the other version of this API which takes a custom buffer
      * size for updates.
      *
-     * @param streamListener  log replication client listener
-     * @param namespace       namespace of the replicated tables
-     * @param streamTag       stream tag of the replicated tables
+     * @param streamListener log replication client listener
+     * @param namespace      namespace of the replicated tables
+     * @param streamTag      stream tag of the replicated tables
      */
     public void subscribeLogReplicationListener(@Nonnull LogReplicationListener streamListener,
                                                 @Nonnull String namespace, @Nonnull String streamTag) {

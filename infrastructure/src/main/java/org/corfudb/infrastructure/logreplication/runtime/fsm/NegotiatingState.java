@@ -214,8 +214,7 @@ public class NegotiatingState implements LogReplicationRuntimeState {
          */
         if (negotiationResponse.getSnapshotStart() == Address.NON_ADDRESS) {
             log.info("No snapshot available in remote. Initiate SNAPSHOT sync to {}", fsm.getSession());
-            fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.NEGOTIATION_COMPLETE,
-                    new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_SYNC_REQUEST)));
+            startSnapshotSync();
             return;
         }
 
@@ -233,8 +232,7 @@ public class NegotiatingState implements LogReplicationRuntimeState {
         if (negotiationResponse.getSnapshotStart() > negotiationResponse.getSnapshotTransferred()) {
             log.info("Previous Snapshot Sync transfer did not complete. Restart SNAPSHOT sync, snapshotStart={}, snapshotTransferred={}",
                     negotiationResponse.getSnapshotStart(), negotiationResponse.getSnapshotTransferred());
-            fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.NEGOTIATION_COMPLETE,
-                    new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_SYNC_REQUEST)));
+            startSnapshotSync();
             return;
         }
 
@@ -299,8 +297,7 @@ public class NegotiatingState implements LogReplicationRuntimeState {
                 //  in the the transaction stream.
                 log.info(" Start SNAPSHOT sync. LOG ENTRY Sync cannot resume, address space has been trimmed." +
                         "logHead={}, lastLogProcessed={}", logHead, negotiationResponse.getLastLogEntryTimestamp());
-                fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.NEGOTIATION_COMPLETE,
-                        new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_SYNC_REQUEST)));
+                startSnapshotSync();
             }
 
             return;
@@ -315,5 +312,10 @@ public class NegotiatingState implements LogReplicationRuntimeState {
                 negotiationResponse);
         fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.NEGOTIATION_COMPLETE,
                 new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_SYNC_REQUEST)));
+    }
+
+    private void startSnapshotSync() {
+        fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.NEGOTIATION_COMPLETE,
+            new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_SYNC_REQUEST)));
     }
 }

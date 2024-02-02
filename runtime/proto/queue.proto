@@ -15,3 +15,65 @@ message CorfuGuidMsg {
 message CorfuQueueMetadataMsg {
     int64 txSequence = 1;
 }
+
+enum ReplicationType {
+    NONE = 0;
+    LOG_ENTRY_SYNC = 1; // This entry was made during a delta sync
+    SNAPSHOT_SYNC = 2; // This entry was made during a snapshot sync
+    LAST_SNAPSHOT_SYNC_ENTRY = 3; // Used for Routing Queue Model only.  Last entry denoting the end of a snapshot sync
+}
+
+enum OperationType {
+    INVALID = 0;
+    PUT = 1;
+    REMOVE = 2;
+}
+
+message DataLocatorMsg {
+
+    // Name of the table that will be modified.
+    string tableName = 1;
+
+    // Serialized form of the keys of the table that will be modified.
+    bytes key_serialized = 2;
+}
+
+// This message forms the value part of the payload used for LogReplication over Routing Queues
+message RoutingTableEntryMsg {
+    // Source cluster id that is sending messages
+    string source_cluster_id = 1;
+
+    // List of unique destinations from topology.
+    repeated string destinations = 2;
+
+    // Specify the replication type for routing queue model.
+    ReplicationType replication_type = 3;
+
+    // The actual payload carrying data that will be replicated to the destinations specified.
+    bytes opaque_payload = 4;
+
+    // Serialized metadata field for certain types
+    bytes opaque_metadata = 5;
+
+    // Contains the table name and serialized keys that will be updated of that table
+    DataLocatorMsg dataLocator = 6;
+
+    // Operation type that marks the table content is being created or removed.
+    OperationType operation_type = 7;
+}
+
+// One entry is placed in this stream once per full sync transaction batch from client.
+// This helps identify which full sync request the client is responding to and helps ignore
+// older full sync messages.
+message RoutingQSnapSyncHeaderKeyMsg {
+    // Stamp every full snapshot sync request with a unique request id from lr server.
+    int64 snap_sync_request_id = 1;
+    // Destination corresponding to this snapshot sync.
+    string destination = 2;
+}
+
+message RoutingQSnapSyncHeaderMsg {
+    // This is the response that the Client started its full sync read snapshot on.
+    int64 snapshot_start_timestamp = 3;
+    // Marker message denoting the end of a snapshot sync is the same value in negative
+}

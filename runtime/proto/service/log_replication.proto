@@ -177,3 +177,24 @@ message ReplicationInfo {
 message ReverseReplicateMsg {
   string sinkLeaderNodeId = 1;
 }
+
+/*------- Log Replication Event Table Schema ----------*/
+
+message ReplicationEventInfoKey {
+  org.corfudb.runtime.LogReplicationSession session = 1;
+}
+
+message ReplicationEvent {
+  option (org.corfudb.runtime.table_schema).stream_tag = "log_replication";
+
+  enum ReplicationEventType {
+    FORCE_SNAPSHOT_SYNC = 0;
+    UPGRADE_COMPLETION_FORCE_SNAPSHOT_SYNC = 1; // Intent to queue force sync for all full table sessions
+    SERVER_REQUESTED_SNAPSHOT_SYNC = 2;
+    CLIENT_REQUESTED_FORCED_SNAPSHOT_SYNC = 3;
+  }
+  string clusterId = 1;
+  string eventId = 2;
+  ReplicationEventType type = 3;
+  google.protobuf.Timestamp eventTimestamp = 4;
+}

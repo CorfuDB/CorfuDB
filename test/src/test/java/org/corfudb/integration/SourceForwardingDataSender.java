@@ -13,9 +13,8 @@ import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.Re
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationSinkManager;
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationSourceManager;
-import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationError;
 import org.corfudb.infrastructure.logreplication.replication.fsm.ObservableAckMsg;
-import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationError;
 import org.corfudb.integration.DefaultDataControl.DefaultDataControlConfig;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplication;
@@ -81,6 +80,8 @@ public class SourceForwardingDataSender implements DataSender {
 
     private int msgCnt = 0;
 
+    private int numTimesLastAckDropped = 0;
+
     // Represents the number of cycles for which we reply that snapshot sync apply has not completed
     private int delayedApplyCycles;
     private int countDelayedApplyCycles = 0;
@@ -106,20 +107,17 @@ public class SourceForwardingDataSender implements DataSender {
     private int numStartMsgsDropped;
 
     @SneakyThrows
-    public SourceForwardingDataSender(String destinationEndpoint, LogReplicationIT.TestConfig testConfig,
+    public SourceForwardingDataSender(LogReplicationIT.TestConfig testConfig,
                                       LogReplicationMetadataManager metadataManager,
                                       LogReplicationIT.TransitionSource function,
-                                      LogReplicationContext context) {
-        this.runtime = CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder().build())
-                .parseConfigurationString(destinationEndpoint)
-                .connect();
+                                      LogReplicationContext context, CorfuRuntime sinkRuntime) {
+        this.runtime = sinkRuntime;
         this.destinationDataSender = new AckDataSender();
         this.destinationDataControl = new DefaultDataControl(new DefaultDataControlConfig(
             false, 0));
 
         // TODO pankti: This test-only constructor can be removed
-        this.destinationLogReplicationManager = new LogReplicationSinkManager(runtime.getLayoutServers().get(0),
-            metadataManager, session, context);
+        this.destinationLogReplicationManager = new LogReplicationSinkManager(metadataManager, session, context);
 
         this.ifDropMsg = testConfig.getDropMessageLevel();
         this.delayedApplyCycles = testConfig.getDelayedApplyCycles();
@@ -128,7 +126,7 @@ public class SourceForwardingDataSender implements DataSender {
         this.dropACKLevel = testConfig.getDropAckLevel();
         this.callbackFunction = function;
         this.lastAckDropped = Long.MAX_VALUE;
-        this.sinkCorfuStore = new CorfuStore(runtime);
+        this.sinkCorfuStore = new CorfuStore(sinkRuntime);
         sinkCorfuStore.openTable(LogReplicationMetadataManager.NAMESPACE,
                 REPLICATION_STATUS_TABLE,
                 LogReplicationSession.class,
@@ -185,6 +183,13 @@ public class SourceForwardingDataSender implements DataSender {
         //check is_data_consistent flag is set to false on snapshot_start
         if (message.getMetadata().getEntryType().equals(LogReplicationEntryType.SNAPSHOT_START)) {
             checkStatusOnSink(false);
+        }
+
+        if (dropACKLevel == 3 && message.getMetadata().getEntryType() == LogReplicationEntryType.SNAPSHOT_END &&
+                numTimesLastAckDropped < 2) {
+            log.info("****** Drop msg for snapshot sync, entry type {}", message.getMetadata().getEntryType());
+            ++numTimesLastAckDropped;
+            return cf;
         }
 
         if (dropAck(ack, message)) {
@@ -309,7 +314,7 @@ public class SourceForwardingDataSender implements DataSender {
     }
 
     private boolean dropAck(LogReplicationEntryMsg ack, LogReplicationEntryMsg message){
-        if (dropACKLevel > 0 && msgCnt == droppingAcksNum) {
+        if (dropACKLevel > 0 && dropACKLevel < 3 && msgCnt == droppingAcksNum) {
             log.info("****** Drop ACK {} for log entry ts {}", ack, message.getMetadata().getTimestamp());
             if (dropACKLevel == DROP_MSG_ONCE) {
                 droppingAcksNum += DROP_INCREMENT;

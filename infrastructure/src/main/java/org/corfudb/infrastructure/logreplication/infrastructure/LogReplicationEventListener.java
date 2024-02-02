@@ -3,11 +3,9 @@ package org.corfudb.infrastructure.logreplication.infrastructure;
 import com.google.protobuf.Message;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.DiscoveryServiceEvent.DiscoveryServiceEventType;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEventInfoKey;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEvent;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEvent.ReplicationEventType;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStoreEntry;
@@ -63,18 +61,21 @@ public final class LogReplicationEventListener implements StreamListener {
         // Generate a discovery event and put it into the discovery service event queue.
         for (List<CorfuStreamEntry> entryList : results.getEntries().values()) {
             for (CorfuStreamEntry entry : entryList) {
-                if (entry.getOperation() == CorfuStreamEntry.OperationType.CLEAR) {
-                    log.warn("LREventListener ignoring a CLEAR operation");
+                if (entry.getOperation() == CorfuStreamEntry.OperationType.CLEAR ||
+                        entry.getOperation() == CorfuStreamEntry.OperationType.DELETE) {
+                    log.warn("LREventListener ignoring a {} operation", entry.getOperation());
                     continue;
                 }
-                ReplicationEventInfoKey key = (ReplicationEventInfoKey) entry.getKey();
-                ReplicationEvent event = (ReplicationEvent) entry.getPayload();
+                LogReplication.ReplicationEventInfoKey key = (LogReplication.ReplicationEventInfoKey) entry.getKey();
+                LogReplication.ReplicationEvent event = (LogReplication.ReplicationEvent) entry.getPayload();
                 log.info("Received event :: id={}, type={}, session={}, ts={}", event.getEventId(), event.getType(),
                     key.getSession(), event.getEventTimestamp());
-                if (event.getType().equals(ReplicationEventType.FORCE_SNAPSHOT_SYNC)) {
+                if (event.getType().equals(LogReplication.ReplicationEvent.ReplicationEventType.FORCE_SNAPSHOT_SYNC) ||
+                        event.getType().equals(LogReplication.ReplicationEvent.ReplicationEventType.CLIENT_REQUESTED_FORCED_SNAPSHOT_SYNC)) {
                     discoveryService.input(new DiscoveryServiceEvent(DiscoveryServiceEventType.ENFORCE_SNAPSHOT_SYNC,
                         key.getSession(), event.getEventId()));
-                } else if (event.getType().equals(ReplicationEventType.UPGRADE_COMPLETION_FORCE_SNAPSHOT_SYNC)) {
+                } else if (event.getType().equals(LogReplication.ReplicationEvent.ReplicationEventType.
+                        UPGRADE_COMPLETION_FORCE_SNAPSHOT_SYNC)) {
                     // Note: This block will not get executed in the first version of LRv2 because in this version,
                     // LR does not start until all nodes in the cluster are on the same version.  So the event to
                     // trigger a forced snapshot sync will not be received as an update on the listener.
@@ -95,7 +96,7 @@ public final class LogReplicationEventListener implements StreamListener {
      * Read the event table to process any events written when LR was not running.
      */
     private void processPendingRequests() {
-        List<CorfuStoreEntry<ReplicationEventInfoKey, ReplicationEvent, Message>> pendingEvents =
+        List<CorfuStoreEntry<LogReplication.ReplicationEventInfoKey, LogReplication.ReplicationEvent, Message>> pendingEvents =
             discoveryService.getSessionManager().getMetadataManager().getReplicationEvents();
 
         // TODO v2: Currently, this method runs on LR startup and processes events of type
@@ -103,14 +104,14 @@ public final class LogReplicationEventListener implements StreamListener {
         //  events handled by onNext(), this logic can be abstracted out to a common method which can be shared with
         //  onNext()
         for (CorfuStoreEntry event : pendingEvents) {
-            if (((ReplicationEvent)event.getPayload()).getType().equals(
-                    ReplicationEventType.UPGRADE_COMPLETION_FORCE_SNAPSHOT_SYNC)) {
-                triggerForcedSnapshotSyncForAllSessions((ReplicationEvent)event.getPayload());
+            if (((LogReplication.ReplicationEvent)event.getPayload()).getType().equals(
+                    LogReplication.ReplicationEvent.ReplicationEventType.UPGRADE_COMPLETION_FORCE_SNAPSHOT_SYNC)) {
+                triggerForcedSnapshotSyncForAllSessions((LogReplication.ReplicationEvent)event.getPayload());
             }
         }
     }
 
-    private void triggerForcedSnapshotSyncForAllSessions(ReplicationEvent event) {
+    private void triggerForcedSnapshotSyncForAllSessions(LogReplication.ReplicationEvent event) {
         for (LogReplicationSession session : discoveryService.getSessionManager().getSessions()) {
             log.info("Adding event for forced snapshot sync request for session {}, sync_id={}",
                     session, event.getEventId());

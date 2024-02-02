@@ -17,9 +17,11 @@ import org.corfudb.runtime.CorfuStoreMetadata.TableMetadata;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.ExampleSchemas.ExampleTableName;
 import org.corfudb.runtime.ExampleSchemas.ManagedMetadata;
+import org.corfudb.runtime.RoutingQueueSenderClient;
 import org.corfudb.runtime.collections.CorfuDynamicKey;
 import org.corfudb.runtime.collections.CorfuDynamicRecord;
 import org.corfudb.runtime.collections.CorfuRecord;
+import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStoreShim;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
 import org.corfudb.runtime.collections.ICorfuTable;
@@ -72,7 +74,7 @@ public class CorfuStoreBrowserEditor implements CorfuBrowserEditorCommands {
      * @param runtime CorfuRuntime which has connected to the server
      */
     public CorfuStoreBrowserEditor(CorfuRuntime runtime) {
-        this(runtime, null);
+        this(runtime, null, false);
     }
 
     /**
@@ -82,10 +84,25 @@ public class CorfuStoreBrowserEditor implements CorfuBrowserEditorCommands {
      *                 that won't fit into memory
      */
     public CorfuStoreBrowserEditor(CorfuRuntime runtime, String diskPath) {
+        this(runtime, diskPath, false);
+    }
+
+    /**
+     * Creates a CorfuBrowser which connects a runtime to the server.
+     * @param runtime CorfuRuntime which has connected to the server
+     * @param diskPath path to temp disk directory for loading large tables
+     *                 that won't fit into memory
+     * @param skipDynamicProtoSerializer - is it an operation on internal tables?
+     */
+    public CorfuStoreBrowserEditor(CorfuRuntime runtime, String diskPath, boolean skipDynamicProtoSerializer) {
         this.runtime = runtime;
         this.diskPath = diskPath;
+        if (skipDynamicProtoSerializer) {
+            dynamicProtobufSerializer = null;
+            return;
+        }
         dynamicProtobufSerializer =
-            new DynamicProtobufSerializer(runtime);
+                new DynamicProtobufSerializer(runtime);
         runtime.getSerializers().registerSerializer(dynamicProtobufSerializer);
     }
 
@@ -844,6 +861,18 @@ public class CorfuStoreBrowserEditor implements CorfuBrowserEditorCommands {
         printStreamTagMap(streamTag, streamTagToTableNames.get(streamTag));
         System.out.println("\n======================\n");
         return streamTagToTableNames.get(streamTag);
+    }
+
+    @Override
+    public void requestGlobalFullSync() {
+        CorfuStore corfuStore = new CorfuStore(runtime);
+        try {
+            RoutingQueueSenderClient routingQueueSenderClient = new RoutingQueueSenderClient(corfuStore, RoutingQueueSenderClient.DEFAULT_ROUTING_QUEUE_CLIENT);
+            routingQueueSenderClient.requestGlobalSnapshotSync("any", "any");
+            System.out.println("Full Sync requested for ALL remote sites");
+        } catch (Exception e) {
+            System.out.println("Hit exception on requestGlobalFullSync" + e);
+        }
     }
 
     private Map<String, List<TableName>> getTagToTableNamesMap() {

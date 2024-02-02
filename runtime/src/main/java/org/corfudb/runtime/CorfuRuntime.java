@@ -344,6 +344,13 @@ public class CorfuRuntime {
          */
         boolean cacheWrites = true;
 
+        /**
+         * When set to true, the serialized data in LogData will not be set to null after deserializing it in LogData.getPayload().
+         * This is needed for LR which relies on the opaqueStream to read the data to replicate. On finding the "data"
+         * of LogData set to null, the opaqueStream skips that logData. This causes a correctness issue.
+         */
+        boolean retainSerializedDataInCache = false;
+
         // endregion
 
         /**
@@ -485,6 +492,7 @@ public class CorfuRuntime {
             private boolean cacheWrites = true;
             private String clientName = "CorfuClient";
             private long checkpointTriggerFreqMillis = 0;
+            private boolean retainSerializedDataInCache = false;
 
             public CorfuRuntimeParametersBuilder streamingWorkersThreadPoolSize(int streamingWorkersThreadPoolSize) {
                 this.streamingWorkersThreadPoolSize = streamingWorkersThreadPoolSize;
@@ -803,6 +811,11 @@ public class CorfuRuntime {
                 return this;
             }
 
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder retainSerializedDataInCache(boolean retainSerializedDataInCache) {
+                this.retainSerializedDataInCache = retainSerializedDataInCache;
+                return this;
+            }
+
             public CorfuRuntimeParameters build() {
                 CorfuRuntimeParameters corfuRuntimeParameters = new CorfuRuntimeParameters();
                 corfuRuntimeParameters.setTlsEnabled(tlsEnabled);
@@ -868,6 +881,7 @@ public class CorfuRuntime {
                 corfuRuntimeParameters.setCacheWrites(cacheWrites);
                 corfuRuntimeParameters.setClientName(clientName);
                 corfuRuntimeParameters.setCheckpointTriggerFreqMillis(checkpointTriggerFreqMillis);
+                corfuRuntimeParameters.setRetainSerializedDataInCache(retainSerializedDataInCache);
                 return corfuRuntimeParameters;
             }
         }

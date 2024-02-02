@@ -32,13 +32,19 @@ public abstract class LogReplicationConfig {
 
     // The recommended max message size of a protobuf message is 64MB. Log Replication uses this limit as the default
     // message size to batch and send data across over to the other side.
+    //
+    // For routing queue model, this number was reduced to ~17MB when testing with multiple (upto 64) reader threads sending
+    // data concurrently.  With this concurrency, LR can run out-of-memory as each thread created a payload to send.
+    // In future with a fixed size thread pool, the empirical 17MB limit can be revisited.
     public static final int DEFAULT_MAX_DATA_MSG_SIZE = 64 << 20;
 
-    // Log Replication default max cache number of entries
-    // Note: if we want to improve performance for large scale this value should be tuned as it
-    // used in snapshot sync to quickly access shadow stream entries, written locally.
-    // This value is exposed as a configuration parameter for LR.
-    public static final int DEFAULT_MAX_CACHE_NUM_ENTRIES = 200;
+    // Default number of entries kept in the runtime cache of Log Replicator.
+    // During scale testing, it was found that keeping a large number of entries in the cache caused LR to run
+    // out-of-memory if each entry(transaction) is big(15MB approx).  So keeping the default number low for now.
+    // To improve performance for large scale, this value should be tuned as it is
+    // used to quickly access shadow stream entries, written locally.
+    // TODO: Tune this better.
+    public static final int DEFAULT_MAX_CACHE_NUM_ENTRIES = 10;
 
     // Corfu runtime's max uncompressed write size is used to calculate the payload transfer and apply sizes in
     // LR.  To account for extra bytes added in logData.serialize(), consider a fraction of this max write size.
