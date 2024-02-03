@@ -763,6 +763,9 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
             IRetry.build(IntervalRetry.class, () -> {
                 try {
                     this.clientChannelAdapter.connectAsync(sessionToRemoteClusterDescriptor.get(session), nodeId, session);
+                } catch(NullPointerException npe) {
+                    log.info("The session is already stopped. Abort trying to reconnect {}", session);
+                    return null;
                 } catch (Exception e) {
                     log.error("Failed to connect to remote node {} for session {}. Retry after 1 second. Exception {}.",
                             nodeId, session, e);

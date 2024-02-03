@@ -44,7 +44,7 @@ public class LogReplicationFsmUtil {
                 // Check Leadership
                 CorfuMessage.RequestPayloadMsg payload =
                         CorfuMessage.RequestPayloadMsg.newBuilder().setLrLeadershipQuery(
-                                LogReplication.LogReplicationLeadershipRequestMsg.newBuilder().setSession(session).build()
+                                LogReplication.LogReplicationLeadershipRequestMsg.newBuilder().build()
                         ).build();
                 CompletableFuture<LogReplication.LogReplicationLeadershipResponseMsg> leadershipRequestCf =
                         router.sendRequestAndGetCompletable(session, payload, nodeId);
@@ -114,12 +114,6 @@ public class LogReplicationFsmUtil {
 
     private static <T> void enqueueLeaderNotFound(Object fsm, Class<T> clazz, String leader) throws NoSuchMethodException,
             InvocationTargetException, IllegalAccessException {
-        // wait for a while before enqueuing
-        try {
-            new CompletableFuture<>().get(CorfuLogReplicationRuntime.DEFAULT_TIMEOUT, TimeUnit.MILLISECONDS);
-        } catch (Exception e) {
-            log.trace("Exception occurred while waiting to enqueue REMOTE_LEADER_NOT_FOUND");
-        }
 
         if (clazz.getName().equals(CorfuLogReplicationRuntime.class.getName())) {
             clazz.getMethod("input", LogReplicationRuntimeEvent.class).invoke(fsm,

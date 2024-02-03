@@ -202,7 +202,6 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
             //  To resolve this, we need to have a long living RPC from the connectionInitiator cluster which will query
             //  for sessions from the other cluster
             if (sinkManager == null || sinkManager.isSinkManagerShutdown()) {
-                //TODO: this block probably can be removed now.
                 if(!allSessions.contains(session)) {
                     log.error("SessionManager does not know about incoming session {}, total={}, current sessions={}",
                             session, sessionToSinkManagerMap.size(), sessionToSinkManagerMap.keySet());
@@ -269,7 +268,6 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
             //  To resolve this, we need to have a long living RPC from the connectionInitiator cluster which will query
             //  for sessions from the other cluster
             if (sinkManager == null) {
-                //TODO: this block probably can be removed now.
                 if(!allSessions.contains(session)) {
                     log.error("SessionManager does not know about incoming session {}, total={}, current sessions={}",
                             session, sessionToSinkManagerMap.size(), sessionToSinkManagerMap.keySet());
@@ -311,15 +309,7 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
                                                      @Nonnull IClientServerRouter router) {
         log.debug("Log Replication Query Leadership Request received by Server.");
         HeaderMsg responseHeader = getHeaderMsg(request.getHeader());
-        ResponseMsg response;
-        // To ensure that SINK is ready to respond to a negotiation msg, we stall until the session manager is aware of
-        // the session. The node buys some time by replying "not-the-leader" even if it is the leader.
-        // This is needed in cases where the pluggable transport layer doesn't have a timeout mechanism for an rpc.
-        if (allSessions.contains(request.getPayload().getLrLeadershipQuery().getSession())) {
-            response = getLeadershipResponse(responseHeader, replicationContext.getIsLeader().get(), localNodeId);
-        } else {
-            response = getLeadershipResponse(responseHeader, false, localNodeId);
-        }
+        ResponseMsg response = getLeadershipResponse(responseHeader, replicationContext.getIsLeader().get(), localNodeId);
         router.sendResponse(response);
     }
 
