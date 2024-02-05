@@ -386,11 +386,12 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
             final CompletableFuture<T> cfTimeout =
                     CFUtils.within(cf, Duration.ofMillis(timeoutResponse));
             final long finalRequestId = requestId;
+            String finalNodeId = nodeId;
             cfTimeout.exceptionally(e -> {
                 if (e.getCause() instanceof TimeoutException) {
                     sessionToOutstandingRequests.get(session).remove(finalRequestId);
-                    log.debug("sendMessageAndGetCompletable: Remove request {} to {} due to timeout! Message:{}",
-                            finalRequestId, sessionToRemoteClusterDescriptor.get(session).getClusterId(), payload.getPayloadCase());
+                    log.debug("sendMessageAndGetCompletable: Remove request {} to {}/{} due to timeout! Message:{}",
+                            finalRequestId, sessionToRemoteClusterDescriptor.get(session).getClusterId(), finalNodeId, payload.getPayloadCase());
                 }
                 return null;
             });
@@ -415,8 +416,8 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
             removeSessionInfo(session);
         } catch (Exception e) {
             sessionToOutstandingRequests.get(session).remove(requestId);
-            log.error("sendMessageAndGetCompletable: Remove request {} to {} due to exception! Message:{}",
-                    requestId, sessionToRemoteClusterDescriptor.get(session).getClusterId(), payload.getPayloadCase(), e);
+            log.error("sendMessageAndGetCompletable: Remove request {} to {}/{} due to exception! Message:{}",
+                    requestId, sessionToRemoteClusterDescriptor.get(session).getClusterId(), nodeId, payload.getPayloadCase(), e);
             cf.completeExceptionally(e);
         }
         return cf;
