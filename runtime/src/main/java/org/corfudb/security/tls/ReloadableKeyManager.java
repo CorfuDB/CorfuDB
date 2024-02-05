@@ -120,6 +120,7 @@ public class ReloadableKeyManager implements X509KeyManager {
             if (km instanceof X509KeyManager) {
                 keyManager = (X509KeyManager) km;
                 lastReloadSucceeded = true;
+                log.info("Successfully reloaded keystore.");
                 return;
             }
         }

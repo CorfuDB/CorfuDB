@@ -640,7 +640,7 @@ public class NettyCommTest extends AbstractCorfuTest {
 
         FileWatcher fileWatcher = new FileWatcher(
                 clientCertManager.keyStoreConfig.getKeyStoreFile().toString(),
-                clientRouter::reconnect, Duration.ofSeconds(1));
+                clientRouter::reconnect);
         TimeUnit.SECONDS.sleep(1);
 
         // Copy original keystore
@@ -658,11 +658,10 @@ public class NettyCommTest extends AbstractCorfuTest {
 
         // Verify ssl is auto-reloaded
         TimeUnit.SECONDS.sleep(2);
-        log.info("Testing connection after corrupting the keystore");
         assertThat(getBaseClient(clientRouter).pingSync()).isFalse();
 
         // Restore the correct cert
-        Files.copy(keyStoreFilePathCopy, keyStoreFilePath, StandardCopyOption.REPLACE_EXISTING);
+        Files.move(keyStoreFilePathCopy, keyStoreFilePath, StandardCopyOption.ATOMIC_MOVE);
 
         // Verify ssl is auto-reloaded
         TimeUnit.SECONDS.sleep(2);

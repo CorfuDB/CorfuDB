@@ -361,11 +361,6 @@ public class CorfuRuntime {
          */
         Duration runtimeGCPeriod = Duration.ofMinutes(20);
 
-        /**
-         * The period at which the file watcher will poll the file from disk
-         */
-        Duration fileWatcherPollPeriod = Duration.ofMinutes(1);
-
         /*
          * The {@link UUID} for the cluster this client is connecting to, or
          * {@code null} if the client should adopt the {@link UUID} of the first
@@ -470,7 +465,6 @@ public class CorfuRuntime {
             private int streamBatchSize = 10;
             private int checkpointReadBatchSize = 1;
             private Duration runtimeGCPeriod = Duration.ofMinutes(20);
-            private Duration fileWatcherPollPeriod = Duration.ofMinutes(1);
             private UUID clusterId = null;
             private int systemDownHandlerTriggerLimit = 20;
             private List<NodeLocator> layoutServers = new ArrayList<>();
@@ -763,11 +757,6 @@ public class CorfuRuntime {
                 return this;
             }
 
-            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder fileWatcherPollPeriod(Duration fileWatcherPollPeriod) {
-                this.fileWatcherPollPeriod = fileWatcherPollPeriod;
-                return this;
-            }
-
             public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder clusterId(UUID clusterId) {
                 this.clusterId = clusterId;
                 return this;
@@ -853,7 +842,6 @@ public class CorfuRuntime {
                 corfuRuntimeParameters.setStreamBatchSize(streamBatchSize);
                 corfuRuntimeParameters.setCheckpointReadBatchSize(checkpointReadBatchSize);
                 corfuRuntimeParameters.setRuntimeGCPeriod(runtimeGCPeriod);
-                corfuRuntimeParameters.setFileWatcherPollPeriod(fileWatcherPollPeriod);
                 corfuRuntimeParameters.setClusterId(clusterId);
                 corfuRuntimeParameters.setSystemDownHandlerTriggerLimit(systemDownHandlerTriggerLimit);
                 corfuRuntimeParameters.setLayoutServers(layoutServers);
@@ -1054,7 +1042,7 @@ public class CorfuRuntime {
         if (keyStorePath == null || keyStorePath.isEmpty()) {
             return Optional.empty();
         }
-        FileWatcher sslWatcher = new FileWatcher(keyStorePath, this::reconnect, this.parameters.fileWatcherPollPeriod);
+        FileWatcher sslWatcher = new FileWatcher(keyStorePath, this::reconnect);
         return Optional.of(sslWatcher);
     }
 
