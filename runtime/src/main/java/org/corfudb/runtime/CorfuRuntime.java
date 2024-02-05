@@ -362,7 +362,7 @@ public class CorfuRuntime {
         Duration runtimeGCPeriod = Duration.ofMinutes(20);
         
         /**
-         * Disable the above filewatcher
+         * Disable the filewatcher for this runtime
          */
         boolean disableFileWatcher = false;
 
@@ -1059,8 +1059,7 @@ public class CorfuRuntime {
         }
 
         String keyStorePath = this.parameters.getKeyStore();
-        return FileWatcher.newInstance(keyStorePath,
-                this::reconnect);
+        return FileWatcher.newInstance(keyStorePath, this::reconnect);
     }
 
     /**

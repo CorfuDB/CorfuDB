@@ -43,7 +43,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -82,6 +81,7 @@ public class CorfuServerNode implements AutoCloseable {
 
     private HTTPServer metricsServer;
 
+    @Getter
     private final Optional<FileWatcher> sslCertWatcher;
 
     /**
@@ -125,16 +125,17 @@ public class CorfuServerNode implements AutoCloseable {
 
         this.close = new AtomicBoolean(false);
         // Initialize the getSslCertWatcher
-        sslCertWatcher = FileWatcher.newInstance(
-                serverContext.getServerConfig(String.class, ConfigParamNames.KEY_STORE),
-                this::restartServerChannel,
-                Duration.ofSeconds(
-                        serverContext
-                                .<String>getServerConfig(ConfigParamNames.FILE_WATCHER_POLL_PERIOD)
-                                .map(Integer::parseInt)
-                                .orElse(KeyStoreConfig.DEFAULT_FILE_WATCHER_POLL_PERIOD)
-                )
-        );
+        if (serverContext
+                .<String>getServerConfig(ConfigParamNames.DISABLE_FILE_WATCHER)
+                .map(Boolean::parseBoolean)
+                .orElse(KeyStoreConfig.DEFAULT_DISABLE_FILE_WATCHER)){
+            sslCertWatcher = Optional.empty();
+        } else {
+            sslCertWatcher = FileWatcher.newInstance(
+                    serverContext.getServerConfig(String.class, ConfigParamNames.KEY_STORE),
+                    this::restartServerChannel);
+        }
+
     }
 
     /**
@@ -479,6 +480,8 @@ public class CorfuServerNode implements AutoCloseable {
                             context.getServerConfig(String.class, ConfigParamNames.TRUST_STORE_PASS_FILE),
                             certExpiryFile
                     );
+                    // TODO (Chetan): remove this before merging
+                    log.info("constructSslContext from CorfuServerNode ");
 
                     sslContext = SslContextConstructor.constructSslContext(
                             true, keyStoreConfig, trustStoreConfig
