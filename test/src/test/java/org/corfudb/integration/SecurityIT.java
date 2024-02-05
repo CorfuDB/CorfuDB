@@ -45,6 +45,7 @@ public class SecurityIT extends AbstractIT {
     private String runtimePathToTrustStore;
     private String runtimePathToTrustStorePassword;
     private String disableCertExpiryCheckFile;
+    private String disableFileWatcher;
     private static final short SYSTEM_DOWN_HANDLER_TRIGGER_LIMIT = 3;
 
     /**
@@ -70,9 +71,11 @@ public class SecurityIT extends AbstractIT {
             corfuServerRunner.setDisableCertExpiryCheckFile(disableCertExpiryCheckFile);
         }
 
-        if (serverEnableTlsMutualAuth) {
-            corfuServerRunner.setTlsMutualAuthEnabled(serverEnableTlsMutualAuth);
+        if (disableFileWatcher != null) {
+            corfuServerRunner.setDisableFileWatcher(disableFileWatcher);
         }
+
+        corfuServerRunner.setTlsMutualAuthEnabled(serverEnableTlsMutualAuth);
 
         return corfuServerRunner.runServer();
     }
@@ -378,6 +381,67 @@ public class SecurityIT extends AbstractIT {
         assertThat(sslCertWatcher).isNotEmpty();
         assertThat(sslCertWatcher.get().getIsStopped()).isTrue();
         assertThat(sslCertWatcher.get().getIsRegistered()).isFalse();
+    }
+    /**
+     * Test that connection scenarios between client and server during certificate replacement workflows
+     * - Server is started with default certs
+     * - Certificate replacement is done on the server (this triggers sever channel restart)
+     * - the old server channel should no longer be active
+     * - if the new certs are good, then clients should auto reconnect on server channel restart
+     * - if they are bad, then clients should keep fail and retying until the limit is reached,
+     *   and then trigger shutdownHandlers()
+     *
+     * @throws IOException when parsing the properties fails
+     * @throws InterruptedException when shutdown retry sleep is interrupted
+     */
+    @Test
+    public void testServerCertReplacementWithValidCerts() throws Exception {
+        // set disableCertExpiryCheckFile
+        disableCertExpiryCheckFile = getPropertyAbsolutePath(
+                "disableCertExpiryCheckFile");
+
+        // set disableFileWatcher = false by default
+        disableFileWatcher = getPropertyAbsolutePath(
+                "disableFileWatcher");
+
+        // Run a corfu server
+        // Enable Tls Mutual Auth to trigger CheckClientTrusted() in ReloadableTrustManager
+        Process corfuServer = runSinglePersistentServerTls(true);
+
+        // Create Runtime parameters for enabling TLS
+        final CorfuRuntimeParametersBuilder paramsBuilder = CorfuRuntime.CorfuRuntimeParameters
+                .builder()
+                .tlsEnabled(tlsEnabled)
+                .keyStore(runtimePathToKeyStore)
+                .ksPasswordFile(runtimePathToKeyStorePassword)
+                .trustStore(runtimePathToTrustStore)
+                .tsPasswordFile(runtimePathToTrustStorePassword)
+                .disableCertExpiryCheckFile(Paths.get(disableCertExpiryCheckFile))
+                .disableFileWatcher(Boolean.parseBoolean(disableFileWatcher))
+                .systemDownHandler(getShutdownHandler());
+
+        CorfuRuntime corfuRuntime = createRuntime(
+                getVersionFormattedEndpointURL(corfuSingleNodeHost, corfuStringNodePort),
+                paramsBuilder);
+
+        assertThat(corfuServer.isAlive()).isTrue();
+
+        // Replace certificates with Valid Certificates
+
+        assertThat(corfuRuntime.isShutdown()).isTrue();
+        assertThat(corfuRuntime.getNettyEventLoop().isShuttingDown()).isTrue();
+        assertThat(corfuRuntime.getNettyEventLoop().isTerminated()).isTrue();
+        assertThat(corfuRuntime.getNettyEventLoop().isShutdown()).isTrue();
+
+
+
+        // Run a corfu server 2nd time
+        // Enable Tls Mutual Auth to trigger CheckClientTrusted() in ReloadableTrustManager
+        assertThat(corfuServer.isAlive()).isTrue();
+
+
+        assertThat(shutdownCorfuServer(corfuServer)).isTrue();
+        corfuRuntime.shutdown();
     }
 
     private Runnable getShutdownHandler() {
