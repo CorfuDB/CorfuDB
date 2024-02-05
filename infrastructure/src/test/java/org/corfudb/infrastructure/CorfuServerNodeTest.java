@@ -3,12 +3,14 @@ package org.corfudb.infrastructure;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.MoreExecutors;
 import org.assertj.core.api.Assertions;
+import org.corfudb.common.config.ConfigParamNames;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
+import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -65,5 +67,18 @@ public class CorfuServerNodeTest {
         verify(countDownLatch,times(1)).countDown();
         verify(countDownLatch,times(1)).await();
         Assertions.assertThat(CorfuServer.getReloadServerComponents().get()).isFalse();
+    }
+
+
+    /**
+     * Test that disable file watcher argument does not initialize sslCertWatcher in CorfuServerNode
+     */
+    @Test
+    public void testDisableFileWatcher() {
+        // make mockServerContext return true for disableFIleWatcher
+        when(mockServerContext.getServerConfig(ConfigParamNames.DISABLE_FILE_WATCHER))
+                .thenReturn(Optional.of("true"));
+        CorfuServerNode node = new CorfuServerNode(mockServerContext, ImmutableMap.of());
+        Assertions.assertThat(node.getSslCertWatcher()).isEqualTo(Optional.empty());
     }
 }

@@ -47,6 +47,7 @@ import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.security.tls.TlsUtils.CertStoreConfig.KeyStoreConfig.DEFAULT_DISABLE_FILE_WATCHER;
 
 /**
  * This class contains basic functionality for any IT test.
@@ -573,6 +574,7 @@ public class AbstractIT extends AbstractCorfuTest {
         private String logSizeLimitPercentage = null;
         private String trustStorePassword = null;
         private String disableCertExpiryCheckFile = null;
+        private String disableFileWatcher = String.valueOf(DEFAULT_DISABLE_FILE_WATCHER);
         private String compressionCodec = null;
         private boolean disableHost = false;
         private String networkInterface = null;
@@ -643,6 +645,10 @@ public class AbstractIT extends AbstractCorfuTest {
                 if (disableCertExpiryCheckFile != null) {
                     command.append(" --disable-cert-expiry-check-file=").append(disableCertExpiryCheckFile);
                 }
+                if (disableFileWatcher != null) {
+                    command.append(" --disable-file-watcher=").append(disableFileWatcher);
+                }
+
             }
 
             if (networkInterface != null) {
