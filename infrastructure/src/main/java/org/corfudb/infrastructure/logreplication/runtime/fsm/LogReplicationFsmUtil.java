@@ -44,7 +44,8 @@ public class LogReplicationFsmUtil {
                 // Check Leadership
                 CorfuMessage.RequestPayloadMsg payload =
                         CorfuMessage.RequestPayloadMsg.newBuilder().setLrLeadershipQuery(
-                                LogReplication.LogReplicationLeadershipRequestMsg.newBuilder().build()
+                                LogReplication.LogReplicationLeadershipRequestMsg.newBuilder()
+                                        .setSession(session).build()
                         ).build();
                 CompletableFuture<LogReplication.LogReplicationLeadershipResponseMsg> leadershipRequestCf =
                         router.sendRequestAndGetCompletable(session, payload, nodeId);

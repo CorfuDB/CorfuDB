@@ -118,7 +118,7 @@ public class LogReplicationServerTest {
     @Test
     public void testHandleLeadershipQuery() {
         final LogReplicationLeadershipRequestMsg leadershipQuery =
-            LogReplicationLeadershipRequestMsg.newBuilder().build();
+            LogReplicationLeadershipRequestMsg.newBuilder().setSession(session).build();
         final RequestMsg request =
             getRequestMsg(HeaderMsg.newBuilder().setClusterId(sourceClusterUuid).build(),
                 CorfuMessage.RequestPayloadMsg.newBuilder()
