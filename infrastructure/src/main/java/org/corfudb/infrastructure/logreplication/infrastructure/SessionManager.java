@@ -263,10 +263,6 @@ public class SessionManager {
      * (2) In the case of client registration (on Source), sessions are created on-demand from client config listener.
      */
     public void createSessionsWhenLeader(ReplicationSubscriber subscriber) {
-        if (!replicationContext.getIsLeader().get()) {
-            log.debug("Current Node is not the leader. Skipping session creation");
-            return;
-        }
         Set<LogReplicationSession> newSessions = new HashSet<>();
         try {
             String localClusterId = topology.getLocalClusterDescriptor().getClusterId();

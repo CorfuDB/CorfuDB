@@ -86,16 +86,11 @@ public class SessionManagerTest extends AbstractViewTest {
                 DefaultClusterConfig.getTopologyTypeToClientModelMap().get(TP_SINGLE_SOURCE_SINK));
         SessionManager sessionManager = new SessionManager(topology, corfuRuntime, replicationManager, router,
                 msgHandler, pluginConfig);
+        sessionManager.getReplicationContext().setIsLeader(true);
         sessionManager.startClientRegistrationListener();
         while(sessionManager.getOutgoingSessions().isEmpty()) {
             //wait
         }
-        sessionManager.refresh(topology);
-        Assert.assertEquals(0, sessionManager.getOutgoingSessions().size());
-        Assert.assertEquals(0, sessionManager.getIncomingSessions().size());
-
-
-        sessionManager.getReplicationContext().setIsLeader(true);
         sessionManager.refresh(topology);
         int numSinkCluster = topology.getRemoteSinkClusters().size();
 
