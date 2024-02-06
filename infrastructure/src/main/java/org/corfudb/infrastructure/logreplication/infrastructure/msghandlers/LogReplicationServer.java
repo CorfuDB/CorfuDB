@@ -6,10 +6,12 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
+import org.corfudb.infrastructure.logreplication.infrastructure.SessionManager;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.transport.IClientServerRouter;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
+import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationSinkManager;
 import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
@@ -70,9 +72,7 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
     @VisibleForTesting
     private final Map<LogReplicationSession, LogReplicationSinkManager> sessionToSinkManagerMap = new ConcurrentHashMap<>();
 
-    private final ServerContext serverContext;
-
-    private final Set<LogReplicationSession> allSessions;
+    private final SessionManager sessionManager;
 
     private final LogReplicationMetadataManager metadataManager;
 
@@ -85,15 +85,14 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
     private final ReplicationHandlerMethods handlerMethods =
             ReplicationHandlerMethods.generateHandler(MethodHandles.lookup(), this);
 
-    public LogReplicationServer(@Nonnull ServerContext context, Set<LogReplicationSession> sessions,
+    public LogReplicationServer(@Nonnull ServerContext context,
                                 LogReplicationMetadataManager metadataManager, String localNodeId, String localClusterId,
-                                LogReplicationContext replicationContext) {
-        this.serverContext = context;
-        this.allSessions = sessions;
+                                LogReplicationContext replicationContext, SessionManager sessionManager) {
         this.metadataManager = metadataManager;
         this.localNodeId = localNodeId;
         this.localClusterId = localClusterId;
         this.replicationContext = replicationContext;
+        this.sessionManager = sessionManager;
         this.executor = context.getExecutorService(context.getLogReplicationServerThreadCount(), EXECUTOR_NAME_PREFIX);
     }
 
@@ -144,7 +143,10 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
             session = LogReplicationSession.newBuilder()
                     .setSourceClusterId(getUUID(request.getHeader().getClusterId()).toString())
                     .setSinkClusterId(localClusterId)
-                    .setSubscriber(LogReplicationConfigManager.getDefaultSubscriber())
+                    .setSubscriber(LogReplication.ReplicationSubscriber.newBuilder()
+                            .setClientName(LogReplicationConfigManager.DEFAULT_CLIENT)
+                            .setModel(LogReplication.ReplicationModel.FULL_TABLE)
+                            .build())
                     .build();
         } else {
             session = request.getHeader().getSession();
@@ -201,7 +203,7 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
             //  To resolve this, we need to have a long living RPC from the connectionInitiator cluster which will query
             //  for sessions from the other cluster
             if (sinkManager == null || sinkManager.getIsShutdown().get()) {
-                if(!allSessions.contains(session)) {
+                if(!sessionManager.getIncomingSessions().contains(session)) {
                     log.error("SessionManager does not know about incoming session {}, total={}, current sessions={}",
                             session, sessionToSinkManagerMap.size(), sessionToSinkManagerMap.keySet());
                     return;
@@ -267,7 +269,7 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
             //  To resolve this, we need to have a long living RPC from the connectionInitiator cluster which will query
             //  for sessions from the other cluster
             if (sinkManager == null) {
-                if(!allSessions.contains(session)) {
+                if(!sessionManager.getIncomingSessions().contains(session)) {
                     log.error("SessionManager does not know about incoming session {}, total={}, current sessions={}",
                             session, sessionToSinkManagerMap.size(), sessionToSinkManagerMap.keySet());
                     return;
@@ -296,17 +298,27 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
     }
 
     /**
-     * Given a leadership request message, send back a
-     * response indicating our current leadership status.
+     * Given a leadership request message, send back a response indicating our current leadership status.
+     * Since the client registration happens on the SOURCE, leadership query msg also serves as a vehicle to notify the
+     * SINK about the new sessions. Response to the leadership request msg is sent only after processing the session
+     * information in the msg header.
      *
      * @param request the leadership request message
      * @param router  router used for sending back the response
      */
     @LogReplicationRequestHandler(requestType = LR_LEADERSHIP_QUERY)
-    private void  handleLeadershipQuery(RequestMsg request, ResponseMsg res,
+    private void handleLeadershipQuery(RequestMsg request, ResponseMsg res,
                                                      @Nonnull IClientServerRouter router) {
         log.debug("Log Replication Query Leadership Request received by Server.");
         HeaderMsg responseHeader = getHeaderMsg(request.getHeader());
+        // if session in the leadership query is not known to the local cluster, create and process the new session information
+        if (replicationContext.getIsLeader().get()) {
+            LogReplicationSession session = getSession(request);
+            if (!sessionManager.getIncomingSessions().contains(session)) {
+                this.sessionManager.addNotifiedSessionFromSource(session);
+                createSinkManager(session);
+            }
+        }
         ResponseMsg response = getLeadershipResponse(responseHeader, replicationContext.getIsLeader().get(), localNodeId);
         router.sendResponse(response);
     }

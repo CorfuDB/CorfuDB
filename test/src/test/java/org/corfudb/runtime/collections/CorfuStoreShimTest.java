@@ -10,16 +10,12 @@ import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
-import org.corfudb.runtime.CorfuOptions;
+import org.corfudb.runtime.*;
 import org.corfudb.runtime.CorfuOptions.PersistenceOptions;
-import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.CorfuStoreMetadata.ProtobufFileDescriptor;
 import org.corfudb.runtime.CorfuStoreMetadata.ProtobufFileName;
-import org.corfudb.runtime.ExampleSchemas;
 import org.corfudb.runtime.ExampleSchemas.ManagedMetadata;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMetadataMsg;
-import org.corfudb.runtime.Queue;
 import org.corfudb.runtime.exceptions.StaleRevisionUpdateException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.VersionedObjectIdentifier;
@@ -1246,6 +1242,8 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         referenceMap.put(CorfuStoreMetadata.getDescriptor().getFullName(),
                 CorfuStoreMetadata.getDescriptor().getFile());
         referenceMap.put(CorfuOptions.getDescriptor().getFullName(),
+                CorfuOptions.getDescriptor().getFile());
+        referenceMap.put(LogReplication.getDescriptor().getFullName(),
                 CorfuOptions.getDescriptor().getFile());
 
         for (int i = 0; i < numTables; i++) {

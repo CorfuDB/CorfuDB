@@ -68,7 +68,7 @@ import java.util.concurrent.Semaphore;
 
 import static java.lang.Thread.sleep;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig.getSessions;
+import static org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig.getAllFullTableSessions;
 import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.NAMESPACE;
 import static org.corfudb.runtime.LogReplicationUtils.LR_STATUS_STREAM_TAG;
 import static org.corfudb.runtime.LogReplicationUtils.REPLICATION_STATUS_TABLE_NAME;
@@ -91,7 +91,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
     private static final String TEST_LOCAL_ENDPOINT_PREFIX = "test:";
 
     // Default session to used to initialize and update status table
-    private static final LogReplicationSession DEFAULT_SESSION = getSessions().get(0);
+    private static final LogReplicationSession DEFAULT_SESSION = getAllFullTableSessions().get(0);
 
     private static final String LOCAL_SOURCE_CLUSTER_ID = DefaultClusterConfig.getSourceClusterIds().get(0);
 
@@ -941,7 +941,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
 
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(runtime, LOCAL_SOURCE_CLUSTER_ID);
         LogReplicationPluginConfig pluginConfig = new LogReplicationPluginConfig(pluginConfigFilePath);
-        LogReplicationSession session = DefaultClusterConfig.getSessions().get(0);
+        LogReplicationSession session = DefaultClusterConfig.getAllFullTableSessions().get(0);
         configManager.generateConfig(Collections.singleton(session), false);
 
         switch(readerImpl) {

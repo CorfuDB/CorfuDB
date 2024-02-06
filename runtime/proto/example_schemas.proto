@@ -5,6 +5,7 @@ option java_package = "org.corfudb.runtime";
 
 import "corfu_options.proto";
 import "google/protobuf/descriptor.proto";
+import "service/log_replication.proto";
 
 message ManagedMetadata {
     int64 revision = 1;
@@ -28,6 +29,7 @@ message ClusterUuidMsg {
     option (org.corfudb.runtime.table_schema).stream_tag = "cluster_manager_test";
     fixed64 msb = 1;
     fixed64 lsb = 2;
+    LogReplicationSession session = 3;
 }
 
 message ExampleValue {

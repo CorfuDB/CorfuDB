@@ -4,6 +4,7 @@ import com.google.common.collect.Iterables;
 import com.google.protobuf.Any;
 import com.google.protobuf.DynamicMessage;
 import com.google.protobuf.InvalidProtocolBufferException;
+import com.google.protobuf.Message;
 import com.google.protobuf.util.JsonFormat;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -17,11 +18,13 @@ import org.corfudb.runtime.CorfuStoreMetadata.TableMetadata;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.ExampleSchemas.ExampleTableName;
 import org.corfudb.runtime.ExampleSchemas.ManagedMetadata;
+import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.RoutingQueueSenderClient;
 import org.corfudb.runtime.collections.CorfuDynamicKey;
 import org.corfudb.runtime.collections.CorfuDynamicRecord;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuStore;
+import org.corfudb.runtime.collections.CorfuStoreEntry;
 import org.corfudb.runtime.collections.CorfuStoreShim;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
 import org.corfudb.runtime.collections.ICorfuTable;
@@ -30,6 +33,7 @@ import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.collections.StreamListener;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
+import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.PersistenceOptions;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
@@ -49,12 +53,17 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+
+import static org.corfudb.runtime.LogReplicationClient.LR_REGISTRATION_TABLE_NAME;
+import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 /**
  * This is the CorfuStore Browser/Editor Tool which prints data in a given
@@ -866,8 +875,34 @@ public class CorfuStoreBrowserEditor implements CorfuBrowserEditorCommands {
     @Override
     public void requestGlobalFullSync() {
         CorfuStore corfuStore = new CorfuStore(runtime);
+
         try {
-            RoutingQueueSenderClient routingQueueSenderClient = new RoutingQueueSenderClient(corfuStore, RoutingQueueSenderClient.DEFAULT_ROUTING_QUEUE_CLIENT);
+            Table<LogReplication.ClientRegistrationId, LogReplication.ClientRegistrationInfo, Message> replicationRegistrationTable;
+            try {
+                replicationRegistrationTable = corfuStore.getTable(CORFU_SYSTEM_NAMESPACE, LR_REGISTRATION_TABLE_NAME);
+            } catch (NoSuchElementException | IllegalArgumentException e) {
+                log.warn("Failed getTable operation, opening table.", e);
+                replicationRegistrationTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, LR_REGISTRATION_TABLE_NAME,
+                        LogReplication.ClientRegistrationId.class,
+                        LogReplication.ClientRegistrationInfo.class,
+                        null,
+                        TableOptions.fromProtoSchema(LogReplication.ClientRegistrationInfo.class));
+            }
+            List<CorfuStoreEntry<LogReplication.ClientRegistrationId, LogReplication.ClientRegistrationInfo, Message>> registrationTableEntries;
+            try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+                registrationTableEntries = txn.executeQuery(replicationRegistrationTable, p -> true);
+                txn.commit();
+            }
+            String clientName = null;
+            Optional<CorfuStoreEntry<LogReplication.ClientRegistrationId, LogReplication.ClientRegistrationInfo, Message>> routingQueueEntries = registrationTableEntries.stream()
+                    .filter(e ->
+                            ((LogReplication.ClientRegistrationInfo)e.getPayload()).getModel().equals(LogReplication.ReplicationModel.ROUTING_QUEUES))
+                    .findFirst();
+            if(routingQueueEntries.isPresent()) {
+                clientName = routingQueueEntries.get().getPayload().getClientName();
+            }
+
+            RoutingQueueSenderClient routingQueueSenderClient = new RoutingQueueSenderClient(corfuStore, clientName);
             routingQueueSenderClient.requestGlobalSnapshotSync("any", "any");
             System.out.println("Full Sync requested for ALL remote sites");
         } catch (Exception e) {

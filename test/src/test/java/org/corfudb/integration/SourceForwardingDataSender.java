@@ -100,7 +100,7 @@ public class SourceForwardingDataSender implements DataSender {
 
     private static final String REPLICATION_STATUS_TABLE = LogReplicationUtils.REPLICATION_STATUS_TABLE_NAME;
 
-    private LogReplicationSession session = DefaultClusterConfig.getSessions().get(0);
+    private LogReplicationSession session = DefaultClusterConfig.getAllFullTableSessions().get(0);
 
     private LogReplicationIT.TestConfig testConfig;
 

@@ -1,6 +1,7 @@
 package org.corfudb.integration;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager.TP_SINGLE_SOURCE_SINK;
 import static org.junit.Assert.fail;
 
 import java.io.BufferedReader;
@@ -29,8 +30,7 @@ import org.corfudb.infrastructure.logreplication.infrastructure.CorfuInterCluste
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultSnapshotSyncPlugin;
-import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
-import org.corfudb.runtime.LogReplication.SnapshotSyncInfo;
+import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.SnapshotSyncInfo.SnapshotSyncType;
 import org.corfudb.runtime.LogReplication.SyncType;
 import org.corfudb.runtime.LogReplication.SyncStatus;
@@ -311,6 +311,8 @@ public class LogReplicationAbstractIT extends AbstractIT {
             txn.putRecord(configTable, this.topologyType, this.topologyType, this.topologyType);
             txn.commit();
         }
+
+        DefaultClusterConfig.registerWithLR(corfuStoreSource, DefaultClusterConfig.getTopologyTypeToClientModelMap().get(topologyType));
     }
 
     private void triggerSnapshotAndTestRemainingEntries() throws Exception{
@@ -322,9 +324,12 @@ public class LogReplicationAbstractIT extends AbstractIT {
                         ExampleSchemas.ClusterUuidMsg.class, ExampleSchemas.ClusterUuidMsg.class, ExampleSchemas.ClusterUuidMsg.class,
                         TableOptions.fromProtoSchema(ExampleSchemas.ClusterUuidMsg.class)
                 );
+
+        ExampleSchemas.ClusterUuidMsg enforceSnapshotMsg = ExampleSchemas.ClusterUuidMsg.newBuilder().mergeFrom(DefaultClusterManager.OP_ENFORCE_SNAPSHOT_FULL_SYNC)
+                .setSession(DefaultClusterConfig.getSessionsForTopology(TP_SINGLE_SOURCE_SINK, 1, 1).stream().findFirst().get())
+                .build();
         try (TxnContext txn = corfuStoreSource.txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
-            txn.putRecord(configTable, DefaultClusterManager.OP_ENFORCE_SNAPSHOT_FULL_SYNC,
-                    DefaultClusterManager.OP_ENFORCE_SNAPSHOT_FULL_SYNC, DefaultClusterManager.OP_ENFORCE_SNAPSHOT_FULL_SYNC);
+            txn.putRecord(configTable, enforceSnapshotMsg, enforceSnapshotMsg, enforceSnapshotMsg);
             txn.commit();
         }
 
@@ -343,21 +348,18 @@ public class LogReplicationAbstractIT extends AbstractIT {
                 null,
                 TableOptions.fromProtoSchema(ReplicationStatus.class));
 
-        LogReplicationSession session = LogReplicationSession.newBuilder()
-            .setSourceClusterId(new DefaultClusterConfig().getSourceClusterIds().get(0))
-            .setSinkClusterId(new DefaultClusterConfig().getSinkClusterIds().get(0))
-            .setSubscriber(LogReplicationConfigManager.getDefaultSubscriber())
-            .build();
 
-        ReplicationStatus replicationStatus;
+
         statusUpdateLatch.await();
 
-        try (TxnContext txn = corfuStoreSource.txn(LogReplicationMetadataManager.NAMESPACE)) {
-            replicationStatus = (ReplicationStatus) txn.getRecord(REPLICATION_STATUS_TABLE_NAME, session).getPayload();
-            txn.commit();
-        }
-
-        assertThat(replicationStatus.getSourceStatus().getRemainingEntriesToSend()).isEqualTo(0);
+        DefaultClusterConfig.getSessionsForTopology(topologyType, 1, 1).forEach(session -> {
+            ReplicationStatus replicationStatus;
+            try (TxnContext txn = corfuStoreSource.txn(LogReplicationMetadataManager.NAMESPACE)) {
+                replicationStatus = (ReplicationStatus) txn.getRecord(REPLICATION_STATUS_TABLE_NAME, session).getPayload();
+                txn.commit();
+            }
+            assertThat(replicationStatus.getSourceStatus().getRemainingEntriesToSend()).isEqualTo(0);
+        });
     }
 
     private void verifyReplicationStatusFromSource() throws Exception {
@@ -376,36 +378,48 @@ public class LogReplicationAbstractIT extends AbstractIT {
 
         String sourceClusterId = new DefaultClusterConfig().getSourceClusterIds().get(0);
 
-        LogReplicationSession session = LogReplicationSession.newBuilder()
-            .setSourceClusterId(sourceClusterId)
-            .setSinkClusterId(sinkClusterId)
-            .setSubscriber(LogReplicationConfigManager.getDefaultSubscriber())
-            .build();
 
-        IRetry.build(IntervalRetry.class, () -> {
-            try(TxnContext txn = corfuStoreSource.txn(LogReplicationMetadataManager.NAMESPACE)) {
-                CorfuStoreEntry<LogReplicationSession, ReplicationStatus, Message> entry =
-                    txn.getRecord(replicationStatusTable, session);
+        DefaultClusterConfig.getTopologyTypeToClientModelMap().get(topologyType).forEach((key, value) -> value.forEach(client -> {
+            LogReplication.ReplicationSubscriber subscriber = LogReplication.ReplicationSubscriber.newBuilder()
+                    .setModel(key)
+                    .setClientName(client)
+                    .build();
 
-                if (entry.getPayload().getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus() !=
-                    SyncStatus.COMPLETED) {
-                    Sleep.sleepUninterruptibly(Duration.ofMillis(SHORT_SLEEP_TIME));
-                    txn.commit();
-                    throw new RetryNeededException();
-                }
-                assertThat(entry.getPayload().getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus())
-                    .isEqualTo(SyncStatus.COMPLETED);
-                assertThat(entry.getPayload().getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getType())
-                    .isEqualTo(SnapshotSyncInfo.SnapshotSyncType.DEFAULT);
-                assertThat(entry.getPayload().getSourceStatus().getReplicationInfo().getSnapshotSyncInfo()
-                    .getBaseSnapshot()).isNotEqualTo(Address.NON_ADDRESS);
-                txn.commit();
-            } catch (TransactionAbortedException tae) {
-                log.error("Error while attempting to connect to update dummy table in onSnapshotSyncStart.", tae);
-                throw new RetryNeededException();
+            LogReplicationSession session = LogReplicationSession.newBuilder()
+                    .setSourceClusterId(sourceClusterId)
+                    .setSinkClusterId(sinkClusterId)
+                    .setSubscriber(subscriber)
+                    .build();
+
+            try {
+                IRetry.build(IntervalRetry.class, () -> {
+                    try (TxnContext txn = corfuStoreSource.txn(LogReplicationMetadataManager.NAMESPACE)) {
+                        CorfuStoreEntry<LogReplicationSession, ReplicationStatus, Message> entry =
+                                txn.getRecord(replicationStatusTable, session);
+
+                        if (entry.getPayload().getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus() !=
+                                SyncStatus.COMPLETED) {
+                            Sleep.sleepUninterruptibly(Duration.ofMillis(SHORT_SLEEP_TIME));
+                            txn.commit();
+                            throw new RetryNeededException();
+                        }
+                        assertThat(entry.getPayload().getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus())
+                                .isEqualTo(SyncStatus.COMPLETED);
+                        assertThat(entry.getPayload().getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getType())
+                                .isEqualTo(SnapshotSyncType.DEFAULT);
+                        assertThat(entry.getPayload().getSourceStatus().getReplicationInfo().getSnapshotSyncInfo()
+                                .getBaseSnapshot()).isNotEqualTo(Address.NON_ADDRESS);
+                        txn.commit();
+                    } catch (TransactionAbortedException tae) {
+                        log.error("Error while attempting to connect to update dummy table in onSnapshotSyncStart.", tae);
+                        throw new RetryNeededException();
+                    }
+                    return null;
+                }).run();
+            } catch (InterruptedException e) {
+                log.error("Interrupted during retry");
             }
-            return null;
-        }).run();
+        }));
     }
 
     void validateSnapshotSyncPlugin(SnapshotSyncPluginListener listener) {
@@ -783,11 +797,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
     }
 
     public void verifyInLogEntrySyncState() throws InterruptedException {
-        LogReplicationSession session = LogReplicationSession.newBuilder()
-            .setSourceClusterId(new DefaultClusterConfig().getSourceClusterIds().get(0))
-            .setSinkClusterId(new DefaultClusterConfig().getSinkClusterIds().get(0))
-            .setSubscriber(LogReplicationConfigManager.getDefaultSubscriber())
-            .build();
+        LogReplicationSession session = DefaultClusterConfig.getSessionsForTopology(topologyType, 1, 1).stream().findFirst().get();
 
         ReplicationStatus status = null;
 

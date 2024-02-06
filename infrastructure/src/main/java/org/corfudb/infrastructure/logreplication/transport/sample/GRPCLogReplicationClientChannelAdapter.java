@@ -66,8 +66,6 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
     private final Map<LogReplicationSession, LogReplicationBlockingStub> sessionToBlockingStubMap;
     private final Map<LogReplicationSession, LogReplicationStub> sessionToAsyncStubMap;
     private final ExecutorService executorService;
-
-    private final ConcurrentMap<LogReplicationSession, CorfuStreamObserver<ResponseMsg>> responseObserverMap;
     private final ConcurrentMap<Pair<LogReplicationSession, Long>, CorfuStreamObserver<RequestMsg>> replicationReqObserverMap;
 
 
@@ -89,7 +87,6 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
         this.sessionToAsyncStubMap = new HashMap<>();
         this.executorService = Executors.newSingleThreadExecutor();
         this.connectionFuture = new CompletableFuture<>();
-        this.responseObserverMap = new ConcurrentHashMap<>();
         this.replicationReqObserverMap = new ConcurrentHashMap<>();
         context = Context.current();
     }
@@ -208,62 +205,6 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
             default:
                 break;
         }
-    }
-
-    // Used when connection is triggered from SINK
-    @Override
-    public void send(String nodeId, ResponseMsg response) {
-        if(nodeId == null) {
-            nodeId = this.getRouter().getRemoteLeaderNodeId().get();
-        }
-
-        LogReplicationSession sessionMsg = response.getHeader().getSession();
-
-        if (!responseObserverMap.containsKey(sessionMsg)) {
-            String finalNodeId = nodeId;
-            StreamObserver<RequestMsg> requestObserver = new StreamObserver<RequestMsg>() {
-                @Override
-                public void onNext(RequestMsg request) {
-                    try {
-                        log.info("Received request {}", request.getHeader().getRequestId());
-                        receive(request);
-                    } catch (Exception e) {
-                        log.error("Caught exception while receiving Requests", e);
-                        getRouter().completeExceptionally(sessionMsg, request.getHeader().getRequestId(), e);
-                        responseObserverMap.remove(sessionMsg);
-                    }
-                }
-
-                @Override
-                public void onError(Throwable t) {
-                    log.error("Error from request observer", t);
-                    long requestId = response.getHeader().getRequestId();
-                    getRouter().completeExceptionally(sessionMsg, requestId, t);
-                    responseObserverMap.remove(sessionMsg);
-                    onServiceUnavailable(t, finalNodeId, sessionMsg);
-                    getRouter().inputRemoteSourceLeaderLoss(sessionMsg);
-                }
-
-                @Override
-                public void onCompleted() {
-                    responseObserverMap.remove(sessionMsg);
-                }
-            };
-
-            if(sessionToAsyncStubMap.containsKey(sessionMsg)) {
-                StreamObserver<ResponseMsg> responseObserver = sessionToAsyncStubMap.get(sessionMsg).reverseReplicate(requestObserver);
-                responseObserverMap.put(sessionMsg, new CorfuStreamObserver<>(responseObserver));
-            } else {
-                log.error("No stub found for remote node {}. Message dropped type={}",
-                        nodeId, response.getPayload().getPayloadCase());
-            }
-        }
-
-        responseObserverMap.get(sessionMsg).onNext(response);
-    }
-
-    public void processLeadershipLoss(LogReplicationSession session) {
-        responseObserverMap.remove(session);
     }
 
     private void queryLeadership(String nodeId, RequestMsg request) {
@@ -395,7 +336,6 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
                 });
             }
         });
-        responseObserverMap.clear();
         replicationReqObserverMap.clear();
         nodeIdToChannelMap.keySet().forEach(node -> log.debug("Channel is closed for node {}", node));
         lock.unlock();

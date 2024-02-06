@@ -4,11 +4,13 @@ import com.google.protobuf.Message;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.ExampleSchemas;
+import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.LogReplication.ReplicationStatus;
 import org.corfudb.runtime.collections.CorfuStore;
@@ -24,13 +26,19 @@ import org.junit.After;
 import org.junit.Assert;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 
 import static org.assertj.core.api.Assertions.fail;
+import static org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager.TP_MIXED_MODEL_THREE_SINK;
+import static org.corfudb.runtime.LogReplication.ReplicationModel.FULL_TABLE;
+import static org.corfudb.runtime.LogReplication.ReplicationModel.LOGICAL_GROUPS;
 import static org.corfudb.runtime.LogReplicationUtils.LR_STATUS_STREAM_TAG;
 import static org.corfudb.runtime.LogReplicationUtils.REPLICATION_STATUS_TABLE_NAME;
 import static org.corfudb.integration.LogReplicationAbstractIT.NAMESPACE;
@@ -93,14 +101,18 @@ public class CorfuReplicationMultiSourceSinkIT extends AbstractIT {
     // Listens to replication status updates on a Sink cluster
     private List<ReplicationStatusListener> replicationStatusListeners = new ArrayList<>();
 
+    @Getter
+    private ExampleSchemas.ClusterUuidMsg topologyType;
+
     protected void setUp(int numSourceClusters, int numSinkClusters, ExampleSchemas.ClusterUuidMsg topologyType) throws Exception {
         this.numSourceClusters = numSourceClusters;
         this.numSinkClusters = numSinkClusters;
+        this.topologyType = topologyType;
         setupSourceAndSinkCorfu(numSourceClusters, numSinkClusters);
-        initMultiSinkTopology(topologyType);
+        initMultiSinkTopology();
     }
 
-    private void initMultiSinkTopology(ExampleSchemas.ClusterUuidMsg topologyType) throws Exception {
+    private void initMultiSinkTopology() throws Exception {
         for (int i = 0; i < numSourceClusters; i++) {
             Table<ExampleSchemas.ClusterUuidMsg, ExampleSchemas.ClusterUuidMsg, ExampleSchemas.ClusterUuidMsg> configTable =
                     sourceCorfuStores.get(i).openTable(
@@ -112,6 +124,8 @@ public class CorfuReplicationMultiSourceSinkIT extends AbstractIT {
                 txn.putRecord(configTable, topologyType, topologyType, topologyType);
                 txn.commit();
             }
+
+            DefaultClusterConfig.registerWithLR(sourceCorfuStores.get(i), DefaultClusterConfig.getTopologyTypeToClientModelMap().get(topologyType));
         }
     }
 
@@ -307,6 +321,9 @@ public class CorfuReplicationMultiSourceSinkIT extends AbstractIT {
                 txn.commit();
             }
             Assert.assertEquals(1, configTable.count());
+            for(int i = 0; i < numSourceClusters; ++i) {
+                DefaultClusterConfig.registerWithLR(sourceCorfuStores.get(i), DefaultClusterConfig.getTopologyTypeToClientModelMap().get(topologyType));
+            }
         } else {
             // Start Log Replication
             startReplicationServers();

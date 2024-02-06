@@ -123,7 +123,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
     private SourceForwardingDataSender sourceDataSender;
 
-    private final LogReplicationSession session = DefaultClusterConfig.getSessions().get(0);
+    private final LogReplicationSession session = DefaultClusterConfig.getAllFullTableSessions().get(0);
 
     // List of all opened maps backed by Corfu on Source and Destination
     private Map<String, Table<StringKey, IntValue, Metadata>> srcCorfuTables = new HashMap<>();

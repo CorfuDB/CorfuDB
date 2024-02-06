@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure.logreplication.infrastructure;
 
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.tuple.Pair;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.infrastructure.logreplication.utils.SnapshotSyncUtils;
 import org.corfudb.runtime.CorfuStoreMetadata;
@@ -17,6 +18,7 @@ import org.corfudb.runtime.exceptions.StreamingException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.corfudb.infrastructure.logreplication.config.LogReplicationLogicalGroupConfig.CLIENT_CONFIG_TAG;
@@ -70,11 +72,13 @@ public class LogReplicationClientRegisterListener extends StreamListenerResumeOr
      * Subscribe this stream listener to start monitoring the changes of LR client config tables.
      */
     public void start() {
-        CorfuStoreMetadata.Timestamp timestamp = configManager.preprocessAndGetTail();
+        Pair<Set<LogReplication.ReplicationSubscriber>, CorfuStoreMetadata.Timestamp> subscribersAndLogTail = configManager.preprocessAndGetTail();
+        subscribersAndLogTail.getLeft().forEach(sessionManager ::createSessionsWhenLeader);
+        CorfuStoreMetadata.Timestamp tail = subscribersAndLogTail.getRight();
 
-        log.info("Start log replication listener for client registration table from {}", timestamp);
+        log.info("Start log replication listener for client registration table from {}", tail);
         try {
-            corfuStore.subscribeListener(this, CORFU_SYSTEM_NAMESPACE, CLIENT_CONFIG_TAG, tablesOfInterest, timestamp);
+            corfuStore.subscribeListener(this, CORFU_SYSTEM_NAMESPACE, CLIENT_CONFIG_TAG, tablesOfInterest, tail);
             started.set(true);
         } catch (StreamingException e) {
             if (e.getExceptionCause().equals(StreamingException.ExceptionCause.LISTENER_SUBSCRIBED)) {
@@ -117,18 +121,20 @@ public class LogReplicationClientRegisterListener extends StreamListenerResumeOr
         }
 
         for (CorfuStreamEntry entry : registrationTableEntries) {
+            String clientName = ((ClientRegistrationId) entry.getKey()).getClientName();
+            ReplicationModel model = ((ClientRegistrationInfo) entry.getPayload()).getModel();
+            LogReplication.ReplicationSubscriber subscriber = LogReplication.ReplicationSubscriber.newBuilder()
+                    .setClientName(clientName).setModel(model).build();
+
             if (entry.getOperation().equals(CorfuStreamEntry.OperationType.UPDATE)) {
-                String clientName = ((ClientRegistrationId) entry.getKey()).getClientName();
-                ReplicationModel model = ((ClientRegistrationInfo) entry.getPayload()).getModel();
-                // TODO (V2): Currently we add a default subscriber for logical group use case instead of listening
-                //  on client registration. Subscriber should be added upon registration after grpc stream for session
-                //  creation is added.
-                // configManager.onNewClientRegister(subscriber);
-                // sessionManager.createOutgoingSessionsBySubscriber(subscriber);
+                configManager.onNewClientRegister(subscriber);
+                sessionManager.createSessionsWhenLeader(subscriber);
                 log.info("New client {} registered with model {}", clientName, model);
             } else if (entry.getOperation().equals(CorfuStreamEntry.OperationType.DELETE)) {
-                // TODO (V2 / Chris/Shreay): add unregister API for clients
-                String clientName = ((ClientRegistrationId) entry.getKey()).getClientName();
+                // TODO (V2 / Chris/Shreay): add unregister API for clients.
+                //  Currently the in-memory subscriber info will be removed so that in the event of of a switchover
+                //  the old active (new standby) doesn't have the subscriber information
+                configManager.getRegisteredSubscribers().remove(subscriber);
                 log.info("Client {} unregistered", clientName);
             }
         }
@@ -158,11 +164,12 @@ public class LogReplicationClientRegisterListener extends StreamListenerResumeOr
      */
     @Override
     protected CorfuStoreMetadata.Timestamp performFullSync() {
-        CorfuStoreMetadata.Timestamp timestamp = configManager.onClientListenerResume();
-        sessionManager.getSessions().forEach(session -> {
+        Pair<Set<LogReplication.ReplicationSubscriber>, CorfuStoreMetadata.Timestamp> subscribersAndTs = configManager.onClientListenerResume();
+        subscribersAndTs.getLeft().forEach(sessionManager::createSessionsWhenLeader);
+        sessionManager.getOutgoingSessions().forEach(session -> {
             SnapshotSyncUtils.enforceSnapshotSync(session, corfuStore,
                     LogReplication.ReplicationEvent.ReplicationEventType.FORCE_SNAPSHOT_SYNC);
         });
-        return timestamp;
+        return subscribersAndTs.getRight();
     }
 }

@@ -265,7 +265,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         // topology cannot be discovered and therefore LR cannot start, for this reason, connection
         // should be attempted indefinitely.
         try {
-            clusterManagerAdapter.register(this);
+            clusterManagerAdapter.register(this, runtime);
 
             IRetry.build(IntervalRetry.class, () -> {
                 try {
@@ -373,7 +373,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
 
         // Setup the connection components if this node is the leader
         if (sessionManager.getReplicationContext().getIsLeader().get()) {
-            setupConnectionComponents();
+            setupConnectionReceivingComponents();
         }
 
         // If invoked on a topology change and no longer a Source, stop the listeners
@@ -381,7 +381,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
             if (logReplicationEventListener != null) {
                 logReplicationEventListener.stop();
             }
-            sessionManager.stopClientConfigListener();
+            sessionManager.stopClientRegistrationListener();
         }
 
         // If the current cluster is a Source and a leader, start the listeners
@@ -389,21 +389,19 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
             if (logReplicationEventListener == null) {
                 logReplicationEventListener = new LogReplicationEventListener(this, runtime);
             }
+            // The order of starting the below 2 listeners is important, specially so for upgrade scenarios where the
+            // enforce_snapshot_sync event would be added to the event table after the source cluster upgrades.
+            // If the sessions are not created by then, we miss processing the event on the existing subscribers.
+            sessionManager.startClientRegistrationListener();
             logReplicationEventListener.start();
-            sessionManager.startClientConfigListener();
         }
-    }
-
-    private void setupConnectionComponents() {
-        setupConnectionReceivingComponents();
-        sessionManager.connectToRemoteClusters();
     }
 
     /**
      * Create CorfuInterClusterReplicationServerNode when the cluster is a connection endpoint.
      */
     private void setupConnectionReceivingComponents() {
-        if (!sessionManager.isConnectionReceiver()) {
+        if (!topologyDescriptor.getRemoteSinkClusters().isEmpty()) {
             if (interClusterServerNode != null) {
                 // Stop the replication server.
                 // There may be a topology change where the remote cluster that would connect to the local cluster was
@@ -454,7 +452,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
      */
     private void stopLogReplication(boolean lockReleased) {
         if (lockReleased || sessionManager.getReplicationContext().getIsLeader().get()) {
-            log.info("Stopping log replication.");
+            log.info("Stopping Log Replication");
             sessionManager.stopReplication();
         }
     }

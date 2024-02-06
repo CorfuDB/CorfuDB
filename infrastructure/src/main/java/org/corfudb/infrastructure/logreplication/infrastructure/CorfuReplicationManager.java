@@ -42,15 +42,14 @@ public class CorfuReplicationManager {
     /**
      * Create Log Replication Runtime for a session, if not already created.
      */
-    public void createAndStartRuntime(ClusterDescriptor remote, LogReplicationSession replicationSession,
-                                      LogReplicationClientServerRouter router) {
+    public void createAndStartRuntime(LogReplicationSession replicationSession, LogReplicationClientServerRouter router) {
         try {
             CorfuLogReplicationRuntime replicationRuntime;
             if (!sessionRuntimeMap.containsKey(replicationSession)) {
                 log.info("Creating Log Replication Runtime for session {}", replicationSession);
                 replicationRuntime = new CorfuLogReplicationRuntime(metadataManager, replicationSession, replicationContext, router);
                 sessionRuntimeMap.put(replicationSession, replicationRuntime);
-                router.addRuntimeFSM(replicationSession, replicationRuntime);
+                router.getSessionToRuntimeFSM().put(replicationSession, replicationRuntime);
                 replicationRuntime.start();
             } else {
                 log.warn("Log Replication Runtime to remote session {}, already exists. Skipping init.",

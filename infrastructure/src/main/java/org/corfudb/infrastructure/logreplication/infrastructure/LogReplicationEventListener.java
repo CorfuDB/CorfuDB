@@ -112,7 +112,7 @@ public final class LogReplicationEventListener implements StreamListener {
     }
 
     private void triggerForcedSnapshotSyncForAllSessions(LogReplication.ReplicationEvent event) {
-        for (LogReplicationSession session : discoveryService.getSessionManager().getSessions()) {
+        for (LogReplicationSession session : discoveryService.getSessionManager().getOutgoingSessions()) {
             log.info("Adding event for forced snapshot sync request for session {}, sync_id={}",
                     session, event.getEventId());
             discoveryService.input(new DiscoveryServiceEvent(DiscoveryServiceEventType.ENFORCE_SNAPSHOT_SYNC,

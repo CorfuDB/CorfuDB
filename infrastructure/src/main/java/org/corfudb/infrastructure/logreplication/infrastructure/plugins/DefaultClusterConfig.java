@@ -1,16 +1,45 @@
 package org.corfudb.infrastructure.logreplication.infrastructure.plugins;
 
+import com.google.protobuf.Message;
+import com.google.protobuf.Timestamp;
 import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
+import org.corfudb.runtime.ExampleSchemas;
+import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
+import org.corfudb.runtime.collections.CorfuStore;
+import org.corfudb.runtime.collections.CorfuStoreEntry;
+import org.corfudb.runtime.collections.Table;
+import org.corfudb.runtime.collections.TableOptions;
+import org.corfudb.runtime.collections.TxnContext;
+
+import java.lang.reflect.InvocationTargetException;
+import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.Objects;
+import java.util.Set;
 
 import static org.corfudb.common.util.URLUtils.getPortFromEndpointURL;
+import static org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager.TP_MIXED_MODEL_THREE_SINK;
+import static org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager.TP_MULTI_SINK;
+import static org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager.TP_MULTI_SOURCE;
+import static org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager.TP_SINGLE_SOURCE_SINK;
+import static org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager.TP_SINGLE_SOURCE_SINK_ROUTING_QUEUE;
+import static org.corfudb.runtime.LogReplication.ReplicationModel.FULL_TABLE;
+import static org.corfudb.runtime.LogReplication.ReplicationModel.LOGICAL_GROUPS;
+import static org.corfudb.runtime.LogReplication.ReplicationModel.ROUTING_QUEUES;
+import static org.corfudb.runtime.LogReplicationClient.LR_REGISTRATION_TABLE_NAME;
+import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
+@Slf4j
 public final class DefaultClusterConfig {
 
     @Getter
@@ -99,32 +128,57 @@ public final class DefaultClusterConfig {
     @Getter
     private final int logSinkAckCycleTimer = 1000;
 
-    public static List<LogReplicationSession> getSessions() {
+    @Getter
+    private static final HashMap<ExampleSchemas.ClusterUuidMsg, HashMap<LogReplication.ReplicationModel, Set<String>>> topologyTypeToClientModelMap = new HashMap<>();
+
+    static {
+        topologyTypeToClientModelMap.put(TP_SINGLE_SOURCE_SINK, new HashMap<>());
+        topologyTypeToClientModelMap.get(TP_SINGLE_SOURCE_SINK).put(FULL_TABLE, Collections.singleton("SampleClient1"));
+
+        topologyTypeToClientModelMap.put(TP_MULTI_SINK, new HashMap<>());
+        topologyTypeToClientModelMap.get(TP_MULTI_SINK).put(FULL_TABLE, Collections.singleton("SampleClient2"));
+
+        topologyTypeToClientModelMap.put(TP_MULTI_SOURCE, new HashMap<>());
+        topologyTypeToClientModelMap.get(TP_MULTI_SOURCE).put(FULL_TABLE, Collections.singleton("SampleClient3"));
+
+        topologyTypeToClientModelMap.put(TP_MIXED_MODEL_THREE_SINK, new HashMap<>());
+        topologyTypeToClientModelMap.get(TP_MIXED_MODEL_THREE_SINK).put(FULL_TABLE, Collections.singleton("SampleClient4"));
+        topologyTypeToClientModelMap.get(TP_MIXED_MODEL_THREE_SINK).put(LOGICAL_GROUPS, Collections.singleton("SampleClient5"));
+
+        topologyTypeToClientModelMap.put(TP_SINGLE_SOURCE_SINK_ROUTING_QUEUE, new HashMap<>());
+        topologyTypeToClientModelMap.get(TP_SINGLE_SOURCE_SINK_ROUTING_QUEUE).put(ROUTING_QUEUES, Collections.singleton("SampleClient6"));
+    }
+
+    public static List<LogReplicationSession> getAllFullTableSessions() {
         List<LogReplicationSession> sessions = new LinkedList<>();
         for(String sourceClusterId : sourceClusterIds) {
             for(String sinkClusterId : sinkClusterIds) {
                 sessions.add(LogReplicationSession.newBuilder()
                         .setSourceClusterId(sourceClusterId)
                         .setSinkClusterId(sinkClusterId)
-                        .setSubscriber(LogReplicationConfigManager.getDefaultSubscriber())
+                        .setSubscriber(getDefaultFullTableSubscriber())
                         .build());
             }
         }
         return sessions;
     }
 
-    public static List<LogReplicationSession> getRoutingQueueSessions() {
-        List<LogReplicationSession> sessions = new LinkedList<>();
-        for(String sourceClusterId : sourceClusterIds) {
-            for(String sinkClusterId : sinkClusterIds) {
-                sessions.add(LogReplicationSession.newBuilder()
-                    .setSourceClusterId(sourceClusterId)
-                    .setSinkClusterId(sinkClusterId)
-                    .setSubscriber(LogReplicationConfigManager.getDefaultRoutingQueueSubscriber())
-                    .build());
-            }
-        }
-        return sessions;
+    public static LogReplication.ReplicationSubscriber getDefaultFullTableSubscriber() {
+        return LogReplication.ReplicationSubscriber.newBuilder()
+                .setClientName(LogReplicationConfigManager.DEFAULT_CLIENT)
+                .setModel(LogReplication.ReplicationModel.FULL_TABLE)
+                .build();
+    }
+
+    public static LogReplicationSession getSpecificSession(int sourceIdx, int sinkIdx, String clientName, LogReplication.ReplicationModel model) {
+        return LogReplicationSession.newBuilder()
+                .setSourceClusterId(sourceClusterIds.get(sourceIdx))
+                .setSinkClusterId(sinkClusterIds.get(sinkIdx))
+                .setSubscriber(LogReplication.ReplicationSubscriber.newBuilder()
+                        .setClientName(clientName)
+                        .setModel(model)
+                        .build())
+                .build();
     }
 
     public String getDefaultNodeId(String endpoint) {
@@ -143,5 +197,97 @@ public final class DefaultClusterConfig {
             }
         }
         return null;
+    }
+
+    public static void registerWithLR(CorfuStore store,
+                                      HashMap<LogReplication.ReplicationModel, Set<String>> modelToClients) throws  Exception {
+
+        Table<LogReplication.ClientRegistrationId, LogReplication.ClientRegistrationInfo, Message> finalReplicationRegistrationTable = openClientRegistrationTable(store);
+        modelToClients.entrySet().forEach(e -> {
+            e.getValue().forEach(client -> {
+                log.info("Registering client {} for model {}", client, e.getKey());
+                LogReplication.ClientRegistrationId clientKey = LogReplication.ClientRegistrationId.newBuilder()
+                        .setClientName(client)
+                        .build();
+                Instant time = Instant.now();
+                Timestamp timestamp = Timestamp.newBuilder().setSeconds(time.getEpochSecond())
+                        .setNanos(time.getNano()).build();
+                LogReplication.ClientRegistrationInfo clientInfo = LogReplication.ClientRegistrationInfo.newBuilder()
+                        .setClientName(client)
+                        .setModel(e.getKey())
+                        .setRegistrationTime(timestamp)
+                        .build();
+
+                try (TxnContext txn = store.txn(CORFU_SYSTEM_NAMESPACE)) {
+                    txn.putRecord(finalReplicationRegistrationTable, clientKey, clientInfo, null);
+                    txn.commit();
+                }
+            });
+        });
+    }
+
+    public static Set<LogReplicationSession> getSessionsForTopology(ExampleSchemas.ClusterUuidMsg topologyType,
+                                                                    int numSource, int numSink) {
+        Set<LogReplicationSession> allSessions = new HashSet<>();
+        for (int i = 0; i < numSource; ++i) {
+            String sourceClusterId = sourceClusterIds.get(i);
+            for (int j = 0; j < numSink; ++j) {
+                String sinkClusterId = sinkClusterIds.get(j);
+
+                DefaultClusterConfig.getTopologyTypeToClientModelMap().get(topologyType).forEach((key, value) -> value.forEach(client -> {
+                    LogReplication.ReplicationSubscriber subscriber = LogReplication.ReplicationSubscriber.newBuilder()
+                            .setModel(key)
+                            .setClientName(client)
+                            .build();
+
+                    LogReplicationSession session = LogReplicationSession.newBuilder()
+                            .setSourceClusterId(sourceClusterId)
+                            .setSinkClusterId(sinkClusterId)
+                            .setSubscriber(subscriber)
+                            .build();
+                    allSessions.add(session);
+                }));
+            }
+        }
+
+        return allSessions;
+    }
+
+    public static void unregisterFullTableClient(CorfuStore corfuStore) throws Exception {
+        openClientRegistrationTable(corfuStore);
+        List<CorfuStoreEntry<LogReplication.ClientRegistrationId, LogReplication.ClientRegistrationInfo, Message>> clientRegistrationRecords;
+        try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+             clientRegistrationRecords = txn.executeQuery(LR_REGISTRATION_TABLE_NAME, p -> true);
+        }
+        List<LogReplication.ClientRegistrationId> keysToDelete = new ArrayList<>();
+        for (CorfuStoreEntry<LogReplication.ClientRegistrationId, LogReplication.ClientRegistrationInfo, Message> e : clientRegistrationRecords) {
+            if (e.getPayload().getModel().equals(FULL_TABLE)) {
+                keysToDelete.add(e.getKey());
+            }
+        }
+
+        for (LogReplication.ClientRegistrationId keyToDelete : keysToDelete) {
+            try(TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+                txn.delete(LR_REGISTRATION_TABLE_NAME, keyToDelete);
+            }
+        }
+    }
+
+    private static Table<LogReplication.ClientRegistrationId, LogReplication.ClientRegistrationInfo, Message>
+    openClientRegistrationTable(CorfuStore store) throws InvocationTargetException, NoSuchMethodException, IllegalAccessException {
+        Table<LogReplication.ClientRegistrationId, LogReplication.ClientRegistrationInfo, Message> replicationRegistrationTable;
+
+        try {
+            replicationRegistrationTable = store.getTable(CORFU_SYSTEM_NAMESPACE, LR_REGISTRATION_TABLE_NAME);
+        } catch (NoSuchElementException | IllegalArgumentException e) {
+            replicationRegistrationTable =
+                    store.openTable(CORFU_SYSTEM_NAMESPACE, LR_REGISTRATION_TABLE_NAME,
+                            LogReplication.ClientRegistrationId.class,
+                            LogReplication.ClientRegistrationInfo.class,
+                            null,
+                            TableOptions.fromProtoSchema(LogReplication.ClientRegistrationInfo.class));
+        }
+
+        return replicationRegistrationTable;
     }
 }

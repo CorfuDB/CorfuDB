@@ -44,23 +44,6 @@ public abstract class IServerChannelAdapter {
     public abstract void send(CorfuMessage.ResponseMsg msg);
 
     /**
-     * Send a message across the channel to a specific endpoint.
-     *
-     * @param request corfu message to be sent
-     */
-    public abstract void send(CorfuMessage.RequestMsg request);
-
-    /**
-     * Receive a message from Server.
-     * The adapter will forward this message to the router for further processing.
-     *
-     * @param msg received corfu message
-     */
-    public void receive(CorfuMessage.ResponseMsg msg) {
-        router.receive(msg);
-    }
-
-    /**
      * Receive a message from Client.
      * @param msg received corfu message
      */

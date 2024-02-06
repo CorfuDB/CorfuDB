@@ -18,8 +18,6 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
-import static org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationFsmUtil.canEnqueueStopRuntimeFsmEvent;
-
 /**
  * Log Replication Runtime Negotiating State.
  *
@@ -90,10 +88,7 @@ public class NegotiatingState implements LogReplicationRuntimeState {
                 }
                 return null;
             case LOCAL_LEADER_LOSS:
-                if (canEnqueueStopRuntimeFsmEvent(router, fsm, event.isConnectionStarter())) {
-                    return fsm.getStates().get(LogReplicationRuntimeStateType.STOPPED);
-                }
-                return null;
+                return fsm.getStates().get(LogReplicationRuntimeStateType.STOPPED);
             case ERROR:
                 ((UnrecoverableState)fsm.getStates().get(LogReplicationRuntimeStateType.UNRECOVERABLE)).setThrowableCause(event.getT().getCause());
                 return fsm.getStates().get(LogReplicationRuntimeStateType.UNRECOVERABLE);
@@ -132,10 +127,8 @@ public class NegotiatingState implements LogReplicationRuntimeState {
                 // (snapshot or log entry sync). This will be carried along the negotiation_complete event.
                 processNegotiationResponse(response);
 
-                if(router.isConnectionStarterForSession(fsm.getSession())) {
-                    // Negotiation to leader node completed, unblock channel in the router.
-                    router.getSessionToLeaderConnectionFuture().get(fsm.getSession()).complete(null);
-                }
+                // Negotiation to leader node completed, unblock channel in the router.
+                router.getSessionToLeaderConnectionFuture().get(fsm.getSession()).complete(null);
             } else {
                 log.debug("No leader found during negotiation.");
                 // No leader found at the time of negotiation

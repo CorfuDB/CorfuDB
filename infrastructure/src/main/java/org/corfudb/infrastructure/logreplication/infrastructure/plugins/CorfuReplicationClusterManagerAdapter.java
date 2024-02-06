@@ -3,6 +3,7 @@ package org.corfudb.infrastructure.logreplication.infrastructure.plugins;
 import org.corfudb.infrastructure.logreplication.infrastructure.CorfuReplicationDiscoveryServiceAdapter;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationDiscoveryServiceException;
 import org.corfudb.infrastructure.logreplication.infrastructure.TopologyDescriptor;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.LogReplication.ReplicationStatus;
 
@@ -21,7 +22,7 @@ public interface CorfuReplicationClusterManagerAdapter {
     /**
      * Register the discovery service
      */
-    void register(CorfuReplicationDiscoveryServiceAdapter corfuReplicationDiscoveryServiceAdapter);
+    void register(CorfuReplicationDiscoveryServiceAdapter corfuReplicationDiscoveryServiceAdapter, CorfuRuntime runtime);
 
     /**
      * Query the topology information.
