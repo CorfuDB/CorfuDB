@@ -280,6 +280,9 @@ public class LogReplicationMetadataManager {
      * @param value value to update
      */
     public void updateReplicationMetadataField(TxnContext txn, LogReplicationSession session, int fieldNumber, Object value) {
+        if (!replicationContext.getIsLeader().get()) {
+            return;
+        }
         Descriptors.FieldDescriptor fd = ReplicationMetadata.getDescriptor().findFieldByNumber(fieldNumber);
         if (fd == null) {
             log.error("Failed to find metadata field number {} in ReplicationMetadata object. Metadata is not UPDATED!", fieldNumber);
