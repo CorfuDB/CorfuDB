@@ -217,24 +217,13 @@ public class SessionManager {
             throw new UnrecoverableCorfuInterruptedError(e);
         }
 
-        // When a node acquires the lock, check if all the sessions present in the system tables are still valid.
-        // Since the metadata table is written to only by the leader node, we can run into the scenario where
-        // leadership was acquired after processing a topology change.
-        // On acquiring leadership, stale sessions will not get removed from the metadata table as the in-memory copy
-        // of sessions have already been updated.
-        // Therefore, iterate over the sessions in the system tables and remove the stale sessions if any.
         if (replicationContext.getIsLeader().get()) {
-            removeStaleSessionOnLeadershipAcquire();
-        }
-
-        // check if any new SINKs have been added to the topology.
-        Set<String> newRemoteSinksAdded = Sets.difference(newRemoteSinks, currentRemoteSinks);
-        if (!newRemoteSinksAdded.isEmpty()) {
-            configManager.getRegisteredSubscribers().forEach(this::createSessions);
-        } else {
-            // Since sessions are created on all the nodes in the SOURCE cluster, its possible that on leadership change,
-            // the new leader doesn't have any new sessions to create. In that case, only connect
-            connectToRemoteClusters();
+            removeSessionsFromSystemTables(sessionsToRemove);
+            // check if any new SINKs have been added to the topology.
+            Set<String> newRemoteSinksAdded = Sets.difference(newRemoteSinks, currentRemoteSinks);
+            if (!newRemoteSinksAdded.isEmpty()) {
+                configManager.getRegisteredSubscribers().forEach(this::createSessionsWhenLeader);
+            }
         }
     }
 
@@ -273,7 +262,7 @@ public class SessionManager {
      *
      * (2) In the case of client registration (on Source), sessions are created on-demand from client config listener.
      */
-    public void createSessions(ReplicationSubscriber subscriber) {
+    public void createSessionsWhenLeader(ReplicationSubscriber subscriber) {
         if (!replicationContext.getIsLeader().get()) {
             log.debug("Current Node is not the leader. Skipping session creation");
             return;
@@ -375,14 +364,14 @@ public class SessionManager {
                 .build();
     }
 
-    private void removeStaleSessionOnLeadershipAcquire() {
+    private void removeSessionsFromSystemTables(Set<LogReplicationSession> sessionsToRemove) {
         try {
             IRetry.build(IntervalRetry.class, () -> {
                 try (TxnContext txn = metadataManager.getTxnContext()) {
                     Set<LogReplicationSession> sessionsInTable = txn.keySet(METADATA_TABLE_NAME);
                     sessionsInTable.addAll(txn.keySet(REPLICATION_STATUS_TABLE_NAME));
                     sessionsInTable.stream()
-                            .filter(sessionInTable -> !outgoingSessions.contains(sessionInTable) && !incomingSessions.contains(sessionInTable))
+                            .filter(sessionInTable -> sessionsToRemove.contains(sessionInTable))
                             .forEach(staleSession -> metadataManager.removeSession(txn, staleSession));
                     txn.commit();
                     return null;

@@ -73,7 +73,7 @@ public class LogReplicationClientRegisterListener extends StreamListenerResumeOr
      */
     public void start() {
         Pair<Set<LogReplication.ReplicationSubscriber>, CorfuStoreMetadata.Timestamp> subscribersAndLogTail = configManager.preprocessAndGetTail();
-        subscribersAndLogTail.getLeft().forEach(sessionManager :: createSessions);
+        subscribersAndLogTail.getLeft().forEach(sessionManager ::createSessionsWhenLeader);
         CorfuStoreMetadata.Timestamp tail = subscribersAndLogTail.getRight();
 
         log.info("Start log replication listener for client registration table from {}", tail);
@@ -128,7 +128,7 @@ public class LogReplicationClientRegisterListener extends StreamListenerResumeOr
 
             if (entry.getOperation().equals(CorfuStreamEntry.OperationType.UPDATE)) {
                 configManager.onNewClientRegister(subscriber);
-                sessionManager.createSessions(subscriber);
+                sessionManager.createSessionsWhenLeader(subscriber);
                 log.info("New client {} registered with model {}", clientName, model);
             } else if (entry.getOperation().equals(CorfuStreamEntry.OperationType.DELETE)) {
                 // TODO (V2 / Chris/Shreay): add unregister API for clients.
@@ -165,7 +165,7 @@ public class LogReplicationClientRegisterListener extends StreamListenerResumeOr
     @Override
     protected CorfuStoreMetadata.Timestamp performFullSync() {
         Pair<Set<LogReplication.ReplicationSubscriber>, CorfuStoreMetadata.Timestamp> subscribersAndTs = configManager.onClientListenerResume();
-        subscribersAndTs.getLeft().forEach(sessionManager::createSessions);
+        subscribersAndTs.getLeft().forEach(sessionManager::createSessionsWhenLeader);
         sessionManager.getOutgoingSessions().forEach(session -> {
             SnapshotSyncUtils.enforceSnapshotSync(session, corfuStore,
                     LogReplication.ReplicationEvent.ReplicationEventType.FORCE_SNAPSHOT_SYNC);
