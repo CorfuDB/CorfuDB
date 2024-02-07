@@ -279,7 +279,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
 
             @Override
             public void onError(Throwable throwable) {
-                log.warn("Error encountered while receiving leadership response msg {}", throwable);
+                log.warn("Error encountered while receiving leadership response msg", throwable);
             }
 
             @Override
@@ -311,7 +311,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
             log.info("Metadata request for session {}", session);
             if (sessionToBlockingStubMap.containsKey(session)) {
                 ResponseMsg response = sessionToBlockingStubMap.get(session)
-                        .withDeadlineAfter(5000, TimeUnit.MILLISECONDS)
+                        .withDeadlineAfter(180000, TimeUnit.MILLISECONDS)
                         .withWaitForReady()
                         .negotiate(request);
                 receive(response);

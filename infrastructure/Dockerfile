@@ -21,6 +21,7 @@ COPY target/scripts /usr/share/corfu/scripts
 COPY target/logback.prod.xml /usr/share/corfu/conf/logback.prod.xml
 COPY target/corfu-compactor-config.yml /usr/share/corfu/conf/corfu-compactor-config.yml
 COPY target/compactor-logback.prod.xml /usr/share/corfu/conf/compactor-logback.prod.xml
+COPY target/corfu_cloud_plugin_config.properties /usr/share/corfu/conf/corfu_plugin_config.properties
 
 # For integration testing purposes
 COPY target/${CORFU_JAR} /app/corfu.jar

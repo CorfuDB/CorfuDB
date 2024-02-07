@@ -328,7 +328,7 @@ public class CorfuInterClusterReplicationServer implements Runnable {
     private void startDiscoveryService(ServerContext serverContext) {
 
         ILogReplicationVersionAdapter versionPlugin = initVersionPlugin(serverContext.getPluginConfigFilePath());
-        CorfuSaasEndpointProvider.init(serverContext.getPluginConfigFilePath(), versionPlugin.isSaasDeployment());
+        CorfuSaasEndpointProvider.init(versionPlugin.isSaasDeployment());
 
         CorfuRuntime runtime = getRuntime(serverContext);
         CorfuStore corfuStore = new CorfuStore(runtime);

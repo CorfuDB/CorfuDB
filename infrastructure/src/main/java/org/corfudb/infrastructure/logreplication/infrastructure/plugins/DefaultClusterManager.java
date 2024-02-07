@@ -47,7 +47,7 @@ import java.util.stream.Collectors;
  */
 @Slf4j
 public class DefaultClusterManager implements CorfuReplicationClusterManagerAdapter {
-    private static final int BACKUP_CORFU_PORT = 9007;
+    public static final int BACKUP_CORFU_PORT = 9007;
 
     public static final String CONFIG_NAMESPACE = "ns_lr_config_it";
     public static final String CONFIG_TABLE_NAME = "lr_config_it";
@@ -220,7 +220,7 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
         List<String> sinkCorfuPorts = topology.getSinkCorfuPorts();
         List<String> sinkLogReplicationPorts =
                 topology.getSinkLogReplicationPorts();
-        List<String> sinkNodeNames = topology.getSourceNodeNames();
+        List<String> sinkNodeNames = topology.getSinkNodeNames();
         List<String> sinkNodeHosts = topology.getSinkIpAddresses();
         List<String> sinkNodeIds = topology.getSinkNodeUuids();
 
