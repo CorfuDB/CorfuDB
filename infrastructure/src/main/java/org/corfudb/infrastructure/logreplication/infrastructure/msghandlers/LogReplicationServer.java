@@ -98,7 +98,7 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
         this.executor = context.getExecutorService(1, EXECUTOR_NAME_PREFIX);
     }
 
-    public LogReplicationSinkManager createSinkManager(LogReplicationSession session) {
+    public synchronized LogReplicationSinkManager createSinkManager(LogReplicationSession session) {
         if(sessionToSinkManagerMap.containsKey(session)) {
             log.trace("Sink manager already exists for session {}", session);
             return sessionToSinkManagerMap.get(session);
@@ -300,6 +300,7 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
      * Given a leadership request message, send back a
      * response indicating our current leadership status.
      *
+     *
      * @param request the leadership request message
      * @param router  router used for sending back the response
      */
@@ -307,8 +308,15 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
     private void  handleLeadershipQuery(RequestMsg request, ResponseMsg res,
                                                      @Nonnull IClientServerRouter router) {
         log.debug("Log Replication Query Leadership Request received by Server.");
+        ResponseMsg response;
         HeaderMsg responseHeader = getHeaderMsg(request.getHeader());
-        ResponseMsg response = getLeadershipResponse(responseHeader, replicationContext.getIsLeader().get(), localNodeId);
+        // When the SOURCE is on an older version, the session information will not be present in the header. Stall the
+        // SOURCE until the leader on the SINK knows about the FULL_TABLE session.
+        if (!request.getHeader().hasSession() && !allSessions.contains(getSession(request))) {
+            response = getLeadershipResponse(responseHeader, false, localNodeId);
+        } else {
+            response = getLeadershipResponse(responseHeader, replicationContext.getIsLeader().get(), localNodeId);
+        }
         router.sendResponse(response);
     }
 
