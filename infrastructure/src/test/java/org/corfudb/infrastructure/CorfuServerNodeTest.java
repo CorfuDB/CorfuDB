@@ -77,7 +77,7 @@ public class CorfuServerNodeTest {
     public void testDisableFileWatcher() {
         // make mockServerContext return true for disableFIleWatcher
         when(mockServerContext.getServerConfig(ConfigParamNames.DISABLE_FILE_WATCHER))
-                .thenReturn(Optional.of("true"));
+                .thenReturn(Optional.of(true));
         CorfuServerNode node = new CorfuServerNode(mockServerContext, ImmutableMap.of());
         Assertions.assertThat(node.getSslCertWatcher()).isEqualTo(Optional.empty());
     }
