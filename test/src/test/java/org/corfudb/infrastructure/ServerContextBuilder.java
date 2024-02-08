@@ -34,7 +34,7 @@ public class ServerContextBuilder {
     String truststore = "";
     String truststorePasswordFile = "";
     String disableCertExpiryCheckFile = TrustStoreConfig.DEFAULT_DISABLE_CERT_EXPIRY_CHECK_FILE.toString();
-    String disableFileWatcher = String.valueOf(DEFAULT_DISABLE_FILE_WATCHER);
+    boolean disableFileWatcher = DEFAULT_DISABLE_FILE_WATCHER;
 
     String implementation = "local";
 

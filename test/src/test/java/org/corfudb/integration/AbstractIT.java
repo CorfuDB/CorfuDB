@@ -47,6 +47,8 @@ import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.common.config.ConfigParamNames.DISABLE_CERT_EXPIRY_CHECK_FILE;
+import static org.corfudb.common.config.ConfigParamNames.DISABLE_FILE_WATCHER;
 import static org.corfudb.security.tls.TlsUtils.CertStoreConfig.KeyStoreConfig.DEFAULT_DISABLE_FILE_WATCHER;
 
 /**
@@ -574,7 +576,7 @@ public class AbstractIT extends AbstractCorfuTest {
         private String logSizeLimitPercentage = null;
         private String trustStorePassword = null;
         private String disableCertExpiryCheckFile = null;
-        private String disableFileWatcher = String.valueOf(DEFAULT_DISABLE_FILE_WATCHER);
+        private boolean disableFileWatcher = DEFAULT_DISABLE_FILE_WATCHER;
         private String compressionCodec = null;
         private boolean disableHost = false;
         private String networkInterface = null;
@@ -643,10 +645,10 @@ public class AbstractIT extends AbstractCorfuTest {
                     command.append(" -b");
                 }
                 if (disableCertExpiryCheckFile != null) {
-                    command.append(" --disable-cert-expiry-check-file=").append(disableCertExpiryCheckFile);
+                    command.append(" " + DISABLE_CERT_EXPIRY_CHECK_FILE + "=").append(disableCertExpiryCheckFile);
                 }
-                if (disableFileWatcher != null) {
-                    command.append(" --disable-file-watcher=").append(disableFileWatcher);
+                if (disableFileWatcher) {
+                    command.append(" " + DISABLE_FILE_WATCHER);
                 }
 
             }

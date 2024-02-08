@@ -126,11 +126,12 @@ public class CorfuServerNode implements AutoCloseable {
         this.close = new AtomicBoolean(false);
         // Initialize the getSslCertWatcher
         if (serverContext
-                .<String>getServerConfig(ConfigParamNames.DISABLE_FILE_WATCHER)
-                .map(Boolean::parseBoolean)
+                .<Boolean>getServerConfig(ConfigParamNames.DISABLE_FILE_WATCHER)
                 .orElse(KeyStoreConfig.DEFAULT_DISABLE_FILE_WATCHER)){
+            log.info("CorfuServerNode: Disabling FileWatcher for corfu server as per the server args.");
             sslCertWatcher = Optional.empty();
         } else {
+            log.info("CorfuServerNode: Starting FileWatcher for corfu server as per the server args.");
             sslCertWatcher = FileWatcher.newInstance(
                     serverContext.getServerConfig(String.class, ConfigParamNames.KEY_STORE),
                     this::restartServerChannel);
