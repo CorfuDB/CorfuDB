@@ -1,16 +1,19 @@
 package org.corfudb.integration;
 
 import com.google.common.reflect.TypeToken;
+import io.netty.channel.Channel;
 import lombok.extern.slf4j.Slf4j;
 import org.assertj.core.api.Assertions;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters.CorfuRuntimeParametersBuilder;
+import org.corfudb.runtime.clients.NettyClientRouter;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.exceptions.UnreachableClusterException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.FileWatcher;
 import org.corfudb.util.NodeLocator;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -21,6 +24,7 @@ import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.Arrays;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.common.util.URLUtils.getVersionFormattedEndpointURL;
@@ -28,11 +32,19 @@ import static org.corfudb.common.util.URLUtils.getVersionFormattedEndpointURL;
 /**
  * This test suit exercises the ability to enable TLS on Corfu servers and runtime
  * Created by Sam Behnam on 8/13/18.
+ *
+ * Member Variable names indexing Info:
+ * serverKeyStorePath = key store file path of the server.
+ *                      this is the location used by actual server process
+ * Backup = Backup file to restore the original file at the end of tests.
+ *          Backups are created in the @Before section and deleted in the @After section
+ * Temp = Swap files created to copy the file first into a Temp location and then do
+ *        an ATOMIC MOVE from Temp to Destination
  */
 @Slf4j
 public class SecurityIT extends AbstractIT {
     private String corfuSingleNodeHost;
-    private int corfuStringNodePort;
+    private int corfuSingleNodePort;
     private String singleNodeEndpoint;
 
     private boolean tlsEnabled = true;
@@ -45,8 +57,18 @@ public class SecurityIT extends AbstractIT {
     private String runtimePathToTrustStore;
     private String runtimePathToTrustStorePassword;
     private String disableCertExpiryCheckFile;
-    private String disableFileWatcher;
+    private boolean disableFileWatcher = false;
     private static final short SYSTEM_DOWN_HANDLER_TRIGGER_LIMIT = 3;
+    private Path serverKeyStoreFilePath;
+
+    private Path serverKeyStoreFilePathBackup;
+    private Path serverInvalidKeyStorePath;
+    private Path serverInvalidKeyStorePathTemp;
+    private Path serverKeyStoreFilePathTemp;
+
+    private static final int MAX_RETRY_LIMIT = 5;
+    private static final int MIN_RETRY_LIMIT = 3;
+    private static final int RETRY_INTERVAL_SECONDS = 1;
 
     /**
      * A helper method that start a single TLS enabled server and returns a process.
@@ -58,22 +80,20 @@ public class SecurityIT extends AbstractIT {
     private Process runSinglePersistentServerTls(boolean serverEnableTlsMutualAuth) throws IOException {
         AbstractIT.CorfuServerRunner corfuServerRunner = new AbstractIT.CorfuServerRunner()
                 .setHost(corfuSingleNodeHost)
-                .setPort(corfuStringNodePort)
+                .setPort(corfuSingleNodePort)
                 .setTlsEnabled(tlsEnabled)
                 .setKeyStore(serverPathToKeyStore)
                 .setKeyStorePassword(serverPathToKeyStorePassword)
                 .setTrustStore(serverPathToTrustStore)
                 .setTrustStorePassword(serverPathToTrustStorePassword)
-                .setLogPath(getCorfuServerLogPath(corfuSingleNodeHost, corfuStringNodePort))
+                .setLogPath(getCorfuServerLogPath(corfuSingleNodeHost, corfuSingleNodePort))
                 .setSingle(true);
 
         if (disableCertExpiryCheckFile != null) {
             corfuServerRunner.setDisableCertExpiryCheckFile(disableCertExpiryCheckFile);
         }
 
-        if (disableFileWatcher != null) {
-            corfuServerRunner.setDisableFileWatcher(disableFileWatcher);
-        }
+        corfuServerRunner.setDisableFileWatcher(disableFileWatcher);
 
         corfuServerRunner.setTlsMutualAuthEnabled(serverEnableTlsMutualAuth);
 
@@ -88,14 +108,14 @@ public class SecurityIT extends AbstractIT {
      * truststore, it will lead to throwing {@link IllegalArgumentException}.
      */
     @Before
-    public void loadProperties() {
+    public void loadProperties() throws IOException {
         // Load host and port properties
         corfuSingleNodeHost = PROPERTIES.getProperty("corfuSingleNodeHost");
-        corfuStringNodePort = Integer.parseInt(PROPERTIES.getProperty("corfuSingleNodePort"));
+        corfuSingleNodePort = Integer.parseInt(PROPERTIES.getProperty("corfuSingleNodePort"));
 
         singleNodeEndpoint = String.format("%s:%d",
                 corfuSingleNodeHost,
-                corfuStringNodePort);
+                corfuSingleNodePort);
 
         // Load TLS configuration, keystore and truststore properties
         serverPathToKeyStore = getPropertyAbsolutePath("serverPathToKeyStore");
@@ -106,6 +126,26 @@ public class SecurityIT extends AbstractIT {
         runtimePathToKeyStorePassword = getPropertyAbsolutePath("runtimePathToKeyStorePassword");
         runtimePathToTrustStore = getPropertyAbsolutePath("runtimePathToTrustStore");
         runtimePathToTrustStorePassword = getPropertyAbsolutePath("runtimePathToTrustStorePassword");
+
+
+        serverKeyStoreFilePath = Paths.get(serverPathToKeyStore);
+        serverKeyStoreFilePathBackup = serverKeyStoreFilePath.resolveSibling(serverKeyStoreFilePath.getFileName() + ".backup");
+
+        // Backup Valid Certificates
+        Files.copy(serverKeyStoreFilePath, serverKeyStoreFilePathBackup, StandardCopyOption.REPLACE_EXISTING);
+
+        serverInvalidKeyStorePath = Paths.get(getPropertyAbsolutePath("serverPathToInvalidKeyStore"));
+        serverInvalidKeyStorePathTemp = serverInvalidKeyStorePath.resolveSibling(serverInvalidKeyStorePath + ".temp");
+        serverKeyStoreFilePathTemp = serverKeyStoreFilePathBackup.resolveSibling(serverKeyStoreFilePathBackup + ".temp");
+
+    }
+
+    @After
+    public void restoreProperties() throws Exception {
+        Files.move(serverKeyStoreFilePathBackup, serverKeyStoreFilePath, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        Files.deleteIfExists(serverKeyStoreFilePathBackup);
+        Files.deleteIfExists(serverInvalidKeyStorePathTemp);
+        Files.deleteIfExists(serverKeyStoreFilePathTemp);
     }
 
     /**
@@ -255,7 +295,7 @@ public class SecurityIT extends AbstractIT {
                 .systemDownHandler(getShutdownHandler());
 
         Assertions.assertThatThrownBy(() -> createRuntime(
-                getVersionFormattedEndpointURL(corfuSingleNodeHost, corfuStringNodePort),
+                getVersionFormattedEndpointURL(corfuSingleNodeHost, corfuSingleNodePort),
                 paramsBuilder)).isInstanceOf(UnrecoverableCorfuError.class);
 
         assertThat(shutdownCorfuServer(corfuServer)).isTrue();
@@ -293,7 +333,7 @@ public class SecurityIT extends AbstractIT {
                 .systemDownHandler(getShutdownHandler());
 
         CorfuRuntime corfuRuntime = createRuntime(
-                getVersionFormattedEndpointURL(corfuSingleNodeHost, corfuStringNodePort),
+                getVersionFormattedEndpointURL(corfuSingleNodeHost, corfuSingleNodePort),
                 paramsBuilder);
         assertThat(shutdownCorfuServer(corfuServer)).isTrue();
         corfuRuntime.shutdown();
@@ -328,7 +368,7 @@ public class SecurityIT extends AbstractIT {
                 .systemDownHandler(getShutdownHandler());
 
         CorfuRuntime corfuRuntime = createRuntime(
-                getVersionFormattedEndpointURL(corfuSingleNodeHost, corfuStringNodePort),
+                getVersionFormattedEndpointURL(corfuSingleNodeHost, corfuSingleNodePort),
                 paramsBuilder);
         assertThat(shutdownCorfuServer(corfuServer)).isTrue();
         corfuRuntime.shutdown();
@@ -395,17 +435,12 @@ public class SecurityIT extends AbstractIT {
      * @throws InterruptedException when shutdown retry sleep is interrupted
      */
     @Test
-    public void testServerCertReplacementWithValidCerts() throws Exception {
+    public void testServerCertReplacementWithValidAndInvalidCerts() throws Exception {
         // set disableCertExpiryCheckFile
         disableCertExpiryCheckFile = getPropertyAbsolutePath(
                 "disableCertExpiryCheckFile");
 
-        // set disableFileWatcher = false by default
-        disableFileWatcher = getPropertyAbsolutePath(
-                "disableFileWatcher");
-
-        // Run a corfu server
-        // Enable Tls Mutual Auth to trigger CheckClientTrusted() in ReloadableTrustManager
+        // Run a corfu server with default File Watcher settings
         Process corfuServer = runSinglePersistentServerTls(true);
 
         // Create Runtime parameters for enabling TLS
@@ -417,28 +452,62 @@ public class SecurityIT extends AbstractIT {
                 .trustStore(runtimePathToTrustStore)
                 .tsPasswordFile(runtimePathToTrustStorePassword)
                 .disableCertExpiryCheckFile(Paths.get(disableCertExpiryCheckFile))
-                .disableFileWatcher(Boolean.parseBoolean(disableFileWatcher))
+                .disableFileWatcher(disableFileWatcher)
                 .systemDownHandler(getShutdownHandler());
 
         CorfuRuntime corfuRuntime = createRuntime(
-                getVersionFormattedEndpointURL(corfuSingleNodeHost, corfuStringNodePort),
+                getVersionFormattedEndpointURL(corfuSingleNodeHost, corfuSingleNodePort),
                 paramsBuilder);
 
         assertThat(corfuServer.isAlive()).isTrue();
 
-        // Replace certificates with Valid Certificates
+        // Wait for some time and check that client connects to the server with an initial channel
+        Channel initialChannel = null;
+        for (int i = 0; i < MAX_RETRY_LIMIT; i++) {
+            initialChannel = ((NettyClientRouter)corfuRuntime.getRouter(getVersionFormattedEndpointURL(corfuSingleNodeHost, corfuSingleNodePort))).getChannel();
+            if (initialChannel.isActive()){
+                break;
+            }
+            TimeUnit.SECONDS.sleep(RETRY_INTERVAL_SECONDS);
+        }
+        assertThat(initialChannel).isNotNull();
+        assertThat(initialChannel.isActive()).isTrue();
 
-        assertThat(corfuRuntime.isShutdown()).isTrue();
-        assertThat(corfuRuntime.getNettyEventLoop().isShuttingDown()).isTrue();
-        assertThat(corfuRuntime.getNettyEventLoop().isTerminated()).isTrue();
-        assertThat(corfuRuntime.getNettyEventLoop().isShutdown()).isTrue();
+        // Replace valid certs with invalid ones (Doing MOVE to simulate the client's behavior)
+        Files.copy(serverInvalidKeyStorePath, serverInvalidKeyStorePathTemp, StandardCopyOption.REPLACE_EXISTING);
+        Files.move(serverInvalidKeyStorePathTemp, serverKeyStoreFilePath, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
 
+        // Wait for some time and check that client never connects with the server
+        for (int i = 0; i < MIN_RETRY_LIMIT; i++) {
+            if (!initialChannel.isActive()){
+                break;
+            }
+            TimeUnit.SECONDS.sleep(RETRY_INTERVAL_SECONDS);
+        }
+        assertThat(initialChannel.isActive()).isFalse();
 
+        // Restore back to valid certs
+        Files.copy(serverKeyStoreFilePathBackup, serverKeyStoreFilePathTemp, StandardCopyOption.REPLACE_EXISTING);
+        Files.move(serverKeyStoreFilePathTemp, serverKeyStoreFilePath, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
 
-        // Run a corfu server 2nd time
-        // Enable Tls Mutual Auth to trigger CheckClientTrusted() in ReloadableTrustManager
-        assertThat(corfuServer.isAlive()).isTrue();
+        // Wait for some time and check that client connects to the server with a new channel
+        Channel newChannel = null;
+        for (int i = 0; i < MAX_RETRY_LIMIT; i++) {
+            newChannel = ((NettyClientRouter)corfuRuntime.getRouter(getVersionFormattedEndpointURL(corfuSingleNodeHost, corfuSingleNodePort))).getChannel();
+            if (newChannel.isActive()){
+                break;
+            }
+            TimeUnit.SECONDS.sleep(RETRY_INTERVAL_SECONDS);
+        }
+        assertThat(newChannel).isNotNull();
+        assertThat(newChannel.isActive()).isTrue();
+        assertThat(newChannel.equals(initialChannel)).isFalse();
 
+        // initialChannel should never become active again as it is already closed
+        assertThat(initialChannel.isActive()).isFalse();
+
+        // runtime should still be active
+        assertThat(corfuRuntime.isShutdown()).isFalse();
 
         assertThat(shutdownCorfuServer(corfuServer)).isTrue();
         corfuRuntime.shutdown();

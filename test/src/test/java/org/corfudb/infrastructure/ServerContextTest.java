@@ -24,9 +24,7 @@ public class ServerContextTest {
 
             // Asserting the default value of disableFileWatcher
             assertThat(
-                    Boolean.parseBoolean(
-                        (String)context.getServerConfig().get(DISABLE_FILE_WATCHER)
-                    )
+                    context.getServerConfig().get(DISABLE_FILE_WATCHER)
             ).isEqualTo(DEFAULT_DISABLE_FILE_WATCHER);
 
             EventLoopGroup workersGroup;

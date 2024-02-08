@@ -385,7 +385,7 @@ public class ServerContext implements AutoCloseable {
                 .saslPlainTextEnabled((Boolean) serverConfig.get("--enable-sasl-plain-text-auth"))
                 .usernameFile((String) serverConfig.get("--sasl-plain-text-username-file"))
                 .passwordFile((String) serverConfig.get("--sasl-plain-text-password-file"))
-                // disable filewatcher for management client as when the certs are changed,
+                // Disable FileWatcher for management client as when the certs are changed,
                 // server already re-initializes the connections
                 .disableFileWatcher(true)
                 .bulkReadSize(Integer.parseInt((String) serverConfig.get("--batch-size")))
