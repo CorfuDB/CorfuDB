@@ -82,9 +82,11 @@ public class CompactorService implements ManagementService {
             //the following if condition can possibly invoked by all calls. It's ok to have multiple
             //calls to shutdown and start.
             synchronized (this) {
-                if (!corfuRuntimeOptional.isPresent() || runtime == corfuRuntimeOptional.get()) {
+                if (corfuRuntimeOptional.isPresent() && runtime == corfuRuntimeOptional.get()) {
                     shutdown();
                     start(this.triggerInterval);
+                } else {
+                    runtime.shutdown();
                 }
             }
             throw new UnreachableClusterException("CorfuRuntime for CompactorService stalled. Invoked systemDownHandler after "
@@ -105,7 +107,6 @@ public class CompactorService implements ManagementService {
         } catch (UnrecoverableCorfuError er) {
             log.error("Unable to connect to server due to UnrecoverableCorfuError: ", er);
             runtime.getParameters().getSystemDownHandler().run();
-            throw er;
         }
         log.info("getNewCorfuRuntime: Corfu Runtime connected successfully");
         return runtime;
