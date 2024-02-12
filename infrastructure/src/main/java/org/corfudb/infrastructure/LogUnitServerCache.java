@@ -47,11 +47,11 @@ public class LogUnitServerCache {
     public LogUnitServerCache(LogUnitServerConfig config, StreamLog streamLog) {
         this.streamLog = streamLog;
 
-        this.dataCache = DataCacheConfigurator.builder()
+        this.dataCache = DataCacheConfiguration.builder()
                 .config(config)
                 .cacheLoader(this::handleRetrieval)
                 .build()
-                .buildDataCache();
+                .dataCache();
 
         MeterRegistryProvider
                 .getInstance()
@@ -134,7 +134,7 @@ public class LogUnitServerCache {
     }
 
     @Builder
-    public static class DataCacheConfigurator {
+    public static class DataCacheConfiguration {
         @Default
         @NonNull
         private final Weigher<Long, ILogData> weigher = (addr, logData) -> {
@@ -160,7 +160,7 @@ public class LogUnitServerCache {
         @NonNull
         private final CacheLoader<Long, ILogData> cacheLoader;
 
-        public LoadingCache<Long, ILogData> buildDataCache() {
+        public LoadingCache<Long, ILogData> dataCache() {
             return Caffeine.newBuilder()
                     .weigher(weigher)
                     .maximumWeight(config.getMaxCacheSize())
