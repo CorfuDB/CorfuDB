@@ -25,6 +25,8 @@ public class CheckedRocksIterator implements RocksIteratorInterface, AutoCloseab
     private final AtomicBoolean isValid;
 
     public CheckedRocksIterator(RocksIterator rocksIterator, StampedLock lock, ReadOptions readOptions) {
+        // NOTE: Ensure that the read lock is acquired when called from DiskBackedSMRSnapshot.
+
         // {@link ReadOptions::isOwningHandle} is atomically set to false on
         // {@link ReadOptions::close}. Therefore, if we do not own the handle,
         // the existing snapshot is no longer valid.
@@ -36,7 +38,7 @@ public class CheckedRocksIterator implements RocksIteratorInterface, AutoCloseab
         this.rocksIterator = rocksIterator;
         this.lock = lock;
 
-        underReadLock(rocksIterator::seekToFirst);
+        this.rocksIterator.seekToFirst();
     }
 
     /**

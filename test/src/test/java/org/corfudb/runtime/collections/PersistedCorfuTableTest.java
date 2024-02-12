@@ -61,6 +61,7 @@ import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.AbstractMap.SimpleEntry;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
@@ -68,6 +69,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 import java.util.stream.LongStream;
@@ -90,6 +92,7 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
     private static final Options defaultOptions = new Options().setCreateIfMissing(true);
     private static final ISerializer defaultSerializer = new PojoSerializer(String.class);
     private static final int SAMPLE_SIZE = 100;
+    private static final int SAMPLE_SIZE_TWO = 2;
     private static final int NUM_OF_TRIES = 1;
     private static final int STRING_MIN = 5;
     private static final int STRING_MAX = 10;
@@ -759,6 +762,43 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
                 assertThatThrownBy(iterator::next)
                         .isInstanceOf(TrimmedException.class);
             });
+        }
+    }
+
+    private void entryStreamIterate(PersistedCorfuTable<String, String> table) {
+        final long startTime = System.currentTimeMillis();
+        final long duration = TimeUnit.SECONDS.toMillis(10);
+
+        while (System.currentTimeMillis() - startTime < duration) {executeTx(() -> table.entryStream().count());
+        }
+    }
+
+    /**
+     * Two threads will perform a concurrent scan and filter for N seconds.
+     * This tests ensure that there are no deadlocks on that path.
+     * NOTE: If this tests fails due to a timeout, then that means there is a bug.
+     *
+     * @param intended
+     * @throws InterruptedException
+     */
+    @Property(tries = NUM_OF_TRIES)
+    void concurrentEntryStream(@ForAll @Size(SAMPLE_SIZE_TWO) Set<String> intended) throws InterruptedException {
+        resetTests(CorfuRuntimeParameters.builder().mvoCacheExpiry(Duration.ofNanos(0)).build());
+        try (final PersistedCorfuTable<String, String> table = setupTable()) {
+
+            executeTx(() -> {
+                intended.forEach(entry -> table.insert(entry, entry));
+                intended.forEach(entry -> assertThat(table.get(entry)).isEqualTo(entry));
+            });
+
+            List<Thread> threads = Arrays.asList(
+                    new Thread(() -> entryStreamIterate(table), "T1"),
+                    new Thread(() -> entryStreamIterate(table), "T2"));
+
+            threads.forEach(Thread::start);
+            for (Thread thread : threads) {
+                thread.join();
+            }
         }
     }
 

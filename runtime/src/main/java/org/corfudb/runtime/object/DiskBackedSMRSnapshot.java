@@ -122,7 +122,7 @@ public class DiskBackedSMRSnapshot<S extends SnapshotGenerator<S>> implements SM
     }
 
     public <K, V> RocksDbEntryIterator<K, V> newIterator(ISerializer serializer, Transaction transaction) {
-        // When newIterator is invoked, it's possible that this snapshot has since been invalidated.
+        // When getIterator is invoked, it's possible that this snapshot has since been invalidated.
         // Requesting an iterator from the RocksDB transaction with an invalid snapshot/readOptions causes
         // an internal assertion failure. Hence, CheckedRocksIterator performs necessary validation before
         // creating the new iterator.
