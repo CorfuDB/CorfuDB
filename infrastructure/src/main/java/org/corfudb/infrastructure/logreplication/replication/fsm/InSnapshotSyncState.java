@@ -106,6 +106,7 @@ public class InSnapshotSyncState implements LogReplicationState {
                             .get(LogReplicationStateType.WAIT_SNAPSHOT_APPLY);
                     waitSnapshotApplyState.setTransitionSyncId(transitionSyncId);
                     waitSnapshotApplyState.setBaseSnapshotTimestamp(snapshotSender.getBaseSnapshotTimestamp());
+                    waitSnapshotApplyState.setForcedSnapshotSync(event.getMetadata().isForcedSnapshotSync());
                     fsm.setBaseSnapshot(event.getMetadata().getLastTransferredBaseSnapshot());
                     fsm.setAckedTimestamp(event.getMetadata().getLastLogEntrySyncedTimestamp());
                     snapshotSyncAcksCounter.ifPresent(AtomicLong::getAndIncrement);

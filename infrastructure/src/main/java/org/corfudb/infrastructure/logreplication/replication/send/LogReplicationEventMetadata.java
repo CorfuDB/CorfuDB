@@ -74,6 +74,19 @@ public class LogReplicationEventMetadata {
         this.lastTransferredBaseSnapshot = baseSnapshot;
     }
 
+    /**
+     * Constructor
+     *
+     * @param syncId identifier of the request that preceded this event.
+     * @param syncTimestamp last synced timestamp.
+     * @param baseSnapshot last base snapshot
+     */
+    public LogReplicationEventMetadata(UUID syncId, long syncTimestamp, long baseSnapshot, boolean forcedSnapshotSync) {
+        this(syncId, syncTimestamp);
+        this.lastTransferredBaseSnapshot = baseSnapshot;
+        this.forceSnapshotSync = forcedSnapshotSync;
+    }
+
     public UUID getSyncId() {
         return this.syncId;
     }

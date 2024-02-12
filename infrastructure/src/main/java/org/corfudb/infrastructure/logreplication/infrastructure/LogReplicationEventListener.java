@@ -18,6 +18,7 @@ import org.corfudb.runtime.collections.TableSchema;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -25,16 +26,22 @@ public final class LogReplicationEventListener implements StreamListener {
 
     private final CorfuReplicationDiscoveryService discoveryService;
     private final CorfuStore corfuStore;
+    private AtomicBoolean listenerStarted;
 
     public LogReplicationEventListener(CorfuReplicationDiscoveryService discoveryService, CorfuRuntime runtime) {
         this.discoveryService = discoveryService;
         this.corfuStore = new CorfuStore(runtime);
+        this.listenerStarted = new AtomicBoolean(false);
     }
 
     public void start() {
+        if (listenerStarted.get()) {
+            log.trace("Listener is already started");
+            return;
+        }
         log.info("LogReplication start listener for table {}", LogReplicationMetadataManager.REPLICATION_EVENT_TABLE_NAME);
         try {
-            // Read the event table to process any events written when LR was not running.
+            // Read the event table to process any events written when LR was not running (Processed events are deleted from te table)
             processPendingRequests();
 
             // Subscription can fail if the table was not opened, opened with an incorrect tag or the address at
@@ -45,6 +52,7 @@ public final class LogReplicationEventListener implements StreamListener {
             corfuStore.subscribeListener(this, LogReplicationMetadataManager.NAMESPACE,
                 LogReplicationMetadataManager.LR_STREAM_TAG, Collections.singletonList(
                     LogReplicationMetadataManager.REPLICATION_EVENT_TABLE_NAME));
+            listenerStarted.set(true);
         } catch (Exception e) {
             log.error("Failed to subscribe to the ReplicationEvent Table", e);
         }
@@ -52,6 +60,7 @@ public final class LogReplicationEventListener implements StreamListener {
 
     public void stop() {
         corfuStore.unsubscribeListener(this);
+        this.listenerStarted.set(false);
     }
 
     @Override
@@ -103,10 +112,7 @@ public final class LogReplicationEventListener implements StreamListener {
         //  events handled by onNext(), this logic can be abstracted out to a common method which can be shared with
         //  onNext()
         for (CorfuStoreEntry event : pendingEvents) {
-            if (((ReplicationEvent)event.getPayload()).getType().equals(
-                    ReplicationEventType.UPGRADE_COMPLETION_FORCE_SNAPSHOT_SYNC)) {
-                triggerForcedSnapshotSyncForAllSessions((ReplicationEvent)event.getPayload());
-            }
+            triggerForcedSnapshotSyncForAllSessions((ReplicationEvent)event.getPayload());
         }
     }
 
@@ -122,5 +128,8 @@ public final class LogReplicationEventListener implements StreamListener {
     @Override
     public void onError(Throwable throwable) {
         log.error("onError with a throwable ", throwable);
+        listenerStarted.set(false);
+        // resume the subscription
+        start();
     }
 }
