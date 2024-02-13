@@ -35,26 +35,23 @@ public final class LogReplicationEventListener implements StreamListener {
     }
 
     public void start() {
-        if (listenerStarted.get()) {
-            log.trace("Listener is already started");
-            return;
-        }
-        log.info("LogReplication start listener for table {}", LogReplicationMetadataManager.REPLICATION_EVENT_TABLE_NAME);
-        try {
-            // Read the event table to process any events written when LR was not running (Processed events are deleted from te table)
-            processPendingRequests();
+        if (listenerStarted.compareAndSet(false, true)) {
+            log.info("LogReplication start listener for table {}", LogReplicationMetadataManager.REPLICATION_EVENT_TABLE_NAME);
+            try {
+                // Read the event table to process any events written when LR was not running (Processed events are deleted from te table)
+                processPendingRequests();
 
-            // Subscription can fail if the table was not opened, opened with an incorrect tag or the address at
-            // which subscription is attempted has been trimmed.  None of these are likely in this case as this is an
-            // internal table opened on MetadataManager init(completed before) and subscription is done at the log tail.
-            // However, if there is a failure, simply log it and continue such that normal replication flow is not
-            // interrupted.
-            corfuStore.subscribeListener(this, LogReplicationMetadataManager.NAMESPACE,
-                LogReplicationMetadataManager.LR_STREAM_TAG, Collections.singletonList(
-                    LogReplicationMetadataManager.REPLICATION_EVENT_TABLE_NAME));
-            listenerStarted.set(true);
-        } catch (Exception e) {
-            log.error("Failed to subscribe to the ReplicationEvent Table", e);
+                // Subscription can fail if the table was not opened, opened with an incorrect tag or the address at
+                // which subscription is attempted has been trimmed.  None of these are likely in this case as this is an
+                // internal table opened on MetadataManager init(completed before) and subscription is done at the log tail.
+                // However, if there is a failure, simply log it and continue such that normal replication flow is not
+                // interrupted.
+                corfuStore.subscribeListener(this, LogReplicationMetadataManager.NAMESPACE,
+                        LogReplicationMetadataManager.LR_STREAM_TAG, Collections.singletonList(
+                                LogReplicationMetadataManager.REPLICATION_EVENT_TABLE_NAME));
+            } catch (Exception e) {
+                log.error("Failed to subscribe to the ReplicationEvent Table", e);
+            }
         }
     }
 
