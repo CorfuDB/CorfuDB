@@ -72,8 +72,9 @@ public final class LogReplicationEventListener implements StreamListener {
         // Generate a discovery event and put it into the discovery service event queue.
         for (List<CorfuStreamEntry> entryList : results.getEntries().values()) {
             for (CorfuStreamEntry entry : entryList) {
-                if (entry.getOperation() == CorfuStreamEntry.OperationType.CLEAR) {
-                    log.warn("LREventListener ignoring a CLEAR operation");
+                if (entry.getOperation() == CorfuStreamEntry.OperationType.CLEAR ||
+                        entry.getOperation() == CorfuStreamEntry.OperationType.DELETE) {
+                    log.warn("LREventListener ignoring a {} operation", entry.getOperation());
                     continue;
                 }
                 ReplicationEventInfoKey key = (ReplicationEventInfoKey) entry.getKey();

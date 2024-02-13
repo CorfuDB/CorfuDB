@@ -476,7 +476,9 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
     public void processLockRelease() {
         log.debug("Lock released");
         sessionManager.getReplicationContext().setIsLeader(false);
-        logReplicationEventListener.stop();
+        if(logReplicationEventListener != null) {
+            logReplicationEventListener.stop();
+        }
         sessionManager.stopClientConfigListener();
         sessionManager.notifyLeadershipChange();
         stopLogReplication(true);
