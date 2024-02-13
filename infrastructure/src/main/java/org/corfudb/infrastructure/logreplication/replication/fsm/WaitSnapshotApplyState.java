@@ -102,8 +102,7 @@ public class WaitSnapshotApplyState implements LogReplicationState {
                 if(fsm.isValidTransition(transitionSyncId, event.getMetadata().getSyncId())) {
                     log.debug("Sync has been canceled while waiting for Snapshot Sync {} to complete apply. Restart.", transitionSyncId);
                     LogReplicationState inSnapshotSyncState = fsm.getStates().get(LogReplicationStateType.IN_SNAPSHOT_SYNC);
-                    // new ID for new snapshot sync ID
-                    inSnapshotSyncState.setTransitionSyncId(UUID.randomUUID());
+                    inSnapshotSyncState.setTransitionSyncId(transitionSyncId);
                     ((InSnapshotSyncState) inSnapshotSyncState).setForcedSnapshotSync(event.getMetadata().isForcedSnapshotSync());
                     return inSnapshotSyncState;
                 }

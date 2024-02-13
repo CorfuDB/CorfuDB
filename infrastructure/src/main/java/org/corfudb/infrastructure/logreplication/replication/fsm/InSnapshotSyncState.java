@@ -119,17 +119,10 @@ public class InSnapshotSyncState implements LogReplicationState {
                 // If cancel was intended for current snapshot sync task, cancel and transition to new state
                 if (fsm.isValidTransition(transitionSyncId, event.getMetadata().getSyncId())) {
                     cancelSnapshotSync("cancellation request.");
-                    // Re-trigger SnapshotSync due to error, generate a new event Id for the new snapshot sync
-                    LogReplicationState inSnapshotSyncState = fsm.getStates().get(LogReplicationStateType.IN_SNAPSHOT_SYNC);
-                    UUID newSnapshotSyncId = UUID.randomUUID();
-                    log.debug("Starting new snapshot sync after cancellation id={}", newSnapshotSyncId);
-                    inSnapshotSyncState.setTransitionSyncId(newSnapshotSyncId);
-                    // If a force snapshot sync gets cancelled due to ACK timeout, a new snapshot sync is triggered.
-                    // Retain the 'forced' information in the subsequent snapshot syncs
-                    ((InSnapshotSyncState)inSnapshotSyncState).setForcedSnapshotSync(event.getMetadata().isForcedSnapshotSync());
+                    log.debug("Starting new snapshot sync after cancellation. forced {} ID={}", event.getMetadata().isForcedSnapshotSync(), transitionSyncId);
                     snapshotSender.reset();
                     fsm.getAckReader().markSnapshotSyncInfoOngoing(forcedSnapshotSync, transitionSyncId);
-                    return inSnapshotSyncState;
+                    return this;
                 }
 
                 log.warn("Ignoring Sync Cancel for eventId {}, while running snapshot sync for {}",
