@@ -51,6 +51,7 @@ public final class LogReplicationEventListener implements StreamListener {
                                 LogReplicationMetadataManager.REPLICATION_EVENT_TABLE_NAME));
             } catch (Exception e) {
                 log.error("Failed to subscribe to the ReplicationEvent Table", e);
+                listenerStarted.set(false);
             }
         }
     }
