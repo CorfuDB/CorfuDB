@@ -18,6 +18,7 @@ import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Sleep;
 
 import java.time.Duration;
+import java.util.*;
 import java.util.concurrent.ExecutionException;
 
 /**
@@ -137,5 +138,42 @@ public class BootstrapUtil {
             }
         }
         log.info("Successfully Bootstrapped layout:{} .", layout);
+    }
+
+    /**
+     * Bootstrap the given layout for all the nodes in the router map with the configured
+     * routers. This implementation ignores the AlreadyBootstrappedException.
+     * @param routerMap A configured router map
+     * @param layout A layout to bootstrap
+     * @param retries Num retries
+     * @param retryDuration Duration between retries
+     */
+    public static void bootstrapWithRouterMap(Map<String, NettyClientRouter> routerMap,
+                                              Layout layout, int retries,
+                                              @NonNull Duration retryDuration) {
+        for (String server : routerMap.keySet()) {
+            int retry = retries;
+            try (NettyClientRouter router = routerMap.get(server)) {
+                while (retry-- > 0) {
+                    try {
+                        log.info("Attempting to bootstrap node: {} with layout:{}", server, layout);
+                        bootstrapLayoutServer(router, layout);
+                        bootstrapManagementServer(router, layout);
+                        break;
+                    } catch (AlreadyBootstrappedException abe) {
+                        log.warn("Node already bootstrapped. Skipping.");
+                        break;
+                    } catch (Exception e) {
+                        log.error("Bootstrapping node: {} failed with exception:", server, e);
+                        if (retry == 0) {
+                            throw new RetryExhaustedException("Bootstrapping node: retry exhausted");
+                        }
+                        log.warn("Retrying bootstrap {} times in {}ms.", retry, retryDuration.toMillis());
+                        Sleep.sleepUninterruptibly(retryDuration);
+                    }
+                }
+            }
+            log.info("Successfully Bootstrapped layout:{} from the router map.", layout);
+        }
     }
 }

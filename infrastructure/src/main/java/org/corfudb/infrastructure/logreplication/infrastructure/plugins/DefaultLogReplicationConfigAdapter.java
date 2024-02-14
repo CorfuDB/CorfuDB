@@ -32,6 +32,8 @@ public class DefaultLogReplicationConfigAdapter implements ILogReplicationConfig
         streamsToReplicate.add("Table001");
         streamsToReplicate.add("Table002");
         streamsToReplicate.add("Table003");
+        // TODO (Shreay): make this dynamic
+        streamsToReplicate.add("LR-Test$MyTestTable");
 
         // Support for UFO
         for (int i = 1; i <= MAP_COUNT; i++) {

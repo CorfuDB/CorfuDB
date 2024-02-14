@@ -399,7 +399,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
             if (update) {
                 localClusterDescriptor = tmpClusterDescriptor;
                 localNodeDescriptor = tmpNodeDescriptor;
-                localCorfuEndpoint = getCorfuEndpoint(getLocalHost(), localClusterDescriptor.getCorfuPort());
+                localCorfuEndpoint = getCorfuEndpoint();
             }
         }
 
@@ -409,8 +409,15 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     /**
      * Retrieve local Corfu Endpoint
      */
-    private String getCorfuEndpoint(String localEndpoint, int corfuPort) {
-        return NodeLocator.parseString(localEndpoint).getHost() + ":" + corfuPort;
+    private String getCorfuEndpoint() {
+        // e.g. log-replication2-2.log-replication2.default.svc.cluster.local:9010
+        String lrEndpoint = DefaultClusterConfig.getDefaultNodeId();
+        String name = lrEndpoint.split("\\.")[0];
+        String suffix = "";
+        if (!name.split("-")[1].matches("[a-zA-Z]+")) {
+            suffix = "2";
+        }
+        return "corfu" + suffix + "-" + name.split("-")[2] + ".corfu" + suffix + "-headless.default.svc.cluster.local:9000";
     }
 
     /**
@@ -913,32 +920,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
 
     private void setupLocalNodeId() {
         // Retrieve system-specific node id
-        LogReplicationPluginConfig config = new LogReplicationPluginConfig(serverContext.getPluginConfigFilePath());
-        String nodeIdFilePath = config.getNodeIdFilePath();
-        if (nodeIdFilePath != null) {
-            File nodeIdFile = new File(nodeIdFilePath);
-            try (BufferedReader bufferedReader = new BufferedReader(new FileReader(nodeIdFile))) {
-                String line = bufferedReader.readLine();
-                localNodeId = line.split("=")[1].trim().toLowerCase();
-                log.info("setupLocalNodeId succeeded, node id is {}", localNodeId);
-            } catch (IOException e) {
-                log.error("setupLocalNodeId failed", e);
-                throw new IllegalStateException(e.getCause());
-            }
-        } else {
-            log.error("setupLocalNodeId failed, because nodeId file path is missing!");
-            // For testing purpose, it uses the default host to assign node id
-            if (getLocalHost().equals(DefaultClusterConfig.getDefaultHost())) {
-                localNodeId = DefaultClusterConfig.getDefaultNodeId(localEndpoint);
-                if (localNodeId != null) {
-                    log.info("setupLocalNodeId failed, using default node id {} for test", localNodeId);
-                } else {
-                    throw new IllegalStateException("SetupLocalNodeId failed for testing");
-                }
-            } else {
-                throw new IllegalArgumentException("NodeId file path is missing");
-            }
-        }
+        localNodeId = DefaultClusterConfig.getDefaultNodeId();
     }
 
     private void resetReplicationStatusTableWithRetry() {
