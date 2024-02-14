@@ -455,6 +455,10 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
     private void stopLogReplication(boolean lockReleased) {
         if (lockReleased || sessionManager.getReplicationContext().getIsLeader().get()) {
             log.info("Stopping log replication.");
+            if(logReplicationEventListener != null) {
+                logReplicationEventListener.stop();
+            }
+            sessionManager.stopClientConfigListener();
             sessionManager.stopReplication();
         }
     }
@@ -476,10 +480,6 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
     public void processLockRelease() {
         log.debug("Lock released");
         sessionManager.getReplicationContext().setIsLeader(false);
-        if(logReplicationEventListener != null) {
-            logReplicationEventListener.stop();
-        }
-        sessionManager.stopClientConfigListener();
         sessionManager.notifyLeadershipChange();
         stopLogReplication(true);
         recordLockRelease();
