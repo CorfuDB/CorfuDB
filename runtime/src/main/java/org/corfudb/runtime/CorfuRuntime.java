@@ -976,6 +976,7 @@ public class CorfuRuntime {
         nodeRouterPool = new NodeRouterPool(getRouterFunction);
 
         // Start file watcher on Ssl certs
+        log.info("CorfuRuntime: Initializing sslCertWatcher.");
         sslCertWatcher = getSslCertWatcher();
 
         if (parameters.metricsEnabled) {
@@ -1102,6 +1103,7 @@ public class CorfuRuntime {
         nodeRouterPool.shutdown();
 
         if (!shutdown) {
+            log.info("stop: Re-Initializing sslCertWatcher.");
             sslCertWatcher = getSslCertWatcher();
             nodeRouterPool = new NodeRouterPool(getRouterFunction);
         }
@@ -1420,6 +1422,13 @@ public class CorfuRuntime {
         parameters.trustStore = trustStore;
         parameters.tsPasswordFile = tsPasswordFile;
         parameters.tlsEnabled = true;
+
+        // Start file watcher on Ssl certs if it is not initialized
+        if(!sslCertWatcher.isPresent()){
+            log.info("enableTls: Initializing sslCertWatcher.");
+            sslCertWatcher = getSslCertWatcher();
+        }
+
         return this;
     }
 
