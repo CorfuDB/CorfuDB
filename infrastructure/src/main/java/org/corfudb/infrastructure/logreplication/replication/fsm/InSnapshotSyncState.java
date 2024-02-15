@@ -6,8 +6,10 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.infrastructure.logreplication.replication.send.SnapshotSender;
+import org.corfudb.infrastructure.logreplication.utils.SnapshotSyncUtils;
 import org.corfudb.runtime.LogReplication.SyncStatus;
 import org.corfudb.runtime.LogReplication.SyncType;
+import org.corfudb.runtime.collections.CorfuStore;
 
 import java.util.Optional;
 import java.util.UUID;
@@ -121,6 +123,7 @@ public class InSnapshotSyncState implements LogReplicationState {
                     // Re-trigger SnapshotSync due to error, generate a new event Id for the new snapshot sync
                     LogReplicationState inSnapshotSyncState = fsm.getStates().get(LogReplicationStateType.IN_SNAPSHOT_SYNC);
                     UUID newSnapshotSyncId = UUID.randomUUID();
+                    SnapshotSyncUtils.modifyUpgradeSnapshotSyncEvent(transitionEventId, newSnapshotSyncId, new CorfuStore(fsm.getAckReader().getRuntime()));
                     log.debug("Starting new snapshot sync after cancellation id={}", newSnapshotSyncId);
                     inSnapshotSyncState.setTransitionSyncId(newSnapshotSyncId);
                     // If a force snapshot sync gets cancelled due to ACK timeout, a new snapshot sync is triggered.

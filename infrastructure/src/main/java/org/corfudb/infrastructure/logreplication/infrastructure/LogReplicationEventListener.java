@@ -13,6 +13,7 @@ import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStoreEntry;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
 import org.corfudb.runtime.collections.CorfuStreamEntry;
+import org.corfudb.runtime.collections.CorfuStreamEntry.OperationType;
 import org.corfudb.runtime.collections.StreamListener;
 import org.corfudb.runtime.collections.TableSchema;
 
@@ -66,6 +67,9 @@ public final class LogReplicationEventListener implements StreamListener {
                 if (entry.getOperation() == CorfuStreamEntry.OperationType.CLEAR) {
                     log.warn("LREventListener ignoring a CLEAR operation");
                     continue;
+                } else if (entry.getOperation() == OperationType.DELETE) {
+                    log.warn("LREventListener ignoring a DELETE operation");
+                    continue;
                 }
                 ReplicationEventInfoKey key = (ReplicationEventInfoKey) entry.getKey();
                 ReplicationEvent event = (ReplicationEvent) entry.getPayload();
@@ -82,7 +86,10 @@ public final class LogReplicationEventListener implements StreamListener {
                     // In later versions of LRv2, the Log Replication process will run even when nodes are on
                     // different versions.  At that time, this event will be processed as an update from this
                     // block.
-                    triggerForcedSnapshotSyncForAllSessions(event);
+                    discoveryService.input(new DiscoveryServiceEvent(DiscoveryServiceEventType.ENFORCE_SNAPSHOT_SYNC,
+                            key.getSession(), event.getEventId()));
+                } else if (event.getType().equals(ReplicationEventType.UPGRADE_COMPLETION_FORCE_SNAPSHOT_SYNC_RETRIGGER)) {
+                    log.warn("LREventListener ignoring event for UPGRADE_COMPLETION_FORCE_SNAPSHOT_SYNC_RETRIGGER");
                 } else {
                     log.warn("Received invalid event :: id={}, type={}, cluster_id={} ts={}", event.getEventId(),
                         event.getType(), event.getClusterId(), event.getEventTimestamp());
