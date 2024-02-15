@@ -6,6 +6,10 @@ import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.github.benmanes.caffeine.cache.RemovalListener;
 import com.github.benmanes.caffeine.cache.Weigher;
 import com.google.common.annotations.VisibleForTesting;
+import io.micrometer.core.instrument.FunctionCounter;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Tag;
+import io.micrometer.core.instrument.Tags;
 import io.micrometer.core.instrument.binder.cache.CaffeineCacheMetrics;
 import lombok.Builder;
 import lombok.Builder.Default;
@@ -40,9 +44,7 @@ public class LogUnitServerCache {
     //Empirical threshold of number of streams in a logdata beyond which server performance may be slow
     private static final int MAX_STREAM_THRESHOLD = 20;
 
-    private final String loadTimeName = "logunit.cache.load_time";
     private final String hitRatioName = "logunit.cache.hit_ratio";
-    private final String weightName = "logunit.cache.weight";
 
     public LogUnitServerCache(LogUnitServerConfig config, StreamLog streamLog) {
         this.streamLog = streamLog;
@@ -55,11 +57,29 @@ public class LogUnitServerCache {
 
         MeterRegistryProvider
                 .getInstance()
-                .ifPresent(registry -> CaffeineCacheMetrics.monitor(registry, dataCache, "logunit.read_cache"));
-        MicroMeterUtils.gauge(hitRatioName, dataCache, cache -> cache.stats().hitRate());
-        MicroMeterUtils.gauge(loadTimeName, dataCache, cache -> cache.stats().totalLoadTime());
-        MicroMeterUtils.gauge(weightName, dataCache, cache -> cache.stats().evictionWeight());
+                .ifPresent(registry -> {
+                    CaffeineCacheMetrics.monitor(registry, dataCache, "logunit.read_cache");
+
+                    //calc hit rate
+                    MicroMeterUtils.gauge(hitRatioName, dataCache, cache -> {
+                        double miss = getReadCacheCounter(registry, Tag.of("result", "miss")).count();
+                        double hit = getReadCacheCounter(registry, Tag.of("result", "hit")).count();
+
+                        return hit / (hit + miss);
+                    });
+                });
     }
+
+    private FunctionCounter getReadCacheCounter(MeterRegistry meterRegistry, Tag tag) {
+        Tags cacheTags = Tags.of(Tag.of("cache", "logunit.read_cache"));
+        Tags counterTags = cacheTags.and(tag);
+
+        return meterRegistry
+                .get("cache.gets")
+                .tags(counterTags)
+                .functionCounter();
+    }
+
 
     /**
      * Retrieves the LogUnitEntry from disk, given an address.
@@ -125,7 +145,7 @@ public class LogUnitServerCache {
      */
     public void invalidateAll() {
         dataCache.invalidateAll();
-        MicroMeterUtils.removeGaugesWithNoTags(loadTimeName, hitRatioName, weightName);
+        MicroMeterUtils.removeGaugesWithNoTags(hitRatioName);
     }
 
     @VisibleForTesting
