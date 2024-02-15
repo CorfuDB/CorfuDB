@@ -1301,7 +1301,8 @@ public class CorfuRuntime {
                         MicroMeterUtils.time(fetchSample, "runtime.fetch_layout.timer");
                         return l;
                     } catch (InterruptedException ie) {
-                        throw new UnrecoverableCorfuInterruptedError("Interrupted during layout fetch", ie);
+                        throw new UnrecoverableCorfuInterruptedError(
+                                "Interrupted during layout fetch", ie);
                     } catch (WrongClusterException we) {
                         // It is futile trying to re-connect to the wrong cluster
                         log.warn("Giving up since cluster is incorrect or reconfigured!");
