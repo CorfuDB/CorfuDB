@@ -14,10 +14,10 @@
         <rollingPolicy class="ch.qos.logback.core.rolling.FixedWindowRollingPolicy">
             <fileNamePattern>${LOG_DIRECTORY}/corfu.9000.%i.log.gz</fileNamePattern>
             <minIndex>1</minIndex>
-            <maxIndex>50</maxIndex>
+            <maxIndex>30</maxIndex>
         </rollingPolicy>
         <triggeringPolicy class="ch.qos.logback.core.rolling.SizeBasedTriggeringPolicy">
-            <maxFileSize>50MB</maxFileSize>
+            <maxFileSize>700MB</maxFileSize>
         </triggeringPolicy>
         <encoder>
             <pattern>
@@ -57,24 +57,6 @@
             </pattern>
         </encoder>
     </appender>
-
-    <appender name="log_unit_writes_file" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>${LOG_DIRECTORY}/tx-log.log</file>
-        <rollingPolicy class="ch.qos.logback.core.rolling.FixedWindowRollingPolicy">
-            <fileNamePattern>${LOG_DIRECTORY}/tx-log.%i.log.gz</fileNamePattern>
-            <minIndex>1</minIndex>
-            <maxIndex>100</maxIndex>
-        </rollingPolicy>
-        <triggeringPolicy class="ch.qos.logback.core.rolling.SizeBasedTriggeringPolicy">
-            <maxFileSize>100MB</maxFileSize>
-        </triggeringPolicy>
-        <encoder>
-            <pattern>
-                %date{yyyy-MM-dd'T'HH:mm:ss.SSSXXX, UTC} | %11.11thread | %msg%n%xException
-            </pattern>
-        </encoder>
-    </appender>
-
     <!-- https://logback.qos.ch/manual/appenders.html#AsyncAppender -->
     <appender name="async_file" class="ch.qos.logback.classic.AsyncAppender">
         <appender-ref ref="file" />
@@ -86,13 +68,6 @@
         <queueSize>1024</queueSize>
         <maxFlushTime>5000</maxFlushTime>
     </appender>
-
-    <appender name="async_log_unit_writes_file" class="ch.qos.logback.classic.AsyncAppender">
-        <appender-ref ref="log_unit_writes_file" />
-        <queueSize>1024</queueSize>
-        <maxFlushTime>1000</maxFlushTime>
-    </appender>
-
     <appender name="async_compactor_leader_file" class="ch.qos.logback.classic.AsyncAppender">
         <appender-ref ref="compactor_leader_file" />
         <queueSize>1024</queueSize>
@@ -103,10 +78,6 @@
         <appender-ref ref="async_metrics_file"/>
     </logger>
     <logger name="org.corfudb.client.metricsdata" level="off" />
-
-    <logger name="org.corfudb.infrastructure.LogUnitServerWriter" level="debug">
-        <appender-ref ref="async_log_unit_writes_file"/>
-    </logger>
 
     <logger additivity="false" name="compactor-leader" level="debug">
 	    <appender-ref ref="async_compactor_leader_file"/>

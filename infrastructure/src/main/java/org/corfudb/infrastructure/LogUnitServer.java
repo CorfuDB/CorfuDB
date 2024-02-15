@@ -35,17 +35,12 @@ import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg.PayloadC
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.Utils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nonnull;
 import java.lang.invoke.MethodHandles;
 import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletionException;
@@ -97,11 +92,6 @@ import static org.corfudb.protocols.service.CorfuProtocolMessage.getResponseMsg;
  */
 @Slf4j
 public class LogUnitServer extends AbstractServer {
-
-    public static final int UUID_TAIL_LENGTH = 8;
-
-    private static final String WRITER_LOGGER_NAME = LogUnitServer.class.getName() + "Writer";
-    private static final Logger WRITER_LOG = LoggerFactory.getLogger(WRITER_LOGGER_NAME);
 
     /**
      * The options map.
@@ -308,24 +298,10 @@ public class LogUnitServer extends AbstractServer {
      */
     @RequestHandler(type = PayloadCase.WRITE_LOG_REQUEST)
     private void handleWrite(RequestMsg req, ChannelHandlerContext ctx, IServerRouter router) {
-
         LogData logData = getLogData(req.getPayload().getWriteLogRequest().getLogData());
-        Map<UUID, Long> backPointerMap = logData.getBackpointerMap();
 
-        List<String> reducedBackPointers = new ArrayList<>(backPointerMap.size());
-        backPointerMap.forEach((uuid, data) ->{
-            String uuidStr = uuid.toString();
-            String uuidTail = uuidStr.substring(0, UUID_TAIL_LENGTH);
-
-            reducedBackPointers.add(uuidTail + "=" + data);
-        });
-
-        WRITER_LOG.debug("{}, {}, {}: {}",
-                logData.getToken().getEpoch(),
-                logData.getToken().getSequence(),
-                logData.getType(),
-                reducedBackPointers
-        );
+        log.debug("handleWrite: {}, at: {}, ids: {}",
+                logData.getType(), logData.getToken(), logData.getBackpointerMap());
 
         // Its not clear that making all holes high priority is the right thing to do, but since
         // some reads will block until a hole is filled this is required (i.e. bypass quota checks)
