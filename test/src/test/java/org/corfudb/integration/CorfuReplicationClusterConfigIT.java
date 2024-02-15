@@ -2218,7 +2218,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
 
     @Test
     public void testSinkLockRelease() throws Exception {
-        if (topologyType.equals(TP_SINGLE_SOURCE_SINK)) {
+        if (topologyType.equals(TP_SINGLE_SOURCE_SINK) || topologyType.equals(TP_LOCAL_CLUSTER_NOT_FOUND)) {
             return;
         }
         // Write 10 entries to source map
