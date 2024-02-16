@@ -154,7 +154,7 @@ public class CorfuRuntime {
      * File watcher for SSL key store to support auto hot-swapping.
      */
     @Getter
-    private Optional<FileWatcher> sslCertWatcher;
+    private Optional<FileWatcher> sslCertWatcher = Optional.empty();
 
     /**
      * A completable future containing a layout, when completed.
@@ -975,10 +975,6 @@ public class CorfuRuntime {
         // Initializing the node router pool.
         nodeRouterPool = new NodeRouterPool(getRouterFunction);
 
-        // Start file watcher on Ssl certs
-        log.info("CorfuRuntime: Initializing sslCertWatcher.");
-        sslCertWatcher = getSslCertWatcher();
-
         if (parameters.metricsEnabled) {
             Logger logger = LoggerFactory.getLogger("org.corfudb.client.metricsdata");
             if (logger.isDebugEnabled()) {
@@ -1099,12 +1095,11 @@ public class CorfuRuntime {
      * Stop all routers associated with this Corfu Runtime.
      **/
     public void stop(boolean shutdown) {
-        sslCertWatcher.ifPresent(FileWatcher::close);
-        nodeRouterPool.shutdown();
-
-        if (!shutdown) {
-            log.info("stop: Re-Initializing sslCertWatcher.");
-            sslCertWatcher = getSslCertWatcher();
+        if (shutdown) {
+            sslCertWatcher.ifPresent(FileWatcher::close);
+            nodeRouterPool.shutdown();
+        } else {
+            log.info("stop: Re-Initializing nodeRouterPool.");
             nodeRouterPool = new NodeRouterPool(getRouterFunction);
         }
     }
@@ -1345,6 +1340,12 @@ public class CorfuRuntime {
 
         log.info("connect: runtime parameters {}", getParameters());
 
+        // Start file watcher on Ssl certs
+        if (!sslCertWatcher.isPresent()) {
+            log.info("connect: Initializing sslCertWatcher.");
+            sslCertWatcher = getSslCertWatcher();
+        }
+
         if (layout == null) {
             log.info("Connecting to Corfu server instance, layout servers={}", bootstrapLayoutServers);
             // Fetch the current layout and save the future.
@@ -1422,12 +1423,6 @@ public class CorfuRuntime {
         parameters.trustStore = trustStore;
         parameters.tsPasswordFile = tsPasswordFile;
         parameters.tlsEnabled = true;
-
-        // Start file watcher on Ssl certs if it is not initialized
-        if(!sslCertWatcher.isPresent()){
-            log.info("enableTls: Initializing sslCertWatcher.");
-            sslCertWatcher = getSslCertWatcher();
-        }
 
         return this;
     }
