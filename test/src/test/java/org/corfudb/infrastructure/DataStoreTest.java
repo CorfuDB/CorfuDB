@@ -1,7 +1,6 @@
 package org.corfudb.infrastructure;
 
 import com.google.common.collect.ImmutableMap;
-import com.google.gson.reflect.TypeToken;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.infrastructure.datastore.DataStore;
 import org.corfudb.infrastructure.datastore.KvDataStore.KvRecord;
@@ -11,8 +10,6 @@ import org.junit.Test;
 import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
@@ -26,9 +23,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 public class DataStoreTest extends AbstractCorfuTest {
 
     private static final KvRecord<String> TEST_RECORD = KvRecord.of("test", "key", String.class);
-
-    private static final KvRecord<Map> TEST_MAP_RECORD = KvRecord.of("test_map", "key",
-            new TypeToken<HashMap<UUID, String>>(){}.getType());
 
     private DataStore createPersistDataStore(String serviceDir, String numRetention,
                                              Consumer<String> cleanupTask) {
@@ -58,25 +52,6 @@ public class DataStoreTest extends AbstractCorfuTest {
 
         dataStore.put(TEST_RECORD, "NEW_VALUE");
         assertThat(dataStore.get(TEST_RECORD)).isEqualTo("NEW_VALUE");
-    }
-
-    @Test
-    public void testPutGetNestedValue() {
-        final String numRetention = "10";
-        final String serviceDir = PARAMETERS.TEST_TEMP_DIR;
-        DataStore dataStore = createPersistDataStore(serviceDir, numRetention, fn -> {});
-        Map<UUID, String> value = new HashMap<>();
-        UUID uuidKey = UUID.randomUUID();
-        value.put(uuidKey, "value1");
-        dataStore.put(TEST_MAP_RECORD, value);
-        assertThat(dataStore.get(TEST_MAP_RECORD)).isEqualTo(value);
-
-        dataStore.delete(TEST_MAP_RECORD);
-        assertThat(dataStore.get(TEST_MAP_RECORD)).isEqualTo(value);
-
-        value.put(uuidKey, "value2");
-        dataStore.put(TEST_MAP_RECORD, value);
-        assertThat(dataStore.get(TEST_MAP_RECORD)).isEqualTo(value);
     }
 
     @Test

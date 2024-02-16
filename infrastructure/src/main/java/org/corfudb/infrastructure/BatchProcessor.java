@@ -199,9 +199,6 @@ public class BatchProcessor implements AutoCloseable {
                             case RESET:
                                 streamLog.reset();
                                 break;
-                            case DUMP_LOG_METADATA:
-                                streamLog.persistLogMetadata();
-                                break;
                             case TAILS_QUERY:
                                 final TailsResponse tails;
 
