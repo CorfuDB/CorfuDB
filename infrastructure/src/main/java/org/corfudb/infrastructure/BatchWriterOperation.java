@@ -20,7 +20,6 @@ public class BatchWriterOperation<T> {
         PREFIX_TRIM,
         SEAL,
         RESET,
-        DUMP_LOG_METADATA,
         TAILS_QUERY,
         LOG_ADDRESS_SPACE_QUERY
     }

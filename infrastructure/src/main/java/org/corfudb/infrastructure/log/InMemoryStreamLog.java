@@ -235,9 +235,4 @@ public class InMemoryStreamLog implements StreamLog {
         // Clearing all data from the cache.
         logCache.clear();
     }
-
-    @Override
-    public void persistLogMetadata() {
-        // no-op
-    }
 }

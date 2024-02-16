@@ -30,13 +30,9 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
-import java.util.UUID;
-import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -403,20 +399,11 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         assertThat(log.getDirtySegments().size()).isEqualTo(0);
     }
 
-    private void writeToLog(StreamLog log, long address, UUID streamId) {
+    private void writeToLog(StreamLog log, long address) {
         ByteBuf b = Unpooled.buffer();
         byte[] streamEntry = "Payload".getBytes();
         Serializers.CORFU.serialize(streamEntry, b);
-        LogData logData = new LogData(DataType.DATA, b);
-        Map<UUID, Long> map = new HashMap<>();
-        map.put(streamId, 0L);
-        logData.setBackpointerMap(map);
-        logData.setGlobalAddress(address);
-        log.append(address, logData);
-    }
-
-    private void writeToLog(StreamLog log, long address) {
-        writeToLog(log, address, UUID.randomUUID());
+        log.append(address, new LogData(DataType.DATA, b));
     }
 
     @Test
@@ -578,14 +565,14 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
             writeToLog(log, x);
         }
         final long filesToBeTrimmed = 1;
-        log.prefixTrim(RECORDS_PER_LOG_FILE * filesToBeTrimmed - 1);
+        log.prefixTrim(RECORDS_PER_LOG_FILE * filesToBeTrimmed);
         log.compact();
 
         File logsDir = new File(logDir);
 
         final int expectedFilesBeforeReset = (int) (numSegments - filesToBeTrimmed);
         final long globalTailBeforeReset = (RECORDS_PER_LOG_FILE * numSegments) - 1;
-        final long trimMarkBeforeReset = RECORDS_PER_LOG_FILE * filesToBeTrimmed;
+        final long trimMarkBeforeReset = RECORDS_PER_LOG_FILE * filesToBeTrimmed + 1;
         assertThat(logsDir.list()).hasSize(expectedFilesBeforeReset);
         assertThat(log.getLogTail()).isEqualTo(globalTailBeforeReset);
         assertThat(log.getTrimMark()).isEqualTo(trimMarkBeforeReset);
@@ -595,208 +582,14 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         log.reset();
         assertThat(log.getOpenSegments()).hasSize(0);
 
-        final int expectedFilesAfterReset = 1;
+        final int expectedFilesAfterReset = 2;
         assertThat(logsDir.list()).hasSize(expectedFilesAfterReset);
 
-        final long globalTailAfterReset = 20000 - 1;
+        final long globalTailAfterReset = 20000 + 1;
         assertThat(log.getLogTail()).isEqualTo(globalTailAfterReset);
 
         final long trimMarkAfterReset = trimMarkBeforeReset;
         assertThat(log.getTrimMark()).isEqualTo(trimMarkAfterReset);
-    }
-
-    /**
-     * 1. Generate 3 log segment data.
-     * 2. Trim the 1st segment.
-     * 3. Persist log metadata.
-     * 4. Generate 4th log segment.
-     * 5. Reconstruct StreamLogFiles from persisted log metadata.
-     */
-    @Test
-    public void testLogMetadataReconstructionBasic() {
-        ServerContext sc = getContext();
-        StreamLogFiles log = new StreamLogFiles(sc, new BatchProcessorContext());
-
-        List<UUID> streamIds = new ArrayList<>();
-        for (int i = 0; i < 1000; i++) {
-            streamIds.add(UUID.randomUUID());
-        }
-
-        // Write 30K entries
-        final long numSegments = 3;
-        Map<UUID, List<Long>> addressMap = new HashMap<>();
-        for (int address = 0; address < RECORDS_PER_LOG_FILE * numSegments; address++) {
-            UUID streamId = streamIds.get(address%1000);
-            writeToLog(log, address, streamId);
-            addressMap.computeIfAbsent(streamId, k -> new ArrayList<>()).add((long) address);
-        }
-
-        // Perform prefixTrim and delete the first log segment
-        final long filesToBeTrimmed = 1;
-        long trimAddress = RECORDS_PER_LOG_FILE * filesToBeTrimmed - 1; // inclusive
-        log.prefixTrim(trimAddress);
-        log.compact();
-
-        final Map<UUID, List<Long>> trimmedAddressMap = addressMap.entrySet()
-            .stream()
-            .collect(Collectors.toMap(
-                Map.Entry::getKey,
-                entry -> entry.getValue().stream()
-                    .filter(val -> val > trimAddress)
-                    .collect(Collectors.toList())
-            ));
-
-        log.persistLogMetadata();
-
-        // Write 10K more addresses after the log metadata has been persisted
-        for (int address = (int) (RECORDS_PER_LOG_FILE * numSegments);
-             address < RECORDS_PER_LOG_FILE * (numSegments+1); address++) {
-            UUID streamId = streamIds.get(address%1000);
-            writeToLog(log, address, streamId);
-            trimmedAddressMap.computeIfAbsent(streamId, k -> new ArrayList<>()).add((long) address);
-        }
-        log.updateCommittedTail(RECORDS_PER_LOG_FILE * (numSegments+1) - 1);
-        log.close();
-
-        // Reconstruct log
-        log = new StreamLogFiles(sc, new BatchProcessorContext());
-
-        // Check the reconstructed log metadata
-        assertThat(log.getLogTail()).isEqualTo(RECORDS_PER_LOG_FILE * (numSegments+1) - 1);
-        assertThat(log.getCommittedTail()).isEqualTo(RECORDS_PER_LOG_FILE * (numSegments+1) - 1);
-        assertThat(log.getTrimMark()).isEqualTo(trimAddress + 1);
-
-        assertThat(log.getStreamsAddressSpace().getAddressMap()).hasSize(1000);
-        log.getStreamsAddressSpace().getAddressMap().forEach((uuid, streamAddressSpace) -> {
-            assertThat(streamAddressSpace.size()).isEqualTo(30);
-            assertThat(streamAddressSpace.toArray()).containsExactly(trimmedAddressMap.get(uuid).toArray(new Long[0]));
-        });
-    }
-
-    /**
-     * 1. Generate 0.5 segment of data to stream A.
-     * 2. Generate 1.5 segment of data to stream B.
-     * 3. Trim and delete the 1st segment. Now stream A is trimmed.
-     * 4. Reconstruct StreamLogFiles => prePersisting.
-     * 4. Persist log metadata.
-     * 5. Reconstruct StreamLogFiles => postPersisting.
-     * 6. Verify prePersisting and postPersisting.
-     */
-    @Test
-    public void testLogMetadataReconstructionWithEmptyStream() {
-        ServerContext sc = getContext();
-        StreamLogFiles log = new StreamLogFiles(sc, new BatchProcessorContext());
-
-        UUID streamA = UUID.randomUUID();
-        UUID streamB = UUID.randomUUID();
-
-        // Write 5K entries to stream id in [0..499]
-        Map<UUID, List<Long>> addressMap = new HashMap<>();
-        for (int address = 0; address < 0.5 * RECORDS_PER_LOG_FILE; address++) {
-            writeToLog(log, address, streamA);
-            addressMap.computeIfAbsent(streamA, k -> new ArrayList<>()).add((long) address);
-        }
-
-        // Write 15K entries to stream id in [500..999]
-        for (int address = (int) (0.5 * RECORDS_PER_LOG_FILE); address < 2 * RECORDS_PER_LOG_FILE; address++) {
-            writeToLog(log, address, streamB);
-            addressMap.computeIfAbsent(streamB, k -> new ArrayList<>()).add((long) address);
-        }
-        log.updateCommittedTail(RECORDS_PER_LOG_FILE * 2 - 1);
-
-        // Trim and delete the first log segment
-        final long filesToBeTrimmed = 1;
-        long trimAddress = RECORDS_PER_LOG_FILE * filesToBeTrimmed - 1; // inclusive
-        log.prefixTrim(trimAddress);
-        log.compact();
-
-        StreamLogFiles prePersisting = new StreamLogFiles(sc, new BatchProcessorContext());
-
-        // Persist log metadata
-        log.persistLogMetadata();
-
-        // Reconstruct log from the persisted log metadata
-        StreamLogFiles postPersisting = new StreamLogFiles(sc, new BatchProcessorContext());
-
-        // Check the reconstructed log metadata and verify the stream [0..499] doesn't exist
-        for (StreamLogFiles reconstructed : new StreamLogFiles[]{prePersisting, postPersisting}) {
-            assertThat(reconstructed.getLogTail()).isEqualTo(RECORDS_PER_LOG_FILE * 2 - 1);
-            assertThat(reconstructed.getCommittedTail()).isEqualTo(RECORDS_PER_LOG_FILE * 2 - 1);
-            assertThat(reconstructed.getTrimMark()).isEqualTo(RECORDS_PER_LOG_FILE * filesToBeTrimmed);
-            assertThat(reconstructed.getStreamsAddressSpace().getAddressMap()).doesNotContainKey(streamA);
-        }
-    }
-
-    /**
-     * 1. Generate 1 segment of data (10K entries).
-     * 2. Persist log metadata.
-     * 3. Generate additional 1 segment of data.
-     * 4. Trim at (15K-1) and delete the first segment.
-     * 5. Reconstruct StreamLogFiles from persisted log metadata.
-     */
-    @Test
-    public void testLogMetadataReconstructionWithHigherTrimMark() {
-        ServerContext sc = getContext();
-        StreamLogFiles log = new StreamLogFiles(sc, new BatchProcessorContext());
-
-        List<UUID> streamIds = new ArrayList<>();
-        for (int i = 0; i < 1000; i++) {
-            streamIds.add(UUID.randomUUID());
-        }
-
-        // Write 10K entries
-        final long numSegments = 1;
-        Map<UUID, List<Long>> addressMap = new HashMap<>();
-        for (int address = 0; address < RECORDS_PER_LOG_FILE * numSegments; address++) {
-            UUID streamId = streamIds.get(address%1000);
-            writeToLog(log, address, streamId);
-            addressMap.computeIfAbsent(streamId, k -> new ArrayList<>()).add((long) address);
-        }
-
-        // Persist log metadata
-        log.persistLogMetadata();
-
-        // Write additional 10K entries
-        long start = RECORDS_PER_LOG_FILE * numSegments;
-        long end = RECORDS_PER_LOG_FILE * numSegments * 2;
-        for (long address = start; address < end; address++) {
-            UUID streamId = streamIds.get((int) (address%1000));
-            writeToLog(log, address, streamId);
-            addressMap.computeIfAbsent(streamId, k -> new ArrayList<>()).add(address);
-        }
-        log.updateCommittedTail(RECORDS_PER_LOG_FILE * 2 - 1);
-
-        // Perform prefixTrim at 15K and delete the first log segment
-        long trimAddress = (long) (1.5 * RECORDS_PER_LOG_FILE - 1); // inclusive
-        log.prefixTrim(trimAddress);
-        log.compact();
-
-        final Map<UUID, List<Long>> trimmedAddressMap = addressMap.entrySet()
-            .stream()
-            .collect(Collectors.toMap(
-                Map.Entry::getKey,
-                entry -> entry.getValue().stream()
-                    .filter(val -> val > trimAddress)
-                    .collect(Collectors.toList())
-            ));
-
-        // Reconstruct log
-        log = new StreamLogFiles(sc, new BatchProcessorContext());
-
-        // Check the reconstructed log metadata
-        String logDir = sc.getServerConfig().get("--log-path") + File.separator + "log";
-        File logsDir = new File(logDir);
-        assertThat(logsDir.list()).hasSize(1);
-
-        assertThat(log.getLogTail()).isEqualTo(RECORDS_PER_LOG_FILE * 2 - 1);
-        assertThat(log.getCommittedTail()).isEqualTo(RECORDS_PER_LOG_FILE * 2 - 1);
-        assertThat(log.getTrimMark()).isEqualTo(trimAddress + 1);
-
-        assertThat(log.getStreamsAddressSpace().getAddressMap()).hasSize(1000);
-        log.getStreamsAddressSpace().getAddressMap().forEach((uuid, streamAddressSpace) -> {
-            assertThat(streamAddressSpace.size()).isEqualTo(5);
-            assertThat(streamAddressSpace.toArray()).containsExactly(trimmedAddressMap.get(uuid).toArray(new Long[0]));
-        });
     }
 
     @Test
