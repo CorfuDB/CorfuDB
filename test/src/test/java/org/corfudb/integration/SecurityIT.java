@@ -9,7 +9,10 @@ import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters.CorfuRuntimeParam
 import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.exceptions.UnreachableClusterException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.util.ConnectionUtils;
+import org.corfudb.util.ConnectionUtils.SSLConnectionInfo;
 import org.corfudb.util.FileWatcher;
+import org.corfudb.security.tls.TlsUtils;
 import org.corfudb.util.NodeLocator;
 import org.junit.Before;
 import org.junit.Test;
@@ -21,9 +24,19 @@ import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.Arrays;
 import java.util.Optional;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.common.util.URLUtils.getVersionFormattedEndpointURL;
+import static org.corfudb.test.TestUtils.extractThumbprintsFromKeyStore;
+import static org.corfudb.util.ConnectionUtils.extractIsChannelActive;
+import static org.corfudb.util.ConnectionUtils.extractIsChannelActiveMap;
+import static org.corfudb.util.ConnectionUtils.extractSSLConnectionInfo;
+import static org.corfudb.util.ConnectionUtils.extractSSLConnectionInfoMap;
 
 /**
  * This test suit exercises the ability to enable TLS on Corfu servers and runtime
@@ -46,6 +59,7 @@ public class SecurityIT extends AbstractIT {
     private String runtimePathToTrustStorePassword;
     private String disableCertExpiryCheckFile;
     private static final short SYSTEM_DOWN_HANDLER_TRIGGER_LIMIT = 3;
+    private static final int SLEEP_TIMER_1S = 1;
 
     /**
      * A helper method that start a single TLS enabled server and returns a process.
@@ -378,6 +392,147 @@ public class SecurityIT extends AbstractIT {
         assertThat(sslCertWatcher).isNotEmpty();
         assertThat(sslCertWatcher.get().getIsStopped()).isTrue();
         assertThat(sslCertWatcher.get().getIsRegistered()).isFalse();
+    }
+    /**
+     * Test certificate verification methods in ConnectionUtils with a TLS enabled server.
+     * Cover {@link ConnectionUtils#extractSSLConnectionInfoMap(CorfuRuntime)} and
+     * {@link ConnectionUtils#extractSSLConnectionInfo(NodeLocator, CorfuRuntime)} methods when valid
+     * certs are present.
+     *
+     * @throws IOException when File IO Error occurs while loading certs
+     */
+    @Test
+    public void testSslCertsVerificationWithValidCerts() throws Exception {
+        // Run a corfu server
+        // Enable Tls Mutual Auth to trigger CheckClientTrusted() in ReloadableTrustManager
+        Process corfuServer = runSinglePersistentServerTls(true);
+
+        // Create Runtime parameters for enabling TLS
+        final CorfuRuntimeParametersBuilder paramsBuilder = CorfuRuntime.CorfuRuntimeParameters
+                .builder()
+                .tlsEnabled(tlsEnabled)
+                .keyStore(runtimePathToKeyStore)
+                .ksPasswordFile(runtimePathToKeyStorePassword)
+                .trustStore(runtimePathToTrustStore)
+                .tsPasswordFile(runtimePathToTrustStorePassword)
+                .systemDownHandler(getShutdownHandler());
+
+        CorfuRuntime corfuRuntime = createRuntime(
+                getVersionFormattedEndpointURL(corfuSingleNodeHost, corfuStringNodePort),
+                paramsBuilder);
+
+        List<String> localThumbprintsFromFile = extractThumbprintsFromKeyStore(
+                TlsUtils.CertStoreConfig.KeyStoreConfig.from(
+                        runtimePathToKeyStore,
+                        runtimePathToKeyStorePassword)
+        );
+
+        List<String> remoteThumbprintsFromFile = extractThumbprintsFromKeyStore(
+                TlsUtils.CertStoreConfig.KeyStoreConfig.from(
+                        serverPathToKeyStore,
+                        serverPathToKeyStorePassword)
+        );
+
+        NodeLocator serverNode = NodeLocator.builder()
+                .host(corfuSingleNodeHost).port(corfuStringNodePort).build();
+
+        // Test the ConnectionStatuses of all the routers in the pool (connected to all servers)
+        Map<NodeLocator, SSLConnectionInfo> sslConnectionStatusesFromChannel =
+                extractSSLConnectionInfoMap(corfuRuntime);
+        SSLConnectionInfo sslConnectionInfo = sslConnectionStatusesFromChannel.get(serverNode);
+
+        assertThat(localThumbprintsFromFile.containsAll(sslConnectionInfo.getLocalCertificateThumbprints())).isTrue();
+        assertThat(remoteThumbprintsFromFile.containsAll(sslConnectionInfo.getRemoteCertificateThumbprints())).isTrue();
+
+        // Test the ConnectionStatus of a single node router (connected to a single server)
+        sslConnectionInfo = extractSSLConnectionInfo(serverNode, corfuRuntime);
+        assertThat(localThumbprintsFromFile.containsAll(sslConnectionInfo.getLocalCertificateThumbprints())).isTrue();
+        assertThat(remoteThumbprintsFromFile.containsAll(sslConnectionInfo.getRemoteCertificateThumbprints())).isTrue();
+
+        // Test the getChannelActiveStatus() and getChannelActiveStatuses()
+        assertThat(extractIsChannelActive(serverNode, corfuRuntime)).isTrue();
+        assertThat(extractIsChannelActiveMap(corfuRuntime).get(serverNode)).isTrue();
+
+        assertThat(shutdownCorfuServer(corfuServer)).isTrue();
+        corfuRuntime.shutdown();
+    }
+
+    /**
+     * Test certificate verification methods in ConnectionUtils with a TLS enabled server.
+     * Cover {@link ConnectionUtils#extractSSLConnectionInfoMap(CorfuRuntime)} and
+     * {@link ConnectionUtils#extractSSLConnectionInfo(NodeLocator, CorfuRuntime)} methods when
+     * invalid certs are present.
+     *
+     * @throws IOException when File IO Error occurs while loading certs
+     */
+    @Test
+    public void testSslCertsVerificationWithInvalidCerts() throws Exception {
+        // Run a corfu server
+        // Enable Tls Mutual Auth to trigger CheckClientTrusted() in ReloadableTrustManager
+        Process corfuServer = runSinglePersistentServerTls(true);
+
+        // Overriding with expired runtime keystore
+        String runtimePathToKeyStoreExpired = getPropertyAbsolutePath(
+                "runtimePathToKeyStoreExpired");
+
+        // Create Runtime parameters for enabling TLS
+        final CorfuRuntimeParametersBuilder paramsBuilder = CorfuRuntime.CorfuRuntimeParameters
+                .builder()
+                .tlsEnabled(tlsEnabled)
+                .keyStore(runtimePathToKeyStoreExpired)
+                .ksPasswordFile(runtimePathToKeyStorePassword)
+                .trustStore(runtimePathToTrustStore)
+                .tsPasswordFile(runtimePathToTrustStorePassword)
+                .systemDownHandler(getShutdownHandler());
+
+        CorfuRuntimeParameters rtParams = paramsBuilder
+                .maxMvoCacheEntries(DEFAULT_MVO_CACHE_SIZE)
+                .cacheDisabled(true)
+                .systemDownHandlerTriggerLimit(100000)
+                .build();
+
+        CorfuRuntime corfuRuntime = CorfuRuntime.fromParameters(rtParams)
+                .parseConfigurationString(getVersionFormattedEndpointURL(corfuSingleNodeHost, corfuStringNodePort));
+        managed(corfuRuntime);
+
+        ExecutorService executorService = Executors.newSingleThreadExecutor();
+
+        try {
+            executorService.submit(corfuRuntime::connect);
+
+            NodeLocator serverNode = NodeLocator.builder()
+                    .host(corfuSingleNodeHost).port(corfuStringNodePort).build();
+
+            // Test the ConnectionStatuses of all the routers in the pool (connected to all servers)
+            SSLConnectionInfo sslConnectionInfo = extractSSLConnectionInfoMap(corfuRuntime).get(serverNode);
+            // loop to ensure runtime is started and tries to corfu server
+            // (client bootstrap takes some time)
+            while (sslConnectionInfo == null) {
+                sslConnectionInfo = extractSSLConnectionInfoMap(corfuRuntime).get(serverNode);
+                TimeUnit.SECONDS.sleep(SLEEP_TIMER_1S);
+            }
+            assertThat(sslConnectionInfo.isChannelActive()).isFalse();
+            assertThat(sslConnectionInfo.getRemoteCertificateThumbprints().isEmpty()).isTrue();
+            assertThat(sslConnectionInfo.getLocalCertificateThumbprints().isEmpty()).isTrue();
+
+            // Test the ConnectionStatus of a single node router (connected to a single server)
+            // no need to loop again as we already waited before
+            sslConnectionInfo = extractSSLConnectionInfo(serverNode, corfuRuntime);
+            assertThat(sslConnectionInfo.isChannelActive()).isFalse();
+            assertThat(sslConnectionInfo.getRemoteCertificateThumbprints().isEmpty()).isTrue();
+            assertThat(sslConnectionInfo.getLocalCertificateThumbprints().isEmpty()).isTrue();
+
+            // Test the getChannelActiveStatus() and getChannelActiveStatuses()
+            assertThat(extractIsChannelActive(serverNode, corfuRuntime)).isFalse();
+            assertThat(extractIsChannelActiveMap(corfuRuntime).get(serverNode)).isFalse();
+
+
+        } finally {
+            executorService.shutdownNow();
+            assertThat(shutdownCorfuServer(corfuServer)).isTrue();
+            corfuRuntime.shutdown();
+        }
+
     }
 
     private Runnable getShutdownHandler() {

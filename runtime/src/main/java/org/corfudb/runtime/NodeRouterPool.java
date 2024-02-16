@@ -19,7 +19,7 @@ import java.util.function.Function;
 @Slf4j
 public class NodeRouterPool {
 
-    @Getter(AccessLevel.PROTECTED)
+    @Getter
     private final Map<NodeLocator, IClientRouter> nodeRouters = new ConcurrentHashMap<>();
 
     /**
