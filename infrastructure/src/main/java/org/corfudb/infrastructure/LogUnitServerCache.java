@@ -65,7 +65,8 @@ public class LogUnitServerCache {
                         double miss = getReadCacheCounter(registry, Tag.of("result", "miss")).count();
                         double hit = getReadCacheCounter(registry, Tag.of("result", "hit")).count();
 
-                        return hit / (hit + miss);
+                        long requestCount = (long) (hit + miss);
+                        return (requestCount == 0) ? 1.0 : hit / requestCount;
                     });
                 });
     }
