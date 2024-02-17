@@ -5,11 +5,14 @@ import com.google.protobuf.TextFormat;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.ServerContext;
+import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
+import org.corfudb.infrastructure.logreplication.infrastructure.TopologyDescriptor;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.transport.IClientServerRouter;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
+import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationSinkManager;
 import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
@@ -23,6 +26,7 @@ import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
 import javax.annotation.Nonnull;
 import java.lang.invoke.MethodHandles;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -59,9 +63,6 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
     // should have a unique way the identify a node in the  topology
     private final String localNodeId;
 
-    // Cluster Id of the local node.
-    private final String localClusterId;
-
     private final ExecutorService executor;
 
     private static final String EXECUTOR_NAME_PREFIX = "LogReplicationServer-";
@@ -78,6 +79,7 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
 
     private final LogReplicationContext replicationContext;
 
+    private final TopologyDescriptor topology;
     /**
      * RequestHandlerMethods for the LogReplication server
      */
@@ -85,15 +87,14 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
     private final ReplicationHandlerMethods handlerMethods =
             ReplicationHandlerMethods.generateHandler(MethodHandles.lookup(), this);
 
-    public LogReplicationServer(@Nonnull ServerContext context, Set<LogReplicationSession> sessions,
-                                LogReplicationMetadataManager metadataManager, String localNodeId, String localClusterId,
-                                LogReplicationContext replicationContext) {
+    public LogReplicationServer(@Nonnull ServerContext context, Set<LogReplicationSession> sessions, TopologyDescriptor topology,
+                                LogReplicationMetadataManager metadataManager, LogReplicationContext replicationContext) {
         this.serverContext = context;
         this.allSessions = sessions;
         this.metadataManager = metadataManager;
-        this.localNodeId = localNodeId;
-        this.localClusterId = localClusterId;
+        this.localNodeId = topology.getLocalNodeDescriptor().getNodeId();
         this.replicationContext = replicationContext;
+        this.topology = topology;
         // TODO V2: the number of threads will change in the follow up PR.
         this.executor = context.getExecutorService(1, EXECUTOR_NAME_PREFIX);
     }
@@ -138,15 +139,25 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
      * @return the session for the given request
      */
     private LogReplicationSession getSession(RequestMsg request) {
-        LogReplicationSession session;
+        LogReplicationSession session = null;
 
         if(!request.getHeader().hasSession()) {
-            // Backward compatibility where 'session' field not present
-            session = LogReplicationSession.newBuilder()
-                    .setSourceClusterId(getUUID(request.getHeader().getClusterId()).toString())
-                    .setSinkClusterId(localClusterId)
-                    .setSubscriber(LogReplicationConfigManager.getDefaultSubscriber())
-                    .build();
+            // Backward compatibility where 'session' field is not present.
+            // The only model supported in the previous version is the FULL_TABLE model. So navigate the topology to
+            // find the source cluster which supports FULL_TABLE model
+            // Currently, we expect only 1 source cluster to support FULL_TABLE model.
+            Optional<Map.Entry<ClusterDescriptor, Set<LogReplication.ReplicationModel>>> clusterForFullTable =
+                    topology.getRemoteSourceClusterToReplicationModels().entrySet().stream()
+                    .filter(sessionToModel -> sessionToModel.getValue().contains(LogReplication.ReplicationModel.FULL_TABLE))
+                    .findFirst();
+
+            if (clusterForFullTable.isPresent()) {
+                session = LogReplicationSession.newBuilder()
+                        .setSourceClusterId(clusterForFullTable.get().getKey().getClusterId())
+                        .setSinkClusterId(topology.getLocalClusterDescriptor().getClusterId())
+                        .setSubscriber(LogReplicationConfigManager.getDefaultSubscriber())
+                        .build();
+            }
         } else {
             session = request.getHeader().getSession();
         }
@@ -188,7 +199,7 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
         if (replicationContext.getIsLeader().get()) {
             LogReplicationSession session = getSession(request);
 
-            LogReplicationSinkManager sinkManager = sessionToSinkManagerMap.get(session);
+            LogReplicationSinkManager sinkManager = session != null ? sessionToSinkManagerMap.get(session) : null;
 
             // We create a sinkManager for sessions that are discovered while bootstrapping LR. But as topology changes,
             // we may discover new sessions. At the same time, its possible that the remote Source cluster finds a new
@@ -202,7 +213,7 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
             //  To resolve this, we need to have a long living RPC from the connectionInitiator cluster which will query
             //  for sessions from the other cluster
             if (sinkManager == null || sinkManager.isSinkManagerShutdown()) {
-                if(!allSessions.contains(session)) {
+                if(session == null || !allSessions.contains(session)) {
                     log.error("SessionManager does not know about incoming session {}, total={}, current sessions={}",
                             session, sessionToSinkManagerMap.size(), sessionToSinkManagerMap.keySet());
                     return;
@@ -256,7 +267,7 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
 
             LogReplicationSession session = getSession(request);
 
-            LogReplicationSinkManager sinkManager = sessionToSinkManagerMap.get(session);
+            LogReplicationSinkManager sinkManager = session != null ? sessionToSinkManagerMap.get(session) : null;
 
             // We create a sinkManager for sessions that are discovered while bootstrapping LR. But as topology changes,
             // we may discover new sessions. At the same time, its possible that the remote Source cluster finds a new
@@ -268,7 +279,7 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
             //  To resolve this, we need to have a long living RPC from the connectionInitiator cluster which will query
             //  for sessions from the other cluster
             if (sinkManager == null) {
-                if(!allSessions.contains(session)) {
+                if(session == null || !allSessions.contains(session)) {
                     log.error("SessionManager does not know about incoming session {}, total={}, current sessions={}",
                             session, sessionToSinkManagerMap.size(), sessionToSinkManagerMap.keySet());
                     return;
@@ -312,7 +323,8 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
         HeaderMsg responseHeader = getHeaderMsg(request.getHeader());
         // When the SOURCE is on an older version, the session information will not be present in the header. Stall the
         // SOURCE until the leader on the SINK knows about the FULL_TABLE session.
-        if (!request.getHeader().hasSession() && !allSessions.contains(getSession(request))) {
+        LogReplicationSession session = getSession(request);
+        if (!request.getHeader().hasSession() && (session == null || !allSessions.contains(session))) {
             response = getLeadershipResponse(responseHeader, false, localNodeId);
         } else {
             response = getLeadershipResponse(responseHeader, replicationContext.getIsLeader().get(), localNodeId);
