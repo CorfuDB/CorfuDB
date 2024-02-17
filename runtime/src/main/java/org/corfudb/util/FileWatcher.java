@@ -1,6 +1,7 @@
 package org.corfudb.util;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.Closeable;
@@ -29,8 +30,10 @@ public class FileWatcher implements Closeable {
 
     private final ExecutorService executorService = newExecutorService();
 
+    @Getter
     private final AtomicBoolean isStopped = new AtomicBoolean(false);
 
+    @Getter
     private final AtomicBoolean isRegistered = new AtomicBoolean(false);
 
 
@@ -90,7 +93,14 @@ public class FileWatcher implements Closeable {
             // reset key for continuous watching
             key.reset();
         } catch (Throwable t) {
-            log.error("FileWatcher failed to poll file {}", file.getAbsoluteFile(), t);
+            // Check if the FileWatcher is stopped and log accordingly
+            // to avoid throwing unintentional ERROR statements
+            if (isStopped.get()) {
+                log.info("FileWatcher failed to poll file {}, Exception: {}., isStopped: {}",
+                        file.getAbsoluteFile(), t, isStopped.get());
+            } else {
+                log.error("FileWatcher failed to poll file {}", file.getAbsoluteFile(), t);
+            }
             reloadNewWatchService();
         }
     }

@@ -1034,7 +1034,7 @@ public class CorfuRuntime {
      *
      * @return The Optional of FileWatcher on Keystore file. Empty if keystore is not set in runtime.
      */
-    private Optional<FileWatcher> getSslCertWatcher() {
+    private Optional<FileWatcher> initializeSslCertWatcher() {
         String keyStorePath = this.parameters.getKeyStore();
         if (keyStorePath == null || keyStorePath.isEmpty()) {
             return Optional.empty();
@@ -1343,7 +1343,7 @@ public class CorfuRuntime {
         // Start file watcher on Ssl certs
         if (!sslCertWatcher.isPresent()) {
             log.info("connect: Initializing sslCertWatcher.");
-            sslCertWatcher = getSslCertWatcher();
+            sslCertWatcher = initializeSslCertWatcher();
         }
 
         if (layout == null) {
