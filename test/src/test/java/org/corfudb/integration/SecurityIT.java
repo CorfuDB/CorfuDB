@@ -337,7 +337,7 @@ public class SecurityIT extends AbstractIT {
      * @throws IOException when File IO Error occurs while loading certs
      */
     @Test
-    public void testFileWatcherLifeCycle() throws Exception {
+    public void testRuntimeFileWatcherLifeCycleWithServer() throws Exception {
         // Run a corfu server
         // Enable Tls Mutual Auth to trigger CheckClientTrusted() in ReloadableTrustManager
         Process corfuServer = runSinglePersistentServerTls(true);

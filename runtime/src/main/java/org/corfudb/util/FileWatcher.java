@@ -28,7 +28,7 @@ public class FileWatcher implements Closeable {
     
     private volatile WatchService watchService;
 
-    private final ExecutorService executorService = newExecutorService();
+    private ExecutorService executorService;
 
     @Getter
     private final AtomicBoolean isStopped = new AtomicBoolean(false);
@@ -36,17 +36,21 @@ public class FileWatcher implements Closeable {
     @Getter
     private final AtomicBoolean isRegistered = new AtomicBoolean(false);
 
-
-    public FileWatcher(String filePath, Runnable onChange){
+    public FileWatcher(String filePath, Runnable onChange, ExecutorService executorService){
         this.file = Paths.get(filePath).toFile();
         this.onChange = onChange;
+        this.executorService = executorService;
         executorService.submit(this::start);
     }
 
-    private ExecutorService newExecutorService() {
+    public FileWatcher(String filePath, Runnable onChange){
+        this(filePath, onChange, newExecutorService());
+    }
+
+    private static ExecutorService newExecutorService() {
         ThreadFactory threadFactory = new ThreadFactoryBuilder()
                 .setDaemon(true)
-                .setNameFormat("FileWatcher")
+                .setNameFormat("FileWatcher-%d")
                 .build();
 
         return Executors.newSingleThreadExecutor(threadFactory);
@@ -132,7 +136,10 @@ public class FileWatcher implements Closeable {
         isStopped.set(true);
 
         try {
-            this.watchService.close();
+            if (watchService != null) {
+                watchService.close();
+            }
+            isRegistered.set(false);
         } catch (IOException ioe) {
             throw new IllegalStateException("FileWatcher failed to close the watch service!", ioe);
         }
