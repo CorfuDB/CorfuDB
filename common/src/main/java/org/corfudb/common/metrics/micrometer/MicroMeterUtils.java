@@ -3,11 +3,15 @@ package org.corfudb.common.metrics.micrometer;
 import com.google.common.collect.ImmutableSet;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.DistributionSummary;
+import io.micrometer.core.instrument.FunctionCounter;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.Meter;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Tag;
 import io.micrometer.core.instrument.Tags;
 import io.micrometer.core.instrument.Timer;
+import io.micrometer.core.instrument.search.MeterNotFoundException;
+import io.micrometer.core.instrument.search.RequiredSearch;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider.MetricType;
 import org.corfudb.common.util.Tuple;
@@ -66,7 +70,7 @@ public class MicroMeterUtils {
 
 
     private MicroMeterUtils() {
-
+        // protection from creating new instances
     }
 
     private static Optional<Set<String>> getMetricsBlockList() {
@@ -244,5 +248,15 @@ public class MicroMeterUtils {
         } else {
             return future;
         }
+    }
+
+    public static Optional<RequiredSearch> search(String name, Tags tags) {
+        return MeterRegistryProvider
+                .getInstance()
+                .map(registry -> search(registry, name, tags));
+    }
+
+    public static RequiredSearch search(MeterRegistry meterRegistry, String name, Tags tags) {
+        return meterRegistry.get(name).tags(tags);
     }
 }

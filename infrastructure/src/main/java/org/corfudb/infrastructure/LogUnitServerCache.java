@@ -7,7 +7,7 @@ import com.github.benmanes.caffeine.cache.RemovalListener;
 import com.github.benmanes.caffeine.cache.Weigher;
 import com.google.common.annotations.VisibleForTesting;
 import io.micrometer.core.instrument.FunctionCounter;
-import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.Tag;
 import io.micrometer.core.instrument.Tags;
 import io.micrometer.core.instrument.binder.cache.CaffeineCacheMetrics;
@@ -21,7 +21,9 @@ import org.corfudb.infrastructure.LogUnitServer.LogUnitServerConfig;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.util.LambdaUtils.BiOptional;
 
+import java.util.Optional;
 import java.util.function.Supplier;
 
 /**
@@ -44,6 +46,11 @@ public class LogUnitServerCache {
     //Empirical threshold of number of streams in a logdata beyond which server performance may be slow
     private static final int MAX_STREAM_THRESHOLD = 20;
 
+    private final String cacheName = "logunit.read_cache";
+    private final Tags cacheTags = Tags.of(Tag.of("cache", cacheName));
+    private final Tags missTags = cacheTags.and(Tag.of("result", "miss"));
+    private final Tags hitTags = cacheTags.and(Tag.of("result", "hit"));
+
     private final String hitRatioName = "logunit.cache.hit_ratio";
 
     public LogUnitServerCache(LogUnitServerConfig config, StreamLog streamLog) {
@@ -57,28 +64,33 @@ public class LogUnitServerCache {
 
         MeterRegistryProvider
                 .getInstance()
-                .ifPresent(registry -> {
-                    CaffeineCacheMetrics.monitor(registry, dataCache, "logunit.read_cache");
+                .ifPresent(registry -> CaffeineCacheMetrics.monitor(registry, dataCache, cacheName));
 
-                    //calc hit rate
-                    MicroMeterUtils.gauge(hitRatioName, dataCache, cache -> {
-                        double miss = getReadCacheCounter(registry, Tag.of("result", "miss")).count();
-                        double hit = getReadCacheCounter(registry, Tag.of("result", "hit")).count();
+        BiOptional.of(miss(), hit()).ifPresent((missCounter, hitCounter) -> {
+            //calc hit rate
+            MicroMeterUtils.gauge(hitRatioName, dataCache, cache -> {
+                double miss = missCounter.count();
+                double hit = hitCounter.count();
 
-                        long requestCount = (long) (hit + miss);
-                        return (requestCount == 0) ? 1.0 : hit / requestCount;
-                    });
-                });
+                long requestCount = (long) (hit + miss);
+                return (requestCount == 0) ? 1.0 : hit / requestCount;
+            });
+        });
     }
 
-    private FunctionCounter getReadCacheCounter(MeterRegistry meterRegistry, Tag tag) {
-        Tags cacheTags = Tags.of(Tag.of("cache", "logunit.read_cache"));
-        Tags counterTags = cacheTags.and(tag);
+    Optional<FunctionCounter> miss() {
+        return MeterRegistryProvider.getInstance()
+                .map(registry -> registry.get("cache.gets").tags(missTags).functionCounter());
+    }
 
-        return meterRegistry
-                .get("cache.gets")
-                .tags(counterTags)
-                .functionCounter();
+    Optional<FunctionCounter> hit() {
+        return MeterRegistryProvider.getInstance()
+                .map(registry -> registry.get("cache.gets").tags(hitTags).functionCounter());
+    }
+
+    Optional<Gauge> hitRatio() {
+        return MeterRegistryProvider.getInstance()
+                .map(registry -> registry.get(hitRatioName).gauge());
     }
 
 
