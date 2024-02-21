@@ -249,14 +249,4 @@ public class MicroMeterUtils {
             return future;
         }
     }
-
-    public static Optional<RequiredSearch> search(String name, Tags tags) {
-        return MeterRegistryProvider
-                .getInstance()
-                .map(registry -> search(registry, name, tags));
-    }
-
-    public static RequiredSearch search(MeterRegistry meterRegistry, String name, Tags tags) {
-        return meterRegistry.get(name).tags(tags);
-    }
 }
