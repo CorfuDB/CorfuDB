@@ -381,7 +381,7 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
                 sessionToSinkManagerMap.remove(session);
             }
         } catch (NullPointerException npe) {
-            log.warn("SinkManger was either shutdown or wasnot created for session {}", session);
+            log.warn("SinkManger was either shutdown or was not created for session {}", session);
         }
     }
 }
