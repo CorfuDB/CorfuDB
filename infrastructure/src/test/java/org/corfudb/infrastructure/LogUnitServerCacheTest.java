@@ -51,7 +51,7 @@ class LogUnitServerCacheTest {
             cache.get(rnd.nextInt(150));
         }
 
-        BiOptional<FunctionCounter> missAndHit = BiOptional.of(cache.miss(), cache.hit());
+        BiOptional<FunctionCounter, FunctionCounter> missAndHit = BiOptional.of(cache.miss(), cache.hit());
         if (missAndHit.isEmpty()) {
             Assertions.fail("Metrics not initialized");
         }
