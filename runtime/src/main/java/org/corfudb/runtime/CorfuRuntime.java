@@ -154,7 +154,7 @@ public class CorfuRuntime {
      * File watcher for SSL key store to support auto hot-swapping.
      */
     @Getter
-    private Optional<FileWatcher> sslCertWatcher = Optional.empty();
+    private volatile Optional<FileWatcher> sslCertWatcher = Optional.empty();
 
     /**
      * A completable future containing a layout, when completed.
