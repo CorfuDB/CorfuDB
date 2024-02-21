@@ -1,7 +1,6 @@
 package org.corfudb.infrastructure;
 
 import static org.corfudb.infrastructure.logreplication.config.LogReplicationConfig.DEFAULT_MAX_NUM_MSG_PER_BATCH;
-import static org.corfudb.infrastructure.logreplication.config.LogReplicationConfig.DEFAULT_MAX_DATA_MSG_SIZE;
 import static org.corfudb.infrastructure.logreplication.config.LogReplicationConfig.DEFAULT_MAX_CACHE_NUM_ENTRIES;
 import static org.corfudb.infrastructure.logreplication.config.LogReplicationConfig.DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED;
 import static org.corfudb.common.util.URLUtils.getVersionFormattedHostAddress;
@@ -137,7 +136,7 @@ public class ServerContext implements AutoCloseable {
     private final EventLoopGroup clientGroup;
 
     @Getter
-    private final EventLoopGroup workerGroup;
+    private volatile EventLoopGroup workerGroup;
 
     @Getter (AccessLevel.PACKAGE)
     @Setter
@@ -385,6 +384,9 @@ public class ServerContext implements AutoCloseable {
                 .saslPlainTextEnabled((Boolean) serverConfig.get("--enable-sasl-plain-text-auth"))
                 .usernameFile((String) serverConfig.get("--sasl-plain-text-username-file"))
                 .passwordFile((String) serverConfig.get("--sasl-plain-text-password-file"))
+                // Disable FileWatcher for management client as when the certs are changed,
+                // server already re-initializes the connections
+                .disableFileWatcher(true)
                 .bulkReadSize(Integer.parseInt((String) serverConfig.get("--batch-size")))
                 .clientName("CorfuServer")
                 .checkpointTriggerFreqMillis(checkpointTriggerFreqMs)
@@ -666,6 +668,42 @@ public class ServerContext implements AutoCloseable {
         } else {
             return null;
         }
+    }
+
+    /**
+     * Shuts down the workerGroup and spawns a new one
+     */
+    public void refreshWorkerGroupThreads() {
+        CorfuRuntime.CorfuRuntimeParameters params = getManagementRuntimeParameters();
+
+        workerGroup.shutdownGracefully(
+                params.getNettyShutdownQuitePeriod(),
+                params.getNettyShutdownTimeout(),
+                TimeUnit.MILLISECONDS
+        );
+
+        try {
+            // Wait a while for existing tasks to terminate
+            if (!workerGroup.awaitTermination(params.getNettyShutdownTimeout(), TimeUnit.MILLISECONDS)) {
+                log.error("refreshWorkerGroup: Executor Pool workerGroup did not terminate.");
+            } else {
+                log.info("refreshWorkerGroup: Executor Pool workerGroup terminated successfully.");
+            }
+        } catch (InterruptedException ie) {
+            // (Re-)Cancel if current thread also interrupted
+            workerGroup.shutdownNow();
+            // Preserve interrupt status on the current thread
+            Thread.currentThread().interrupt();
+        }
+
+        log.trace("refreshWorkerGroup: workerGroup isShuttingDown {}," +
+                        " isShutdown {}, isTerminated {}",
+                workerGroup.isShuttingDown(),
+                workerGroup.isShutdown(),
+                workerGroup.isTerminated());
+
+        log.info("refreshWorkerGroup: Creating new workerGroup threads.");
+        workerGroup = getNewWorkerGroup();
     }
 
     /**

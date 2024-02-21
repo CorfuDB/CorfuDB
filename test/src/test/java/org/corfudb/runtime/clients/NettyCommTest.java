@@ -32,7 +32,6 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
-import java.time.Duration;
 import java.util.Random;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -706,6 +705,9 @@ public class NettyCommTest extends AbstractCorfuTest {
         byte[] randomBytes = new byte[100];
         Random random = new Random();
         random.nextBytes(randomBytes);
+
+        // Wait a second to mark new file's modified time greater than original file
+        TimeUnit.SECONDS.sleep(1);
         Files.write(keyStoreFilePath, randomBytes, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
 
         clientRouter.reconnect();
