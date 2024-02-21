@@ -34,7 +34,7 @@ public class RocksDbEntryIterator<K, V> implements Iterator<Map.Entry<K, V>>, Au
     private final ISerializer serializer;
 
     /**
-     * place holder for the current value
+     * Placeholder for the current value
      */
     private Map.Entry<K, V> next;
 
