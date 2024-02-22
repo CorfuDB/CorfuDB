@@ -93,6 +93,10 @@ public class LogUnitServerCache {
                 .map(registry -> registry.get(hitRatioName).gauge());
     }
 
+    BiOptional<FunctionCounter, FunctionCounter> missAndHit() {
+        return BiOptional.of(miss(), hit());
+    }
+
 
     /**
      * Retrieves the LogUnitEntry from disk, given an address.

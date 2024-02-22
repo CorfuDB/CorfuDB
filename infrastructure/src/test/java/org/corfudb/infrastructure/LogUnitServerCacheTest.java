@@ -24,23 +24,33 @@ class LogUnitServerCacheTest {
     private final Random rnd = new Random();
 
     @Test
-    public void testMetrics() {
-        String defaultMetricsLoggerName = LogUnitServerCacheTest.class.getName();
-        Duration defaultMetricsLoggingInterval = Duration.ofMinutes(1);
-
-        Logger logger = LoggerFactory.getLogger(defaultMetricsLoggerName);
-        String endpoint = "127.0.0.1:9000";
-
-        MeterRegistryInitializer.initServerMetrics(logger, defaultMetricsLoggingInterval, endpoint);
-
-        LogUnitServerConfig config = LogUnitServerConfig.builder()
-                .cacheSizeHeapRatio(0.5)
-                .maxCacheSize(100_000)
-                .memoryMode(true)
-                .noSync(true)
-                .build();
+    public void testNaNMetrics() {
+        init_metrics();
         StreamLog streamLog = new InMemoryStreamLog(new BatchProcessorContext());
-        LogUnitServerCache cache = new LogUnitServerCache(config, streamLog);
+        LogUnitServerCache cache = getLogUnitServerCache(streamLog);
+
+        BiOptional<FunctionCounter, FunctionCounter> missAndHit = cache.missAndHit();
+        if (missAndHit.isEmpty()) {
+            Assertions.fail("Metrics not initialized");
+        }
+
+        missAndHit.ifPresent((miss, hit) -> {
+            assertEquals(0, miss.count());
+            assertEquals(0, hit.count());
+            if (cache.hitRatio().isPresent()) {
+                double expected = 1.0;
+                assertEquals(expected, cache.hitRatio().get().value());
+            } else {
+                Assertions.fail("Hit ratio not present");
+            }
+        });
+    }
+
+    @Test
+    public void testMetrics() {
+        init_metrics();
+        StreamLog streamLog = new InMemoryStreamLog(new BatchProcessorContext());
+        LogUnitServerCache cache = getLogUnitServerCache(streamLog);
 
         for (int addr = 1; addr < 101; addr++) {
             LogData logData = generateLogData(addr);
@@ -51,7 +61,7 @@ class LogUnitServerCacheTest {
             cache.get(rnd.nextInt(150));
         }
 
-        BiOptional<FunctionCounter, FunctionCounter> missAndHit = BiOptional.of(cache.miss(), cache.hit());
+        BiOptional<FunctionCounter, FunctionCounter> missAndHit = cache.missAndHit();
         if (missAndHit.isEmpty()) {
             Assertions.fail("Metrics not initialized");
         }
@@ -67,11 +77,31 @@ class LogUnitServerCacheTest {
         });
     }
 
+    private static LogUnitServerCache getLogUnitServerCache(StreamLog streamLog) {
+        final double cacheSizeHeapRatio = 0.5;
+        final int maxCacheSize = 100_000;
+
+        LogUnitServerConfig config = LogUnitServerConfig.builder()
+                .cacheSizeHeapRatio(cacheSizeHeapRatio)
+                .maxCacheSize(maxCacheSize)
+                .memoryMode(true)
+                .noSync(true)
+                .build();
+        return new LogUnitServerCache(config, streamLog);
+    }
+
+    private static void init_metrics() {
+        final String endpoint = "127.0.0.1:9000";
+        Logger logger = LoggerFactory.getLogger(LogUnitServerCacheTest.class);
+
+        Duration defaultMetricsLoggingInterval = Duration.ofMinutes(1);
+        MeterRegistryInitializer.initServerMetrics(logger, defaultMetricsLoggingInterval, endpoint);
+    }
+
     private static LogData generateLogData(long address) {
         LogData ld = new LogData(DataType.DATA);
         ld.setGlobalAddress(address);
         ld.setEpoch(1L);
         return ld;
     }
-
 }
