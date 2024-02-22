@@ -1,6 +1,7 @@
 package org.corfudb.util;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.Closeable;
@@ -27,23 +28,29 @@ public class FileWatcher implements Closeable {
     
     private volatile WatchService watchService;
 
-    private final ExecutorService executorService = newExecutorService();
+    private ExecutorService executorService;
 
+    @Getter
     private final AtomicBoolean isStopped = new AtomicBoolean(false);
 
+    @Getter
     private final AtomicBoolean isRegistered = new AtomicBoolean(false);
 
-
-    public FileWatcher(String filePath, Runnable onChange){
+    public FileWatcher(String filePath, Runnable onChange, ExecutorService executorService){
         this.file = Paths.get(filePath).toFile();
         this.onChange = onChange;
+        this.executorService = executorService;
         executorService.submit(this::start);
     }
 
-    private ExecutorService newExecutorService() {
+    public FileWatcher(String filePath, Runnable onChange){
+        this(filePath, onChange, newExecutorService());
+    }
+
+    private static ExecutorService newExecutorService() {
         ThreadFactory threadFactory = new ThreadFactoryBuilder()
                 .setDaemon(true)
-                .setNameFormat("FileWatcher")
+                .setNameFormat("FileWatcher-%d")
                 .build();
 
         return Executors.newSingleThreadExecutor(threadFactory);
@@ -90,7 +97,14 @@ public class FileWatcher implements Closeable {
             // reset key for continuous watching
             key.reset();
         } catch (Throwable t) {
-            log.error("FileWatcher failed to poll file {}", file.getAbsoluteFile(), t);
+            // Check if the FileWatcher is stopped and log accordingly
+            // to avoid throwing unintentional ERROR statements
+            if (isStopped.get()) {
+                log.info("FileWatcher failed to poll file {}, Exception: {}., isStopped: {}",
+                        file.getAbsoluteFile(), t, isStopped.get());
+            } else {
+                log.error("FileWatcher failed to poll file {}", file.getAbsoluteFile(), t);
+            }
             reloadNewWatchService();
         }
     }
@@ -122,7 +136,10 @@ public class FileWatcher implements Closeable {
         isStopped.set(true);
 
         try {
-            this.watchService.close();
+            if (watchService != null) {
+                watchService.close();
+            }
+            isRegistered.set(false);
         } catch (IOException ioe) {
             throw new IllegalStateException("FileWatcher failed to close the watch service!", ioe);
         }

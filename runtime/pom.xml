@@ -184,6 +184,12 @@
             <artifactId>vavr</artifactId>
             <version>0.9.2</version>
         </dependency>
+        <dependency>
+            <groupId>ch.qos.logback</groupId>
+            <artifactId>logback-classic</artifactId>
+            <version>${logback.classic.version}</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
 </project>
