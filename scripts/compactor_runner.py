@@ -96,7 +96,7 @@ class CommandBuilder(object):
             if 'PrintGCTimeStamps' in GCParameters and GCParameters['PrintGCTimeStamps'] is True:
                 gc_str += ':time'
             if 'UseGCLogFileRotation' in GCParameters and GCParameters['UseGCLogFileRotation'] is True:
-                gc_str += ':filecount=' + GCParameters['NumberOfGCLogFiles'] + ',filesize=' + GCParameters['GCLogFileSize']
+                gc_str += ':filecount=' + str(GCParameters['NumberOfGCLogFiles']) + ',filesize=' + GCParameters['GCLogFileSize']
             cmd.append(gc_str)
 
         ConfigFiles = compactor_config["ConfigFiles"]
