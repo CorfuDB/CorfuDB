@@ -66,7 +66,7 @@ public class LogUnitServerCache {
                 .getInstance()
                 .ifPresent(registry -> CaffeineCacheMetrics.monitor(registry, dataCache, cacheName));
 
-        BiOptional.of(miss(), hit()).ifPresent((missCounter, hitCounter) -> {
+        missAndHit().ifPresent((missCounter, hitCounter) -> {
             //calc hit rate
             MicroMeterUtils.gauge(hitRatioName, dataCache, cache -> {
                 double miss = missCounter.count();
@@ -78,12 +78,12 @@ public class LogUnitServerCache {
         });
     }
 
-    Optional<FunctionCounter> miss() {
+    private Optional<FunctionCounter> miss() {
         return MeterRegistryProvider.getInstance()
                 .map(registry -> registry.get("cache.gets").tags(missTags).functionCounter());
     }
 
-    Optional<FunctionCounter> hit() {
+    private Optional<FunctionCounter> hit() {
         return MeterRegistryProvider.getInstance()
                 .map(registry -> registry.get("cache.gets").tags(hitTags).functionCounter());
     }
