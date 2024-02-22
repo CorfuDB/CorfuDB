@@ -24,7 +24,7 @@ class LogUnitServerCacheTest {
     private final Random rnd = new Random();
 
     @Test
-    public void testNaNMetrics() {
+    public void testMetrics() {
         init_metrics();
         StreamLog streamLog = new InMemoryStreamLog(new BatchProcessorContext());
         LogUnitServerCache cache = getLogUnitServerCache(streamLog);
@@ -34,23 +34,7 @@ class LogUnitServerCacheTest {
             Assertions.fail("Metrics not initialized");
         }
 
-        missAndHit.ifPresent((miss, hit) -> {
-            assertEquals(0, miss.count());
-            assertEquals(0, hit.count());
-            if (cache.hitRatio().isPresent()) {
-                double expected = 1.0;
-                assertEquals(expected, cache.hitRatio().get().value());
-            } else {
-                Assertions.fail("Hit ratio not present");
-            }
-        });
-    }
-
-    @Test
-    public void testMetrics() {
-        init_metrics();
-        StreamLog streamLog = new InMemoryStreamLog(new BatchProcessorContext());
-        LogUnitServerCache cache = getLogUnitServerCache(streamLog);
+        verifyEmptyCase(cache, missAndHit);
 
         for (int addr = 1; addr < 101; addr++) {
             LogData logData = generateLogData(addr);
@@ -61,18 +45,30 @@ class LogUnitServerCacheTest {
             cache.get(rnd.nextInt(150));
         }
 
-        BiOptional<FunctionCounter, FunctionCounter> missAndHit = cache.missAndHit();
-        if (missAndHit.isEmpty()) {
-            Assertions.fail("Metrics not initialized");
-        }
+        verify(cache);
+    }
 
-        missAndHit.ifPresent((miss, hit) -> {
+    private static void verify(LogUnitServerCache cache) {
+        cache.missAndHit().ifPresent((miss, hit) -> {
             //compare with hit ratio
             double expected = hit.count() / (hit.count() + miss.count());
             if (cache.hitRatio().isPresent()) {
                 assertEquals(expected, cache.hitRatio().get().value());
             } else {
                 Assertions.fail("Hit ration not present");
+            }
+        });
+    }
+
+    private static void verifyEmptyCase(LogUnitServerCache cache, BiOptional<FunctionCounter, FunctionCounter> missAndHit) {
+        missAndHit.ifPresent((miss, hit) -> {
+            assertEquals(0, miss.count());
+            assertEquals(0, hit.count());
+            if (cache.hitRatio().isPresent()) {
+                double expected = 1.0;
+                assertEquals(expected, cache.hitRatio().get().value());
+            } else {
+                Assertions.fail("Hit ratio not present");
             }
         });
     }
