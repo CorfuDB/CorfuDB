@@ -25,7 +25,7 @@ class LogUnitServerCacheTest {
 
     @Test
     public void testMetrics() {
-        init_metrics();
+        initMetrics();
         StreamLog streamLog = new InMemoryStreamLog(new BatchProcessorContext());
         LogUnitServerCache cache = getLogUnitServerCache(streamLog);
 
@@ -86,7 +86,7 @@ class LogUnitServerCacheTest {
         return new LogUnitServerCache(config, streamLog);
     }
 
-    private static void init_metrics() {
+    private static void initMetrics() {
         final String endpoint = "127.0.0.1:9000";
         Logger logger = LoggerFactory.getLogger(LogUnitServerCacheTest.class);
 
