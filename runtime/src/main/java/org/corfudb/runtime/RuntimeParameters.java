@@ -113,7 +113,7 @@ public class RuntimeParameters {
          * The type of socket which {@link NettyClientRouter}s should use. By default,
          * an NIO based implementation is used.
          */
-        public ChannelImplementation socketType = ChannelImplementation.NIO;
+        public ChannelImplementation socketType = ChannelImplementation.AUTO;
 
         /**
          * The {@link EventLoopGroup} which {@link NettyClientRouter}s will use.
