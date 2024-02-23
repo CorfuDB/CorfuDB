@@ -52,6 +52,7 @@ import java.util.NoSuchElementException;
 import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -164,6 +165,19 @@ public class CorfuStoreShimTest extends AbstractViewTest {
             UuidMsg key2 = null;
             assertThatThrownBy(() -> readWriteTxn.putRecord(tableName, key2, null, null))
                     .isExactlyInstanceOf(IllegalArgumentException.class);
+        }
+
+        // Validate conflict aborts have full tablename in message
+        try (ManagedTxnContext readWriteTxn = shimStore.tx(someNamespace)) {
+            readWriteTxn.putRecord(table, key1, user_1, user_1);
+            CompletableFuture.runAsync(() -> {
+                ManagedTxnContext anotherTxn = shimStore.tx(someNamespace);
+                anotherTxn.putRecord(table, key1, user_1, user_1);
+                anotherTxn.commit();
+            }).get();
+            readWriteTxn.commit();
+        } catch (TransactionAbortedException ex) {
+            assertThat(ex.getMessage()).contains(table.getFullyQualifiedTableName());
         }
     }
 

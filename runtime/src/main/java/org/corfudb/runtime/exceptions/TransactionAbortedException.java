@@ -4,6 +4,7 @@ import lombok.Getter;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
+import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.util.Utils;
 
@@ -70,7 +71,10 @@ public class TransactionAbortedException extends RuntimeException {
                 + " | Failed Transaction ID = " + txResolutionInfo.getTXid()
                 + " | Offending Address = " + offendingAddress
                 + " | Conflict Key = " + Utils.bytesToHex(conflictKey)
-                + " | Conflict Stream = " + conflictStream
+                + " | Conflict Stream = " + (TransactionalContext.getRootContext() != null &&
+                TransactionalContext.getRootContext().getTxnContext() != null ?
+                TransactionalContext.getRootContext().getTxnContext()
+                        .getTableNameFromUuid(conflictStream): conflictStream)
                 + " | Cause = " + abortCause
                 + " | Time = " + (context == null ? "Unknown" :
                 System.currentTimeMillis() -
