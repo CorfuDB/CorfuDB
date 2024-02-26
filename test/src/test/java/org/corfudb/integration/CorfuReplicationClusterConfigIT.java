@@ -2295,7 +2295,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         log.info("Sink's lock table cleared!");
 
         // Allow for the sinks leadership loss to be processed
-        Thread.sleep(5000);
+        Thread.sleep(PARAMETERS.TIMEOUT_NORMAL.toMillis());
 
         // Write more data on the Source
         for (int i = secondBatch; i < thirdBatch; i++) {

@@ -158,7 +158,7 @@ public class GRPCLogReplicationServerHandler extends LogReplicationGrpc.LogRepli
         LogReplicationSession session = msg.getHeader().getSession();
 
         // Case: message to send is an ACK (async observers)
-        if (msg.getPayload().getPayloadCase().equals(ResponsePayloadMsg.PayloadCase.LR_ENTRY_ACK) ||
+        if (msg.getPayload().getPayloadCase().equals(PayloadCase.LR_ENTRY_ACK) ||
                 msg.getPayload().getPayloadCase().equals(PayloadCase.LR_LEADERSHIP_LOSS)) {
             try {
                 if (!replicationStreamObserverMap.containsKey(Pair.of(session, requestId))) {
