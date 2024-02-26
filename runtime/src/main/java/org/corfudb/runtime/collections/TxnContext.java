@@ -785,8 +785,6 @@ public class TxnContext implements AutoCloseable {
 
         // CorfuStore should have only one transactional context since nesting is prohibited.
         AbstractTransactionalContext rootContext = TransactionalContext.getRootContext();
-        // Regardless of transaction outcome remove any TxnContext association from ThreadLocal.
-        rootContext.setTxnContext(null);
 
         long commitAddress = Address.NON_ADDRESS;
         if (iDidNotStartCorfuTxn) {
@@ -794,9 +792,6 @@ public class TxnContext implements AutoCloseable {
         } else {
             commitAddress = this.objectsView.TXEnd();
         }
-
-        // These can be moved to trace once stability improves.
-        log.trace("Txn committed on namespace {}", namespace);
 
         MultiObjectSMREntry writeSet = rootContext.getWriteSetInfo().getWriteSet();
         final Map<String, List<CorfuStreamEntry>> mutations = new HashMap<>(tablesUpdated.size());
@@ -830,8 +825,6 @@ public class TxnContext implements AutoCloseable {
      */
     public void txAbort() {
         if (TransactionalContext.isInTransaction()) {
-            // Regardless of transaction outcome remove any TxnContext association from ThreadLocal.
-            TransactionalContext.getRootContext().setTxnContext(null);
             this.objectsView.TXAbort();
         }
     }
@@ -844,14 +837,23 @@ public class TxnContext implements AutoCloseable {
     public void close() {
         if (TransactionalContext.isInTransaction()) {
             AbstractTransactionalContext rootContext = TransactionalContext.getRootContext();
-            rootContext.setTxnContext(null);
             log.trace("closing {} transaction without calling commit()!", rootContext);
-
             if (iDidNotStartCorfuTxn) {
                 log.warn("close() called on an inner transaction not started by CorfuStore");
             } else {
                 this.objectsView.TXAbort();
             }
         }
+    }
+
+    /**
+     * @param streamId - UUID of the stream
+     * @return Return the table name given the stream UUID
+     */
+    public String getTableNameFromUuid(UUID streamId) {
+        if (tablesUpdated.containsKey(streamId)) {
+            return tablesUpdated.get(streamId).getFullyQualifiedTableName();
+        }
+        return streamId.toString();
     }
 }
