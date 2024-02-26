@@ -12,6 +12,7 @@ import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg.PayloadCase;
 
 import java.util.Map;
 import java.util.Objects;
@@ -157,7 +158,8 @@ public class GRPCLogReplicationServerHandler extends LogReplicationGrpc.LogRepli
         LogReplicationSession session = msg.getHeader().getSession();
 
         // Case: message to send is an ACK (async observers)
-        if (msg.getPayload().getPayloadCase().equals(ResponsePayloadMsg.PayloadCase.LR_ENTRY_ACK)) {
+        if (msg.getPayload().getPayloadCase().equals(PayloadCase.LR_ENTRY_ACK) ||
+                msg.getPayload().getPayloadCase().equals(PayloadCase.LR_LEADERSHIP_LOSS)) {
             try {
                 if (!replicationStreamObserverMap.containsKey(Pair.of(session, requestId))) {
                     log.warn("Corfu Message {} has no pending observer. Message {} will not be sent.",
