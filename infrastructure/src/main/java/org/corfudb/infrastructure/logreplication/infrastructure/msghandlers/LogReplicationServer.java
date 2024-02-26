@@ -143,9 +143,9 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
 
         if(!request.getHeader().hasSession()) {
             // Backward compatibility where 'session' field is not present.
-            // The only model supported in the previous version is the FULL_TABLE model. So navigate the topology to
-            // find the source cluster which supports FULL_TABLE model
-            // Currently, we expect only 1 source cluster to support FULL_TABLE model.
+            // The clusterId was added to the request msg only in LR V2. So to be backward compatible, we navigate the
+            // topology to find the source cluster which supports FULL_TABLE model which was the only supported model in LR V1.
+            // (Currently, we expect only 1 source cluster to support FULL_TABLE model.)
             Optional<Map.Entry<ClusterDescriptor, Set<LogReplication.ReplicationModel>>> clusterForFullTable =
                     topology.getRemoteSourceClusterToReplicationModels().entrySet().stream()
                     .filter(sessionToModel -> sessionToModel.getValue().contains(LogReplication.ReplicationModel.FULL_TABLE))
@@ -324,7 +324,7 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
         // When the SOURCE is on an older version, the session information will not be present in the header. Stall the
         // SOURCE until the leader on the SINK knows about the FULL_TABLE session.
         LogReplicationSession session = getSession(request);
-        if (!request.getHeader().hasSession() && (session == null || !allSessions.contains(session))) {
+        if (session == null || !allSessions.contains(session)) {
             response = getLeadershipResponse(responseHeader, false, localNodeId);
         } else {
             response = getLeadershipResponse(responseHeader, replicationContext.getIsLeader().get(), localNodeId);

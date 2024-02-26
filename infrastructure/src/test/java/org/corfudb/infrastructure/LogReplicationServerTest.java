@@ -94,7 +94,7 @@ public class LogReplicationServerTest {
         sinkManager = mock(LogReplicationSinkManager.class);
 
         topology = mock(TopologyDescriptor.class);
-        NodeDescriptor sinkNodeDescriptor = new NodeDescriptor("host", "port",sourceClusterId, "", SINK_NODE_ID);
+        NodeDescriptor sinkNodeDescriptor = new NodeDescriptor("host", "port",SINK_CLUSTER_ID, "", SINK_NODE_ID);
         ClusterDescriptor sourceCluster = new ClusterDescriptor(sourceClusterId, 9000, Collections.singletonList(sinkNodeDescriptor));
         ClusterDescriptor sinkCluster = new ClusterDescriptor(SINK_CLUSTER_ID, 9000, Collections.singletonList(sinkNodeDescriptor));
         when(topology.getLocalNodeDescriptor()).thenReturn(sinkNodeDescriptor);
@@ -153,18 +153,18 @@ public class LogReplicationServerTest {
         //verify the response when leader and sessionManager knows about the session
         lrServer.getHandlerMethods().handle(request, null, mockServerRouter);
         ArgumentCaptor<ResponseMsg> argument = ArgumentCaptor.forClass(ResponseMsg.class);
-        verify(mockServerRouter, atMost(1))
-            .sendResponse(argument.capture());
+        verify(mockServerRouter, times(1)).sendResponse(argument.capture());
         Assertions.assertThat(argument.getValue().getPayload().getLrLeadershipResponse().getIsLeader()).isTrue();
 
-        // verify the response when leader but sessionManager does not know about the session
+        // verify the response when leader but sessionManager does not know about the session yet
         replicationContext = new LogReplicationContext(mock(LogReplicationConfigManager.class),
                 0L, SAMPLE_HOSTNAME, false, mock(LogReplicationPluginConfig.class));
         lrServer = spy(new LogReplicationServer(context, new HashSet<>(), topology, metadataManager,
                 replicationContext));
+        mockServerRouter = mock(IClientServerRouter.class);
         lrServer.getHandlerMethods().handle(request, null, mockServerRouter);
         argument = ArgumentCaptor.forClass(ResponseMsg.class);
-        verify(mockServerRouter, atMost(2)).sendResponse(argument.capture());
+        verify(mockServerRouter, times(1)).sendResponse(argument.capture());
         Assertions.assertThat(argument.getValue().getPayload().getLrLeadershipResponse().getIsLeader()).isFalse();
 
         // verify the response when not the leader
@@ -172,9 +172,22 @@ public class LogReplicationServerTest {
                 0L, SAMPLE_HOSTNAME, false, mock(LogReplicationPluginConfig.class));
         lrServer = spy(new LogReplicationServer(context, new HashSet<>(), topology, metadataManager,
                 replicationContext));
+        mockServerRouter = mock(IClientServerRouter.class);
         lrServer.getHandlerMethods().handle(request, null, mockServerRouter);
         argument = ArgumentCaptor.forClass(ResponseMsg.class);
-        verify(mockServerRouter, atMost(3)).sendResponse(argument.capture());
+        verify(mockServerRouter, times(1)).sendResponse(argument.capture());
+        Assertions.assertThat(argument.getValue().getPayload().getLrLeadershipResponse().getIsLeader()).isFalse();
+
+        // verify the response when leader but the topology does not have FULL_TABLE
+        replicationContext = new LogReplicationContext(mock(LogReplicationConfigManager.class),
+                0L, SAMPLE_HOSTNAME, false, mock(LogReplicationPluginConfig.class));
+        when(topology.getRemoteSourceClusterToReplicationModels()).thenReturn(new HashMap<>());
+        lrServer = spy(new LogReplicationServer(context, new HashSet<>(), topology, metadataManager,
+                replicationContext));
+        mockServerRouter = mock(IClientServerRouter.class);
+        lrServer.getHandlerMethods().handle(request, null, mockServerRouter);
+        argument = ArgumentCaptor.forClass(ResponseMsg.class);
+        verify(mockServerRouter, times(1)).sendResponse(argument.capture());
         Assertions.assertThat(argument.getValue().getPayload().getLrLeadershipResponse().getIsLeader()).isFalse();
     }
 
@@ -184,10 +197,10 @@ public class LogReplicationServerTest {
                 LogReplicationLeadershipRequestMsg.newBuilder().build();
         final RequestMsg request =
                 getRequestMsg(HeaderMsg.newBuilder()
-                        .setVersion(getDefaultProtocolVersionMsg())
-                        .setIgnoreClusterId(true)
-                        .setIgnoreEpoch(true)
-                        .setClientId(getUuidMsg(UUID.randomUUID()))
+                                .setVersion(getDefaultProtocolVersionMsg())
+                                .setIgnoreClusterId(true)
+                                .setIgnoreEpoch(true)
+                                .setClientId(getUuidMsg(UUID.randomUUID()))
                                 .build(),
                         CorfuMessage.RequestPayloadMsg.newBuilder()
                                 .setLrLeadershipQuery(leadershipQuery).build());
@@ -197,15 +210,16 @@ public class LogReplicationServerTest {
         // when node is the leader and when sessionManger knows about the session
         lrServer.getHandlerMethods().handle(request, null, mockServerRouter);
         ArgumentCaptor<ResponseMsg> argument = ArgumentCaptor.forClass(ResponseMsg.class);
-        verify(mockServerRouter, atMost(1)).sendResponse(argument.capture());
+        verify(mockServerRouter, times(1)).sendResponse(argument.capture());
         Assertions.assertThat(argument.getValue().getPayload()
                 .getLrLeadershipResponse().getIsLeader()).isTrue();
 
         //when node is the leader and sessionManager does not know about the session
         lrServer = spy(new LogReplicationServer(context, new HashSet<>(), topology, metadataManager, replicationContext));
+        mockServerRouter = mock(IClientServerRouter.class);
         lrServer.getHandlerMethods().handle(request, null, mockServerRouter);
         argument = ArgumentCaptor.forClass(ResponseMsg.class);
-        verify(mockServerRouter, atMost(2)).sendResponse(argument.capture());
+        verify(mockServerRouter, times(1)).sendResponse(argument.capture());
         Assertions.assertThat(argument.getValue().getPayload().getLrLeadershipResponse().getIsLeader()).isFalse();
     }
 
