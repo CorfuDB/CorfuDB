@@ -153,17 +153,47 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
      */
     private void processUpdatesShadowStream(List<SMREntry> smrEntries, Long currentSeqNum, UUID shadowStreamUuid,
                                             UUID snapshotSyncId) {
-        CorfuStoreMetadata.Timestamp timestamp;
+        CorfuStoreMetadata.Timestamp timestamp = null;
+        List<SMREntry> buffer = new ArrayList<>();
+        long bufferSize = 0;
 
-        try (TxnContext txn = metadataManager.getTxnContext()) {
-            updateLog(txn, smrEntries, shadowStreamUuid);
-            ReplicationMetadata metadata = metadataManager.queryReplicationMetadata(txn, session);
-            ReplicationMetadata updatedMetadata = metadata.toBuilder().setLastSnapshotStarted(srcGlobalSnapshot)
+        for (SMREntry smrEntry : smrEntries) {
+            if (bufferSize + smrEntry.getSerializedSize() + metadataManager.getReplicationMetadata(session).getSerializedSize()
+                    > replicationContext.getConfig(session).getMaxApplySize()
+                    || maxEntriesLimitReached(shadowStreamUuid,
+                    buffer)) {
+                try (TxnContext txnContext = metadataManager.getTxnContext()) {
+                    updateLog(txnContext, buffer, shadowStreamUuid);
+                    ReplicationMetadata metadata = metadataManager.queryReplicationMetadata(txnContext, session);
+                    ReplicationMetadata updatedMetadata = metadata.toBuilder().setLastSnapshotStarted(srcGlobalSnapshot)
                     .setLastSnapshotTransferredSeqNumber(currentSeqNum)
                     .build();
 
-            metadataManager.updateReplicationMetadata(txn, session, updatedMetadata);
-            timestamp = txn.commit();
+                    metadataManager.updateReplicationMetadata(txnContext, session, updatedMetadata);
+                    txnContext.commit();
+                    buffer.clear();
+                    buffer.add(smrEntry);
+                    bufferSize = smrEntry.getSerializedSize() + updatedMetadata.getSerializedSize();
+                }
+            } else {
+                buffer.add(smrEntry);
+                bufferSize += smrEntry.getSerializedSize() + metadataManager.getReplicationMetadata(session).getSerializedSize();
+            }
+        }
+
+
+        if (!buffer.isEmpty()) {
+            try (TxnContext txn = metadataManager.getTxnContext()) {
+                updateLog(txn, buffer, shadowStreamUuid);
+
+                ReplicationMetadata metadata = metadataManager.queryReplicationMetadata(txn, session);
+                ReplicationMetadata updatedMetadata = metadata.toBuilder().setLastSnapshotStarted(srcGlobalSnapshot)
+                        .setLastSnapshotTransferredSeqNumber(currentSeqNum)
+                        .build();
+
+                metadataManager.updateReplicationMetadata(txn, session, updatedMetadata);
+                timestamp = txn.commit();
+            }
         }
 
         if (!snapshotSyncStartMarker.isPresent()) {
@@ -173,6 +203,7 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
                 txn.commit();
             }
         }
+
 
         log.debug("Process entries total={}, set sequence number {}", smrEntries.size(), currentSeqNum);
     }
