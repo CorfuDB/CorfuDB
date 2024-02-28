@@ -51,6 +51,8 @@ public final class FileSystemAgent {
 
     private final ScheduledExecutorService scheduler;
 
+    PartitionAttribute partitionAttribute;
+
     private final Optional<PartitionAgent> maybePartitionAgent;
 
     private FileSystemAgent(FileSystemConfig config, BatchProcessorContext batchProcessorContext) {
@@ -61,14 +63,17 @@ public final class FileSystemAgent {
         if (config.mode == PersistenceMode.MEMORY) {
             initialLogSize = 0;
             logSizeLimit = Long.MAX_VALUE;
-
             maybePartitionAgent = Optional.empty();
+            partitionAttribute = new PartitionAttribute(
+                    false, Long.MAX_VALUE, Long.MAX_VALUE, batchProcessorContext.getStatus()
+            );
         } else {
             initialLogSize = estimateSize();
             logSizeLimit = getLogSizeLimit();
 
             PartitionAgent partitionAgent = new PartitionAgent(config, batchProcessorContext);
             maybePartitionAgent = Optional.of(partitionAgent);
+            partitionAttribute = partitionAgent.getPartitionAttribute();
         }
 
         logSizeQuota = new ResourceQuota("LogSizeQuota", logSizeLimit);
@@ -121,7 +126,8 @@ public final class FileSystemAgent {
 
     public static PartitionAttribute getPartitionAttribute() {
         Supplier<IllegalStateException> err = () -> new IllegalStateException(NOT_CONFIGURED_ERR_MSG);
-        return instance.orElseThrow(err).maybePartitionAgent.orElseThrow(err).getPartitionAttribute();
+        return instance.orElseThrow(err).maybePartitionAgent.isPresent() ?
+                instance.get().maybePartitionAgent.get().getPartitionAttribute() : instance.get().partitionAttribute;
     }
 
     /**
