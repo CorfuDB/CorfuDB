@@ -94,8 +94,7 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
         this.localNodeId = localNodeId;
         this.localClusterId = localClusterId;
         this.replicationContext = replicationContext;
-        // TODO V2: the number of threads will change in the follow up PR.
-        this.executor = context.getExecutorService(1, EXECUTOR_NAME_PREFIX);
+        this.executor = context.getExecutorService(context.getLogReplicationServerThreadCount(), EXECUTOR_NAME_PREFIX);
     }
 
     public synchronized LogReplicationSinkManager createSinkManager(LogReplicationSession session) {
@@ -201,7 +200,7 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
             //  connection.
             //  To resolve this, we need to have a long living RPC from the connectionInitiator cluster which will query
             //  for sessions from the other cluster
-            if (sinkManager == null || sinkManager.isSinkManagerShutdown()) {
+            if (sinkManager == null || sinkManager.getIsShutdown().get()) {
                 if(!allSessions.contains(session)) {
                     log.error("SessionManager does not know about incoming session {}, total={}, current sessions={}",
                             session, sessionToSinkManagerMap.size(), sessionToSinkManagerMap.keySet());
@@ -373,7 +372,7 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
         }
     }
 
-    public void stopSinkManagerForSession(LogReplicationSession session) {
+    public synchronized void stopSinkManagerForSession(LogReplicationSession session) {
         log.info("Stopping Sink manager for session: {}", session);
         try {
             if (sessionToSinkManagerMap.containsKey(session)) {
