@@ -142,7 +142,8 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
         LogReplicationSession session = null;
 
         if(!request.getHeader().hasSession()) {
-            // Backward compatibility where 'session' field is not present.
+            // Backward compatibility where 'session' field is not present. Here, we are running with the assumption that
+            // the sink will be upgraded before the source.
             // The clusterId was added to the request msg only in LR V2. So to be backward compatible, we navigate the
             // topology to find the source cluster which supports FULL_TABLE model which was the only supported model in LR V1.
             // (Currently, we expect only 1 source cluster to support FULL_TABLE model.)
@@ -325,6 +326,8 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
         // SOURCE until the leader on the SINK knows about the FULL_TABLE session.
         LogReplicationSession session = getSession(request);
         if (session == null || !allSessions.contains(session)) {
+            log.error("The session {} was not found, hence will be returning not a leader while leadership value is {}. Current sessions are {}",
+                    session, replicationContext.getIsLeader().get(), sessionToSinkManagerMap.keySet());
             response = getLeadershipResponse(responseHeader, false, localNodeId);
         } else {
             response = getLeadershipResponse(responseHeader, replicationContext.getIsLeader().get(), localNodeId);
