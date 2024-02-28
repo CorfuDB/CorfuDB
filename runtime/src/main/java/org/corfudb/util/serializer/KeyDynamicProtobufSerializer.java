@@ -79,7 +79,10 @@ public class KeyDynamicProtobufSerializer extends DynamicProtobufSerializer {
                     log.error("messagesFdProtoNameMap keySet is {}", messagesFdProtoNameMap.keySet());
                 }
             }
-            return new OpaqueCorfuDynamicRecord(payload.getTypeUrl(), payload.getValue(), metadataTypeUrl, metaDataByteString);
+
+            String metadataTypeUrlIntern = metadataTypeUrl != null ? metadataTypeUrl.intern() : null;
+            return new OpaqueCorfuDynamicRecord(payload.getTypeUrl().intern(), payload.getValue(),
+                    metadataTypeUrlIntern, metaDataByteString);
 
         } catch (IOException | Descriptors.DescriptorValidationException ie) {
             log.error("Exception during deserialization!", ie);
@@ -103,14 +106,14 @@ public class KeyDynamicProtobufSerializer extends DynamicProtobufSerializer {
             OpaqueCorfuDynamicRecord opaqueRecord = (OpaqueCorfuDynamicRecord) o;
 
             Any message = Any.newBuilder()
-                    .setTypeUrl(opaqueRecord.getPayloadTypeUrl())
+                    .setTypeUrl(opaqueRecord.getPayloadTypeUrl().intern())
                     .setValue(opaqueRecord.getPayload())
                     .build();
             CorfuStoreMetadata.Record.Builder recordBuilder = CorfuStoreMetadata.Record.newBuilder()
                     .setPayload(message);
             if (opaqueRecord.getMetadata() != null) {
                 Any metadata = Any.newBuilder()
-                        .setTypeUrl(opaqueRecord.getMetadataTypeUrl())
+                        .setTypeUrl(opaqueRecord.getMetadataTypeUrl().intern())
                         .setValue(opaqueRecord.getMetadata())
                         .build();
                 recordBuilder.setMetadata(metadata);
@@ -120,7 +123,7 @@ public class KeyDynamicProtobufSerializer extends DynamicProtobufSerializer {
         } else {
             CorfuDynamicKey corfuKey = (CorfuDynamicKey) o;
             Any message = Any.newBuilder()
-                    .setTypeUrl(corfuKey.getKeyTypeUrl())
+                    .setTypeUrl(corfuKey.getKeyTypeUrl().intern())
                     .setValue(corfuKey.getKey().toByteString())
                     .build();
             corfuRecord = CorfuStoreMetadata.Record.newBuilder()

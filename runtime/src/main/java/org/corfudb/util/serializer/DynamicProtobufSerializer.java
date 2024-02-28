@@ -375,7 +375,7 @@ public class DynamicProtobufSerializer implements ISerializer {
             DynamicMessage value = DynamicMessage.parseFrom(valueDescriptor, payload.getValue());
 
             if (type.equals(MessageType.KEY)) {
-                return new CorfuDynamicKey(payload.getTypeUrl(), value);
+                return new CorfuDynamicKey(payload.getTypeUrl().intern(), value);
             }
 
             String metadataTypeUrl = null;
@@ -397,7 +397,9 @@ public class DynamicProtobufSerializer implements ISerializer {
                 Descriptor metaDescriptor = metaFileDescriptor.findMessageTypeByName(getMessageName(anyMetadata));
                 metadata = DynamicMessage.parseFrom(metaDescriptor, anyMetadata.getValue());
             }
-            return new CorfuDynamicRecord(payload.getTypeUrl(), value, metadataTypeUrl, metadata);
+
+            String metadataTypeUrlIntern = metadataTypeUrl != null ? metadataTypeUrl.intern() : null;
+            return new CorfuDynamicRecord(payload.getTypeUrl().intern(), value, metadataTypeUrlIntern, metadata);
 
         } catch (IOException | DescriptorValidationException ie) {
             log.error("Exception during deserialization!", ie);
@@ -420,14 +422,14 @@ public class DynamicProtobufSerializer implements ISerializer {
         if (o instanceof CorfuDynamicRecord) {
             CorfuDynamicRecord corfuRecord = (CorfuDynamicRecord) o;
             Any message = Any.newBuilder()
-                    .setTypeUrl(corfuRecord.getPayloadTypeUrl())
+                    .setTypeUrl(corfuRecord.getPayloadTypeUrl().intern())
                     .setValue(corfuRecord.getPayload().toByteString())
                     .build();
             Record.Builder recordBuilder = Record.newBuilder()
                     .setPayload(message);
             if (corfuRecord.getMetadata() != null) {
                 Any metadata = Any.newBuilder()
-                        .setTypeUrl(corfuRecord.getMetadataTypeUrl())
+                        .setTypeUrl(corfuRecord.getMetadataTypeUrl().intern())
                         .setValue(corfuRecord.getMetadata().toByteString())
                         .build();
                 recordBuilder.setMetadata(metadata);
@@ -437,7 +439,7 @@ public class DynamicProtobufSerializer implements ISerializer {
         } else {
             CorfuDynamicKey corfuKey = (CorfuDynamicKey) o;
             Any message = Any.newBuilder()
-                    .setTypeUrl(corfuKey.getKeyTypeUrl())
+                    .setTypeUrl(corfuKey.getKeyTypeUrl().intern())
                     .setValue(corfuKey.getKey().toByteString())
                     .build();
             record = Record.newBuilder()
