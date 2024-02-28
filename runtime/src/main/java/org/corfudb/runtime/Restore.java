@@ -1,5 +1,6 @@
 package org.corfudb.runtime;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -37,6 +38,7 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 import static org.corfudb.runtime.view.TableRegistry.getFullyQualifiedTableName;
 
 /**
@@ -76,6 +78,12 @@ public class Restore {
 
     // The namespace to restore. It's only used in PARTIAL_NAMESPACE mode
     private final String namespace;
+
+    // List of tables ignored during clean up and restore
+    private static final List<String> IGNORED_CORFU_SYSTEM_TABLES = Arrays.asList(
+            CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
+            CompactorMetadataTables.COMPACTION_CONTROLS_TABLE
+    );
 
     /**
      * Unpacked files from backup tar file are stored under RESTORE_TEMP_DIR. They are deleted after restore finishes.
@@ -124,7 +132,8 @@ public class Restore {
         log.info("restore completed");
     }
 
-    private void disableCompaction() throws Exception {
+    @VisibleForTesting
+    protected void disableCompaction() throws Exception {
         log.info("Disabling compaction...");
         if (cpHelper == null) {
             try {
@@ -143,9 +152,10 @@ public class Restore {
         cpHelper.enableCompaction();
     }
 
-    private void restore() throws IOException {
+    @VisibleForTesting
+    protected void restore() throws IOException {
         if (restoreMode == RestoreMode.FULL) {
-            clearAllTables();
+            clearAllExceptIgnoredTables();
         } else if (restoreMode == RestoreMode.PARTIAL_NAMESPACE) {
             clearTablesInNamespace(namespace);
         }
@@ -154,6 +164,11 @@ public class Restore {
         int restoredTableCount = 0;
         for (TableBackupFileName tableBackupFileName : tableBackupFileNames) {
             log.info("start restoring table {}", tableBackupFileName);
+            if (tableBackupFileName.namespace.equals(CORFU_SYSTEM_NAMESPACE) &&
+                    IGNORED_CORFU_SYSTEM_TABLES.contains(tableBackupFileName.getTableName())) {
+                log.info("Skip restoring table {} which is part of IGNORED_TABLES", tableBackupFileName);
+                continue;
+            }
 
             // In PARTIAL_TAGGED mode, the RegistryTable is first restored, so the isTableTagged is
             // deduced from the restored RegistryTable.
@@ -275,7 +290,8 @@ public class Restore {
     /**
      * Open the backup tar file and save the table backups to tableDir directory
      */
-    private void openTarFile() throws IOException {
+    @VisibleForTesting
+    protected void openTarFile() throws IOException {
         this.restoreTempDirPath = Files.createTempDirectory(RESTORE_TEMP_DIR_PREFIX).toString();
         try (FileInputStream fileInput = new FileInputStream(filePath);
              TarArchiveInputStream tarInput = new TarArchiveInputStream(fileInput)) {
@@ -332,10 +348,12 @@ public class Restore {
         }
     }
 
-    private void clearAllTables() {
+    private void clearAllExceptIgnoredTables() {
         try (TxnContext txn = corfuStore.txn(TableRegistry.CORFU_SYSTEM_NAMESPACE)) {
-
             corfuStore.getRuntime().getTableRegistry().listTables().forEach(tableName -> {
+                if (tableName.getNamespace().equals(CORFU_SYSTEM_NAMESPACE) && IGNORED_CORFU_SYSTEM_TABLES.contains(tableName.getTableName())) {
+                    return;
+                }
                 String name = getFullyQualifiedTableName(tableName);
                 UUID streamId = CorfuRuntime.getStreamID(name);
                 SMREntry entry = new SMREntry("clear", new Array[0], Serializers.PRIMITIVE);
