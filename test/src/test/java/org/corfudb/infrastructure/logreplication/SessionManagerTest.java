@@ -8,12 +8,16 @@ import org.corfudb.infrastructure.logreplication.infrastructure.msghandlers.LogR
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationSinkManager;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientServerRouter;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
+import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplication;
+import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.view.AbstractViewTest;
+import org.corfudb.runtime.view.Address;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -65,7 +69,9 @@ public class SessionManagerTest extends AbstractViewTest {
 
     /**
      * This test verifies that the outgoing session is established using session manager.
-     * It verifies that the in-memory state has captured the outgoing session.
+     * It verifies that:
+     * (i) when not the leader, the sessions are retrieved from the LR's system tables
+     * (ii) when leader, the in-memory state has captured the outgoing session.
      */
     @Test
     public void testSessionMgrWithOutgoingSession() {
@@ -77,19 +83,76 @@ public class SessionManagerTest extends AbstractViewTest {
         SessionManager sessionManager = new SessionManager(topology, corfuRuntime, replicationManager, router,
                 msgHandler, pluginConfig);
         sessionManager.refresh(topology);
-        Assert.assertEquals(0, sessionManager.getOutgoingSessions().size());
-        Assert.assertEquals(0, sessionManager.getIncomingSessions().size());
+
+        // Local node is not the leader yet. Simulating the leader node creating session by directly adding the session
+        // related metadata into the LR's system tables
+        LogReplication.LogReplicationSession outgoingSession = LogReplication.LogReplicationSession.newBuilder()
+                .setSourceClusterId(topology.getLocalClusterDescriptor().getClusterId())
+                .setSinkClusterId(DefaultClusterConfig.getSinkClusterIds().get(0))
+                .setSubscriber(LogReplication.ReplicationSubscriber.getDefaultInstance())
+                .build();
+        addSession(sessionManager, false, outgoingSession);
+
+        Assert.assertEquals(0, sessionManager.getSessions().size());
+        Assert.assertEquals(topology.getRemoteSinkClusters().size(), sessionManager.getOutgoingSessions().size());
+        Assert.assertEquals(topology.getRemoteSourceClusters().size(), sessionManager.getIncomingSessions().size());
 
 
         sessionManager.getReplicationContext().setIsLeader(true);
         sessionManager.refresh(topology);
         String sourceClusterId = DefaultClusterConfig.getSourceClusterIds().get(0);
-        int numSinkCluster = topology.getRemoteSinkClusters().size();
 
-        // Verifies that the source cluster has established session with 1 sink clusters.
-        Assert.assertEquals(numSinkCluster, sessionManager.getOutgoingSessions().size());
+        // Verifies that the leader cluster has established session with 1 sink clusters.
+        Assert.assertEquals(topology.getRemoteSinkClusters().size(), sessionManager.getOutgoingSessions().size());
         Assert.assertEquals(sourceClusterId, topology.getLocalClusterDescriptor().getClusterId());
-        Assert.assertEquals(0, sessionManager.getIncomingSessions().size());
+        Assert.assertEquals(topology.getRemoteSourceClusters().size(), sessionManager.getIncomingSessions().size());
+        Assert.assertEquals(sessionManager.getOutgoingSessions().size() + sessionManager.getIncomingSessions().size(), sessionManager.getSessions().size());
+    }
+
+    private void addSession(SessionManager sessionManager, boolean incoming, LogReplication.LogReplicationSession session) {
+        try (TxnContext txn = sessionManager.getMetadataManager().getTxnContext()) {
+            if (!incoming) {
+                LogReplication.ReplicationStatus defaultSourceStatus = LogReplication.ReplicationStatus.newBuilder()
+                        .setSourceStatus(LogReplication.SourceReplicationStatus.newBuilder()
+                                .setRemainingEntriesToSend(-1L)
+                                .setReplicationInfo(LogReplication.ReplicationInfo.newBuilder()
+                                        .setStatus(LogReplication.SyncStatus.NOT_STARTED)
+                                        .setSnapshotSyncInfo(LogReplication.SnapshotSyncInfo.newBuilder()
+                                                .setStatus(LogReplication.SyncStatus.NOT_STARTED)
+                                                .build())
+                                        .build())
+                                .build())
+                        .build();
+                txn.putRecord(sessionManager.getMetadataManager().getStatusTable(), session, defaultSourceStatus, null);
+            } else {
+                LogReplication.ReplicationStatus defaultSinkStatus = LogReplication.ReplicationStatus.newBuilder()
+                        .setSinkStatus(LogReplication.SinkReplicationStatus.newBuilder()
+                                .setDataConsistent(false)
+                                .setReplicationInfo(LogReplication.ReplicationInfo.newBuilder()
+                                        .setStatus(LogReplication.SyncStatus.NOT_STARTED)
+                                        .setSnapshotSyncInfo(LogReplication.SnapshotSyncInfo.newBuilder()
+                                                .setStatus(LogReplication.SyncStatus.NOT_STARTED)
+                                                .build())
+                                        .build())
+                                .build())
+                        .build();
+
+                LogReplicationMetadata.ReplicationMetadata defaultMetadata = LogReplicationMetadata.ReplicationMetadata.newBuilder()
+                        .setTopologyConfigId(1)
+                        .setLastLogEntryApplied(Address.NON_ADDRESS)
+                        .setLastLogEntryBatchProcessed(Address.NON_ADDRESS)
+                        .setLastSnapshotTransferredSeqNumber(Address.NON_ADDRESS)
+                        .setLastSnapshotApplied(Address.NON_ADDRESS)
+                        .setLastSnapshotTransferred(Address.NON_ADDRESS)
+                        .setLastSnapshotStarted(Address.NON_ADDRESS)
+                        .setCurrentCycleMinShadowStreamTs(Address.NON_ADDRESS)
+                        .build();
+
+                txn.putRecord(sessionManager.getMetadataManager().getStatusTable(), session, defaultSinkStatus, null);
+                txn.putRecord(sessionManager.getMetadataManager().getMetadataTable(), session, defaultMetadata, null);
+            }
+            txn.commit();
+        }
     }
 
     /**
@@ -105,15 +168,30 @@ public class SessionManagerTest extends AbstractViewTest {
 
         SessionManager sessionManager = new SessionManager(topology, corfuRuntime, replicationManager, router,
                 msgHandler, pluginConfig);
+        sessionManager.refresh(topology);
+        // Local node is not the leader yet. Simulating the leader node creating session by directly adding the session
+        // related metadata into the LR's system tables
+        LogReplication.LogReplicationSession outgoingSession = LogReplication.LogReplicationSession.newBuilder()
+                .setSourceClusterId(DefaultClusterConfig.getSourceClusterIds().get(0))
+                .setSinkClusterId(topology.getLocalClusterDescriptor().getClusterId())
+                .setSubscriber(LogReplication.ReplicationSubscriber.getDefaultInstance())
+                .build();
+        addSession(sessionManager, true, outgoingSession);
+
+        Assert.assertEquals(0, sessionManager.getSessions().size());
+        Assert.assertEquals(topology.getRemoteSinkClusters().size(), sessionManager.getOutgoingSessions().size());
+        Assert.assertEquals(topology.getRemoteSourceClusters().size(), sessionManager.getIncomingSessions().size());
+
+
         sessionManager.getReplicationContext().setIsLeader(true);
         sessionManager.refresh(topology);
         String sinkClusterId = DefaultClusterConfig.getSinkClusterIds().get(0);
-        int numSourceCluster = topology.getRemoteSourceClusters().size();
 
         // Verifies that the sink cluster has established session with all source clusters (1 in our topology).
-        Assert.assertEquals(0, sessionManager.getOutgoingSessions().size());
+        Assert.assertEquals(topology.getRemoteSinkClusters().size(), sessionManager.getOutgoingSessions().size());
         Assert.assertEquals(sinkClusterId, topology.getLocalClusterDescriptor().getClusterId());
-        Assert.assertEquals(numSourceCluster, sessionManager.getIncomingSessions().size());
+        Assert.assertEquals(topology.getRemoteSourceClusters().size(), sessionManager.getIncomingSessions().size());
+        Assert.assertEquals(sessionManager.getOutgoingSessions().size() + sessionManager.getIncomingSessions().size(), sessionManager.getSessions().size());
     }
 
     /**
@@ -134,12 +212,12 @@ public class SessionManagerTest extends AbstractViewTest {
         sessionManager.getReplicationContext().setIsLeader(true);
         sessionManager.refresh(topology);
         String sourceClusterId = DefaultClusterConfig.getSourceClusterIds().get(0);
-        int numSinkCluster = topology.getRemoteSinkClusters().size();
 
         // Verifies that the sink cluster has established session with all source clusters (1 in our topology).
-        Assert.assertEquals(numSinkCluster, sessionManager.getOutgoingSessions().size());
+        Assert.assertEquals(topology.getRemoteSinkClusters().size(), sessionManager.getOutgoingSessions().size());
         Assert.assertEquals(sourceClusterId, topology.getLocalClusterDescriptor().getClusterId());
-        Assert.assertEquals(0, sessionManager.getIncomingSessions().size());
+        Assert.assertEquals(topology.getRemoteSourceClusters().size(), sessionManager.getIncomingSessions().size());
+        Assert.assertEquals(sessionManager.getOutgoingSessions().size() + sessionManager.getIncomingSessions().size(), sessionManager.getSessions().size());
 
         //get sessions from topology1
         Set<LogReplication.LogReplicationSession> sessionsFromTopology1 = new HashSet<>(sessionManager.getSessions());
@@ -151,8 +229,9 @@ public class SessionManagerTest extends AbstractViewTest {
         Set<LogReplication.LogReplicationSession> sessionFromTopology2 = new HashSet<>(sessionManager.getSessions());
 
         //assert size of incoming and outgoing sessions
-        Assert.assertEquals(0, sessionManager.getIncomingSessions().size());
+        Assert.assertEquals(newTopology.getRemoteSourceClusters().size(), sessionManager.getIncomingSessions().size());
         Assert.assertEquals(newTopology.getRemoteSinkClusters().size(), sessionManager.getOutgoingSessions().size());
+        Assert.assertEquals(sessionManager.getOutgoingSessions().size() + sessionManager.getIncomingSessions().size(), sessionManager.getSessions().size());
 
         //verify router.stop was called with old stale sessions
         Mockito.verify(router, Mockito.times(1)).stop(Sets.difference(sessionsFromTopology1, sessionFromTopology2));

@@ -2,6 +2,7 @@ package org.corfudb.infrastructure.logreplication.infrastructure;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Sets;
+import com.google.protobuf.Message;
 import com.google.protobuf.TextFormat;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -19,6 +20,7 @@ import org.corfudb.runtime.LogReplication.ReplicationModel;
 import org.corfudb.runtime.LogReplication.ReplicationStatus;
 import org.corfudb.runtime.LogReplication.ReplicationSubscriber;
 import org.corfudb.runtime.collections.CorfuStore;
+import org.corfudb.runtime.collections.CorfuStoreEntry;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
@@ -29,6 +31,7 @@ import org.corfudb.util.retry.RetryNeededException;
 
 import javax.annotation.Nonnull;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -443,7 +446,15 @@ public class SessionManager {
      * @return set of sessions for which this cluster is the sink
      */
     public Set<LogReplicationSession> getIncomingSessions() {
-        return incomingSessions;
+        if (replicationContext.getIsLeader().get()) {
+            return incomingSessions;
+        }
+        Set<LogReplicationSession> sessionsToReturn;
+        try (TxnContext txn = metadataManager.getTxnContext()) {
+            sessionsToReturn = txn.keySet(metadataManager.getMetadataTable());
+            txn.commit();
+        }
+        return sessionsToReturn;
     }
 
     /**
@@ -452,7 +463,17 @@ public class SessionManager {
      * @return set of sessions for which this cluster is the sink
      */
     public Set<LogReplicationSession> getOutgoingSessions() {
-        return outgoingSessions;
+        if (replicationContext.getIsLeader().get()) {
+            return outgoingSessions;
+        }
+        List<CorfuStoreEntry<LogReplicationSession, ReplicationStatus, Message>> sessionsToStatus;
+        try (TxnContext txn = metadataManager.getTxnContext()) {
+            sessionsToStatus = txn.executeQuery(metadataManager.getStatusTable(), p -> true);
+            txn.commit();
+        }
+        Set<LogReplicationSession> sessionsToReturn = new HashSet<>();
+        sessionsToStatus.stream().filter(e -> e.getPayload().hasSourceStatus()).forEach(e -> sessionsToReturn.add(e.getKey()));
+        return sessionsToReturn;
     }
 
     /**

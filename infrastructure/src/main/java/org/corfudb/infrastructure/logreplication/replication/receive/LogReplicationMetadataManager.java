@@ -80,7 +80,9 @@ public class LogReplicationMetadataManager {
     @Getter
     private final CorfuRuntime runtime;
 
+    @Getter
     private final Table<LogReplicationSession, ReplicationStatus, Message> statusTable;
+    @Getter
     private final Table<LogReplicationSession, ReplicationMetadata, Message> metadataTable;
     private final Table<ReplicationEventInfoKey, ReplicationEvent, Message> replicationEventTable;
 
