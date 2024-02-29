@@ -1,25 +1,27 @@
 package org.corfudb.infrastructure.log;
 
 import org.corfudb.infrastructure.BatchProcessor.BatchProcessorContext;
-import org.corfudb.infrastructure.ServerContext;
-import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.infrastructure.log.FileSystemAgent.FileSystemConfig;
+import org.corfudb.infrastructure.log.StreamLog.PersistenceMode;
 import org.corfudb.runtime.proto.FileSystemStats.BatchProcessorStatus;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+
+import java.io.File;
+import java.time.Duration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class FileSystemAgentTest {
 
+    @TempDir
+    File logDir;
+
     @Test
     public void testFileSystemAgentUpdateBatchProcessorStatus() throws Exception {
+
         // Init the FileSystemAgent
-        String logDir = com.google.common.io.Files.createTempDir().getAbsolutePath();
-        ServerContext context = new ServerContextBuilder()
-                .setLogPath(logDir)
-                .setMemory(false)
-                .build();
-        FileSystemConfig config = new FileSystemConfig(context);
+        FileSystemConfig config = new FileSystemConfig(logDir.toPath(),100, 0, PersistenceMode.DISK, Duration.ofMillis(50));
         BatchProcessorContext batchProcessorContext = new BatchProcessorContext();
         FileSystemAgent.init(config, batchProcessorContext);
 
@@ -30,11 +32,20 @@ public class FileSystemAgentTest {
         // Set Batch Processor Error Status
         batchProcessorContext.setErrorStatus();
 
-        // Allow time for PartitionAttribute's scheduled updater thread to run
-        Thread.sleep(10000);
+
+        boolean result = false;
+        for (int i = 0; i < 10; i++) {
+            BatchProcessorStatus batchProcessorStatus = FileSystemAgent
+                    .getPartitionAttribute()
+                    .getBatchProcessorStatus();
+            if (batchProcessorStatus == BatchProcessorStatus.BP_STATUS_ERROR) {
+                result = true;
+                break;
+            }
+            Thread.sleep(50);
+        }
 
         // Check that the updated value is reflected
-        assertThat(FileSystemAgent.getPartitionAttribute().getBatchProcessorStatus()
-                .equals(BatchProcessorStatus.BP_STATUS_ERROR)).isTrue();
+        assertThat(result).isTrue();
     }
 }
