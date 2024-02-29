@@ -2,6 +2,7 @@ package org.corfudb.runtime;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import com.google.protobuf.Message;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
@@ -14,9 +15,12 @@ import org.corfudb.runtime.collections.CorfuStoreEntry;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus;
+import org.corfudb.runtime.CorfuCompactorManagement.StringKey;
 import org.corfudb.runtime.exceptions.BackupRestoreException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.runtime.proto.RpcCommon;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.test.SampleSchema;
 import org.corfudb.test.SampleSchema.Uuid;
@@ -34,6 +38,11 @@ import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.runtime.CompactorMetadataTables.COMPACTION_CONTROLS_TABLE;
+import static org.corfudb.runtime.CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME;
+import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * Test the Corfu native backup and restore functionalities. Overall the tests bring up two CorfuServers,
@@ -749,6 +758,94 @@ public class BackupRestoreIT extends AbstractIT {
 
         assertThat(allTablesBeforeBackup).containsAll(allTablesAfterRestore);
         assertThat(allTablesAfterRestore).containsAll(allTablesBeforeBackup);
+
+        Table<StringKey, CheckpointingStatus, Message> compactionManagerTable = destDataCorfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
+                COMPACTION_MANAGER_TABLE_NAME,
+                StringKey.class,
+                CheckpointingStatus.class,
+                null,
+                TableOptions.fromProtoSchema(CheckpointingStatus.class));
+
+        Table<StringKey, RpcCommon.TokenMsg, Message> compactionControlsTable = destDataCorfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
+                COMPACTION_CONTROLS_TABLE,
+                StringKey.class,
+                RpcCommon.TokenMsg.class,
+                null,
+                TableOptions.fromProtoSchema(RpcCommon.TokenMsg.class));
+
+        try (TxnContext txn = destDataCorfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+            CheckpointingStatus managerStatus = txn.getRecord(compactionManagerTable,
+                    CompactorMetadataTables.COMPACTION_MANAGER_KEY).getPayload();
+            assertThat(managerStatus).isNull();
+            assertThat(txn.getRecord(compactionControlsTable,
+                    CompactorMetadataTables.DISABLE_COMPACTION).getPayload()).isNull();
+            txn.commit();
+        }
+
+        // Close servers and runtime before exiting
+        cleanEnv();
+    }
+
+    /**
+     * Tests if compaction is disabled till end of restore()
+     *
+     * @throws Exception
+     */
+    @Test
+    public void backupRestoreDisableCompactionTest() throws Exception {
+        // Set up the test environment
+        setupEnv();
+
+        // Create Corfu Store to add entries into server
+        CorfuStore srcDataCorfuStore = new CorfuStore(srcDataRuntime);
+        CorfuStore destDataCorfuStore = new CorfuStore(destDataRuntime);
+
+        List<String> tableNames = getTableNames(numTables);
+
+        // Generate random entries and save into sourceServer
+        // Set half of the tables with backup tag, and the other half without backup tag
+        int i = 0;
+        for (String tableName : tableNames) {
+            if (i++ % 2 == 0) {
+                // set requires_backup_support
+                generateData(srcDataCorfuStore, tableName, true);
+            } else {
+                generateData(srcDataCorfuStore, tableName, false);
+            }
+        }
+
+        // Backup all tables
+        Backup backup = new Backup(BACKUP_TAR_FILE_PATH, backupRuntime, false);
+        backup.start();
+
+        // Verify that backup tar file exists
+        File backupTarFile = new File(BACKUP_TAR_FILE_PATH);
+        assertThat(backupTarFile).exists();
+
+        // Generate pre-existing data and save into destServer
+        for (String tableName : tableNames) {
+            generateData(destDataCorfuStore, tableName, true);
+        }
+
+        // Restore using backup files
+        Restore restore = new Restore(BACKUP_TAR_FILE_PATH, restoreRuntime, Restore.RestoreMode.FULL);
+        restore.disableCompaction();
+        restore.openTarFile();
+        restore.restore();
+
+        //Do not call enableCompaction() here as we want to test if compaction is disabled after restore()
+        Table<StringKey, RpcCommon.TokenMsg, Message> compactionControlsTable = destDataCorfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
+                COMPACTION_CONTROLS_TABLE,
+                StringKey.class,
+                RpcCommon.TokenMsg.class,
+                null,
+                TableOptions.fromProtoSchema(RpcCommon.TokenMsg.class));
+
+        try (TxnContext txn = destDataCorfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+            assertThat(txn.getRecord(compactionControlsTable,
+                    CompactorMetadataTables.DISABLE_COMPACTION).getPayload()).isNotNull();
+            txn.commit();
+        }
 
         // Close servers and runtime before exiting
         cleanEnv();

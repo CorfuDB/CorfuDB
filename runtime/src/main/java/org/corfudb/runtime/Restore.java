@@ -1,5 +1,6 @@
 package org.corfudb.runtime;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -34,6 +35,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
+import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 import static org.corfudb.runtime.view.TableRegistry.getFullyQualifiedTableName;
 
 /**
@@ -70,6 +72,12 @@ public class Restore {
 
     //
     private DistributedCheckpointerHelper cpHelper;
+
+    // List of tables ignored during clean up and restore
+    private static final List<String> IGNORED_CORFU_SYSTEM_TABLES = Arrays.asList(
+            CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
+            CompactorMetadataTables.COMPACTION_CONTROLS_TABLE
+    );
 
     /**
      * Unpacked files from backup tar file are stored under RESTORE_TEMP_DIR. They are deleted after restore finishes.
@@ -114,7 +122,8 @@ public class Restore {
         log.info("restore completed");
     }
 
-    private void disableCompaction() throws Exception {
+    @VisibleForTesting
+    protected void disableCompaction() throws Exception {
         log.info("Disabling compaction...");
         if (cpHelper == null) {
             try {
@@ -133,20 +142,29 @@ public class Restore {
         cpHelper.enableCompaction();
     }
 
-    private void restore() throws IOException {
+    @VisibleForTesting
+    protected void restore() throws IOException {
         if (restoreMode == RestoreMode.FULL) {
-            clearAllTables();
+            clearAllExceptIgnoredTables();
         }
 
         long startTime = System.currentTimeMillis();
         for (String tableBackup : tableBackups) {
             log.info("start restoring table {}", tableBackup);
+            String fullyQualifiedTableName = tableBackup.split("\\.")[1];
+            String namespace = fullyQualifiedTableName.split("\\$")[0];
+            String tableName = fullyQualifiedTableName.split("\\$")[1];
+            if (namespace.equals(CORFU_SYSTEM_NAMESPACE) &&
+                    IGNORED_CORFU_SYSTEM_TABLES.contains(tableName)) {
+                log.info("Skip restoring table {} which is part of IGNORED_TABLES", tableBackup);
+                continue;
+            }
             if (restoreMode == RestoreMode.PARTIAL_TAGGED && !isTableTagged(tableBackup)) {
                 log.info("skip restoring table {} since it doesn't have requires_backup_support tag", tableBackup);
                 continue;
             }
 
-            UUID streamId = UUID.fromString(tableBackup.substring(0, tableBackup.indexOf(".")));
+            UUID streamId = UUID.fromString(tableBackup.split("\\.")[0]);
             try {
                 Path tableBackupPath = Paths.get(restoreTempDirPath).resolve(tableBackup);
                 restoreTable(tableBackupPath, streamId);
@@ -254,7 +272,8 @@ public class Restore {
     /**
      * Open the backup tar file and save the table backups to tableDir directory
      */
-    private void openTarFile() throws IOException {
+    @VisibleForTesting
+    protected void openTarFile() throws IOException {
         this.restoreTempDirPath = Files.createTempDirectory(RESTORE_TEMP_DIR_PREFIX).toString();
         try (FileInputStream fileInput = new FileInputStream(filePath);
              TarArchiveInputStream tarInput = new TarArchiveInputStream(fileInput)) {
@@ -319,16 +338,18 @@ public class Restore {
         }
     }
 
-    private void clearAllTables() {
+    private void clearAllExceptIgnoredTables() {
         TxnContext txn = corfuStore.txn(TableRegistry.CORFU_SYSTEM_NAMESPACE);
 
         corfuStore.getRuntime().getTableRegistry().listTables().forEach(tableName -> {
+            if (tableName.getNamespace().equals(CORFU_SYSTEM_NAMESPACE) && IGNORED_CORFU_SYSTEM_TABLES.contains(tableName.getTableName())) {
+                return;
+            }
             String name = getFullyQualifiedTableName(tableName);
             UUID streamId = CorfuRuntime.getStreamID(name);
             SMREntry entry = new SMREntry("clear", new Array[0], Serializers.PRIMITIVE);
             txn.logUpdate(streamId, entry);
         });
-
         txn.commit();
         log.info("Cleared all tables.");
     }
