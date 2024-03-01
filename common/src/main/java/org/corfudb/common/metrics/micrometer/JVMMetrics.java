@@ -11,6 +11,7 @@ import java.util.Optional;
  */
 
 public final class JVMMetrics {
+
     private static void subscribeThreadMetrics(MeterRegistry meterRegistry) {
         JvmThreadMetrics threadMetrics = new JvmThreadMetrics();
         threadMetrics.bindTo(meterRegistry);
