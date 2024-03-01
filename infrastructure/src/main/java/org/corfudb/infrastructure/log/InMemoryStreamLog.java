@@ -23,6 +23,8 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
+import static org.corfudb.infrastructure.log.FileSystemAgent.FileSystemConfig.UPDATE_INTERVAL_SECONDS;
+
 /**
  * This class implements the StreamLog interface using a Java hash map.
  * The stream log is only stored in-memory and not persisted.
@@ -57,7 +59,8 @@ public class InMemoryStreamLog implements StreamLog {
         Path dummyLogDir = new File(".").toPath().toAbsolutePath();
         double unlimited = 100;
         long reservedSpace = 0;
-        FileSystemConfig config = new FileSystemConfig(dummyLogDir, unlimited, reservedSpace, PersistenceMode.MEMORY);
+        FileSystemConfig config = new FileSystemConfig(dummyLogDir, unlimited, reservedSpace,
+                PersistenceMode.MEMORY, UPDATE_INTERVAL_SECONDS);
         fsAgent = FileSystemAgent.init(config, batchProcessorContext);
     }
 

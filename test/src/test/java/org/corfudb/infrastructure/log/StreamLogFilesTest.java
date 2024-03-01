@@ -36,6 +36,7 @@ import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.corfudb.infrastructure.log.FileSystemAgent.FileSystemConfig.UPDATE_INTERVAL_SECONDS;
 import static org.corfudb.infrastructure.log.Segment.METADATA_SIZE;
 import static org.corfudb.infrastructure.log.Segment.VERSION;
 import static org.corfudb.infrastructure.log.SegmentUtils.getByteBufferWithMetaData;
@@ -740,10 +741,10 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
 
         final double limit = 100.0;
         final PersistenceMode mode = PersistenceMode.DISK;
-        FileSystemAgent.init(new FileSystemConfig(parentDir.toPath(), limit, 0, mode), new BatchProcessorContext());
+        FileSystemAgent.init(new FileSystemConfig(parentDir.toPath(), limit, 0, mode, UPDATE_INTERVAL_SECONDS), new BatchProcessorContext());
         long parentSize = FileSystemAgent.getResourceQuota().getUsed().get();
 
-        FileSystemAgent.init(new FileSystemConfig(childDir.toPath(), limit, 0, mode), new BatchProcessorContext());
+        FileSystemAgent.init(new FileSystemConfig(childDir.toPath(), limit, 0, mode, UPDATE_INTERVAL_SECONDS), new BatchProcessorContext());
         long childDirSize = FileSystemAgent.getResourceQuota().getUsed().get();
 
         assertThat(parentSize).isEqualTo(parentDirFilePayloadSize + childDirFilePayloadSize);

@@ -272,12 +272,12 @@ public class BatchProcessor implements AutoCloseable {
         private final AtomicReference<BatchProcessorStatus> status = new AtomicReference<>(BatchProcessorStatus.BP_STATUS_OK);
 
         @VisibleForTesting
-        void setErrorStatus() {
+        public void setErrorStatus() {
             status.set(BatchProcessorStatus.BP_STATUS_ERROR);
         }
 
         @VisibleForTesting
-        void setOkStatus() {
+        public void setOkStatus() {
             status.set(BatchProcessorStatus.BP_STATUS_OK);
         }
 
