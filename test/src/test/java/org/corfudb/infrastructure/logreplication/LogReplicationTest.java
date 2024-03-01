@@ -14,7 +14,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @Slf4j
 public class LogReplicationTest {
 
-    private String endpoint;
+    private final String endpoint;
 
     private final int ITERATIONS = 10;
 
@@ -29,13 +29,11 @@ public class LogReplicationTest {
 
     /**
      * Setup Test Environment
-     *
+     * <p>
      * - Two independent Corfu Servers (source and destination)
      * - CorfuRuntime's to each Corfu Server
-     *
-     * @throws IOException
      */
-    private void setupEnv() throws IOException {
+    private void setupEnv() {
 
         CorfuRuntime.CorfuRuntimeParameters params = CorfuRuntime.CorfuRuntimeParameters.builder()
 //                .trustStore("/config/cluster-manager/cluster-manager/public/truststore.jks")
