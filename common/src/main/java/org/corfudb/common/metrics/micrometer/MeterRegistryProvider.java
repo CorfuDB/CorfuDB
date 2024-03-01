@@ -36,7 +36,7 @@ public class MeterRegistryProvider {
 
     }
 
-    public static enum MetricType {
+    public enum MetricType {
         SERVER,
         CLIENT
     }
