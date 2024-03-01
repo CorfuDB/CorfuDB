@@ -21,6 +21,7 @@ import org.corfudb.runtime.clients.NettyCommTestUtil.CertificateManager;
 import org.corfudb.security.tls.TlsUtils.CertStoreConfig.CertManagementConfig;
 import org.corfudb.util.NodeLocator;
 import org.junit.Assume;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import javax.annotation.Nonnull;
@@ -550,6 +551,7 @@ public class NettyCommTest extends AbstractCorfuTest {
     }
 
     @Test
+    @Ignore("unpredictable behavior across different environments (JDK versions and OpenSSL)")
     public void testTlsCipherRsaAndEcdsaKeyStoreRsaEcdsa() throws Exception {
         if (OpenSsl.isAvailable()) {
             // when OpenSsl is the SSL provider
