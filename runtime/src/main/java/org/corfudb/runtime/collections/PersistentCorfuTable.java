@@ -36,7 +36,7 @@ public class PersistentCorfuTable<K, V> implements
 
     @Override
     public void setCorfuSMRProxy(ICorfuSMRProxy<ImmutableCorfuTable<K, V>> proxy) {
-        this.proxy = (ICorfuSMRProxy<ImmutableCorfuTable<K, V>>) proxy;
+        this.proxy = proxy;
     }
 
     @Override
