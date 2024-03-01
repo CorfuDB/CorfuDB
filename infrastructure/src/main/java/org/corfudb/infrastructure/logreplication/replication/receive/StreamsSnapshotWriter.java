@@ -153,7 +153,7 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
      */
     private void processUpdatesShadowStream(List<SMREntry> smrEntries, Long currentSeqNum, UUID shadowStreamUuid,
                                             UUID snapshotSyncId) {
-            batchingData(smrEntries, currentSeqNum, shadowStreamUuid, snapshotSyncId, false);
+        batchingData(smrEntries, currentSeqNum, shadowStreamUuid, snapshotSyncId);
         }
 
     /**
@@ -314,7 +314,7 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
             smrEntries = filterRegistryTableEntries(smrEntries);
         }
 
-        batchingData(smrEntries, 0, streamId, null, true);
+        batchingData(smrEntries, 0, streamId, null);
     }
 
     private boolean maxEntriesLimitReached(UUID streamId, List<SMREntry> buffer) {
@@ -436,13 +436,12 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
         }
     }
 
-    private void batchingData(List<SMREntry> smrEntries, long currentSeqNum, UUID streamId, UUID snapshotSyncId,
-                              boolean applyPhase) {
+    private void batchingData(List<SMREntry> smrEntries, long currentSeqNum, UUID streamId, UUID snapshotSyncId) {
         CorfuStoreMetadata.Timestamp ts = null;
         List<SMREntry> buffer = new ArrayList<>();
         long bufferSize = 0;
         int numBatches = 1;
-        int metadataSize = applyPhase ? 0 : metadataManager.getReplicationMetadata(session).getSerializedSize();
+        int metadataSize = snapshotSyncId == null ? 0 : metadataManager.getReplicationMetadata(session).getSerializedSize();
 
         for (SMREntry smrEntry : smrEntries) {
             // Apply all SMR entries in a single transaction as long as it does not exceed maxApplySize(a fraction of
@@ -460,14 +459,6 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
                     buffer)) {
                 try (TxnContext txnContext = metadataManager.getTxnContext()) {
                     updateLog(txnContext, buffer, streamId);
-                    if (!applyPhase) {
-                        ReplicationMetadata metadata = metadataManager.queryReplicationMetadata(txnContext, session);
-                        ReplicationMetadata updatedMetadata = metadata.toBuilder().setLastSnapshotStarted(srcGlobalSnapshot)
-                                .setLastSnapshotTransferredSeqNumber(currentSeqNum)
-                                .build();
-
-                        metadataManager.updateReplicationMetadata(txnContext, session, updatedMetadata);
-                    }
                     ts = txnContext.commit();
                     log.debug("Applied shadow stream partially for stream {} on address :: {}.  {} SMR entries written",
                             streamId, ts.getSequence(), buffer.size());
@@ -484,22 +475,22 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
         if (!buffer.isEmpty()) {
             try (TxnContext txnContext = metadataManager.getTxnContext()) {
                 updateLog(txnContext, buffer, streamId);
-                if (!applyPhase) {
-                    ReplicationMetadata metadata = metadataManager.queryReplicationMetadata(txnContext, session);
-                    ReplicationMetadata updatedMetadata = metadata.toBuilder().setLastSnapshotStarted(srcGlobalSnapshot)
-                            .setLastSnapshotTransferredSeqNumber(currentSeqNum)
-                            .build();
-
-                    metadataManager.updateReplicationMetadata(txnContext, session, updatedMetadata);
-                }
                 ts = txnContext.commit();
             }
         }
 
-        if (snapshotSyncId != null && ts != null && !applyPhase && !snapshotSyncStartMarker.isPresent()) {
+        if (snapshotSyncId != null) {
             try (TxnContext txn = metadataManager.getTxnContext()) {
-                metadataManager.setSnapshotSyncStartMarker(txn, session, snapshotSyncId, ts);
-                snapshotSyncStartMarker = Optional.of(new SnapshotSyncStartMarker(snapshotSyncId, ts.getSequence()));
+                ReplicationMetadata metadata = metadataManager.queryReplicationMetadata(txn, session);
+                ReplicationMetadata updatedMetadata = metadata.toBuilder().setLastSnapshotStarted(srcGlobalSnapshot)
+                        .setLastSnapshotTransferredSeqNumber(currentSeqNum)
+                        .build();
+
+                metadataManager.updateReplicationMetadata(txn, session, updatedMetadata);
+                if (!snapshotSyncStartMarker.isPresent()) {
+                    metadataManager.setSnapshotSyncStartMarker(txn, session, snapshotSyncId, ts);
+                    snapshotSyncStartMarker = Optional.of(new SnapshotSyncStartMarker(snapshotSyncId, ts.getSequence()));
+                }
                 txn.commit();
             }
             log.debug("Process entries total={}, set sequence number {}", smrEntries.size(), currentSeqNum);
