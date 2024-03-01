@@ -2,7 +2,7 @@ package org.corfudb.runtime.collections;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.reflect.TypeToken;
-import org.corfudb.runtime.object.ICorfuSMR;
+import org.corfudb.runtime.collections.table.GenericCorfuTable;
 import org.corfudb.runtime.object.ICorfuSMRProxy;
 import org.corfudb.runtime.object.ICorfuSMRUpcallTarget;
 
@@ -11,9 +11,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Stream;
 
-public class PersistentCorfuTable<K, V> implements
-        ICorfuTable<K, V>,
-        ICorfuSMR<ImmutableCorfuTable<K, V>> {
+public class PersistentCorfuTable<K, V> implements GenericCorfuTable<ImmutableCorfuTable<K, V>, K, V> {
 
     private ICorfuSMRProxy<ImmutableCorfuTable<K, V>> proxy;
 
@@ -111,5 +109,10 @@ public class PersistentCorfuTable<K, V> implements
     @Override
     public Map<String, ICorfuSMRUpcallTarget<ImmutableCorfuTable<K, V>>> getSMRUpcallMap() {
         return upcallTargetMap;
+    }
+
+    @Override
+    public TypeToken<ImmutableCorfuTable<K, V>> getTableTypeToken() {
+        return ImmutableCorfuTable.getTypeToken();
     }
 }
