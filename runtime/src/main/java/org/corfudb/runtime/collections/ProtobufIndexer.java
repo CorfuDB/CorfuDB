@@ -20,11 +20,10 @@ import java.util.Optional;
  * ProtobufIndexer uses the special FieldOptions that the application can place on its
  * protobuf definitions (like secondary_key) and create secondary indexes callbacks over CorfuTable
  * based on that.
- *
+ * <p>
  * Created by hisundar on 2019-08-12.
  */
-public class ProtobufIndexer implements Index.Registry<Message, CorfuRecord<Message,
-        Message>> {
+public class ProtobufIndexer implements Index.Registry<Message, CorfuRecord<Message, Message>> {
 
     private final HashMap<String,
             Index.Spec<Message, CorfuRecord<Message, Message>, ?>>
@@ -33,7 +32,7 @@ public class ProtobufIndexer implements Index.Registry<Message, CorfuRecord<Mess
     // Map from secondary index name to index path (index fully qualified name)
     private final HashMap<String, String> secondaryIndexNameToPath = new HashMap<>();
 
-    ProtobufIndexer(Message payloadSchema, CorfuOptions.SchemaOptions schemaOptions) {
+    public ProtobufIndexer(Message payloadSchema, CorfuOptions.SchemaOptions schemaOptions) {
         registerSecondaryIndex(payloadSchema, schemaOptions);
     }
 
