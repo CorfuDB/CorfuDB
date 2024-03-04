@@ -253,6 +253,7 @@ public abstract class AbstractTransactionalContext implements
      * Forcefully abort the transaction.
      */
     public void abortTransaction(TransactionAbortedException ae) {
+        log.error("Aborted", ae);
         AbstractTransactionalContext.log.debug("TXAbort[{}]", this);
         commitAddress = ABORTED_ADDRESS;
         txnContext = null;
