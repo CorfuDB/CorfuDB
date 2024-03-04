@@ -10,6 +10,7 @@ import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.common.config.ConfigParamsHelper;
+import org.corfudb.common.config.ConfigParamsHelper.TlsCiphers;
 import org.corfudb.util.FileWatcher;
 import org.corfudb.infrastructure.BaseServer;
 import org.corfudb.infrastructure.CorfuServerNode;
@@ -21,7 +22,6 @@ import org.corfudb.runtime.clients.NettyCommTestUtil.CertificateManager;
 import org.corfudb.security.tls.TlsUtils.CertStoreConfig.CertManagementConfig;
 import org.corfudb.util.NodeLocator;
 import org.junit.Assume;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import javax.annotation.Nonnull;
@@ -33,7 +33,8 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
-import java.time.Duration;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Random;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -457,7 +458,7 @@ public class NettyCommTest extends AbstractCorfuTest {
     @Test
     public void testTlsCipherRsaKeyStoreRsa() throws Exception {
         tlsCipherTestHelper(TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256.name(), KeyStoreType.RSA,
-                true, TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256);
+                true, List.of(TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256));
     }
     @Test
     public void testTlsCipherRsaKeyStoreEcdsa() throws Exception {
@@ -468,13 +469,13 @@ public class NettyCommTest extends AbstractCorfuTest {
     @Test
     public void testTlsCipherRsaKeyStoreRsaEcdsa() throws Exception {
         tlsCipherTestHelper(TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256.name(), KeyStoreType.RSA_ECDSA,
-                true, TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256);
+                true, List.of(TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256));
     }
 
     @Test
     public void testTlsCipherRsaKeyStoreRsaRsa() throws Exception {
         tlsCipherTestHelper(TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256.name(), KeyStoreType.RSA_RSA,
-                true, TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256);
+                true, List.of(TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256));
     }
 
     @Test
@@ -498,7 +499,7 @@ public class NettyCommTest extends AbstractCorfuTest {
     @Test
     public void testTlsCipherEcdsaKeyStoreEcdsa() throws Exception {
         tlsCipherTestHelper(TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384.name(), KeyStoreType.ECDSA,
-                true, TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384);
+                true, List.of(TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384));
     }
 
     @Test
@@ -516,7 +517,7 @@ public class NettyCommTest extends AbstractCorfuTest {
         // When JDK is the SSL provider, it works with ECDSA consistently.
         if (!OpenSsl.isAvailable()) {
             tlsCipherTestHelper(TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384.name(), KeyStoreType.RSA_ECDSA,
-                    true, TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384);
+                    true, List.of(TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384));
         }
     }
 
@@ -529,7 +530,7 @@ public class NettyCommTest extends AbstractCorfuTest {
     @Test
     public void testTlsCipherEcdsaKeystoreEcdsaEcdsa() throws Exception {
         tlsCipherTestHelper(TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384.name(), KeyStoreType.ECDSA_ECDSA,
-                true, TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384);
+                true, List.of(TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384));
     }
 
     /**
@@ -541,41 +542,35 @@ public class NettyCommTest extends AbstractCorfuTest {
     @Test
     public void testTlsCipherRsaAndEcdsaKeyStoreRsa() throws Exception {
         tlsCipherTestHelper(ConfigParamsHelper.getTlsCiphersCSV(), KeyStoreType.RSA,
-                true, TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256);
+                true, List.of(TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256));
     }
 
     @Test
     public void testTlsCipherRsaAndEcdsaKeyStoreEcdsa() throws Exception {
         tlsCipherTestHelper(ConfigParamsHelper.getTlsCiphersCSV(), KeyStoreType.ECDSA,
-                true, TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384);
+                true, List.of(TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384));
     }
 
     @Test
-    @Ignore("unpredictable behavior across different environments (JDK versions and OpenSSL)")
     public void testTlsCipherRsaAndEcdsaKeyStoreRsaEcdsa() throws Exception {
-        if (OpenSsl.isAvailable()) {
-            // when OpenSsl is the SSL provider
-            // Picks RSA Cipher TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 when both are given
-            tlsCipherTestHelper(ConfigParamsHelper.getTlsCiphersCSV(), KeyStoreType.RSA_ECDSA,
-                    true, TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256);
-        } else {
-            // When JDK is the SSL provider
-            // Picks ECDSA Cipher TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384 when both are given
-            tlsCipherTestHelper(ConfigParamsHelper.getTlsCiphersCSV(), KeyStoreType.RSA_ECDSA,
-                    true, TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384);
-        }
+        // when OpenSsl is the SSL provider
+        // Picks RSA Cipher TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 when both are given
+        // When JDK is the SSL provider
+        // Picks ECDSA Cipher TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384 when both are given
+        tlsCipherTestHelper(ConfigParamsHelper.getTlsCiphersCSV(), KeyStoreType.RSA_ECDSA,
+                true, Arrays.asList(TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256));
     }
 
     @Test
     public void testTlsCipherRsaAndEcdsaKeyStoreRsaRsa() throws Exception {
         tlsCipherTestHelper(ConfigParamsHelper.getTlsCiphersCSV(), KeyStoreType.RSA_RSA,
-                true, TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256);
+                true, List.of(TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256));
     }
 
     @Test
     public void testTlsCipherRsaAndEcdsaKeyStoreEcdsaEcdsa() throws Exception {
         tlsCipherTestHelper(ConfigParamsHelper.getTlsCiphersCSV(), KeyStoreType.ECDSA_ECDSA,
-                true, TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384);
+                true, List.of(TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384));
     }
 
     @Test
@@ -782,12 +777,12 @@ public class NettyCommTest extends AbstractCorfuTest {
      * @param tlsCiphers        The Ciphers to be enabled for the netty connection
      * @param keyStoreType      A keystore containing keys supporting the enabled ciphers
      * @param shouldPingSucceed whether the current combination of ciphers and keys is expected to work or not
-     * @param expectedCipher    the expected cipher in a successful connection,
+     * @param expectedCiphers    the expected ciphers in a successful connection,
      *                          null if no connection can be established
      * @throws Exception Any Exception thrown during the test
      */
     private void tlsCipherTestHelper(String tlsCiphers, KeyStoreType keyStoreType,
-                                     boolean shouldPingSucceed, ConfigParamsHelper.TlsCiphers expectedCipher) throws Exception {
+                                     boolean shouldPingSucceed, List<TlsCiphers>  expectedCiphers) throws Exception {
         String serverKeystorePathPrefix = "src/test/resources/security/server_";
         String runtimeKeystorePathPrefix = "src/test/resources/security/runtime_";
         String jksSuffix = ".jks";
@@ -828,8 +823,8 @@ public class NettyCommTest extends AbstractCorfuTest {
                                 ((SslHandler) r.getChannel().pipeline().get("ssl"))
                                         .engine().getSession();
                         assertThat(sslSession.getProtocol()).isEqualTo("TLSv1.2");
-                        assertThat(sslSession.getCipherSuite())
-                                .isEqualTo(expectedCipher.name());
+                        assertThat(expectedCiphers.contains(TlsCiphers.valueOf(sslSession.getCipherSuite())))
+                                .isTrue();
                     } else {
                         assertThat(getBaseClient(r).pingSync()).isFalse();
                     }
