@@ -618,7 +618,7 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
                         assertThat(entries.get(0).getValue().getPayload().getAnotherKey()).isEqualTo(numEntries);
 
 
-                        entries = toList(table.getByIndex(() -> "uuid", Uuid.getDefaultInstance()));
+                        entries = toList(table.getByIndex(() -> "uuid", ExampleSchemas.Uuid.getDefaultInstance()));
                         assertThat(entries.size()).isEqualTo(numEntries);
                         assertThat(entries.containsAll(initialEntries)).isTrue();
                         assertThat(initialEntries.containsAll(entries)).isTrue();
@@ -649,7 +649,7 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
                         entries = toList(table.getByIndex(() -> "anotherKey", 1L));
                         assertThat(entries).isEmpty();
 
-                        entries = toList(table.getByIndex(() -> "uuid", Uuid.getDefaultInstance()));
+                        entries = toList(table.getByIndex(() -> "uuid", ExampleSchemas.Uuid.getDefaultInstance()));
                         assertThat(entries.size()).isEqualTo(expectedEntries.size());
                         assertThat(entries.containsAll(expectedEntries)).isTrue();
                         assertThat(expectedEntries.containsAll(entries)).isTrue();
