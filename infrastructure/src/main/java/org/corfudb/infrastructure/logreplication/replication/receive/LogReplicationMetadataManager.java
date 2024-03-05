@@ -468,7 +468,7 @@ public class LogReplicationMetadataManager {
                 return false;
             }
         }
-        return false;
+        return true;
     }
 
     /**
