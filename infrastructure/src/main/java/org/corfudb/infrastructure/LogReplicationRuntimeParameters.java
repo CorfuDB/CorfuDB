@@ -4,8 +4,9 @@ import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
 import lombok.Data;
 import org.corfudb.comm.ChannelImplementation;
-import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.infrastructure.logreplication.transport.IChannelContext;
+
+import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.RuntimeParameters;
 import org.corfudb.runtime.RuntimeParametersBuilder;
@@ -33,6 +34,9 @@ public class LogReplicationRuntimeParameters extends RuntimeParameters {
     // Local Cluster Identifier
     private String localClusterId;
 
+    // Plugin File Path (file with plugin configurations - absolute paths of JAR and canonical name of classes)
+    private String pluginFilePath;
+
     // Topology Configuration Identifier (configuration epoch)
     private long topologyConfigId;
 
@@ -51,6 +55,7 @@ public class LogReplicationRuntimeParameters extends RuntimeParameters {
         private String localCorfuEndpoint;
         private String localClusterId;
         private ClusterDescriptor remoteClusterDescriptor;
+        private String pluginFilePath;
         private long topologyConfigId;
         private IChannelContext channelContext;
         private int maxWriteSize;
@@ -76,6 +81,11 @@ public class LogReplicationRuntimeParameters extends RuntimeParameters {
 
         public LogReplicationRuntimeParameters.LogReplicationRuntimeParametersBuilder remoteClusterDescriptor(ClusterDescriptor remoteLogReplicationCluster) {
             this.remoteClusterDescriptor = remoteLogReplicationCluster;
+            return this;
+        }
+
+        public LogReplicationRuntimeParameters.LogReplicationRuntimeParametersBuilder pluginFilePath(String pluginFilePath) {
+            this.pluginFilePath = pluginFilePath;
             return this;
         }
 
@@ -246,6 +256,7 @@ public class LogReplicationRuntimeParameters extends RuntimeParameters {
             runtimeParameters.setLocalClusterId(localClusterId);
             runtimeParameters.setRemoteClusterDescriptor(remoteClusterDescriptor);
             runtimeParameters.setTopologyConfigId(topologyConfigId);
+            runtimeParameters.setPluginFilePath(pluginFilePath);
             runtimeParameters.setChannelContext(channelContext);
             runtimeParameters.setMaxWriteSize(maxWriteSize);
             return runtimeParameters;

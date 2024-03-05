@@ -2,7 +2,6 @@ package org.corfudb.infrastructure.logreplication;
 
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
-import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogEntryWriter;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
@@ -52,7 +51,7 @@ public class LogEntryWriterTest extends AbstractViewTest {
 
         logEntryWriter = new LogEntryWriter(metadataManager, getDefaultSession(),
                 new LogReplicationContext(new LogReplicationConfigManager(corfuRuntime, LOCAL_SINK_CLUSTER_ID), topologyConfigId,
-                        getEndpoint(SERVERS.PORT_0), Mockito.mock(LogReplicationPluginConfig.class)));
+                        getEndpoint(SERVERS.PORT_0)));
     }
 
     @After
