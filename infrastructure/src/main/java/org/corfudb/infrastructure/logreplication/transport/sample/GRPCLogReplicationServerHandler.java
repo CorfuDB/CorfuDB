@@ -9,6 +9,7 @@ import org.corfudb.infrastructure.logreplication.LogReplicationGrpc;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientServerRouter;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.exceptions.NetworkException;
+import org.corfudb.runtime.proto.service.CorfuMessage;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg;
@@ -199,32 +200,38 @@ public class GRPCLogReplicationServerHandler extends LogReplicationGrpc.LogRepli
 
     public void send(RequestMsg msg) {
 
-        LogReplicationSession session = msg.getHeader().getSession();
-        try {
+        if (msg.getPayload().getPayloadCase().equals(CorfuMessage.RequestPayloadMsg.PayloadCase.LR_METADATA_REQUEST) ||
+                msg.getPayload().getPayloadCase().equals(CorfuMessage.RequestPayloadMsg.PayloadCase.LR_ENTRY) ||
+                msg.getPayload().getPayloadCase().equals(CorfuMessage.RequestPayloadMsg.PayloadCase.LR_LEADERSHIP_LOSS)) {
+            LogReplicationSession session = msg.getHeader().getSession();
+            try {
 
-            if (!reverseReplicationStreamObserverMap.containsKey(session)) {
-                log.warn("Corfu Message {} has no pending observer. Message {} will not be sent.",
-                        msg.getHeader().getRequestId(), msg.getPayload().getPayloadCase().name());
-                router.completeExceptionally(session, msg.getHeader().getRequestId(),
-                        new NetworkException(String.format("No pending observer for session %s", session),
-                                session.getSinkClusterId()));
-                return;
+                if (!reverseReplicationStreamObserverMap.containsKey(session)) {
+                    log.warn("Corfu Message {} has no pending observer. Message {} will not be sent.",
+                            msg.getHeader().getRequestId(), msg.getPayload().getPayloadCase().name());
+                    router.completeExceptionally(session, msg.getHeader().getRequestId(),
+                            new NetworkException(String.format("No pending observer for session %s", session),
+                                    session.getSinkClusterId()));
+                    return;
+                }
+
+                CorfuStreamObserver<RequestMsg> observer = reverseReplicationStreamObserverMap.get(session);
+                observer.onNext(msg);
+
+            } catch(StatusRuntimeException e) {
+                if (e.getStatus().getCode().equals(Status.Code.CANCELLED)) {
+                    log.error("StreamObserver is cancelled for session {} with exception", msg.getHeader().getSession(), e);
+                    router.onConnectionDown(msg.getHeader().getSession());
+                }
+                router.completeExceptionally(session, msg.getHeader().getRequestId(), e);
+            } catch (Exception e) {
+                log.error("Caught exception while trying to send message {}", msg.getHeader().getRequestId(), e);
+                router.completeExceptionally(session, msg.getHeader().getRequestId(), e);
             }
 
-            CorfuStreamObserver<RequestMsg> observer = reverseReplicationStreamObserverMap.get(session);
-            observer.onNext(msg);
-
-        } catch (StatusRuntimeException e) {
-            if (e.getStatus().getCode().equals(Status.Code.CANCELLED)) {
-                log.error("StreamObserver is cancelled for session {} with exception", msg.getHeader().getSession(), e);
-                router.onConnectionDown(msg.getHeader().getSession());
-            }
-            router.completeExceptionally(session, msg.getHeader().getRequestId(), e);
-        } catch (Exception e) {
-            log.error("Caught exception while trying to send message {}", msg.getHeader().getRequestId(), e);
-            router.completeExceptionally(session, msg.getHeader().getRequestId(), e);
+        } else {
+            log.error("UnExpected request msg {}", msg);
         }
-
     }
 
 }
