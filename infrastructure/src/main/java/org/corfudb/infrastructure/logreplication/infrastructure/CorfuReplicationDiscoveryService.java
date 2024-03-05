@@ -228,7 +228,6 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
 
             if (interClusterServerNode != null) {
                 interClusterServerNode.close();
-                interClusterServerNode = null;
             }
         }
     }
@@ -409,7 +408,6 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
                 // There may be a topology change where the remote cluster that would connect to the local cluster was
                 // removed from the topology.
                 interClusterServerNode.close();
-                interClusterServerNode = null;
             }
             return;
         }
@@ -691,7 +689,6 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
 
         if (interClusterServerNode != null) {
             interClusterServerNode.close();
-            interClusterServerNode = null;
         }
 
         if (sessionManager != null) {
