@@ -111,8 +111,8 @@ public class LogReplicationSourceManager {
 
         ReadProcessor readProcessor = new DefaultReadProcessor(runtime);
         this.metadataManager = metadataManager;
-
         // Ack Reader for Snapshot and LogEntry Sync
+        // TODO pankti: Should AckReader also get tableManagerPlugin?
         this.ackReader = new LogReplicationAckReader(this.metadataManager, tableManagerPlugin, runtime, replicationSession);
 
         this.logReplicationFSM = new LogReplicationFSM(this.runtime, tableManagerPlugin, dataSender, readProcessor,

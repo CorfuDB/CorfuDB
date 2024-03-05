@@ -9,7 +9,6 @@ import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationE
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent.LogReplicationEventType;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationFSM;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.LogEntryReader;
-import org.corfudb.infrastructure.logreplication.replication.send.logreader.MessageSizeExceededException;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.exceptions.TrimmedException;
 
@@ -122,18 +121,18 @@ public class LogEntrySender {
                     // (Optimization):
                     // Back-off for couple of seconds and retry n times if not require full sync
                 }
+
+                if (logEntryReader.hasMessageExceededSize()) {
+                    cancelLogEntrySync(LogReplicationError.LOG_ENTRY_MESSAGE_SIZE_EXCEEDED, LogReplicationEventType.REPLICATION_SHUTDOWN, logEntrySyncEventId);
+                    return;
+                }
+
             } catch (TrimmedException te) {
                 log.error("Caught Trimmed Exception while reading for {}", logEntrySyncEventId);
-                cancelLogEntrySync(LogReplicationError.TRIM_LOG_ENTRY_SYNC,
-                        LogReplicationEventType.SYNC_CANCEL, logEntrySyncEventId);
-                return;
-            } catch (MessageSizeExceededException me) {
-                log.error("Caught Message Size Exceeded Exception while reading for {}", logEntrySyncEventId);
-                cancelLogEntrySync(LogReplicationError.LOG_ENTRY_MESSAGE_SIZE_EXCEEDED,
-                        LogReplicationEventType.SYNC_CANCEL, logEntrySyncEventId);
+                cancelLogEntrySync(LogReplicationError.TRIM_LOG_ENTRY_SYNC, LogReplicationEvent.LogReplicationEventType.SYNC_CANCEL, logEntrySyncEventId);
                 return;
             } catch (Exception e) {
-                log.error("Caught exception at log entry sender", e);
+                log.error("Caught exception at LogEntrySender", e);
                 cancelLogEntrySync(LogReplicationError.UNKNOWN, LogReplicationEventType.SYNC_CANCEL, logEntrySyncEventId);
                 return;
             }
