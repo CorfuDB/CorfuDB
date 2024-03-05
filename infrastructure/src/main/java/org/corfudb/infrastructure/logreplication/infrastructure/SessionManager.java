@@ -451,6 +451,7 @@ public class SessionManager {
         }
         Set<LogReplicationSession> sessionsToReturn;
         try (TxnContext txn = metadataManager.getTxnContext()) {
+            // retrieve the incoming sessions from metadata table as only Sinks write to the table.
             sessionsToReturn = txn.keySet(metadataManager.getMetadataTable());
             txn.commit();
         }
@@ -466,14 +467,11 @@ public class SessionManager {
         if (replicationContext.getIsLeader().get()) {
             return outgoingSessions;
         }
-        List<CorfuStoreEntry<LogReplicationSession, ReplicationStatus, Message>> sessionsToStatus;
-        try (TxnContext txn = metadataManager.getTxnContext()) {
-            sessionsToStatus = txn.executeQuery(metadataManager.getStatusTable(), p -> true);
-            txn.commit();
-        }
-        Set<LogReplicationSession> sessionsToReturn = new HashSet<>();
-        sessionsToStatus.stream().filter(e -> e.getPayload().hasSourceStatus()).forEach(e -> sessionsToReturn.add(e.getKey()));
-        return sessionsToReturn;
+        Map<LogReplicationSession, ReplicationStatus> statusMap = metadataManager.getReplicationStatus();
+        return statusMap.entrySet().stream()
+                .filter(e -> e.getValue().hasSourceStatus())
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toSet());
     }
 
     /**

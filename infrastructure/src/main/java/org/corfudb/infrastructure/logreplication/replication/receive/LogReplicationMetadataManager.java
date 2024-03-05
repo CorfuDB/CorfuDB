@@ -177,7 +177,8 @@ public class LogReplicationMetadataManager {
      * of relying on the default value, as some clients of log replicator v1 consume the status table with hasField
      * check.
      */
-    private void initializeMetadata(TxnContext txn, LogReplicationSession session, boolean incomingSession,
+    @VisibleForTesting
+    public void initializeMetadata(TxnContext txn, LogReplicationSession session, boolean incomingSession,
                                     long topologyConfigId) {
         if (incomingSession) {
             // Add an entry for this session if it does not exist, otherwise, this is a resuming/ongoing session
