@@ -77,7 +77,7 @@ public class LogReplicationSinkWriterIT extends LogReplicationAbstractIT {
         }
 
         // Set the plugin config file path before starting the process
-        pluginConfigFilePath = grpcConfig;
+        pluginConfigFilePath = nettyConfig;
         startLogReplicatorServers();
 
         // Verify snapshot sync completed and cluster went into log entry sync

@@ -4,22 +4,6 @@ import static java.lang.Thread.sleep;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Observable;
-import java.util.Observer;
-import java.util.Queue;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Semaphore;
-import java.util.concurrent.atomic.AtomicBoolean;
-
 import com.google.protobuf.ByteString;
 import com.google.protobuf.Message;
 import lombok.Getter;
@@ -876,9 +860,9 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
                 break;
         }
 
+        LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(runtime, TEST_TOPOLOGY_CONFIG_ID);
         LogReplicationContext context = new LogReplicationContext(configManager, TEST_TOPOLOGY_CONFIG_ID,
-                "test:" + SERVERS.PORT_0, true);
-        LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(runtime, context);
+                "test:" + SERVERS.PORT_0);
         ackReader = new LogReplicationAckReader(metadataManager, runtime, session, context);
         fsm = new LogReplicationFSM(runtime, snapshotReader, dataSender, logEntryReader,
                 new DefaultReadProcessor(runtime), upgradeManager,

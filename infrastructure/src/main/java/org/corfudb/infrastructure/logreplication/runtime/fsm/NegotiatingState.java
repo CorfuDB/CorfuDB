@@ -6,7 +6,7 @@ import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationE
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationEventMetadata;
 import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
-import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientServerRouter;
+import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientRouter;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationUpgradeManager;
 import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
@@ -36,15 +36,14 @@ public class NegotiatingState implements LogReplicationRuntimeState {
 
     private final ThreadPoolExecutor worker;
 
-    private final LogReplicationClientServerRouter router;
+    private final LogReplicationClientRouter router;
 
     private final LogReplicationMetadataManager metadataManager;
 
     private final LogReplicationUpgradeManager upgradeManager;
 
-    public NegotiatingState(CorfuLogReplicationRuntime fsm, ThreadPoolExecutor worker,
-                            LogReplicationClientServerRouter router, LogReplicationMetadataManager metadataManager,
-                            LogReplicationUpgradeManager upgradeManager) {
+    public NegotiatingState(CorfuLogReplicationRuntime fsm, ThreadPoolExecutor worker, LogReplicationClientRouter router,
+                            LogReplicationMetadataManager metadataManager, LogReplicationUpgradeManager upgradeManager) {
         this.fsm = fsm;
         this.metadataManager = metadataManager;
         this.worker = worker;
@@ -70,7 +69,7 @@ public class NegotiatingState implements LogReplicationRuntimeState {
                     leaderNodeId = Optional.empty();
                     return fsm.getStates().get(LogReplicationRuntimeStateType.VERIFYING_REMOTE_LEADER);
                 } else {
-                    // If connection starter, router will attempt reconnection of non-leader endpoint
+                    // Router will attempt reconnection of non-leader endpoint
                     return null;
                 }
             case ON_CONNECTION_UP:
@@ -132,7 +131,7 @@ public class NegotiatingState implements LogReplicationRuntimeState {
                         CorfuMessage.RequestPayloadMsg.newBuilder().setLrMetadataRequest(
                                 LogReplication.LogReplicationMetadataRequestMsg.newBuilder().build()).build();
                 CompletableFuture<LogReplicationMetadataResponseMsg> cf = router
-                        .sendRequestAndGetCompletable(fsm.session, payload, remoteLeader);
+                        .sendRequestAndGetCompletable(payload, remoteLeader);
                 LogReplicationMetadataResponseMsg response =
                         cf.get(CorfuLogReplicationRuntime.DEFAULT_TIMEOUT, TimeUnit.MILLISECONDS);
 
@@ -140,10 +139,8 @@ public class NegotiatingState implements LogReplicationRuntimeState {
                 // (snapshot or log entry sync). This will be carried along the negotiation_complete event.
                 processNegotiationResponse(response);
 
-                if(router.isConnectionStarterForSession(fsm.getSession())) {
-                    // Negotiation to leader node completed, unblock channel in the router.
-                    router.getSessionToLeaderConnectionFuture().get(fsm.getSession()).complete(null);
-                }
+                // Negotiation to leader node completed, unblock channel in the router.
+                router.getRemoteLeaderConnectionFuture().complete(null);
             } else {
                 log.debug("No leader found during negotiation.");
                 // No leader found at the time of negotiation
@@ -182,7 +179,7 @@ public class NegotiatingState implements LogReplicationRuntimeState {
 
         log.debug("Process negotiation response {} from {}", negotiationResponse, fsm.getRemoteClusterId());
 
-        long topologyConfigId = metadataManager.getReplicationContext().getTopologyConfigId();
+        long topologyConfigId = metadataManager.getTopologyConfigId();
 
         /*
          * The sink site has a smaller config ID, redo the discovery for this sink site when

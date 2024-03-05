@@ -40,7 +40,6 @@ import static org.assertj.core.api.Assertions.assertThat;
  * contain multiple(possibly all) updates in a single transaction.
  */
 @Slf4j
-@SuppressWarnings("checkstyle:magicnumber")
 public class CorfuReplicationLargeTxIT extends LogReplicationAbstractIT {
 
     private Map<String, Table<Sample.StringKey, SampleSchema.ValueFieldTagOne,

@@ -10,7 +10,6 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -145,28 +144,6 @@ public class TopologyDescriptor {
         setLocalDescriptor(localNodeId);
     }
 
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
-        TopologyDescriptor that = (TopologyDescriptor) o;
-        return topologyConfigId == that.topologyConfigId &&
-                remoteSourceClusters.equals(that.remoteSourceClusters) &&
-                remoteSourceClusterToReplicationModels.equals(that.remoteSourceClusterToReplicationModels) &&
-                allClustersInTopology.equals(that.allClustersInTopology) &&
-                remoteClusterEndpoints.equals(that.remoteClusterEndpoints);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(topologyConfigId, remoteSourceClusters, remoteSourceClusterToReplicationModels,
-                allClustersInTopology, remoteClusterEndpoints);
-    }
-
     /**
      * Set the local cluster & node descriptors, given the endpoint of this node
      *
@@ -195,9 +172,7 @@ public class TopologyDescriptor {
                 .collect(Collectors.toSet());
         otherClusters.removeAll(sourceOrSinkClusters);
 
-        return String.format("Topology[id=%s] \n Remote Source Cluster=%s \n Remote Sink Clusters=%s \n connection endpoints=%s \nOther Clusters=%s",
-                topologyConfigId, remoteSourceClusters.values(), remoteSinkClusters.values(),remoteClusterEndpoints.values(), otherClusters);
+        return String.format("Topology[id=%s] \n Source Cluster=%s \n Sink Clusters=%s \n Invalid Clusters=%s",
+                topologyConfigId, remoteSourceClusters.values(), remoteSinkClusters.values(), otherClusters);
     }
-
-
 }
