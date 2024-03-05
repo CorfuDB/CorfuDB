@@ -37,12 +37,6 @@ public class CorfuTestParameters {
      */
     public final Duration TIMEOUT_LONG;
 
-    /** A longer timeout, typically several minutes.
-     * Some test cases related to log replication could take a long time
-     * to finish.
-     */
-    public final Duration TIMEOUT_VERY_LONG;
-
     /** The number of iterations to run for a very small test.
      * This number will be about 10 by default, and should be used for
      * operations that need to be repeated just a few times.
@@ -94,8 +88,7 @@ public class CorfuTestParameters {
         TIMEOUT_VERY_SHORT = Duration.of(500, MILLIS);
         TIMEOUT_SHORT = Duration.of(1, SECONDS);
         TIMEOUT_NORMAL = Duration.of(10, SECONDS);
-        TIMEOUT_LONG = Duration.of(2, MINUTES);
-        TIMEOUT_VERY_LONG = Duration.of(4, MINUTES);
+        TIMEOUT_LONG = timeoutLong;
 
         // Iterations
         NUM_ITERATIONS_VERY_LOW = 10;

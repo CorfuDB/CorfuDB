@@ -6,19 +6,17 @@ import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationE
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationEventMetadata;
 import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
-import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientServerRouter;
+import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientRouter;
+import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage;
-import org.corfudb.runtime.view.Address;
 
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-
-import static org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationFsmUtil.canEnqueueStopRuntimeFsmEvent;
 
 /**
  * Log Replication Runtime Negotiating State.
@@ -37,16 +35,19 @@ public class NegotiatingState implements LogReplicationRuntimeState {
 
     private final ThreadPoolExecutor worker;
 
-    private final LogReplicationClientServerRouter router;
+    private final LogReplicationClientRouter router;
 
     private final LogReplicationMetadataManager metadataManager;
 
-    public NegotiatingState(CorfuLogReplicationRuntime fsm, ThreadPoolExecutor worker,
-                            LogReplicationClientServerRouter router, LogReplicationMetadataManager metadataManager) {
+    private final LogReplicationConfigManager tableManagerPlugin;
+
+    public NegotiatingState(CorfuLogReplicationRuntime fsm, ThreadPoolExecutor worker, LogReplicationClientRouter router,
+                            LogReplicationMetadataManager metadataManager, LogReplicationConfigManager tableManagerPlugin) {
         this.fsm = fsm;
         this.metadataManager = metadataManager;
         this.worker = worker;
         this.router = router;
+        this.tableManagerPlugin = tableManagerPlugin;
     }
 
     @Override
@@ -67,7 +68,7 @@ public class NegotiatingState implements LogReplicationRuntimeState {
                     leaderNodeId = Optional.empty();
                     return fsm.getStates().get(LogReplicationRuntimeStateType.VERIFYING_REMOTE_LEADER);
                 } else {
-                    // If connection starter, router will attempt reconnection of non-leader endpoint
+                    // Router will attempt reconnection of non-leader endpoint
                     return null;
                 }
             case ON_CONNECTION_UP:
@@ -76,7 +77,15 @@ public class NegotiatingState implements LogReplicationRuntimeState {
                 return null;
             case NEGOTIATION_COMPLETE:
                 log.info("Negotiation complete, result={}", event.getNegotiationResult());
-                ((ReplicatingState)fsm.getStates().get(LogReplicationRuntimeStateType.REPLICATING)).setReplicationEvent(event.getNegotiationResult());
+                if (tableManagerPlugin.isUpgraded()) {
+                    // Force a snapshot sync if an upgrade has been identified. This will guarantee that
+                    // changes in the streams to replicate are captured by the destination.
+                    log.info("A forced snapshot sync will be done as Active side LR has been upgraded.");
+                    ((ReplicatingState) fsm.getStates().get(LogReplicationRuntimeStateType.REPLICATING))
+                            .setReplicationEvent(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_SYNC_REQUEST));
+                } else {
+                    ((ReplicatingState)fsm.getStates().get(LogReplicationRuntimeStateType.REPLICATING)).setReplicationEvent(event.getNegotiationResult());
+                }
                 return fsm.getStates().get(LogReplicationRuntimeStateType.REPLICATING);
             case NEGOTIATION_FAILED:
                 return this;
@@ -90,10 +99,7 @@ public class NegotiatingState implements LogReplicationRuntimeState {
                 }
                 return null;
             case LOCAL_LEADER_LOSS:
-                if (canEnqueueStopRuntimeFsmEvent(router, fsm, event.isConnectionStarter())) {
-                    return fsm.getStates().get(LogReplicationRuntimeStateType.STOPPED);
-                }
-                return null;
+                return fsm.getStates().get(LogReplicationRuntimeStateType.STOPPED);
             case ERROR:
                 ((UnrecoverableState)fsm.getStates().get(LogReplicationRuntimeStateType.UNRECOVERABLE)).setThrowableCause(event.getT().getCause());
                 return fsm.getStates().get(LogReplicationRuntimeStateType.UNRECOVERABLE);
@@ -124,7 +130,7 @@ public class NegotiatingState implements LogReplicationRuntimeState {
                         CorfuMessage.RequestPayloadMsg.newBuilder().setLrMetadataRequest(
                                 LogReplication.LogReplicationMetadataRequestMsg.newBuilder().build()).build();
                 CompletableFuture<LogReplicationMetadataResponseMsg> cf = router
-                        .sendRequestAndGetCompletable(fsm.session, payload, remoteLeader);
+                        .sendRequestAndGetCompletable(payload, remoteLeader);
                 LogReplicationMetadataResponseMsg response =
                         cf.get(CorfuLogReplicationRuntime.DEFAULT_TIMEOUT, TimeUnit.MILLISECONDS);
 
@@ -132,10 +138,8 @@ public class NegotiatingState implements LogReplicationRuntimeState {
                 // (snapshot or log entry sync). This will be carried along the negotiation_complete event.
                 processNegotiationResponse(response);
 
-                if(router.isConnectionStarterForSession(fsm.getSession())) {
-                    // Negotiation to leader node completed, unblock channel in the router.
-                    router.getSessionToLeaderConnectionFuture().get(fsm.getSession()).complete(null);
-                }
+                // Negotiation to leader node completed, unblock channel in the router.
+                router.getRemoteLeaderConnectionFuture().complete(null);
             } else {
                 log.debug("No leader found during negotiation.");
                 // No leader found at the time of negotiation
@@ -163,7 +167,7 @@ public class NegotiatingState implements LogReplicationRuntimeState {
     }
 
     /**
-     * It will decide to do a full snapshot sync or log entry sync according to the metadata received from the sink site.
+     * It will decide to do a full snapshot sync or log entry sync according to the metadata received from the standby site.
      *
      * @param negotiationResponse
      * @return
@@ -174,25 +178,23 @@ public class NegotiatingState implements LogReplicationRuntimeState {
 
         log.debug("Process negotiation response {} from {}", negotiationResponse, fsm.getRemoteClusterId());
 
-        long topologyConfigId = metadataManager.getReplicationContext().getTopologyConfigId();
-
         /*
-         * The sink site has a smaller config ID, redo the discovery for this sink site when
-         * getting a new notification of the site config change if this sink is in the new config.
+         * The standby site has a smaller config ID, redo the discovery for this standby site when
+         * getting a new notification of the site config change if this standby is in the new config.
          */
-        if (negotiationResponse.getTopologyConfigID() < topologyConfigId) {
-            log.error("The source site configID {} is bigger than the sink configID {} ",
-                topologyConfigId, negotiationResponse.getTopologyConfigID());
+        if (negotiationResponse.getTopologyConfigID() < metadataManager.getTopologyConfigId()) {
+            log.error("The active site configID {} is bigger than the standby configID {} ",
+                    metadataManager.getTopologyConfigId(), negotiationResponse.getTopologyConfigID());
             throw new LogReplicationNegotiationException("Mismatch of configID");
         }
 
         /*
-         * The sink site has larger config ID, redo the whole discovery for the source site
+         * The standby site has larger config ID, redo the whole discovery for the active site
          * it will be triggered by a notification of the site config change.
          */
-        if (negotiationResponse.getTopologyConfigID() > topologyConfigId) {
-            log.error("The source site configID {} is smaller than the sink configID {} ",
-                topologyConfigId, negotiationResponse.getTopologyConfigID());
+        if (negotiationResponse.getTopologyConfigID() > metadataManager.getTopologyConfigId()) {
+            log.error("The active site configID {} is smaller than the standby configID {} ",
+                    metadataManager.getTopologyConfigId(), negotiationResponse.getTopologyConfigID());
             throw new LogReplicationNegotiationException("Mismatch of configID");
         }
 
@@ -203,7 +205,7 @@ public class NegotiatingState implements LogReplicationRuntimeState {
 
         /*
          * It is a fresh start, start snapshot full sync.
-         * Following is an example that metadata value indicates a fresh start, no replicated data at sink site:
+         * Following is an example that metadata value indicates a fresh start, no replicated data at standby site:
          * "topologyConfigId": "10"
          * "version": "release-1.0"
          * "snapshotStart": "-1"
@@ -212,8 +214,8 @@ public class NegotiatingState implements LogReplicationRuntimeState {
          * "snapshotApplied": "-1"
          * "lastLogEntryProcessed": "-1"
          */
-        if (negotiationResponse.getSnapshotStart() == Address.NON_ADDRESS) {
-            log.info("No snapshot available in remote. Initiate SNAPSHOT sync to {}", fsm.getSession());
+        if (negotiationResponse.getSnapshotStart() == -1) {
+            log.info("No snapshot available in remote. Initiate SNAPSHOT sync to {}", fsm.getRemoteClusterId());
             fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.NEGOTIATION_COMPLETE,
                     new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_SYNC_REQUEST)));
             return;
@@ -240,9 +242,9 @@ public class NegotiatingState implements LogReplicationRuntimeState {
 
         /*
          * If it is in the snapshot full sync transfer phase (Phase II):
-         * the data has been transferred to the sink site and the the sink site is applying data from shadow streams
+         * the data has been transferred to the standby site and the the standby site is applying data from shadow streams
          * to the real streams.
-         * It doesn't need to transfer the data again, just send a SNAPSHOT_COMPLETE message to the sink site.
+         * It doesn't need to transfer the data again, just send a SNAPSHOT_COMPLETE message to the standby site.
          * An example of in Snapshot sync phase II: applying phase
          * "topologyConfigId": "10"
          * "version": "release-1.0"
@@ -260,13 +262,13 @@ public class NegotiatingState implements LogReplicationRuntimeState {
             fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.NEGOTIATION_COMPLETE,
                     new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_TRANSFER_COMPLETE,
                             new LogReplicationEventMetadata(LogReplicationEventMetadata.getNIL_UUID(), negotiationResponse.getSnapshotStart(),
-                                    negotiationResponse.getSnapshotTransferred(), false))));
+                                    negotiationResponse.getSnapshotTransferred()))));
             return;
         }
 
         /* If it is in log entry sync state, continues log entry sync state.
-         * An example to show the sink site is in log entry sync phase.
-         * A full snapshot transfer based on timestamp 100 has been completed, and this sink has processed all log entries
+         * An example to show the standby site is in log entry sync phase.
+         * A full snapshot transfer based on timestamp 100 has been completed, and this standby has processed all log entries
          * between 100 to 200. A log entry sync should be restart if log entry 201 is not trimmed.
          * Otherwise, start a full snapshot full sync.
          * "topologyConfigId": "10"
@@ -290,7 +292,7 @@ public class NegotiatingState implements LogReplicationRuntimeState {
                 fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.NEGOTIATION_COMPLETE,
                         new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.LOG_ENTRY_SYNC_REQUEST,
                                 new LogReplicationEventMetadata(LogReplicationEventMetadata.getNIL_UUID(), negotiationResponse.getLastLogEntryTimestamp(),
-                                        negotiationResponse.getSnapshotApplied(), false))));
+                                        negotiationResponse.getSnapshotApplied()))));
             } else {
                 // TODO: it is OK for a first phase, but this might not be efficient/accurate, as the next (+1)
                 //  might not really be the next entry (as that is a globalAddress and the +1 might not even belong to
@@ -309,9 +311,9 @@ public class NegotiatingState implements LogReplicationRuntimeState {
         // TODO(Future): consider continue snapshot sync from a remaining point (insert new event in LogReplicationFSM) -> efficiency
 
         /*
-         * For other scenarios, the sink site is in a non-recognizable state, trigger a snapshot full sync.
+         * For other scenarios, the standby site is in a non-recognizable state, trigger a snapshot full sync.
          */
-        log.warn("Could not recognize the sink cluster state according to the response {}, will restart with a snapshot full sync event" ,
+        log.warn("Could not recognize the standby cluster state according to the response {}, will restart with a snapshot full sync event" ,
                 negotiationResponse);
         fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.NEGOTIATION_COMPLETE,
                 new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_SYNC_REQUEST)));
