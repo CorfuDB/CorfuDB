@@ -3,13 +3,8 @@ syntax = "proto3";
 package org.corfudb.infrastructure.logreplication.proto;
 
 import "corfu_options.proto";
-import "rpc_common.proto";
 import "google/protobuf/timestamp.proto";
-import "service/log_replication.proto";
 
-/* Note: v1 definitions are kept for compatibility and rolling upgrade purposes */
-
-/*------- Log Replication Metadata Table V1 Schema ----------*/
 /**
  * This is used by replication metadata table in corfu store.
  * The metadata table has the following key-value pairs defined both as strings:
@@ -35,40 +30,12 @@ message LogReplicationMetadataVal {
   string val = 1;
 }
 
-/*--------END---------*/
-
-/*------- Log Replication Metadata Table V2 Schema ----------*/
-
-message ReplicationMetadata {
-  uint64 topologyConfigId = 1;
-  string version = 2;
-  int64 lastSnapshotStarted = 3;
-  int64 lastSnapshotTransferredSeqNumber = 4;
-  int64 lastSnapshotTransferred = 5;
-  int64 lastSnapshotApplied = 6;
-  int64 lastLogEntryApplied = 7;
-  org.corfudb.runtime.UuidMsg currentSnapshotCycleId = 8;
-  int64 currentCycleMinShadowStreamTs = 9;
-  SyncType snapshotSyncType = 10;
-  int64 snapshotSyncCompleteTime = 11;
-  int64 lastLogEntryBatchProcessed = 12;
-}
-
-/*--------END---------*/
-
-/*-------- Replication Status Table V1------*/
-
-enum SyncType {
-  SNAPSHOT = 0;
-  LOG_ENTRY = 1;
-}
-
 /*
  * Replication Status Key
  */
-message ReplicationStatusKey {
-  string clusterId = 1;
-}
+ message ReplicationStatusKey {
+   string clusterId = 1;
+ }
 
 /*
  * Replication Status Value
@@ -77,40 +44,15 @@ message ReplicationStatusKey {
 message ReplicationStatusVal {
   option (org.corfudb.runtime.table_schema).stream_tag = "lr_status";
 
-  uint64 remainingEntriesToSend = 1; // Set only by Source
-  bool dataConsistent = 2; // Set only by Sink
+  uint64 remainingEntriesToSend = 1;
+  bool dataConsistent = 2;
+  enum SyncType {
+    SNAPSHOT = 0;
+    LOG_ENTRY = 1;
+  }
   SyncType syncType = 3;
   SyncStatus status = 4;
   SnapshotSyncInfo snapshotSyncInfo = 5;
-}
-
-/*-------- Replication Status Table V2------*/
-
-message ReplicationStatus {
-  option (org.corfudb.runtime.table_schema).stream_tag = "lr_status";
-  oneof status {
-    SourceReplicationStatus source_status = 1;
-    SinkReplicationStatus sink_status = 2;
-  }
-}
-
-message SourceReplicationStatus {
-  option (org.corfudb.runtime.table_schema).stream_tag = "lr_status";
-
-  uint64 remainingEntriesToSend = 1;
-  ReplicationInfo replicationInfo = 2;
-}
-
-message SinkReplicationStatus {
-  option (org.corfudb.runtime.table_schema).stream_tag = "lr_status";
-  bool dataConsistent = 1;
-  ReplicationInfo replicationInfo = 2;
-}
-
-message ReplicationInfo {
-  SyncType syncType = 1;
-  SyncStatus status = 2;
-  SnapshotSyncInfo snapshotSyncInfo = 3;
 }
 
 /*
@@ -150,16 +92,8 @@ enum SyncStatus {
   UNAVAILABLE = 5;
 }
 
-/*------- Log Replication Event Table Schema ----------*/
-
-/*----------  Key Schema V1 ------------*/
 message ReplicationEventKey {
   string key = 1;
-}
-
-/*------- Key Schema V2 ----------*/
-message ReplicationEventInfoKey {
-  org.corfudb.runtime.LogReplicationSession session = 1;
 }
 
 message ReplicationEvent {
@@ -171,5 +105,11 @@ message ReplicationEvent {
   string clusterId = 1;
   string eventId = 2;
   ReplicationEventType type = 3;
-  google.protobuf.Timestamp eventTimestamp = 4;
+}
+
+enum ReplicationModel {
+  FULL_TABLE = 0;                 // Full table replication (Single Source to Single Sink = 1:1)
+  ROUTING_QUEUES = 1;             // Routing queue replication (used for entry-level replication) (1:1)
+  LOGICAL_GROUPS = 2;             // Table association to logical group (1:1)
+  MULTI_SOURCE_MERGE = 3;         // Same table replication from multiple sources to single sink (n:1)
 }

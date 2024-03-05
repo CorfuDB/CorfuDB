@@ -2,21 +2,24 @@ package org.corfudb.infrastructure.logreplication;
 
 import com.google.protobuf.Message;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.logreplication.proto.Sample;
-import org.corfudb.infrastructure.logreplication.proto.Sample.IntValueTag;
+import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSubscriber;
 import org.corfudb.infrastructure.logreplication.proto.Sample.Metadata;
+import org.corfudb.infrastructure.logreplication.proto.Sample.IntValue;
+import org.corfudb.infrastructure.logreplication.proto.Sample.IntValueTag;
 import org.corfudb.infrastructure.logreplication.proto.Sample.StringKey;
+import org.corfudb.test.SampleSchema.ValueFieldTagOne;
+import org.corfudb.test.SampleSchema.Uuid;
+
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.view.AbstractViewTest;
+
 import org.corfudb.runtime.view.TableRegistry;
-import org.corfudb.test.SampleSchema;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
-
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -27,17 +30,18 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
-import static org.corfudb.runtime.view.TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME;
 import static org.corfudb.runtime.view.TableRegistry.REGISTRY_TABLE_NAME;
+import static org.corfudb.runtime.view.TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME;
+import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 @Slf4j
 public class LogReplicationConfigManagerTest extends AbstractViewTest {
+
     private CorfuRuntime runtime;
     private CorfuStore corfuStore;
 
-    private Set<String> streamsToReplicate = new HashSet<>();
-    private Set<UUID> streamsToDrop = new HashSet<>();
+    private Map<ReplicationSubscriber, Set<String>> expectedSubscriberToStreamsToReplicateMap = new HashMap<>();
+    private Map<ReplicationSubscriber, Set<UUID>> expectedSubscriberToStreamsToDropMap = new HashMap<>();
     private Map<UUID, List<UUID>> streamToTagsMap = new HashMap<>();
 
     private static final String NAMESPACE = "LR-Test";
@@ -64,16 +68,18 @@ public class LogReplicationConfigManagerTest extends AbstractViewTest {
         streamNamesToReplicate.add(TABLE2);
 
         // Open tables to be replicated and setup the expected streams to replicated and tags maps
-        setupStreamsToReplicateAndTagsMap(streamNamesToReplicate, IntValueTag.class);
+        setupStreamsToReplicateAndTagsMap(streamNamesToReplicate, ReplicationSubscriber.getDefaultReplicationSubscriber(),
+            IntValueTag.class);
 
         // 2 tables which should not be replicated, opened with schema IntValue which has is_federated=false
         Set<String> streamNamesToDrop = new HashSet<>();
         streamNamesToDrop.add(TABLE3);
         streamNamesToDrop.add(TABLE4);
-        setupStreamsToDrop(streamNamesToDrop, Sample.IntValue.class);
+        setupStreamsToDrop(streamNamesToDrop, ReplicationSubscriber.getDefaultReplicationSubscriber(), IntValue.class);
     }
 
     private <K extends Message> void setupStreamsToReplicateAndTagsMap(Set<String> streamNamesToReplicate,
+                                                            ReplicationSubscriber subscriber,
                                                             Class<K> valueSchema) throws Exception {
 
         TableOptions tableOptions = TableOptions.fromProtoSchema(valueSchema);
@@ -84,6 +90,9 @@ public class LogReplicationConfigManagerTest extends AbstractViewTest {
                 corfuStore.openTable(NAMESPACE, stream, StringKey.class, valueSchema, Metadata.class, tableOptions);
             }
 
+            Set<String> streamsToReplicate = expectedSubscriberToStreamsToReplicateMap.getOrDefault(
+                subscriber, new HashSet<>());
+
             String fullyQualifiedTableName;
             if (stream.equals(REGISTRY_TABLE_NAME) || stream.equals(PROTOBUF_DESCRIPTOR_TABLE_NAME)) {
                 fullyQualifiedTableName = TableRegistry.getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, stream);
@@ -91,6 +100,7 @@ public class LogReplicationConfigManagerTest extends AbstractViewTest {
                 fullyQualifiedTableName = TableRegistry.getFullyQualifiedTableName(NAMESPACE, stream);
             }
             streamsToReplicate.add(fullyQualifiedTableName);
+            expectedSubscriberToStreamsToReplicateMap.put(subscriber, streamsToReplicate);
 
             if (!stream.equals(REGISTRY_TABLE_NAME) && !stream.equals(PROTOBUF_DESCRIPTOR_TABLE_NAME)) {
                 List<UUID> streamTags = tableOptions.getSchemaOptions().getStreamTagList().stream().map(streamTag ->
@@ -99,17 +109,21 @@ public class LogReplicationConfigManagerTest extends AbstractViewTest {
                 streamToTagsMap.put(CorfuRuntime.getStreamID(fullyQualifiedTableName), streamTags);
             }
         }
+
     }
 
-    private <K extends Message> void setupStreamsToDrop(Set<String> streamNamesToDrop,
+    private <K extends Message> void setupStreamsToDrop(Set<String> streamNamesToDrop, ReplicationSubscriber subscriber,
                                                         Class<K> valueSchema) throws Exception {
 
         for (String streamToDrop : streamNamesToDrop) {
             corfuStore.openTable(NAMESPACE, streamToDrop, StringKey.class, valueSchema, Metadata.class,
-                    TableOptions.fromProtoSchema(valueSchema));
+                TableOptions.fromProtoSchema(valueSchema));
+
+            Set<UUID> streamIdsToDrop = expectedSubscriberToStreamsToDropMap.getOrDefault(subscriber, new HashSet<>());
 
             String fullyQualifiedTableName = TableRegistry.getFullyQualifiedTableName(NAMESPACE, streamToDrop);
-            streamsToDrop.add(CorfuRuntime.getStreamID(fullyQualifiedTableName));
+            streamIdsToDrop.add(CorfuRuntime.getStreamID(fullyQualifiedTableName));
+            expectedSubscriberToStreamsToDropMap.put(subscriber, streamIdsToDrop);
         }
     }
 
@@ -123,16 +137,24 @@ public class LogReplicationConfigManagerTest extends AbstractViewTest {
     public void testConfigUpdate() throws Exception {
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(runtime);
         verifyExpectedConfigGenerated(configManager.getConfig());
+
         // Open new tables and update the expected streams to replicate map, streams to drop and stream tags
-        setupStreamsToReplicateAndTagsMap(Collections.singleton(TABLE5), SampleSchema.ValueFieldTagOne.class);
-        setupStreamsToDrop(Collections.singleton(TABLE6), SampleSchema.Uuid.class);
+        setupStreamsToReplicateAndTagsMap(Collections.singleton(TABLE5),
+            ReplicationSubscriber.getDefaultReplicationSubscriber(), ValueFieldTagOne.class);
+
+        setupStreamsToDrop(Collections.singleton(TABLE6), ReplicationSubscriber.getDefaultReplicationSubscriber(),
+            Uuid.class);
+
         verifyExpectedConfigGenerated(configManager.getUpdatedConfig());
     }
 
     private void verifyExpectedConfigGenerated(LogReplicationConfig actualConfig) {
-        Assert.assertTrue(Objects.equals(streamsToReplicate, actualConfig.getStreamsToReplicate()));
-        Assert.assertTrue(Objects.equals(streamsToDrop, actualConfig.getStreamsToDrop()));
-        Assert.assertTrue(Objects.equals(streamToTagsMap, actualConfig.getDataStreamToTagsMap()));
+        Assert.assertTrue(Objects.equals(expectedSubscriberToStreamsToReplicateMap,
+            actualConfig.getReplicationSubscriberToStreamsMap()));
 
+        Assert.assertTrue(Objects.equals(expectedSubscriberToStreamsToDropMap,
+            actualConfig.getSubscriberToNonReplicatedStreamsMap()));
+
+        Assert.assertTrue(Objects.equals(streamToTagsMap, actualConfig.getDataStreamToTagsMap()));
     }
 }

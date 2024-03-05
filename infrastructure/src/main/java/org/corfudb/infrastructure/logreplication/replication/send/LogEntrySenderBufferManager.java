@@ -5,7 +5,8 @@ import io.micrometer.core.instrument.Tag;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.infrastructure.logreplication.DataSender;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SyncType;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal;
+import org.corfudb.infrastructure.logreplication.replication.LogReplicationAckReader;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 
 import java.util.Map;
@@ -72,7 +73,8 @@ public class LogEntrySenderBufferManager extends SenderBufferManager {
     @Override
     public void updateAck(LogReplicationEntryMsg entry) {
         updateAck(entry.getMetadata().getTimestamp());
-        ackReader.setAckedTsAndSyncType(entry.getMetadata().getTimestamp(), SyncType.LOG_ENTRY);
+        ackReader.setAckedTsAndSyncType(entry.getMetadata().getTimestamp(),
+                ReplicationStatusVal.SyncType.LOG_ENTRY);
     }
 
     private static Optional<AtomicLong> configureAcksCounter() {
