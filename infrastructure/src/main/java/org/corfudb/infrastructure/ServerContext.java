@@ -98,6 +98,7 @@ public class ServerContext implements AutoCloseable {
     /** The node Id, stored as a base64 string. */
     private static final String NODE_ID = "NODE_ID";
 
+
     private static final KvRecord<String> NODE_ID_RECORD = KvRecord.of(NODE_ID, String.class);
 
     private static final KvRecord<Layout> CURR_LAYOUT_RECORD = KvRecord.of(
@@ -313,7 +314,7 @@ public class ServerContext implements AutoCloseable {
     }
 
     public int getCorfuServerConnectionPort() {
-        String val = getServerConfig(String.class, "--corfu-port-for-lr");
+        String val = getServerConfig(String.class, "<corfu-server-port>");
         return Integer.parseInt(val);
     }
 
