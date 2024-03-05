@@ -11,7 +11,6 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.view.AbstractViewTest;
-import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.test.SampleSchema;
 import org.junit.Assert;
@@ -88,17 +87,17 @@ public class LogReplicationConfigManagerTest extends AbstractViewTest {
             String fullyQualifiedTableName;
             if (stream.equals(REGISTRY_TABLE_NAME) || stream.equals(PROTOBUF_DESCRIPTOR_TABLE_NAME)) {
                 fullyQualifiedTableName = TableRegistry.getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, stream);
-
-                streamToTagsMap.put(CorfuRuntime.getStreamID(fullyQualifiedTableName),
-                        Collections.singletonList(ObjectsView.getLogReplicatorStreamId()));
             } else {
                 fullyQualifiedTableName = TableRegistry.getFullyQualifiedTableName(NAMESPACE, stream);
-
-                List<UUID> streamTags = tableOptions.getSchemaOptions().getStreamTagList().stream().map(streamTag ->
-                        TableRegistry.getStreamIdForStreamTag(NAMESPACE, streamTag)).collect(Collectors.toList());
-                streamToTagsMap.put(CorfuRuntime.getStreamID(fullyQualifiedTableName), streamTags);
             }
             streamsToReplicate.add(fullyQualifiedTableName);
+
+            if (!stream.equals(REGISTRY_TABLE_NAME) && !stream.equals(PROTOBUF_DESCRIPTOR_TABLE_NAME)) {
+                List<UUID> streamTags = tableOptions.getSchemaOptions().getStreamTagList().stream().map(streamTag ->
+                    TableRegistry.getStreamIdForStreamTag(NAMESPACE, streamTag)).collect(Collectors.toList());
+
+                streamToTagsMap.put(CorfuRuntime.getStreamID(fullyQualifiedTableName), streamTags);
+            }
         }
     }
 

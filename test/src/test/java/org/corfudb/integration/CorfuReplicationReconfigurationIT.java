@@ -317,7 +317,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
             writeToSource(numWritesSmaller, numWritesSmaller / 2);
 
             log.debug("Wait ... Delta log replication in progress ...");
-            verifySinkData(numWritesSmaller + (numWritesSmaller / 2));
+            verifySinkData((numWritesSmaller + (numWritesSmaller / 2)));
         } finally {
             executorService.shutdownNow();
 

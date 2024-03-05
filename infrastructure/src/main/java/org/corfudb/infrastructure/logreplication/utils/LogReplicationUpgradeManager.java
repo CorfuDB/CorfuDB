@@ -181,17 +181,17 @@ public class LogReplicationUpgradeManager {
      */
     public boolean isUpgraded() {
         VersionString versionString = VersionString.newBuilder().setName(VERSION_PLUGIN_KEY).build();
-        CorfuStoreEntry<VersionString, Version, Uuid> entry;
+        CorfuStoreEntry<VersionString, Version, Uuid> record;
 
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            entry = txn.getRecord(LOG_REPLICATION_PLUGIN_VERSION_TABLE, versionString);
+            record = txn.getRecord(LOG_REPLICATION_PLUGIN_VERSION_TABLE, versionString);
             txn.commit();
         } catch (NoSuchElementException e) {
             // Normally this will not happen as version table should be initialized during bootstrap
             log.error("Version table has not been initialized", e);
             return false;
         }
-        return entry.getPayload().getIsUpgraded();
+        return record.getPayload().getIsUpgraded();
     }
 
     private VersionResult verifyVersionResult(TxnContext txn) {
@@ -207,7 +207,7 @@ public class LogReplicationUpgradeManager {
         return VersionResult.SAME;
     }
 
-    private static enum VersionResult {
+    private enum VersionResult {
         UNSET,
         CHANGE,
         SAME
