@@ -22,7 +22,7 @@ public class GRPCLogReplicationServerChannelAdapter extends IServerChannelAdapte
     /*
      * GRPC Server used for listening and dispatching incoming calls.
      */
-    private Server server;
+    private final Server server;
 
     private final int port;
 
@@ -39,17 +39,7 @@ public class GRPCLogReplicationServerChannelAdapter extends IServerChannelAdapte
         // The executor of GRPCLogReplicationServerHandler needs to be single-threaded, otherwise the ordering of
         // requests and their acks cannot be guaranteed. By default, grpc utilizes thread-pool, so we need to provide
         // a single-threaded executor here.
-        this.server = createGRPCServerInstance();
-    }
-
-    /**
-     * If a gRPC server has started or shutdown, the same instance cannot be used for starting a gRPC server again,
-     * and a new instance has to be created. This is a limitation introduced by gRPC.
-     *
-     * @return A newly instantiated gRPC server instance
-     */
-    private Server createGRPCServerInstance() {
-        return ServerBuilder.forPort(port).addService(service)
+        this.server = ServerBuilder.forPort(port).addService(service)
                 .executor(Executors.newSingleThreadScheduledExecutor()).build();
     }
 
@@ -66,21 +56,16 @@ public class GRPCLogReplicationServerChannelAdapter extends IServerChannelAdapte
     }
 
     @Override
-    public CompletableFuture<Boolean> start() throws IllegalStateException {
+    public CompletableFuture<Boolean> start() {
         CompletableFuture<Boolean> serverCompletable = new CompletableFuture<>();
         try {
             server.start();
             serverCompletable.complete(true);
             log.info("Server started, listening on {}", port);
-        } catch (IllegalStateException ise) {
-            log.warn("gRPC server already started or shutdown, instantiating a new one.", ise);
-            this.server = createGRPCServerInstance();
-            throw ise;
         } catch (Exception e) {
             log.error("Caught exception while starting server on port {}", port, e);
             serverCompletable.completeExceptionally(e);
         }
-
         return serverCompletable;
     }
 
