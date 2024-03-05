@@ -42,9 +42,9 @@ import static org.corfudb.protocols.service.CorfuProtocolLogReplication.getLrEnt
 @Slf4j
 public abstract class BaseSnapshotReader extends SnapshotReader {
     /**
-     * The max size of data for SMR entries in a replication message.
+     * The max size of data for SMR entries in data message.
      */
-    private final long maxTransferSize;
+    private final int maxDataSizePerMsg;
     private final Optional<DistributionSummary> messageSizeDistributionSummary;
     private final CorfuRuntime rt;
     private long snapshotTimestamp;
@@ -71,7 +71,7 @@ public abstract class BaseSnapshotReader extends SnapshotReader {
         this.session = session;
         this.replicationContext = replicationContext;
         this.rt.parseConfigurationString(runtime.getLayoutServers().get(0)).connect();
-        this.maxTransferSize = replicationContext.getConfig(session).getMaxTransferSize();
+        this.maxDataSizePerMsg = replicationContext.getConfig(session).getMaxDataSizePerMsg();
         this.messageSizeDistributionSummary = configureMessageSizeDistributionSummary();
         refreshStreamsToReplicateSet();
         log.info("Total of {} streams to replicate at initialization. Streams to replicate={}, Session={}",
@@ -141,30 +141,24 @@ public abstract class BaseSnapshotReader extends SnapshotReader {
         int currentMsgSize = 0;
 
         try {
-            while (currentMsgSize < maxTransferSize) {
+            while (currentMsgSize < maxDataSizePerMsg) {
                 if (lastEntry != null) {
                     List<SMREntry> smrEntries = lastEntry.getEntries().get(stream.uuid);
                     if (smrEntries != null) {
                         int currentEntrySize = ReaderUtility.calculateSize(smrEntries);
+
                         if (currentEntrySize > DEFAULT_MAX_DATA_MSG_SIZE) {
-                            log.error("The current entry size {} is bigger than the max size {} supported",
+                            log.error("The current entry size {} is bigger than the maxDataSizePerMsg {} supported",
                                 currentEntrySize, DEFAULT_MAX_DATA_MSG_SIZE);
                             throw new IllegalSnapshotEntrySizeException(" The snapshot entry is bigger than the system supported");
-                        } else if (currentEntrySize > maxTransferSize) {
-                            // TODO: As of now, there is no plan to allow applications to change the max uncompressed
-                            //  tx size. (CorfuRuntime.MAX_UNCOMPRESSED_WRITE_SIZE).  So the transfer size(85 MB)
-                            //  will be higher than DEFAULT_MAX_DATA_MSG_SIZE(64 MB).
-                            // However, if this behavior changes in future, it is possible that
-                            // currentEntrySize <= DEFAULT_MAX_DATA_MSG_SIZE but currentEntrySize > maxTransferSize.
-                            // In that case, split the transaction (right now currentEntrySize contains the size of all
-                            // SMR entries in the transaction).
+                        } else if (currentEntrySize > maxDataSizePerMsg) {
                             observeBiggerMsg.setValue(observeBiggerMsg.getValue()+1);
-                            log.warn("The current entry size {} is bigger than the configured transfer size {}",
-                                currentEntrySize, maxTransferSize);
+                            log.warn("The current entry size {} is bigger than the configured maxDataSizePerMsg {}",
+                                currentEntrySize, maxDataSizePerMsg);
                         }
 
                         // Skip append this entry in this message. Will process it first at the next round.
-                        if (currentEntrySize + currentMsgSize > maxTransferSize && currentMsgSize != 0) {
+                        if (currentEntrySize + currentMsgSize > maxDataSizePerMsg && currentMsgSize != 0) {
                             break;
                         }
 
@@ -188,9 +182,8 @@ public abstract class BaseSnapshotReader extends SnapshotReader {
             throw e;
         }
 
-        log.trace("CurrentMsgSize {} lastEntrySize {}  maxTransferSize {}",
-            currentMsgSize, lastEntry == null ? 0 : ReaderUtility.calculateSize(lastEntry.getEntries().get(stream.uuid)),
-                    maxTransferSize);
+        log.trace("CurrentMsgSize {} lastEntrySize {}  maxDataSizePerMsg {}",
+            currentMsgSize, lastEntry == null ? 0 : ReaderUtility.calculateSize(lastEntry.getEntries().get(stream.uuid)), maxDataSizePerMsg);
         return new SMREntryList(currentMsgSize, smrList);
     }
 

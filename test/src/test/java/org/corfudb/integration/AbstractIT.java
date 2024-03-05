@@ -413,8 +413,8 @@ public class AbstractIT extends AbstractCorfuTest {
                 .runServer();
     }
 
-    public Process runReplicationServerWithCustomMaxTxSize(int port, int corfuServerPort,
-                                                          String pluginConfigFilePath, int maxUncompressedTxSize,
+    public Process runReplicationServerCustomMaxWriteSize(int port, int corfuServerPort,
+                                                          String pluginConfigFilePath, int maxWriteSize,
                                                           int maxEntriesApplied, String transportType) throws IOException {
         return new CorfuReplicationServerRunner()
                 .setHost(DEFAULT_HOST)
@@ -422,7 +422,7 @@ public class AbstractIT extends AbstractCorfuTest {
                 .setCorfuServerConnectionPort(corfuServerPort)
                 .setPluginConfigFilePath(pluginConfigFilePath)
                 .setMsg_size(MSG_SIZE)
-                .setMaxUncompressedTxSize(maxUncompressedTxSize)
+                .setMaxWriteSize(maxWriteSize)
                 .setMaxSnapshotEntriesApplied(maxEntriesApplied)
                 .setTransportType(transportType)
                 .runServer();
@@ -720,7 +720,7 @@ public class AbstractIT extends AbstractCorfuTest {
         private String logPath = null;
         private int msg_size = 0;
         private Integer lockLeaseDuration;
-        private int maxUncompressedTxSize = 0;
+        private int maxWriteSize = 0;
         private int maxSnapshotEntriesApplied;
         private int corfuServerConnectionPort = 0;
 
@@ -782,8 +782,8 @@ public class AbstractIT extends AbstractCorfuTest {
                 command.append(" --lock-lease=").append(lockLeaseDuration);
             }
 
-            if (maxUncompressedTxSize != 0) {
-                command.append(" --runtime-max-uncompressed-size=").append(maxUncompressedTxSize);
+            if (maxWriteSize != 0) {
+                command.append(" --max-replication-write-size=").append(maxWriteSize);
             }
 
             if (maxSnapshotEntriesApplied != 0) {

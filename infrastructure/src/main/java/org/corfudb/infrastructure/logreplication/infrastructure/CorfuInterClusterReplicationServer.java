@@ -81,8 +81,7 @@ public class CorfuInterClusterReplicationServer implements Runnable {
                     + "[-H <seconds>] [-I <cluster-id>] [-x <ciphers>] [-z <tls-protocols>]] "
                     + "[--disable-cert-expiry-check-file=<file_path>]"
                     + "[--metrics] [--corfu-port-for-lr=<corfu-port-for-lr>]"
-                    + "[-P <prefix>] [-R <retention>] [--runtime-max-uncompressed-size=<runtime-max-uncompressed-size>]"
-                    + "<port>\n"
+                    + "[-P <prefix>] [-R <retention>] <port>\n"
                     + "\n"
                     + "Options:\n"
                     + " -l <path>, --log-path=<path>                                             "
@@ -211,8 +210,6 @@ public class CorfuInterClusterReplicationServer implements Runnable {
                     + " --max-snapshot-entries-applied=<max-snapshot-entries-applied>            "
                     + "              Max number of entries applied in a snapshot transaction.  50 by default."
                     + "              For special tables only\n.                                  "
-                    + " --runtime-max-uncompressed-size=<runtime-max-uncompressed-size>          "
-                    + "              Max uncompressed size of a transaction written by LR's runtime\n. "
                     + " -h, --help                                                               "
                     + "              Show this screen\n"
                     + " --version                                                                "
@@ -371,6 +368,7 @@ public class CorfuInterClusterReplicationServer implements Runnable {
         String localCorfuEndpoint = CorfuSaasEndpointProvider.getCorfuSaasEndpoint()
                 .orElseGet(() ->getCorfuEndpoint(getHostFromEndpointURL(serverContext.getLocalEndpoint()),
             serverContext.getCorfuServerConnectionPort()));
+
         return CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder()
             .trustStore((String) serverContext.getServerConfig().get(ConfigParamNames.TRUST_STORE))
             .tsPasswordFile((String) serverContext.getServerConfig().get(ConfigParamNames.TRUST_STORE_PASS_FILE))
@@ -379,7 +377,7 @@ public class CorfuInterClusterReplicationServer implements Runnable {
             .tlsEnabled((Boolean) serverContext.getServerConfig().get("--enable-tls"))
             .systemDownHandler(() -> System.exit(SYSTEM_EXIT_ERROR_CODE))
             .maxCacheEntries(serverContext.getLogReplicationCacheMaxSize()/2)
-            .maxUncompressedWriteSize(serverContext.getMaxUncompressedTxSize())
+            .maxWriteSize(serverContext.getMaxWriteSize())
             .build())
             .parseConfigurationString(localCorfuEndpoint).connect();
     }
