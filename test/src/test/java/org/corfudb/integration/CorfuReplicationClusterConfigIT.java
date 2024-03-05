@@ -166,14 +166,6 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
                 TableOptions.fromProtoSchema(ClusterUuidMsg.class)
         );
 
-        try (TxnContext txn = sourceCorfuStore.txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
-            txn.putRecord(configTable, DefaultClusterManager.TP_SINGLE_SOURCE_SINK,
-                    DefaultClusterManager.TP_SINGLE_SOURCE_SINK, DefaultClusterManager.TP_SINGLE_SOURCE_SINK);
-            txn.commit();
-        }
-
-        assertThat(configTable.count()).isOne();
-
         sourceLockTable = sourceCorfuStore.openTable(
                 CORFU_SYSTEM_NAMESPACE,
                 LOCK_TABLE_NAME,
