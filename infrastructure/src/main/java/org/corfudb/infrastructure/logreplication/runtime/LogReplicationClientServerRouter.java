@@ -49,6 +49,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import static org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getDefaultProtocolVersionMsg;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getRequestMsg;
+import static org.corfudb.protocols.service.CorfuProtocolMessage.getResponseMsg;
 
 /**
  * Router, interfaces between the custom transport layer and LR core components.

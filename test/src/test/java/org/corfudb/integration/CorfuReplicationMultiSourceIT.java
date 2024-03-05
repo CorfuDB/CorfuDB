@@ -78,7 +78,7 @@ public class CorfuReplicationMultiSourceIT extends CorfuReplicationMultiSourceSi
      * Same as testUpdatesOnReplicatedTables(), but the sink is the one which starts the connection
      */
     @Test
-    public void testUpdatesOnReplicatedTablesSinkConnectionStarter() throws Exception {
+    public void testUpdatesOnReplicatedTables_sinkConnectionStarter() throws Exception {
         // Setup Corfu on 3 LR Source Sites and 1 LR Sink Site
         super.setUp(MAX_REMOTE_CLUSTERS, 1, DefaultClusterManager.TP_MULTI_SOURCE_REV_CONNECTION);
         verifySnapshotAndLogEntrySink(false);
