@@ -271,7 +271,19 @@ public class ServerContext implements AutoCloseable {
     }
 
     /**
+     * Get the max size of the log replication data message used by both snapshot data message and
+     * log entry sync data message.
+     *
+     * @return max data message size
+     */
+    public int getLogReplicationMaxDataMessageSize() {
+        String val = getServerConfig(String.class, "--max-replication-data-message-size");
+        return val == null ? DEFAULT_MAX_DATA_MSG_SIZE : Integer.parseInt(val);
+    }
+
+    /**
      * Get the max size of LR's runtime cache in number of entries.
+     *
      * @return max cache number of entries
      */
     public int getLogReplicationCacheMaxSize() {
@@ -279,12 +291,6 @@ public class ServerContext implements AutoCloseable {
         return val == null ? DEFAULT_MAX_CACHE_NUM_ENTRIES : Integer.parseInt(val);
     }
 
-    /**
-     * Max uncompressed size of a transaction written by LR's runtime.  In all known cases, it must be the same as
-     * Corfu Runtime's max uncompressed transaction size.  It is exposed as a parameter so that the value can be
-     * changed at runtime for any unforeseen bugs/customer issues.
-     * @return
-     */
     public int getMaxUncompressedTxSize() {
         String val = getServerConfig(String.class, "--runtime-max-uncompressed-size");
         return val == null ? CorfuRuntime.MAX_UNCOMPRESSED_WRITE_SIZE : Integer.parseInt(val);

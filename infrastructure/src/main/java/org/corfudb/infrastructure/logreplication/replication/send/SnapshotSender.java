@@ -154,8 +154,7 @@ public class SnapshotSender {
             if (snapshotCompleted) {
                 // Block until ACK from last sent message is received
                 try {
-                    // TODO V2: the fix to retry for the last msg incase of ack timeout is present in
-                    //  "routing-q-bidirectional" branch
+                    // TODO V2: the fix to retry for the last msg incase of ack timeout is present in PR 3750
                     LogReplicationEntryMsg ack = snapshotSyncAck.get(DEFAULT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
                     if (ack.getMetadata().getSnapshotTimestamp() == baseSnapshotTimestamp &&
                             ack.getMetadata().getEntryType().equals(LogReplicationEntryType.SNAPSHOT_TRANSFER_COMPLETE)) {
