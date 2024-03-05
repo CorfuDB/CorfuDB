@@ -8,8 +8,6 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
-import org.corfudb.infrastructure.logreplication.exceptions.GroupDestinationChangeException;
-import org.corfudb.infrastructure.logreplication.exceptions.MessageSizeExceededException;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
@@ -132,7 +130,7 @@ public abstract class BaseLogEntryReader extends LogEntryReader {
      * @return true, if the transaction entry has any valid stream to replicate.
      * false, otherwise.
      */
-    boolean isValidTransactionEntry(@NonNull OpaqueEntry entry) {
+    private boolean isValidTransactionEntry(@NonNull OpaqueEntry entry) {
         Set<UUID> txEntryStreamIds = new HashSet<>(entry.getEntries().keySet());
 
         // Sanity Check: discard if transaction stream opaque entry is empty (no streams are present)
@@ -146,7 +144,7 @@ public abstract class BaseLogEntryReader extends LogEntryReader {
         // table and add them to the list in that case.
         if (!getStreamUUIDs().containsAll(txEntryStreamIds)) {
             log.info("There could be additional streams to replicate in tx stream. Checking with registry table.");
-            replicationContext.refreshConfig(session, false);
+            replicationContext.refresh();
             // TODO: Add log message here for the newly found streams when we support incremental refresh.
         }
         // If none of the streams in the transaction entry are specified to be replicated, this is an invalid entry, skip
@@ -173,8 +171,7 @@ public abstract class BaseLogEntryReader extends LogEntryReader {
     }
 
     @Override
-    public LogReplication.LogReplicationEntryMsg read(UUID logEntryRequestId) throws TrimmedException,
-            MessageSizeExceededException, GroupDestinationChangeException {
+    public LogReplication.LogReplicationEntryMsg read(UUID logEntryRequestId) throws TrimmedException, MessageSizeExceededException {
         List<OpaqueEntry> opaqueEntryList = new ArrayList<>();
         int currentEntrySize = 0;
         int currentMsgSize = 0;
@@ -238,7 +235,7 @@ public abstract class BaseLogEntryReader extends LogEntryReader {
             return txMessage;
 
         } catch (Exception e) {
-            log.warn("Caught an exception while reading transaction stream", e);
+            log.warn("Caught an exception while reading transaction stream {}", e);
             throw e;
         }
     }
@@ -262,7 +259,7 @@ public abstract class BaseLogEntryReader extends LogEntryReader {
      *
      * @return UUIDs of streams to replicate
      */
-    Set<UUID> getStreamUUIDs() {
+    private Set<UUID> getStreamUUIDs() {
         return replicationContext.getConfig(session).getDataStreamToTagsMap().keySet();
     }
 
@@ -292,7 +289,7 @@ public abstract class BaseLogEntryReader extends LogEntryReader {
     @Override
     public void reset(long lastSentBaseSnapshotTimestamp, long lastAckedTimestamp) {
         // Sync with registry when entering into IN_LOG_ENTRY_SYNC state
-        replicationContext.refreshConfig(session, true);
+        replicationContext.refresh();
         this.currentProcessedEntryMetadata = new StreamIteratorMetadata(Address.NON_ADDRESS, false);
         setGlobalBaseSnapshot(lastSentBaseSnapshotTimestamp, lastAckedTimestamp);
         lastOpaqueEntry = null;
