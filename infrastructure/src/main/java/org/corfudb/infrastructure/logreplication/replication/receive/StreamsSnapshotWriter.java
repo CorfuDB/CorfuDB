@@ -485,8 +485,18 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
                 ReplicationMetadata updatedMetadata = metadata.toBuilder().setLastSnapshotStarted(srcGlobalSnapshot)
                         .setLastSnapshotTransferredSeqNumber(currentSeqNum)
                         .build();
-
-                metadataManager.updateReplicationMetadata(txn, session, updatedMetadata);
+                try {
+                    IRetry.build(IntervalRetry.class, () -> {
+                        try {
+                            metadataManager.updateReplicationMetadata(txn, session, updatedMetadata);
+                        } catch (TransactionAbortedException tae){
+                            throw new RetryNeededException();
+                        }
+                        return null;
+                    }).run();
+                } catch (InterruptedException e) {
+                    throw new UnrecoverableCorfuInterruptedError(e);
+                }
                 if (!snapshotSyncStartMarker.isPresent()) {
                     metadataManager.setSnapshotSyncStartMarker(txn, session, snapshotSyncId, ts);
                     snapshotSyncStartMarker = Optional.of(new SnapshotSyncStartMarker(snapshotSyncId, ts.getSequence()));
