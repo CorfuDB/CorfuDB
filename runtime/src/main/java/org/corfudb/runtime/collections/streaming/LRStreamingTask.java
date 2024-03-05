@@ -72,13 +72,12 @@ public class LRStreamingTask<K extends Message, V extends Message, M extends Mes
                 UUID streamTagId = TableRegistry.getStreamIdForStreamTag(nsToTableNamesEntry.getKey(), streamTag);
                 if (!table.getStreamTags().contains(streamTagId)) {
                     throw new IllegalArgumentException(String.format("Interested table: %s does not " +
-                            "have specified stream tag: %s", table.getFullyQualifiedTableName(), streamTag));
+                        "have specified stream tag: %s", table.getFullyQualifiedTableName(), streamTag));
                 }
                 tableSchemas.put(streamId, new TableSchema<>(tableName, table.getKeyClass(), table.getValueClass(),
                         table.getMetadataClass()));
             }
         }
-
         status.set(StreamStatus.RUNNABLE);
     }
 }

@@ -408,9 +408,9 @@ public class CorfuStore {
      * Note: If memory is a consideration, consider using the other version of this API which takes a custom buffer
      * size for updates.
      *
-     * @param streamListener  log replication client listener
-     * @param namespace       namespace of the replicated tables
-     * @param streamTag       stream tag of the replicated tables
+     * @param streamListener log replication client listener
+     * @param namespace      namespace of the replicated tables
+     * @param streamTag      stream tag of the replicated tables
      */
     public void subscribeLogReplicationListener(@Nonnull LogReplicationListener streamListener,
                                                 @Nonnull String namespace, @Nonnull String streamTag) {
