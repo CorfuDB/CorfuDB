@@ -109,12 +109,20 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-javadoc-plugin</artifactId>
+                <reportSets>
+                    <reportSet>
+                        <reports>
+                            <report>aggregate-no-fork</report>
+                            <report>test-aggregate-no-fork</report>
+                        </reports>
+                    </reportSet>
+                </reportSets>
                 <configuration>
                     <links>
-                        <link>http://docs.oracle.com/javase8/docs/api</link>
+                        <link>https://docs.oracle.com/en/java/javase/11/docs/api</link>
                     </links>
                     <failOnError>false</failOnError>
-                    <additionalparam>-Xdoclint:none</additionalparam>
+                    <doclint>none</doclint>
                 </configuration>
             </plugin>
         </plugins>
@@ -380,10 +388,27 @@
                     <strictCheck>true</strictCheck>
                 </configuration>
             </plugin>
+            <!-- https://projectlombok.org/features/delombok
+            Lombok cannot plug into javadoc which runs on java sources.
+            Delombok still allows you to use lombok with these tools by preprocessing
+            your java code into java code with all of lombok's transformations already applied. -->
+            <plugin>
+                <groupId>org.projectlombok</groupId>
+                <artifactId>lombok-maven-plugin</artifactId>
+                <version>1.18.20.0</version>
+                <executions>
+                    <execution>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>delombok</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-javadoc-plugin</artifactId>
-                <version>2.10.1</version>
+                <version>3.6.3</version>
                 <executions>
                     <execution>
                         <id>attach-javadocs</id>
@@ -393,8 +418,8 @@
                     </execution>
                 </executions>
                 <configuration>
-                    <aggregate>true</aggregate>
-                    <additionalparam>-Xdoclint:none</additionalparam>
+                    <failOnError>false</failOnError>
+                    <doclint>none</doclint>
                 </configuration>
             </plugin>
             <plugin>
