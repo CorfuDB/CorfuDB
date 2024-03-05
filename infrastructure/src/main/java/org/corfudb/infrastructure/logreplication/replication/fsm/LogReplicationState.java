@@ -45,12 +45,12 @@ public interface LogReplicationState {
      *
      * @param eventId event identifier
      */
-    default void setTransitionSyncId(UUID eventId) {}
+    default void setTransitionEventId(UUID eventId) {}
 
     /**
      * Retrieve the id of the event that caused the transition to this state.
      */
-    default UUID getTransitionSyncId() { return null; }
+    default UUID getTransitionEventId() { return null; }
 }
 
 
