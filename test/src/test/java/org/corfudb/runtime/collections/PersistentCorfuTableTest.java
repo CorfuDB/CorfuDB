@@ -1,15 +1,8 @@
 package org.corfudb.runtime.collections;
 
 import com.google.common.reflect.TypeToken;
-import com.google.protobuf.Descriptors.Descriptor;
-import com.google.protobuf.Message;
-import lombok.Builder;
-import lombok.Builder.Default;
-import lombok.NonNull;
-import lombok.SneakyThrows;
 import org.apache.commons.lang3.tuple.Pair;
 import org.corfudb.protocols.wireprotocol.Token;
-import org.corfudb.runtime.CorfuOptions.SchemaOptions;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.ExampleSchemas;
@@ -29,26 +22,30 @@ import org.corfudb.runtime.ExampleSchemas.NonPrimitiveValue;
 import org.corfudb.runtime.ExampleSchemas.Office;
 import org.corfudb.runtime.ExampleSchemas.Person;
 import org.corfudb.runtime.ExampleSchemas.PhoneNumber;
+import org.corfudb.runtime.collections.table.GenericCorfuTable;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.UnreachableClusterException;
-import org.corfudb.runtime.object.MVOCorfuCompileProxy;
 import org.corfudb.runtime.object.VersionedObjectIdentifier;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.AddressSpaceView;
 import org.corfudb.runtime.view.ObjectOpenOption;
 import org.corfudb.runtime.view.SMRObject;
+import org.corfudb.test.ManagedCorfuTableForTest;
 import org.corfudb.test.TestSchema.Uuid;
-import org.corfudb.util.LambdaUtils.ThrowableConsumer;
 import org.corfudb.util.serializer.ProtobufSerializer;
 import org.junit.Test;
+import org.junit.jupiter.api.DynamicTest;
+import org.junit.jupiter.api.TestFactory;
+import org.junit.jupiter.api.function.ThrowingConsumer;
 import org.junit.runner.RunWith;
 import org.mockito.junit.MockitoJUnitRunner;
 
 import javax.annotation.Nonnull;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashSet;
+import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -57,14 +54,17 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.LongStream;
+import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
-import static org.corfudb.runtime.ExampleSchemas.*;
-import static org.corfudb.runtime.view.ObjectsView.*;
+import static org.corfudb.runtime.ExampleSchemas.SportsProfessional;
+import static org.corfudb.runtime.ExampleSchemas.TrainingPlan;
+import static org.corfudb.runtime.view.ObjectsView.ObjectID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -73,7 +73,6 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.spy;
 
-@RunWith(MockitoJUnitRunner.class)
 public class PersistentCorfuTableTest extends AbstractViewTest {
 
     private static final String INTERRUPTED_ERROR_MSG = "Unexpected InterruptedException";
@@ -313,7 +312,7 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
     }
 
     private void snapshotRead(
-            CorfuRuntime rt, PersistentCorfuTable<Uuid, CorfuRecord<Uuid, Uuid>> corfuTable,
+            CorfuRuntime rt, GenericCorfuTable<?, Uuid, CorfuRecord<Uuid, Uuid>> corfuTable,
             long ts, int low, int high) {
         rt.getObjectsView().TXBuild()
                 .type(TransactionType.SNAPSHOT)
@@ -625,7 +624,7 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
                         assertThat(entries.get(0).getValue().getPayload().getAnotherKey()).isEqualTo(numEntries);
 
 
-                        entries = toList(table.getByIndex(() -> "uuid", Uuid.getDefaultInstance()));
+                        entries = toList(table.getByIndex(() -> "uuid", ExampleSchemas.Uuid.getDefaultInstance()));
                         assertThat(entries.size()).isEqualTo(numEntries);
                         assertThat(entries.containsAll(initialEntries)).isTrue();
                         assertThat(initialEntries.containsAll(entries)).isTrue();
@@ -656,7 +655,7 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
                         entries = toList(table.getByIndex(() -> "anotherKey", 1L));
                         assertThat(entries).isEmpty();
 
-                        entries = toList(table.getByIndex(() -> "uuid", Uuid.getDefaultInstance()));
+                        entries = toList(table.getByIndex(() -> "uuid", ExampleSchemas.Uuid.getDefaultInstance()));
                         assertThat(entries.size()).isEqualTo(expectedEntries.size());
                         assertThat(entries.containsAll(expectedEntries)).isTrue();
                         assertThat(expectedEntries.containsAll(entries)).isTrue();
@@ -1355,133 +1354,9 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
         });
     }
 
-    @Builder
-    private static final class ManagedCorfuTableForTest<K extends Message, V extends Message, M extends Message> {
-        @NonNull
-        private final CorfuRuntime rt;
-
-        @NonNull
-        private final Class<K> kClass;
-        @NonNull
-        private final Class<V> vClass;
-        @NonNull
-        private final Class<M> mClass;
-
-        private final SchemaOptions schemaOptions;
-
-        @Default
-        private PersistentCorfuTable<K, CorfuRecord<V, M>> table = new PersistentCorfuTable<>();
-
-        @Default
-        private final String namespace = "some-namespace";
-        @Default
-        private final String tableName = "some-table";
-
-        public static ManagedCorfuTableForTest<Uuid, ExampleValue, ManagedMetadata> buildExample(CorfuRuntime rt)
-                throws Exception {
-            return ManagedCorfuTableForTest.<Uuid, ExampleValue, ManagedMetadata>builder()
-                    .rt(rt)
-                    .kClass(Uuid.class)
-                    .vClass(ExampleValue.class)
-                    .mClass(ManagedMetadata.class)
-                    .schemaOptions(TableOptions.fromProtoSchema(ExampleValue.class).getSchemaOptions())
-                    .build();
-        }
-
-        public static ManagedCorfuTableForTest<Uuid, Uuid, Uuid> buildDefault(CorfuRuntime rt) {
-            return ManagedCorfuTableForTest.<Uuid, Uuid, Uuid>builder()
-                    .rt(rt)
-                    .kClass(Uuid.class)
-                    .vClass(Uuid.class)
-                    .mClass(Uuid.class)
-                    .build();
-        }
-
-        @SneakyThrows
-        public void execute(ThrowableConsumer<PersistentCorfuTable<K, CorfuRecord<V, M>>> action) {
-
-            String defaultInstanceMethodName = "getDefaultInstance";
-            K defaultKeyMessage = (K) kClass.getMethod(defaultInstanceMethodName).invoke(null);
-            addTypeToClassMap(defaultKeyMessage);
-
-            V defaultValueMessage = (V) vClass.getMethod(defaultInstanceMethodName).invoke(null);
-            addTypeToClassMap(defaultValueMessage);
-
-            M defaultMetadataMessage = (M) mClass.getMethod(defaultInstanceMethodName).invoke(null);
-            addTypeToClassMap(defaultMetadataMessage);
-
-            Object[] args = getArgs(defaultValueMessage);
-
-            ProtobufSerializer serializer = getSerializer();
-
-            final String fullyQualifiedTableName = getFullyQualifiedTableName();
-            MVOCorfuCompileProxy proxy = new MVOCorfuCompileProxy(
-                    rt,
-                    UUID.nameUUIDFromBytes(fullyQualifiedTableName.getBytes()),
-                    ImmutableCorfuTable.<K, CorfuRecord<V, M>>getTypeToken().getRawType(),
-                    args,
-                    serializer,
-                    new HashSet<UUID>(),
-                    table,
-                    ObjectOpenOption.CACHE,
-                    rt.getObjectsView().getMvoCache()
-            );
-
-            table.setCorfuSMRProxy(proxy);
-
-            try {
-                action.accept(table);
-            } finally {
-                table.close();
-            }
-        }
-
-        private Object[] getArgs(V defaultValueMessage) {
-            Object[] args = {};
-
-            // If no schema options are provided, omit secondary indexes.
-            if (schemaOptions != null) {
-                args = new Object[]{new ProtobufIndexer(defaultValueMessage, schemaOptions)};
-            }
-            return args;
-        }
-
-        /**
-         * Fully qualified table name created to produce the stream uuid.
-         */
-        private String getFullyQualifiedTableName() {
-            return namespace + "$" + tableName;
-        }
-
-        /**
-         * Adds the schema to the class map to enable serialization of this table data.
-         */
-        private <T extends Message> void addTypeToClassMap(T msg) {
-            String typeUrl = getTypeUrl(msg.getDescriptorForType());
-            // Register the schemas to schema table.
-            ProtobufSerializer serializer = getSerializer();
-
-            serializer.getClassMap().put(typeUrl, msg.getClass());
-        }
-
-        private ProtobufSerializer getSerializer() {
-            return rt
-                    .getSerializers()
-                    .getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE, ProtobufSerializer.class);
-        }
-
-        /**
-         * Gets the type Url of the protobuf descriptor. Used to identify the message during serialization.
-         * Note: This is same as used in Any.proto.
-         */
-        private String getTypeUrl(Descriptor descriptor) {
-            return "type.googleapis.com/" + descriptor.getFullName();
-        }
-    }
-
-    private enum CacheSizeForTest {
+    public enum CacheSizeForTest {
         SMALL(3), MEDIUM(100), LARGE(50_000);
-        private final long size;
+        public final long size;
 
         CacheSizeForTest(long size) {
             this.size = size;
