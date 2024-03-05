@@ -22,5 +22,5 @@ public @interface LogReplicationResponseHandler {
      * Returns the response payload type
      * @return the type of log replication response payload
      */
-    CorfuMessage.ResponsePayloadMsg.PayloadCase responseType();
+    CorfuMessage.ResponsePayloadMsg.PayloadCase  responseType();
 }
