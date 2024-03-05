@@ -20,7 +20,6 @@ import org.corfudb.infrastructure.logreplication.infrastructure.NodeDescriptor;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientServerRouter;
 import org.corfudb.infrastructure.logreplication.transport.client.IClientChannelAdapter;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
-import org.corfudb.runtime.proto.service.CorfuMessage;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
 import org.corfudb.util.NodeLocator;
@@ -226,9 +225,6 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
                 public void onNext(RequestMsg request) {
                     try {
                         log.info("Received request {}", request.getHeader().getRequestId());
-                        if (request.getPayload().getPayloadCase().equals(CorfuMessage.RequestPayloadMsg.PayloadCase.LR_LEADERSHIP_LOSS)) {
-                            responseObserverMap.remove(sessionMsg);
-                        }
                         receive(request);
                     } catch (Exception e) {
                         log.error("Caught exception while receiving Requests", e);
@@ -244,7 +240,6 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
                     getRouter().completeExceptionally(sessionMsg, requestId, t);
                     responseObserverMap.remove(sessionMsg);
                     onServiceUnavailable(t, finalNodeId, sessionMsg);
-                    getRouter().inputRemoteSourceLeaderLoss(sessionMsg);
                 }
 
                 @Override

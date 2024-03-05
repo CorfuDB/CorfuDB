@@ -34,7 +34,7 @@ message LogReplicationMetadataResponseMsg {
   uint64 lastLogEntryTimestamp = 6;
 }
 
-message LogReplicationLeadershipLossMsg {
+message LogReplicationLeadershipLossResponseMsg {
   string nodeId = 1;
 }
 

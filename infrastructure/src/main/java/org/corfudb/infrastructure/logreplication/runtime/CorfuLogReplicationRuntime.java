@@ -155,9 +155,6 @@ public class CorfuLogReplicationRuntime {
     @Getter
     public final LogReplicationSession session;
 
-    @Getter
-    private final LogReplicationContext replicationContext;
-
     /**
      * Default Constructor
      */
@@ -170,7 +167,6 @@ public class CorfuLogReplicationRuntime {
         this.sourceManager = new LogReplicationSourceManager(parameters,router, metadataManager,
                 session, replicationContext);
         this.connectedNodes = new HashSet<>();
-        this.replicationContext = replicationContext;
 
         ThreadFactory threadFactory = new ThreadFactoryBuilder().setNameFormat("runtime-fsm-worker-"+session.hashCode())
             .build();
@@ -210,7 +206,7 @@ public class CorfuLogReplicationRuntime {
             communicationFSMWorkers, router));
         states.put(LogReplicationRuntimeStateType.NEGOTIATING, new NegotiatingState(this, communicationFSMWorkers,
                 router, metadataManager));
-        states.put(LogReplicationRuntimeStateType.REPLICATING, new ReplicatingState(this, sourceManager, router));
+        states.put(LogReplicationRuntimeStateType.REPLICATING, new ReplicatingState(this, sourceManager));
         states.put(LogReplicationRuntimeStateType.STOPPED, new StoppedState(sourceManager));
         states.put(LogReplicationRuntimeStateType.UNRECOVERABLE, new UnrecoverableState());
     }
@@ -316,7 +312,6 @@ public class CorfuLogReplicationRuntime {
      * Stop Log Replication, regardless of current state.
      */
     public void stop() {
-        input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.LOCAL_LEADER_LOSS,
-                router.isConnectionStarterForSession(session)));
+        input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.LOCAL_LEADER_LOSS));
     }
 }

@@ -18,7 +18,6 @@ import org.corfudb.infrastructure.logreplication.transport.IClientServerRouter;
 import org.corfudb.infrastructure.logreplication.transport.client.ChannelAdapterException;
 import org.corfudb.infrastructure.logreplication.transport.client.IClientChannelAdapter;
 import org.corfudb.infrastructure.logreplication.transport.server.IServerChannelAdapter;
-import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
@@ -34,7 +33,6 @@ import java.io.File;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.time.Duration;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -50,9 +48,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import static org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getDefaultProtocolVersionMsg;
-import static org.corfudb.protocols.service.CorfuProtocolMessage.getHeaderMsg;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getRequestMsg;
-import static org.corfudb.protocols.service.CorfuProtocolMessage.getResponseMsg;
 
 /**
  * Router, interfaces between the custom transport layer and LR core components.
@@ -118,7 +114,6 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
     /**
      * local node ID
      */
-    @Getter
     private final String localNodeId;
 
     /**
@@ -319,9 +314,8 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
         final CompletableFuture<T> cf = new CompletableFuture<>();
         try {
             // Get the next request ID.
-            requestId = sessionToRequestIdCounter.getOrDefault(session, new AtomicLong(0)).getAndIncrement();
+            requestId = sessionToRequestIdCounter.get(session).getAndIncrement();
 
-            sessionToOutstandingRequests.putIfAbsent(session, new HashMap<>());
             sessionToOutstandingRequests.get(session).put(requestId, cf);
 
             header.setRequestId(requestId);
@@ -368,12 +362,10 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
             // In the case the message is intended for a specific endpoint, we do not
             // block on connection future, this is the case of leader verification.
             if(isConnectionStarterForSession(session)) {
-                log.info("Send requestID/payload {}/{} via clientChannelAdapter for session {}", header.getRequestId(),
-                        payload.getPayloadCase(), session);
+                log.info("Send requestID {} via clientChannelAdapter for session {}", header.getRequestId(), session);
                 clientChannelAdapter.send(nodeId, getRequestMsg(header.build(), payload));
             } else {
-                log.info("Send requestID/payload {}/{} via serverChannelAdapter for session {}", header.getRequestId(),
-                        payload.getPayloadCase(), session);
+                log.info("Send requestID {} via serverChannelAdapter for session {}", header.getRequestId(), session);
                 serverChannelAdapter.send(getRequestMsg(header.build(), payload));
             }
 
@@ -485,11 +477,6 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
         }
     }
 
-    public void inputRemoteSourceLeaderLoss(LogReplicationSession session) {
-        sessionToRemoteSourceLeaderManager.get(session).input(
-                new LogReplicationSinkEvent(LogReplicationSinkEvent.LogReplicationSinkEventType.REMOTE_LEADER_LOSS));
-    }
-
     @Override
     public void receive(CorfuMessage.ResponseMsg msg) {
         try {
@@ -524,13 +511,6 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
                 sessionToRuntimeFSM.get(session).setRemoteLeaderNodeId(remoteLeaderId);
                 // Start runtimeFSM
                 addConnectionUpEvent(session, remoteLeaderId);
-            } else if (isAckForLocalLeaderLoss(msg)) {
-                log.debug("Received an ACK for requestID/payload {}/{}", msg.getHeader().getRequestId(),
-                        msg.getPayload().getPayloadCase());
-                // the ACK for leadership loss msg from SOURCE is completed with null
-                completeRequest(msg.getHeader().getSession(), msg.getHeader().getRequestId(), null);
-                return;
-
             } else {
                 // Route the message to the handler.
                 if (log.isTraceEnabled()) {
@@ -547,30 +527,9 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
         }
     }
 
-    private boolean isAckForLocalLeaderLoss(CorfuMessage.ResponseMsg msg) {
-        return msg.getPayload().getPayloadCase().equals(CorfuMessage.ResponsePayloadMsg.PayloadCase.LR_ENTRY_ACK) &&
-                !msg.getPayload().getLrEntryAck().hasMetadata();
-    }
-
     @Override
     public void receive(CorfuMessage.RequestMsg message) {
         log.debug("Received request message {}", message.getPayload().getPayloadCase());
-        try {
-            if (message.getPayload().getPayloadCase().equals(CorfuMessage.RequestPayloadMsg.PayloadCase.LR_LEADERSHIP_LOSS)) {
-                sessionToRemoteSourceLeaderManager.get(message.getHeader().getSession()).input(new LogReplicationSinkEvent(
-                        LogReplicationSinkEvent.LogReplicationSinkEventType.REMOTE_LEADER_LOSS,
-                        message.getPayload().getLrLeadershipLoss().getNodeId()));
-                // ack the leadership loss msg with an empty payload
-                CorfuMessage.ResponsePayloadMsg responsePayloadMsg = CorfuMessage.ResponsePayloadMsg.newBuilder()
-                        .setLrEntryAck(LogReplication.LogReplicationEntryMsg.newBuilder().build()).build();
-                sendResponse(getResponseMsg(getHeaderMsg(message.getHeader()), responsePayloadMsg));
-                return;
-            }
-        } catch (NullPointerException npe) {
-            log.error("Ignoring the leadership_loss msg. The replication components has already been stopped for " +
-                    "session {} ", message.getHeader().getSession());
-            return;
-        }
 
         // Route the message to the handler.
         if (log.isTraceEnabled()) {
@@ -649,8 +608,7 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
     private boolean isValidMessage(CorfuMessage.RequestPayloadMsg message) {
         return message.getPayloadCase().equals(CorfuMessage.RequestPayloadMsg.PayloadCase.LR_ENTRY) ||
                 message.getPayloadCase().equals(CorfuMessage.RequestPayloadMsg.PayloadCase.LR_METADATA_REQUEST) ||
-                message.getPayloadCase().equals(CorfuMessage.RequestPayloadMsg.PayloadCase.LR_LEADERSHIP_QUERY) ||
-                message.getPayloadCase().equals(CorfuMessage.RequestPayloadMsg.PayloadCase.LR_LEADERSHIP_LOSS);
+                message.getPayloadCase().equals(CorfuMessage.RequestPayloadMsg.PayloadCase.LR_LEADERSHIP_QUERY);
     }
 
     /**
