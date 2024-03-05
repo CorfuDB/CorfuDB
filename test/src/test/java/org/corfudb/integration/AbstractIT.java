@@ -81,7 +81,7 @@ public class AbstractIT extends AbstractCorfuTest {
     private static final long SHUTDOWN_RETRY_WAIT = 500;
 
     // Config the msg size for log replication data
-    // sent from source cluster to the sink cluster.
+    // sent from active cluster to the standby cluster.
     // We set it as 128KB to make multiple messages during the tests.
     private static final int MSG_SIZE = 131072;
 

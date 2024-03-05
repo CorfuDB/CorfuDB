@@ -8,7 +8,7 @@ import "google/protobuf/timestamp.proto";
 /**
  * This is used by replication metadata table in corfu store.
  * The metadata table has the following key-value pairs defined both as strings:
- * One example to show the sink is at log entry sync state:
+ * One example to show the standby is at log entry sync state:
  * "topologyConfigId": "0"
  * "version": "release-1.0"
  * "lastSnapshotStarted": "100"
@@ -39,7 +39,7 @@ message LogReplicationMetadataVal {
 
 /*
  * Replication Status Value
- * Source Site sets the completionPercent, Sink sets the dataConsistent boolean
+ * Active Site sets the completionPercent, Standby sets the dataConsistent boolean
  */
 message ReplicationStatusVal {
   option (org.corfudb.runtime.table_schema).stream_tag = "lr_status";

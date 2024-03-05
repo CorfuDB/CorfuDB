@@ -116,7 +116,7 @@ public class LogReplicationAckReader {
      * Note that this method is not accurate because the global tail can reflect the interleaving of replicated and
      * non-replicated streams, and hence, does not accurately represent the remaining entries to send for replicated streams.
      *
-     * If there is no data on the source, it returns 0, which means no replication remaining.
+     * If there is no data on the active, it returns 0, which means no replication remaining.
      * If the ack'd timestamp is uninitialized(no ack received), it returns the log tail, which means no replication has
      * been done.
      */
@@ -135,7 +135,7 @@ public class LogReplicationAckReader {
                     currentTxStreamProcessedTs.isStreamsToReplicatePresent(), lastSyncType);
         }
 
-        // No data to send on the source, so no replication remaining
+        // No data to send on the active, so no replication remaining
         if (maxReplicatedStreamTail == Address.NON_ADDRESS) {
             log.debug("No data to replicate, replication complete.");
             return NO_REPLICATION_REMAINING_ENTRIES;

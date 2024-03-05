@@ -180,7 +180,7 @@ public class LogReplicationSinkManager implements DataReceiver {
         try {
             IRetry.build(IntervalRetry.class, () -> {
                 try {
-                    logReplicationMetadataManager.setDataConsistentOnSink(isDataConsistent);
+                    logReplicationMetadataManager.setDataConsistentOnStandby(isDataConsistent);
                 } catch (TransactionAbortedException tae) {
                     log.error("Error while attempting to setDataConsistent in SinkManager's init", tae);
                     throw new RetryNeededException();
@@ -589,7 +589,7 @@ public class LogReplicationSinkManager implements DataReceiver {
      * Stop any functions on Sink Manager when leadership is lost
      */
     public void stopOnLeadershipLoss() {
-        // If current sink is in TRANSFER phase, trigger end of snapshot sync (unfreeze checkpoint) as we
+        // If current sink/standby is in TRANSFER phase, trigger end of snapshot sync (unfreeze checkpoint) as we
         // don't know when snapshot sync might be started again.
         // If in APPLY phase do not unfreeze or shadow streams could be lost. This change was done near the release
         // date we don't know if we would be able to recover from this (test this scenario)

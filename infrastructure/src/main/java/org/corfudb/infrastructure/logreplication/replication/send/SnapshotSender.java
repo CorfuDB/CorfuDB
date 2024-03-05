@@ -184,7 +184,7 @@ public class SnapshotSender {
                 snapshotSyncAck.get(DEFAULT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
                 snapshotSyncTransferComplete(snapshotSyncEventId);
             } catch (Exception e) {
-                log.warn("Caught exception while sending data to sink.", e);
+                log.warn("Caught exception while sending data to standby.", e);
                 snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.UNKNOWN);
             }
         }

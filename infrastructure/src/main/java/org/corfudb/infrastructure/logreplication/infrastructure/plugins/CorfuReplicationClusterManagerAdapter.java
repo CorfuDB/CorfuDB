@@ -53,8 +53,8 @@ public interface CorfuReplicationClusterManagerAdapter {
     Map<String, LogReplicationMetadata.ReplicationStatusVal> queryReplicationStatus();
 
     /**
-     * This API enforce a full snapshot sync on the sink cluster with the clusterId at best effort.
-     * The command can only be executed on the source cluster's node.
+     * This API enforce a full snapshot sync on the standby cluster with the clusterId at best effort.
+     * The command can only be executed on the active cluster's node.
      *
      * @param clusterId
      */
