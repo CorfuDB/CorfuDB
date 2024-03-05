@@ -72,7 +72,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
 import static org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager.TP_SINGLE_SOURCE_SINK;
 import static org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager.TP_SINGLE_SOURCE_SINK_REV_CONNECTION;
-import static org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager.TP_LOCAL_CLUSTER_NOT_FOUND;
 import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.METADATA_TABLE_NAME;
 import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.REPLICATION_EVENT_TABLE_NAME;
 import static org.corfudb.integration.AbstractIT.shutdownCorfuServer;
@@ -158,10 +157,9 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
     public static List<ClusterUuidMsg> input() {
         return Arrays.asList(
                 TP_SINGLE_SOURCE_SINK,
-                TP_SINGLE_SOURCE_SINK_REV_CONNECTION,
-                TP_LOCAL_CLUSTER_NOT_FOUND     // used only in tests which create a topology where local node is not
-                                              // found in any cluster
+                TP_SINGLE_SOURCE_SINK_REV_CONNECTION
         );
+
     }
 
     @Before
@@ -310,7 +308,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
      */
     @Test
     public void testNewConfigWithSwitchRole() throws Exception {
-        if(topologyType.equals(TP_SINGLE_SOURCE_SINK_REV_CONNECTION) || topologyType.equals(TP_LOCAL_CLUSTER_NOT_FOUND)) {
+        if(topologyType.equals(TP_SINGLE_SOURCE_SINK_REV_CONNECTION)) {
             return;
         }
         // Write 10 entries to source map
@@ -547,10 +545,6 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
      */
     @Test
     public void testDataConsistentForEmptyStreams() throws Exception {
-        if (topologyType.equals(TP_LOCAL_CLUSTER_NOT_FOUND)) {
-            return;
-        }
-
         // Open 2/10 tables to be replicated on the source and write data
         // to it
         openMapsOnCluster(true, 2, 1);
@@ -620,10 +614,6 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
      */
     @Test
     public void testSnapshotSyncOfUnopenedTrimmedStreams() throws Exception {
-        if (topologyType.equals(TP_LOCAL_CLUSTER_NOT_FOUND)) {
-            return;
-        }
-
         // Open 2/10 tables to be replicated on the source
         openMapsOnCluster(true, 2, 1);
 
@@ -842,10 +832,9 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
      */
     @Test
     public void testSessionCreationOnNonLeaderSource() throws Exception {
-        if (topologyType.equals(TP_SINGLE_SOURCE_SINK_REV_CONNECTION) || topologyType.equals(TP_LOCAL_CLUSTER_NOT_FOUND)) {
+        if (topologyType.equals(TP_SINGLE_SOURCE_SINK_REV_CONNECTION)) {
             return;
         }
-
         //check snapshot sync
         // Write 'N' entries to source map (to ensure nothing happens wrt. the status, as LR is not started on source)
         for (int i = 0; i < firstBatch; i++) {
@@ -1037,7 +1026,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
      */
     @Test
     public void testSessionCreationOnNonLeaderSink() throws Exception {
-        if (topologyType.equals(TP_SINGLE_SOURCE_SINK_REV_CONNECTION) || topologyType.equals(TP_LOCAL_CLUSTER_NOT_FOUND)) {
+        if (topologyType.equals(TP_SINGLE_SOURCE_SINK_REV_CONNECTION)) {
             return;
         }
         //check snapshot sync
@@ -1232,9 +1221,6 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
      */
     @Test
     public void testClusterSyncStatus() throws Exception {
-        if (topologyType.equals(TP_LOCAL_CLUSTER_NOT_FOUND)) {
-            return;
-        }
 
         final int waitInMillis = 500;
         final int deltaSeconds = 5;
@@ -1505,10 +1491,6 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
      */
     @Test
     public void testNewConfigWithTwoSource() throws Exception {
-        if (topologyType.equals(TP_LOCAL_CLUSTER_NOT_FOUND)) {
-            return;
-        }
-
         // Write 10 entries to source map
         for (int i = 0; i < firstBatch; i++) {
             try (TxnContext txn = sourceCorfuStore.txn(NAMESPACE)) {
@@ -1609,10 +1591,6 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
      */
     @Test
     public void testNewConfigWithAllSink() throws Exception {
-        if (topologyType.equals(TP_LOCAL_CLUSTER_NOT_FOUND)) {
-            return;
-        }
-
         // Write 10 entries to source map
         for (int i = 0; i < firstBatch; i++) {
             try (TxnContext txn = sourceCorfuStore.txn(NAMESPACE)) {
@@ -1713,10 +1691,6 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
      */
     @Test
     public void testNewConfigWithInvalidClusters() throws Exception {
-        if (topologyType.equals(TP_LOCAL_CLUSTER_NOT_FOUND)) {
-            return;
-        }
-
         // Write 10 entries to source map
         for (int i = 0; i < firstBatch; i++) {
             try (TxnContext txn = sourceCorfuStore.txn(NAMESPACE)) {
@@ -1858,10 +1832,6 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
      */
     @Test
     public void testEnforceSnapshotSync() throws Exception {
-        if (topologyType.equals(TP_LOCAL_CLUSTER_NOT_FOUND)) {
-            return;
-        }
-
         // Write 10 entries to source map
         for (int i = 0; i < firstBatch; i++) {
             try (TxnContext txn = sourceCorfuStore.txn(NAMESPACE)) {
@@ -2087,10 +2057,6 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
      */
     @Test
     public void testSourceLockRelease() throws Exception {
-        if (topologyType.equals(TP_LOCAL_CLUSTER_NOT_FOUND)) {
-            return;
-        }
-
         // Write 10 entries to source map
         for (int i = 0; i < firstBatch; i++) {
             try (TxnContext txn = sourceCorfuStore.txn(NAMESPACE)) {
@@ -2218,7 +2184,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
 
     @Test
     public void testSinkLockRelease() throws Exception {
-        if (topologyType.equals(TP_SINGLE_SOURCE_SINK) || topologyType.equals(TP_LOCAL_CLUSTER_NOT_FOUND)) {
+        if (topologyType.equals(TP_SINGLE_SOURCE_SINK)) {
             return;
         }
         // Write 10 entries to source map
@@ -2312,180 +2278,6 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         // Sink map should still have secondBatch size
         log.info("Sink map should still have {} size", secondBatch);
         assertThat(mapSink.count()).isEqualTo(secondBatch);
-    }
-
-    /**
-     * This test verifies that LR can handle a scenario where the local node is not found in any cluster present in
-     * the topology given by the Cluster Manager during init.(Note that this is different than
-     * testNewConfigWithInvalidClusters() where the local node was present in a cluster of type INVALID.)
-     * 1) Create a topology where local node is not found in any cluster.  Verify that no replication takes place
-     * 2) Trigger a topology update with a valid topology where the nodes belong to respective Source and Sink clusters.
-     * 3) Verify that replication now starts and data is replicated
-     * @throws Exception
-     */
-    @Test
-    public void testLocalNodeAbsentOnInit() throws Exception {
-        testLocalNodeAbsent(true);
-    }
-
-    /**
-     * This test verifies that LR can handle a scenario where the local node is not found in any cluster present in
-     * the topology given by the Cluster Manager during init and in a subsequent update.(Note that this is different
-     * than testNewConfigWithInvalidClusters() where the local node was present in a cluster of type INVALID.)
-     * 1) Create a topology where local node is not found in any cluster.  Verify that no replication takes place
-     * 2) Trigger a topology update with the same topology (internally, discovery service will try to stop
-     * replication which had never started, verify that this does not result in any unrecoverable errors)
-     * 3) Trigger a topology update with a valid topology where the nodes belong to respective Source and Sink clusters.
-     * 4) Verify that replication now starts and data is replicated
-     * @throws Exception
-     */
-    @Test
-    public void testLocalNodeAbsentOnInitAndUpdate() throws Exception {
-        testLocalNodeAbsent(false);
-    }
-
-    private void testLocalNodeAbsent(boolean localNodePresentInUpdate) throws Exception {
-        if (topologyType.equals(TP_SINGLE_SOURCE_SINK) || topologyType.equals(TP_SINGLE_SOURCE_SINK_REV_CONNECTION)) {
-            return;
-        }
-
-        // Write 10 entries to source map
-        for (int i = 0; i < firstBatch; i++) {
-            try (TxnContext txn = sourceCorfuStore.txn(NAMESPACE)) {
-                txn.putRecord(mapSource, Sample.StringKey.newBuilder().setKey(String.valueOf(i)).build(),
-                    Sample.IntValue.newBuilder().setValue(i).build(), null);
-                txn.commit();
-            }
-        }
-        assertThat(mapSource.count()).isEqualTo(firstBatch);
-        assertThat(mapSink.count()).isZero();
-
-        log.info("Before log replication, append {} entries to source map. Current source corfu" +
-                "[{}] log tail is {}, sink corfu[{}] log tail is {}", firstBatch, sourceClusterCorfuPort,
-            sourceRuntime.getAddressSpaceView().getLogTail(), sinkClusterCorfuPort,
-            sinkRuntime.getAddressSpaceView().getLogTail());
-
-        sinkReplicationServer = runReplicationServer(sinkReplicationServerPort, sinkClusterCorfuPort,
-            pluginConfigPath, transportType);
-
-        sourceReplicationServer = runReplicationServer(sourceReplicationServerPort, sourceClusterCorfuPort,
-            pluginConfigPath, transportType);
-
-        log.info("Replication servers started");
-
-        // Verify that no replication took place because the local cluster was not found.
-        Thread.sleep(PARAMETERS.TIMEOUT_NORMAL.toMillis());
-        assertThat(mapSource.count()).isEqualTo(firstBatch);
-        assertThat(mapSink.count()).isZero();
-        log.info("No data replicated on the Sink because the local node was not part of any cluster");
-
-        if (!localNodePresentInUpdate) {
-            // Trigger a topology update with the same information.  This time, Discovery Service will try to stop log
-            // replication(which had never started)
-            log.info("Trigger topology update with the same topology");
-            try (TxnContext txn = sourceCorfuStore.txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
-                txn.putRecord(configTable, DefaultClusterManager.OP_LOCAL_CLUSTER_NOT_FOUND,
-                    DefaultClusterManager.OP_LOCAL_CLUSTER_NOT_FOUND,
-                    DefaultClusterManager.OP_LOCAL_CLUSTER_NOT_FOUND);
-                txn.commit();
-            }
-
-            // Verify that still no replication took place
-            Thread.sleep(PARAMETERS.TIMEOUT_NORMAL.toMillis());
-            assertThat(mapSource.count()).isEqualTo(firstBatch);
-            assertThat(mapSink.count()).isZero();
-            log.info("No data replicated on the Sink after topology update because the local node was not part of any cluster");
-        }
-
-        // Trigger topology update where local nodes are part of respective Source or Sink cluster
-        log.info("Trigger topology update where local node is part of a Source or Sink cluster");
-        try (TxnContext txn = sourceCorfuStore.txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
-            txn.putRecord(configTable, DefaultClusterManager.OP_RESUME,
-                DefaultClusterManager.OP_RESUME, DefaultClusterManager.OP_RESUME);
-            txn.commit();
-        }
-
-        // Verify that replication now completes successfully
-        waitForReplication(size -> size == firstBatch, mapSink, firstBatch);
-        assertThat(mapSource.count()).isEqualTo(firstBatch);
-        assertThat(mapSink.count()).isEqualTo(firstBatch);
-        log.info("Data replicated successfully after local node was found in the topology");
-    }
-
-    /**
-     * This test verifies that LR can handle a scenario where the local node is not found in any cluster present in
-     * the topology given by the Cluster Manager in a topology update.(Note that this is different
-     * than testNewConfigWithInvalidClusters() where the local node was present in a cluster of type INVALID.)
-     * 1) Create a valid topology where local node is present in respective Source or Sink cluster. Verify that
-     * replication is successful
-     * 2) Trigger a topology update where the local node is not present in any cluster(internally, discovery service
-     * will stop replication)
-     * 3) Write more data on the Source and verify that it is not replicated.
-     * @throws Exception
-     */
-    @Test
-    public void testLocalNodeAbsentInUpdate() throws Exception {
-        if (topologyType.equals(TP_LOCAL_CLUSTER_NOT_FOUND)) {
-            return;
-        }
-
-        // Write 10 entries to source map
-        for (int i = 0; i < firstBatch; i++) {
-            try (TxnContext txn = sourceCorfuStore.txn(NAMESPACE)) {
-                txn.putRecord(mapSource, Sample.StringKey.newBuilder().setKey(String.valueOf(i)).build(),
-                    Sample.IntValue.newBuilder().setValue(i).build(), null);
-                txn.commit();
-            }
-        }
-        assertThat(mapSource.count()).isEqualTo(firstBatch);
-        assertThat(mapSink.count()).isZero();
-
-        log.info("Before log replication, append {} entries to source map. Current source corfu" +
-                "[{}] log tail is {}, sink corfu[{}] log tail is {}", firstBatch, sourceClusterCorfuPort,
-            sourceRuntime.getAddressSpaceView().getLogTail(), sinkClusterCorfuPort,
-            sinkRuntime.getAddressSpaceView().getLogTail());
-
-        sinkReplicationServer = runReplicationServer(sinkReplicationServerPort, sinkClusterCorfuPort,
-            pluginConfigPath, transportType);
-
-        sourceReplicationServer = runReplicationServer(sourceReplicationServerPort, sourceClusterCorfuPort,
-            pluginConfigPath, transportType);
-
-        log.info("Replication servers started");
-
-        // Verify that replication was successful.
-        waitForReplication(size -> size == firstBatch, mapSink, firstBatch);
-        assertThat(mapSource.count()).isEqualTo(firstBatch);
-        assertThat(mapSink.count()).isEqualTo(firstBatch);
-        log.info("Data replicated before topology update");
-
-        // Trigger a topology update where the local node is not part of any cluster.  Discovery Service will try to
-        // stop replication
-        log.info("Trigger topology update where the local node is not part of any cluster.");
-        try (TxnContext txn = sourceCorfuStore.txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
-            txn.putRecord(configTable, DefaultClusterManager.OP_LOCAL_CLUSTER_NOT_FOUND,
-                DefaultClusterManager.OP_LOCAL_CLUSTER_NOT_FOUND,
-                DefaultClusterManager.OP_LOCAL_CLUSTER_NOT_FOUND);
-            txn.commit();
-        }
-        Thread.sleep(PARAMETERS.TIMEOUT_NORMAL.toMillis());
-        assertThat(mapSource.count()).isEqualTo(firstBatch);
-        assertThat(mapSink.count()).isEqualTo(firstBatch);
-
-        // Write 5 entries to source map
-        for (int i = firstBatch; i < secondBatch; i++) {
-            try (TxnContext txn = sourceCorfuStore.txn(NAMESPACE)) {
-                txn.putRecord(mapSource, StringKey.newBuilder().setKey(String.valueOf(i)).build(),
-                    IntValue.newBuilder().setValue(i).build(), null);
-                txn.commit();
-            }
-        }
-        assertThat(mapSource.count()).isEqualTo(secondBatch);
-
-        // Verify that the new entries were not replicated as replication stopped
-        Thread.sleep(PARAMETERS.TIMEOUT_NORMAL.toMillis());
-        assertThat(mapSink.count()).isEqualTo(firstBatch);
-        log.info("New entries not replicated to Sink as replication was stopped");
     }
 
     private void clearLockTable(boolean source) {
