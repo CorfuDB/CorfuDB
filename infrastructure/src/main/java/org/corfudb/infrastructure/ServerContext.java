@@ -313,11 +313,6 @@ public class ServerContext implements AutoCloseable {
         return val == null ? DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED : Integer.parseInt(val);
     }
 
-    public int getCorfuServerConnectionPort() {
-        String val = getServerConfig(String.class, "<corfu-server-port>");
-        return Integer.parseInt(val);
-    }
-
     /**
      * Cleanup the DataStore files with names that are prefixes of the specified
      * fileName when so that the number of these files don't exceed the user-defined

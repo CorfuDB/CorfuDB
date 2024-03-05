@@ -220,7 +220,7 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
 
         try (URLClassLoader child = new URLClassLoader(new URL[]{jar.toURI().toURL()}, this.getClass().getClassLoader())) {
             Class adapter = Class.forName(config.getTransportServerClassCanonicalName(), true, child);
-            this.serverChannelAdapter = (IServerChannelAdapter) adapter
+            this.serverChannelAdapter =  (IServerChannelAdapter) adapter
                     .getDeclaredConstructor(ServerContext.class, LogReplicationClientServerRouter.class)
                     .newInstance(serverContext, this);
             return this.serverChannelAdapter.start();

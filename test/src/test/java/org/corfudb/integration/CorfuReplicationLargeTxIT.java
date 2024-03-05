@@ -276,12 +276,12 @@ public class CorfuReplicationLargeTxIT extends LogReplicationAbstractIT {
 
     private void startLogReplicatorServersWithCustomMaxWriteSize() throws Exception {
         sourceReplicationServer =
-            runReplicationServerCustomMaxWriteSize(sourceReplicationServerPort, sourceSiteCorfuPort,
+            runReplicationServerCustomMaxWriteSize(sourceReplicationServerPort,
                 pluginConfigFilePath, MAX_WRITE_SIZE_BYTES, MAX_SNAPSHOT_ENTRIES_APPLIED);
 
         // Start Log Replication Server on Sink Site
         sinkReplicationServer =
-            runReplicationServerCustomMaxWriteSize(sinkReplicationServerPort, sinkSiteCorfuPort,
+            runReplicationServerCustomMaxWriteSize(sinkReplicationServerPort,
                 pluginConfigFilePath, MAX_WRITE_SIZE_BYTES, MAX_SNAPSHOT_ENTRIES_APPLIED);
     }
 
