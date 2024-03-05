@@ -450,14 +450,25 @@ public class LogReplicationMetadataManager {
                     .setLastLogEntryApplied(Address.NON_ADDRESS)
                     .build();
 
-            updateReplicationMetadata(txn, session, updatedMetadata);
-            txn.commit();
+            try {
+                IRetry.build(IntervalRetry.class, () -> {
+                    try {
+                        updateReplicationMetadata(txn, session, updatedMetadata);
+                        txn.commit();
 
-            log.debug("Commit. Set snapshotStart topologyConfigId={}, ts={}, persistedTopologyConfigID={}, " +
-                    "persistedSnapshotStart={}", topologyConfigId, snapshotStartTs, metadata.getTopologyConfigId(),
-                    metadata.getLastSnapshotStarted());
+                        log.debug("Commit. Set snapshotStart topologyConfigId={}, ts={}, persistedTopologyConfigID={}, " +
+                                        "persistedSnapshotStart={}", topologyConfigId, snapshotStartTs, metadata.getTopologyConfigId(),
+                                metadata.getLastSnapshotStarted());
+                        return true;
+                    } catch (TransactionAbortedException tae) {
+                        throw new RetryNeededException();
+                    }
+                }).run();
+            } catch (InterruptedException e) {
+                return false;
+            }
         }
-        return true;
+        return false;
     }
 
     /**
@@ -489,9 +500,21 @@ public class LogReplicationMetadataManager {
                     .setTopologyConfigId(topologyConfigId)
                     .build();
 
-            // Update the topologyConfigId to fence all other transactions that update the metadata at the same time
-            updateReplicationMetadata(txn, session, updatedMetadata);
-            txn.commit();
+            try {
+                IRetry.build(IntervalRetry.class, () -> {
+                    try {
+                        // Update the topologyConfigId to fence all other transactions that update the metadata at the same time
+                        updateReplicationMetadata(txn, session, updatedMetadata);
+                        txn.commit();
+                    } catch (TransactionAbortedException tae) {
+                        throw new RetryNeededException();
+                    }
+                    return null;
+                }).run();
+            } catch (InterruptedException e) {
+                log.error("Unrecoverable exception when attempting to update metadata.", e);
+                throw new UnrecoverableCorfuInterruptedError(e);
+            }
         }
 
         log.debug("Commit snapshot transfer complete timestamp={}, for topologyConfigId={}", ts, topologyConfigId);
@@ -565,7 +588,19 @@ public class LogReplicationMetadataManager {
                 .setCurrentSnapshotCycleId(uuidMsg)
                 .build();
 
-        updateReplicationMetadata(txn, session, updatedMetadata);
+        try {
+            IRetry.build(IntervalRetry.class, () -> {
+                try {
+                    updateReplicationMetadata(txn, session, updatedMetadata);
+                } catch (TransactionAbortedException tae) {
+                    throw new RetryNeededException();
+                }
+                return null;
+            }).run();
+        } catch (InterruptedException e) {
+            log.error("Unrecoverable exception when attempting to update metadata.", e);
+            throw new UnrecoverableCorfuInterruptedError(e);
+        }
 
         log.debug("Shadow stream for the current sync starts from {} (inclusive)", shadowStreamTs);
     }
