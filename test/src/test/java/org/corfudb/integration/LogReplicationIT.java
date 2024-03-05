@@ -7,7 +7,6 @@ import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
-import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
@@ -1228,10 +1227,8 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         configManager.getConfig().setMaxMsgSize(SMALL_MSG_SIZE);
         configManager.getConfig().setMaxDataSizePerMsg(SMALL_MSG_SIZE * LogReplicationConfig.DATA_FRACTION_PER_MSG / 100);
 
-        LogReplicationContext replicationContext = new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT);
-
         // Data Sender
-        sourceDataSender = new SourceForwardingDataSender(DESTINATION_ENDPOINT, replicationContext, testConfig,
+        sourceDataSender = new SourceForwardingDataSender(DESTINATION_ENDPOINT, configManager, testConfig,
             logReplicationMetadataManager, nettyConfig, function);
 
         ReplicationSession replicationSession =
@@ -1242,7 +1239,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
             LogReplicationRuntimeParameters.builder().remoteClusterDescriptor(new ClusterDescriptor(REMOTE_CLUSTER_ID,
                 LogReplicationClusterInfo.ClusterRole.SOURCE, CORFU_PORT)).replicationConfig(configManager.getConfig())
                 .localCorfuEndpoint(SOURCE_ENDPOINT).build(), logReplicationMetadataManager, sourceDataSender,
-                replicationContext, upgradeManager, replicationSession);
+            configManager, upgradeManager, replicationSession);
 
         // Set Log Replication Source Manager so we can emulate the channel for data & control messages (required
         // for testing)

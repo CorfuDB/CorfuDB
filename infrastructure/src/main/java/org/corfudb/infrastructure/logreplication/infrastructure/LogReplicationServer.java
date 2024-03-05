@@ -71,11 +71,11 @@ public class LogReplicationServer extends AbstractServer {
     }
 
     public LogReplicationServer(@Nonnull ServerContext context, String localNodeId,
-                                LogReplicationContext replicationContext,
+                                LogReplicationConfigManager configManager,
                                 String localEndpoint, long topologyConfigId,
                                 Map<ReplicationSession, LogReplicationMetadataManager> sourceSessionToMetadataManagerMap) {
         this.localNodeId = localNodeId;
-        createSinkManagers(replicationContext, localEndpoint, context, sourceSessionToMetadataManagerMap, topologyConfigId);
+        createSinkManagers(configManager, localEndpoint, context, sourceSessionToMetadataManagerMap, topologyConfigId);
         this.executor = context.getExecutorService(1, EXECUTOR_NAME_PREFIX);
     }
 
@@ -87,13 +87,13 @@ public class LogReplicationServer extends AbstractServer {
         this.executor = context.getExecutorService(1, EXECUTOR_NAME_PREFIX);
     }
 
-     private void createSinkManagers(LogReplicationContext replicationContext, String localEndpoint,
+     private void createSinkManagers(LogReplicationConfigManager configManager, String localEndpoint,
                                      ServerContext serverContext,
                                      Map<ReplicationSession, LogReplicationMetadataManager> sourceSessionToMetadataManagerMap,
                                      long topologyConfigId) {
         for (Map.Entry<ReplicationSession, LogReplicationMetadataManager> entry :
             sourceSessionToMetadataManagerMap.entrySet()) {
-            LogReplicationSinkManager sinkManager = new LogReplicationSinkManager(localEndpoint, replicationContext,
+            LogReplicationSinkManager sinkManager = new LogReplicationSinkManager(localEndpoint, configManager,
                 entry.getValue(), serverContext, topologyConfigId, entry.getKey());
             sourceSessionToSinkManagerMap.put(entry.getKey(), sinkManager);
         }

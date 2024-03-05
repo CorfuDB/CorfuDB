@@ -2,8 +2,8 @@ package org.corfudb.infrastructure.logreplication.replication.receive;
 
 import com.google.protobuf.TextFormat;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
+import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.service.CorfuProtocolLogReplication;
@@ -37,15 +37,18 @@ public class LogEntryWriter extends SinkWriter {
     // Timestamp of the last message processed.
     private long lastMsgTs;
 
+    private final LogReplicationConfigManager configManager;
+
     private final LogReplicationMetadataManager metadataManager;
 
-    public LogEntryWriter(LogReplicationContext replicationContext,
+    public LogEntryWriter(LogReplicationConfigManager configManager,
                           LogReplicationMetadataManager logReplicationMetadataManager,
                           ReplicationSession replicationSession) {
-        super(replicationContext, replicationSession);
+        super(configManager, replicationSession);
         this.srcGlobalSnapshot = logReplicationMetadataManager.getLastAppliedSnapshotTimestamp();
         this.lastMsgTs = logReplicationMetadataManager.getLastProcessedLogEntryBatchTimestamp();
         this.metadataManager = logReplicationMetadataManager;
+        this.configManager = configManager;
     }
 
     /**
@@ -72,7 +75,7 @@ public class LogEntryWriter extends SinkWriter {
         // Log entry sync could have slow writes. That is, there could be a relatively long duration between last
         // snapshot/log entry sync and the current log entry sync, during which Sink side could have new tables opened.
         // So the config needs to be synced here to capture those updates.
-        replicationContext.refresh();
+        configManager.getUpdatedConfig();
 
         // Boolean value that indicate if the config should sync with registry table or not. Note that primitive boolean
         // value cannot be used here as its value needs to be changed in the lambda function below.
@@ -170,7 +173,7 @@ public class LogEntryWriter extends SinkWriter {
                                 // If stream tags exist for the current stream, it means its intended for streaming
                                 // on the Sink (receiver)
                                 txnContext.logUpdate(streamId, smrEntry,
-                                    replicationContext.getConfig().getDataStreamToTagsMap().get(streamId));
+                                    configManager.getConfig().getDataStreamToTagsMap().get(streamId));
                             }
                         }
                         txnContext.commit();
@@ -183,7 +186,7 @@ public class LogEntryWriter extends SinkWriter {
                             // an abort if concurrent updates to the registry occur. We are currently not implementing
                             // this, as (1) it incurs in additional RPC calls for all updates and (2) LR will filter out
                             // these streams on the next batch.
-                            replicationContext.refresh();
+                            configManager.getUpdatedConfig();
                             registryTableUpdated.set(false);
                         }
                     } catch (TransactionAbortedException tae) {
@@ -254,7 +257,7 @@ public class LogEntryWriter extends SinkWriter {
     public void reset(long snapshot, long ackTimestamp) {
         // Sync with registry table when LogEntryWriter is reset, which will happen when Snapshot sync is completed, and
         // when LogReplicationSinkManager is initialized and reset.
-        replicationContext.refresh();
+        configManager.getUpdatedConfig();
         srcGlobalSnapshot = snapshot;
         lastMsgTs = ackTimestamp;
     }

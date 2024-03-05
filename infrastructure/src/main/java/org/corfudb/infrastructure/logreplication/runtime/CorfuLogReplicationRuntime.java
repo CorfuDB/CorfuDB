@@ -5,7 +5,6 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
-import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
 import org.corfudb.infrastructure.logreplication.infrastructure.TopologyDescriptor;
 import org.corfudb.infrastructure.logreplication.replication.LogReplicationSourceManager;
@@ -20,6 +19,7 @@ import org.corfudb.infrastructure.logreplication.runtime.fsm.StoppedState;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.UnrecoverableState;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.VerifyingRemoteLeaderState;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.WaitingForConnectionsState;
+import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationUpgradeManager;
 
 import java.util.HashMap;
@@ -119,6 +119,11 @@ public class CorfuLogReplicationRuntime {
     public static final int DEFAULT_TIMEOUT = 5000;
 
     /**
+     * Used for checking if LR is in upgrading path
+     */
+    private final LogReplicationConfigManager replicationConfigManager;
+
+    /**
      * Current state of the FSM.
      */
     private volatile LogReplicationRuntimeState state;
@@ -145,6 +150,8 @@ public class CorfuLogReplicationRuntime {
     private final LinkedBlockingQueue<LogReplicationRuntimeEvent> eventQueue = new LinkedBlockingQueue<>();
 
     private final LogReplicationClientRouter router;
+    private final LogReplicationMetadataManager metadataManager;
+    private final LogReplicationUpgradeManager upgradeManager;
 
     @Getter
     private final LogReplicationSourceManager sourceManager;
@@ -160,13 +167,16 @@ public class CorfuLogReplicationRuntime {
     public CorfuLogReplicationRuntime(LogReplicationRuntimeParameters parameters,
                                       LogReplicationMetadataManager metadataManager,
                                       LogReplicationUpgradeManager upgradeManager,
-                                      LogReplicationContext replicationContext,
+                                      LogReplicationConfigManager replicationConfigManager,
                                       ReplicationSession replicationSession) {
         this.remoteClusterId = replicationSession.getRemoteClusterId();
+        this.metadataManager = metadataManager;
+        this.upgradeManager = upgradeManager;
         this.router = new LogReplicationClientRouter(parameters, this);
         this.router.addClient(new LogReplicationHandler());
         this.sourceManager = new LogReplicationSourceManager(parameters,
-                new LogReplicationClient(router, remoteClusterId), metadataManager, replicationContext, upgradeManager, replicationSession);
+            new LogReplicationClient(router, remoteClusterId), metadataManager, replicationConfigManager,
+            upgradeManager, replicationSession);
         this.connectedNodes = new HashSet<>();
 
         ThreadFactory threadFactory = new ThreadFactoryBuilder().setNameFormat("runtime-fsm-worker-"+remoteClusterId)
@@ -179,7 +189,9 @@ public class CorfuLogReplicationRuntime {
                 ThreadFactoryBuilder().setNameFormat(
                     "runtime-fsm-consumer-"+remoteClusterId).build());
 
-        initializeStates(metadataManager, upgradeManager);
+        this.replicationConfigManager = replicationConfigManager;
+
+        initializeStates();
         this.state = states.get(LogReplicationRuntimeStateType.WAITING_FOR_CONNECTIVITY);
 
         log.info("Log Replication Runtime State Machine initialized");
@@ -198,7 +210,7 @@ public class CorfuLogReplicationRuntime {
     /**
      * Initialize all states for the Log Replication Runtime FSM.
      */
-    private void initializeStates(LogReplicationMetadataManager metadataManager, LogReplicationUpgradeManager upgradeManager) {
+    private void initializeStates() {
         /*
          * Log Replication Runtime State instances are kept in a map to be reused in transitions, avoid creating one
          * per every transition (reduce GC cycles).
