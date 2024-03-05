@@ -6,19 +6,12 @@ import ch.qos.logback.classic.LoggerContext;
 import ch.qos.logback.core.joran.spi.JoranException;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.common.config.ConfigParamNames;
 import org.corfudb.common.config.ConfigParamsHelper;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.common.util.URLUtils.NetworkInterfaceVersion;
 import org.corfudb.infrastructure.ServerContext;
-import org.corfudb.infrastructure.logreplication.infrastructure.plugins.ILogReplicationVersionAdapter;
+import org.corfudb.infrastructure.logreplication.infrastructure.plugins.CorfuReplicationClusterManagerAdapter;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
-import org.corfudb.infrastructure.logreplication.infrastructure.utils.CorfuSaasEndpointProvider;
-import org.corfudb.infrastructure.logreplication.utils.LogReplicationUpgradeManager;
-import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.collections.CorfuStore;
-import org.corfudb.runtime.collections.TxnContext;
-import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.GitRepositoryState;
 import org.docopt.Docopt;
@@ -30,11 +23,8 @@ import java.net.URLClassLoader;
 import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.CompletableFuture;
 
-import static org.corfudb.common.util.URLUtils.getHostFromEndpointURL;
-import static org.corfudb.common.util.URLUtils.getVersionFormattedEndpointURL;
-import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 import static org.corfudb.util.NetworkUtils.getAddressFromInterfaceName;
 
 /**
@@ -45,10 +35,6 @@ import static org.corfudb.util.NetworkUtils.getAddressFromInterfaceName;
  */
 @Slf4j
 public class CorfuInterClusterReplicationServer implements Runnable {
-
-    private static final int SYSTEM_EXIT_ERROR_CODE = -3;
-
-    private static final long DEFAULT_UPGRADE_CHECK_DELAY_MS = 5000;
 
     /**
      * This string defines the command line arguments,
@@ -80,9 +66,8 @@ public class CorfuInterClusterReplicationServer implements Runnable {
                     + "[-k <seqcache>] [-T <threads>] [-B <size>] [-i <channel-implementation>] "
                     + "[-H <seconds>] [-I <cluster-id>] [-x <ciphers>] [-z <tls-protocols>]] "
                     + "[--disable-cert-expiry-check-file=<file_path>]"
-                    + "[--metrics] [--corfu-port-for-lr=<corfu-port-for-lr>]"
-                    + "[-P <prefix>] [-R <retention>] [--runtime-max-uncompressed-size=<runtime-max-uncompressed-size>]"
-                    + "<port>\n"
+                    + "[--metrics]"
+                    + "[-P <prefix>] [-R <retention>] <port>\n"
                     + "\n"
                     + "Options:\n"
                     + " -l <path>, --log-path=<path>                                             "
@@ -201,24 +186,25 @@ public class CorfuInterClusterReplicationServer implements Runnable {
                     + "              Max size of replication data message in bytes. \n   "
                     + " --max-replication-write-size=<max-replication-write-size>"
                     + "              Max size written by the SINK in a single corfu transaction.  Integer.MAX_VALUE by default\n "
-                    + " --max-write-size=<max-write-size>"
-                    + "              Max size of a write in a single corfu transaction.  Integer.MAX_VALUE by default\n "
-                    + "--corfu-port-for-lr=<corfu-port-for-lr>                                   "
-                    + "              Port on which Log Replicator can connect to Corfu Server [default: 9000].\n"
                     + "                                                                          "
                     + " --lock-lease=<lease-duration>                                            "
                     + "              Lock lease duration in seconds\n                            "
                     + " --max-snapshot-entries-applied=<max-snapshot-entries-applied>            "
                     + "              Max number of entries applied in a snapshot transaction.  50 by default."
                     + "              For special tables only\n.                                  "
-                    + " --runtime-max-uncompressed-size=<runtime-max-uncompressed-size>          "
-                    + "              Max uncompressed size of a transaction written by LR's runtime.  Except "
-                    + "              special cases(unforeseen bugs or customer issues), it must be the same as "
-                    + "              CorfuRuntime.MAX_UNCOMPRESSED_WRITE_SIZE\n.                 "
                     + " -h, --help                                                               "
                     + "              Show this screen\n"
                     + " --version                                                                "
                     + "              Show version\n";
+
+    // Active Corfu Server Node.
+    private volatile CorfuInterClusterReplicationServerNode activeServer;
+
+    // Flag if set to true - causes the Corfu Server to shutdown.
+    private volatile boolean shutdownServer = false;
+
+    // If set to true - triggers a reset of the server by wiping off all the data.
+    private volatile boolean cleanupServer = false;
 
     // Error code required to detect an ungraceful shutdown.
     private static final int EXIT_ERROR_CODE = 100;
@@ -231,14 +217,18 @@ public class CorfuInterClusterReplicationServer implements Runnable {
     private static final String ADDRESS_PARAM = "--address";
     private static final String NETWORK_INTERFACE_VERSION_PARAM = "--network-interface-version";
 
+
+    // Getter for testing
+    @Getter
+    private CorfuReplicationClusterManagerAdapter clusterManagerAdapter;
+
     @Getter
     private CorfuReplicationDiscoveryService replicationDiscoveryService;
 
     private final String[] args;
 
     public static void main(String[] args) {
-        CorfuInterClusterReplicationServer corfuReplicationServer =
-            new CorfuInterClusterReplicationServer(args);
+        CorfuInterClusterReplicationServer corfuReplicationServer = new CorfuInterClusterReplicationServer(args);
         corfuReplicationServer.run();
     }
 
@@ -276,12 +266,34 @@ public class CorfuInterClusterReplicationServer implements Runnable {
         shutdownThread.setName("ShutdownThread");
         Runtime.getRuntime().addShutdownHook(shutdownThread);
 
-        try {
-            startDiscoveryService(serverContext);
-        } catch (Throwable th) {
-            log.error("Corfu Replication Service exiting due to unrecoverable error: ", th);
-            System.exit(EXIT_ERROR_CODE);
+        // Manages the lifecycle of the Corfu Log Replication Server.
+        while (!shutdownServer) {
+            try {
+                CompletableFuture<CorfuInterClusterReplicationServerNode> discoveryServiceCallback = startDiscoveryService(serverContext);
+
+                log.info("Wait for Discovery Service to provide a view of the topology...");
+
+                // Block until the replication context is provided by the Discovery service
+                activeServer = discoveryServiceCallback.get();
+
+                log.info("Discovery Service completed. Start Log Replication Service...");
+
+                activeServer.startAndListen();
+            } catch (Throwable th) {
+                log.error("CorfuServer: Server exiting due to unrecoverable error: ", th);
+                System.exit(EXIT_ERROR_CODE);
+            }
+
+            if (cleanupServer) {
+                cleanupServer = false;
+            }
+
+            if (!shutdownServer) {
+                log.info("main: Server restarting.");
+            }
         }
+
+        log.info("main: Server exiting due to shutdown");
         flushAsyncLogAppender();
     }
 
@@ -320,100 +332,28 @@ public class CorfuInterClusterReplicationServer implements Runnable {
     }
 
     /**
-     * Start Corfu Log Replication Discovery Service after the local node version matches the cluster version, i.e.,
-     * any ongoing rolling upgrade completes.
+     * Start Corfu Log Replication Discovery Service
      *
      * @param serverContext server context (server information)
+     * @return completable future for discovered topology
      */
-    private void startDiscoveryService(ServerContext serverContext) {
+    private CompletableFuture<CorfuInterClusterReplicationServerNode> startDiscoveryService(ServerContext serverContext) {
 
-        ILogReplicationVersionAdapter versionPlugin = initVersionPlugin(serverContext.getPluginConfigFilePath());
-        CorfuSaasEndpointProvider.init(serverContext.getPluginConfigFilePath(), versionPlugin.isSaasDeployment());
-
-        CorfuRuntime runtime = getRuntime(serverContext);
-        CorfuStore corfuStore = new CorfuStore(runtime);
-
-        LogReplicationUpgradeManager upgradeManager =
-                new LogReplicationUpgradeManager(corfuStore, versionPlugin);
-
-        // Check if an upgrade is in progress.  If it is, wait for it to complete
-        log.info("Wait for any ongoing rolling upgrade to complete.");
-
-        while(isUpgradeInProgress(upgradeManager, corfuStore)) {
-            // Wait before checking again.
-            sleep();
-        }
-
-        // Upgrade has completed.  Start the discovery Service
         log.info("Start Discovery Service.");
+        CompletableFuture<CorfuInterClusterReplicationServerNode> discoveryServiceCallback = new CompletableFuture<>();
+
+        this.clusterManagerAdapter = buildClusterManagerAdapter(serverContext.getPluginConfigFilePath());
 
         // Start LogReplicationDiscovery Service, responsible for
         // acquiring lock, retrieving Site Manager Info and processing this info
         // so this node is initialized as Source (sender) or Sink (receiver)
-        replicationDiscoveryService = new CorfuReplicationDiscoveryService(serverContext, runtime);
-        replicationDiscoveryService.start();
-    }
+        replicationDiscoveryService = new CorfuReplicationDiscoveryService(serverContext,
+                clusterManagerAdapter, discoveryServiceCallback);
 
-    private ILogReplicationVersionAdapter initVersionPlugin(String pluginConfigFilePath) {
-        log.info("Version plugin :: {}", pluginConfigFilePath);
-        LogReplicationPluginConfig config = new LogReplicationPluginConfig(pluginConfigFilePath);
-        File jar = new File(config.getStreamFetcherPluginJARPath());
-        try (URLClassLoader child = new URLClassLoader(new URL[]{jar.toURI().toURL()}, this.getClass().getClassLoader())) {
-            Class plugin = Class.forName(config.getStreamFetcherClassCanonicalName(), true, child);
-            return (ILogReplicationVersionAdapter)
-                    plugin.getDeclaredConstructor().newInstance();
-        } catch (Exception e) {
-            log.error("Fatal error: Failed to get Log Replicator Version Plugin", e);
-            throw new UnrecoverableCorfuError(e);
-        }
-    }
+        Thread replicationDiscoveryThread = new Thread(replicationDiscoveryService, "discovery-service");
+        replicationDiscoveryThread.start();
 
-    private CorfuRuntime getRuntime(ServerContext serverContext) {
-
-        String localCorfuEndpoint = CorfuSaasEndpointProvider.getCorfuSaasEndpoint()
-                .orElseGet(() ->getCorfuEndpoint(getHostFromEndpointURL(serverContext.getLocalEndpoint()),
-            serverContext.getCorfuServerConnectionPort()));
-        return CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder()
-            .trustStore((String) serverContext.getServerConfig().get(ConfigParamNames.TRUST_STORE))
-            .tsPasswordFile((String) serverContext.getServerConfig().get(ConfigParamNames.TRUST_STORE_PASS_FILE))
-            .keyStore((String) serverContext.getServerConfig().get(ConfigParamNames.KEY_STORE))
-            .ksPasswordFile((String) serverContext.getServerConfig().get(ConfigParamNames.KEY_STORE_PASS_FILE))
-            .tlsEnabled((Boolean) serverContext.getServerConfig().get("--enable-tls"))
-            .systemDownHandler(() -> System.exit(SYSTEM_EXIT_ERROR_CODE))
-            .maxCacheEntries(serverContext.getLogReplicationCacheMaxSize()/2)
-            .maxUncompressedWriteSize(serverContext.getMaxUncompressedTxSize())
-            .build())
-            .parseConfigurationString(localCorfuEndpoint).connect();
-    }
-
-    private String getCorfuEndpoint(String localHostAddress, int port) {
-        return getVersionFormattedEndpointURL(localHostAddress, port);
-    }
-
-    private boolean isUpgradeInProgress(LogReplicationUpgradeManager upgradeManager, CorfuStore corfuStore) {
-        boolean isUpgraded = true;
-        try (TxnContext txnContext = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            isUpgraded = upgradeManager.getLrRollingUpgradeHandler()
-                    .isLRUpgradeInProgress(txnContext);
-            txnContext.commit();
-        } catch (TransactionAbortedException e) {
-            // TODO V2: This exception needs to be caught to handle concurrent writes to the Replication Event table
-            //  from multiple nodes.  The retry should be done in LRRollingUpgradeHandler where the event is
-            //  written.  It is not currently possible because the transaction is committed outside
-            //  LRRollingUpgradeHandler.  When the new wrapper for isLRUpgradeInProgress() without TxnContext is
-            //  available, this try-catch block should be moved there.
-            log.warn("TX Abort when writing to the Replication Event Table.  The table was already updated by another" +
-                    " node.", e);
-        }
-        return isUpgraded;
-    }
-
-    private void sleep() {
-        try {
-            TimeUnit.MILLISECONDS.sleep(DEFAULT_UPGRADE_CHECK_DELAY_MS);
-        } catch (InterruptedException e) {
-            log.debug("Sleep Interrupted", e);
-        }
+        return discoveryServiceCallback;
     }
 
     /**
@@ -435,8 +375,8 @@ public class CorfuInterClusterReplicationServer implements Runnable {
             try {
                 LoggerContext context = (LoggerContext) LoggerFactory.getILoggerFactory();
                 Optional.ofNullable(context.exists(DEFAULT_METRICS_LOGGER_NAME))
-                    .ifPresent(logger -> MeterRegistryProvider.MeterRegistryInitializer.initServerMetrics(logger,
-                        DEFAULT_METRICS_LOGGING_INTERVAL_DURATION, localEndpoint));
+                        .ifPresent(logger -> MeterRegistryProvider.MeterRegistryInitializer.initServerMetrics(logger,
+                                DEFAULT_METRICS_LOGGING_INTERVAL_DURATION, localEndpoint));
             } catch (IllegalStateException ise) {
                 log.warn("Registry has been previously initialized. Skipping.");
             }
@@ -448,7 +388,10 @@ public class CorfuInterClusterReplicationServer implements Runnable {
      */
     public void cleanShutdown() {
         log.info("CleanShutdown: Starting Cleanup.");
-
+        shutdownServer = true;
+        if (activeServer != null) {
+            activeServer.close();
+        }
         if (replicationDiscoveryService != null) {
             replicationDiscoveryService.shutdown();
         }
@@ -503,5 +446,24 @@ public class CorfuInterClusterReplicationServer implements Runnable {
         println("Serving on port " + port);
         println("------------------------------------");
         println("");
+    }
+
+    /**
+     * Retrieve Cluster Manager Adapter, i.e., the adapter to external provider of the topology.
+     *
+     * @return cluster manager adapter instance
+     */
+    private CorfuReplicationClusterManagerAdapter buildClusterManagerAdapter(String pluginConfigFilePath) {
+
+        LogReplicationPluginConfig config = new LogReplicationPluginConfig(pluginConfigFilePath);
+        File jar = new File(config.getTopologyManagerAdapterJARPath());
+
+        try (URLClassLoader child = new URLClassLoader(new URL[]{jar.toURI().toURL()}, this.getClass().getClassLoader())) {
+            Class adapter = Class.forName(config.getTopologyManagerAdapterName(), true, child);
+            return (CorfuReplicationClusterManagerAdapter) adapter.getDeclaredConstructor().newInstance();
+        } catch (Exception e) {
+            log.error("Fatal error: Failed to create serverAdapter", e);
+            throw new UnrecoverableCorfuError(e);
+        }
     }
 }

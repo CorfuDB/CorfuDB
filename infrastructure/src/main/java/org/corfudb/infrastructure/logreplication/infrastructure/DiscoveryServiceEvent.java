@@ -1,7 +1,7 @@
 package org.corfudb.infrastructure.logreplication.infrastructure;
 
 import lombok.Getter;
-import org.corfudb.runtime.LogReplication.LogReplicationSession;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.TopologyConfigurationMsg;
 
 import java.util.UUID;
 
@@ -10,9 +10,9 @@ public class DiscoveryServiceEvent {
 
     private final DiscoveryServiceEventType type;
 
-    private TopologyDescriptor topologyConfig = null;
+    private TopologyConfigurationMsg topologyConfig = null;
 
-    private LogReplicationSession session;
+    private ClusterDescriptor remoteClusterInfo;
 
     private UUID eventId = null;
 
@@ -20,14 +20,18 @@ public class DiscoveryServiceEvent {
        this.type = type;
     }
 
-    public DiscoveryServiceEvent(DiscoveryServiceEventType type, TopologyDescriptor topologyConfig) {
+    public DiscoveryServiceEvent(DiscoveryServiceEventType type, String clusterId) {
         this.type = type;
-        this.topologyConfig = topologyConfig;
+        this.remoteClusterInfo = new ClusterDescriptor(clusterId);
     }
 
-    public DiscoveryServiceEvent(DiscoveryServiceEventType type, LogReplicationSession session, String eventId) {
+    public DiscoveryServiceEvent(DiscoveryServiceEventType type, TopologyConfigurationMsg topologyConfigMsg) {
         this.type = type;
-        this.session = session;
+        this.topologyConfig = topologyConfigMsg;
+    }
+
+    public DiscoveryServiceEvent(DiscoveryServiceEventType type, String clusterId, String eventId) {
+        this(type, clusterId);
         this.eventId = UUID.fromString(eventId);
     }
 
