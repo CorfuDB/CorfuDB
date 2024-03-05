@@ -407,8 +407,7 @@ public class CorfuStoreIT extends AbstractIT {
      * @throws IOException during Corfu Server startup or Table open
      */
     @Test
-    @Ignore("Failing after JDK-11")
-    // TODO(Chetan): fix this.
+    @Ignore("Failing after JDK-11, this test will be fixed in future patches.")
     public void concurrentExecuteQueryDiskBacked() throws Exception {
         final String namespace = "test-namespace";
         final String tableName = "test-table";
