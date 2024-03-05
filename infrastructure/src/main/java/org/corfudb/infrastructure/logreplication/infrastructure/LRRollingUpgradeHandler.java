@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure.logreplication.infrastructure;
 
+import com.google.protobuf.Any;
 import com.google.protobuf.Message;
 import com.google.protobuf.Timestamp;
 import lombok.extern.slf4j.Slf4j;
@@ -9,17 +10,21 @@ import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicat
 import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplicationUtils;
 import org.corfudb.runtime.collections.CorfuStore;
+import org.corfudb.runtime.collections.CorfuStoreEntry;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.NAMESPACE;
 import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.REPLICATION_EVENT_TABLE_NAME;
 import static org.corfudb.infrastructure.logreplication.utils.LogReplicationUpgradeManager.LOG_REPLICATION_PLUGIN_VERSION_TABLE;
+import static org.corfudb.runtime.LogReplicationUtils.REPLICATION_STATUS_TABLE_NAME;
 
 /**
  * Rolling upgrade handling means cluster must function in a mode where not all
@@ -115,8 +120,27 @@ public class LRRollingUpgradeHandler {
         } // else implies cluster upgrade has completed
 
         log.info("LRRollingUpgrade upgrade completed to version {}", nodeVersion);
+        // Since this path is traversed during startup, check if the migration was previously completed.
+        // To do so, check the type of record in the event/status table. If either of them have records where key of
+        // LogReplicationSession type then its an indication that migration was completed.
+        if (isDataMigrationComplete(txnContext.keySet(REPLICATION_EVENT_TABLE_NAME)) ||
+                isDataMigrationComplete(txnContext.keySet(REPLICATION_STATUS_TABLE_NAME))) {
+            isClusterAllAtV2 = true;
+            return false;
+        }
         migrateData(txnContext);
         isClusterAllAtV2 = true;
+        return false;
+    }
+
+    private boolean isDataMigrationComplete(Set<Message> keySet) {
+        for(Object key : keySet) {
+            if (key instanceof LogReplication.LogReplicationSession || key instanceof LogReplicationMetadata.ReplicationEventInfoKey) {
+                log.info("Data migration for LR V2 has already been completed.");
+                return true;
+            }
+            break;
+        }
         return false;
     }
 
@@ -129,6 +153,10 @@ public class LRRollingUpgradeHandler {
      * @param txnContext All of the above must execute in the same transaction passed in.
      */
     public void migrateData(TxnContext txnContext) {
+//        if(LogReplicationMetadataManager.isMigrationComplete(txnContext)) {
+//            log.info("Data migration for LR V2 has already been completed.");
+//            return;
+//        }
         // Currently only the LogReplicationMetadataManager needs data-migration
         LogReplicationMetadataManager.migrateData(txnContext);
         addSnapshotSyncEventOnUpgradeCompletion(txnContext);

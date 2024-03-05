@@ -165,6 +165,11 @@ public class LogReplicationMetadataManager {
                 .addTypeToClassMap(LogReplicationMetadata.ReplicationEventKey.getDefaultInstance());
     }
 
+    public static boolean isMigrationComplete(TxnContext txnContext) {
+        Table<?,?,?> table = txnContext.getTable(LogReplicationUtils.REPLICATION_STATUS_TABLE_NAME);
+        return table.getKeyClass().getSimpleName().equals(LogReplicationSession.class.getSimpleName());
+    }
+
     public static void migrateData(TxnContext txnContext) {
         txnContext.clear(txnContext.getTable(LogReplicationUtils.REPLICATION_STATUS_TABLE_NAME));
         txnContext.clear(txnContext.getTable(REPLICATION_EVENT_TABLE_NAME));
@@ -962,6 +967,7 @@ public class LogReplicationMetadataManager {
         if(replicationContext.getIsLeader().get()) {
             txn.delete(statusTable, session);
             txn.delete(metadataTable, session);
+            log.debug("Removed session {}", session);
         }
     }
 
