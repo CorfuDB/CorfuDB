@@ -52,6 +52,7 @@ import org.corfudb.infrastructure.logreplication.replication.send.logreader.Snap
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.LogEntryReader;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.StreamsSnapshotReader;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
+import org.corfudb.infrastructure.logreplication.utils.LogReplicationUpgradeManager;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
@@ -851,6 +852,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         LogEntryReader logEntryReader = new TestLogEntryReader();
 
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(runtime, LOCAL_SOURCE_CLUSTER_ID);
+        LogReplicationUpgradeManager upgradeManager = new LogReplicationUpgradeManager(runtime, pluginConfigFilePath);
         LogReplicationSession session = DefaultClusterConfig.getSessions().get(0);
         configManager.generateConfig(Collections.singleton(session));
 
@@ -895,7 +897,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
 
         ackReader = new LogReplicationAckReader(metadataManager, runtime, DEFAULT_SESSION, context);
         fsm = new LogReplicationFSM(runtime, snapshotReader, dataSender, logEntryReader,
-                new DefaultReadProcessor(runtime),
+                new DefaultReadProcessor(runtime), upgradeManager,
                 Executors.newSingleThreadExecutor(new ThreadFactoryBuilder().setNameFormat("fsm-worker").build()),
                 ackReader, DEFAULT_SESSION, context);
         ackReader.setLogEntryReader(fsm.getLogEntryReader());

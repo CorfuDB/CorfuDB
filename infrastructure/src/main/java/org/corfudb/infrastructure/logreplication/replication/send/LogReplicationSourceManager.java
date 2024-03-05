@@ -8,6 +8,7 @@ import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.DataSender;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.infrastructure.logreplication.transport.IClientServerRouter;
+import org.corfudb.infrastructure.logreplication.utils.LogReplicationUpgradeManager;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent;
@@ -64,14 +65,16 @@ public class LogReplicationSourceManager {
      */
     public LogReplicationSourceManager(LogReplicationRuntimeParameters params, IClientServerRouter router,
                                        LogReplicationMetadataManager metadataManager,
+                                       LogReplicationUpgradeManager upgradeManager,
                                        LogReplicationSession session, LogReplicationContext replicationContext) {
-        this(params, metadataManager, new CorfuDataSender(router, session), session, replicationContext);
+        this(params, metadataManager, new CorfuDataSender(router, session), upgradeManager, session, replicationContext);
     }
 
     @VisibleForTesting
     public LogReplicationSourceManager(LogReplicationRuntimeParameters params,
                                        LogReplicationMetadataManager metadataManager, DataSender dataSender,
-                                       LogReplicationSession session, LogReplicationContext replicationContext) {
+                                       LogReplicationUpgradeManager upgradeManager, LogReplicationSession session,
+                                       LogReplicationContext replicationContext) {
 
         // This runtime is used exclusively for the snapshot and log entry reader which do not require a cache
         // as these are one time operations.
@@ -104,7 +107,7 @@ public class LogReplicationSourceManager {
         // Ack Reader for Snapshot and LogEntry Sync
         this.ackReader = new LogReplicationAckReader(this.metadataManager, runtime, session, replicationContext);
 
-        this.logReplicationFSM = new LogReplicationFSM(this.runtime, dataSender, readProcessor,
+        this.logReplicationFSM = new LogReplicationFSM(this.runtime, upgradeManager, dataSender, readProcessor,
                 logReplicationFSMWorkers, ackReader, session, replicationContext);
         this.logReplicationFSM.setTopologyConfigId(params.getTopologyConfigId());
         this.ackReader.setLogEntryReader(this.logReplicationFSM.getLogEntryReader());
