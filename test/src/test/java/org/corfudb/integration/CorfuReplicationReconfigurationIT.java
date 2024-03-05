@@ -544,7 +544,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
             writeToActiveDifferentTypes(totalEntries, totalEntries);
 
             // Verify Delta's are replicated to standby
-            verifyStandbyData(totalEntries*2);
+            verifyStandbyData((totalEntries*2));
 
             // Confirm data has been received by standby streaming listeners (deltas generated)
             // Block until all updates are received
