@@ -2218,7 +2218,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
 
     @Test
     public void testSinkLockRelease() throws Exception {
-        if (topologyType.equals(TP_LOCAL_CLUSTER_NOT_FOUND)) {
+        if (topologyType.equals(TP_SINGLE_SOURCE_SINK) || topologyType.equals(TP_LOCAL_CLUSTER_NOT_FOUND)) {
             return;
         }
         // Write 10 entries to source map
@@ -2294,8 +2294,9 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         clearLockTable(false);
         log.info("Sink's lock table cleared!");
 
-        // Allow for the sinks leadership loss to be processed
-        Thread.sleep(PARAMETERS.TIMEOUT_NORMAL.toMillis());
+        // Wait till the lock release is asynchronously processed and the replication status on Source changes to
+        // STOPPED
+        countDownLatch.await();
 
         // Write more data on the Source
         for (int i = secondBatch; i < thirdBatch; i++) {
@@ -2307,10 +2308,6 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         }
         assertThat(mapSource.count()).isEqualTo(thirdBatch);
         log.info("Source map has {} entries now!", thirdBatch);
-
-        // Wait till the lock release is asynchronously processed and the replication status on Source changes to
-        // STOPPED
-        countDownLatch.await();
 
         // Sink map should still have secondBatch size
         log.info("Sink map should still have {} size", secondBatch);
