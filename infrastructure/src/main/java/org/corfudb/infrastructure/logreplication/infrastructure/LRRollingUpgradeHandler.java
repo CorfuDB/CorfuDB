@@ -5,9 +5,6 @@ import com.google.protobuf.Timestamp;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.ILogReplicationVersionAdapter;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
-import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
-import org.corfudb.runtime.LogReplication;
-import org.corfudb.runtime.LogReplicationUtils;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
@@ -60,22 +57,21 @@ public class LRRollingUpgradeHandler {
     private volatile boolean isClusterAllAtV2 = false;
     ILogReplicationVersionAdapter versionAdapter;
 
-    CorfuStore corfuStore;
-
     public LRRollingUpgradeHandler(ILogReplicationVersionAdapter versionAdapter, CorfuStore corfuStore) {
         this.versionAdapter = versionAdapter;
-        this.corfuStore = corfuStore;
 
-        // Handle legacy types first.
-        LogReplicationMetadataManager.addLegacyTypesToSerializer(corfuStore);
-        LogReplicationMetadataManager.tryOpenTable(corfuStore, NAMESPACE,
-                LogReplicationUtils.REPLICATION_STATUS_TABLE_NAME,
-                LogReplication.LogReplicationSession.class,
-                LogReplication.ReplicationStatus.class, null);
         // Open the event table, which is used to log the intent for triggering a forced snapshot sync upon upgrade
         // completion
-        LogReplicationMetadataManager.tryOpenTable(corfuStore, NAMESPACE, REPLICATION_EVENT_TABLE_NAME,
-                LogReplicationMetadata.ReplicationEventInfoKey.class, LogReplicationMetadata.ReplicationEvent.class, null);
+        try {
+            corfuStore.openTable(NAMESPACE, REPLICATION_EVENT_TABLE_NAME,
+                LogReplicationMetadata.ReplicationEventInfoKey.class,
+                LogReplicationMetadata.ReplicationEvent.class,
+                null,
+                TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationEvent.class));
+        } catch (Exception e) {
+            log.error("Failed to open the Event Table", e);
+            throw new IllegalStateException(e);
+        }
     }
 
     public boolean isLRUpgradeInProgress(TxnContext txnContext) {
@@ -129,8 +125,7 @@ public class LRRollingUpgradeHandler {
      * @param txnContext All of the above must execute in the same transaction passed in.
      */
     public void migrateData(TxnContext txnContext) {
-        // Currently only the LogReplicationMetadataManager needs data-migration
-        LogReplicationMetadataManager.migrateData(txnContext);
+        // Data migration to be added here.
         addSnapshotSyncEventOnUpgradeCompletion(txnContext);
     }
 

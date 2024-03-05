@@ -9,7 +9,6 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEvent;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEventInfoKey;
@@ -47,8 +46,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
@@ -100,76 +97,25 @@ public class LogReplicationMetadataManager {
         this.runtime = runtime;
         this.corfuStore = new CorfuStore(runtime);
         this.replicationContext = replicationContext;
-        this.metadataTable = (Table<LogReplicationSession, ReplicationMetadata, Message>)
-                tryOpenTable(this.corfuStore, NAMESPACE, METADATA_TABLE_NAME,
-                        LogReplicationSession.class, ReplicationMetadata.class, null);
-        this.statusTable = (Table<LogReplicationSession, ReplicationStatus, Message>)
-                tryOpenTable(this.corfuStore, NAMESPACE, LogReplicationUtils.REPLICATION_STATUS_TABLE_NAME,
-                        LogReplicationSession.class, ReplicationStatus.class, null);
-        this.replicationEventTable = (Table<ReplicationEventInfoKey, ReplicationEvent, Message>)
-                tryOpenTable(corfuStore, NAMESPACE, REPLICATION_EVENT_TABLE_NAME,
-                        ReplicationEventInfoKey.class, ReplicationEvent.class, null);
-    }
 
-    /**
-     * A generic way to try open a table and handle any exceptions encountered
-     * @param corfuStore - instance of the corfuStore
-     * @param namespace - just the namespace part of the full table name
-     * @param tableName - just the tablename part of the full table name
-     * @param keyClass - Protobuf key class that extends Message
-     * @param valueClass - Protobuf generated Value or Payload class that extends Message
-     * @param metadataClass - Protobuf generated Metadata class (can be null)
-     * @return - a generic table type.
-     */
-    public static Table tryOpenTable(CorfuStore corfuStore, String namespace, String tableName,
-                                     Class keyClass, Class valueClass, Class metadataClass) {
-        Table table = null;
         try {
-            table = corfuStore.openTable(namespace, tableName,
-                    keyClass, valueClass, metadataClass,
-                    TableOptions.fromProtoSchema(valueClass));
-        } catch (Exception ee) {
-            log.error("Caught an exception while opening "+namespace+"$"+tableName, ee);
-            throw new ReplicationWriterException(ee);
+            this.metadataTable = this.corfuStore.openTable(NAMESPACE, METADATA_TABLE_NAME,
+                    LogReplicationSession.class, ReplicationMetadata.class, null,
+                    TableOptions.fromProtoSchema(ReplicationMetadata.class));
+
+            this.statusTable = this.corfuStore.openTable(NAMESPACE, LogReplicationUtils.REPLICATION_STATUS_TABLE_NAME,
+                    LogReplicationSession.class, ReplicationStatus.class, null,
+                    TableOptions.fromProtoSchema(ReplicationStatus.class));
+
+            this.replicationEventTable = this.corfuStore.openTable(NAMESPACE, REPLICATION_EVENT_TABLE_NAME,
+                    ReplicationEventInfoKey.class,
+                    ReplicationEvent.class,
+                    null,
+                    TableOptions.fromProtoSchema(ReplicationEvent.class));
+        } catch (Exception e) {
+            log.error("Caught an exception while opening metadata tables", e);
+            throw new ReplicationWriterException(e);
         }
-        return table;
-    }
-
-    /**
-     * The following tables need to move from old type to new type
-     * 1. CORFU-REPLICATION-WRITER-UUID-OF-CLUSTER -> LogReplicationMetadataTable
-     * Type: Schema change AND name change
-     *    (LogReplicationMetadataKey, LogReplicationMetadataVal) ->
-     *     (LogReplicationSession, ReplicationMetadata)
-     * Action: Open the old table with old types and Clear the old table
-     *         Not used in new code. Optional as failure to clear won't cause issues.
-     *         TODO: consider scanning registry for signature and wipe out contents.
-     *
-     * 2. LogReplicationStatus
-     * Type: Schema change for key AND value types with NO table name change
-     * (ReplicationStatusKey, ReplicationStatusVal) ->
-     * (LogReplicationSession.class, ReplicationMetadata.class)
-     * Action: Make serializer aware of old types, open table with new type, clear it
-     *
-     * 3. LogReplicationEventTable
-     * Type: Schema change for Key type only
-     * (ReplicationEventKey, ReplicationEvent) ->
-     * (ReplicationEventInfoKey, ReplicationEvent)
-     * Action: Make serializer aware of old key type, open table with new type, clear it
-     * @param corfuStore - the same runtime used by LogReplicationMetadataManager
-     */
-    public static void addLegacyTypesToSerializer(CorfuStore corfuStore) {
-        corfuStore.getRuntime().getTableRegistry()
-                .addTypeToClassMap(LogReplicationMetadata.ReplicationStatusKey.getDefaultInstance());
-        corfuStore.getRuntime().getTableRegistry()
-                .addTypeToClassMap(LogReplicationMetadata.ReplicationStatusVal.getDefaultInstance());
-        corfuStore.getRuntime().getTableRegistry()
-                .addTypeToClassMap(LogReplicationMetadata.ReplicationEventKey.getDefaultInstance());
-    }
-
-    public static void migrateData(TxnContext txnContext) {
-        txnContext.clear(txnContext.getTable(LogReplicationUtils.REPLICATION_STATUS_TABLE_NAME));
-        txnContext.clear(txnContext.getTable(REPLICATION_EVENT_TABLE_NAME));
     }
 
     private void initializeMetadata(TxnContext txn, LogReplicationSession session, boolean incomingSession,
