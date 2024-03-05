@@ -345,6 +345,7 @@ public class SessionManager {
                         if (supportedModels.contains(subscriber.getModel())) {
                             LogReplicationSession session =
                                     constructSession(remoteSourceCluster.clusterId, localClusterId, subscriber);
+                            // TODO: (V2 / Chris) this is still not thread-safe, need to synchronize on sessions
                             if (!sessions.contains(session)) {
                                 sessionsToAdd.add(session);
                                 metadataManager.addSession(txn, session, topology.getTopologyConfigId(), true);
