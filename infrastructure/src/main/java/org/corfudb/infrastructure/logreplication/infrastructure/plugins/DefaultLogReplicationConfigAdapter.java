@@ -11,7 +11,7 @@ public class DefaultLogReplicationConfigAdapter implements ILogReplicationVersio
 
     private static final String latestVer = "LATEST-VERSION";
 
-    public void openVersionTable(CorfuRuntime runtime) {
+    public DefaultLogReplicationConfigAdapter(CorfuRuntime runtime) {
         if (runtime == null) {
             throw new IllegalArgumentException("Null runtime passed in");
         }
@@ -25,10 +25,5 @@ public class DefaultLogReplicationConfigAdapter implements ILogReplicationVersio
     @Override
     public String getPinnedClusterVersion(TxnContext txnContext) {
         return latestVer;
-    }
-
-    @Override
-    public boolean isSaasDeployment() {
-        return false;
     }
 }

@@ -176,6 +176,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         this.runtime = runtime;
         this.pluginConfig = new LogReplicationPluginConfig(serverContext.getPluginConfigFilePath());
         this.clusterManagerAdapter = getClusterManagerAdapter();
+        CorfuSaasEndpointProvider.init(serverContext.getPluginConfigFilePath(), clusterManagerAdapter.isSaasDeployment());
     }
 
     /**
