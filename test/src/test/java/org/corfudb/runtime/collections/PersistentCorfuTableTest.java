@@ -35,12 +35,17 @@ import org.corfudb.test.ManagedCorfuTableForTest;
 import org.corfudb.test.TestSchema.Uuid;
 import org.corfudb.util.serializer.ProtobufSerializer;
 import org.junit.Test;
+import org.junit.jupiter.api.DynamicTest;
+import org.junit.jupiter.api.TestFactory;
+import org.junit.jupiter.api.function.ThrowingConsumer;
 import org.junit.runner.RunWith;
 import org.mockito.junit.MockitoJUnitRunner;
 
 import javax.annotation.Nonnull;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -49,8 +54,10 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.LongStream;
+import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -66,7 +73,6 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.spy;
 
-@RunWith(MockitoJUnitRunner.class)
 public class PersistentCorfuTableTest extends AbstractViewTest {
 
     private static final String INTERRUPTED_ERROR_MSG = "Unexpected InterruptedException";
@@ -1348,9 +1354,9 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
         });
     }
 
-    private enum CacheSizeForTest {
+    public enum CacheSizeForTest {
         SMALL(3), MEDIUM(100), LARGE(50_000);
-        private final long size;
+        public final long size;
 
         CacheSizeForTest(long size) {
             this.size = size;
