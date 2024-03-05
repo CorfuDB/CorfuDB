@@ -341,7 +341,7 @@ public class TxnContext implements AutoCloseable {
      * Apply a Corfu SMREntry directly to a stream. This can be used for replaying the mutations
      * directly into the underlying stream bypassing the object layer entirely.
      * <p>
-     * This API is used for LR feature, as streaming is selectively required on sink (receiver)
+     * This API is used for LR feature, as streaming is selectively required on standby (receiver)
      * by means of a static configuration file.
      *
      * @param streamId    - UUID of the stream on which the logUpdate is being added to.

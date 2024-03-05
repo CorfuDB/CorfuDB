@@ -1,7 +1,5 @@
 package org.corfudb.runtime.exceptions;
 
-import lombok.Getter;
-
 /**
  * CorfuStore Streaming Exceptions are wrapped in this Exception type, so clients
  * can distinguish from streaming exceptions caused by their own processing logic
@@ -15,22 +13,11 @@ import lombok.Getter;
  */
 public class StreamingException extends RuntimeException {
 
-    public enum ExceptionCause {
-        SUBSCRIBE_ERROR,
-        TRIMMED_EXCEPTION,
-        LISTENER_SUBSCRIBED
+    public StreamingException(Throwable throwable) {
+        super(throwable);
     }
 
-    @Getter
-    private final ExceptionCause exceptionCause;
-
-    public StreamingException(Throwable throwable, ExceptionCause exceptionCause) {
-        super("StreamingException: exceptionCause=" + exceptionCause, throwable);
-        this.exceptionCause = exceptionCause;
-    }
-
-    public StreamingException(String message, ExceptionCause exceptionCause) {
-        super("StreamingException: exceptionCause=" + exceptionCause + "\nmessage=" + message);
-        this.exceptionCause = exceptionCause;
+    public StreamingException(String message) {
+        super(message);
     }
 }

@@ -3,17 +3,12 @@ syntax = "proto3";
 package org.corfudb.infrastructure.logreplication.proto;
 
 import "corfu_options.proto";
-import "rpc_common.proto";
 import "google/protobuf/timestamp.proto";
-import "service/log_replication.proto";
 
-/* Note: v1 definitions are kept for compatibility and rolling upgrade purposes */
-
-/*------- Log Replication Metadata Table V1 Schema ----------*/
 /**
  * This is used by replication metadata table in corfu store.
  * The metadata table has the following key-value pairs defined both as strings:
- * One example to show the sink is at log entry sync state:
+ * One example to show the standby is at log entry sync state:
  * "topologyConfigId": "0"
  * "version": "release-1.0"
  * "lastSnapshotStarted": "100"
@@ -35,40 +30,29 @@ message LogReplicationMetadataVal {
   string val = 1;
 }
 
-/*--------END---------*/
+/*
+ * Replication Status Key
+ */
+ message ReplicationStatusKey {
+   string clusterId = 1;
+ }
 
-/*------- Log Replication Metadata Table V2 Schema ----------*/
+/*
+ * Replication Status Value
+ * Active Site sets the completionPercent, Standby sets the dataConsistent boolean
+ */
+message ReplicationStatusVal {
+  option (org.corfudb.runtime.table_schema).stream_tag = "lr_status";
 
-message ReplicationMetadata {
-  uint64 topologyConfigId = 1;
-  string version = 2;
-  int64 lastSnapshotStarted = 3;
-  int64 lastSnapshotTransferredSeqNumber = 4;
-  int64 lastSnapshotTransferred = 5;
-  int64 lastSnapshotApplied = 6;
-  int64 lastLogEntryApplied = 7;
-  org.corfudb.runtime.UuidMsg currentSnapshotCycleId = 8;
-  int64 currentCycleMinShadowStreamTs = 9;
-  SyncType snapshotSyncType = 10;
-  int64 snapshotSyncCompleteTime = 11;
-  int64 lastLogEntryBatchProcessed = 12;
-}
-
-/*--------END---------*/
-
-/*-------- Replication Status Table V1------*/
-enum SyncType {
-  SNAPSHOT = 0;
-  LOG_ENTRY = 1;
-}
-
-enum SyncStatus {
-  ONGOING = 0;
-  COMPLETED = 1;
-  ERROR = 2;
-  NOT_STARTED = 3;
-  STOPPED = 4;
-  UNAVAILABLE = 5;
+  uint64 remainingEntriesToSend = 1;
+  bool dataConsistent = 2;
+  enum SyncType {
+    SNAPSHOT = 0;
+    LOG_ENTRY = 1;
+  }
+  SyncType syncType = 3;
+  SyncStatus status = 4;
+  SnapshotSyncInfo snapshotSyncInfo = 5;
 }
 
 /*
@@ -92,36 +76,24 @@ message SnapshotSyncInfo {
 }
 
 /*
- * Replication Status Key
+ * SyncStatus
+ *
+ * COMPLETED:   Used in SnapshotSyncInfo only for the latest snapshot sync
+ * ERROR:       Log Replication is unrecoverable, need to restart
+ * NOT_STARTED: Log Replication might be in the very beginning state
+ * STOPPED:     Log Replication is in initialized state
  */
-message ReplicationStatusKey {
-  string clusterId = 1;
+enum SyncStatus {
+  ONGOING = 0;
+  COMPLETED = 1;
+  ERROR = 2;
+  NOT_STARTED = 3;
+  STOPPED = 4;
+  UNAVAILABLE = 5;
 }
 
-/*
- * Replication Status Value
- * Source Site sets the completionPercent, Sink sets the dataConsistent boolean
- */
-message ReplicationStatusVal {
-  option (org.corfudb.runtime.table_schema).stream_tag = "lr_status";
-
-  uint64 remainingEntriesToSend = 1; // Set only by Source
-  bool dataConsistent = 2; // Set only by Sink
-  SyncType syncType = 3;
-  SyncStatus status = 4;
-  SnapshotSyncInfo snapshotSyncInfo = 5;
-}
-
-/*------- Log Replication Event Table Schema ----------*/
-
-/*----------  Key Schema V1 ------------*/
 message ReplicationEventKey {
   string key = 1;
-}
-
-/*------- Key Schema V2 ----------*/
-message ReplicationEventInfoKey {
-  org.corfudb.runtime.LogReplicationSession session = 1;
 }
 
 message ReplicationEvent {
@@ -129,10 +101,15 @@ message ReplicationEvent {
 
   enum ReplicationEventType {
     FORCE_SNAPSHOT_SYNC = 0;
-    UPGRADE_COMPLETION_FORCE_SNAPSHOT_SYNC = 1; // Intent to queue force sync for all sessions
   }
   string clusterId = 1;
   string eventId = 2;
   ReplicationEventType type = 3;
-  google.protobuf.Timestamp eventTimestamp = 4;
+}
+
+enum ReplicationModel {
+  FULL_TABLE = 0;                 // Full table replication (Single Source to Single Sink = 1:1)
+  ROUTING_QUEUES = 1;             // Routing queue replication (used for entry-level replication) (1:1)
+  LOGICAL_GROUPS = 2;             // Table association to logical group (1:1)
+  MULTI_SOURCE_MERGE = 3;         // Same table replication from multiple sources to single sink (n:1)
 }
