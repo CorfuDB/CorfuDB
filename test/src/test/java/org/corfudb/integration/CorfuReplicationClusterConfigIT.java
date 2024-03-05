@@ -3,9 +3,9 @@ package org.corfudb.integration;
 import com.google.common.reflect.TypeToken;
 import com.google.protobuf.Message;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.logreplication.infrastructure.SessionManager;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager;
-import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.runtime.LogReplication.ReplicationStatus;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
 import org.corfudb.infrastructure.logreplication.proto.Sample.IntValue;
@@ -105,12 +105,9 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
     private Process sinkCorfuServer = null;
     private Process sourceReplicationServer = null;
     private Process sinkReplicationServer = null;
-    private Process backupCorfu = null;
-    private Process backupReplicationServer = null;
 
     private CorfuRuntime sourceRuntime;
     private CorfuRuntime sinkRuntime;
-    private CorfuRuntime backupRuntime;
     private Table<StringKey, IntValue, Metadata> mapSource;
     private Table<StringKey, IntValue, Metadata> mapSink;
 
@@ -245,33 +242,15 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
             sinkRuntime.shutdown();
         }
 
-        if (backupRuntime != null) {
-            backupRuntime.shutdown();
-        }
+        shutdownCorfuServer(sourceCorfuServer);
+        shutdownCorfuServer(sinkCorfuServer);
 
-        if (sourceCorfuServer != null) {
-            shutdownCorfuServer(sourceCorfuServer);
+        // skipping test
+        if (sourceReplicationServer == null) {
+            return;
         }
-
-        if (sinkCorfuServer != null) {
-            shutdownCorfuServer(sinkCorfuServer);
-        }
-
-        if (sourceReplicationServer != null) {
-            shutdownCorfuServer(sourceReplicationServer);
-        }
-
-        if (sinkReplicationServer != null) {
-            shutdownCorfuServer(sinkReplicationServer);
-        }
-
-        if (backupCorfu != null) {
-            shutdownCorfuServer(backupCorfu);
-        }
-
-        if (backupReplicationServer != null) {
-            shutdownCorfuServer(backupReplicationServer);
-        }
+        shutdownCorfuServer(sourceReplicationServer);
+        shutdownCorfuServer(sinkReplicationServer);
     }
 
     /**
@@ -289,6 +268,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
     @Test
     public void testNewConfigWithSwitchRole() throws Exception {
         if(topologyType.equals(TP_SINGLE_SOURCE_SINK_REV_CONNECTION)) {
+            tearDown();
             return;
         }
         // Write 10 entries to source map
@@ -350,7 +330,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         LogReplicationSession sessionKey = LogReplicationSession.newBuilder()
             .setSourceClusterId(new DefaultClusterConfig().getSourceClusterIds().get(0))
             .setSinkClusterId(new DefaultClusterConfig().getSinkClusterIds().get(0))
-            .setSubscriber(LogReplicationConfigManager.getDefaultSubscriber())
+            .setSubscriber(SessionManager.getDefaultSubscriber())
             .build();
 
         ReplicationStatus replicationStatus;
@@ -405,7 +385,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         sessionKey = LogReplicationSession.newBuilder()
             .setSourceClusterId(new DefaultClusterConfig().getSinkClusterIds().get(0))
             .setSinkClusterId(new DefaultClusterConfig().getSourceClusterIds().get(0))
-            .setSubscriber(LogReplicationConfigManager.getDefaultSubscriber())
+            .setSubscriber(SessionManager.getDefaultSubscriber())
             .build();
 
         try (TxnContext txn = sinkCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
@@ -425,15 +405,6 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
             replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus(),
             replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getCompletedTime());
 
-        // Wait until data is fully replicated again
-        waitForReplication(size -> size == thirdBatch, mapSource, thirdBatch);
-        log.info("Data is fully replicated again after role switch, both maps have size {}. " +
-                        "Current source corfu[{}] log tail is {}, sink corfu[{}] log tail is {}",
-                thirdBatch, sourceClusterCorfuPort, sourceRuntime.getAddressSpaceView().getLogTail(),
-                sinkClusterCorfuPort, sinkRuntime.getAddressSpaceView().getLogTail());
-
-        TimeUnit.SECONDS.sleep(shortInterval);
-
         assertThat(replicationStatus.getSourceStatus().getReplicationInfo().getSyncType())
                 .isEqualTo(SyncType.LOG_ENTRY);
         assertThat(replicationStatus.getSourceStatus().getReplicationInfo().getStatus())
@@ -444,6 +415,15 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         assertThat(replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus())
                 .isEqualTo(SyncStatus.COMPLETED);
 
+        // Wait until data is fully replicated again
+        waitForReplication(size -> size == thirdBatch, mapSource, thirdBatch);
+        log.info("Data is fully replicated again after role switch, both maps have size {}. " +
+                        "Current source corfu[{}] log tail is {}, sink corfu[{}] log tail is {}",
+                thirdBatch, sourceClusterCorfuPort, sourceRuntime.getAddressSpaceView().getLogTail(),
+                sinkClusterCorfuPort, sinkRuntime.getAddressSpaceView().getLogTail());
+
+        // Double check after 10 seconds
+        TimeUnit.SECONDS.sleep(mediumInterval);
         assertThat(mapSource.count()).isEqualTo(thirdBatch);
         assertThat(mapSink.count()).isEqualTo(thirdBatch);
 
@@ -454,7 +434,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         }
         assertThat(configTable.count()).isOne();
 
-        // Write 5 more entries to mapSource
+        // Write 5 more entries to mapSink
         for (int i = thirdBatch; i < fourthBatch; i++) {
             try (TxnContext txn = sourceCorfuStore.txn(NAMESPACE)) {
                 txn.putRecord(mapSource, StringKey.newBuilder().setKey(String.valueOf(i)).build(),
@@ -480,7 +460,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         sessionKey = LogReplicationSession.newBuilder()
             .setSourceClusterId(new DefaultClusterConfig().getSourceClusterIds().get(0))
             .setSinkClusterId(new DefaultClusterConfig().getSinkClusterIds().get(0))
-            .setSubscriber(LogReplicationConfigManager.getDefaultSubscriber())
+            .setSubscriber(SessionManager.getDefaultSubscriber())
             .build();
 
         try (TxnContext txn = sourceCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
@@ -547,7 +527,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         LogReplicationSession sessionKey = LogReplicationSession.newBuilder()
             .setSourceClusterId(new DefaultClusterConfig().getSourceClusterIds().get(0))
             .setSinkClusterId(new DefaultClusterConfig().getSinkClusterIds().get(0))
-            .setSubscriber(LogReplicationConfigManager.getDefaultSubscriber())
+            .setSubscriber(SessionManager.getDefaultSubscriber())
             .build();
 
         ReplicationStatus replicationStatus;
@@ -608,7 +588,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         LogReplicationSession sessionKey = LogReplicationSession.newBuilder()
             .setSourceClusterId(new DefaultClusterConfig().getSourceClusterIds().get(0))
             .setSinkClusterId(new DefaultClusterConfig().getSinkClusterIds().get(0))
-            .setSubscriber(LogReplicationConfigManager.getDefaultSubscriber())
+            .setSubscriber(SessionManager.getDefaultSubscriber())
             .build();
 
         ReplicationStatus replicationStatus;
@@ -646,18 +626,12 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         sessionKey = LogReplicationSession.newBuilder()
             .setSourceClusterId(new DefaultClusterConfig().getSinkClusterIds().get(0))
             .setSinkClusterId(new DefaultClusterConfig().getSourceClusterIds().get(0))
-            .setSubscriber(LogReplicationConfigManager.getDefaultSubscriber())
+            .setSubscriber(SessionManager.getDefaultSubscriber())
             .build();
 
-        // Block until snapshot sync completes
-        replicationStatus = null;
-        while (replicationStatus == null || !replicationStatus.getSourceStatus().getReplicationInfo()
-                .getSnapshotSyncInfo().getStatus().equals(SyncStatus.COMPLETED)) {
-            try (TxnContext txn = sinkCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
-                replicationStatus = (ReplicationStatus)txn.getRecord(REPLICATION_STATUS_TABLE, sessionKey).getPayload();
-                txn.commit();
-            }
-            sleepUninterruptibly(1);
+        try (TxnContext txn = sinkCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
+            replicationStatus = (ReplicationStatus)txn.getRecord(REPLICATION_STATUS_TABLE, sessionKey).getPayload();
+            txn.commit();
         }
 
         assertThat(replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getType())
@@ -816,7 +790,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         LogReplicationSession sessionKey = LogReplicationSession.newBuilder()
             .setSourceClusterId(new DefaultClusterConfig().getSourceClusterIds().get(0))
             .setSinkClusterId(new DefaultClusterConfig().getSinkClusterIds().get(0))
-            .setSubscriber(LogReplicationConfigManager.getDefaultSubscriber())
+            .setSubscriber(SessionManager.getDefaultSubscriber())
             .build();
 
         ReplicationStatus replicationStatus;
@@ -1314,7 +1288,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         LogReplicationSession sessionKey = LogReplicationSession.newBuilder()
             .setSourceClusterId(new DefaultClusterConfig().getSourceClusterIds().get(0))
             .setSinkClusterId(new DefaultClusterConfig().getSinkClusterIds().get(0))
-            .setSubscriber(LogReplicationConfigManager.getDefaultSubscriber())
+            .setSubscriber(SessionManager.getDefaultSubscriber())
             .build();
 
         ReplicationStatus replicationStatus;
@@ -1426,7 +1400,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         LogReplicationSession sessionKey = LogReplicationSession.newBuilder()
             .setSourceClusterId(new DefaultClusterConfig().getSourceClusterIds().get(0))
             .setSinkClusterId(new DefaultClusterConfig().getSinkClusterIds().get(0))
-            .setSubscriber(LogReplicationConfigManager.getDefaultSubscriber())
+            .setSubscriber(SessionManager.getDefaultSubscriber())
             .build();
 
         ReplicationStatus replicationStatus;
@@ -1642,6 +1616,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
     @Test
     public void testSinkLockRelease() throws Exception {
         if (topologyType.equals(TP_SINGLE_SOURCE_SINK)) {
+            tearDown();
             return;
         }
         // Write 10 entries to source map
@@ -1758,13 +1733,13 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
      */
     @Test
     public void testBackupRestoreWorkflow() throws Exception {
-        backupCorfu = runServer(backupClusterCorfuPort, true);
-        backupReplicationServer = runReplicationServer(backupReplicationServerPort, grpcPluginPath);
+        Process backupCorfu = runServer(backupClusterCorfuPort, true);
+        Process backupReplicationServer = runReplicationServer(backupReplicationServerPort, grpcPluginPath);
 
         CorfuRuntime.CorfuRuntimeParameters params = CorfuRuntime.CorfuRuntimeParameters
                 .builder()
                 .build();
-        backupRuntime = CorfuRuntime.fromParameters(params);
+        CorfuRuntime backupRuntime = CorfuRuntime.fromParameters(params);
         backupRuntime.parseConfigurationString(backupCorfuEndpoint).connect();
         CorfuStore backupCorfuStore = new CorfuStore(backupRuntime);
 
@@ -1858,6 +1833,9 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
                         "is {}, sink corfu[{}] log tail is {}", firstBatch, backupClusterCorfuPort,
                 backupRuntime.getAddressSpaceView().getLogTail(), sinkClusterCorfuPort,
                 sinkRuntime.getAddressSpaceView().getLogTail());
+
+        shutdownCorfuServer(backupCorfu);
+        shutdownCorfuServer(backupReplicationServer);
     }
 
     private void waitForReplication(IntPredicate verifier, Table table, int expected) {

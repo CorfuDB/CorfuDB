@@ -1,7 +1,7 @@
 package org.corfudb.infrastructure.logreplication.infrastructure.plugins;
 
 import lombok.Getter;
-import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
+import org.corfudb.infrastructure.logreplication.infrastructure.SessionManager;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import java.util.Arrays;
 import java.util.Collections;
@@ -106,7 +106,7 @@ public final class DefaultClusterConfig {
                 sessions.add(LogReplicationSession.newBuilder()
                         .setSourceClusterId(sourceClusterId)
                         .setSinkClusterId(sinkClusterId)
-                        .setSubscriber(LogReplicationConfigManager.getDefaultSubscriber())
+                        .setSubscriber(SessionManager.getDefaultSubscriber())
                         .build());
             }
         }

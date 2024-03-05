@@ -215,7 +215,7 @@ public class StreamingTask<K extends Message, V extends Message, M extends Messa
     public void propagateError() {
         Objects.requireNonNull(error);
         if (error instanceof TrimmedException) {
-            listener.onError(new StreamingException(error, StreamingException.ExceptionCause.TRIMMED_EXCEPTION));
+            listener.onError(new StreamingException(error));
         } else {
             listener.onError(error);
         }

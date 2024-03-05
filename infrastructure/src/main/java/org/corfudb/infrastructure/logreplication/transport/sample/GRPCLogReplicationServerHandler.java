@@ -186,7 +186,7 @@ public class GRPCLogReplicationServerHandler extends LogReplicationGrpc.LogRepli
                 return;
             }
 
-            CorfuStreamObserver<ResponseMsg> observer = unaryCallStreamObserverMap.get(Pair.of(session, requestId));
+            StreamObserver<ResponseMsg> observer = unaryCallStreamObserverMap.get(Pair.of(session, requestId));
             observer.onNext(msg);
             observer.onCompleted();
 
@@ -209,7 +209,7 @@ public class GRPCLogReplicationServerHandler extends LogReplicationGrpc.LogRepli
                     return;
                 }
 
-                CorfuStreamObserver<RequestMsg> observer = reverseReplicationStreamObserverMap.get(session);
+                StreamObserver<RequestMsg> observer = reverseReplicationStreamObserverMap.get(session);
                 observer.onNext(msg);
 
             } catch(StatusRuntimeException e) {

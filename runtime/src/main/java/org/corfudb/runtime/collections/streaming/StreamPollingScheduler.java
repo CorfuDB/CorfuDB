@@ -149,8 +149,8 @@ public class StreamPollingScheduler {
             if (allTasks.containsKey(streamListener)) {
                 // Multiple subscribers subscribing to same namespace and table is allowed
                 // as long as the hashcode() and equals() method of the listeners are different.
-                throw new StreamingException("StreamingManager::subscribe: listener already registered "
-                        + streamListener, StreamingException.ExceptionCause.LISTENER_SUBSCRIBED);
+                throw new StreamingException(
+                        "StreamingManager::subscribe: listener already registered " + streamListener);
             }
             StreamingTask task = new StreamingTask(runtime, workers, namespace, streamTag, streamListener,
                     tablesOfInterest, lastAddress, bufferSize);
@@ -169,8 +169,8 @@ public class StreamPollingScheduler {
             if (allTasks.containsKey(streamListener)) {
                 // Multiple subscribers subscribing to same namespace and table is allowed
                 // as long as the hashcode() and equals() method of the listeners are different.
-                throw new StreamingException("StreamingManager::subscribe: listener already registered "
-                        + streamListener, StreamingException.ExceptionCause.LISTENER_SUBSCRIBED);
+                throw new StreamingException(
+                        "StreamingManager::subscribe: listener already registered " + streamListener);
             }
             StreamingTask task = new LRStreamingTask(runtime, workers, nsToStreamTags, nsToTables, streamListener,
                     lastAddress, bufferSize);

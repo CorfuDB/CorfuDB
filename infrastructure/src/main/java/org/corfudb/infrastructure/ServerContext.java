@@ -1,11 +1,5 @@
 package org.corfudb.infrastructure;
 
-import static org.corfudb.infrastructure.logreplication.config.LogReplicationConfig.DEFAULT_MAX_NUM_MSG_PER_BATCH;
-import static org.corfudb.infrastructure.logreplication.config.LogReplicationConfig.DEFAULT_MAX_DATA_MSG_SIZE;
-import static org.corfudb.infrastructure.logreplication.config.LogReplicationConfig.DEFAULT_MAX_CACHE_NUM_ENTRIES;
-import static org.corfudb.infrastructure.logreplication.config.LogReplicationConfig.DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED;
-import static org.corfudb.common.util.URLUtils.getVersionFormattedHostAddress;
-
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.channel.EventLoopGroup;
@@ -286,7 +280,7 @@ public class ServerContext implements AutoCloseable {
      */
     public int getLogReplicationMaxDataMessageSize() {
         String val = getServerConfig(String.class, "--max-replication-data-message-size");
-        return val == null ? DEFAULT_MAX_DATA_MSG_SIZE : Integer.parseInt(val);
+        return val == null ? MAX_DATA_MSG_SIZE_SUPPORTED : Integer.parseInt(val);
     }
 
     /**
@@ -296,7 +290,7 @@ public class ServerContext implements AutoCloseable {
      */
     public int getLogReplicationCacheMaxSize() {
         String val = getServerConfig(String.class, "--lrCacheSize");
-        return val == null ? DEFAULT_MAX_CACHE_NUM_ENTRIES : Integer.parseInt(val);
+        return val == null ? MAX_CACHE_NUM_ENTRIES : Integer.parseInt(val);
     }
 
     /**

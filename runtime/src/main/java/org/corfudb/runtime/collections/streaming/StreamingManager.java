@@ -139,7 +139,7 @@ public class StreamingManager {
             TrimmedException te = new TrimmedException(String.format("Subscription Stream[%s$tag:%s][%s] :: sync start address falls " +
                             "behind trim mark. This will incur in data loss for data in the space [%s, %s] (inclusive)",
                     namespace, streamTag, Utils.toReadableId(txnStreamId), syncAddress, streamAddressSpace.getTrimMark()));
-            throw new StreamingException(te, StreamingException.ExceptionCause.TRIMMED_EXCEPTION);
+            throw new StreamingException(te);
         }
     }
 

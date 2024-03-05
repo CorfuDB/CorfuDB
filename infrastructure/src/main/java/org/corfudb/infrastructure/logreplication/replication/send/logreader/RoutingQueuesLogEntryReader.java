@@ -3,8 +3,8 @@ package org.corfudb.infrastructure.logreplication.replication.send.logreader;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
-import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import java.util.UUID;
 
 
@@ -16,17 +16,23 @@ import java.util.UUID;
  * in the Data Queue.
  *
  */
-public class RoutingQueuesLogEntryReader extends BaseLogEntryReader {
+public class RoutingQueuesLogEntryReader extends LogEntryReader {
 
     public RoutingQueuesLogEntryReader(CorfuRuntime runtime, LogReplicationSession session,
                                        LogReplicationContext replicationContext) {
-        super(runtime, session, replicationContext);
     }
 
     @Override
     public LogReplicationEntryMsg read(UUID logEntryRequestId) throws TrimmedException {
-        // Reads from the queue corresponding to this destination.  The queue contains addresses in the main queue
-        // from where the actual data(payload) is to be read.
+        return null;
+    }
+
+    @Override
+    public void reset(long lastSentBaseSnapshotTimestamp, long lastAckedTimestamp) {
+    }
+
+    @Override
+    public StreamIteratorMetadata getCurrentProcessedEntryMetadata() {
         return null;
     }
 }
