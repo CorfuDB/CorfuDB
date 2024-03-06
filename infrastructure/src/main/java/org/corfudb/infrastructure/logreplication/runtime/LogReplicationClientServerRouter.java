@@ -472,6 +472,7 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
                     if (sessionToRemoteSourceLeaderManager.get(session).getRemoteLeaderNodeId().isPresent()) {
                         clientChannelAdapter.send(sessionToRemoteSourceLeaderManager.get(session).getRemoteLeaderNodeId().get(), response);
                     } else {
+                        log.info("Remote Leader Node not found.  Not sending ACK.");
                         sessionToRemoteSourceLeaderManager.get(session).input(
                                 new LogReplicationSinkEvent(LogReplicationSinkEvent.LogReplicationSinkEventType.REMOTE_LEADER_LOSS));
                     }
