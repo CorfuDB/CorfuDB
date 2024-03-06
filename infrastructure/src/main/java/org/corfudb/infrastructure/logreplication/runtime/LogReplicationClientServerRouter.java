@@ -562,7 +562,6 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
         try {
             if (message.getPayload().getPayloadCase().equals(CorfuMessage.RequestPayloadMsg.PayloadCase.LR_LEADERSHIP_LOSS)) {
 
-                // Leadership Loss is received as a request only if the local cluster is Sink and connection starter.
                 LogReplicationSession session = message.getHeader().getSession();
 
                 this.clientChannelAdapter.processLeadershipLoss(session);
@@ -575,10 +574,13 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
 
                 CorfuMessage.ResponseMsg responseMsg = getResponseMsg(getHeaderMsg(message.getHeader()),
                         responsePayloadMsg);
-
                 // If there is a leadership loss on the remote Source cluster, send an ACK responding to it because
                 // the old leader is waiting(blocked) on this ACK
-                clientChannelAdapter.send(message.getPayload().getLrLeadershipLoss().getNodeId(), responseMsg);
+                if (incomingSession.contains(session)) {
+                    clientChannelAdapter.send(message.getPayload().getLrLeadershipLoss().getNodeId(), responseMsg);
+                } else {
+                    sendResponse(getResponseMsg(getHeaderMsg(message.getHeader()), responsePayloadMsg));
+                }
                 return;
             }
         } catch (NullPointerException npe) {
