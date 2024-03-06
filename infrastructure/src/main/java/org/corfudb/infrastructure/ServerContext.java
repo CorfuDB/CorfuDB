@@ -49,6 +49,13 @@ import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import static org.corfudb.common.util.URLUtils.getVersionFormattedHostAddress;
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_MAX_NUM_MSG_PER_BATCH;
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED;
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_CACHE_NUM_ENTRIES;
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_DATA_MSG_SIZE_SUPPORTED;
+
+
 /**
  * Server Context:
  * <ul>

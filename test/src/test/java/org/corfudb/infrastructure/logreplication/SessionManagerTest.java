@@ -23,8 +23,8 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Set;
 
-import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Matchers.anyLong;
+import static org.mockito.Matchers.anyObject;
 
 
 public class SessionManagerTest extends AbstractViewTest {
@@ -41,7 +41,7 @@ public class SessionManagerTest extends AbstractViewTest {
         LogReplicationConfigManager configManager = Mockito.mock(LogReplicationConfigManager.class);
         Mockito.doReturn(corfuRuntime).when(configManager).getRuntime();
         Mockito.doNothing().when(msgHandler).updateTopologyConfigId(anyLong());
-        Mockito.doReturn(Mockito.mock(LogReplicationSinkManager.class)).when(msgHandler).createSinkManager(any());
+        Mockito.doReturn(Mockito.mock(LogReplicationSinkManager.class)).when(msgHandler).createSinkManager(anyObject());
 
         router = Mockito.mock(LogReplicationClientServerRouter.class);
         Mockito.doNothing().when(router).updateTopologyConfigId(anyLong());
@@ -51,9 +51,9 @@ public class SessionManagerTest extends AbstractViewTest {
 
 
         replicationManager = Mockito.mock(CorfuReplicationManager.class);
-        Mockito.doNothing().when(replicationManager).refreshRuntime(any(), any(), anyLong());
-        Mockito.doNothing().when(replicationManager).updateTopology(any());
-        Mockito.doNothing().when(replicationManager).createAndStartRuntime(any(), any(), any());
+        Mockito.doNothing().when(replicationManager).refreshRuntime(anyObject(), anyObject(), anyLong());
+        Mockito.doNothing().when(replicationManager).updateTopology(anyObject());
+        Mockito.doNothing().when(replicationManager).createAndStartRuntime(anyObject(), anyObject(), anyObject());
 
         pluginConfig = Mockito.mock(LogReplicationPluginConfig.class);
     }
@@ -108,7 +108,7 @@ public class SessionManagerTest extends AbstractViewTest {
         Assert.assertEquals(sinkClusterId, topology.getLocalClusterDescriptor().getClusterId());
         Assert.assertEquals(numSourceCluster, sessionManager.getIncomingSessions().size());
     }
-
+    
     /**
      * This test verifies that the incoming session is established using session manager.
      * It also triggers and validates the topology change scenario.
