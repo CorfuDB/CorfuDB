@@ -72,10 +72,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
 import static org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager.TP_SINGLE_SOURCE_SINK;
 import static org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager.TP_SINGLE_SOURCE_SINK_REV_CONNECTION;
-import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.METADATA_TABLE_NAME;
-import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.REPLICATION_EVENT_TABLE_NAME;
-import static org.corfudb.integration.AbstractIT.shutdownCorfuServer;
-import static org.corfudb.integration.AbstractIT.shutdownCorfuServer;
 import static org.corfudb.runtime.LogReplicationUtils.LR_STATUS_STREAM_TAG;
 import static org.corfudb.runtime.LogReplicationUtils.REPLICATION_STATUS_TABLE_NAME;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
@@ -1815,7 +1811,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
     }
 
     /**
-     * This test verifies enforceSnapshotSync API and the handling of the event.
+     * This test verifies enforceSnapshotSync API
      * <p>
      * 1. Init with corfu 9000 source and 9001 sink
      * 2. Write 10 entries to source map
@@ -1825,10 +1821,6 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
      * 6. Write 5 more entries to source map and perform an enforced full snapshot sync
      * 7. Verify a full snapshot sync is triggered
      * 8. Verify a full snapshot sync is completed and data is correctly replicated.
-     * 9. Shutdown sink and write more data
-     * 10. Bring up the sink.
-     * 11. Verify that the data was replicated and also that there was no snapshot sync.. The data should be replicated via log_entry sync.
-     * To verify this, check that the "CurrentCycleMinShadowStreamTs" has not changed since the last snapshot sync.
      */
     @Test
     public void testEnforceSnapshotSync() throws Exception {
@@ -1934,28 +1926,12 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         }
         assertThat(mapSource.count()).isEqualTo(thirdBatch);
 
-        Table<LogReplicationMetadata.ReplicationEventInfoKey, LogReplicationMetadata.ReplicationEvent, Message> eventTable =
-                sourceCorfuStore.openTable(LogReplicationMetadataManager.NAMESPACE,
-                        REPLICATION_EVENT_TABLE_NAME,
-                        LogReplicationMetadata.ReplicationEventInfoKey.class,
-                        LogReplicationMetadata.ReplicationEvent.class,
-                        null,
-                        TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationEvent.class));
-
-        assertThat(eventTable.count()).isZero();
-
         // Perform an enforce full snapshot sync
         try (TxnContext txn = sourceCorfuStore.txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
             txn.putRecord(configTable, DefaultClusterManager.OP_ENFORCE_SNAPSHOT_FULL_SYNC,
                     DefaultClusterManager.OP_ENFORCE_SNAPSHOT_FULL_SYNC, DefaultClusterManager.OP_ENFORCE_SNAPSHOT_FULL_SYNC);
             txn.commit();
         }
-
-        while(eventTable.count() == 0) {
-            //wait
-        }
-        assertThat(eventTable.count()).isOne();
-
         TimeUnit.SECONDS.sleep(mediumInterval);
 
         // Sink map should have thirdBatch size, since topology config is resumed.
@@ -1967,21 +1943,6 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
             replicationStatus = (ReplicationStatus)txn.getRecord(REPLICATION_STATUS_TABLE, sessionKey).getPayload();
             txn.commit();
         }
-
-        Table<LogReplicationSession, LogReplicationMetadata.ReplicationMetadata, Message> metadataTable =
-                sinkCorfuStore.openTable(LogReplicationMetadataManager.NAMESPACE,
-                        METADATA_TABLE_NAME,
-                        LogReplicationSession.class,
-                        LogReplicationMetadata.ReplicationMetadata.class,
-                        null,
-                        TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationMetadata.class));
-
-        LogReplicationMetadata.ReplicationMetadata metadata = null;
-        try (TxnContext txn = sinkCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
-            metadata = (LogReplicationMetadata.ReplicationMetadata) txn.getRecord(METADATA_TABLE_NAME, sessionKey).getPayload();
-            txn.commit();
-        }
-        long shadowStreamTs = metadata.getCurrentCycleMinShadowStreamTs();
 
         log.info("ReplicationStatusVal: RemainingEntriesToSend: {}, SyncType: {}, Status: {}",
                 replicationStatus.getSourceStatus().getRemainingEntriesToSend(),
@@ -2000,42 +1961,6 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
                 .isEqualTo(SnapshotSyncInfo.SnapshotSyncType.FORCED);
         assertThat(replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus())
                 .isEqualTo(SyncStatus.COMPLETED);
-
-        assertThat(eventTable.count()).isZero();
-
-        shutdownCorfuServer(sourceReplicationServer);
-
-        // Remove the force snapshot operation enqueued above from the test configTable.
-        try (TxnContext txn = sourceCorfuStore.txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
-            txn.delete(configTable, DefaultClusterManager.OP_ENFORCE_SNAPSHOT_FULL_SYNC);
-            txn.commit();
-        }
-
-        // Append to mapSource
-        for (int i = thirdBatch; i < fourthBatch; i++) {
-            try (TxnContext txn = sourceCorfuStore.txn(NAMESPACE)) {
-                txn.putRecord(mapSource, StringKey.newBuilder().setKey(String.valueOf(i)).build(),
-                        IntValue.newBuilder().setValue(i).build(), null);
-                txn.commit();
-            }
-        }
-        assertThat(mapSource.count()).isEqualTo(fourthBatch);
-
-
-        sourceReplicationServer = runReplicationServer(sourceReplicationServerPort, sourceClusterCorfuPort,
-                pluginConfigPath, transportType);
-
-        // Sink map should have thirdBatch size, since topology config is resumed.
-        waitForReplication(size -> size == fourthBatch, mapSink, fourthBatch);
-        assertThat(mapSink.count()).isEqualTo(fourthBatch);
-
-        try (TxnContext txn = sinkCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
-            metadata = (LogReplicationMetadata.ReplicationMetadata) txn.getRecord(METADATA_TABLE_NAME, sessionKey).getPayload();
-            txn.commit();
-        }
-        long oldShadowTs = shadowStreamTs;
-        // If the force snapshot sync was processed again, the CurrentCycleMinShadowStreamTs would be updated. Verify this hasn't happened.
-        assertThat(oldShadowTs).isEqualTo(metadata.getCurrentCycleMinShadowStreamTs());
     }
 
 

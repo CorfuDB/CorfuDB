@@ -260,7 +260,7 @@ public class NegotiatingState implements LogReplicationRuntimeState {
             fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.NEGOTIATION_COMPLETE,
                     new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_TRANSFER_COMPLETE,
                             new LogReplicationEventMetadata(LogReplicationEventMetadata.getNIL_UUID(), negotiationResponse.getSnapshotStart(),
-                                    negotiationResponse.getSnapshotTransferred(), false))));
+                                    negotiationResponse.getSnapshotTransferred()))));
             return;
         }
 
@@ -290,7 +290,7 @@ public class NegotiatingState implements LogReplicationRuntimeState {
                 fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.NEGOTIATION_COMPLETE,
                         new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.LOG_ENTRY_SYNC_REQUEST,
                                 new LogReplicationEventMetadata(LogReplicationEventMetadata.getNIL_UUID(), negotiationResponse.getLastLogEntryTimestamp(),
-                                        negotiationResponse.getSnapshotApplied(), false))));
+                                        negotiationResponse.getSnapshotApplied()))));
             } else {
                 // TODO: it is OK for a first phase, but this might not be efficient/accurate, as the next (+1)
                 //  might not really be the next entry (as that is a globalAddress and the +1 might not even belong to

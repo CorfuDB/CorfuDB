@@ -555,19 +555,24 @@ public class LogReplicationMetadataManager {
                                            CorfuStoreMetadata.Timestamp shadowStreamTs) {
         ReplicationMetadata metadata = queryReplicationMetadata(txn, session);
 
-        RpcCommon.UuidMsg uuidMsg = RpcCommon.UuidMsg.newBuilder()
+
+        UUID currentSnapshotCycleId = new UUID(metadata.getCurrentSnapshotCycleId().getMsb(), metadata.getCurrentSnapshotCycleId().getLsb());
+
+        // Update if current Snapshot Sync differs from the persisted one, otherwise ignore.
+        // It could have already been updated in the case that leader changed in between a snapshot sync cycle
+        if (!Objects.equals(currentSnapshotCycleId, newSnapshotCycleId)) {
+            RpcCommon.UuidMsg uuidMsg = RpcCommon.UuidMsg.newBuilder()
                 .setMsb(newSnapshotCycleId.getMostSignificantBits())
                 .setLsb(newSnapshotCycleId.getLeastSignificantBits())
                 .build();
 
-        ReplicationMetadata updatedMetadata = metadata.toBuilder()
+            ReplicationMetadata updatedMetadata = metadata.toBuilder()
                 .setCurrentCycleMinShadowStreamTs(shadowStreamTs.getSequence())
                 .setCurrentSnapshotCycleId(uuidMsg)
                 .build();
 
-        updateReplicationMetadata(txn, session, updatedMetadata);
-
-        log.debug("Shadow stream for the current sync starts from {} (inclusive)", shadowStreamTs);
+            updateReplicationMetadata(txn, session, updatedMetadata);
+        }
     }
 
     // =============================== Replication Event Table Methods ===================================
@@ -603,38 +608,6 @@ public class LogReplicationMetadataManager {
             log.error("Failed to get the replication events", e);
         }
         return events;
-    }
-
-    public CorfuStoreEntry<ReplicationEventInfoKey, ReplicationEvent, Message> getEventEnqueuedForSession(LogReplicationSession session) {
-        CorfuStoreEntry<ReplicationEventInfoKey, ReplicationEvent, Message> eventEnqueuedForSession = null;
-        ReplicationEventInfoKey key = ReplicationEventInfoKey.newBuilder().setSession(session).build();
-        try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
-            eventEnqueuedForSession = txn.getRecord(REPLICATION_EVENT_TABLE_NAME, key);
-            txn.commit();
-        } catch (Exception e) {
-            log.error("Failed to get the replication event for session {}", session, e);
-        }
-
-        return eventEnqueuedForSession;
-    }
-
-    public void deleteProcessedEvent(LogReplicationSession session) {
-        ReplicationEventInfoKey keyToDelete = ReplicationEventInfoKey.newBuilder().setSession(session).build();
-        try {
-            IRetry.build(IntervalRetry.class, () -> {
-                try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
-                    txn.delete(REPLICATION_EVENT_TABLE_NAME, keyToDelete);
-                    txn.commit();
-                } catch (TransactionAbortedException tae) {
-                    log.error("Error while attempting to delete event for session {}", session, tae);
-                    throw new RetryNeededException();
-                }
-                return null;
-            }).run();
-        } catch (InterruptedException e) {
-            log.error("Unrecoverable exception when attempting to reset replication status", e);
-            throw new UnrecoverableCorfuInterruptedError(e);
-        }
     }
 
     // ================================= Replication Status Table Methods ===================================
