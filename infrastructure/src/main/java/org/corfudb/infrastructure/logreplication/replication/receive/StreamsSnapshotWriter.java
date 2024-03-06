@@ -153,6 +153,18 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
             logReplicationMetadataManager.appendUpdate(txn,
                     LogReplicationMetadataType.LAST_SNAPSHOT_TRANSFERRED_SEQUENCE_NUMBER, currentSeqNum);
             timestamp = txn.commit();
+        CorfuStoreMetadata.Timestamp ts = batchingData(smrEntries, shadowStreamUuid);
+        try (TxnContext txn = metadataManager.getTxnContext()) {
+            ReplicationMetadata metadata = metadataManager.queryReplicationMetadata(txn, session);
+            ReplicationMetadata updatedMetadata = metadata.toBuilder().setLastSnapshotStarted(srcGlobalSnapshot)
+                    .setLastSnapshotTransferredSeqNumber(currentSeqNum)
+                    .build();
+            metadataManager.updateReplicationMetadata(txn, session, updatedMetadata);
+            if (!snapshotSyncStartMarker.isPresent()) {
+                metadataManager.setSnapshotSyncStartMarker(txn, session, snapshotSyncId, ts);
+                snapshotSyncStartMarker = Optional.of(new SnapshotSyncStartMarker(snapshotSyncId, ts.getSequence()));
+            }
+            txn.commit();
         }
 
         if (!snapshotSyncStartMarker.isPresent()) {
@@ -370,6 +382,7 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
         log.debug("Completed applying updates to stream {}.  {} " +
             "entries applied across {} transactions.  ", streamId,
             smrEntries.size(), numBatches);
+        batchingData(smrEntries, streamId);
     }
 
     private boolean maxEntriesLimitReached(UUID streamId, List<SMREntry> buffer) {
@@ -481,6 +494,65 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
             throw new UnrecoverableCorfuInterruptedError(e);
         }
     }
+
+    private CorfuStoreMetadata.Timestamp batchingData(List<SMREntry> smrEntries, UUID streamId) {
+        CorfuStoreMetadata.Timestamp ts = null;
+        List<SMREntry> buffer = new ArrayList<>();
+        long bufferSize = 0;
+        int numBatches = 1;
+
+        for (SMREntry smrEntry : smrEntries) {
+            // Apply all SMR entries in a single transaction as long as it does not exceed maxApplySize(a fraction of
+            // the runtime's max uncompressed write size(100 MB by default).  The fraction is added as a buffer to
+            // account for extra bytes added during LogData.serialize()).
+            // It was observed that special streams(ProtobufDescriptor table), can get a lot of updates, especially
+            // due to schema updates during an upgrade.  If the table was not checkpointed and trimmed on the Source,
+            // no de-duplication on these updates will occur.  As a result, the transaction size can be large.
+            // Although it is within the maxApplySize limit, deserializing these entries to read the table can cause an
+            // OOM on applications running with a small memory footprint.  So for such tables, introduce an
+            // additional limit of max number of entries(50 by default) applied in a single transaction.  This
+            // algorithm is in line with the limits imposed in Compaction and Restore workflows.
+            if (bufferSize + smrEntry.getSerializedSize() > replicationContext.getConfig(session).getMaxApplySize()
+                    || maxEntriesLimitReached(streamId,
+                    buffer)) {
+                try (TxnContext txnContext = metadataManager.getTxnContext()) {
+                    updateLog(txnContext, buffer, streamId);
+                    if (ts == null) {
+                        ts = txnContext.commit();
+                    }
+                    else {
+                        txnContext.commit();
+                    }
+                    log.debug("Applied shadow stream partially for stream {} on address :: {}.  {} SMR entries written",
+                            streamId, ts.getSequence(), buffer.size());
+                    buffer.clear();
+                    buffer.add(smrEntry);
+                    bufferSize = smrEntry.getSerializedSize();
+                    numBatches++;
+                }
+            } else {
+                buffer.add(smrEntry);
+                bufferSize += smrEntry.getSerializedSize();
+            }
+        }
+        if (!buffer.isEmpty()) {
+            try (TxnContext txnContext = metadataManager.getTxnContext()) {
+                updateLog(txnContext, buffer, streamId);
+                if (ts == null) {
+                    ts = txnContext.commit();
+                }
+                else {
+                    txnContext.commit();
+                }
+            }
+        }
+
+        log.debug("Completed applying updates to stream {}.  {} entries applied across {} transactions.  ", streamId,
+                smrEntries.size(), numBatches);
+
+        return ts;
+    }
+
 
     enum Phase {
         TRANSFER_PHASE,
