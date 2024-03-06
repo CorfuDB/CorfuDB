@@ -11,22 +11,15 @@ import org.corfudb.common.config.ConfigParamsHelper;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.common.util.URLUtils.NetworkInterfaceVersion;
 import org.corfudb.infrastructure.ServerContext;
-import org.corfudb.infrastructure.logreplication.infrastructure.plugins.ILogReplicationVersionAdapter;
-import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
-import org.corfudb.infrastructure.logreplication.infrastructure.utils.CorfuSaasEndpointProvider;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationUpgradeManager;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.GitRepositoryState;
 import org.docopt.Docopt;
 import org.slf4j.LoggerFactory;
 
-import java.io.File;
-import java.net.URL;
-import java.net.URLClassLoader;
 import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
@@ -322,14 +315,11 @@ public class CorfuInterClusterReplicationServer implements Runnable {
      */
     private void startDiscoveryService(ServerContext serverContext) {
 
-        ILogReplicationVersionAdapter versionPlugin = initVersionPlugin(serverContext.getPluginConfigFilePath());
-        CorfuSaasEndpointProvider.init(serverContext.getPluginConfigFilePath(), versionPlugin.isSaasDeployment());
-
         CorfuRuntime runtime = getRuntime(serverContext);
         CorfuStore corfuStore = new CorfuStore(runtime);
 
         LogReplicationUpgradeManager upgradeManager =
-                new LogReplicationUpgradeManager(corfuStore, versionPlugin);
+                new LogReplicationUpgradeManager(corfuStore, serverContext.getPluginConfigFilePath());
 
         // Check if an upgrade is in progress.  If it is, wait for it to complete
         log.info("Wait for any ongoing rolling upgrade to complete.");
@@ -349,25 +339,10 @@ public class CorfuInterClusterReplicationServer implements Runnable {
         replicationDiscoveryService.start();
     }
 
-    private ILogReplicationVersionAdapter initVersionPlugin(String pluginConfigFilePath) {
-        log.info("Version plugin :: {}", pluginConfigFilePath);
-        LogReplicationPluginConfig config = new LogReplicationPluginConfig(pluginConfigFilePath);
-        File jar = new File(config.getStreamFetcherPluginJARPath());
-        try (URLClassLoader child = new URLClassLoader(new URL[]{jar.toURI().toURL()}, this.getClass().getClassLoader())) {
-            Class plugin = Class.forName(config.getStreamFetcherClassCanonicalName(), true, child);
-            return (ILogReplicationVersionAdapter)
-                    plugin.getDeclaredConstructor().newInstance();
-        } catch (Exception e) {
-            log.error("Fatal error: Failed to get Log Replicator Version Plugin", e);
-            throw new UnrecoverableCorfuError(e);
-        }
-    }
-
     private CorfuRuntime getRuntime(ServerContext serverContext) {
 
-        String localCorfuEndpoint = CorfuSaasEndpointProvider.getCorfuSaasEndpoint()
-                .orElseGet(() ->getCorfuEndpoint(getHostFromEndpointURL(serverContext.getLocalEndpoint()),
-            serverContext.getCorfuServerConnectionPort()));
+        String localCorfuEndpoint = getCorfuEndpoint(getHostFromEndpointURL(serverContext.getLocalEndpoint()),
+            serverContext.getCorfuServerConnectionPort());
 
         return CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder()
             .trustStore((String) serverContext.getServerConfig().get(ConfigParamNames.TRUST_STORE))
