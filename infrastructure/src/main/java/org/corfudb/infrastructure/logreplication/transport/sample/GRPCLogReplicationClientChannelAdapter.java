@@ -94,7 +94,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
     }
 
     @Override
-    public void connectAsync(ClusterDescriptor remoteClusterDescriptor, LogReplicationSession session) throws Exception {
+    public void connectAsync(ClusterDescriptor remoteClusterDescriptor, LogReplicationSession session) {
         this.executorService.submit(() -> remoteClusterDescriptor.getNodeDescriptors().forEach(node -> {
             try {
                 NodeLocator nodeLocator = NodeLocator.parseString(node.getEndpoint());
@@ -125,7 +125,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
                 log.error("Error: {} :::: {}", e.getCause(), e.getStackTrace());
                 onConnectionDown(node.getNodeId(), session);
             }
-        })).get();
+        }));
     }
 
     private Pair<Boolean, ManagedChannel> canReuseChannel(String nodeId) {

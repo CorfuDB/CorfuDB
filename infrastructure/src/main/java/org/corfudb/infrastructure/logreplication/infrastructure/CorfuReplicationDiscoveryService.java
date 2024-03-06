@@ -399,8 +399,8 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         }
 
         if (interClusterServerNode == null) {
-            interClusterServerNode = new CorfuInterClusterReplicationServerNode(serverContext,
-                    sessionManager.getRouter());
+            interClusterServerNode = new CorfuInterClusterReplicationServerNode(serverContext, sessionManager.getRouter(),
+                    sessionManager.getReplicationContext());
         } else {
             //Start the server again as it was previously shutdown due to topology change.(start operation is idempotent)
             interClusterServerNode.startServer();
