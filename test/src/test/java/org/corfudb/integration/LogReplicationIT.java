@@ -36,10 +36,9 @@ import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.util.Utils;
-import org.junit.After;
-import org.junit.Before;
 import org.junit.Test;
 
+import java.io.IOException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -93,22 +92,25 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
     static private final int NUM_KEYS = 10;
 
-    private static final int NUM_KEYS_LARGE = 1000;
-    private static final int NUM_KEYS_VERY_LARGE = 20000;
+    static private final int NUM_KEYS_LARGE = 1000;
+    static private final int NUM_KEYS_VERY_LARGE = 20000;
 
-    private static final int NUM_STREAMS = 1;
-    private static final int TOTAL_STREAM_COUNT = 3;
-    private static final int WRITE_CYCLES = 4;
+    static private final int NUM_STREAMS = 1;
+    static private final int TOTAL_STREAM_COUNT = 3;
+    static private final int WRITE_CYCLES = 4;
 
-    private static final int STATE_CHANGE_CHECKS = 20;
-    private static final int WAIT_STATE_CHANGE = 300;
+    static private final int STATE_CHANGE_CHECKS = 20;
+    static private final int WAIT_STATE_CHANGE = 300;
+
+    // If testConfig set deleteOp enabled, will have one delete operation for four put operations.
+    static private final int DELETE_PACE = 4;
 
     // Number of messages per batch
-    private static final int BATCH_SIZE = 4;
+    static private final int BATCH_SIZE = 4;
 
-    private static final int SMALL_MSG_SIZE = 12000;
+    static private final int SMALL_MSG_SIZE = 12000;
 
-    private TestConfig testConfig;
+    static private TestConfig testConfig = new TestConfig();
 
     // Connect with sourceServer to generate data
     private CorfuRuntime srcDataRuntime = null;
@@ -149,7 +151,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     // An observable value on the number of errors received on Log Entry Sync (source side)
     private ObservableValue errorsLogEntrySync;
 
-    // An observable value on the number of received messages in the LogReplicationSinkManager (Destination Site)
+    // An observable value oln the number of received messages in the LogReplicationSinkManager (Destination Site)
     private ObservableValue sinkReceivedMessages;
 
     /* ******** Expected Values on Observables ******** */
@@ -181,14 +183,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
     private final Semaphore blockUntilExpectedAckTs = new Semaphore(1, true);
 
-    // A semaphore that allows the sender to block for a null ACK from the receiver.  A null ACK is sent when the
-    // receiver gets an unexpected entry type - for example - a snapshot message when in Log Entry Sync State
-    private final Semaphore blockForNullAck = new Semaphore(1, true);
-
-    // A null ACK is received when messages do not reach the receiver.  On receiving a null ACK, the sender resends
-    // them.  Below variable specifies the number of null ACKs the test has waited for
-    private int numNullAcksObserved = 0;
-
     private LogReplicationMetadataManager metadataManager;
 
     private final String t0Name = TABLE_PREFIX + 0;
@@ -212,10 +206,9 @@ public class LogReplicationIT extends AbstractIT implements Observer {
      * - Two independent Corfu Servers (source and destination)
      * - CorfuRuntime's to each Corfu Server
      *
-     * @throws Exception
+     * @throws IOException
      */
-    @Before
-    public void setUp() throws Exception {
+    private void setupEnv() throws IOException {
         // Source Corfu Server (data will be written to this server)
         new CorfuServerRunner()
                 .setHost(DEFAULT_HOST)
@@ -260,12 +253,12 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         metadataManager.addSession(session, 0, true);
 
         expectedAckTimestamp = new AtomicLong(Long.MAX_VALUE);
-        testConfig = new TestConfig();
-        testConfig.setRemoteClusterId(REMOTE_CLUSTER_ID);
+        testConfig.clear().setRemoteClusterId(REMOTE_CLUSTER_ID);
     }
 
-    @After
-    public void cleanUp() throws Exception {
+    private void cleanEnv() {
+        log.info("*** Clean environment");
+
         if (sourceDataSender != null) {
             sourceDataSender.shutdown();
         }
@@ -276,7 +269,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
             dstDataRuntime.shutdown();
             dstTestRuntime.shutdown();
         }
-        super.cleanUp();
     }
 
     /**
@@ -406,70 +398,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     /* ***************************** LOG REPLICATION IT TESTS ***************************** */
 
     /**
-     * This test simulates dropping all SNAPSHOT_START messages.  It verifies that null ACKs were received on the
-     * sender and no data generated as part of snapshot sync is accepted by the receiver.  The test waits for a
-     * default number of null ACKs(TestConfig.DEFAULT_NULL_ACKS_TO_WAIT_FOR) and also verifies that no data was
-     * applied on the receiver.
-     * @throws Exception
-     */
-    @Test
-    public void testOutOfOrderSnapshotStartWithoutRecovery() throws Exception {
-        testSnapshotSyncWithStartDrops(Integer.MAX_VALUE);
-    }
-
-    /**
-     * This test simulates dropping a certain number of SNAPSHOT_START messages and recovers after that.  It verifies
-     * that null ACKs were received on the sender until SNAPSHOT_START was dropped.  After recovery, snapshot sync
-     * completed successfully and data was replicated on the receiver.
-     * @throws Exception
-     */
-    @Test
-    public void testOutOfOrderSnapshotStartWithRecovery() throws Exception {
-        // Number of start messages which will be dropped.  Note:  A higher number increases the test execution time
-        // and makes it time out intermittently.
-        int n = 2;
-        testSnapshotSyncWithStartDrops(n);
-    }
-
-    private void testSnapshotSyncWithStartDrops(int numDrops) throws Exception {
-        Set<String> tables = new HashSet<>();
-        tables.add(t0NameUFO);
-        tables.add(t1NameUFO);
-
-        writeCrossTableTransactions(tables, true);
-
-        // Set the flag to drop START messages and the number of times it must be dropped
-        testConfig.clear().setDropSnapshotStartMsg(true);
-        testConfig.setNumDropsForSnapshotStart(numDrops);
-
-        Set<WAIT> waitSet = new HashSet<>();
-        // If a limited number of START messages will get dropped, wait for equal number of null ACKs.  Otherwise,
-        // the test waits for a default number of null ACKs.
-        // Also wait for metadata from the receiver indicating completion of snapshot sync eventually
-        if (numDrops != Integer.MAX_VALUE) {
-            testConfig.setNumNullAcksToWaitFor(numDrops);
-            waitSet.add(WAIT.ON_METADATA_RESPONSE);
-        }
-
-        // Acquire the semaphore to block for null ACKs
-        blockForNullAck.acquire();
-
-        // Start snapshot sync.  On receiving the required number of null ACKs, the semaphore will get released
-        startSnapshotSync(waitSet);
-
-        // Acquire the same semaphore again to validate that it got released in the previous step
-        blockForNullAck.acquire();
-
-        if (numDrops == Integer.MAX_VALUE) {
-            // Verify the absence of data on the destination
-            verifyNoData(dstCorfuTables);
-        } else {
-            // Snapshot Sync was successful
-            verifyData(dstCorfuStore, dstCorfuTables, srcDataForVerification);
-        }
-    }
-
-    /**
      * This test attempts to perform a snapshot sync and log entry sync through the Log Replication Manager.
      * We emulate the channel between source and destination by directly handling the received data
      * to the other side.
@@ -521,6 +449,8 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         // Because t2 should not have been replicated remove from expected list
         srcDataForVerification.get(t2NameUFO).clear();
         verifyData(dstCorfuStore, dstCorfuTables, srcDataForVerification);
+
+        cleanEnv();
     }
 
     /**
@@ -568,6 +498,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         // Because t2 should not have been replicated remove from expected list
         srcDataForVerification.get(t2NameUFO).clear();
         verifyData(dstCorfuStore, dstCorfuTables, srcDataForVerification);
+        cleanEnv();
     }
 
     /**
@@ -576,6 +507,8 @@ public class LogReplicationIT extends AbstractIT implements Observer {
      */
     @Test
     public void testSnapshotSyncForEmptyLog() throws Exception {
+        // Setup Environment
+        setupEnv();
 
         // Open Streams on Source
         openStreams(srcCorfuTables, srcCorfuStore, NUM_STREAMS);
@@ -600,6 +533,8 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         // Verify No Data On Destination
         verifyNoData(dstCorfuTables);
+
+        cleanEnv();
     }
 
     /**
@@ -609,6 +544,8 @@ public class LogReplicationIT extends AbstractIT implements Observer {
      */
     @Test
     public void testSnapshotSyncForNoData() throws Exception {
+        // Setup Environment
+        setupEnv();
 
         // Generate transactional data across t0, t1 and t2
         openStreams(srcCorfuTables, srcCorfuStore, TOTAL_STREAM_COUNT);
@@ -628,6 +565,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         // Verify No Data On Destination
         verifyNoData(dstCorfuTables);
+        cleanEnv();
     }
 
     /**
@@ -636,6 +574,8 @@ public class LogReplicationIT extends AbstractIT implements Observer {
      */
     @Test
     public void testLogEntrySyncForEmptyLog() throws Exception {
+        // Setup Environment
+        setupEnv();
 
         // Open Streams on Source
         openStreams(srcCorfuTables, srcCorfuStore, NUM_STREAMS);
@@ -667,6 +607,8 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         // Verify No Data On Destination
         verifyNoData(dstCorfuTables);
+
+        cleanEnv();
     }
 
     /**
@@ -796,6 +738,8 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         // expectedAckTimestamp was set in 'startLogEntrySync' to the tail of the Log Replication Stream.  Verify
         // that the metadata table was updated with it after a successful LogEntrySync
         verifyPersistedLogEntryMetadata();
+
+        cleanEnv();
     }
 
     /**
@@ -807,6 +751,9 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     @Test
     public void testSnapshotSyncWithTrimmedExceptions() throws Exception {
         final int RX_MESSAGES_LIMIT = 2;
+
+        // Setup Environment: two corfu servers (source & destination)
+        setupEnv();
 
         // Open One Stream
         openStreams(srcCorfuTables, srcCorfuStore, 1);
@@ -860,6 +807,9 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     public void testLogEntrySyncWithTrim() throws Exception {
         final int RX_MESSAGES_LIMIT = 2;
 
+        // Setup Environment: two corfu servers (source & destination)
+        setupEnv();
+
         // Open One Stream
         openStreams(srcCorfuTables, srcCorfuStore, 1);
         openStreams(dstCorfuTables, dstCorfuStore, 1);
@@ -890,6 +840,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         checkStateChange(fsm, LogReplicationStateType.IN_LOG_ENTRY_SYNC, true);
 
         verifyData(dstCorfuStore, dstCorfuTables, dstDataForVerification);
+        cleanEnv();
     }
 
     /**
@@ -900,6 +851,8 @@ public class LogReplicationIT extends AbstractIT implements Observer {
      */
     @Test
     public void testLogEntrySyncLargeTables() throws Exception {
+        // Setup Environment: two corfu servers (source & destination)
+        setupEnv();
 
         // Open One Stream
         openStreams(srcCorfuTables, srcCorfuStore, 1);
@@ -923,6 +876,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         // Verify its in log entry sync state and that data was completely transferred to destination
         checkStateChange(fsm, LogReplicationStateType.IN_LOG_ENTRY_SYNC, true);
         verifyData(dstCorfuStore, dstCorfuTables, dstDataForVerification);
+        cleanEnv();
     }
 
     /**
@@ -946,6 +900,8 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     }
 
     private void testSnapshotSyncAndLogEntrySync(int numCyclesToDelayApply, boolean delayResponse, int dropAcksLevel) throws Exception {
+        // Setup two separate Corfu Servers: source (source) and destination (sink)
+        setupEnv();
 
         // Open streams in source Corfu
         openStreams(srcCorfuTables, srcCorfuStore, NUM_STREAMS);
@@ -1031,6 +987,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         // Verify Destination
         verifyData(dstCorfuStore, dstCorfuTables, srcDataForVerification);
+        cleanEnv();
     }
 
 
@@ -1062,6 +1019,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         // Verify Destination
         verifyData(dstCorfuStore, dstCorfuTables, srcDataForVerification);
+        cleanEnv();
     }
 
     /**
@@ -1136,18 +1094,24 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         // Verify Destination
         verifyData(dstCorfuStore, dstCorfuTables, srcDataForVerification);
+        cleanEnv();
     }
+
 
     @Test
     public void testSnapshotSyncWithAckDrops() throws Exception {
         testSnapshotSyncAndLogEntrySync(0, false, 1);
+        cleanEnv();
     }
+
 
 
     /* ********************** AUXILIARY METHODS ********************** */
 
     // startCrossTx indicates if we start with a transaction across Tables
     private void writeCrossTableTransactions(Set<String> tableNames, boolean startCrossTx) throws Exception {
+        // Setup two separate Corfu Servers: source (primary) and destination (sink)
+        setupEnv();
 
         // Open streams in source Corfu
         int totalStreams = TOTAL_STREAM_COUNT; // test0, test1, test2 (open stream tables)
@@ -1187,6 +1151,12 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         generateTransactionsCrossTables(srcCorfuTables, crossTables, srcDataForVerification,
                 NUM_KEYS_LARGE, srcCorfuStore, NUM_KEYS*WRITE_CYCLES);
+    }
+
+    private void trim(CorfuRuntime rt, int trimAddress) {
+        log.debug("Trim at: " + trimAddress);
+        rt.getAddressSpaceView().prefixTrim(new Token(0, trimAddress));
+        rt.getAddressSpaceView().invalidateServerCaches();
     }
 
     /**
@@ -1294,11 +1264,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         // for testing)
         sourceDataSender.setSourceManager(logReplicationSourceManager);
 
-        if (testConfig.isDropSnapshotStartMsg()) {
-            ackMessages = sourceDataSender.getAckMessages();
-            ackMessages.addObserver(this);
-        }
-
         // Add this class as observer of the value of interest for the wait condition
         for (WAIT waitCondition : waitConditions) {
             if (waitCondition == WAIT.ON_ACK || waitCondition == WAIT.ON_ACK_TS) {
@@ -1349,26 +1314,13 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     @Override
     public void update(Observable o, Object arg) {
         if (o.equals(ackMessages)) {
-            if (testConfig.isDropSnapshotStartMsg()) {
-                verifyNullAckMessage((ObservableAckMsg)o);
-            } else {
-                verifyExpectedAckMessage((ObservableAckMsg) o);
-            }
+            verifyExpectedAckMessage((ObservableAckMsg)o);
         } else if (o.equals(errorsLogEntrySync)) {
             verifyExpectedValue(expectedErrors, (int)errorsLogEntrySync.getValue());
         } else if (o.equals(sinkReceivedMessages)) {
             verifyExpectedValue(expectedSinkReceivedMessages, (int)sinkReceivedMessages.getValue());
         } else if (o.equals(metadataResponseObservable)) {
             verifyMetadataResponse(metadataResponseObservable.getValue());
-        }
-    }
-
-    private void verifyNullAckMessage(ObservableAckMsg observableAckMsg) {
-        if (observableAckMsg.getDataMessage() == null) {
-            numNullAcksObserved++;
-            if (numNullAcksObserved == testConfig.numNullAcksToWaitFor) {
-                blockForNullAck.release();
-            }
         }
     }
 
@@ -1454,7 +1406,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     }
 
     @Data
-    public class TestConfig {
+    public static class TestConfig {
         private int dropMessageLevel = 0;
         /**
          * 0 : No ACKs dropped
@@ -1472,17 +1424,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         private boolean timeoutMetadataResponse = false;
         private String remoteClusterId = null;
 
-        // Indicates if a snapshot start message should be dropped
-        private boolean dropSnapshotStartMsg = false;
-
-        // If dropSnapshotStartMsg == true, the number of times it must be dropped
-        private int numDropsForSnapshotStart;
-
-        // If dropSnapshotStartMsg == true, the default number of null acks to wait for
-        private static final int DEFAULT_NULL_ACKS_TO_WAIT_FOR = 5;
-
-        private int numNullAcksToWaitFor = DEFAULT_NULL_ACKS_TO_WAIT_FOR;
-
         public TestConfig clear() {
             dropMessageLevel = 0;
             dropAckLevel = 0;
@@ -1493,7 +1434,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
             writingDst = false;
             deleteOP = false;
             remoteClusterId = null;
-            dropSnapshotStartMsg = false;
             return this;
         }
     }
