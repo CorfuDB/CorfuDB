@@ -20,6 +20,7 @@ import org.corfudb.infrastructure.logreplication.infrastructure.NodeDescriptor;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientServerRouter;
 import org.corfudb.infrastructure.logreplication.transport.client.IClientChannelAdapter;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
+import org.corfudb.runtime.proto.service.CorfuMessage;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
 import org.corfudb.util.NodeLocator;
@@ -225,6 +226,9 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
                 public void onNext(RequestMsg request) {
                     try {
                         log.info("Received request {}", request.getHeader().getRequestId());
+                        if (request.getPayload().getPayloadCase().equals(CorfuMessage.RequestPayloadMsg.PayloadCase.LR_LEADERSHIP_LOSS)) {
+                            responseObserverMap.remove(sessionMsg);
+                        }
                         receive(request);
                     } catch (Exception e) {
                         log.error("Caught exception while receiving Requests", e);
@@ -259,10 +263,6 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
         }
 
         responseObserverMap.get(sessionMsg).onNext(response);
-    }
-
-    public void processLeadershipLoss(LogReplicationSession session) {
-        responseObserverMap.remove(session);
     }
 
     private void queryLeadership(String nodeId, RequestMsg request) {
