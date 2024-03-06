@@ -24,7 +24,7 @@ software architecture and example usage.
 [Developing with Corfu](#now-i-want-to-write-a-program-that-uses-corfu)
 
 ## What do I need to run Corfu?
-The Corfu infrastructure can run on any system which has Java 8 support. We do not impose any requirements on the kind of storage used - Corfu works with any device that your operating system will allow Java to work with: traditional hard disks, SSDs, and even NVM. We also provide an in-memory mode for nodes which do not require persistence. 
+The Corfu infrastructure can run on any system which has Java 11 support. We do not impose any requirements on the kind of storage used - Corfu works with any device that your operating system will allow Java to work with: traditional hard disks, SSDs, and even NVM. We also provide an in-memory mode for nodes which do not require persistence. 
 
 Even though Corfu is a distributed system, you can start working with Corfu using just a single machine. In addition, you can easily simulate a distributed Corfu system on a single machine using just a few commands.
 
@@ -40,7 +40,7 @@ For more details on the inner workings of Corfu, see the [Corfu wiki](https://gi
 ## Ok, great - get me started running Corfu!
 
 ### Building Corfu From Source
-To build Corfu, you will need the Java JDK 8 as well as Apache Maven
+To build Corfu, you will need the Java JDK 11 as well as Apache Maven
 3.3 or later to invoke the build system.
 
 Your major release number of Debian/Ubuntu will determine whether the
@@ -81,9 +81,8 @@ installed.  Output should look like:
     OS name: "mac os x", version: "10.11.6", arch: "x86_64", family: "mac"
 
 Some OS X users have had problems where the version of Maven installed
-by MacPorts uses a different Java version than expected.  Java version
-1.8 or later is required.  If Java 1.7 or earlier is reported, then
-refer to this
+by MacPorts uses a different Java version than expected. Java version 11 or later is required.  
+If Java 1.7 or earlier is reported, then refer to this
 [StackOverflow Maven JDK mismatch question](http://stackoverflow.com/questions/18813828/why-maven-use-jdk-1-6-but-my-java-version-is-1-7).
 
 ### Building Corfu

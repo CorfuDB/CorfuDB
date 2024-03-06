@@ -332,7 +332,7 @@ public class AbstractIT extends AbstractCorfuTest {
         long pid = -1;
 
         try {
-            if (p.getClass().getName().equals("java.lang.UNIXProcess")) {
+            if (p.getClass().getName().equals("java.lang.UNIXProcess") || p.getClass().getName().equals("java.lang.ProcessImpl")) {
                 Field f = p.getClass().getDeclaredField("pid");
                 f.setAccessible(true);
                 pid = f.getLong(p);
