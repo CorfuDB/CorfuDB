@@ -134,6 +134,8 @@ public class LogReplicationClientConfigListener extends StreamListenerResumeOrFu
             if (entry.getOperation().equals(CorfuStreamEntry.OperationType.UPDATE)) {
                 String clientName = ((ClientRegistrationId) entry.getKey()).getClientName();
                 ReplicationModel model = ((ClientRegistrationInfo) entry.getPayload()).getModel();
+                LogReplication.ReplicationSubscriber subscriber = LogReplication.ReplicationSubscriber.newBuilder()
+                        .setClientName(clientName).setModel(model).build();
                 // TODO (V2): Currently we add a default subscriber for logical group use case instead of listening
                 //  on client registration. Subscriber should be added upon registration after grpc stream for session
                 //  creation is added.

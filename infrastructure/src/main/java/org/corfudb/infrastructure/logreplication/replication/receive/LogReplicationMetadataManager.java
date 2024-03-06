@@ -784,8 +784,8 @@ public class LogReplicationMetadataManager {
             ReplicationStatus previous = entry.getPayload();
             SnapshotSyncInfo previousSnapshotSyncInfo = previous.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo();
 
-            if (previous.getSourceStatus().getReplicationInfo().getStatus().equals(SyncStatus.NOT_STARTED) &&
-                    previousSnapshotSyncInfo.getStatus().equals(SyncStatus.NOT_STARTED) ||
+            if ((previous.getSourceStatus().getReplicationInfo().getStatus().equals(SyncStatus.NOT_STARTED) &&
+                    previousSnapshotSyncInfo.getStatus().equals(SyncStatus.NOT_STARTED)) ||
                     (previous.getSourceStatus().getReplicationInfo().getStatus().equals(SyncStatus.STOPPED) ||
                             previousSnapshotSyncInfo.getStatus().equals(SyncStatus.STOPPED))) {
                 // Skip update of sync status, it will be updated once replication is resumed or started
