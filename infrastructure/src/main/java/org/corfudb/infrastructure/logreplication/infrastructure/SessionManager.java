@@ -228,16 +228,6 @@ public class SessionManager {
             log.error("Unrecoverable exception while refreshing sessions", e);
             throw new UnrecoverableCorfuInterruptedError(e);
         }
-
-        // When a node acquires the lock, check if all the sessions present in the system tables are still valid.
-        // Since the metadata table is written to only by the leader node, we can run into the scenario where
-        // leadership was acquired after processing a topology change.
-        // On acquiring leadership, stale sessions will not get removed from the metadata table as the in-memory copy
-        // of sessions have already been updated.
-        // Therefore, iterate over the sessions in the system tables and remove the stale sessions if any.
-        if (replicationContext.getIsLeader().get()) {
-            removeStaleSessionOnLeadershipAcquire();
-        }
     }
 
     /**
@@ -416,7 +406,16 @@ public class SessionManager {
                 .build();
     }
 
-    private void removeStaleSessionOnLeadershipAcquire() {
+    /**
+     * When a node acquires the lock, check if all the sessions present in the system tables are still valid.
+     *
+     * Since the metadata table is written to only by the leader node, we can run into the scenario where the leader node
+     * missed updating the system table because the leadership changed at that precise moment.
+     * If the new leader node had already received the topology change notification before becoming the leader, the stale
+     * sessions would not be recognized on "refresh".
+     * Therefore, iterate over the sessions in the system tables and remove the stale sessions if any.
+     */
+    public void removeStaleSessionOnLeadershipAcquire() {
         try {
             IRetry.build(IntervalRetry.class, () -> {
                 try (TxnContext txn = metadataManager.getTxnContext()) {

@@ -57,35 +57,44 @@ public final class LogReplicationEventListener implements StreamListener {
     @Override
     public void onNext(CorfuStreamEntries results) {
 
-        log.info("onNext[{}] :: processing updates for tables {}", results.getTimestamp(),
-            results.getEntries().keySet().stream().map(TableSchema::getTableName).collect(Collectors.toList()));
+        // If the current node is not a leader, ignore the notifications.
+        synchronized (discoveryService) {
+            if (!discoveryService.getSessionManager().getReplicationContext().getIsLeader().get()) {
+                log.info("onNext[{}] :: skipped as current node is not the leader", results.getTimestamp());
+                return;
+            }
 
-        // Generate a discovery event and put it into the discovery service event queue.
-        for (List<CorfuStreamEntry> entryList : results.getEntries().values()) {
-            for (CorfuStreamEntry entry : entryList) {
-                if (entry.getOperation() == CorfuStreamEntry.OperationType.CLEAR) {
-                    log.warn("LREventListener ignoring a CLEAR operation");
-                    continue;
-                }
-                ReplicationEventInfoKey key = (ReplicationEventInfoKey) entry.getKey();
-                ReplicationEvent event = (ReplicationEvent) entry.getPayload();
-                log.info("Received event :: id={}, type={}, session={}, ts={}", event.getEventId(), event.getType(),
-                    key.getSession(), event.getEventTimestamp());
-                if (event.getType().equals(ReplicationEventType.FORCE_SNAPSHOT_SYNC)) {
-                    discoveryService.input(new DiscoveryServiceEvent(DiscoveryServiceEventType.ENFORCE_SNAPSHOT_SYNC,
-                        key.getSession(), event.getEventId()));
-                } else if (event.getType().equals(ReplicationEventType.UPGRADE_COMPLETION_FORCE_SNAPSHOT_SYNC)) {
-                    // Note: This block will not get executed in the first version of LRv2 because in this version,
-                    // LR does not start until all nodes in the cluster are on the same version.  So the event to
-                    // trigger a forced snapshot sync will not be received as an update on the listener.
-                    // Instead, it will be read on startup in processPendingRequests().
-                    // In later versions of LRv2, the Log Replication process will run even when nodes are on
-                    // different versions.  At that time, this event will be processed as an update from this
-                    // block.
-                    triggerForcedSnapshotSyncForAllSessions(event);
-                } else {
-                    log.warn("Received invalid event :: id={}, type={}, cluster_id={} ts={}", event.getEventId(),
-                        event.getType(), event.getClusterId(), event.getEventTimestamp());
+            log.info("onNext[{}] :: processing updates for tables {}", results.getTimestamp(),
+                    results.getEntries().keySet().stream().map(TableSchema::getTableName).collect(Collectors.toList()));
+
+            // If the current node is the leader, it generates a discovery event and puts it into the discovery
+            // service event queue.
+            for (List<CorfuStreamEntry> entryList : results.getEntries().values()) {
+                for (CorfuStreamEntry entry : entryList) {
+                    if (entry.getOperation() == CorfuStreamEntry.OperationType.CLEAR) {
+                        log.warn("LREventListener ignoring a CLEAR operation");
+                        continue;
+                    }
+                    ReplicationEventInfoKey key = (ReplicationEventInfoKey) entry.getKey();
+                    ReplicationEvent event = (ReplicationEvent) entry.getPayload();
+                    log.info("Received event :: id={}, type={}, session={}, ts={}", event.getEventId(), event.getType(),
+                            key.getSession(), event.getEventTimestamp());
+                    if (event.getType().equals(ReplicationEventType.FORCE_SNAPSHOT_SYNC)) {
+                        discoveryService.input(new DiscoveryServiceEvent(DiscoveryServiceEventType.ENFORCE_SNAPSHOT_SYNC,
+                            key.getSession(), event.getEventId()));
+                    } else if (event.getType().equals(ReplicationEventType.UPGRADE_COMPLETION_FORCE_SNAPSHOT_SYNC)) {
+                        // Note: This block will not get executed in the first version of LRv2 because in this version,
+                        // LR does not start until all nodes in the cluster are on the same version.  So the event to
+                        // trigger a forced snapshot sync will not be received as an update on the listener.
+                        // Instead, it will be read on startup in processPendingRequests().
+                        // In later versions of LRv2, the Log Replication process will run even when nodes are on
+                        // different versions.  At that time, this event will be processed as an update from this
+                        // block.
+                        triggerForcedSnapshotSyncForAllSessions(event);
+                    } else {
+                        log.warn("Received invalid event :: id={}, type={}, cluster_id={} ts={}", event.getEventId(),
+                            event.getType(), event.getClusterId(), event.getEventTimestamp());
+                    }
                 }
             }
         }
