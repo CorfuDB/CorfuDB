@@ -170,11 +170,6 @@ public class LogReplicationMetadataManager {
         txnContext.clear(txnContext.getTable(REPLICATION_EVENT_TABLE_NAME));
     }
 
-    /**
-     * Initialize LogReplicationStatus table. Note that it is required to initialize those fields explicitly instead
-     * of relying on the default value, as some clients of log replicator v1 consume the status table with hasField
-     * check.
-     */
     private void initializeMetadata(TxnContext txn, LogReplicationSession session, boolean incomingSession,
                                     long topologyConfigId) {
         if (incomingSession) {
@@ -192,12 +187,6 @@ public class LogReplicationMetadataManager {
                 ReplicationStatus defaultSinkStatus = ReplicationStatus.newBuilder()
                         .setSinkStatus(SinkReplicationStatus.newBuilder()
                                 .setDataConsistent(false)
-                                .setReplicationInfo(ReplicationInfo.newBuilder()
-                                        .setStatus(SyncStatus.NOT_STARTED)
-                                        .setSnapshotSyncInfo(SnapshotSyncInfo.newBuilder()
-                                                .setStatus(SyncStatus.NOT_STARTED)
-                                                .build())
-                                        .build())
                                 .build())
                         .build();
 
@@ -529,10 +518,7 @@ public class LogReplicationMetadataManager {
                     .setSinkStatus(SinkReplicationStatus.newBuilder()
                             .setDataConsistent(true)
                             .setReplicationInfo(ReplicationInfo.newBuilder()
-                                    .setStatus(SyncStatus.COMPLETED)
-                                    .setSnapshotSyncInfo(SnapshotSyncInfo.newBuilder()
-                                            .setStatus(SyncStatus.COMPLETED)
-                                            .build())
+                                    .setStatus(SyncStatus.NOT_AVAILABLE)
                                     .build())
                             .build())
                     .build();
@@ -843,15 +829,11 @@ public class LogReplicationMetadataManager {
      * @param session log replication session identifier
      */
     public void setDataConsistentOnSink(boolean isConsistent, LogReplicationSession session) {
-
+        SinkReplicationStatus status = SinkReplicationStatus.newBuilder()
+                .setDataConsistent(isConsistent)
+                .build();
         try (TxnContext txn = getTxnContext()) {
-            ReplicationStatus status = txn.getRecord(statusTable, session).getPayload();
-            SinkReplicationStatus sinkReplicationStatus = status.getSinkStatus();
-            status.toBuilder().setSinkStatus(
-                    sinkReplicationStatus.toBuilder().setDataConsistent(isConsistent).build()
-            ).build();
-
-            txn.putRecord(statusTable, session, status, null);
+            txn.putRecord(statusTable, session, ReplicationStatus.newBuilder().setSinkStatus(status).build(), null);
             txn.commit();
         }
 
