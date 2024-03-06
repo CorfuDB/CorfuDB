@@ -99,9 +99,6 @@ public final class DefaultClusterConfig {
     @Getter
     private final int logSinkAckCycleTimer = 1000;
 
-    @Getter
-    private final String invalidLocalNodeId = "55555555-5555-5555-5555-555555555555";
-
     public static List<LogReplicationSession> getSessions() {
         List<LogReplicationSession> sessions = new LinkedList<>();
         for(String sourceClusterId : sourceClusterIds) {
