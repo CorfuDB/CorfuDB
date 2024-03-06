@@ -1,4 +1,5 @@
-FROM openjdk:8-jdk-alpine3.8
+ARG BASE_IMAGE=openjdk:17-jdk-bullseye
+FROM $BASE_IMAGE
 
 WORKDIR /app
 
