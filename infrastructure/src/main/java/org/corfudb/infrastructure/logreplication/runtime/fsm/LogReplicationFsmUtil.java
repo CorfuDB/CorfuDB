@@ -12,11 +12,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
-
-import static org.corfudb.protocols.service.CorfuProtocolLogReplication.getLeadershipLossRequestPayloadMsg;
 
 @Slf4j
 public class LogReplicationFsmUtil {
@@ -127,56 +123,6 @@ public class LogReplicationFsmUtil {
                             LogReplicationSinkEvent.LogReplicationSinkEventType.REMOTE_LEADER_NOT_FOUND,
                             leader));
         }
-    }
-
-    /**
-     * Check if stop event can be enqueued. STOPPED event can be enqueued for a connection endpoint, only after sending
-     * a leadership loss msg to remote.
-     *
-     * @param router
-     * @param fsm
-     * @return
-     */
-    public static boolean canEnqueueStopRuntimeFsmEvent(LogReplicationClientServerRouter router, CorfuLogReplicationRuntime fsm,
-                                                        boolean isConnectionStarter) {
-        // send a leadershipLoss msg to remote when the local cluster is NOT a connection starter
-        if (!isConnectionStarter) {
-            return sendLeadershipLossRequestMsg(router, fsm);
-        }
-        return true;
-    }
-
-    /**
-     * SOURCE to send leadership loss msg when it is the connection endpoint for a session and the local node looses the
-     * leadership.
-     *
-     * @param router send msg to remote via the router
-     * @param fsm  runtime fsm
-     */
-    private static boolean sendLeadershipLossRequestMsg(LogReplicationClientServerRouter router, CorfuLogReplicationRuntime fsm) {
-        if(fsm.getReplicationContext().getIsLeader().get()) {
-            log.debug("the local node acquired the leadership. Stop sending Leadership_loss msg");
-            // do not transition to another state
-            return false;
-        }
-        try {
-            log.debug("Sending LEADERSHIP_LOSS msg for session {}", fsm.getSession());
-            CompletableFuture<LogReplication.LogReplicationMetadataResponseMsg> cf = router
-                    .sendRequestAndGetCompletable(fsm.session,
-                            getLeadershipLossRequestPayloadMsg(router.getLocalNodeId()),
-                            fsm.getRemoteLeaderNodeId().get());
-            cf.get(CorfuLogReplicationRuntime.DEFAULT_TIMEOUT, TimeUnit.MILLISECONDS);
-            return true;
-        } catch(TimeoutException | ExecutionException | InterruptedException ex) {
-            log.error("Retry sending leadership loss msg until an ACK is received ", ex);
-            fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.LOCAL_LEADER_LOSS, false));
-        } catch (Exception ex) {
-            // error occurring due to transport/network layer failure can be ignored as the remote will be notified. The
-            // remote will then initiate a new connection. In this case, its safe to transition FSM to STOPPED state
-            log.error("Sending leadership loss msg failed. Transitioning the FSM to STOPPED state. ", ex);
-            return true;
-        }
-        return false;
     }
 
 }

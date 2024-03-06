@@ -8,7 +8,6 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.corfudb.infrastructure.logreplication.LogReplicationGrpc;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientServerRouter;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
-import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.proto.service.CorfuMessage;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
@@ -119,10 +118,9 @@ public class GRPCLogReplicationServerHandler extends LogReplicationGrpc.LogRepli
 
         return new StreamObserver<ResponseMsg>() {
             LogReplicationSession session;
-            long requestId;
             @Override
             public void onNext(ResponseMsg lrResponseMsg) {
-                requestId = lrResponseMsg.getHeader().getRequestId();
+                long requestId = lrResponseMsg.getHeader().getRequestId();
 
                 session = lrResponseMsg.getHeader().getSession();
 
@@ -140,7 +138,6 @@ public class GRPCLogReplicationServerHandler extends LogReplicationGrpc.LogRepli
             public void onError(Throwable t) {
                 log.error("Encountered error in the long living reverse replicate RPC for {}...", session, t);
                 reverseReplicationStreamObserverMap.remove(session);
-                router.completeExceptionally(session, requestId, t);
                 router.onConnectionDown(session);
             }
 
@@ -201,17 +198,14 @@ public class GRPCLogReplicationServerHandler extends LogReplicationGrpc.LogRepli
     public void send(RequestMsg msg) {
 
         if (msg.getPayload().getPayloadCase().equals(CorfuMessage.RequestPayloadMsg.PayloadCase.LR_METADATA_REQUEST) ||
-                msg.getPayload().getPayloadCase().equals(CorfuMessage.RequestPayloadMsg.PayloadCase.LR_ENTRY) ||
-                msg.getPayload().getPayloadCase().equals(CorfuMessage.RequestPayloadMsg.PayloadCase.LR_LEADERSHIP_LOSS)) {
-            LogReplicationSession session = msg.getHeader().getSession();
+                msg.getPayload().getPayloadCase().equals(CorfuMessage.RequestPayloadMsg.PayloadCase.LR_ENTRY)) {
             try {
+                LogReplicationSession session = msg.getHeader().getSession();
 
                 if (!reverseReplicationStreamObserverMap.containsKey(session)) {
                     log.warn("Corfu Message {} has no pending observer. Message {} will not be sent.",
                             msg.getHeader().getRequestId(), msg.getPayload().getPayloadCase().name());
-                    router.completeExceptionally(session, msg.getHeader().getRequestId(),
-                            new NetworkException(String.format("No pending observer for session %s", session),
-                                    session.getSinkClusterId()));
+
                     return;
                 }
 
@@ -223,10 +217,8 @@ public class GRPCLogReplicationServerHandler extends LogReplicationGrpc.LogRepli
                     log.error("StreamObserver is cancelled for session {} with exception", msg.getHeader().getSession(), e);
                     router.onConnectionDown(msg.getHeader().getSession());
                 }
-                router.completeExceptionally(session, msg.getHeader().getRequestId(), e);
             } catch (Exception e) {
                 log.error("Caught exception while trying to send message {}", msg.getHeader().getRequestId(), e);
-                router.completeExceptionally(session, msg.getHeader().getRequestId(), e);
             }
 
         } else {

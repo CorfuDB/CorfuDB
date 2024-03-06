@@ -27,7 +27,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 
-import static org.corfudb.protocols.service.CorfuProtocolLogReplication.getLeadershipLossResponseMsg;
+import static org.corfudb.protocols.service.CorfuProtocolLogReplication.getLeadershipLoss;
 import static org.corfudb.protocols.service.CorfuProtocolLogReplication.getLeadershipResponse;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getHeaderMsg;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getResponseMsg;
@@ -350,7 +350,7 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
      */
     private void sendLeadershipLoss(@Nonnull RequestMsg request, @Nonnull IClientServerRouter router) {
         HeaderMsg responseHeader = getHeaderMsg(request.getHeader());
-        ResponseMsg response = getLeadershipLossResponseMsg(responseHeader, localNodeId);
+        ResponseMsg response = getLeadershipLoss(responseHeader, localNodeId);
         router.sendResponse(response);
     }
 
