@@ -1,7 +1,6 @@
 package org.corfudb.runtime;
 
 import com.google.common.base.Preconditions;
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
@@ -13,14 +12,14 @@ import org.corfudb.runtime.collections.CorfuStreamEntry;
 import org.corfudb.runtime.collections.StreamListener;
 import org.corfudb.runtime.collections.TableSchema;
 import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.runtime.view.Address;
 import javax.annotation.Nonnull;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 import static org.corfudb.runtime.LogReplicationUtils.REPLICATION_STATUS_TABLE_NAME;
@@ -32,7 +31,7 @@ import static org.corfudb.runtime.LogReplicationUtils.REPLICATION_STATUS_TABLE_N
  * listener will observe the writes and apply them to the merged table based on the client implementation.
  *
  *
- * This interface sees ordered updates from:
+ * This interface sees ordered updates from :
  * 1. client-streams from client-Namespace, and,
  * 2. LrStatusTable from corfuSystem-Namespace.
  *
@@ -40,13 +39,22 @@ import static org.corfudb.runtime.LogReplicationUtils.REPLICATION_STATUS_TABLE_N
  */
 @Slf4j
 public abstract class LogReplicationListener implements StreamListener {
+
+    // Indicates if a full sync on client tables was performed during subscription.  A full sync will not be
+    // performed if a snapshot sync is ongoing.
+    @Getter
+    private final AtomicBoolean clientFullSyncPending = new AtomicBoolean(false);
+
     // This variable tracks if a snapshot sync is ongoing
     @Getter
     private final AtomicBoolean snapshotSyncInProgress = new AtomicBoolean(false);
 
-    // Thread pool to perform client full sync asynchronously from subscription
+    // Timestamp at which the client performed a full sync.  Any updates below this timestamp must be ignored.
+    // At the time of subscription, a full sync cannot be performed if LR Snapshot Sync is in progress.  Full Sync is
+    // performed when this ongoing snapshot sync completes.  The listener, however, can get updates before this full
+    // sync.  So we need to maintain this timestamp and ignore any updates below it.
     @Getter
-    private final ExecutorService fullSyncExecutorService;
+    private final AtomicLong clientFullSyncTimestamp = new AtomicLong(Address.NON_ADDRESS);
 
     private final CorfuStore corfuStore;
     private final String namespace;
@@ -59,14 +67,6 @@ public abstract class LogReplicationListener implements StreamListener {
     public LogReplicationListener(CorfuStore corfuStore, @Nonnull String namespace) {
         this.corfuStore = corfuStore;
         this.namespace = namespace;
-        this.fullSyncExecutorService = Executors.newSingleThreadExecutor(new
-                ThreadFactoryBuilder().setNameFormat("client-full-sync-worker-%d")
-                .build());
-
-        // Shutdown listener threads on JVM restarts
-        Thread shutdownThread = new Thread(fullSyncExecutorService::shutdown);
-        shutdownThread.setName("full-sync-pool-shutdown-thread");
-        Runtime.getRuntime().addShutdownHook(shutdownThread);
     }
 
     /**
@@ -75,6 +75,12 @@ public abstract class LogReplicationListener implements StreamListener {
      * @param results is a map of stream UUID -> list of entries of this stream.
      */
     public final void onNext(CorfuStreamEntries results) {
+
+        // If this update came before the client's full sync timestamp, ignore it.
+        if (results.getTimestamp().getSequence() <= clientFullSyncTimestamp.get()) {
+            return;
+        }
+
         Set<String> tableNames =
                 results.getEntries().keySet().stream().map(schema -> schema.getTableName()).collect(Collectors.toSet());
 
@@ -82,6 +88,13 @@ public abstract class LogReplicationListener implements StreamListener {
             Preconditions.checkState(results.getEntries().keySet().size() == 1,
                 "Replication Status Table Update received with other tables");
             processReplicationStatusUpdate(results);
+            return;
+        }
+
+        // Data Updates
+        if (clientFullSyncPending.get()) {
+            // If the listener started when snapshot sync was ongoing, ignore all data updates until it ends.  When
+            // it ends, the client will perform a full sync and build a consistent state containing these updates.
             return;
         }
 
@@ -102,6 +115,7 @@ public abstract class LogReplicationListener implements StreamListener {
             .get();
 
         for (CorfuStreamEntry entry : replicationStatusTableEntries) {
+
             LogReplicationSession session = (LogReplicationSession)entry.getKey();
 
             // Only process updates where operation type == UPDATE, model == Logical Groups and the client name
@@ -114,7 +128,13 @@ public abstract class LogReplicationListener implements StreamListener {
                 if (status.getSinkStatus().getDataConsistent()) {
                     // getDataConsistent() == true means that snapshot sync has ended.
                     if (snapshotSyncInProgress.get()) {
-                        // Process snapshot sync completion
+                        if (clientFullSyncPending.get()) {
+                            // Snapshot sync which was ongoing when the listener was subscribed has ended.  Attempt to
+                            // perform a full sync now.
+                            LogReplicationUtils.attemptClientFullSync(corfuStore, this, namespace);
+                            return;
+                        }
+                        // Process snapshot sync completion in steady state, i.e., client full sync is already complete
                         snapshotSyncInProgress.set(false);
                         onSnapshotSyncComplete();
                     }
