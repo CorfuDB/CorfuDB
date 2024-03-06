@@ -358,7 +358,7 @@ public class LogReplicationConfigManager {
                     });
 
                     List<CorfuStoreEntry<ClientDestinationInfoKey, DestinationInfoVal, Message>> groupConfigResults =
-                            txn.executeQuery(clientConfigTable, p -> true);
+                            txn.executeQuery(clientConfigTable, record -> true);
                     groupConfigResults.forEach(entry -> {
                         String clientName = entry.getKey().getClientName();
                         ReplicationModel model = entry.getKey().getModel();
