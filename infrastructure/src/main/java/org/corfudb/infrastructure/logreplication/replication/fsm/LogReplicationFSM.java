@@ -28,7 +28,6 @@ import org.corfudb.runtime.view.Address;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -199,8 +198,6 @@ public class LogReplicationFSM {
     /**
      * Snapshot Sender (send snapshot cut to remote cluster)
      */
-    @Getter
-    @VisibleForTesting
     private final SnapshotSender snapshotSender;
 
     /**
@@ -449,9 +446,5 @@ public class LogReplicationFSM {
         this.ackReader.shutdown();
         this.logReplicationFSMConsumer.shutdown();
         this.logReplicationFSMWorkers.shutdown();
-    }
-
-    public boolean isValidTransition(UUID currentSyncId, UUID newSyncID) {
-        return currentSyncId.equals(newSyncID);
     }
 }

@@ -13,12 +13,12 @@ public class LogReplicationEventMetadata {
     private static final UUID NIL_UUID = new UUID(0,0);
 
     /*
-     * Represents the ID of snapshot_sync or log_entry_sync.
+     * Represents the request/event Id that preceded this event.
      *
-     * This is used to correlate the sync ID and the FSM event, and if an FSM event is received for some other sync,
-     * it is effectively ignored.
+     * This is used to correlate the event with the state in which it was originated.
+     * For example, a trimmed exception from state A vs. a trimmed exception from state B.
      */
-    private UUID syncId;
+    private UUID requestId;
 
     /*
      * Represents the last log entry synced timestamp.
@@ -33,49 +33,59 @@ public class LogReplicationEventMetadata {
     private boolean forceSnapshotSync = false;
 
     /**
-     * Constructor
+     * Empty Metadata
      *
-     * @param syncId identifier of the request that preceded this event.
+     * @return an empty instance of log replication event metadata
      */
-    public LogReplicationEventMetadata(UUID syncId) {
-        this.syncId = syncId;
+    public static LogReplicationEventMetadata empty() {
+        return new LogReplicationEventMetadata(NIL_UUID, -1L);
     }
 
     /**
      * Constructor
      *
-     * @param syncId identifier of the request that preceded this event.
+     * @param requestId identifier of the request that preceded this event.
      */
-    public LogReplicationEventMetadata(UUID syncId, boolean forceSnapshotSync) {
-        this.syncId = syncId;
-        this.forceSnapshotSync = forceSnapshotSync;
+    public LogReplicationEventMetadata(UUID requestId) {
+        this.requestId = requestId;
     }
 
     /**
      * Constructor
      *
-     * @param syncId identifier of the request that preceded this event.
+     * @param requestId identifier of the request that preceded this event.
      * @param syncTimestamp last synced timestamp.
      */
-    public LogReplicationEventMetadata(UUID syncId, long syncTimestamp) {
-        this.syncId = syncId;
+    public LogReplicationEventMetadata(UUID requestId, long syncTimestamp) {
+        this.requestId = requestId;
         this.lastLogEntrySyncedTimestamp = syncTimestamp;
     }
 
     /**
      * Constructor
      *
-     * @param syncId identifier of the request that preceded this event.
+     * @param requestId identifier of the request that preceded this event.
      * @param syncTimestamp last synced timestamp.
      * @param baseSnapshot last base snapshot
      */
-    public LogReplicationEventMetadata(UUID syncId, long syncTimestamp, long baseSnapshot) {
-        this(syncId, syncTimestamp);
+    public LogReplicationEventMetadata(UUID requestId, long syncTimestamp, long baseSnapshot) {
+        this(requestId, syncTimestamp);
         this.lastTransferredBaseSnapshot = baseSnapshot;
     }
 
-    public UUID getSyncId() {
-        return this.syncId;
+    /**
+     * Constructor
+     *
+     * @param forceSnapshotSync true, if snapshot sync has been forced by caller.
+     *                          false, otherwise.
+     */
+    public LogReplicationEventMetadata(boolean forceSnapshotSync) {
+        this(NIL_UUID, -1L);
+        this.forceSnapshotSync = forceSnapshotSync;
+    }
+
+    public UUID getRequestId() {
+        return this.requestId;
     }
 
     public long getLastLogEntrySyncedTimestamp() {
