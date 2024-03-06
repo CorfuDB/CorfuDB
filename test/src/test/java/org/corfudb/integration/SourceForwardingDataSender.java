@@ -104,7 +104,7 @@ public class SourceForwardingDataSender extends AbstractIT implements DataSender
     @SneakyThrows
     public SourceForwardingDataSender(String destinationEndpoint, LogReplicationIT.TestConfig testConfig,
                                       LogReplicationMetadataManager metadataManager,
-                                      LogReplicationIT.TransitionSource function,
+                                      String pluginConfigFilePath, LogReplicationIT.TransitionSource function,
                                       LogReplicationContext context) {
         this.runtime = CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder().build())
                 .parseConfigurationString(destinationEndpoint)
@@ -115,7 +115,7 @@ public class SourceForwardingDataSender extends AbstractIT implements DataSender
 
         // TODO pankti: This test-only constructor can be removed
         this.destinationLogReplicationManager = new LogReplicationSinkManager(runtime.getLayoutServers().get(0),
-            metadataManager, session, context);
+            metadataManager, pluginConfigFilePath, session, context);
 
         this.ifDropMsg = testConfig.getDropMessageLevel();
         this.delayedApplyCycles = testConfig.getDelayedApplyCycles();

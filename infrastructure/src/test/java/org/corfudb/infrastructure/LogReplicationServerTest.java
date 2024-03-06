@@ -6,7 +6,6 @@ import org.assertj.core.api.Assertions;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.infrastructure.logreplication.infrastructure.msghandlers.LogReplicationServer;
 import org.corfudb.infrastructure.logreplication.infrastructure.SessionManager;
-import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationSinkManager;
@@ -81,7 +80,7 @@ public class LogReplicationServerTest {
         Set<LogReplicationSession> sessionSet = new HashSet<>();
         sessionSet.add(session);
         LogReplicationContext replicationContext = new LogReplicationContext(mock(LogReplicationConfigManager.class),
-                0L, SAMPLE_HOSTNAME, true, mock(LogReplicationPluginConfig.class));
+                0L, SAMPLE_HOSTNAME, true);
         lrServer = spy(new LogReplicationServer(context, sessionSet, metadataManager, SINK_NODE_ID, SINK_CLUSTER_ID,
                 replicationContext));
         lrServer.getSessionToSinkManagerMap().put(session, sinkManager);

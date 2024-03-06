@@ -8,7 +8,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 public class CorfuSaasEndpointProviderTest {
 
-    private final String pluginConfigFile = "src/test/resources/transport/pluginConfig.properties";
+    private final String pluginConfigFile = "src/test/resources/transport/grpcConfig.properties";
 
     /**
      * This test call the utility function and expects the value from the config file
