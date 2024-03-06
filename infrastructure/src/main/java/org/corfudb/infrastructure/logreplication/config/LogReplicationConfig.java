@@ -30,8 +30,8 @@ public abstract class LogReplicationConfig {
     // Default value for the max number of entries applied in a single transaction on Sink during snapshot sync
     public static final int DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED = 50;
 
-    // The recommended max message size of a protobuf message is 64MB. Log Replication uses this limit as the default
-    // message size to batch and send data across over to the other side.
+    // Max message size supported by protocol buffers is 64MB. Log Replication uses this limit as the default message
+    // size to batch and send data across over to the other side.
     public static final int DEFAULT_MAX_DATA_MSG_SIZE = 64 << 20;
 
     // Log Replication default max cache number of entries
@@ -40,9 +40,8 @@ public abstract class LogReplicationConfig {
     // This value is exposed as a configuration parameter for LR.
     public static final int DEFAULT_MAX_CACHE_NUM_ENTRIES = 200;
 
-    // Corfu runtime's max uncompressed write size is used to calculate the payload transfer and apply sizes in
-    // LR.  To account for extra bytes added in logData.serialize(), consider a fraction of this max write size.
-    public static final int DATA_FRACTION_OF_UNCOMPRESSED_WRITE_SIZE = 85;
+    // Percentage of log data per log replication message
+    public static final int DATA_FRACTION_PER_MSG = 90;
 
     public static final UUID REGISTRY_TABLE_ID = CorfuRuntime.getStreamID(
         TableRegistry.getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, TableRegistry.REGISTRY_TABLE_NAME));
@@ -61,18 +60,16 @@ public abstract class LogReplicationConfig {
     // Snapshot Sync Batch Size(number of messages)
     private int maxNumMsgPerBatch;
 
+    // Max Size of Log Replication Data Message
+    private int maxMsgSize;
+
     // Max Cache number of entries
     private int maxCacheSize;
 
     /**
-     * The max size of replicated data payload transferred at a time.
+     * The max size of data payload for the log replication message.
      */
-    private long maxTransferSize;
-
-    /**
-     * The max size of data payload written in a single transaction during the Apply phase of Snapshot Sync
-     */
-    private long maxApplySize;
+    private int maxDataSizePerMsg;
 
     /**
      * Max number of entries to be applied during a snapshot sync.  For special tables only.
@@ -97,15 +94,15 @@ public abstract class LogReplicationConfig {
 
         if (serverContext == null) {
             this.maxNumMsgPerBatch = DEFAULT_MAX_NUM_MSG_PER_BATCH;
+            this.maxMsgSize = DEFAULT_MAX_DATA_MSG_SIZE;
             this.maxCacheSize = DEFAULT_MAX_CACHE_NUM_ENTRIES;
             this.maxSnapshotEntriesApplied = DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED;
-            this.maxApplySize = CorfuRuntime.MAX_UNCOMPRESSED_WRITE_SIZE * DATA_FRACTION_OF_UNCOMPRESSED_WRITE_SIZE / 100;
         } else {
             this.maxNumMsgPerBatch = serverContext.getLogReplicationMaxNumMsgPerBatch();
+            this.maxMsgSize = serverContext.getLogReplicationMaxDataMessageSize();
             this.maxCacheSize = serverContext.getLogReplicationCacheMaxSize();
             this.maxSnapshotEntriesApplied = serverContext.getMaxSnapshotEntriesApplied();
-            this.maxApplySize = serverContext.getMaxUncompressedTxSize() * DATA_FRACTION_OF_UNCOMPRESSED_WRITE_SIZE / 100;
         }
-        this.maxTransferSize = Math.min(DEFAULT_MAX_DATA_MSG_SIZE, maxApplySize);
+        this.maxDataSizePerMsg = maxMsgSize * DATA_FRACTION_PER_MSG / 100;
     }
 }
