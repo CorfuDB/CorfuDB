@@ -472,7 +472,6 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
                     if (sessionToRemoteSourceLeaderManager.get(session).getRemoteLeaderNodeId().isPresent()) {
                         clientChannelAdapter.send(sessionToRemoteSourceLeaderManager.get(session).getRemoteLeaderNodeId().get(), response);
                     } else {
-                        log.info("Remote Leader Node not found.  Not sending ACK.");
                         sessionToRemoteSourceLeaderManager.get(session).input(
                                 new LogReplicationSinkEvent(LogReplicationSinkEvent.LogReplicationSinkEventType.REMOTE_LEADER_LOSS));
                     }
@@ -562,26 +561,14 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
         log.debug("Received request message {}", message.getPayload().getPayloadCase());
         try {
             if (message.getPayload().getPayloadCase().equals(CorfuMessage.RequestPayloadMsg.PayloadCase.LR_LEADERSHIP_LOSS)) {
-
-                LogReplicationSession session = message.getHeader().getSession();
-
-                this.clientChannelAdapter.processLeadershipLoss(session);
-                sessionToRemoteSourceLeaderManager.get(session).input(new LogReplicationSinkEvent(
+                this.clientChannelAdapter.processLeadershipLoss(message.getHeader().getSession());
+                sessionToRemoteSourceLeaderManager.get(message.getHeader().getSession()).input(new LogReplicationSinkEvent(
                         LogReplicationSinkEvent.LogReplicationSinkEventType.REMOTE_LEADER_LOSS,
                         message.getPayload().getLrLeadershipLoss().getNodeId()));
                 // ack the leadership loss msg with an empty payload
                 CorfuMessage.ResponsePayloadMsg responsePayloadMsg = CorfuMessage.ResponsePayloadMsg.newBuilder()
                         .setLrEntryAck(LogReplication.LogReplicationEntryMsg.newBuilder().build()).build();
-
-                CorfuMessage.ResponseMsg responseMsg = getResponseMsg(getHeaderMsg(message.getHeader()),
-                        responsePayloadMsg);
-                // If there is a leadership loss on the remote Source cluster, send an ACK responding to it because
-                // the old leader is waiting(blocked) on this ACK
-                if (incomingSession.contains(session)) {
-                    clientChannelAdapter.send(message.getPayload().getLrLeadershipLoss().getNodeId(), responseMsg);
-                } else {
-                    sendResponse(getResponseMsg(getHeaderMsg(message.getHeader()), responsePayloadMsg));
-                }
+                sendResponse(getResponseMsg(getHeaderMsg(message.getHeader()), responsePayloadMsg));
                 return;
             }
         } catch (NullPointerException npe) {
