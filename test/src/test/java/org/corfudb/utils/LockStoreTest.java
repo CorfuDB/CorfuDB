@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
@@ -286,5 +287,13 @@ public class LockStoreTest extends AbstractViewTest {
 
             cleanupAfterIteration();
         }
+    }
+
+    @Test
+    public void testFilterExpiredLocksWithEmptyLockTable() throws Exception {
+        LockStore lockStore = new LockStore(runtime1, UUID.randomUUID());
+        List<LockDataTypes.LockId> revocableLocks =
+            lockStore.filterLocksWithExpiredLeases(Collections.singletonList(lockId)).stream().collect(Collectors.toList());
+        Assert.assertTrue(Objects.equals(revocableLocks, Collections.singletonList(lockId)));
     }
 }
