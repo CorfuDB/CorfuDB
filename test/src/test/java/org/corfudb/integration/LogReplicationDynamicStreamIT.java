@@ -48,9 +48,12 @@ public class LogReplicationDynamicStreamIT extends LogReplicationAbstractIT {
      */
     @Before
     public void setupPluginPath() throws Exception {
+         String grpcConfig = "src/test/resources/transport/grpcConfig.properties";
         if(runProcess) {
-            File f = new File(pluginConfigFilePath);
+            File f = new File(grpcConfig);
             this.pluginConfigFilePath = f.getAbsolutePath();
+        } else {
+            this.pluginConfigFilePath = grpcConfig;
         }
 
         // Initiate Source and Sink runtime and CorfuStore
