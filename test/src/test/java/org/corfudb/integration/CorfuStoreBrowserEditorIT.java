@@ -978,6 +978,69 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         Assert.assertEquals(2, browser.printTable(NAMESPACE, TABLE_NAME));
     }
 
+    @Test
+    public void addRecordToATableWithoutMetadata() throws IOException,
+            InvocationTargetException, NoSuchMethodException,
+            IllegalAccessException {
+        runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
+
+        // Start a Corfu runtime
+        runtime = createRuntime(singleNodeEndpoint);
+
+        CorfuStore store = new CorfuStore(runtime);
+
+        final Table<SampleSchema.Uuid, SampleSchema.Uuid, SampleSchema.Uuid> table1 = store.openTable(
+                NAMESPACE,
+                TABLE_NAME,
+                SampleSchema.Uuid.class,
+                SampleSchema.Uuid.class,
+                null,
+                TableOptions.fromProtoSchema(SampleSchema.Uuid.class));
+
+        final long keyUuid = 1L;
+        final long valueUuid = 3L;
+
+        SampleSchema.Uuid uuidKey = SampleSchema.Uuid.newBuilder()
+                .setMsb(keyUuid)
+                .setLsb(keyUuid)
+                .build();
+        SampleSchema.Uuid uuidVal = SampleSchema.Uuid.newBuilder()
+                .setMsb(valueUuid)
+                .setLsb(valueUuid)
+                .build();
+        TxnContext tx = store.txn(NAMESPACE);
+        tx.putRecord(table1, uuidKey, uuidVal, null);
+        tx.commit();
+        runtime.shutdown();
+
+        runtime = createRuntime(singleNodeEndpoint);
+        CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime);
+
+        // Add a new record with empty metadata and verify it can be added
+        final String newKeyString1 = "{\"msb\": \"4\", \"lsb\": \"4\"}";
+        final String newValString1 = "{\"msb\": \"4\", \"lsb\": \"4\"}";
+        final String newMetadataString1 = "";
+
+        CorfuDynamicRecord addedRecord = browser.addRecord(NAMESPACE,
+                TABLE_NAME, newKeyString1, newValString1, newMetadataString1);
+        Assert.assertNotNull(addedRecord);
+
+        // Verify
+        final long newVal = 4L;
+        SampleSchema.Uuid newValUuid = SampleSchema.Uuid.newBuilder()
+                .setMsb(newVal)
+                .setLsb(newVal)
+                .build();
+        CorfuDynamicRecord expectedRecord = new CorfuDynamicRecord(
+                Any.pack(SampleSchema.Uuid.getDefaultInstance()).getTypeUrl(),
+                DynamicMessage.newBuilder(newValUuid).build(),
+                "",
+                null);
+
+        Assert.assertEquals(expectedRecord, addedRecord);
+        Assert.assertEquals(2, browser.printTable(NAMESPACE, TABLE_NAME));
+    }
+
     /**
      * Verify that addRecord fails on a non-existent table.
      */

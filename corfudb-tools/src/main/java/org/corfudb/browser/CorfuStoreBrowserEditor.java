@@ -407,7 +407,7 @@ public class CorfuStoreBrowserEditor implements CorfuBrowserEditorCommands {
         DynamicMessage newValueMsg =
             dynamicProtobufSerializer.createDynamicMessageFromJson(defaultValueAny,
                 newValue);
-        DynamicMessage newMetadataMsg =
+        DynamicMessage newMetadataMsg = defaultMetadataAny.getTypeUrl().isEmpty() ? null :
             dynamicProtobufSerializer.createDynamicMessageFromJson(defaultMetadataAny,
                 newMetadata);
 
