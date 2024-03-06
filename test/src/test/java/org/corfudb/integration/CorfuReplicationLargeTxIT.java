@@ -51,21 +51,16 @@ public class CorfuReplicationLargeTxIT extends LogReplicationAbstractIT {
 
     private static final int NUM_ENTRIES_PER_TABLE = 20;
 
-    // Max uncompressed transaction size(in bytes) for applying snapshot sync updates
-    // It was observed that a single transaction on the Protobuf descriptor table was >9k bytes.  The Snapshot reader
-    // currently does not have the ability to split a single transaction before sending it.  So the max write size
-    // must be able to accommodate this much data as it will not be split when writing to the shadow stream on the
-    // Sink also.
-    private static final int MAX_WRITE_SIZE_BYTES = 10000;
+    // Max transaction size(in bytes) for applying snapshot sync updates
+    private static final int MAX_WRITE_SIZE_BYTES = 9000;
 
     // Max number of entries applied in a single transaction during snapshot sync
     private static final int MAX_SNAPSHOT_ENTRIES_APPLIED = 1;
 
     /**
-     * In LR Snapshot sync, the max payload size transferred is 85% of MAX_WRITE_SIZE_BYTES, i.e., 8500 bytes.
-     * The Sink cluster also applies the same number of bytes in a single transaction during the apply phase.
-     * It was empirically determined that NUM_ENTRIES_PER_TABLE had a serialized size of 5.5k bytes approx.  Hence, a
-     * snapshot sync with this much data will be applied in a single transaction on the Sink
+     * MAX_WRITE_SIZE_BYTES is the maximum number of bytes which can be written in a single transaction during
+     * snapshot sync apply on the Sink.  It was empirically determined that NUM_ENTRIES_PER_TABLE had a serialized
+     * size of 8.5k bytes approx.  Hence, a snapshot sync with this much data will be applied in a single transaction.
      * @throws Exception
      */
     @Test
@@ -74,10 +69,10 @@ public class CorfuReplicationLargeTxIT extends LogReplicationAbstractIT {
     }
 
     /**
-     * In LR Snapshot sync, the max payload size transferred is 85% of MAX_WRITE_SIZE_BYTES, i.e., 8500 bytes.
-     * The Sink cluster also applies the same number of bytes in a single transaction during the apply phase.
-     * It was empirically determined that NUM_ENTRIES_PER_TABLE had a serialized size of 5.5k bytes approx.  Hence, a
-     * snapshot sync with twice this much data will be applied in 2 transactions on the Sink.
+     * MAX_WRITE_SIZE_BYTES is the maximum number of bytes which can be written in a single transaction during
+     * snapshot sync apply on the Sink.  It was empirically determined that NUM_ENTRIES_PER_TABLE had a serialized
+     * size of 8.5k bytes approx.  Hence, a snapshot sync with twice the data(2*NUM_ENTRIES_PER_TABLE) will be
+     * applied in 2 transactions.
      * @throws Exception
      */
     @Test
@@ -144,7 +139,7 @@ public class CorfuReplicationLargeTxIT extends LogReplicationAbstractIT {
         corfuStoreSink.subscribeListener(streamingUpdateListener, NAMESPACE, TAG_ONE);
 
         // Start LR on both clusters with custom write sizes.
-        startLogReplicatorServersWithCustomMaxTxSize();
+        startLogReplicatorServersWithCustomMaxWriteSize();
 
         log.debug("Wait for snapshot sync to finish");
         statusUpdateLatch.await();
@@ -279,14 +274,14 @@ public class CorfuReplicationLargeTxIT extends LogReplicationAbstractIT {
         }
     }
 
-    private void startLogReplicatorServersWithCustomMaxTxSize() throws Exception {
+    private void startLogReplicatorServersWithCustomMaxWriteSize() throws Exception {
         sourceReplicationServer =
-            runReplicationServerWithCustomMaxTxSize(sourceReplicationServerPort, sourceSiteCorfuPort,
+            runReplicationServerCustomMaxWriteSize(sourceReplicationServerPort, sourceSiteCorfuPort,
                 pluginConfigFilePath, MAX_WRITE_SIZE_BYTES, MAX_SNAPSHOT_ENTRIES_APPLIED, transportType);
 
         // Start Log Replication Server on Sink Site
         sinkReplicationServer =
-            runReplicationServerWithCustomMaxTxSize(sinkReplicationServerPort, sinkSiteCorfuPort,
+            runReplicationServerCustomMaxWriteSize(sinkReplicationServerPort, sinkSiteCorfuPort,
                 pluginConfigFilePath, MAX_WRITE_SIZE_BYTES, MAX_SNAPSHOT_ENTRIES_APPLIED, transportType);
     }
 
