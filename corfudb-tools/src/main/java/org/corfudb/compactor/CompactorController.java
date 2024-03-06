@@ -1,5 +1,6 @@
 package org.corfudb.compactor;
 
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.DistributedCheckpointerHelper;
@@ -11,19 +12,14 @@ import org.corfudb.runtime.collections.CorfuStore;
  */
 @Slf4j
 public class CompactorController {
-    private final CorfuRuntime corfuRuntime;
-    private final CorfuStore corfuStore;
     private final CompactorControllerConfig config;
-    private final DistributedCheckpointerHelper distributedCheckpointerHelper;
-    public CompactorController(String[] args) throws Exception {
+    @Getter
+    private CorfuRuntime corfuRuntime;
+    private CorfuStore corfuStore;
+    private DistributedCheckpointerHelper distributedCheckpointerHelper;
+    public CompactorController(String[] args) {
         this.config = new CompactorControllerConfig(args);
-
         Thread.currentThread().setName("Cmpt-ctrls-" + config.getNodeLocator().getPort());
-        this.corfuRuntime = (CorfuRuntime.fromParameters(
-                config.getParams())).parseConfigurationString(config.getNodeLocator().toEndpointUrl()).connect();
-        this.corfuStore = new CorfuStore(corfuRuntime);
-
-        this.distributedCheckpointerHelper = new DistributedCheckpointerHelper(corfuStore);
     }
 
     public CompactorController(CompactorControllerConfig config, CorfuRuntime corfuRuntime, CorfuStore corfuStore,
@@ -34,18 +30,29 @@ public class CompactorController {
         this.distributedCheckpointerHelper = distributedCheckpointerHelper;
     }
 
+    public void initCompactorController() throws Exception {
+        this.corfuRuntime = (CorfuRuntime.fromParameters(
+                config.getParams())).parseConfigurationString(config.getNodeLocator().toEndpointUrl());
+        this.corfuRuntime.connect();
+        this.corfuStore = new CorfuStore(corfuRuntime);
+        this.distributedCheckpointerHelper = new DistributedCheckpointerHelper(corfuStore);
+    }
+
     /**
      * Entry point to invoke compactor controls operations
      *
      * @param args command line argument strings
      */
     public static void main(String[] args) {
+        CompactorController corfuStoreCompactorControls = new CompactorController(args);
         try {
-            CompactorController corfuStoreCompactorControls = new CompactorController(args);
+            corfuStoreCompactorControls.initCompactorController();
             corfuStoreCompactorControls.doCompactorAction();
         } catch (Exception e) {
             log.error("CorfuStoreCompactorMain crashed with error: {}, Exception: ",
                     CompactorBaseConfig.CORFU_LOG_CHECKPOINT_ERROR, e);
+        } finally {
+            corfuStoreCompactorControls.shutdown();
         }
         log.info("Exiting CorfuStoreCompactor");
     }
@@ -79,6 +86,12 @@ public class CompactorController {
                 log.info("Enabling instant compactor trigger...");
                 distributedCheckpointerHelper.instantTrigger(false);
             }
+        }
+    }
+
+    public void shutdown() {
+        if (corfuRuntime != null) {
+            corfuRuntime.shutdown();
         }
     }
 }

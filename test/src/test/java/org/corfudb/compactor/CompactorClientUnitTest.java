@@ -19,6 +19,7 @@ import static org.mockito.Mockito.when;
 
     public class CompactorClientUnitTest {
     private final CorfuRuntime corfuRuntime = mock(CorfuRuntime.class);
+    private final CorfuRuntime cpRuntime = mock(CorfuRuntime.class);
     private final CorfuStore corfuStore = mock(CorfuStore.class);
     private final CompactorControllerConfig config = mock(CompactorControllerConfig.class);
     private final DistributedCheckpointerHelper distributedCheckpointerHelper = mock(DistributedCheckpointerHelper.class);
@@ -30,7 +31,7 @@ import static org.mockito.Mockito.when;
     public void setup() {
         when(corfuRuntime.getParameters()).thenReturn(CorfuRuntime.CorfuRuntimeParameters.builder().clientName("TestClient").build());
         corfuCompactorControls = spy(new CompactorController(config, corfuRuntime, corfuStore, distributedCheckpointerHelper));
-        corfuCompactorCheckpointer = spy(new CompactorCheckpointer(distributedCheckpointerHelper, distributedCheckpointer));
+        corfuCompactorCheckpointer = spy(new CompactorCheckpointer(cpRuntime, corfuRuntime, distributedCheckpointerHelper, distributedCheckpointer));
         doReturn(true).when(distributedCheckpointerHelper).disableCompaction();
         doNothing().when(distributedCheckpointerHelper).enableCompaction();
         doNothing().when(distributedCheckpointerHelper).freezeCompaction();
@@ -54,12 +55,15 @@ import static org.mockito.Mockito.when;
         corfuCompactorControls.doCompactorAction();
         corfuCompactorControls.doCompactorAction();
 
+        corfuCompactorControls.shutdown();
+
         verify(distributedCheckpointerHelper).disableCompaction();
         verify(distributedCheckpointerHelper).freezeCompaction();
         verify(distributedCheckpointerHelper, times(2)).enableCompaction();
         verify(distributedCheckpointerHelper, times(2)).unfreezeCompaction();
         verify(distributedCheckpointerHelper).instantTrigger(true);
         verify(distributedCheckpointerHelper).instantTrigger(false);
+        verify(corfuCompactorControls.getCorfuRuntime()).shutdown();
     }
 
     @Test
@@ -74,18 +78,24 @@ import static org.mockito.Mockito.when;
         doReturn(false).when(config).isUnfreezeCompaction();
         corfuCompactorControls.doCompactorAction();
 
+        corfuCompactorControls.shutdown();
+
         verify(distributedCheckpointerHelper).freezeCompaction();
         verify(distributedCheckpointerHelper).disableCompaction();
         verify(distributedCheckpointerHelper, never()).unfreezeCompaction();
         verify(distributedCheckpointerHelper, never()).enableCompaction();
+        verify(corfuCompactorControls.getCorfuRuntime()).shutdown();
     }
 
     @Test
     public void unableToCheckpointTest() {
         doReturn(false).when(distributedCheckpointerHelper).hasCompactionStarted();
         corfuCompactorCheckpointer.startCheckpointing();
+        corfuCompactorCheckpointer.shutdown();
 
         verify(distributedCheckpointerHelper, times(CompactorCheckpointer.RETRY_CHECKPOINTING)).hasCompactionStarted();
+        verify(corfuRuntime).shutdown();
+        verify(cpRuntime).shutdown();
         verify(distributedCheckpointer).shutdown();
     }
 
@@ -93,8 +103,11 @@ import static org.mockito.Mockito.when;
     public void checkpointSuccessTest() {
         when(distributedCheckpointerHelper.hasCompactionStarted()).thenReturn(false).thenReturn(true);
         corfuCompactorCheckpointer.startCheckpointing();
+        corfuCompactorCheckpointer.shutdown();
 
         verify(distributedCheckpointerHelper, times(2)).hasCompactionStarted();
+        verify(corfuRuntime).shutdown();
+        verify(cpRuntime).shutdown();
         verify(distributedCheckpointer).shutdown();
     }
 }
