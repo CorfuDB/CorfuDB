@@ -129,7 +129,7 @@ public class CorfuRuntime {
     /**
      * CorfuStore's table registry cache for Table lifecycle management.
      */
-    private final AtomicReference<TableRegistry> tableRegistry = new AtomicReference<>(null);
+    private final AtomicReference<TableRegistry> tableRegistry = new AtomicReference<>();
 
     /**
      * List of initial set of layout servers, i.e., servers specified in
@@ -1065,7 +1065,7 @@ public class CorfuRuntime {
             try {
                 layout.cancel(true);
             } catch (Exception e) {
-                log.error("Runtime shutting down. Exception in terminating fetchLayout: {}", e);
+                log.error("Runtime shutting down. Exception in terminating fetchLayout", e);
             }
         }
 

@@ -24,6 +24,11 @@ public class CustomSerializer implements ISerializer {
         return serializer.deserialize(b, rt);
     }
 
+    @Override
+    public <T> T deserializeTyped(ByteBuf b, CorfuRuntime rt) {
+        return (T) deserialize(b, rt);
+    }
+
     public void serialize(Object o, ByteBuf b) {
         serializer.serialize(o, b);
     }

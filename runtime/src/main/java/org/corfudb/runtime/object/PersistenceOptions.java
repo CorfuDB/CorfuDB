@@ -1,6 +1,7 @@
 package org.corfudb.runtime.object;
 
 import lombok.Builder;
+import lombok.Builder.Default;
 import lombok.Getter;
 import org.corfudb.runtime.CorfuOptions.ConsistencyModel;
 import org.corfudb.runtime.CorfuOptions.SizeComputationModel;

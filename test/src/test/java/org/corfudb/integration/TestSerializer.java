@@ -28,6 +28,11 @@ public class TestSerializer implements ISerializer {
     }
 
     @Override
+    public <T> T deserializeTyped(ByteBuf b, CorfuRuntime rt) {
+        return (T) deserialize(b, rt);
+    }
+
+    @Override
     public void serialize(Object object, ByteBuf buffer) {
         buffer.writeLong((Long)object);
 

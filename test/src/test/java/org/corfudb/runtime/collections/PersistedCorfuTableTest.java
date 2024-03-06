@@ -1198,6 +1198,11 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
         }
 
         @Override
+        public <T> T deserializeTyped(ByteBuf b, CorfuRuntime rt) {
+            return (T) deserialize(b, rt);
+        }
+
+        @Override
         public void serialize(Object o, ByteBuf b) {
             b.writeBytes(gson.toJson(o).getBytes());
         }

@@ -18,10 +18,10 @@ public class SnapshotProxy<T extends AutoCloseable> implements ICorfuSMRSnapshot
     private T snapshotView;
     private final Supplier<Long> snapshotVersionSupplier;
 
-    private final Map<String, ICorfuSMRUpcallTarget<T>> upcallTargetMap;
+    private final Map<String, CorfuSmrUpcallTarget<T>> upcallTargetMap;
 
     public SnapshotProxy(@NonNull final SMRSnapshot<T> snapshot, Supplier<Long> snapshotVersionSupplier,
-                         @NonNull final Map<String, ICorfuSMRUpcallTarget<T>> upcallTargetMap) {
+                         @NonNull final Map<String, CorfuSmrUpcallTarget<T>> upcallTargetMap) {
         this.snapshot = snapshot;
         this.snapshotView = snapshot.consume();
         this.snapshotVersionSupplier = snapshotVersionSupplier;
@@ -36,7 +36,7 @@ public class SnapshotProxy<T extends AutoCloseable> implements ICorfuSMRSnapshot
     }
 
     public void logUpdate(@NonNull SMREntry updateEntry) {
-        final ICorfuSMRUpcallTarget<T> target = upcallTargetMap.get(updateEntry.getSMRMethod());
+        final CorfuSmrUpcallTarget<T> target = upcallTargetMap.get(updateEntry.getSMRMethod());
 
         if (target == null) {
             throw new RuntimeException("Unknown upcall " + updateEntry.getSMRMethod());

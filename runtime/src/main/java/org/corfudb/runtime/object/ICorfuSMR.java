@@ -1,5 +1,7 @@
 package org.corfudb.runtime.object;
 
+import org.corfudb.runtime.object.SnapshotGenerator.SnapshotGeneratorWithConsistency;
+
 import java.util.Map;
 
 /**
@@ -7,9 +9,7 @@ import java.util.Map;
  *
  * @param <S> that extends {@link SnapshotGenerator} and {@link ConsistencyView}
  */
-public interface ICorfuSMR<S extends
-        SnapshotGenerator<S> &
-        ConsistencyView> extends AutoCloseable {
+public interface ICorfuSMR<S extends SnapshotGeneratorWithConsistency<S>> extends AutoCloseable {
 
     /** Get the proxy for this wrapper, to manage the state of the object.
      * @return The proxy for this wrapper. */
@@ -18,14 +18,12 @@ public interface ICorfuSMR<S extends
     /**
      * Set the proxy for this wrapper, to manage the state of the object.
      * @param proxy The proxy to set for this wrapper.
-     * @param <S> The type used for managing underlying versions.
      */
     void setCorfuSMRProxy(ICorfuSMRProxy<S> proxy);
 
     /**
      * Get a map from strings (function names) to SMR upcalls.
-     * @param <R> The return type for ICorfuSMRUpcallTargets
      * @return A map from function names to SMR upcalls
      */
-    <R> Map<String, ICorfuSMRUpcallTarget<R>> getSMRUpcallMap();
+    Map<String, CorfuSmrUpcallTarget<S>> getSmrUpCallMap();
 }

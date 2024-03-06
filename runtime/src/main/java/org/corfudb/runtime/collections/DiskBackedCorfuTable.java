@@ -16,14 +16,13 @@ import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.runtime.CorfuOptions;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.object.ColumnFamilyRegistry;
-import org.corfudb.runtime.object.ConsistencyView;
 import org.corfudb.runtime.object.DiskBackedSMRSnapshot;
 import org.corfudb.runtime.object.PersistenceOptions;
 import org.corfudb.runtime.object.RocksDbApi;
 import org.corfudb.runtime.object.RocksDbSnapshotGenerator;
 import org.corfudb.runtime.object.RocksDbStore;
 import org.corfudb.runtime.object.SMRSnapshot;
-import org.corfudb.runtime.object.SnapshotGenerator;
+import org.corfudb.runtime.object.SnapshotGenerator.SnapshotGeneratorWithConsistency;
 import org.corfudb.runtime.object.SnapshotProxy;
 import org.corfudb.runtime.object.VersionedObjectIdentifier;
 import org.corfudb.runtime.object.ViewGenerator;
@@ -90,9 +89,8 @@ import static org.corfudb.runtime.CorfuOptions.SizeComputationModel.EXACT_SIZE;
 @AllArgsConstructor
 @Builder(toBuilder = true)
 public class DiskBackedCorfuTable<K, V> implements
-        SnapshotGenerator<DiskBackedCorfuTable<K, V>>,
-        ViewGenerator<DiskBackedCorfuTable<K, V>>,
-        ConsistencyView {
+        SnapshotGeneratorWithConsistency<DiskBackedCorfuTable<K, V>>,
+        ViewGenerator<DiskBackedCorfuTable<K, V>> {
 
     public static final Options defaultOptions = getDiskBackedCorfuTableOptions();
     private static final HashFunction murmurHash3 = Hashing.murmur3_32();

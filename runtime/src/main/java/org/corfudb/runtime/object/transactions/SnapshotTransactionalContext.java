@@ -6,6 +6,7 @@ import org.corfudb.runtime.object.ConsistencyView;
 import org.corfudb.runtime.object.ICorfuSMRAccess;
 import org.corfudb.runtime.object.MVOCorfuCompileProxy;
 import org.corfudb.runtime.object.SnapshotGenerator;
+import org.corfudb.runtime.object.SnapshotGenerator.SnapshotGeneratorWithConsistency;
 
 import java.util.List;
 import java.util.UUID;
@@ -29,7 +30,7 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
      * {@inheritDoc}
      */
     @Override
-    public <R, S extends SnapshotGenerator<S> & ConsistencyView> R access(
+    public <R, S extends SnapshotGeneratorWithConsistency<S>> R access(
             MVOCorfuCompileProxy<S> proxy, ICorfuSMRAccess<R, S> accessFunction, Object[] conflictObject) {
         long startAccessTime = System.nanoTime();
         try {

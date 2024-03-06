@@ -1,5 +1,6 @@
 package org.corfudb.runtime.object;
 
+import org.corfudb.runtime.object.SnapshotGenerator.SnapshotGeneratorWithConsistency;
 import org.corfudb.util.serializer.ISerializer;
 
 import java.util.Set;
@@ -12,7 +13,7 @@ import java.util.UUID;
  * @param <S> The type of the SMR object which must extend
  *            {@link SnapshotGenerator} and {@link ConsistencyView}
  */
-public interface ICorfuSMRProxy<S extends SnapshotGenerator<S> & ConsistencyView> {
+public interface ICorfuSMRProxy<S extends SnapshotGeneratorWithConsistency<S>> {
 
     /**
      * Access the state of the object.

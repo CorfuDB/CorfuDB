@@ -1,6 +1,7 @@
 package org.corfudb.runtime.object;
 
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.object.SnapshotGenerator.SnapshotGeneratorWithConsistency;
 import org.corfudb.runtime.view.ObjectOpenOption;
 import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.util.ReflectionUtils;
@@ -37,36 +38,36 @@ public class CorfuCompileWrapperBuilder {
      * @throws InstantiationException Cannot instantiate the object using the arguments and class.
      */
     @SuppressWarnings("checkstyle:abbreviation")
-    private static <T extends ICorfuSMR, S extends SnapshotGenerator<S> & ConsistencyView> T getWrapper(
+    private static <T extends ICorfuSMR<?>, S extends SnapshotGeneratorWithConsistency<S>> T getWrapper(
             Class<T> type, CorfuRuntime rt, UUID streamID, Object[] args,
             ISerializer serializer, Set<UUID> streamTags, ObjectOpenOption objectOpenOption) throws Exception {
 
         if (type.getName().equals(PERSISTENT_CORFU_TABLE_CLASS_NAME)) {
             // TODO: make general - This should get cleaned up
-            Class<S> immutableClass = (Class<S>)
-                    Class.forName(IMMUTABLE_CORFU_TABLE_CLASS_NAME);
+            Class<S> immutableClass = (Class<S>) Class.forName(IMMUTABLE_CORFU_TABLE_CLASS_NAME);
 
-            Class<ICorfuSMR> wrapperClass = (Class<ICorfuSMR>) Class.forName(type.getName());
+            Class<ICorfuSMR<?>> wrapperClass = (Class<ICorfuSMR<?>>) Class.forName(type.getName());
 
             // Instantiate a new instance of this class.
-            ICorfuSMR wrapperObject = (ICorfuSMR) ReflectionUtils.
+            ICorfuSMR<S> wrapperObject = (ICorfuSMR<S>) ReflectionUtils.
                     findMatchingConstructor(wrapperClass.getDeclaredConstructors(), new Object[0]);
 
-            MVOCache<S> mvoCache = rt.getObjectsView().getMvoCache();
+            MVOCache<S> mvoCache = (MVOCache<S>) rt.getObjectsView().getMvoCache();
             // Note: args are used when invoking the internal immutable data structure constructor
-            wrapperObject.setCorfuSMRProxy(new MVOCorfuCompileProxy<>(rt, streamID,
-                    immutableClass, args, serializer, streamTags, wrapperObject, objectOpenOption,
-                    mvoCache));
+            ICorfuSMRProxy<S> proxy = new MVOCorfuCompileProxy<>(
+                    rt, streamID, immutableClass, args, serializer, streamTags, wrapperObject, objectOpenOption, mvoCache
+            );
+            wrapperObject.setCorfuSMRProxy(proxy);
+
             return (T) wrapperObject;
         } else if (type.getName().equals(PERSISTED_CORFU_TABLE_CLASS_NAME)) {
             // TODO: make general - This should also get cleaned up
-            Class<S> coreClass = (Class<S>)
-                    Class.forName(DISKBACKED_CORFU_TABLE_CLASS_NAME);
+            Class<S> coreClass = (Class<S>) Class.forName(DISKBACKED_CORFU_TABLE_CLASS_NAME);
 
             Class<ICorfuSMR> wrapperClass = (Class<ICorfuSMR>) Class.forName(type.getName());
 
             // Instantiate a new instance of this class.
-            ICorfuSMR wrapperObject = (ICorfuSMR) ReflectionUtils.
+            ICorfuSMR<S> wrapperObject = (ICorfuSMR<S>) ReflectionUtils.
                     findMatchingConstructor(wrapperClass.getDeclaredConstructors(), new Object[0]);
 
             // In the context of PersistedCorfuTable, there is one-to-one mapping between
@@ -75,9 +76,13 @@ public class CorfuCompileWrapperBuilder {
             // there is no contention for the underlying resource (memory), there is no
             // good reason to enforce a global cache.
             MVOCache<S> mvoCache = new MVOCache<>(rt.getParameters().getMvoCacheExpiry());
-            wrapperObject.setCorfuSMRProxy(new MVOCorfuCompileProxy<>(rt, streamID,
+            ICorfuSMRProxy<S> proxy = new MVOCorfuCompileProxy<>(
+                    rt, streamID,
                     coreClass, args, serializer, streamTags, wrapperObject, objectOpenOption,
-                    mvoCache));
+                    mvoCache
+            );
+
+            wrapperObject.setCorfuSMRProxy(proxy);
             return (T) wrapperObject;
         }
 

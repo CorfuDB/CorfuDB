@@ -15,6 +15,7 @@ import org.corfudb.runtime.object.ICorfuSMRAccess;
 import org.corfudb.runtime.object.ICorfuSMRSnapshotProxy;
 import org.corfudb.runtime.object.MVOCorfuCompileProxy;
 import org.corfudb.runtime.object.SnapshotGenerator;
+import org.corfudb.runtime.object.SnapshotGenerator.SnapshotGeneratorWithConsistency;
 import org.corfudb.runtime.object.transactions.TransactionalContext.PreCommitListener;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.util.Utils;
@@ -152,7 +153,7 @@ public abstract class AbstractTransactionalContext implements
         AbstractTransactionalContext.log.trace("TXBegin[{}]", this);
     }
 
-    protected <S extends SnapshotGenerator<S> & ConsistencyView> ICorfuSMRSnapshotProxy<S> getAndCacheSnapshotProxy(
+    protected <S extends SnapshotGeneratorWithConsistency<S>> ICorfuSMRSnapshotProxy<S> getAndCacheSnapshotProxy(
             MVOCorfuCompileProxy<S> proxy, long ts) {
         // TODO: Refactor me to avoid casting on ICorfuSMRProxyInternal type.
         ICorfuSMRSnapshotProxy<S> snapshotProxy = (ICorfuSMRSnapshotProxy<S>) snapshotProxyMap.get(proxy);
@@ -196,10 +197,10 @@ public abstract class AbstractTransactionalContext implements
      *                       of the object.
      * @param conflictObject Fine-grained conflict information, if available.
      * @param <R>            The return type of the access function.
-     * @param <T>            The type of the proxy's underlying object.
+     * @param <S>            The type of the proxy's underlying object.
      * @return The return value of the access function.
      */
-    public abstract <R, S extends SnapshotGenerator<S> & ConsistencyView> R access(
+    public abstract <R, S extends SnapshotGeneratorWithConsistency<S>> R access(
             MVOCorfuCompileProxy<S> proxy, ICorfuSMRAccess<R, S> accessFunction, Object[] conflictObject);
 
     /**
@@ -208,11 +209,9 @@ public abstract class AbstractTransactionalContext implements
      * @param proxy          The proxy which generated the update.
      * @param updateEntry    The entry which we are writing to the log.
      * @param conflictObject Fine-grained conflict information, if available.
-     * @param <T>            The type of the proxy's underlying object.
      * @return The address the update was written at.
      */
-    public abstract long logUpdate(
-            MVOCorfuCompileProxy<?> proxy, SMREntry updateEntry, Object[] conflictObject);
+    public abstract long logUpdate(MVOCorfuCompileProxy<?> proxy, SMREntry updateEntry, Object[] conflictObject);
 
     public abstract void logUpdate(UUID streamId, SMREntry updateEntry);
 

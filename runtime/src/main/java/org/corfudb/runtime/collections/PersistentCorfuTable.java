@@ -2,9 +2,9 @@ package org.corfudb.runtime.collections;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.reflect.TypeToken;
+import org.corfudb.runtime.object.CorfuSmrUpcallTarget;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.ICorfuSMRProxy;
-import org.corfudb.runtime.object.ICorfuSMRUpcallTarget;
 
 import javax.annotation.Nonnull;
 import java.util.Map;
@@ -17,8 +17,8 @@ public class PersistentCorfuTable<K, V> implements
 
     private ICorfuSMRProxy<ImmutableCorfuTable<K, V>> proxy;
 
-    private final Map<String, ICorfuSMRUpcallTarget<ImmutableCorfuTable<K, V>>> upcallTargetMap
-        = ImmutableMap.<String, ICorfuSMRUpcallTarget<ImmutableCorfuTable<K, V>>>builder()
+    private final Map<String, CorfuSmrUpcallTarget<ImmutableCorfuTable<K, V>>> upcallTargetMap
+        = ImmutableMap.<String, CorfuSmrUpcallTarget<ImmutableCorfuTable<K, V>>>builder()
             .put("put", (obj, args) -> obj.put((K) args[0], (V) args[1]))
             .put("clear", (obj, args) -> obj.clear())
             .put("remove", (obj, args) -> obj.remove((K) args[0]))
@@ -36,7 +36,7 @@ public class PersistentCorfuTable<K, V> implements
 
     @Override
     public void setCorfuSMRProxy(ICorfuSMRProxy<ImmutableCorfuTable<K, V>> proxy) {
-        this.proxy = (ICorfuSMRProxy<ImmutableCorfuTable<K, V>>) proxy;
+        this.proxy = proxy;
     }
 
     @Override
@@ -109,7 +109,7 @@ public class PersistentCorfuTable<K, V> implements
     }
 
     @Override
-    public Map<String, ICorfuSMRUpcallTarget<ImmutableCorfuTable<K, V>>> getSMRUpcallMap() {
+    public Map<String, CorfuSmrUpcallTarget<ImmutableCorfuTable<K, V>>> getSmrUpCallMap() {
         return upcallTargetMap;
     }
 }

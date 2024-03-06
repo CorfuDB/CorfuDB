@@ -121,9 +121,7 @@ public class DynamicProtobufSerializer implements ISerializer {
                 .setTypeToken(new TypeToken<PersistentCorfuTable<TableName,
                     CorfuRecord<TableDescriptors, TableMetadata>>>() {
                 })
-                .setStreamName(
-                   getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE,
-                       REGISTRY_TABLE_NAME))
+                .setStreamName(getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, REGISTRY_TABLE_NAME))
                 .setSerializer(protobufSerializer)
                 .addOpenOption(ObjectOpenOption.NO_CACHE)
                 .open();
@@ -239,7 +237,8 @@ public class DynamicProtobufSerializer implements ISerializer {
     private void identifyMessageTypesinFileDescriptorProto(FileDescriptorProto fileDescriptorProto) {
         for (DescriptorProtos.DescriptorProto descriptorProto : fileDescriptorProto.getMessageTypeList()) {
             String messageName;
-            if (fileDescriptorProto.getPackage() == null || fileDescriptorProto.getPackage().equals("")) {
+            fileDescriptorProto.getPackage();
+            if (fileDescriptorProto.getPackage().equals("")) {
                 messageName = descriptorProto.getName();
             } else {
                 messageName = fileDescriptorProto.getPackage() + "." + descriptorProto.getName();
@@ -275,7 +274,7 @@ public class DynamicProtobufSerializer implements ISerializer {
             FileDescriptor descriptor = getDescriptor(s);
             fileDescriptorList.add(descriptor);
         }
-        FileDescriptor[] fileDescriptors = fileDescriptorList.toArray(new FileDescriptor[fileDescriptorList.size()]);
+        FileDescriptor[] fileDescriptors = fileDescriptorList.toArray(new FileDescriptor[0]);
         FileDescriptor fileDescriptor = FileDescriptor.buildFrom(fdProtoMap.get(name), fileDescriptors);
         fileDescriptorMap.putIfAbsent(name, fileDescriptor);
         return fileDescriptor;
@@ -405,6 +404,11 @@ public class DynamicProtobufSerializer implements ISerializer {
         }
     }
 
+    @Override
+    public <T> T deserializeTyped(ByteBuf b, CorfuRuntime rt) {
+        return (T) deserialize(b, rt);
+    }
+
     /**
      * Serialize an object into a given byte buffer.
      *
@@ -460,20 +464,25 @@ public class DynamicProtobufSerializer implements ISerializer {
     public String toString() {
         StringBuilder stringBuilder = new StringBuilder();
         stringBuilder.append("\n---------messageFdProtoNameMap Messages:---------\n");
-        for (Map.Entry<String, String> mname: messagesFdProtoNameMap.entrySet()) {
-            stringBuilder.append("Message: "+ mname.getKey()+ " in file "+ mname.getValue()+"\n");
+        for (Map.Entry<String, String> mName: messagesFdProtoNameMap.entrySet()) {
+            stringBuilder
+                    .append("Message: ")
+                    .append(mName.getKey())
+                    .append(" in file ")
+                    .append(mName.getValue())
+                    .append("\n");
         }
 
         stringBuilder.append("\n-------fdProtoMap FileDescriptors:--------------\n");
         for (Map.Entry<String, FileDescriptorProto> fdProto: fdProtoMap.entrySet()) {
-            stringBuilder.append("File: " + fdProto.getKey());
+            stringBuilder.append("File: ").append(fdProto.getKey());
             stringBuilder.append(" ===> (FileDescriptorProto follows...)\n");
             stringBuilder.append(fdProto.getValue());
         }
 
         stringBuilder.append("\n---------fileDescriptorCache FileDescriptors----------\n");
         for (Map.Entry<String, FileDescriptor> fds: fileDescriptorMap.entrySet()) {
-            stringBuilder.append("File: "+ fds.getKey() + " ==> " + fds.getValue() + "\n");
+            stringBuilder.append("File: ").append(fds.getKey()).append(" ==> ").append(fds.getValue()).append("\n");
         }
         return stringBuilder.toString();
     }

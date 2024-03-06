@@ -29,10 +29,12 @@ import org.corfudb.runtime.proto.RpcCommon;
 import org.corfudb.runtime.proto.RpcCommon.UuidMsg;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.Address;
-import org.corfudb.runtime.view.ObjectsView;
+import org.corfudb.runtime.view.ObjectsView.ObjectID;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.test.SampleSchema;
+import org.corfudb.test.SampleSchema.SampleTableAMsg;
+import org.corfudb.test.SampleSchema.Uuid;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalRetry;
 import org.corfudb.util.retry.RetryNeededException;
@@ -262,7 +264,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
 
         // By some future bug should the table disappear from the object cache ensure that
         // the method still fails gracefully with a NoSuchElementException
-        ObjectsView.ObjectID oid = new ObjectsView.ObjectID(table.getStreamUUID(), PersistentCorfuTable.class);
+        ObjectID<PersistentCorfuTable> oid = new ObjectID<>(table.getStreamUUID(), PersistentCorfuTable.class);
         corfuRuntime.getObjectsView().getObjectCache().remove(oid);
         assertThatThrownBy(() -> shimStore.freeTableData(someNamespace, tableName))
                 .isExactlyInstanceOf(NoSuchElementException.class);
@@ -272,7 +274,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
      * CorfuStore stores 3 pieces of information - key, value and metadata
      * This test demonstrates how metadata field options especially "version" can be used and verified.
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void checkMetadataTransactions() throws Exception {
@@ -290,17 +292,17 @@ public class CorfuStoreShimTest extends AbstractViewTest {
 
         // Create & Register the table.
         // This is required to initialize the table for the current corfu client.
-        Table<SampleSchema.Uuid, SampleSchema.EventInfo, ManagedResources> table = shimStore.openTable(
+        Table<Uuid, SampleSchema.EventInfo, ManagedResources> table = shimStore.openTable(
                 nsxManager,
                 tableName,
-                SampleSchema.Uuid.class,
+                Uuid.class,
                 SampleSchema.EventInfo.class,
                 ManagedResources.class,
                 // TableOptions includes option to choose - Memory/Disk based corfu table.
                 TableOptions.builder().build());
 
         UUID uuid1 = UUID.nameUUIDFromBytes("1".getBytes());
-        SampleSchema.Uuid key1 = SampleSchema.Uuid.newBuilder()
+        Uuid key1 = Uuid.newBuilder()
                 .setMsb(uuid1.getMostSignificantBits()).setLsb(uuid1.getLeastSignificantBits())
                 .build();
         ManagedResources user_1 = ManagedResources.newBuilder().setCreateUser("user_1").build();
@@ -369,12 +371,12 @@ public class CorfuStoreShimTest extends AbstractViewTest {
 
         // Verify the table is readable using entryStream()
         final int batchSize = 50;
-        Stream<CorfuStoreEntry<SampleSchema.Uuid, SampleSchema.EventInfo, ManagedResources>> entryStream = table.entryStream();
-        final Iterable<List<CorfuStoreEntry<SampleSchema.Uuid, SampleSchema.EventInfo, ManagedResources>>> partitions =
+        Stream<CorfuStoreEntry<Uuid, SampleSchema.EventInfo, ManagedResources>> entryStream = table.entryStream();
+        final Iterable<List<CorfuStoreEntry<Uuid, SampleSchema.EventInfo, ManagedResources>>> partitions =
                 Iterables.partition(entryStream::iterator, batchSize);
-        for (List<CorfuStoreEntry<SampleSchema.Uuid, SampleSchema.EventInfo, ManagedResources>> partition : partitions) {
-            for (CorfuStoreEntry<SampleSchema.Uuid, SampleSchema.EventInfo, ManagedResources> entry : partition) {
-                assertThat(entry.getKey()).isExactlyInstanceOf(SampleSchema.Uuid.class);
+        for (List<CorfuStoreEntry<Uuid, SampleSchema.EventInfo, ManagedResources>> partition : partitions) {
+            for (CorfuStoreEntry<Uuid, SampleSchema.EventInfo, ManagedResources> entry : partition) {
+                assertThat(entry.getKey()).isExactlyInstanceOf(Uuid.class);
                 assertThat(entry.getPayload()).isExactlyInstanceOf(SampleSchema.EventInfo.class);
                 assertThat(entry.getMetadata()).isExactlyInstanceOf(ManagedResources.class);
             }
@@ -384,7 +386,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
     /**
      * Demonstrates that opening same table from multiple threads will retry internal transactions
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void checkOpenRetriesTXN() throws Exception {
@@ -397,7 +399,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
             for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
                 // Create & Register the table.
                 // This is required to initialize the table for the current corfu client.
-                shimStore.openTable(nsxManager, tableName, SampleSchema.Uuid.class, SampleSchema.EventInfo.class, null,
+                shimStore.openTable(nsxManager, tableName, Uuid.class, SampleSchema.EventInfo.class, null,
                         TableOptions.builder().build());
             }
 
@@ -415,7 +417,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
      * This test runs the above 2 transactions concurrently for 100 iterations and verifies that
      * TransactionAbortedException gets thrown at least once if the key is touched.
      * Additionally, it verifies that the exception is not thrown if the key is not touched.
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void testTouchReqdForReadTxWriteTxConflict() throws Exception {
@@ -439,14 +441,14 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         CorfuStore corfuStore = new CorfuStore(corfuRuntime);
 
         // Open 2 tables with the same schema
-        Table<SampleSchema.Uuid, SampleSchema.EventInfo, Message> table1 = corfuStore.openTable(namespace, tableName1,
-            SampleSchema.Uuid.class, SampleSchema.EventInfo.class, null, TableOptions.builder().build());
+        Table<Uuid, SampleSchema.EventInfo, Message> table1 = corfuStore.openTable(namespace, tableName1,
+            Uuid.class, SampleSchema.EventInfo.class, null, TableOptions.builder().build());
 
-        Table<SampleSchema.Uuid, SampleSchema.EventInfo, Message> table2 = corfuStore.openTable(namespace, tableName2,
-            SampleSchema.Uuid.class, SampleSchema.EventInfo.class, null, TableOptions.builder().build());
+        Table<Uuid, SampleSchema.EventInfo, Message> table2 = corfuStore.openTable(namespace, tableName2,
+            Uuid.class, SampleSchema.EventInfo.class, null, TableOptions.builder().build());
 
         // Construct the conflict key
-        SampleSchema.Uuid conflictKey = SampleSchema.Uuid.newBuilder().setLsb(0).setMsb(0).build();
+        Uuid conflictKey = Uuid.newBuilder().setLsb(0).setMsb(0).build();
 
         // In each iteration, write 3 records in table1.  Then start 2 transactions concurrently.  TX1 reads the
         // conflict key from table1, touches it(touch == true) and writes it to table2.  TX2 updates the conflict key
@@ -456,7 +458,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         for (int i = 0; i < numIterations; i++) {
             // Write sample records in table1
             for (int j = 0; j < numRecords; j++) {
-                SampleSchema.Uuid key = SampleSchema.Uuid.newBuilder().setLsb(j).setMsb(j).build();
+                Uuid key = Uuid.newBuilder().setLsb(j).setMsb(j).build();
                 SampleSchema.EventInfo value = SampleSchema.EventInfo.newBuilder().setName("test" + j).build();
                 try (TxnContext txnContext = corfuStore.txn(namespace)) {
                     txnContext.putRecord(table1, key, value, null);
@@ -519,7 +521,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
      * This test verifies getHighestSequenceNumber is able to return the highest sequence number
      * corresponding to a DATA entry when the tail of a stream is filled with HOLES.
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void getHighestSequenceNumberPresenceOfHoles() throws Exception {
@@ -554,17 +556,25 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         }
 
         // Verify Data is reflected in the sequencer
-        StreamAddressSpace addressSpace = corfuRuntime.getSequencerView().getStreamAddressSpace(new StreamAddressRange(table.getStreamUUID(), Address.MAX, Address.NON_ADDRESS));
+        StreamAddressSpace addressSpace = corfuRuntime
+                .getSequencerView()
+                .getStreamAddressSpace(new StreamAddressRange(table.getStreamUUID(), Address.MAX, Address.NON_ADDRESS));
         assertThat(addressSpace.size()).isEqualTo(numUpdates);
 
         // Enforce 'numHoles' holes to 'table'
         for (int index = 0; index < numHoles; index++) {
             TokenResponse token = corfuRuntime.getSequencerView().next(table.getStreamUUID());
-            corfuRuntime.getLayoutView().getRuntimeLayout().getLogUnitClient(SERVERS.ENDPOINT_0).write(LogData.getHole(token.getSequence())).get();
+            corfuRuntime.getLayoutView()
+                    .getRuntimeLayout()
+                    .getLogUnitClient(SERVERS.ENDPOINT_0)
+                    .write(LogData.getHole(token.getSequence()))
+                    .get();
         }
 
         // Verify Data is reflected in the sequencer
-        StreamAddressSpace addressSpaceWithHoles = corfuRuntime.getSequencerView().getStreamAddressSpace(new StreamAddressRange(table.getStreamUUID(), Address.MAX, Address.NON_ADDRESS));
+        StreamAddressSpace addressSpaceWithHoles = corfuRuntime
+                .getSequencerView()
+                .getStreamAddressSpace(new StreamAddressRange(table.getStreamUUID(), Address.MAX, Address.NON_ADDRESS));
         assertThat(addressSpaceWithHoles.size()).isEqualTo(numUpdates + numHoles);
 
         // Get Highest Sequence Number and verify it does not retrieve non-data entry.
@@ -807,7 +817,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
     /**
      * Validate that fields of metadata that are not set explicitly retain their prior values.
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void checkMetadataWorksWithoutSupervision() throws Exception {
@@ -913,7 +923,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
     /**
      * Validate that nested transactions do not throw exception if txnWithNesting is used.
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void checkNestedTransaction() throws Exception {
@@ -973,7 +983,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         // ----- check nested transactions NOT started by CorfuStore isn't messed up by CorfuStore txn -----
         PersistentCorfuTable<String, String>
                 corfuTable = corfuRuntime.getObjectsView().build()
-                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setTypeToken(PersistentCorfuTable.<String, String>getTypeToken())
                 .setStreamName("test")
                 .open();
 
@@ -1072,7 +1082,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
      * This is a research work done to demonstrate how Google DynamicMessage can be used to print/dump
      * the contents of the protobuf store which was written by a fully qualified type.
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Ignore
     @Test
@@ -1132,7 +1142,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
     /**
      * Verify null Value and Key schemas are blocked on openTable.
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void checkNullValueAndKeySchema() throws Exception {
@@ -1168,7 +1178,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
     /**
      * Demonstrates how features switches can be extracted from table options.
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void checkTableOptions() throws Exception {
@@ -1186,19 +1196,19 @@ public class CorfuStoreShimTest extends AbstractViewTest {
 
         // Create & Register the table.
         // This is required to initialize the table for the current corfu client.
-        Table<SampleSchema.Uuid, SampleSchema.SampleTableAMsg, Message> table =
+        Table<Uuid, SampleTableAMsg, Message> table =
                 shimStore.openTable(
                         someNamespace,
                         tableName,
-                        SampleSchema.Uuid.class,
-                        SampleSchema.SampleTableAMsg.class,
+                        Uuid.class,
+                        SampleTableAMsg.class,
                         null,
                         // TableOptions includes option to choose - Memory/Disk based corfu table.
                         TableOptions.builder().build());
 
-        String streamTag1 = SampleSchema.SampleTableAMsg.getDescriptor()
+        String streamTag1 = SampleTableAMsg.getDescriptor()
                 .getOptions().getExtension(CorfuOptions.tableSchema).getStreamTag(0);
-        String streamTag2 = SampleSchema.SampleTableAMsg.getDescriptor()
+        String streamTag2 = SampleTableAMsg.getDescriptor()
                 .getOptions().getExtension(CorfuOptions.tableSchema).getStreamTag(1);
         assertThat(streamTag1).isEqualTo("sample_streamer_1");
         assertThat(streamTag2).isEqualTo("sample_streamer_2");
@@ -1377,8 +1387,8 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         shimStore.openTable(
                 someNamespace,
                 tableName,
-                SampleSchema.Uuid.class,
-                SampleSchema.SampleTableAMsg.class,
+                Uuid.class,
+                SampleTableAMsg.class,
                 null,
                 // TableOptions includes option to choose - Memory/Disk based corfu table.
                 TableOptions.builder().build());
@@ -1402,7 +1412,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         shimStore.openTable(
                 someNamespace,
                 tableName,
-                SampleSchema.Uuid.class,
+                Uuid.class,
                 SampleSchema.SampleTableBMsg.class,
                 null,
                 // TableOptions includes option to choose - Memory/Disk based corfu table.
@@ -1421,7 +1431,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         shimStore.openTable(
                 someNamespace,
                 tableName,
-                SampleSchema.Uuid.class,
+                Uuid.class,
                 SampleSchema.SampleTableBMsg.class,
                 null,
                 // TableOptions includes option to choose - Memory/Disk based corfu table.
@@ -1443,7 +1453,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         shimStore.openTable(
                 someNamespace,
                 tableName,
-                SampleSchema.Uuid.class,
+                Uuid.class,
                 SampleSchema.SampleTableEMsg.class,
                 null,
                 // TableOptions includes option to choose - Memory/Disk based corfu table.
@@ -1480,11 +1490,11 @@ public class CorfuStoreShimTest extends AbstractViewTest {
                 .setDataPath(dataPath)
                 .build();
 
-        final Table<SampleSchema.Uuid, SampleSchema.SampleTableAMsg, ManagedResources> table = shimStore.openTable(
+        final Table<Uuid, SampleTableAMsg, ManagedResources> table = shimStore.openTable(
                 someNamespace,
                 tableName,
-                SampleSchema.Uuid.class,
-                SampleSchema.SampleTableAMsg.class,
+                Uuid.class,
+                SampleTableAMsg.class,
                 ManagedResources.class,
                 TableOptions.builder().persistenceOptions(persistenceOptions).build());
 
@@ -1492,8 +1502,8 @@ public class CorfuStoreShimTest extends AbstractViewTest {
 
         try (ManagedTxnContext txnContext = shimStore.tx(someNamespace)) {
             for (int i = 0; i < numEntries; i++) {
-                SampleSchema.Uuid key = SampleSchema.Uuid.newBuilder().setLsb(i).setMsb(i).build();
-                SampleSchema.SampleTableAMsg value = SampleSchema.SampleTableAMsg.newBuilder()
+                Uuid key = Uuid.newBuilder().setLsb(i).setMsb(i).build();
+                SampleTableAMsg value = SampleTableAMsg.newBuilder()
                         .setPayload(String.valueOf(i)).build();
                 txnContext.putRecord(table, key, value, null);
             }
@@ -1506,16 +1516,16 @@ public class CorfuStoreShimTest extends AbstractViewTest {
             // Ensure that count() works.
             assertThat(txnContext.count(table)).isEqualTo(numEntries);
 
-            final Set<SampleSchema.Uuid> keySet = new HashSet<>();
-            final Set<SampleSchema.SampleTableAMsg> valueSet = new HashSet<>();
+            final Set<Uuid> keySet = new HashSet<>();
+            final Set<SampleTableAMsg> valueSet = new HashSet<>();
 
 
             // Ensure that get() works.
             for (int i = 0; i < numEntries; i++) {
-                SampleSchema.Uuid key = SampleSchema.Uuid.newBuilder().setLsb(i).setMsb(i).build();
-                SampleSchema.SampleTableAMsg expectedKey = SampleSchema.SampleTableAMsg.newBuilder()
+                Uuid key = Uuid.newBuilder().setLsb(i).setMsb(i).build();
+                SampleTableAMsg expectedKey = SampleTableAMsg.newBuilder()
                         .setPayload(String.valueOf(i)).build();
-                CorfuStoreEntry<?, SampleSchema.SampleTableAMsg, ?> entry = txnContext.getRecord(table, key);
+                CorfuStoreEntry<?, SampleTableAMsg, ?> entry = txnContext.getRecord(table, key);
                 assertThat(entry.getPayload()).isEqualTo(expectedKey);
                 keySet.add(key);
                 valueSet.add(expectedKey);
@@ -1536,8 +1546,8 @@ public class CorfuStoreShimTest extends AbstractViewTest {
 
         try (ManagedTxnContext txnContext = shimStore.tx(someNamespace)) {
             for (int i = 0; i < numEntries/2; i++) {
-                SampleSchema.Uuid key = SampleSchema.Uuid.newBuilder().setLsb(i).setMsb(i).build();
-                SampleSchema.SampleTableAMsg value = SampleSchema.SampleTableAMsg.newBuilder()
+                Uuid key = Uuid.newBuilder().setLsb(i).setMsb(i).build();
+                SampleTableAMsg value = SampleTableAMsg.newBuilder()
                         .setPayload(String.valueOf(i)).build();
                 txnContext.delete(table, key);
             }
@@ -1559,11 +1569,11 @@ public class CorfuStoreShimTest extends AbstractViewTest {
             shimStore.freeTableData(someNamespace, tableName);
         }
 
-        final Table<SampleSchema.Uuid, SampleSchema.SampleTableAMsg, ManagedResources> newTable = shimStore.openTable(
+        final Table<Uuid, SampleTableAMsg, ManagedResources> newTable = shimStore.openTable(
                 someNamespace,
                 tableName,
-                SampleSchema.Uuid.class,
-                SampleSchema.SampleTableAMsg.class,
+                Uuid.class,
+                SampleTableAMsg.class,
                 ManagedResources.class,
                 TableOptions.builder().persistenceOptions(persistenceOptions).build());
 

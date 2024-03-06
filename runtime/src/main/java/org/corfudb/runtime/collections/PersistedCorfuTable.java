@@ -4,14 +4,13 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.reflect.TypeToken;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.runtime.object.CorfuSmrUpcallTarget;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.ICorfuSMRProxy;
-import org.corfudb.runtime.object.ICorfuSMRUpcallTarget;
 
 import javax.annotation.Nonnull;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -22,8 +21,8 @@ public class PersistedCorfuTable<K, V> implements
 
     private ICorfuSMRProxy<DiskBackedCorfuTable<K, V>> proxy;
 
-    private final Map<String, ICorfuSMRUpcallTarget<DiskBackedCorfuTable<K, V>>> upcallTargetMap
-            = ImmutableMap.<String, ICorfuSMRUpcallTarget<DiskBackedCorfuTable<K, V>>>builder()
+    private final Map<String, CorfuSmrUpcallTarget<DiskBackedCorfuTable<K, V>>> upcallTargetMap
+            = ImmutableMap.<String, CorfuSmrUpcallTarget<DiskBackedCorfuTable<K, V>>>builder()
             .put("put", (obj, args) -> obj.put((K) args[0], (V) args[1]))
             .put("clear", (obj, args) -> obj.clear())
             .put("remove", (obj, args) -> obj.remove((K) args[0]))
@@ -115,7 +114,7 @@ public class PersistedCorfuTable<K, V> implements
         return proxy.access(corfuSmr -> corfuSmr.getByIndex(indexName, indexKey), null);
     }
     @Override
-    public Map<String, ICorfuSMRUpcallTarget<DiskBackedCorfuTable<K, V>>> getSMRUpcallMap() {
+    public Map<String, CorfuSmrUpcallTarget<DiskBackedCorfuTable<K, V>>> getSmrUpCallMap() {
         return upcallTargetMap;
     }
 }

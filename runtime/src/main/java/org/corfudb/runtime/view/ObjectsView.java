@@ -41,8 +41,7 @@ import static org.corfudb.runtime.LogReplicationLogicalGroupClient.DEFAULT_LOGIC
 @Slf4j
 public class ObjectsView extends AbstractView {
 
-    private static final String LOG_REPLICATOR_STREAM_NAME =
-        "LR_Transaction_Stream";
+    private static final String LOG_REPLICATOR_STREAM_NAME = "LR_Transaction_Stream";
 
     private static final String LOGICAL_GROUP_REPLICATION_STREAM_NAME_PREFIX = "LogicalGroupReplicationStream_";
 
@@ -65,11 +64,11 @@ public class ObjectsView extends AbstractView {
     }
 
     @Getter
-    Map<ObjectID, Object> objectCache = new ConcurrentHashMap<>();
+    Map<ObjectID<? extends ICorfuSMR<?>>, ICorfuSMR<?>> objectCache = new ConcurrentHashMap<>();
 
     @Getter
     @Setter
-    MVOCache mvoCache = new MVOCache(runtime);
+    MVOCache<? extends ICorfuSMR<?>> mvoCache = new MVOCache<>(runtime);
 
     public ObjectsView(@Nonnull final CorfuRuntime runtime) {
         super(runtime);
@@ -238,8 +237,8 @@ public class ObjectsView extends AbstractView {
      * open with the NO_CACHE options will not be gc'd
      */
     public void gc(long trimMark) {
-        for (Object obj : getObjectCache().values()) {
-            ((ICorfuSMR) obj).getCorfuSMRProxy().getUnderlyingMVO().gc(trimMark);
+        for (ICorfuSMR<?> obj : getObjectCache().values()) {
+            obj.getCorfuSMRProxy().getUnderlyingMVO().gc(trimMark);
         }
     }
 
