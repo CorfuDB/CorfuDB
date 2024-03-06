@@ -38,17 +38,17 @@ public class LogReplicationFsmUtil {
         log.debug("Verify leader on remote cluster {}", remoteClusterId);
 
         try {
-            LogReplication.LogReplicationSession session = (LogReplication.LogReplicationSession) clazz.getMethod("getSession").invoke(fsm);
             for (String nodeId : connectedNodes) {
                 log.debug("Verify leadership status for node {}", nodeId);
                 // Check Leadership
                 CorfuMessage.RequestPayloadMsg payload =
                         CorfuMessage.RequestPayloadMsg.newBuilder().setLrLeadershipQuery(
-                                LogReplication.LogReplicationLeadershipRequestMsg.newBuilder()
-                                        .setSession(session).build()
+                                LogReplication.LogReplicationLeadershipRequestMsg.newBuilder().build()
                         ).build();
                 CompletableFuture<LogReplication.LogReplicationLeadershipResponseMsg> leadershipRequestCf =
-                        router.sendRequestAndGetCompletable(session, payload, nodeId);
+                        router.sendRequestAndGetCompletable(
+                                (LogReplication.LogReplicationSession) clazz.getMethod("getSession").invoke(fsm),
+                                payload, nodeId);
                 pendingLeadershipQueries.put(nodeId, leadershipRequestCf);
             }
 
