@@ -285,14 +285,14 @@ public class DynamicProtobufSerializer implements ISerializer {
             builder = DynamicMessage.parseFrom(descriptor,
                 anyMsg.getValue()).toBuilder();
         } catch (InvalidProtocolBufferException e) {
-            log.warn("Unable to Parse Key {}", anyMsg.getValue());
+            log.error("Unable to Parse Key {} due to an invalid input", anyMsg.getValue(), e);
             return null;
         }
 
         try {
             JsonFormat.parser().merge(jsonString, builder);
         } catch(InvalidProtocolBufferException e) {
-            log.warn("Unable to Parse String {}", jsonString);
+            log.error("Unable to Parse String {} due to an invalid input", jsonString, e);
             return null;
         }
         return builder.build();
