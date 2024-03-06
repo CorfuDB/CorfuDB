@@ -180,22 +180,6 @@ public class StreamPollingScheduler {
         }
     }
 
-    /**
-     * Checks if the buffer size of a stream is greater than or equal to the minimum required.
-     *
-     * @param bufferSize bufferSize
-     * @return true if bufferSize is greater than or equal to the poll threshold
-     */
-    public boolean hasEnoughBuffer(int bufferSize) {
-        return bufferSize >= pollThreshold;
-    }
-
-    public boolean containsTask(@Nonnull StreamListener streamListener) {
-        synchronized (allTasks) {
-            return allTasks.containsKey(streamListener);
-        }
-    }
-
     public void removeTask(@Nonnull StreamListener streamListener) {
         synchronized (allTasks) {
             allTasks.remove(streamListener);
