@@ -32,7 +32,6 @@ import org.corfudb.runtime.collections.StreamListener;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
-import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.LogReplication.SyncStatus;
@@ -41,9 +40,6 @@ import org.corfudb.runtime.LogReplication.SnapshotSyncInfo;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.util.Sleep;
-import org.corfudb.util.retry.IRetry;
-import org.corfudb.util.retry.IntervalRetry;
-import org.corfudb.util.retry.RetryNeededException;
 import org.corfudb.util.serializer.DynamicProtobufSerializer;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.ProtobufSerializer;
@@ -142,8 +138,8 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
     @Parameterized.Parameters
     public static List<ClusterUuidMsg> input() {
         return Arrays.asList(
-                TP_SINGLE_SOURCE_SINK
-                //TP_SINGLE_SOURCE_SINK_REV_CONNECTION
+                TP_SINGLE_SOURCE_SINK,
+                TP_SINGLE_SOURCE_SINK_REV_CONNECTION
         );
 
     }
@@ -1646,13 +1642,15 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
                 .setLockName(lockName)
                 .build();
         CorfuStoreEntry lockTableRecord;
+
+        // Release Source's lock by deleting the lock table
         try (TxnContext txnContext = sourceCorfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             lockTableRecord = txnContext.getRecord(sourceLockTable, lockId);
+            txnContext.clear(sourceLockTable);
             txnContext.commit();
         }
 
-        // Release Source's lock by deleting the lock table
-        clearLockTable(true);
+        Assert.assertEquals(0, sourceLockTable.count());
         log.info("Source's lock table cleared!");
 
         // Wait till the lock release is asynchronously processed and the replication status on Source changes to
@@ -1696,6 +1694,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         // Sink map should now have the third batch size
         log.info("Sink map now has {} size", thirdBatch);
         assertThat(mapSink.count()).isEqualTo(thirdBatch);
+
     }
 
     @Test
@@ -1773,7 +1772,12 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
                 LR_STATUS_STREAM_TAG);
 
         // Release Sink's lock by deleting the lock table
-        clearLockTable(false);
+        try (TxnContext txnContext = sinkCorfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+            txnContext.clear(sinkLockTable);
+            txnContext.commit();
+        }
+
+        Assert.assertEquals(0, sinkLockTable.count());
         log.info("Sink's lock table cleared!");
 
         // Wait till the lock release is asynchronously processed and the replication status on Source changes to
@@ -1794,27 +1798,6 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         // Sink map should still have secondBatch size
         log.info("Sink map should still have {} size", secondBatch);
         assertThat(mapSink.count()).isEqualTo(secondBatch);
-    }
-
-    private void clearLockTable(boolean source) {
-        CorfuStore corfuStore = source ? sourceCorfuStore : sinkCorfuStore;
-        Table<LockDataTypes.LockId, LockDataTypes.LockData, Message> lockTable = source ? sourceLockTable : sinkLockTable;
-
-        try {
-            IRetry.build(IntervalRetry.class, () -> {
-                try (TxnContext txnContext = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-                    txnContext.clear(lockTable);
-                    txnContext.commit();
-                } catch (TransactionAbortedException tae) {
-                    log.debug("TX Aborted while trying to clear the lock table.  Retrying");
-                    throw new RetryNeededException();
-                }
-                return null;
-            }).run();
-        } catch (InterruptedException e) {
-            fail("Failed to clear the lock table", e);
-        }
-        Assert.assertEquals(0, lockTable.count());
     }
 
     /**
