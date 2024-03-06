@@ -25,7 +25,6 @@ import org.corfudb.runtime.collections.CorfuDynamicKey;
 import org.corfudb.runtime.collections.CorfuDynamicRecord;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuStore;
-import org.corfudb.runtime.collections.CorfuStoreEntry;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.collections.StreamListener;
@@ -1559,10 +1558,6 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
      * 6. Revoke source's lock and wait for 10 sec
      * 7. Write 5 more entries to source map
      * 8. Verify data will not be replicated, since source's lock is released
-     * (when sink is connection starter, verify via logs that the source sends the leadership loss msg, and the
-     *        sink sends a leadership query)
-     * 9. After the SOURCE fsm is stopped, make the SOURCE a leader again
-     * 10.Verify remaining data on SOURCE gets replicated to SINK
      */
     @Test
     public void testSourceLockRelease() throws Exception {
@@ -1634,18 +1629,8 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         sourceCorfuStore.subscribeListener(listener, LogReplicationMetadataManager.NAMESPACE,
             LR_STATUS_STREAM_TAG);
 
-        final String lockGroup = "Log_Replication_Group";
-        final String lockName = "Log_Replication_Lock";
-
-        LockDataTypes.LockId lockId = LockDataTypes.LockId.newBuilder()
-                .setLockGroup(lockGroup)
-                .setLockName(lockName)
-                .build();
-        CorfuStoreEntry lockTableRecord;
-
         // Release Source's lock by deleting the lock table
         try (TxnContext txnContext = sourceCorfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            lockTableRecord = txnContext.getRecord(sourceLockTable, lockId);
             txnContext.clear(sourceLockTable);
             txnContext.commit();
         }
@@ -1671,30 +1656,6 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         // Sink map should still have secondBatch size
         log.info("Sink map should still have {} size", secondBatch);
         assertThat(mapSink.count()).isEqualTo(secondBatch);
-
-        //source acquires lock again.
-        // If SOURCE is connection starter, it will send queryLeadership msg to SINK and
-        // replicate data. Otherwise, the SINK will send queryLeadership after getting a leadershipLoss msg from SOURCE.
-        // The SOURCE will then replicate via the reverseReplicate rpc.
-        try (TxnContext txnContext = sourceCorfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            LockDataTypes.LockData oldLockData = LockDataTypes.LockData.newBuilder().mergeFrom(lockTableRecord.getPayload()).build();
-            txnContext.putRecord(sourceLockTable, lockId,
-                    LockDataTypes.LockData.newBuilder().mergeFrom(oldLockData)
-                            .setLeaseAcquisitionNumber(oldLockData.getLeaseAcquisitionNumber() + 1)
-                            .setLeaseRenewalNumber(oldLockData.getLeaseRenewalNumber() + 1).build(), null);
-            txnContext.commit();
-        }
-
-        Assert.assertEquals(1, sourceLockTable.count());
-        log.info("Source's lock table has a lock entry");
-
-        // Wait until the third batch is replicated to sink
-        waitForReplication(size -> size == thirdBatch, mapSink, thirdBatch);
-
-        // Sink map should now have the third batch size
-        log.info("Sink map now has {} size", thirdBatch);
-        assertThat(mapSink.count()).isEqualTo(thirdBatch);
-
     }
 
     @Test

@@ -213,7 +213,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
                 } catch (Exception e) {
                     log.error("Caught an exception. Stop discovery service.", e);
                     shouldRun = false;
-                    stopLogReplication(false);
+                    stopLogReplication();
                     if (e instanceof InterruptedException) {
                         Thread.interrupted();
                     }
@@ -436,8 +436,8 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
     /**
      * Stop Log Replication
      */
-    private void stopLogReplication(boolean lockReleased) {
-        if (lockReleased || sessionManager.getReplicationContext().getIsLeader().get()) {
+    private void stopLogReplication() {
+        if (sessionManager.getReplicationContext().getIsLeader().get()) {
             log.info("Stopping log replication.");
             sessionManager.stopReplication();
         }
@@ -459,9 +459,13 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
      */
     public void processLockRelease() {
         log.debug("Lock released");
+        // Unset isLeader flag after stopping log replication
+        stopLogReplication();
+        if (interClusterServerNode != null) {
+            interClusterServerNode.close();
+        }
         sessionManager.getReplicationContext().setIsLeader(false);
         sessionManager.notifyLeadershipChange();
-        stopLogReplication(true);
         recordLockRelease();
     }
 
@@ -503,7 +507,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
             isValid = processDiscoveredTopology(discoveredTopology, topologyDescriptor.getLocalClusterDescriptor() == null);
         } catch (Throwable t) {
             log.error("Exception when processing the discovered topology", t);
-            stopLogReplication(false);
+            stopLogReplication();
             return;
         }
 
@@ -511,7 +515,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
             onTopologyChange(discoveredTopology);
         } else {
             // Stop Log Replication in case this node was previously SOURCE but no longer belongs to the Topology
-            stopLogReplication(false);
+            stopLogReplication();
         }
     }
 

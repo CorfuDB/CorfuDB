@@ -230,8 +230,7 @@ public class LogReplicationConfigManager {
                 streamsToReplicate.add(tableName);
                 // Collect tags for merge-only stream
                 streamToTagsMap.put(streamId, Collections.singletonList(LOG_REPLICATOR_STREAM_INFO.getStreamId()));
-            } else if (entry.getValue().getMetadata().getTableOptions().hasReplicationGroup() &&
-                    !entry.getValue().getMetadata().getTableOptions().getReplicationGroup().getLogicalGroup().isEmpty()) {
+            } else if (entry.getValue().getMetadata().getTableOptions().hasReplicationGroup()) {
                 // Find streams to replicate for every logical group for this session
                 String logicalGroup = entry.getValue().getMetadata().getTableOptions()
                         .getReplicationGroup().getLogicalGroup();

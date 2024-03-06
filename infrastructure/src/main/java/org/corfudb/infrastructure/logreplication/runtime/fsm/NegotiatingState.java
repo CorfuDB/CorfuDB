@@ -18,8 +18,6 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
-import static org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationFsmUtil.canEnqueueStopRuntimeFsmEvent;
-
 /**
  * Log Replication Runtime Negotiating State.
  *
@@ -90,10 +88,7 @@ public class NegotiatingState implements LogReplicationRuntimeState {
                 }
                 return null;
             case LOCAL_LEADER_LOSS:
-                if (canEnqueueStopRuntimeFsmEvent(router, fsm, event.isConnectionStarter())) {
-                    return fsm.getStates().get(LogReplicationRuntimeStateType.STOPPED);
-                }
-                return null;
+                return fsm.getStates().get(LogReplicationRuntimeStateType.STOPPED);
             case ERROR:
                 ((UnrecoverableState)fsm.getStates().get(LogReplicationRuntimeStateType.UNRECOVERABLE)).setThrowableCause(event.getT().getCause());
                 return fsm.getStates().get(LogReplicationRuntimeStateType.UNRECOVERABLE);
