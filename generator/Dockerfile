@@ -1,5 +1,4 @@
-ARG BASE_IMAGE=openjdk:17-jdk-bullseye
-FROM $BASE_IMAGE
+FROM openjdk:17-jdk-bullseye
 
 WORKDIR /app
 
