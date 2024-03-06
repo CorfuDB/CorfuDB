@@ -27,8 +27,7 @@ public class DefaultAdapterForUpgrade implements ILogReplicationVersionAdapter {
 
     private CorfuStore corfuStore;
 
-    @Override
-    public void openVersionTable(CorfuRuntime runtime) {
+    public DefaultAdapterForUpgrade(CorfuRuntime runtime) {
         corfuStore = new CorfuStore(runtime);
     }
 
@@ -40,11 +39,6 @@ public class DefaultAdapterForUpgrade implements ILogReplicationVersionAdapter {
     @Override
     public String getPinnedClusterVersion(TxnContext txnContext) {
         return pinnedVersionString;
-    }
-
-    @Override
-    public boolean isSaasDeployment() {
-        return false;
     }
 
     /**

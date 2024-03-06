@@ -37,8 +37,7 @@ public class RollingUpgradeHandlerTest extends AbstractViewTest {
      */
     @Test
     public void testIsUpgradeInProgress() throws Exception {
-        DefaultAdapterForUpgrade defaultAdapterForUpgrade = new DefaultAdapterForUpgrade();
-        defaultAdapterForUpgrade.openVersionTable(corfuRuntime);
+        DefaultAdapterForUpgrade defaultAdapterForUpgrade = new DefaultAdapterForUpgrade(corfuRuntime);
 
         // Update the node version.  Cluster version is still not updated
         defaultAdapterForUpgrade.startRollingUpgrade();
