@@ -471,6 +471,8 @@ public class SessionManager {
      */
     public void stopReplication() {
         log.info("Stopping log replication.");
+        // Stop config listener if required
+        stopClientConfigListener();
         stopReplication(sessions);
     }
 
