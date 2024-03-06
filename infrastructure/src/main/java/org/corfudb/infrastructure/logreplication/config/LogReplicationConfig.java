@@ -106,12 +106,6 @@ public abstract class LogReplicationConfig {
             this.maxSnapshotEntriesApplied = serverContext.getMaxSnapshotEntriesApplied();
             this.maxApplySize = serverContext.getMaxUncompressedTxSize() * DATA_FRACTION_OF_UNCOMPRESSED_WRITE_SIZE / 100;
         }
-        // The transfer size determines the amount of data sent at a time from the sender and, in case of
-        // Snapshot Sync, applied in a single transaction to the shadow stream.  Write to the shadow stream also adds
-        // metadata on the Sink so we consider the min of maxApplySize and DEFAULT_MAX_DATA_MSG_SIZE to account for the
-        // LR metadata.
-        // No LR metadata is written during the 'apply' phase so it is enough to include just
-        // DATA_FRACTION_OF_UNCOMPRESSED_WRITE_SIZE as a buffer.
         this.maxTransferSize = Math.min(DEFAULT_MAX_DATA_MSG_SIZE, maxApplySize);
     }
 }
