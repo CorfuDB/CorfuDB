@@ -2,6 +2,7 @@ package org.corfudb.runtime.collections;
 
 import com.google.protobuf.Message;
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -47,6 +48,8 @@ import java.util.stream.StreamSupport;
  * <p>
  */
 @Slf4j
+@AllArgsConstructor
+@Builder(toBuilder = true)
 public class Table<K extends Message, V extends Message, M extends Message> implements AutoCloseable {
 
     // Accessor/Mutator threads can interleave in a way that create a deadlock because they can create a
@@ -352,7 +355,7 @@ public class Table<K extends Message, V extends Message, M extends Message> impl
     }
 
     @Override
-    public void close() throws Exception {
+    public void close() {
         corfuTable.close();
     }
 
@@ -511,5 +514,11 @@ public class Table<K extends Message, V extends Message, M extends Message> impl
 
     public Class<?> getUnderlyingType() {
         return corfuTable.getClass();
+    }
+
+    Table<K, V, M> generateImmutableView(long sequence) {
+        return this.toBuilder()
+                .corfuTable(this.corfuTable.generateImmutableView(sequence))
+                .build();
     }
 }

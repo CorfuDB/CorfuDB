@@ -25,6 +25,7 @@ import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.collections.IsolationLevel;
 import org.corfudb.runtime.collections.PersistedCorfuTable;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
+import org.corfudb.runtime.collections.ScopedTransaction;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TableParameters;
@@ -752,6 +753,120 @@ public class CorfuStoreIT extends AbstractIT {
         }
 
         assertThat(shutdownCorfuServer(corfuServer)).isTrue();
+    }
+
+    @Test
+    public void testScopedTransaction() throws Exception {
+        Process corfuServer = startCorfu();
+
+        // Define a namespace for the table and table name
+        final String namespace = "corfu-namespace";
+        final String tableName1 = "Table1";
+        final String tableName2 = "Table2";
+        final String tableName3 = "Table3";
+        final String tableNameNoWrites = "NoWritesTable";
+        final int numUpdates1 = 100;
+        final long OFFSET = 5L;
+
+        // Create & Register the table.
+        Table<Uuid, Uuid, ManagedResources> table1 = corfuStore.openTable(
+                namespace,
+                tableName1,
+                Uuid.class,
+                Uuid.class,
+                ManagedResources.class,
+                TableOptions.builder().build());
+
+        Table<Uuid, Uuid, ManagedResources> table2 = corfuStore.openTable(
+                namespace,
+                tableName2,
+                Uuid.class,
+                Uuid.class,
+                ManagedResources.class,
+                TableOptions.builder().build());
+
+        Table<Uuid, SampleSchema.EventInfo, ManagedResources> table3 = corfuStore.openTable(
+                namespace,
+                tableName3,
+                Uuid.class,
+                SampleSchema.EventInfo.class,
+                ManagedResources.class,
+                TableOptions.builder().build());
+
+        for (int i = 1; i <= numUpdates1; i++) {
+            final Uuid a = Uuid.newBuilder().setLsb(i).setMsb(0).build();
+            final Uuid b = Uuid.newBuilder().setLsb(0).setMsb(i).build();
+
+            try (TxnContext tx = corfuStore.txn(namespace)) {
+                tx.putRecord(table1, a, b, null);
+                tx.putRecord(table2, b, a, null);
+                tx.commit();
+            }
+        }
+
+        ScopedTransaction scopedTxn = corfuStore.scopedTxn(
+                namespace, IsolationLevel.snapshot(),
+                table1, table2);
+        assertThat(scopedTxn.count(table1))
+                .isEqualTo(scopedTxn.count(table2))
+                .isEqualTo(numUpdates1);
+        for (int i = 1; i <= numUpdates1; i++) {
+            final Uuid a = Uuid.newBuilder().setLsb(i).setMsb(0).build();
+            final Uuid b = Uuid.newBuilder().setLsb(0).setMsb(i).build();
+            assertThat(scopedTxn.getRecord(table1, a).getPayload()).isEqualTo(b);
+            assertThat(scopedTxn.getRecord(table2, b).getPayload()).isEqualTo(a);
+        }
+
+        for (int i = 1; i <= numUpdates1; i++) {
+            final Uuid a = Uuid.newBuilder().setLsb(i).setMsb(i).build();
+            final Uuid b = Uuid.newBuilder().setLsb(0).setMsb(i).build();
+            final Uuid c = Uuid.newBuilder().setLsb(i).setMsb(i).build();
+
+            try (TxnContext tx = corfuStore.txn(namespace)) {
+                tx.putRecord(table1, a, c, null);
+                tx.putRecord(table1, c, c, null);
+                tx.putRecord(table2, b, c, null);
+                tx.putRecord(table2, c, c, null);
+                tx.commit();
+            }
+        }
+
+        try (TxnContext tx = corfuStore.txn(namespace)) {
+            for (int i = 1; i <= numUpdates1; i++) {
+                final Uuid a = Uuid.newBuilder().setLsb(i).setMsb(i).build();
+                final Uuid b = Uuid.newBuilder().setLsb(0).setMsb(i).build();
+                final Uuid c = Uuid.newBuilder().setLsb(i).setMsb(i).build();
+                assertThat(tx.getRecord(table1, a).getPayload()).isEqualTo(c);
+                assertThat(tx.getRecord(table2, b).getPayload()).isEqualTo(c);
+                assertThat(tx.getRecord(table1, c).getPayload()).isEqualTo(c);
+                assertThat(tx.getRecord(table2, c).getPayload()).isEqualTo(c);
+            }
+        }
+
+        assertThat(scopedTxn.count(table1))
+                .isEqualTo(scopedTxn.count(table2))
+                .isEqualTo(numUpdates1);
+        for (int i = 1; i <= numUpdates1; i++) {
+            final Uuid a = Uuid.newBuilder().setLsb(i).setMsb(0).build();
+            final Uuid b = Uuid.newBuilder().setLsb(0).setMsb(i).build();
+            assertThat(scopedTxn.getRecord(table1, a).getPayload()).isEqualTo(b);
+            assertThat(scopedTxn.getRecord(table2, b).getPayload()).isEqualTo(a);
+        }
+
+        Thread thread = new Thread(() -> {
+            assertThat(scopedTxn.count(table1))
+                    .isEqualTo(scopedTxn.count(table2))
+                    .isEqualTo(numUpdates1);
+            for (int i = 1; i <= numUpdates1; i++) {
+                final Uuid a = Uuid.newBuilder().setLsb(i).setMsb(0).build();
+                final Uuid b = Uuid.newBuilder().setLsb(0).setMsb(i).build();
+                assertThat(scopedTxn.getRecord(table1, a).getPayload()).isEqualTo(b);
+                assertThat(scopedTxn.getRecord(table2, b).getPayload()).isEqualTo(a);
+            }
+        });
+
+        thread.start();
+        thread.join();
     }
 
     private long generateUpdates(String namespace, Table<Uuid, SampleSchema.EventInfo, ManagedResources> table1,
