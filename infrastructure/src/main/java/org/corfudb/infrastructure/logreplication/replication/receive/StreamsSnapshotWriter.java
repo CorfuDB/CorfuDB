@@ -141,7 +141,7 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
         snapshotSyncStartMarker = Optional.empty();
         replicatedStreamIds.clear();
         // Sync with registry table to capture local updates on Sink side
-        replicationContext.refreshConfig(session, true);
+        replicationContext.refresh();
     }
 
     /**
@@ -255,8 +255,8 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
     }
 
     private void clearStream(UUID streamId, TxnContext txnContext) {
-        txnContext.logUpdate(streamId, CLEAR_ENTRY, replicationContext.getConfig(session)
-                .getDataStreamToTagsMap().get(streamId));
+        SMREntry entry = new SMREntry(CLEAR_SMR_METHOD, new Array[0], Serializers.PRIMITIVE);
+        txnContext.logUpdate(streamId, entry, replicationContext.getConfig(session).getDataStreamToTagsMap().get(streamId));
     }
 
     @Override
@@ -392,7 +392,7 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
         applyShadowStream(REGISTRY_TABLE_ID, snapshot);
 
         // Sync the config with registry table after applying its entries
-        replicationContext.refreshConfig(session, true);
+        replicationContext.refresh();
 
         for (String stream : replicationContext.getConfig(session).getStreamsToReplicate()) {
             UUID regularStreamId = CorfuRuntime.getStreamID(stream);

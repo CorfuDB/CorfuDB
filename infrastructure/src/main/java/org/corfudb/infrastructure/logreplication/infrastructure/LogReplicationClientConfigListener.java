@@ -4,8 +4,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.infrastructure.logreplication.utils.SnapshotSyncUtils;
 import org.corfudb.runtime.CorfuStoreMetadata;
+import org.corfudb.runtime.LogReplication;
+import org.corfudb.runtime.LogReplication.ClientDestinationInfoKey;
 import org.corfudb.runtime.LogReplication.ClientRegistrationId;
 import org.corfudb.runtime.LogReplication.ClientRegistrationInfo;
+import org.corfudb.runtime.LogReplication.DestinationInfoVal;
+import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.LogReplication.ReplicationModel;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
@@ -14,27 +18,30 @@ import org.corfudb.runtime.collections.StreamListenerResumeOrFullSync;
 import org.corfudb.runtime.exceptions.StreamingException;
 
 import java.util.ArrayList;
-import java.util.Collections;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.corfudb.infrastructure.logreplication.config.LogReplicationLogicalGroupConfig.CLIENT_CONFIG_TAG;
+import static org.corfudb.runtime.LogReplicationLogicalGroupClient.LR_MODEL_METADATA_TABLE_NAME;
 import static org.corfudb.runtime.LogReplicationLogicalGroupClient.LR_REGISTRATION_TABLE_NAME;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 
 /**
- * This class implements a Corfu stream listener for the Logical Group client registration table.
- * It is used by LR to listen to client registration events and create outgoing sessions from Source side
+ * This class implements a Corfu stream listener for the Logical Group client configuration tables.
+ * It is used by LR to listen to client registration events and logical group destination information updates.
  */
 @Slf4j
-public class LogReplicationClientRegisterListener extends StreamListenerResumeOrFullSync {
+public class LogReplicationClientConfigListener extends StreamListenerResumeOrFullSync {
 
     /**
-     * This listener will be listening to LogReplicationRegistrationTable.
+     * Tables that this stream listener will be listening to.
      */
     private static final List<String> tablesOfInterest = new ArrayList<>(
-            Collections.singletonList(LR_REGISTRATION_TABLE_NAME));
+            Arrays.asList(LR_REGISTRATION_TABLE_NAME, LR_MODEL_METADATA_TABLE_NAME));
 
     /**
      * Accessing SessionManager for client register and unregister, which could lead to session creation and termination.
@@ -42,7 +49,7 @@ public class LogReplicationClientRegisterListener extends StreamListenerResumeOr
     private final SessionManager sessionManager;
 
     /**
-     * Accessing LogReplicationConfigManager to generating config for created session upon listener start and resume.
+     * Accessing LogReplicationConfigManager to react accordingly when new entries found in client config tables
      */
     private final LogReplicationConfigManager configManager;
 
@@ -52,13 +59,13 @@ public class LogReplicationClientRegisterListener extends StreamListenerResumeOr
     private final CorfuStore corfuStore;
 
     /**
-     * Flag to indicate whether this stream listener has been started or not.
+     * Flag to indicate whether this stream listener has been started.
      */
     private final AtomicBoolean started = new AtomicBoolean(false);
 
-    public LogReplicationClientRegisterListener(SessionManager sessionManager,
-                                                LogReplicationConfigManager configManager,
-                                                CorfuStore corfuStore) {
+    public LogReplicationClientConfigListener(SessionManager sessionManager,
+                                              LogReplicationConfigManager configManager,
+                                              CorfuStore corfuStore) {
         super(corfuStore, CORFU_SYSTEM_NAMESPACE, CLIENT_CONFIG_TAG, tablesOfInterest);
         this.sessionManager = sessionManager;
         this.configManager = configManager;
@@ -70,8 +77,9 @@ public class LogReplicationClientRegisterListener extends StreamListenerResumeOr
      */
     public void start() {
         CorfuStoreMetadata.Timestamp timestamp = configManager.preprocessAndGetTail();
+        configManager.generateConfig(sessionManager.getSessions());
 
-        log.info("Start log replication listener for client registration table from {}", timestamp);
+        log.info("Start log replication listener for client config tables from {}", timestamp);
         try {
             corfuStore.subscribeListener(this, CORFU_SYSTEM_NAMESPACE, CLIENT_CONFIG_TAG, tablesOfInterest, timestamp);
             started.set(true);
@@ -95,12 +103,19 @@ public class LogReplicationClientRegisterListener extends StreamListenerResumeOr
      */
     @Override
     public void onNext(CorfuStreamEntries results) {
+        log.info("Client config listener onNext: {}", results.getEntries().size());
         results.getEntries().forEach((key, value) -> {
+            log.info("Key table name: {}", key.getTableName());
             String tableName = key.getTableName();
-            if (tableName.equals(LR_REGISTRATION_TABLE_NAME)) {
-                handleRegistrationTableEntries(value);
-            } else {
-                log.warn("Client registration listener receives entries from unexpected table: {}", tableName);
+            switch (tableName) {
+                case LR_REGISTRATION_TABLE_NAME:
+                    handleRegistrationTableEntries(value);
+                    break;
+                case LR_MODEL_METADATA_TABLE_NAME:
+                    handleClientMetadataTableEntries(value);
+                    break;
+                default:
+                    break;
             }
         });
     }
@@ -134,6 +149,40 @@ public class LogReplicationClientRegisterListener extends StreamListenerResumeOr
     }
 
     /**
+     * Handle client metadata table entries.
+     * @param clientMetadataTableEntries list of client metadata table entries
+     */
+    private void handleClientMetadataTableEntries(List<CorfuStreamEntry> clientMetadataTableEntries) {
+        Set<LogReplicationSession> impactedSessions = new HashSet<>();
+        log.info("clientMetadataTableEntries: {}", clientMetadataTableEntries);
+        if (clientMetadataTableEntries == null) {
+            log.warn("No client metadata table entries found!");
+            return;
+        }
+
+        for (CorfuStreamEntry entry : clientMetadataTableEntries) {
+            ClientDestinationInfoKey clientInfo = (ClientDestinationInfoKey) entry.getKey();
+            LogReplication.ReplicationSubscriber subscriber = LogReplication.ReplicationSubscriber.newBuilder()
+                    .setClientName(clientInfo.getClientName()).setModel(clientInfo.getModel()).build();
+            if (entry.getOperation().equals(CorfuStreamEntry.OperationType.UPDATE)) {
+                DestinationInfoVal sinksInfo = (DestinationInfoVal) entry.getPayload();
+                impactedSessions = configManager.onGroupDestinationsChange(subscriber, clientInfo.getGroupName(),
+                        sinksInfo.getDestinationIdsList());
+            } else if (entry.getOperation().equals(CorfuStreamEntry.OperationType.DELETE)) {
+                impactedSessions = configManager.onGroupDestinationsChange(subscriber, clientInfo.getGroupName(),
+                        new ArrayList<>());
+            }
+
+            if (impactedSessions != null) {
+                log.info("Sessions that a forced snapshot sync will be triggered: {}", impactedSessions);
+                impactedSessions.forEach(session -> {
+                    SnapshotSyncUtils.enforceSnapshotSync(session, corfuStore);
+                });
+            }
+        }
+    }
+
+    /**
      * Unsubscribe this stream listener to stop
      */
     public void stop() {
@@ -157,7 +206,10 @@ public class LogReplicationClientRegisterListener extends StreamListenerResumeOr
      */
     @Override
     protected CorfuStoreMetadata.Timestamp performFullSync() {
+        // TODO (V2 / Chris): In next PR this listener will be only for client register/unregister, remember to avoid
+        //  clearing all the in-memory fields in onClientListenerResume method in next PR.
         CorfuStoreMetadata.Timestamp timestamp = configManager.onClientListenerResume();
+        configManager.generateConfig(sessionManager.getSessions());
         sessionManager.getSessions().forEach(session -> {
             SnapshotSyncUtils.enforceSnapshotSync(session, corfuStore);
         });

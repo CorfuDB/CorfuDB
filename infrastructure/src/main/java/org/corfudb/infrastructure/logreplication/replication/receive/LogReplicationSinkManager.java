@@ -497,7 +497,7 @@ public class LogReplicationSinkManager implements DataReceiver {
 
         // Sync with registry after transfer phase to capture local updates, as transfer phase could
         // take a relatively long time.
-        replicationContext.refreshConfig(session, true);
+        replicationContext.refresh();
         snapshotWriter.clearLocalStreams();
         snapshotWriter.startSnapshotSyncApply();
         completeSnapshotApply(entry);

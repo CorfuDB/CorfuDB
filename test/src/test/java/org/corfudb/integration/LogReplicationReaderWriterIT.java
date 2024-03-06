@@ -230,7 +230,7 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
     public static void readSnapshotMsgs(List<LogReplicationEntryMsg> msgQ, CorfuRuntime rt, boolean blockOnSem) {
         int cnt = 0;
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(rt, LOCAL_SOURCE_CLUSTER_ID);
-        configManager.generateConfig(Collections.singleton(getDefaultSession()), false);
+        configManager.generateConfig(Collections.singleton(getDefaultSession()));
         LogReplicationContext context = new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT,
                 Mockito.mock(LogReplicationPluginConfig.class));
 
@@ -264,7 +264,7 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
     public void writeSnapshotMsgs(List<LogReplicationEntryMsg> msgQ, CorfuRuntime rt) {
 
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(rt, LOCAL_SINK_CLUSTER_ID);
-        configManager.generateConfig(Collections.singleton(getDefaultSession()), false);
+        configManager.generateConfig(Collections.singleton(getDefaultSession()));
 
         LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt,
                 getReplicationContext(configManager, 0, "test", true));
@@ -303,7 +303,7 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
                                         boolean blockOnce) throws TrimmedException {
 
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(rt, LOCAL_SOURCE_CLUSTER_ID);
-        configManager.generateConfig(Collections.singleton(getDefaultSession()), false);
+        configManager.generateConfig(Collections.singleton(getDefaultSession()));
 
         StreamsLogEntryReader reader = new StreamsLogEntryReader(rt, getDefaultSession(),
                 new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT,
@@ -338,7 +338,7 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
     private void writeLogEntryMsgs(List<LogReplicationEntryMsg> msgQ, CorfuRuntime rt) {
 
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(rt, LOCAL_SINK_CLUSTER_ID);
-        configManager.generateConfig(Collections.singleton(getDefaultSession()), false);
+        configManager.generateConfig(Collections.singleton(getDefaultSession()));
 
         LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt,
                 getReplicationContext(configManager, 0, "test", true));

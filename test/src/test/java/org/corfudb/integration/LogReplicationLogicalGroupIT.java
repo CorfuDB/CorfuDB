@@ -633,6 +633,8 @@ public class LogReplicationLogicalGroupIT extends CorfuReplicationMultiSourceSin
         // Remove groupB from Sink3 and verify groupB tables' data no longer replicated to Sink3
         logicalGroupClient.removeDestinations(GROUP_B,
                 Collections.singletonList(DefaultClusterConfig.getSinkClusterIds().get(SINK3_INDEX)));
+        // Pause the test thread for a while to let the destination removal and new config take effect.
+        TimeUnit.SECONDS.sleep(SLEEP_INTERVAL);
 
         for (int i = targetWrites; i < targetWrites + NUM_WRITES; i++) {
             StringKey key = StringKey.newBuilder().setKey(String.valueOf(i)).build();
@@ -650,234 +652,7 @@ public class LogReplicationLogicalGroupIT extends CorfuReplicationMultiSourceSin
         verifyGroupBTableData(sinkCorfuStores.get(SINK2_INDEX),
                 targetWrites + NUM_WRITES, sinkTablesGroupBOnSink2);
 
-        // After removing groupB from Sink3, the data from groupB tables on Sink3 should be cleared.
-        verifyGroupBTableData(sinkCorfuStores.get(SINK3_INDEX), 0, sinkTablesGroupB);
-    }
-
-    /**
-     * This test verifies that continuous group removal will make Sink side clear related tables without
-     * missing any group removal.
-     * (1) Bring up the 1-Source & 3-Sink topology
-     * (2) Register the logical group client and setup initial group destination mapping as
-     *     {GROUP_A: [SINK2, SINK3]; GROUP_B: [SINK2, SINK3]}
-     * (3) Open tables for replication on both Source and Sink side, and write data to Source side
-     * (4) Start replication servers and verify snapshot sync succeeded.
-     * (5) Remove all groups from SINK3, so now the mapping is {GROUP_A: [SINK2]; GROUP_B: [SINK2]}
-     * (6) Verify forced snapshot sync with Sink3 is triggered because of group removal
-     * (8) Write more data to GROUP_A and GROUP_B tables on Source side, and verify new data is only replicated to
-     *     Sink2 and related tables are cleared from Sink3.
-     */
-    @Test
-    public void testGroupContinuousRemoval() throws Exception {
-        // Register client and add group destinations
-        CorfuRuntime clientRuntime = getClientRuntime();
-        LogReplicationLogicalGroupClient logicalGroupClient =
-                new LogReplicationLogicalGroupClient(clientRuntime, SAMPLE_CLIENT_NAME);
-        logicalGroupClient.setDestinations(GROUP_A,
-                Arrays.asList(
-                        DefaultClusterConfig.getSinkClusterIds().get(SINK2_INDEX),
-                        DefaultClusterConfig.getSinkClusterIds().get(SINK3_INDEX)));
-        logicalGroupClient.setDestinations(GROUP_B,
-                Arrays.asList(
-                        DefaultClusterConfig.getSinkClusterIds().get(SINK2_INDEX),
-                        DefaultClusterConfig.getSinkClusterIds().get(SINK3_INDEX)));
-
-        // Subscribe snapshot plugin listener on each Sink cluster, Sink1 will only have 1 snapshot sync while Sink2
-        // and Sink3 will have 2 snapshot sync for each, where 1 snapshot sync will update the listener twice.
-        CountDownLatch latchSink1 = new CountDownLatch(PLUGIN_UPDATES_PER_SNAPSHOT_SYNC);
-        SnapshotSyncPluginListener snapshotSyncPluginListenerSink1 = new SnapshotSyncPluginListener(latchSink1);
-        subscribeToSnapshotSyncPluginTable(sinkCorfuStores.get(SINK1_INDEX), snapshotSyncPluginListenerSink1);
-
-        CountDownLatch latchSink2 = new CountDownLatch(PLUGIN_UPDATES_PER_SNAPSHOT_SYNC);
-        SnapshotSyncPluginListener snapshotSyncPluginListenerSink2 = new SnapshotSyncPluginListener(latchSink2);
-        subscribeToSnapshotSyncPluginTable(sinkCorfuStores.get(SINK2_INDEX), snapshotSyncPluginListenerSink2);
-
-        CountDownLatch latchSink3 = new CountDownLatch(2 * PLUGIN_UPDATES_PER_SNAPSHOT_SYNC);
-        SnapshotSyncPluginListener snapshotSyncPluginListenerSink3 = new SnapshotSyncPluginListener(latchSink3);
-        subscribeToSnapshotSyncPluginTable(sinkCorfuStores.get(SINK3_INDEX), snapshotSyncPluginListenerSink3);
-
-        // Open tables for replication on both side
-        int numTables = 3;
-        // Source
-        openFederatedTable(numTables, sourceCorfuStores.get(SOURCE_INDEX), srcFederatedTables);
-        openGroupATable(numTables, sourceCorfuStores.get(SOURCE_INDEX), srcTablesGroupA);
-        openGroupBTable(numTables, sourceCorfuStores.get(SOURCE_INDEX), srcTablesGroupB);
-        // Sink
-        openFederatedTable(numTables, sinkCorfuStores.get(SINK1_INDEX), sinkFederatedTables);
-        openGroupATable(numTables, sinkCorfuStores.get(SINK2_INDEX), sinkTablesGroupA);
-        openGroupBTable(numTables, sinkCorfuStores.get(SINK3_INDEX), sinkTablesGroupB);
-
-        // Write data to Source side tables
-        writeDataOnSource(0, NUM_WRITES);
-
-        // Start log replication for all sessions
-        startReplicationServers();
-
-        // Verify all the sessions' snapshot sync completed
-        verifySessionInLogEntrySyncState(SINK1_INDEX, LogReplicationConfigManager.getDefaultSubscriber());
-        // TODO: should be replaced by real client name after Sink session creation workflow is introduced
-        verifySessionInLogEntrySyncState(SINK2_INDEX, LogReplicationConfigManager.getDefaultLogicalGroupSubscriber());
-        verifySessionInLogEntrySyncState(SINK3_INDEX, LogReplicationConfigManager.getDefaultLogicalGroupSubscriber());
-
-        List<Table<StringKey, SampleGroupMsgA, Message>> sinkTablesGroupAOnSink3 = new ArrayList<>();
-        openGroupATable(numTables, sinkCorfuStores.get(SINK3_INDEX), sinkTablesGroupAOnSink3);
-        List<Table<StringKey, SampleGroupMsgB, Message>> sinkTablesGroupBOnSink2 = new ArrayList<>();
-        openGroupBTable(numTables, sinkCorfuStores.get(SINK2_INDEX), sinkTablesGroupBOnSink2);
-
-        // Verify tables' content on Sink side
-        verifyFederatedTableData(sinkCorfuStores.get(SINK1_INDEX), NUM_WRITES, sinkFederatedTables);
-        verifyGroupATableData(sinkCorfuStores.get(SINK2_INDEX), NUM_WRITES, sinkTablesGroupA);
-        verifyGroupATableData(sinkCorfuStores.get(SINK3_INDEX), NUM_WRITES, sinkTablesGroupAOnSink3);
-        verifyGroupBTableData(sinkCorfuStores.get(SINK2_INDEX), NUM_WRITES, sinkTablesGroupBOnSink2);
-        verifyGroupBTableData(sinkCorfuStores.get(SINK3_INDEX), NUM_WRITES, sinkTablesGroupB);
-
-        // Remove GROUP_A and GROUP_B from Sink3
-        logicalGroupClient.removeDestinations(GROUP_A,
-                Collections.singletonList(DefaultClusterConfig.getSinkClusterIds().get(SINK3_INDEX)));
-        logicalGroupClient.removeDestinations(GROUP_B,
-                Collections.singletonList(DefaultClusterConfig.getSinkClusterIds().get(SINK3_INDEX)));
-
-        int targetWrites = 2 * NUM_WRITES;
-        for (int i = NUM_WRITES; i < targetWrites; i++) {
-            StringKey key = StringKey.newBuilder().setKey(String.valueOf(i)).build();
-            SampleGroupMsgA groupATablePayload = SampleGroupMsgA.newBuilder().setPayload(String.valueOf(i)).build();
-            SampleGroupMsgB groupBTablePayload = SampleGroupMsgB.newBuilder().setPayload(String.valueOf(i)).build();
-
-            try (TxnContext txn = sourceCorfuStores.get(SOURCE_INDEX).txn(NAMESPACE)) {
-                for (Table<StringKey, SampleGroupMsgA, Message> table : srcTablesGroupA) {
-                    txn.putRecord(table, key, groupATablePayload, null);
-                }
-                for (Table<StringKey, SampleGroupMsgB, Message> table : srcTablesGroupB) {
-                    txn.putRecord(table, key, groupBTablePayload, null);
-                }
-                txn.commit();
-            }
-        }
-
-        verifyGroupATableData(sinkCorfuStores.get(SINK2_INDEX), targetWrites, sinkTablesGroupA);
-        verifyGroupBTableData(sinkCorfuStores.get(SINK2_INDEX), targetWrites, sinkTablesGroupBOnSink2);
-        // After removing group from Sink, the tables for those groups should be cleared from related Sinks.
-        verifyGroupATableData(sinkCorfuStores.get(SINK3_INDEX), 0, sinkTablesGroupAOnSink3);
-        verifyGroupBTableData(sinkCorfuStores.get(SINK3_INDEX), 0, sinkTablesGroupB);
-
-        // Check Sink clusters snapshot plugin listeners received expected updates.
-        latchSink1.await();
-        latchSink2.await();
-        latchSink3.await();
-    }
-
-    /**
-     * This test verifies that group deletion from client metadata table could be properly captured from log entry
-     * readers and trigger a snapshot sync.
-     * (1) Bring up the 1-Source & 3-Sink topology
-     * (2) Register the logical group client and setup initial group destination mapping as
-     *     {GROUP_A: [SINK2, SINK3]; GROUP_B: [SINK2, SINK3]}
-     * (3) Open tables for replication on both Source and Sink side, and write data to Source side
-     * (4) Start replication servers and verify snapshot sync succeeded.
-     * (5) Remove all Sinks from groupA, so now the mapping is {GROUP_A: []; GROUP_B: [SINK2, SINK3]}
-     * (6) Verify snapshot sync with Sink2 and Sink3 is triggered because of group removal
-     * (8) Write more data to GROUP_A and GROUP_B tables on Source side, and verify new data is only replicated to
-     *     GROUP_B tables on Sink side, and GROUP_A tables are cleared from both Sink2 and Sink3
-     */
-    @Test
-    public void testGroupDeletion() throws Exception {
-        // Register client and add group destinations
-        CorfuRuntime clientRuntime = getClientRuntime();
-        LogReplicationLogicalGroupClient logicalGroupClient =
-                new LogReplicationLogicalGroupClient(clientRuntime, SAMPLE_CLIENT_NAME);
-        logicalGroupClient.setDestinations(GROUP_A,
-                Arrays.asList(
-                        DefaultClusterConfig.getSinkClusterIds().get(SINK2_INDEX),
-                        DefaultClusterConfig.getSinkClusterIds().get(SINK3_INDEX)));
-        logicalGroupClient.setDestinations(GROUP_B,
-                Arrays.asList(
-                        DefaultClusterConfig.getSinkClusterIds().get(SINK2_INDEX),
-                        DefaultClusterConfig.getSinkClusterIds().get(SINK3_INDEX)));
-
-        // Subscribe snapshot plugin listener on each Sink cluster, Sink1 will only have 1 snapshot sync while Sink2
-        // and Sink3 will have 2 snapshot sync for each, where 1 snapshot sync will update the listener twice.
-        CountDownLatch latchSink1 = new CountDownLatch(PLUGIN_UPDATES_PER_SNAPSHOT_SYNC);
-        SnapshotSyncPluginListener snapshotSyncPluginListenerSink1 = new SnapshotSyncPluginListener(latchSink1);
-        subscribeToSnapshotSyncPluginTable(sinkCorfuStores.get(SINK1_INDEX), snapshotSyncPluginListenerSink1);
-
-        CountDownLatch latchSink2 = new CountDownLatch(2 * PLUGIN_UPDATES_PER_SNAPSHOT_SYNC);
-        SnapshotSyncPluginListener snapshotSyncPluginListenerSink2 = new SnapshotSyncPluginListener(latchSink2);
-        subscribeToSnapshotSyncPluginTable(sinkCorfuStores.get(SINK2_INDEX), snapshotSyncPluginListenerSink2);
-
-        CountDownLatch latchSink3 = new CountDownLatch(2 * PLUGIN_UPDATES_PER_SNAPSHOT_SYNC);
-        SnapshotSyncPluginListener snapshotSyncPluginListenerSink3 = new SnapshotSyncPluginListener(latchSink3);
-        subscribeToSnapshotSyncPluginTable(sinkCorfuStores.get(SINK3_INDEX), snapshotSyncPluginListenerSink3);
-
-        // Open tables for replication on both side
-        int numTables = 3;
-        // Source
-        openFederatedTable(numTables, sourceCorfuStores.get(SOURCE_INDEX), srcFederatedTables);
-        openGroupATable(numTables, sourceCorfuStores.get(SOURCE_INDEX), srcTablesGroupA);
-        openGroupBTable(numTables, sourceCorfuStores.get(SOURCE_INDEX), srcTablesGroupB);
-        // Sink
-        openFederatedTable(numTables, sinkCorfuStores.get(SINK1_INDEX), sinkFederatedTables);
-        openGroupATable(numTables, sinkCorfuStores.get(SINK2_INDEX), sinkTablesGroupA);
-        openGroupBTable(numTables, sinkCorfuStores.get(SINK3_INDEX), sinkTablesGroupB);
-
-        // Write data to Source side tables
-        writeDataOnSource(0, NUM_WRITES);
-
-        // Start log replication for all sessions
-        startReplicationServers();
-
-        // Verify all the sessions' snapshot sync completed
-        verifySessionInLogEntrySyncState(SINK1_INDEX, LogReplicationConfigManager.getDefaultSubscriber());
-        // TODO: should be replaced by real client name after Sink session creation workflow is introduced
-        verifySessionInLogEntrySyncState(SINK2_INDEX, LogReplicationConfigManager.getDefaultLogicalGroupSubscriber());
-        verifySessionInLogEntrySyncState(SINK3_INDEX, LogReplicationConfigManager.getDefaultLogicalGroupSubscriber());
-
-        List<Table<StringKey, SampleGroupMsgA, Message>> sinkTablesGroupAOnSink3 = new ArrayList<>();
-        openGroupATable(numTables, sinkCorfuStores.get(SINK3_INDEX), sinkTablesGroupAOnSink3);
-        List<Table<StringKey, SampleGroupMsgB, Message>> sinkTablesGroupBOnSink2 = new ArrayList<>();
-        openGroupBTable(numTables, sinkCorfuStores.get(SINK2_INDEX), sinkTablesGroupBOnSink2);
-
-        // Verify tables' content on Sink side
-        verifyFederatedTableData(sinkCorfuStores.get(SINK1_INDEX), NUM_WRITES, sinkFederatedTables);
-        verifyGroupATableData(sinkCorfuStores.get(SINK2_INDEX), NUM_WRITES, sinkTablesGroupA);
-        verifyGroupATableData(sinkCorfuStores.get(SINK3_INDEX), NUM_WRITES, sinkTablesGroupAOnSink3);
-        verifyGroupBTableData(sinkCorfuStores.get(SINK2_INDEX), NUM_WRITES, sinkTablesGroupBOnSink2);
-        verifyGroupBTableData(sinkCorfuStores.get(SINK3_INDEX), NUM_WRITES, sinkTablesGroupB);
-
-        // Remove GROUP_A from Sink3 and GROUP_B from Sink2
-        logicalGroupClient.removeDestinations(GROUP_A,
-                Collections.singletonList(DefaultClusterConfig.getSinkClusterIds().get(SINK2_INDEX)));
-        logicalGroupClient.removeDestinations(GROUP_A,
-                Collections.singletonList(DefaultClusterConfig.getSinkClusterIds().get(SINK3_INDEX)));
-
-        assertThat(logicalGroupClient.getDestinations(GROUP_A)).isEqualTo(null);
-
-        int targetWrites = 2 * NUM_WRITES;
-        for (int i = NUM_WRITES; i < targetWrites; i++) {
-            StringKey key = StringKey.newBuilder().setKey(String.valueOf(i)).build();
-            SampleGroupMsgA groupATablePayload = SampleGroupMsgA.newBuilder().setPayload(String.valueOf(i)).build();
-            SampleGroupMsgB groupBTablePayload = SampleGroupMsgB.newBuilder().setPayload(String.valueOf(i)).build();
-
-            try (TxnContext txn = sourceCorfuStores.get(SOURCE_INDEX).txn(NAMESPACE)) {
-                for (Table<StringKey, SampleGroupMsgA, Message> table : srcTablesGroupA) {
-                    txn.putRecord(table, key, groupATablePayload, null);
-                }
-                for (Table<StringKey, SampleGroupMsgB, Message> table : srcTablesGroupB) {
-                    txn.putRecord(table, key, groupBTablePayload, null);
-                }
-                txn.commit();
-            }
-        }
-
         verifyGroupBTableData(sinkCorfuStores.get(SINK3_INDEX), targetWrites, sinkTablesGroupB);
-        verifyGroupBTableData(sinkCorfuStores.get(SINK2_INDEX), targetWrites, sinkTablesGroupBOnSink2);
-        // After removing group from Sink, the tables for those groups should be cleared from related Sinks.
-        verifyGroupATableData(sinkCorfuStores.get(SINK2_INDEX), 0, sinkTablesGroupA);
-        verifyGroupATableData(sinkCorfuStores.get(SINK3_INDEX), 0, sinkTablesGroupAOnSink3);
-
-        // Check Sink clusters snapshot plugin listeners received expected updates.
-        latchSink1.await();
-        latchSink2.await();
-        latchSink3.await();
     }
 
     /**
@@ -967,6 +742,9 @@ public class LogReplicationLogicalGroupIT extends CorfuReplicationMultiSourceSin
         logicalGroupClient.removeDestinations(GROUP_B,
                 Collections.singletonList(DefaultClusterConfig.getSinkClusterIds().get(SINK2_INDEX)));
 
+        // Pause the test thread for a while to let the destination removal and new config take effect.
+        TimeUnit.SECONDS.sleep(SLEEP_INTERVAL);
+
         int targetWrites = 2 * NUM_WRITES;
         for (int i = NUM_WRITES; i < targetWrites; i++) {
             StringKey key = StringKey.newBuilder().setKey(String.valueOf(i)).build();
@@ -986,9 +764,8 @@ public class LogReplicationLogicalGroupIT extends CorfuReplicationMultiSourceSin
 
         verifyGroupATableData(sinkCorfuStores.get(SINK2_INDEX), targetWrites, sinkTablesGroupA);
         verifyGroupBTableData(sinkCorfuStores.get(SINK3_INDEX), targetWrites, sinkTablesGroupB);
-        // After removing group from Sink, the tables for those groups should be cleared from related Sinks.
-        verifyGroupATableData(sinkCorfuStores.get(SINK3_INDEX), 0, sinkTablesGroupAOnSink3);
-        verifyGroupBTableData(sinkCorfuStores.get(SINK2_INDEX), 0, sinkTablesGroupBOnSink2);
+        verifyGroupATableData(sinkCorfuStores.get(SINK3_INDEX), NUM_WRITES, sinkTablesGroupAOnSink3);
+        verifyGroupBTableData(sinkCorfuStores.get(SINK2_INDEX), NUM_WRITES, sinkTablesGroupBOnSink2);
 
         // Add GROUP_A and GROUP_B back and verify new data is replicated to Sink2 and Sink3
         logicalGroupClient.addDestinations(GROUP_A,
