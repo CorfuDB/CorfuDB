@@ -183,7 +183,7 @@ public class LogEntryWriterTest extends AbstractViewTest {
                 .build();
 
         // Throw an exception when sequence number = 3 is being applied. This will simulate a partial apply.
-        Mockito.doThrow(IllegalArgumentException.class).when(metadataManager).updateReplicationMetadata(txnContext,
+        Mockito.doThrow(InterruptedException.class).when(metadataManager).updateReplicationMetadata(txnContext,
                 getDefaultSession(), expectedMetadata);
 
         // Verify that the message containing the list of opaque entries was not applied
