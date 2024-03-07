@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure.logreplication.utils;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.Sets;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.LRRollingUpgradeHandler;
@@ -230,7 +231,7 @@ public class LogReplicationConfigManager {
         StreamAddressSpace currentAddressSpace = runtime.getSequencerView().getStreamAddressSpace(
             new StreamAddressRange(REGISTRY_TABLE_ID, Long.MAX_VALUE, Address.NON_ADDRESS));
         long currentLogTail = currentAddressSpace.getTail();
-        return currentLogTail != lastRegistryTableLogTail;
+        return (currentLogTail != lastRegistryTableLogTail);
     }
 
     /**

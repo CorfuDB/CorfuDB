@@ -69,20 +69,20 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
     private static final String streamName = "Table001";
     private static final String LOCK_TABLE_NAME = "LOCK";
 
-    private static final long shortInterval = 1L;
-    private static final long mediumInterval = 10L;
-    private static final int firstBatch = 10;
-    private static final int secondBatch = 15;
-    private static final int thirdBatch = 20;
-    private static final int fourthBatch = 25;
-    private static final int largeBatch = 50;
+    private final static long shortInterval = 1L;
+    private final static long mediumInterval = 10L;
+    private final static int firstBatch = 10;
+    private final static int secondBatch = 15;
+    private final static int thirdBatch = 20;
+    private final static int fourthBatch = 25;
+    private final static int largeBatch = 50;
 
-    private static final int sourceClusterCorfuPort = 9000;
-    private static final int sinkClusterCorfuPort = 9001;
-    private static final int backupClusterCorfuPort = 9007;
-    private static final int sourceReplicationServerPort = 9010;
-    private static final int sinkReplicationServerPort = 9020;
-    private static final int backupReplicationServerPort = 9030;
+    private final static int sourceClusterCorfuPort = 9000;
+    private final static int sinkClusterCorfuPort = 9001;
+    private final static int backupClusterCorfuPort = 9007;
+    private final static int sourceReplicationServerPort = 9010;
+    private final static int sinkReplicationServerPort = 9020;
+    private final static int backupReplicationServerPort = 9030;
     private static final String sourceCorfuEndpoint = DEFAULT_HOST + ":" + sourceClusterCorfuPort;
     private static final String sinkCorfuEndpoint = DEFAULT_HOST + ":" + sinkClusterCorfuPort;
     private static final String backupCorfuEndpoint = DEFAULT_HOST + ":" + backupClusterCorfuPort;
