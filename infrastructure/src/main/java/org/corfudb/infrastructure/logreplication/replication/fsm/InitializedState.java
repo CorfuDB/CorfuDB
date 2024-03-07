@@ -70,7 +70,6 @@ public class InitializedState implements LogReplicationState {
     public void onEntry(LogReplicationState from) {
         if (from != this) {
             fsm.getAckReader().markSyncStatus(SyncStatus.STOPPED);
-            log.debug("Replication status changed to STOPPED");
             // Disable periodic sync status periodic task while in initialized state (no actual replication occurring)
             fsm.getAckReader().stopSyncStatusUpdatePeriodicTask();
         }

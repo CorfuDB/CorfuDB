@@ -403,7 +403,6 @@ public class LogReplicationAckReader {
             IRetry.build(IntervalRetry.class, () -> {
                 try {
                     lock.lock();
-                    metadataManager.updateSyncStatus(session, lastSyncType, SyncStatus.ONGOING);
                 } catch (TransactionAbortedException tae) {
                     log.error("Error while attempting to markSnapshotSyncInfoOngoing for session {}.", session, tae);
                     throw new RetryNeededException();
@@ -479,9 +478,9 @@ public class LogReplicationAckReader {
                             return null;
                         }
                         long entriesToSend = calculateRemainingEntriesToSend(lastAckedTimestamp);
-                        metadataManager.updateRemainingEntriesToSend(session, entriesToSend, lastSyncType);
+                        metadataManager.setReplicationStatusTable(session, entriesToSend, lastSyncType);
                     } catch (TransactionAbortedException tae) {
-                        log.error("Error while attempting to set remaining entries for remote session {} with " +
+                        log.error("Error while attempting to set replication status for remote session {} with " +
                                 "lastSyncType {}.", session, lastSyncType, tae);
                         throw new RetryNeededException();
                     } finally {
