@@ -39,7 +39,6 @@ import org.corfudb.util.retry.IntervalRetry;
 import org.corfudb.util.retry.RetryNeededException;
 
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -526,22 +525,6 @@ public class LogReplicationMetadataManager {
             txn.putRecord(replicationEventTable, key, event, null);
             txn.commit();
         }
-    }
-
-    /**
-     * Get all replication events from the Event table.
-     * @return list of all replication events
-     */
-    public List<CorfuStoreEntry<ReplicationEventInfoKey, ReplicationEvent, Message>> getReplicationEvents() {
-        List<CorfuStoreEntry<ReplicationEventInfoKey, ReplicationEvent, Message>> events = new ArrayList<>();
-
-        try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
-             events = txn.executeQuery(REPLICATION_EVENT_TABLE_NAME, p -> true);
-             txn.commit();
-        } catch (Exception e) {
-            log.error("Failed to get the replication events", e);
-        }
-        return events;
     }
 
     // ================================= Replication Status Table Methods ===================================

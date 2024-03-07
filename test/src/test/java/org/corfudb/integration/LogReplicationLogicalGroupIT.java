@@ -872,8 +872,7 @@ public class LogReplicationLogicalGroupIT extends CorfuReplicationMultiSourceSin
 
         // Checkpoint & trim on Source side to enforce a snapshot sync on restart for all the 3 sessions
         checkpointAndTrimCorfuStore(createRuntimeWithCache(sourceEndpoints.get(SOURCE_INDEX)));
-        sourceReplicationServers.add(runReplicationServer(sourceReplicationPorts.get(SOURCE_INDEX),
-                sourceCorfuPorts.get(SOURCE_INDEX), pluginConfigFilePath));
+        sourceReplicationServers.add(runReplicationServer(sourceReplicationPorts.get(SOURCE_INDEX), pluginConfigFilePath));
         Table<ExampleSchemas.ClusterUuidMsg, ExampleSchemas.ClusterUuidMsg, ExampleSchemas.ClusterUuidMsg> configTable =
                 sourceCorfuStores.get(SOURCE_INDEX).openTable(
                         DefaultClusterManager.CONFIG_NAMESPACE, DefaultClusterManager.CONFIG_TABLE_NAME,
@@ -982,8 +981,7 @@ public class LogReplicationLogicalGroupIT extends CorfuReplicationMultiSourceSin
         verifyGroupBTableData(sinkCorfuStores.get(SINK3_INDEX), NUM_WRITES, sinkTablesGroupB);
 
         // Restart Source to enforce re-negotiations
-        sourceReplicationServers.add(runReplicationServer(sourceReplicationPorts.get(SOURCE_INDEX),
-                sourceCorfuPorts.get(SOURCE_INDEX), pluginConfigFilePath));
+        sourceReplicationServers.add(runReplicationServer(sourceReplicationPorts.get(SOURCE_INDEX), pluginConfigFilePath));
         Table<ExampleSchemas.ClusterUuidMsg, ExampleSchemas.ClusterUuidMsg, ExampleSchemas.ClusterUuidMsg> configTable =
                 sourceCorfuStores.get(SOURCE_INDEX).openTable(
                         DefaultClusterManager.CONFIG_NAMESPACE, DefaultClusterManager.CONFIG_TABLE_NAME,
