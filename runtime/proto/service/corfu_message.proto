@@ -39,7 +39,6 @@ message HeaderMsg {
   UuidMsg client_id = 6;
   bool ignore_cluster_id = 7;
   bool ignore_epoch = 8;
-  LogReplicationSession session = 9;
 }
 
 message RequestPayloadMsg {

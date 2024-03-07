@@ -11,9 +11,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.compression.Codec;
 import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
-import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
-import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationAckReader;
+import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
+import org.corfudb.infrastructure.logreplication.replication.LogReplicationAckReader;
 import org.corfudb.infrastructure.logreplication.replication.fsm.EmptyDataSender;
 import org.corfudb.infrastructure.logreplication.replication.fsm.EmptySnapshotReader;
 import org.corfudb.infrastructure.logreplication.replication.fsm.InSnapshotSyncState;
@@ -44,7 +44,6 @@ import org.corfudb.runtime.collections.StreamListener;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
-import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.TableRegistry;
 import org.junit.After;
@@ -827,7 +826,9 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
 
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(runtime, null);
         LogReplicationUpgradeManager upgradeManager = new LogReplicationUpgradeManager(runtime, pluginConfigFilePath);
-        LogReplicationSession session = DefaultClusterConfig.getSessions().get(0);
+
+        ReplicationSession replicationSession = ReplicationSession.getDefaultReplicationSessionForCluster(
+            TEST_LOCAL_CLUSTER_ID);
 
         switch(readerImpl) {
             case EMPTY:
@@ -851,23 +852,23 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
                 break;
             case STREAMS:
                 CorfuRuntime runtime = getNewRuntime(getDefaultNode()).connect();
-                snapshotReader = new StreamsSnapshotReader(runtime, session,
-                        new LogReplicationContext(configManager, TEST_TOPOLOGY_CONFIG_ID,
-                                "test:" + SERVERS.PORT_0));
+                snapshotReader = new StreamsSnapshotReader(runtime, new LogReplicationContext(configManager,
+                        TEST_TOPOLOGY_CONFIG_ID, TEST_LOCAL_ENDPOINT_PREFIX + SERVERS.PORT_0), replicationSession);
                 dataSender = new TestDataSender();
                 break;
             default:
                 break;
         }
 
-        LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(runtime, TEST_TOPOLOGY_CONFIG_ID);
-        LogReplicationContext context = new LogReplicationContext(configManager, TEST_TOPOLOGY_CONFIG_ID,
-                "test:" + SERVERS.PORT_0);
-        ackReader = new LogReplicationAckReader(metadataManager, runtime, session, context);
-        fsm = new LogReplicationFSM(runtime, snapshotReader, dataSender, logEntryReader,
-                new DefaultReadProcessor(runtime), upgradeManager,
-                Executors.newSingleThreadExecutor(new ThreadFactoryBuilder().setNameFormat("fsm-worker").build()),
-                ackReader, session, context);
+        LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(runtime, TEST_TOPOLOGY_CONFIG_ID,
+            TEST_LOCAL_CLUSTER_ID);
+        LogReplicationContext replicationContext = new LogReplicationContext(configManager, TEST_TOPOLOGY_CONFIG_ID,
+                TEST_LOCAL_ENDPOINT_PREFIX + SERVERS.PORT_0);
+        ackReader = new LogReplicationAckReader(metadataManager, replicationContext, runtime, replicationSession);
+
+        fsm = new LogReplicationFSM(runtime, snapshotReader, dataSender, logEntryReader, new DefaultReadProcessor(runtime),
+                replicationContext, Executors.newSingleThreadExecutor(new ThreadFactoryBuilder().setNameFormat("fsm-worker").build()),
+                ackReader, upgradeManager, replicationSession);
         ackReader.setLogEntryReader(fsm.getLogEntryReader());
         transitionObservable = fsm.getNumTransitions();
         transitionObservable.addObserver(this);

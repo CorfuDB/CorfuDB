@@ -5,8 +5,8 @@ import io.netty.buffer.Unpooled;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationMetadata;
-import org.corfudb.runtime.LogReplication.LogReplicationSession;
+import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
+import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.LogReplicationMetadataType;
 import org.corfudb.protocols.CorfuProtocolCommon;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
@@ -35,6 +35,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -80,19 +81,22 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
     // regularToShadowStreamId map
     private final Set<UUID> replicatedStreamIds = new HashSet<>();
 
+    private final ReplicationSession replicationSession;
+
     private final LogReplicationMetadataManager metadataManager;
 
     @Getter
     private Phase phase;
 
-    public StreamsSnapshotWriter(CorfuRuntime rt, LogReplicationMetadataManager metadataManager,
-                                 LogReplicationSession session, LogReplicationContext replicationContext) {
-        super(session, replicationContext);
+    public StreamsSnapshotWriter(CorfuRuntime rt, LogReplicationContext replicationContext,
+                                 LogReplicationMetadataManager logReplicationMetadataManager,
+                                 ReplicationSession replicationSession) {
+        super(replicationContext, replicationSession);
         this.rt = rt;
-        this.metadataManager = metadataManager;
+        this.metadataManager = logReplicationMetadataManager;
         this.phase = Phase.TRANSFER_PHASE;
         this.snapshotSyncStartMarker = Optional.empty();
-
+        this.replicationSession = replicationSession;
         // Serialize the clear entry once to access its constant size on each subsequent use
         serializeClearEntry();
     }
@@ -157,13 +161,14 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
 
         try (TxnContext txn = metadataManager.getTxnContext()) {
             updateLog(txn, smrEntries, shadowStreamUuid);
-            metadataManager.updateReplicationMetadataField(txn, session, ReplicationMetadata.LASTSNAPSHOTTRANSFERREDSEQNUMBER_FIELD_NUMBER, currentSeqNum);
+            metadataManager.appendUpdate(txn,
+                    LogReplicationMetadataType.LAST_SNAPSHOT_TRANSFERRED_SEQUENCE_NUMBER, currentSeqNum);
             timestamp = txn.commit();
         }
 
         if (!snapshotSyncStartMarker.isPresent()) {
             try (TxnContext txn = metadataManager.getTxnContext()) {
-                metadataManager.setSnapshotSyncStartMarker(txn, session, snapshotSyncId, timestamp);
+                metadataManager.setSnapshotSyncStartMarker(txn, snapshotSyncId, timestamp);
                 snapshotSyncStartMarker = Optional.of(new SnapshotSyncStartMarker(snapshotSyncId, timestamp.getSequence()));
                 txn.commit();
             }
@@ -179,10 +184,12 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
      * @param streamId
      */
     private void updateLog(TxnContext txnContext, List<SMREntry> smrEntries, UUID streamId) {
-        ReplicationMetadata metadata = metadataManager.queryReplicationMetadata(txnContext, session);
-        long persistedTopologyConfigId = metadata.getTopologyConfigId();
-        long persistedSnapshotStart = metadata.getLastSnapshotStarted();
-        long persistedSequenceNum = metadata.getLastSnapshotTransferredSeqNumber();
+        Map<LogReplicationMetadataType, Long> metadataMap = metadataManager.queryMetadata(txnContext,
+            LogReplicationMetadataType.TOPOLOGY_CONFIG_ID,
+                LogReplicationMetadataType.LAST_SNAPSHOT_STARTED, LogReplicationMetadataType.LAST_SNAPSHOT_TRANSFERRED_SEQUENCE_NUMBER);
+        long persistedTopologyConfigId = metadataMap.get(LogReplicationMetadataType.TOPOLOGY_CONFIG_ID);
+        long persistedSnapshotStart = metadataMap.get(LogReplicationMetadataType.LAST_SNAPSHOT_STARTED);
+        long persistedSequenceNum = metadataMap.get(LogReplicationMetadataType.LAST_SNAPSHOT_TRANSFERRED_SEQUENCE_NUMBER);
 
         if (topologyConfigId != persistedTopologyConfigId || srcGlobalSnapshot != persistedSnapshotStart) {
             log.warn("Skip processing opaque entry. Current topologyConfigId={}, srcGlobalSnapshot={}, currentSeqNum={}, " +
@@ -191,8 +198,8 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
             return;
         }
 
-        metadataManager.updateReplicationMetadataField(txnContext, session, ReplicationMetadata.TOPOLOGYCONFIGID_FIELD_NUMBER, topologyConfigId);
-        metadataManager.updateReplicationMetadataField(txnContext, session, ReplicationMetadata.LASTSNAPSHOTSTARTED_FIELD_NUMBER, srcGlobalSnapshot);
+        metadataManager.appendUpdate(txnContext, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID, topologyConfigId);
+        metadataManager.appendUpdate(txnContext, LogReplicationMetadataType.LAST_SNAPSHOT_STARTED, srcGlobalSnapshot);
 
         for (SMREntry smrEntry : smrEntries) {
             txnContext.logUpdate(streamId, smrEntry, replicationContext.getConfig().getDataStreamToTagsMap().get(streamId));
@@ -273,11 +280,12 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
      * @param snapshot base snapshot timestamp
      */
     private void applyShadowStream(UUID streamId, long snapshot) {
-        log.debug("Apply shadow stream for stream {}, snapshot={}", streamId, snapshot);
-
-        log.trace("Current addresses of stream {} :: {}", streamId, rt.getSequencerView().getStreamAddressSpace(
-            new StreamAddressRange(streamId, Long.MAX_VALUE, Address.NON_ADDRESS)));
-
+        log.debug("Apply shadow stream for stream {}, snapshot={}", streamId,
+            snapshot);
+        log.debug("Current addresses of stream {} :: {}", streamId,
+            rt.getSequencerView().getStreamAddressSpace(
+                new StreamAddressRange(streamId, Long.MAX_VALUE,
+                    Address.NON_ADDRESS)));
         UUID shadowStreamId = getShadowStreamId(streamId);
 
         // In order to avoid data loss as part of a plugin failing to successfully
@@ -294,8 +302,7 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
 
         // This variable reflects the minimum timestamp for all shadow streams in the current snapshot cycle.
         // We seek up to this address, assuming that no trim should occur beyond this snapshot start
-        long currentMinShadowStreamTimestamp =
-            metadataManager.getReplicationMetadata(session).getCurrentCycleMinShadowStreamTs();
+        long currentMinShadowStreamTimestamp = metadataManager.getMinSnapshotSyncShadowStreamTs();
         OpaqueStream shadowOpaqueStream = new OpaqueStream(rt.getStreamsView().get(shadowStreamId, options));
         shadowOpaqueStream.seek(currentMinShadowStreamTimestamp);
         Stream<OpaqueEntry> shadowStream = shadowOpaqueStream.streamUpTo(snapshot);
@@ -313,9 +320,8 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
         }
 
         boolean shouldAddClearRecord = !MERGE_ONLY_STREAMS.contains(streamId);
-
         while (iterator.hasNext()) {
-            // append a clear record at the beginning of every non-merge-only stream
+            // append a clear record at the beginning of every non-merge-only streams
             if(shouldAddClearRecord) {
                 smrEntries.add(CLEAR_ENTRY);
                 shouldAddClearRecord = false;
@@ -325,7 +331,7 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
             smrEntries.addAll(opaqueEntry.getEntries().get(shadowStreamId));
         }
 
-        // if clear record has not been added by now, indicates that shadow stream is empty.
+        // if clear record has not been added by now,indicates that shadow stream is empty.
         if (shouldAddClearRecord) {
             log.trace("No data was written to stream {} on source or sink. Do not clear.", streamId);
             return;
@@ -371,7 +377,8 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
                 txnContext.commit();
             }
         }
-        log.debug("Completed applying updates to stream {}.  {} entries applied across {} transactions.  ", streamId,
+        log.debug("Completed applying updates to stream {}.  {} " +
+            "entries applied across {} transactions.  ", streamId,
             smrEntries.size(), numBatches);
     }
 
@@ -393,7 +400,9 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
         // Sync the config with registry table after applying its entries
         replicationContext.refresh();
 
-        for (String stream : replicationContext.getConfigManager().getConfig().getStreamsToReplicate()) {
+        for (String stream :
+            replicationContext.getConfig().getReplicationSubscriberToStreamsMap()
+                .getOrDefault(replicationSession.getSubscriber(), new HashSet<>())) {
             UUID regularStreamId = CorfuRuntime.getStreamID(stream);
             if (regularStreamId.equals(REGISTRY_TABLE_ID)) {
                 // Skip registry table as it has been applied in advance
@@ -415,10 +424,12 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
         phase = Phase.APPLY_PHASE;
 
         // Get the number of entries to apply
-        long sequenceNumber = metadataManager.getReplicationMetadata(session).getLastSnapshotTransferredSeqNumber();
+        long seqNum =
+            metadataManager.queryMetadata(LogReplicationMetadataType.LAST_SNAPSHOT_TRANSFERRED_SEQUENCE_NUMBER);
 
-        if (sequenceNumber != Address.NON_ADDRESS) {
-            log.debug("Start applying shadow streams, seqNum={}", sequenceNumber);
+        // Only if there is data to be applied
+        if (seqNum != Address.NON_ADDRESS) {
+            log.debug("Start applying shadow streams, seqNum={}", seqNum);
             applyShadowStreams();
         }
     }
@@ -442,7 +453,8 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
         // checkpoint won't run on these streams
         Set<UUID> streamsToQuery = new HashSet<>();
         for (String replicatedStream :
-            replicationContext.getConfig().getStreamsToReplicate()) {
+            replicationContext.getConfig().getReplicationSubscriberToStreamsMap().getOrDefault(
+                replicationSession.getSubscriber(), new HashSet<>())) {
             UUID id = CorfuRuntime.getStreamID(replicatedStream);
             if (replicatedStreamIds.contains(id) || MERGE_ONLY_STREAMS.contains(id)) {
                 continue;
@@ -474,8 +486,8 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
         try {
             IRetry.build(IntervalRetry.class, () -> {
                 try (TxnContext txnContext = metadataManager.getTxnContext()) {
-                    metadataManager.updateReplicationMetadataField(txnContext, session,
-                            ReplicationMetadata.TOPOLOGYCONFIGID_FIELD_NUMBER, topologyConfigId);
+                    metadataManager.appendUpdate(txnContext, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID,
+                        topologyConfigId);
                     streamsToClear.forEach(streamId -> {
                         clearStream(streamId, txnContext);
                     });

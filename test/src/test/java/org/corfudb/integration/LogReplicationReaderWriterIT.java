@@ -3,12 +3,11 @@ package org.corfudb.integration;
 import com.google.common.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
-import org.corfudb.infrastructure.logreplication.infrastructure.SessionManager;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
 import org.corfudb.infrastructure.logreplication.proto.Sample.IntValue;
 import org.corfudb.infrastructure.logreplication.proto.Sample.Metadata;
 import org.corfudb.infrastructure.logreplication.proto.Sample.StringKey;
+import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogEntryWriter;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.replication.receive.StreamsSnapshotWriter;
@@ -38,7 +37,6 @@ import org.corfudb.runtime.view.StreamOptions;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
-import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.junit.Test;
 
 import java.io.IOException;
@@ -215,6 +213,19 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
         }
     }
 
+    void verifyTxStream(CorfuRuntime rt) {
+        StreamOptions options = StreamOptions.builder()
+                .cacheEntries(false)
+                .build();
+
+        IStreamView txStream = rt.getStreamsView().getUnsafe(ObjectsView.getLogReplicatorStreamId(), options);
+        List<ILogData> dataList = txStream.remaining();
+        log.debug("\ndataList size " + dataList.size());
+        for (ILogData data : txStream.remaining()) {
+            log.debug("{}", data);
+        }
+    }
+
     public static void printTails(String tag, CorfuRuntime rt0, CorfuRuntime rt1) {
         log.debug("\n" + tag);
         log.debug("src dataTail " + rt0.getAddressSpaceView().getLogTail());
@@ -225,9 +236,13 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
     public static void readSnapshotMsgs(List<LogReplicationEntryMsg> msgQ, CorfuRuntime rt, boolean blockOnSem) {
         int cnt = 0;
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(rt);
-        LogReplicationContext context = new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT);
 
-        StreamsSnapshotReader reader = new StreamsSnapshotReader(rt, getDefaultSession(), context);
+        ReplicationSession replicationSession =
+            ReplicationSession.getDefaultReplicationSessionForCluster(SINK_CLUSTER_ID);
+
+        LogReplicationContext replicationContext = new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT);
+
+        StreamsSnapshotReader reader = new StreamsSnapshotReader(rt, replicationContext, replicationSession);
 
         reader.reset(rt.getAddressSpaceView().getLogTail());
         while (true) {
@@ -256,13 +271,18 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
 
     public static void writeSnapshotMsgs(List<LogReplicationEntryMsg> msgQ, CorfuRuntime rt) {
 
-        LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt, 0);
-        logReplicationMetadataManager.addSession(getDefaultSession(), 0, true);
+        LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt,
+            0, SINK_CLUSTER_ID);
 
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(rt);
 
-        StreamsSnapshotWriter writer = new StreamsSnapshotWriter(rt, logReplicationMetadataManager,
-            getDefaultSession(), new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT));
+        ReplicationSession replicationSession =
+            ReplicationSession.getDefaultReplicationSessionForCluster(SINK_CLUSTER_ID);
+
+        LogReplicationContext replicationContext = new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT);
+
+        StreamsSnapshotWriter writer = new StreamsSnapshotWriter(rt, replicationContext, logReplicationMetadataManager,
+            replicationSession);
 
         if (msgQ.isEmpty()) {
             log.debug("msgQ is empty");
@@ -270,8 +290,7 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
 
         long topologyConfigId = msgQ.get(0).getMetadata().getTopologyConfigID();
         long snapshot = msgQ.get(0).getMetadata().getSnapshotTimestamp();
-        logReplicationMetadataManager.updateReplicationMetadataField(getDefaultSession(),
-                LogReplicationMetadata.ReplicationMetadata.LASTSNAPSHOTSTARTED_FIELD_NUMBER, snapshot);
+        logReplicationMetadataManager.setBaseSnapshotStart(topologyConfigId, snapshot);
         writer.reset(topologyConfigId, snapshot);
 
         for (LogReplicationEntryMsg msg : msgQ) {
@@ -281,21 +300,17 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
         writer.applyShadowStreams();
     }
 
-    public static LogReplicationSession getDefaultSession() {
-        return LogReplicationSession.newBuilder()
-                .setSinkClusterId(SINK_CLUSTER_ID)
-                .setSourceClusterId(SOURCE_CLUSTER_ID)
-                .setSubscriber(SessionManager.getDefaultSubscriber())
-                .build();
-    }
-
     public static void readLogEntryMsgs(List<LogReplicationEntryMsg> msgQ, CorfuRuntime rt,
                                         boolean blockOnce) throws TrimmedException {
 
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(rt);
 
-        StreamsLogEntryReader reader = new StreamsLogEntryReader(rt, getDefaultSession(),
-                new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT));
+        ReplicationSession replicationSession =
+            ReplicationSession.getDefaultReplicationSessionForCluster(SINK_CLUSTER_ID);
+
+        LogReplicationContext replicationContext = new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT);
+
+        StreamsLogEntryReader reader = new StreamsLogEntryReader(rt, replicationContext, replicationSession);
         reader.setGlobalBaseSnapshot(Address.NON_ADDRESS, Address.NON_ADDRESS);
 
         LogReplicationEntryMsg entry;
@@ -325,13 +340,17 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
 
     public static void writeLogEntryMsgs(List<LogReplicationEntryMsg> msgQ, CorfuRuntime rt) {
 
-        LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt, 0);
-        logReplicationMetadataManager.addSession(getDefaultSession(),0, true);
+        LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt,
+            0, SOURCE_CLUSTER_ID);
 
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(rt);
 
-        LogEntryWriter writer = new LogEntryWriter(logReplicationMetadataManager, getDefaultSession(),
-                new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT));
+        ReplicationSession replicationSession =
+            ReplicationSession.getDefaultReplicationSessionForCluster(SINK_CLUSTER_ID);
+
+        LogReplicationContext replicationContext = new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT);
+
+        LogEntryWriter writer = new LogEntryWriter(replicationContext, logReplicationMetadataManager, replicationSession);
 
         if (msgQ.isEmpty()) {
             log.debug("msgQ is EMPTY");

@@ -5,7 +5,8 @@ import io.micrometer.core.instrument.Tag;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.infrastructure.logreplication.DataSender;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SyncType;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal;
+import org.corfudb.infrastructure.logreplication.replication.LogReplicationAckReader;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
 
@@ -53,11 +54,13 @@ public class SnapshotSenderBufferManager extends SenderBufferManager {
 
         // If only a given stream has been replicated, update with the sequence number
         if (entry.getMetadata().getEntryType() == LogReplicationEntryType.SNAPSHOT_REPLICATED) {
-            ackReader.setAckedTsAndSyncType(entry.getMetadata().getSnapshotSyncSeqNum(), SyncType.SNAPSHOT);
+            ackReader.setAckedTsAndSyncType(entry.getMetadata().getSnapshotSyncSeqNum(),
+                    ReplicationStatusVal.SyncType.SNAPSHOT);
         } else {
             // If all streams have been replicated, ack with the base snapshot so that the remaining entries(0) get
             // calculated correctly
-            ackReader.setAckedTsAndSyncType(entry.getMetadata().getSnapshotTimestamp(), SyncType.SNAPSHOT);
+            ackReader.setAckedTsAndSyncType(entry.getMetadata().getSnapshotTimestamp(),
+                    ReplicationStatusVal.SyncType.SNAPSHOT);
         }
     }
 

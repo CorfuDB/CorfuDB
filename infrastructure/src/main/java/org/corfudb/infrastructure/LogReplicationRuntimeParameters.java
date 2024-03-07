@@ -6,7 +6,7 @@ import lombok.Data;
 import org.corfudb.comm.ChannelImplementation;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
-import org.corfudb.runtime.LogReplication.LogReplicationSession;
+import org.corfudb.infrastructure.logreplication.transport.IChannelContext;
 import org.corfudb.runtime.RuntimeParameters;
 import org.corfudb.runtime.RuntimeParametersBuilder;
 
@@ -20,9 +20,6 @@ import java.util.UUID;
  */
 @Data
 public class LogReplicationRuntimeParameters extends RuntimeParameters {
-
-    // Replication session associated to a runtime
-    private LogReplicationSession session;
 
     // Remote Cluster Descriptor
     private ClusterDescriptor remoteClusterDescriptor;
@@ -59,20 +56,15 @@ public class LogReplicationRuntimeParameters extends RuntimeParameters {
         private ClusterDescriptor remoteClusterDescriptor;
         private String pluginFilePath;
         private long topologyConfigId;
+        private LogReplicationConfig replicationConfig;
         private IChannelContext channelContext;
         private int maxWriteSize;
-        private LogReplicationSession session;
 
         private LogReplicationRuntimeParametersBuilder() {
         }
 
         public LogReplicationRuntimeParameters.LogReplicationRuntimeParametersBuilder localCorfuEndpoint(String localCorfuEndpoint) {
             this.localCorfuEndpoint = localCorfuEndpoint;
-            return this;
-        }
-
-        public LogReplicationRuntimeParameters.LogReplicationRuntimeParametersBuilder session(LogReplicationSession session) {
-            this.session = session;
             return this;
         }
 
@@ -93,6 +85,11 @@ public class LogReplicationRuntimeParameters extends RuntimeParameters {
 
         public LogReplicationRuntimeParameters.LogReplicationRuntimeParametersBuilder topologyConfigId(long topologyConfigId) {
             this.topologyConfigId = topologyConfigId;
+            return this;
+        }
+
+        public LogReplicationRuntimeParameters.LogReplicationRuntimeParametersBuilder replicationConfig(LogReplicationConfig replicationConfig) {
+            this.replicationConfig = replicationConfig;
             return this;
         }
 
@@ -253,13 +250,13 @@ public class LogReplicationRuntimeParameters extends RuntimeParameters {
             runtimeParameters.setUncaughtExceptionHandler(uncaughtExceptionHandler);
             runtimeParameters.setSystemDownHandler(systemDownHandler);
             runtimeParameters.setBeforeRpcHandler(beforeRpcHandler);
-            runtimeParameters.setSession(session);
             runtimeParameters.setLocalCorfuEndpoint(localCorfuEndpoint);
             runtimeParameters.setLocalClusterId(localClusterId);
             runtimeParameters.setRemoteClusterDescriptor(remoteClusterDescriptor);
             runtimeParameters.setTopologyConfigId(topologyConfigId);
             runtimeParameters.setPluginFilePath(pluginFilePath);
             runtimeParameters.setChannelContext(channelContext);
+            runtimeParameters.setReplicationConfig(replicationConfig);
             runtimeParameters.setMaxWriteSize(maxWriteSize);
             return runtimeParameters;
         }
