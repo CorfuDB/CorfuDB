@@ -38,8 +38,8 @@ import static org.corfudb.integration.LogReplicationAbstractIT.runCommandForOutp
 
 @Slf4j
 public class CorfuReplicationMultiSourceSinkIT extends AbstractIT {
-    protected final List<Integer> sourceCorfuPorts = Arrays.asList(9000, 9002, 9004);
-    protected final List<Integer> sinkCorfuPorts = Arrays.asList(9001, 9003, 9005);
+    private final List<Integer> sourceCorfuPorts = Arrays.asList(9000, 9002, 9004);
+    private final List<Integer> sinkCorfuPorts = Arrays.asList(9001, 9003, 9005);
 
     private final List<Process> sourceCorfuProcesses = new ArrayList<>();
     private final List<Process> sinkCorfuProcesses = new ArrayList<>();
@@ -157,13 +157,11 @@ public class CorfuReplicationMultiSourceSinkIT extends AbstractIT {
 
     protected void startReplicationServers() throws Exception {
         for (int i = 0; i < numSourceClusters; i++) {
-            sourceReplicationServers.add(runReplicationServer(sourceReplicationPorts.get(i), sourceCorfuPorts.get(i),
-                    pluginConfigFilePath));
+            sourceReplicationServers.add(runReplicationServer(sourceReplicationPorts.get(i), pluginConfigFilePath));
         }
 
         for (int i = 0; i < numSinkClusters; i++) {
-            sinkReplicationServers.add(runReplicationServer(sinkReplicationPorts.get(i), sinkCorfuPorts.get(i),
-                    pluginConfigFilePath));
+            sinkReplicationServers.add(runReplicationServer(sinkReplicationPorts.get(i), pluginConfigFilePath));
         }
     }
 

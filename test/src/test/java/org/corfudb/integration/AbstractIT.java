@@ -380,43 +380,38 @@ public class AbstractIT extends AbstractCorfuTest {
                 .runServer();
     }
 
-    public Process runReplicationServer(int port, int corfuServerPort) throws IOException {
+    public Process runReplicationServer(int port) throws IOException {
         return new CorfuReplicationServerRunner()
                 .setHost(DEFAULT_HOST)
                 .setPort(port)
-                .setCorfuServerConnectionPort(corfuServerPort)
                 .runServer();
     }
 
-    public Process runReplicationServer(int port, int corfuServerPort, String pluginConfigFilePath) throws IOException {
+    public Process runReplicationServer(int port, String pluginConfigFilePath) throws IOException {
         return new CorfuReplicationServerRunner()
                 .setHost(DEFAULT_HOST)
                 .setPort(port)
-                .setCorfuServerConnectionPort(corfuServerPort)
                 .setPluginConfigFilePath(pluginConfigFilePath)
                 .setMsg_size(MSG_SIZE)
                 .runServer();
     }
 
-    public Process runReplicationServer(int port, int corfuServerPort, String pluginConfigFilePath,
-                                        int lockLeaseDuration) throws IOException {
+    public Process runReplicationServer(int port, String pluginConfigFilePath, int lockLeaseDuration) throws IOException {
         return new CorfuReplicationServerRunner()
                 .setHost(DEFAULT_HOST)
                 .setPort(port)
-                .setCorfuServerConnectionPort(corfuServerPort)
-                .setLockLeaseDuration(Integer.valueOf(lockLeaseDuration))
+                .setLockLeaseDuration(lockLeaseDuration)
                 .setPluginConfigFilePath(pluginConfigFilePath)
                 .setMsg_size(MSG_SIZE)
                 .runServer();
     }
 
-    public Process runReplicationServerCustomMaxWriteSize(int port, int corfuServerPort,
+    public Process runReplicationServerCustomMaxWriteSize(int port,
                                                           String pluginConfigFilePath, int maxWriteSize,
                                                           int maxEntriesApplied) throws IOException {
         return new CorfuReplicationServerRunner()
                 .setHost(DEFAULT_HOST)
                 .setPort(port)
-                .setCorfuServerConnectionPort(corfuServerPort)
                 .setPluginConfigFilePath(pluginConfigFilePath)
                 .setMsg_size(MSG_SIZE)
                 .setMaxWriteSize(maxWriteSize)
@@ -718,7 +713,6 @@ public class AbstractIT extends AbstractCorfuTest {
         private Integer lockLeaseDuration;
         private int maxWriteSize = 0;
         private int maxSnapshotEntriesApplied;
-        private int corfuServerConnectionPort = 9000;
 
         /**
          * Create a command line string according to the properties set for a Corfu Server
@@ -783,8 +777,7 @@ public class AbstractIT extends AbstractCorfuTest {
             }
 
             command.append(" -d ").append(logLevel).append(" ")
-                    .append(port).append(" ")
-                    .append(corfuServerConnectionPort);
+                    .append(port);
 
             return command.toString();
         }

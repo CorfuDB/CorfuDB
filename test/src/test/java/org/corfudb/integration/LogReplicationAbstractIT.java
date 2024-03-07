@@ -605,12 +605,12 @@ public class LogReplicationAbstractIT extends AbstractIT {
             if (runProcess) {
                 // Start Log Replication Server on Source Site
                 sourceReplicationServer =
-                    runReplicationServer(sourceReplicationServerPort, sourceSiteCorfuPort, pluginConfigFilePath,
+                    runReplicationServer(sourceReplicationServerPort, pluginConfigFilePath,
                         lockLeaseDuration);
 
                 // Start Log Replication Server on Sink Site
                 sinkReplicationServer =
-                    runReplicationServer(sinkReplicationServerPort, sinkSiteCorfuPort, pluginConfigFilePath,
+                    runReplicationServer(sinkReplicationServerPort, pluginConfigFilePath,
                         lockLeaseDuration);
             } else {
                 executorService.submit(() -> {
@@ -697,13 +697,11 @@ public class LogReplicationAbstractIT extends AbstractIT {
         try {
             if (runProcess) {
                 // Start Log Replication Server on Source Site
-                sourceReplicationServer = runReplicationServer(sourceReplicationServerPort, sourceSiteCorfuPort,
-                    pluginConfigFilePath, lockLeaseDuration);
+                sourceReplicationServer = runReplicationServer(sourceReplicationServerPort, pluginConfigFilePath, lockLeaseDuration);
             } else {
                 executorService.submit(() -> {
                     CorfuInterClusterReplicationServer.main(new String[]{"-m", "--plugin=" + pluginConfigFilePath,
-                            "--address=localhost", "--corfu-server-connection-port=" + sourceSiteCorfuPort,
-                            String.valueOf(sourceReplicationServerPort)});
+                            "--address=localhost", String.valueOf(sourceReplicationServerPort)});
                 });
             }
         } catch (Exception e) {
@@ -715,13 +713,11 @@ public class LogReplicationAbstractIT extends AbstractIT {
         try {
             if (runProcess) {
                 // Start Log Replication Server on Source Site
-                sinkReplicationServer = runReplicationServer(sinkReplicationServerPort, sinkSiteCorfuPort,
-                    pluginConfigFilePath, lockLeaseDuration);
+                sinkReplicationServer = runReplicationServer(sinkReplicationServerPort, pluginConfigFilePath, lockLeaseDuration);
             } else {
                 executorService.submit(() -> {
                     CorfuInterClusterReplicationServer.main(new String[]{"-m", "--plugin=" + pluginConfigFilePath,
-                            "--address=localhost", "--corfu-server-connection-port=" + sinkSiteCorfuPort,
-                            String.valueOf(sinkReplicationServerPort)});
+                            "--address=localhost", String.valueOf(sinkReplicationServerPort)});
                 });
             }
         } catch (Exception e) {
