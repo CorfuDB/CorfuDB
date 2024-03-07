@@ -8,17 +8,15 @@ import java.util.UUID;
 /**
  * Snapshot reader implementation for Routing Queues Replication Model.
  */
-public class RoutingQueuesSnapshotReader extends BaseSnapshotReader {
+public class RoutingQueuesSnapshotReader extends SnapshotReader {
 
     public RoutingQueuesSnapshotReader(CorfuRuntime corfuRuntime, LogReplicationSession session,
                                        LogReplicationContext replicationContext) {
-        super(corfuRuntime, session, replicationContext);
     }
 
     @Override
-    protected void refreshStreamsToReplicateSet() {
-        throw new IllegalStateException("Unexpected workflow encountered.  Stream UUIDs cannot be refreshed for this " +
-            "model");
+    public SnapshotReadMessage read(UUID syncRequestId) {
+        return null;
     }
 
     @Override

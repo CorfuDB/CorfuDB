@@ -26,10 +26,10 @@ import com.google.protobuf.Message;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.CorfuInterClusterReplicationServer;
+import org.corfudb.infrastructure.logreplication.infrastructure.SessionManager;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultSnapshotSyncPlugin;
-import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.runtime.LogReplication.SnapshotSyncInfo;
 import org.corfudb.runtime.LogReplication.SnapshotSyncInfo.SnapshotSyncType;
 import org.corfudb.runtime.LogReplication.SyncType;
@@ -347,7 +347,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
         LogReplicationSession session = LogReplicationSession.newBuilder()
             .setSourceClusterId(new DefaultClusterConfig().getSourceClusterIds().get(0))
             .setSinkClusterId(new DefaultClusterConfig().getSinkClusterIds().get(0))
-            .setSubscriber(LogReplicationConfigManager.getDefaultSubscriber())
+            .setSubscriber(SessionManager.getDefaultSubscriber())
             .build();
 
         ReplicationStatus replicationStatus;
@@ -380,7 +380,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
         LogReplicationSession session = LogReplicationSession.newBuilder()
             .setSourceClusterId(sourceClusterId)
             .setSinkClusterId(sinkClusterId)
-            .setSubscriber(LogReplicationConfigManager.getDefaultSubscriber())
+            .setSubscriber(SessionManager.getDefaultSubscriber())
             .build();
 
         IRetry.build(IntervalRetry.class, () -> {
@@ -426,7 +426,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
         }
     }
 
-    static class SnapshotSyncPluginListener implements StreamListener {
+    class SnapshotSyncPluginListener implements StreamListener {
 
         @Getter
         Set<String> updates = new HashSet<>();
@@ -776,7 +776,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
         LogReplicationSession session = LogReplicationSession.newBuilder()
             .setSourceClusterId(new DefaultClusterConfig().getSourceClusterIds().get(0))
             .setSinkClusterId(new DefaultClusterConfig().getSinkClusterIds().get(0))
-            .setSubscriber(LogReplicationConfigManager.getDefaultSubscriber())
+            .setSubscriber(SessionManager.getDefaultSubscriber())
             .build();
 
         ReplicationStatus status = null;
@@ -913,6 +913,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
         public synchronized void onNext(CorfuStreamEntries results) {
             log.info("StreamingSinkListener:: onNext {} with entry size {}", results, results.getEntries().size());
             numTxLatch.countDown();
+
             results.getEntries().forEach((schema, entries) -> {
                 if (tablesToListenTo.contains(CorfuRuntime.getStreamID(NAMESPACE + "$" + schema.getTableName()))) {
                     messages.addAll(entries);
