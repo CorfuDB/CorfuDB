@@ -1,6 +1,6 @@
 package org.corfudb.infrastructure.logreplication.infrastructure;
 
-import org.corfudb.runtime.LogReplication.ReplicationStatus;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatus;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 
 import java.util.Map;
@@ -30,5 +30,7 @@ public interface CorfuReplicationDiscoveryServiceAdapter {
 
     // TODO [V2]: Remove this when localNodeId moves to plugin
     String getLocalNodeId();
+
+    SessionManager getSessionManager();
 
 }

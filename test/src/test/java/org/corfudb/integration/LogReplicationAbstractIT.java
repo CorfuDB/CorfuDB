@@ -30,11 +30,11 @@ import org.corfudb.infrastructure.logreplication.infrastructure.SessionManager;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultSnapshotSyncPlugin;
-import org.corfudb.runtime.LogReplication.SnapshotSyncInfo;
-import org.corfudb.runtime.LogReplication.SnapshotSyncInfo.SnapshotSyncType;
-import org.corfudb.runtime.LogReplication.SyncType;
-import org.corfudb.runtime.LogReplication.SyncStatus;
-import org.corfudb.runtime.LogReplication.ReplicationStatus;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SyncType;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SyncStatus;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatus;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.protocols.wireprotocol.Token;
@@ -69,8 +69,7 @@ import org.corfudb.util.serializer.DynamicProtobufSerializer;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.ProtobufSerializer;
 
-import static org.corfudb.runtime.LogReplicationUtils.REPLICATION_STATUS_TABLE_NAME;
-import static org.corfudb.runtime.LogReplicationUtils.LR_STATUS_STREAM_TAG;
+import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.REPLICATION_STATUS_TABLE_NAME;
 
 @Slf4j
 public class LogReplicationAbstractIT extends AbstractIT {
@@ -219,7 +218,8 @@ public class LogReplicationAbstractIT extends AbstractIT {
 
             CountDownLatch statusUpdateLatch = new CountDownLatch(totalSinkStatusUpdateTx);
             ReplicationStatusListener sinkListener = new ReplicationStatusListener(statusUpdateLatch, false);
-            corfuStoreSink.subscribeListener(sinkListener, LogReplicationMetadataManager.NAMESPACE, LR_STATUS_STREAM_TAG);
+            corfuStoreSink.subscribeListener(sinkListener, LogReplicationMetadataManager.NAMESPACE,
+                LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
 
             log.info(">> Open map(s) on source and sink");
             openMaps(totalNumMaps, diskBased);
@@ -327,7 +327,8 @@ public class LogReplicationAbstractIT extends AbstractIT {
 
         CountDownLatch statusUpdateLatch = new CountDownLatch(1);
         ReplicationStatusListener sourceListener = new ReplicationStatusListener(statusUpdateLatch, true);
-        corfuStoreSource.subscribeListener(sourceListener, LogReplicationMetadataManager.NAMESPACE, LR_STATUS_STREAM_TAG);
+        corfuStoreSource.subscribeListener(sourceListener, LogReplicationMetadataManager.NAMESPACE,
+                LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
 
         corfuStoreSource.openTable(LogReplicationMetadataManager.NAMESPACE,
                 REPLICATION_STATUS_TABLE_NAME,
@@ -387,9 +388,9 @@ public class LogReplicationAbstractIT extends AbstractIT {
                     throw new RetryNeededException();
                 }
                 assertThat(entry.getPayload().getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus())
-                    .isEqualTo(SyncStatus.COMPLETED);
+                    .isEqualTo(LogReplicationMetadata.SyncStatus.COMPLETED);
                 assertThat(entry.getPayload().getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getType())
-                    .isEqualTo(SnapshotSyncInfo.SnapshotSyncType.DEFAULT);
+                    .isEqualTo(LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType.DEFAULT);
                 assertThat(entry.getPayload().getSourceStatus().getReplicationInfo().getSnapshotSyncInfo()
                     .getBaseSnapshot()).isNotEqualTo(Address.NON_ADDRESS);
                 txn.commit();
@@ -775,7 +776,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
 
         while (status == null || !status.getSourceStatus().getReplicationInfo().getSyncType().equals(SyncType.LOG_ENTRY)
                 || !status.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus()
-                .equals(SyncStatus.COMPLETED)) {
+                .equals(LogReplicationMetadata.SyncStatus.COMPLETED)) {
             TimeUnit.SECONDS.sleep(1);
             try (TxnContext txn = corfuStoreSource.txn(LogReplicationMetadataManager.NAMESPACE)) {
                 status = (ReplicationStatus) txn.getRecord(REPLICATION_STATUS_TABLE_NAME, session).getPayload();
@@ -786,7 +787,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
         // Snapshot sync should have completed and log entry sync is ongoing
         assertThat(status.getSourceStatus().getReplicationInfo().getSyncType()).isEqualTo(SyncType.LOG_ENTRY);
         assertThat(status.getSourceStatus().getReplicationInfo().getStatus())
-                .isEqualTo(SyncStatus.ONGOING);
+                .isEqualTo(LogReplicationMetadata.SyncStatus.ONGOING);
 
         assertThat(status.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getType())
                 .isEqualTo(SnapshotSyncType.DEFAULT);
