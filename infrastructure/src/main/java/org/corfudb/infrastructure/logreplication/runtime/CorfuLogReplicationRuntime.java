@@ -37,7 +37,7 @@ import java.util.concurrent.TimeUnit;
  * Runtime to connect to a remote Corfu Log Replication Cluster.
  * <p>
  * This class represents the Log Replication Runtime Finite State Machine, which defines
- * all states in which the leader node on the source cluster can be.
+ * all states in which the leader node on the active cluster can be.
  *
  *
  *                                                  R-LEADER_LOSS / NOT_FOUND

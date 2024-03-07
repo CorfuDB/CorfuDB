@@ -31,7 +31,7 @@ public class LogReplicationConfig {
     // Log Replication message timeout time in milliseconds
     public static final int DEFAULT_TIMEOUT_MS = 5000;
 
-    // Log Replication default max number of messages generated at the source cluster for each batch
+    // Log Replication default max number of messages generated at the active cluster for each batch
     public static final int DEFAULT_MAX_NUM_MSG_PER_BATCH = 10;
 
     // Default value for the max number of entries applied in a single transaction on Sink during snapshot sync
@@ -59,10 +59,9 @@ public class LogReplicationConfig {
     public static final UUID PROTOBUF_TABLE_ID = CorfuRuntime.getStreamID(
             getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME));
 
-
     // Set of streams that shouldn't be cleared on snapshot apply phase, as these streams should be the result of
-    // "merging" the replicated data (from source) + local data (on sink).
-    // For instance, RegistryTable (to avoid losing local opened tables on sink)
+    // "merging" the replicated data (from active) + local data (on standby).
+    // For instance, RegistryTable (to avoid losing local opened tables on standby)
     public static final Set<UUID> MERGE_ONLY_STREAMS = new HashSet<>(Arrays.asList(
             REGISTRY_TABLE_ID,
             PROTOBUF_TABLE_ID

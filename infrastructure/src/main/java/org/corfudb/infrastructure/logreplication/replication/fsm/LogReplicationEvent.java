@@ -31,7 +31,7 @@ public class LogReplicationEvent {
                                     // replication for a shared thread pool)
         SYNC_CANCEL,                // External/Internal event requesting to cancel sync (snapshot or log entry)
         LOG_ENTRY_SYNC_REPLICATED,  // External event which signals a log entry sync has been successfully replicated
-                                    // on the sink cluster (ack)
+                                    // on the standby cluster (ack)
         REPLICATION_SHUTDOWN        // External/Internal event which signals log replication to be terminated (only a
                                     // JVM restart can enable log replication after this)
     }

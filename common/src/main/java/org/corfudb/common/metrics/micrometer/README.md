@@ -8,8 +8,8 @@
 ### Current metrics collected for LR:
 
 *   **logreplication.message.size.bytes**: Message size in bytes (throughput, mean and max), distinguished by replication type (snapshot, logentry).
-*   **logreplication.lock.duration.nanoseconds**: Duration of holding a leadership lock in nanoseconds, distinguished by role (source, sink).
-*   **logreplication.lock.acquire.count**: Number of times a leadership lock was acquired, distinguised by role (source, sink).
+*   **logreplication.lock.duration.nanoseconds**: Duration of holding a leadership lock in nanoseconds, distinguished by role (active, standby).
+*   **logreplication.lock.acquire.count**: Number of times a leadership lock was acquired, distinguised by role (active, standby).
 *   **logreplication.sender.duration.nanoseconds**: Duration of sending a log entry in nanoseconds (throughput, mean and max), distinguished by replication type (snapshot, logentry) and status (success, failure).
 *   **logreplication.snapshot.completed.count**: Number of snapshot syncs completed.
 *   **logreplication.snapshot.transfer.duration**: Duration of the TRANSFER phase of a snapshot sync in nanoseconds (throughput, mean and max).

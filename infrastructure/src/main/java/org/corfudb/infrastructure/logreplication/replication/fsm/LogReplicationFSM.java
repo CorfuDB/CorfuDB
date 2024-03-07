@@ -34,7 +34,7 @@ import java.util.concurrent.LinkedBlockingQueue;
  *
  * CorfuDB provides a Log Replication functionality, which allows logs to be automatically replicated from a primary
  * to a remote cluster. This feature is particularly useful in the event of failure or data corruption, so the system
- * can failover to the sink/secondary data-store.
+ * can failover to the standby/secondary data-store.
  *
  * This functionality is initiated by the application through the LogReplicationSourceManager on the primary cluster and handled
  * through the LogReplicationSinkManager on the destination cluster. This implementation assumes that the application provides its own

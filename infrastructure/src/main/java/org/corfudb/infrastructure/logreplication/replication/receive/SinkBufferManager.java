@@ -151,8 +151,8 @@ public abstract class SinkBufferManager {
             //TODO: we create an ACK using the metadata of the last recevied msg, and then override
             // the timestamp with lastProcessedTs. So the rest of the ACK metadata does not match
             // with the ACK.Timestamp().
-            // Currently its fine since source only consumes the ACK.timestamp()...but if the behaviour
-            // changes on source, we need to change it here as well
+            // Currently its fine since active only consumes the ACK.timestamp()...but if the behaviour
+            // changes on active, we need to change it here as well
             LogReplicationEntryMetadataMsg metadata = generateAckMetadata(dataMessage);
             log.trace("Sending an ACK {}", metadata);
             return getLrEntryAckMsg(metadata);

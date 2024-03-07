@@ -42,7 +42,7 @@ public class MetadataManagerTest extends AbstractViewTest {
     @Before
     public void setUp() {
         corfuRuntime = getDefaultRuntime();
-        
+
         Mockito.doReturn(corfuRuntime).when(configManager).getRuntime();
         utils = new TestUtils();
     }

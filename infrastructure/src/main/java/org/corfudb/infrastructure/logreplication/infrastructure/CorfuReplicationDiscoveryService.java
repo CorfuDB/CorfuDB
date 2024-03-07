@@ -63,7 +63,7 @@ import static org.corfudb.common.util.URLUtils.getVersionFormattedEndpointURL;
  * <p>
  * It manages the following:
  * <p>
- * - Discover topology and determine cluster role: source/sink
+ * - Discover topology and determine cluster role: active/standby
  * - Lock acquisition (leader election), node leading the log replication sending and receiving
  * - Log replication configuration (streams to replicate)
  */
@@ -110,7 +110,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
     private LogReplicationConfigManager replicationConfigManager;
 
     /**
-     * Used by the source cluster to initiate Log Replication
+     * Used by the active cluster to initiate Log Replication
      */
     @Getter
     private CorfuReplicationManager replicationManager;
@@ -189,7 +189,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
     /**
      * Indicates that bootstrap has been completed. Bootstrap is done once it
      * is determined that this node belongs to a cluster in the topology
-     * provided by ClusterManager and has the role of SOURCE or SINK
+     * provided by ClusterManager and has the role of ACTIVE or STANDBY
      */
     private boolean bootstrapComplete = false;
 
@@ -296,7 +296,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
      * On first access start topology discovery.
      * <p>
      * On discovery, process the topology information and fetch log replication configuration
-     * (streams to replicate) required by an source and sink site before starting
+     * (streams to replicate) required by an active and standby site before starting
      * log replication.
      */
     private void startDiscovery() {
@@ -345,7 +345,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
      * @param role
      */
     private void performRoleBasedSetup(ClusterRole role) {
-        if (role != ClusterRole.SOURCE && role != ClusterRole.SINK) {
+        if (role != ClusterRole.ACTIVE && role != ClusterRole.STANDBY) {
             log.debug("Cluster role is {}.  Not performing role-based setup.", role);
             return;
         }
@@ -357,15 +357,15 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
 
         Set<String> remoteClusterIds = new HashSet<>();
 
-        if (role == ClusterRole.SOURCE) {
-            remoteClusterIds.addAll(topologyDescriptor.getSinkClusters().keySet());
+        if (role == ClusterRole.ACTIVE) {
+            remoteClusterIds.addAll(topologyDescriptor.getStandbyClusters().keySet());
             createMetadataManagers(remoteClusterIds);
             replicationContext = new LogReplicationContext(logReplicationConfig, topologyDescriptor, localCorfuEndpoint);
             logReplicationEventListener = new LogReplicationEventListener(this, getCorfuRuntime());
             logReplicationEventListener.start();
         } else {
             // Sink Cluster
-            remoteClusterIds.addAll(topologyDescriptor.getSourceClusters().keySet());
+            remoteClusterIds.addAll(topologyDescriptor.getActiveClusters().keySet());
             createMetadataManagers(remoteClusterIds);
 
             LogReplicationServer server = new LogReplicationServer(serverContext, localNodeId, replicationConfigManager,
@@ -497,7 +497,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
      */
     private void onLeadershipAcquire() {
         switch (localClusterDescriptor.getRole()) {
-            case SOURCE:
+            case ACTIVE:
                 log.info("Start as Source (sender/replicator)");
                 if (replicationManager == null) {
                     replicationManager = new CorfuReplicationManager(replicationContext, localNodeDescriptor,
@@ -515,7 +515,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
                 lockAcquireSample = recordLockAcquire(localClusterDescriptor.getRole());
                 processCountOnLockAcquire(localClusterDescriptor.getRole());
                 break;
-            case SINK:
+            case STANDBY:
                 log.info("Start as Sink (receiver)");
 
                 // Sink Site : the LogReplicationServer (server handler) will
@@ -563,7 +563,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
      * Stop Log Replication
      */
     private void stopLogReplication() {
-        if (localClusterDescriptor != null && localClusterDescriptor.getRole() == ClusterRole.SOURCE && isLeader.get()) {
+        if (localClusterDescriptor != null && localClusterDescriptor.getRole() == ClusterRole.ACTIVE && isLeader.get()) {
             log.info("Stopping log replication.");
             replicationManager.stop();
         }
@@ -599,7 +599,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         stopLogReplication();
         isLeader.set(false);
         // Signal Log Replication Server/Sink to stop receiving messages, leadership loss
-        if (localClusterDescriptor != null && localClusterDescriptor.getRole() == ClusterRole.SINK) {
+        if (localClusterDescriptor != null && localClusterDescriptor.getRole() == ClusterRole.STANDBY) {
             interClusterServerNode.setLeadership(false);
         }
         recordLockRelease();
@@ -621,13 +621,12 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
 
         log.debug("OnClusterRoleChange, topology={}", newTopology);
 
-
         // Stop ongoing replication, stopLogReplication() checks leadership and role as SOURCE
         // We do not update topology until we successfully stop log replication
-        if (localClusterDescriptor.getRole() == ClusterRole.SOURCE) {
+        if (localClusterDescriptor.getRole() == ClusterRole.ACTIVE) {
             stopLogReplication();
             logReplicationEventListener.stop();
-        } else if (localClusterDescriptor.getRole() == ClusterRole.SINK) {
+        } else if (localClusterDescriptor.getRole() == ClusterRole.STANDBY) {
             // Stop the replication server
             interClusterServerNode.disable();
         }
@@ -668,7 +667,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
      * Process a topology change as provided by the Cluster Manager
      * <p>
      * Note: We are assuming that topology configId change implies a role change.
-     * The number of sink clusters change would not bump config id.
+     * The number of standby clusters change would not bump config id.
      *
      * @param event discovery event
      */
@@ -698,10 +697,10 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
             if (clusterRoleChanged(discoveredTopology)) {
                 onClusterRoleChange(discoveredTopology);
             } else {
-                onSinkClusterAddRemove(discoveredTopology);
+                onStandbyClusterAddRemove(discoveredTopology);
             }
         } else {
-            // Stop Log Replication in case this node was previously SOURCE but no longer belongs to the Topology
+            // Stop Log Replication in case this node was previously ACTIVE but no longer belongs to the Topology
             stopLogReplication();
         }
     }
@@ -726,14 +725,14 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
      *
      * @param discoveredTopology new discovered topology
      */
-    private void onSinkClusterAddRemove(TopologyDescriptor discoveredTopology) {
+    private void onStandbyClusterAddRemove(TopologyDescriptor discoveredTopology) {
         log.debug("Sink Cluster has been added or removed");
 
         // We only need to process new sinks if the local cluster role is SOURCE
-        if (localClusterDescriptor.getRole() == ClusterRole.SOURCE &&
+        if (localClusterDescriptor.getRole() == ClusterRole.ACTIVE &&
             replicationManager != null && isLeader.get()) {
-            Set<String> receivedSinks = discoveredTopology.getSinkClusters().keySet();
-            Set<String> currentSinks = topologyDescriptor.getSinkClusters().keySet();
+            Set<String> receivedSinks = discoveredTopology.getStandbyClusters().keySet();
+            Set<String> currentSinks = topologyDescriptor.getStandbyClusters().keySet();
 
             Set<String> intersection = Sets.intersection(currentSinks, receivedSinks);
 
@@ -752,7 +751,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
             createMetadataManagers(sinksToAdd);
             initReplicationStatusForRemoteClusters(true);
             replicationContext.setTopology(discoveredTopology);
-            replicationManager.processSinkChange(discoveredTopology, sinksToAdd, sinksToRemove, intersection);
+            replicationManager.processStandbyChange(discoveredTopology, sinksToAdd, sinksToRemove, intersection);
         } else {
             // Update the topology config id on the Sink components
             updateTopologyConfigIdOnSink(discoveredTopology.getTopologyConfigId());
@@ -809,15 +808,15 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
     }
 
     /**
-     * Enforce a snapshot sync for the sink cluster in the event if the
-     * current node is an source leader node
+     * Enforce a snapshot sync for the standby cluster in the event if the
+     * current node is an active leader node
      */
     private void processEnforceSnapshotSync(DiscoveryServiceEvent event) {
 
-        // A switchover could have happened after the SOURCE received the
+        // A switchover could have happened after the ACTIVE received the
         // command and wrote it to the event table.  So check the cluster role
         // here again.
-        if (localClusterDescriptor.getRole() == ClusterRole.SINK) {
+        if (localClusterDescriptor.getRole() == ClusterRole.STANDBY) {
             log.warn("The current role is STANDBY.  Ignoring the forced snapshot sync event");
             return;
         }
@@ -856,8 +855,8 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
             return clientToReplicationStatusMap;
         }
 
-        if (localClusterDescriptor.getRole() != ClusterRole.SOURCE &&
-            localClusterDescriptor.getRole() != ClusterRole.SINK) {
+        if (localClusterDescriptor.getRole() != ClusterRole.ACTIVE &&
+            localClusterDescriptor.getRole() != ClusterRole.STANDBY) {
             log.error("Received Replication Status Query in Incorrect Role {}.", localClusterDescriptor.getRole());
             return clientToReplicationStatusMap;
         }
@@ -873,14 +872,14 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
 
     @Override
     public UUID forceSnapshotSync(String clusterId) throws LogReplicationDiscoveryServiceException {
-        if (localClusterDescriptor.getRole() == ClusterRole.SINK) {
-            String errorStr = "The forceSnapshotSync command is not supported on sink cluster.";
+        if (localClusterDescriptor.getRole() == ClusterRole.STANDBY) {
+            String errorStr = "The forceSnapshotSync command is not supported on standby cluster.";
             log.error(errorStr);
             throw new LogReplicationDiscoveryServiceException(errorStr);
         }
 
         UUID forceSyncId = UUID.randomUUID();
-        log.info("Received forceSnapshotSync command for sink cluster {}, forced sync id {}",
+        log.info("Received forceSnapshotSync command for standby cluster {}, forced sync id {}",
                 clusterId, forceSyncId);
 
         // Write a force sync event to the logReplicationEventTable
