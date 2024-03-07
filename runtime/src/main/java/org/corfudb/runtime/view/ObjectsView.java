@@ -32,8 +32,6 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
-import static org.corfudb.runtime.LogReplicationLogicalGroupClient.DEFAULT_LOGICAL_GROUP_CLIENT;
-
 /**
  * A view of the objects inside a Corfu instance.
  * Created by mwei on 1/7/16.
@@ -44,18 +42,9 @@ public class ObjectsView extends AbstractView {
     private static final String LOG_REPLICATOR_STREAM_NAME =
         "LR_Transaction_Stream";
 
-    private static final String LOGICAL_GROUP_REPLICATION_STREAM_NAME_PREFIX = "LogicalGroupReplicationStream_";
-
     public static final StreamTagInfo LOG_REPLICATOR_STREAM_INFO =
             new StreamTagInfo(LOG_REPLICATOR_STREAM_NAME,
                 CorfuRuntime.getStreamID(LOG_REPLICATOR_STREAM_NAME));
-
-    public static StreamTagInfo getLogicalGroupStreamTagInfo(String replicationClientName) {
-        // TODO (V2): uncomment next line after customized client name is supported
-        // String streamName = LOGICAL_GROUP_REPLICATION_STREAM_NAME_PREFIX + replicationClientName;
-        String streamName = LOGICAL_GROUP_REPLICATION_STREAM_NAME_PREFIX + DEFAULT_LOGICAL_GROUP_CLIENT;
-        return new StreamTagInfo(streamName, CorfuRuntime.getStreamID(streamName));
-    }
 
     /**
      * @return the ID of the log replicator stream.

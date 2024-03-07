@@ -33,31 +33,29 @@ import java.util.concurrent.CountDownLatch;
 import static org.assertj.core.api.Assertions.fail;
 import static org.corfudb.runtime.LogReplicationUtils.LR_STATUS_STREAM_TAG;
 import static org.corfudb.runtime.LogReplicationUtils.REPLICATION_STATUS_TABLE_NAME;
-import static org.corfudb.integration.LogReplicationAbstractIT.NAMESPACE;
-import static org.corfudb.integration.LogReplicationAbstractIT.runCommandForOutput;
 
 @Slf4j
 public class CorfuReplicationMultiSourceSinkIT extends AbstractIT {
     private final List<Integer> sourceCorfuPorts = Arrays.asList(9000, 9002, 9004);
     private final List<Integer> sinkCorfuPorts = Arrays.asList(9001, 9003, 9005);
 
+    private final List<Integer> sourceReplicationPorts = Arrays.asList(9010, 9011, 9012);
+    private final List<Integer> sinkReplicationPorts = Arrays.asList(9020, 9021, 9022);
+
     private final List<Process> sourceCorfuProcesses = new ArrayList<>();
     private final List<Process> sinkCorfuProcesses = new ArrayList<>();
 
-    protected final List<Integer> sourceReplicationPorts = Arrays.asList(9010, 9011, 9012);
-    protected final List<Integer> sinkReplicationPorts = Arrays.asList(9020, 9021, 9022);
+    private final List<Process> sourceReplicationServers = new ArrayList<>();
+    private final List<Process> sinkReplicationServers = new ArrayList<>();
 
-    protected final List<Process> sourceReplicationServers = new ArrayList<>();
-    protected final List<Process> sinkReplicationServers = new ArrayList<>();
-
-    protected List<CorfuRuntime> sourceRuntimes = new ArrayList<>();
-    protected List<CorfuRuntime> sinkRuntimes = new ArrayList<>();
+    private List<CorfuRuntime> sourceRuntimes = new ArrayList<>();
+    private List<CorfuRuntime> sinkRuntimes = new ArrayList<>();
 
     protected List<CorfuStore> sourceCorfuStores = new ArrayList<>();
     protected List<CorfuStore> sinkCorfuStores = new ArrayList<>();
 
-    protected final List<String> sourceEndpoints = new ArrayList<>();
-    protected final List<String> sinkEndpoints = new ArrayList<>();
+    private final List<String> sourceEndpoints = new ArrayList<>();
+    private final List<String> sinkEndpoints = new ArrayList<>();
 
     private int numSourceClusters;
     private int numSinkClusters;
@@ -69,6 +67,8 @@ public class CorfuReplicationMultiSourceSinkIT extends AbstractIT {
 
     protected final List<Table<Sample.StringKey, SampleSchema.ValueFieldTagOne, Message>> srcTables = new ArrayList<>();
     protected final List<Table<Sample.StringKey, SampleSchema.ValueFieldTagOne, Message>> sinkTables = new ArrayList<>();
+
+    protected static final String NAMESPACE = "LR_Test";
 
     protected static final String STREAM_TAG = "tag_one";
 
@@ -163,30 +163,6 @@ public class CorfuReplicationMultiSourceSinkIT extends AbstractIT {
         for (int i = 0; i < numSinkClusters; i++) {
             sinkReplicationServers.add(runReplicationServer(sinkReplicationPorts.get(i), pluginConfigFilePath));
         }
-    }
-
-    protected void stopReplicationServer(int serverPort, Process serverProcess) {
-        List<String> paramsPs = Arrays.asList("/bin/sh", "-c", "ps aux | grep CorfuInterClusterReplicationServer | grep " + serverPort);
-        String result = runCommandForOutput(paramsPs);
-
-        // Get PID
-        String[] output = result.split(" ");
-        int i = 0;
-        String pid = "";
-        for (String st : output) {
-            if (!st.equals("")) {
-                i++;
-                if (i == 2) {
-                    pid = st;
-                    break;
-                }
-            }
-        }
-
-        List<String> paramsKill = Arrays.asList("/bin/sh", "-c", "kill -9 " + pid);
-        runCommandForOutput(paramsKill);
-
-        serverProcess.destroyForcibly();
     }
 
     protected void openMaps() throws Exception {
@@ -455,9 +431,7 @@ public class CorfuReplicationMultiSourceSinkIT extends AbstractIT {
 
     @After
     public void tearDown() throws Exception {
-        if (!dataListeners.isEmpty() && !replicationStatusListeners.isEmpty()) {
-            unsubscribeListeners();
-        }
+        unsubscribeListeners();
 
         for (CorfuRuntime runtime : sourceRuntimes) {
             runtime.shutdown();

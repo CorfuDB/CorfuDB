@@ -30,7 +30,6 @@ import java.util.List;
 @SuppressWarnings("checkstyle:magicnumber")
 public class LogEntryWriterTest extends AbstractViewTest {
 
-    private static final String LOCAL_SINK_CLUSTER_ID = DefaultClusterConfig.getSinkClusterIds().get(0);
     private CorfuRuntime corfuRuntime;
     private LogReplicationMetadataManager metadataManager = Mockito.mock(LogReplicationMetadataManager.class);
     private TxnContext txnContext = Mockito.mock(TxnContext.class);
@@ -50,7 +49,7 @@ public class LogEntryWriterTest extends AbstractViewTest {
         Mockito.doReturn(getDefaultMetadata()).when(metadataManager).getReplicationMetadata(getDefaultSession());
 
         logEntryWriter = new LogEntryWriter(metadataManager, getDefaultSession(),
-                new LogReplicationContext(new LogReplicationConfigManager(corfuRuntime, LOCAL_SINK_CLUSTER_ID), topologyConfigId,
+                new LogReplicationContext(new LogReplicationConfigManager(corfuRuntime), topologyConfigId,
                         getEndpoint(SERVERS.PORT_0)));
     }
 
