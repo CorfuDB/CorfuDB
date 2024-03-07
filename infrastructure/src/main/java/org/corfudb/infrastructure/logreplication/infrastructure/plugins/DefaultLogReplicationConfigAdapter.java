@@ -6,7 +6,6 @@ import org.corfudb.runtime.collections.TxnContext;
 /**
  * Default testing implementation of a Log Replication Config Provider
  */
-
 public class DefaultLogReplicationConfigAdapter implements ILogReplicationVersionAdapter {
 
     private static final String latestVer = "LATEST-VERSION";

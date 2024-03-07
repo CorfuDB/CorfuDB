@@ -2,11 +2,11 @@ package org.corfudb.integration;
 
 import com.google.common.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
 import org.corfudb.infrastructure.logreplication.proto.Sample.IntValue;
 import org.corfudb.infrastructure.logreplication.proto.Sample.Metadata;
 import org.corfudb.infrastructure.logreplication.proto.Sample.StringKey;
-import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogEntryWriter;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.replication.receive.StreamsSnapshotWriter;
@@ -53,6 +53,10 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_MAX_NUM_MSG_PER_BATCH;
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED;
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_CACHE_NUM_ENTRIES;
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_DATA_MSG_SIZE_SUPPORTED;
 
 @Slf4j
 public class LogReplicationReaderWriterIT extends AbstractIT {
@@ -63,8 +67,7 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
     private static final int NUM_KEYS = 10;
     private static final int NUM_STREAMS = 2;
     private static final int NUM_TRANSACTIONS = 20;
-    private static final String SOURCE_CLUSTER_ID = "Cluster-Paris";
-    private static final String SINK_CLUSTER_ID = "Cluster-London";
+    private static final String PRIMARY_SITE_ID = "Cluster-Paris";
     private static final String SHADOW_SUFFIX = "_SHADOW";
     private static final String TEST_NAMESPACE = "LR-Test";
 
@@ -233,14 +236,12 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
 
     }
 
-    public static void readSnapshotMsgs(List<LogReplicationEntryMsg> msgQ, CorfuRuntime rt, boolean blockOnSem) {
+    public static void readSnapLogMsgs(List<LogReplicationEntryMsg> msgQ, CorfuRuntime rt, boolean blockOnSem) {
         int cnt = 0;
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(rt);
-
-        ReplicationSession replicationSession =
-            ReplicationSession.getDefaultReplicationSessionForCluster(SINK_CLUSTER_ID);
-
-        StreamsSnapshotReader reader = new StreamsSnapshotReader(rt, configManager, replicationSession);
+        LogReplicationConfig config = new LogReplicationConfig(configManager, DEFAULT_MAX_NUM_MSG_PER_BATCH,
+                MAX_DATA_MSG_SIZE_SUPPORTED, MAX_CACHE_NUM_ENTRIES, DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED);
+        StreamsSnapshotReader reader = new StreamsSnapshotReader(rt, config);
 
         reader.reset(rt.getAddressSpaceView().getLogTail());
         while (true) {
@@ -267,18 +268,12 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
         }
     }
 
-    public static void writeSnapshotMsgs(List<LogReplicationEntryMsg> msgQ, CorfuRuntime rt) {
-
-        LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt,
-            0, SINK_CLUSTER_ID);
-
+    public static void writeSnapLogMsgs(List<LogReplicationEntryMsg> msgQ, CorfuRuntime rt) {
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(rt);
-
-        ReplicationSession replicationSession =
-            ReplicationSession.getDefaultReplicationSessionForCluster(SINK_CLUSTER_ID);
-
-        StreamsSnapshotWriter writer = new StreamsSnapshotWriter(rt, configManager, logReplicationMetadataManager,
-            replicationSession);
+        LogReplicationConfig config = new LogReplicationConfig(configManager, DEFAULT_MAX_NUM_MSG_PER_BATCH,
+                MAX_DATA_MSG_SIZE_SUPPORTED, MAX_CACHE_NUM_ENTRIES, DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED);
+        LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt, 0, PRIMARY_SITE_ID);
+        StreamsSnapshotWriter writer = new StreamsSnapshotWriter(rt, config, logReplicationMetadataManager);
 
         if (msgQ.isEmpty()) {
             log.debug("msgQ is empty");
@@ -296,15 +291,11 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
         writer.applyShadowStreams();
     }
 
-    public static void readLogEntryMsgs(List<LogReplicationEntryMsg> msgQ, CorfuRuntime rt,
-                                        boolean blockOnce) throws TrimmedException {
-
+    public static void readLogEntryMsgs(List<LogReplicationEntryMsg> msgQ, CorfuRuntime rt, boolean blockOnce) throws TrimmedException {
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(rt);
-
-        ReplicationSession replicationSession =
-            ReplicationSession.getDefaultReplicationSessionForCluster(SINK_CLUSTER_ID);
-
-        StreamsLogEntryReader reader = new StreamsLogEntryReader(rt, configManager, replicationSession);
+        LogReplicationConfig config = new LogReplicationConfig(configManager, DEFAULT_MAX_NUM_MSG_PER_BATCH,
+                MAX_DATA_MSG_SIZE_SUPPORTED, MAX_CACHE_NUM_ENTRIES, DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED);
+        StreamsLogEntryReader reader = new StreamsLogEntryReader(rt, config);
         reader.setGlobalBaseSnapshot(Address.NON_ADDRESS, Address.NON_ADDRESS);
 
         LogReplicationEntryMsg entry;
@@ -332,17 +323,12 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
         assertThat(reader.getLastOpaqueEntry()).isNull();
     }
 
-    public static void writeLogEntryMsgs(List<LogReplicationEntryMsg> msgQ, CorfuRuntime rt) {
-
-        LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt,
-            0, SOURCE_CLUSTER_ID);
-
+    public static void writeLogEntryMsgs(List<LogReplicationEntryMsg> msgQ, Set<String> streams, CorfuRuntime rt) {
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(rt);
-
-        ReplicationSession replicationSession =
-            ReplicationSession.getDefaultReplicationSessionForCluster(SINK_CLUSTER_ID);
-
-        LogEntryWriter writer = new LogEntryWriter(configManager, logReplicationMetadataManager, replicationSession);
+        LogReplicationConfig config = new LogReplicationConfig(configManager, DEFAULT_MAX_NUM_MSG_PER_BATCH,
+                MAX_DATA_MSG_SIZE_SUPPORTED, MAX_CACHE_NUM_ENTRIES, DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED);
+        LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt, 0, PRIMARY_SITE_ID);
+        LogEntryWriter writer = new LogEntryWriter(config, logReplicationMetadataManager);
 
         if (msgQ.isEmpty()) {
             log.debug("msgQ is EMPTY");
@@ -538,7 +524,7 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
         Exception result = null;
 
         try {
-            readSnapshotMsgs(msgQ, srcDataRuntime, true);
+            readSnapLogMsgs(msgQ, srcDataRuntime, true);
         } catch (Exception e) {
             result = e;
             log.debug("caught an exception " + e + " tail " + tail);
@@ -615,10 +601,10 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
         openStreams(dstTables, dstCorfuStore);
 
         // read snapshot from srcServer and put msgs into Queue
-        readSnapshotMsgs(msgQ, srcDataRuntime, false);
+        readSnapLogMsgs(msgQ, srcDataRuntime, false);
 
         // play messages at dst server
-        writeSnapshotMsgs(msgQ, dstDataRuntime);
+        writeSnapLogMsgs(msgQ, dstDataRuntime);
 
         printTails("after writing to server2", srcDataRuntime, dstDataRuntime);
 
@@ -648,7 +634,7 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
         dstWriterRuntime.parseConfigurationString(WRITER_ENDPOINT);
         dstWriterRuntime.connect();
         //play messages at dst server
-        writeLogEntryMsgs(msgQ, dstWriterRuntime);
+        writeLogEntryMsgs(msgQ, srcHashMap.keySet(), dstWriterRuntime);
 
         //verify data with hashtable
         openStreams(dstTables, dstCorfuStore, NUM_STREAMS, serializer);
@@ -658,7 +644,7 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
 
         cleanUp();
     }
-
+    
     /**
      * This test verifies that the Log Entry Reader sets the last processed entry
      * as NULL whenever all entries written to the TX stream are of no interest for

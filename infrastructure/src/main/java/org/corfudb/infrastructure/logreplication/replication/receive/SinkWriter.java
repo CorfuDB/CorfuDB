@@ -3,8 +3,7 @@ package org.corfudb.infrastructure.logreplication.replication.receive;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
-import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
+import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.TableDescriptors;
@@ -15,7 +14,6 @@ import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.util.serializer.ISerializer;
 
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.UUID;
 
@@ -29,21 +27,21 @@ import static org.corfudb.util.serializer.ProtobufSerializer.PROTOBUF_SERIALIZER
 public abstract class SinkWriter {
 
     // Configuration for LR in Source / Sink cluster.
-    private final LogReplicationConfigManager configManager;
+    final LogReplicationConfig config;
 
-    private final ISerializer protobufSerializer;
+    final ISerializer protobufSerializer;
 
-    private final ReplicationSession session;
+    final LogReplicationMetadataManager logReplicationMetadataManager;
 
 
     // Limit the initialization of this class only to its children classes.
-    SinkWriter(LogReplicationConfigManager configManager, ReplicationSession session) {
-        this.configManager = configManager;
-        this.session = session;
-
-        // The CorfuRuntime in LogReplicationConfigManager used to get the config fields from registry
+    SinkWriter(LogReplicationConfig config, LogReplicationMetadataManager logReplicationMetadataManager) {
+        this.logReplicationMetadataManager = logReplicationMetadataManager;
+        this.config = config;
+        // The CorfuRuntime in LogReplicationConfigManager is generally used to get the config fields from registry
         // table, and the protobufSerializer is guaranteed to be registered before initializing SinkWriter.
-        this.protobufSerializer = configManager.getRuntime().getSerializers().getSerializer(PROTOBUF_SERIALIZER_CODE);
+        this.protobufSerializer = config.getConfigManager().getConfigRuntime()
+                .getSerializers().getSerializer(PROTOBUF_SERIALIZER_CODE);
     }
 
     /**
@@ -92,9 +90,7 @@ public abstract class SinkWriter {
      * @return True if the entries should be ignored.
      */
     boolean ignoreEntriesForStream(UUID streamId) {
-        return configManager.getConfig().getSubscriberToNonReplicatedStreamsMap()
-            .getOrDefault(session.getSubscriber(), new HashSet<>())
-            .contains(streamId);
+        return config.getReplicatedStreamsToDrop().contains(streamId);
     }
 
     /**
@@ -107,8 +103,7 @@ public abstract class SinkWriter {
      */
     boolean ignoreEntryForRegistryTable(UUID streamId, CorfuRecord<TableDescriptors, TableMetadata> record) {
 
-        return configManager.getConfig().getSubscriberToNonReplicatedStreamsMap()
-            .getOrDefault(session.getSubscriber(), new HashSet<>())
-            .contains(streamId) || !record.getMetadata().getTableOptions().getIsFederated();
+        return config.getReplicatedStreamsToDrop().contains(streamId) ||
+                !record.getMetadata().getTableOptions().getIsFederated();
     }
 }
