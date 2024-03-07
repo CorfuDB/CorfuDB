@@ -280,6 +280,21 @@ public class LogReplicationClientRouter implements IClientRouter {
         return null;
     }
 
+    @Override
+    public void reconnect() {
+        return;
+    }
+
+    @Override
+    public long getTimeoutConnect() {
+        return 0L;
+    }
+
+    @Override
+    public long getTimeoutResponse() {
+        return 0L;
+    }
+
     /**
      * Send a one way message, without adding a completable future.
      *
