@@ -2,9 +2,8 @@ package org.corfudb.infrastructure.logreplication.transport.client;
 
 import lombok.Getter;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
-import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientServerRouter;
+import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientRouter;
 import org.corfudb.infrastructure.logreplication.transport.IChannelContext;
-import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
 
@@ -26,7 +25,10 @@ public abstract class IClientChannelAdapter {
     private final String localClusterId;
 
     @Getter
-    private final LogReplicationClientServerRouter router;
+    private final ClusterDescriptor remoteClusterDescriptor;
+
+    @Getter
+    private final LogReplicationClientRouter router;
 
     @Getter
     private IChannelContext channelContext;
@@ -35,26 +37,29 @@ public abstract class IClientChannelAdapter {
      * Default Constructor
      *
      * @param localClusterId local cluster unique identifier
-     * @param router interface between LR and the transport layer
+     * @param remoteClusterDescriptor descriptor of the remote cluster (sink)
+     * @param router interface to forward
      */
     public IClientChannelAdapter(@Nonnull String localClusterId,
-                                 @Nonnull LogReplicationClientServerRouter router) {
+                                 @Nonnull ClusterDescriptor remoteClusterDescriptor,
+                                 @Nonnull LogReplicationClientRouter router) {
         this.localClusterId = localClusterId;
+        this.remoteClusterDescriptor = remoteClusterDescriptor;
         this.router = router;
     }
 
     /**
      * Connect Asynchronously to all endpoints specified in the Cluster Descriptor.
      */
-    public abstract void connectAsync(ClusterDescriptor remoteCluster, LogReplicationSession sessionMsg);
+    public void connectAsync() {}
 
     /**
      * If connection is lost to a specific endpoint, attempt to reconnect to the specific node.
      */
-    public abstract void connectAsync(ClusterDescriptor remoteCluster, String nodeId, LogReplicationSession sessionMsg);
+    public void connectAsync(String nodeId) {}
 
     /**
-     * Stop communication across all remote clusters.
+     * Stop communication across Clusters.
      */
     public void stop() {}
 
@@ -74,14 +79,6 @@ public abstract class IClientChannelAdapter {
     public abstract void send(String nodeId, RequestMsg request);
 
     /**
-     * Send a message across the channel to a specific endpoint.
-     *
-     * @param nodeId remote node id
-     * @param request corfu message to be sent
-     */
-    public abstract void send(String nodeId, ResponseMsg request);
-
-    /**
      * Notify adapter of cluster change or reconfiguration.
      *
      * Since the adapter manages the connections to the remote site it must close or open
@@ -98,22 +95,18 @@ public abstract class IClientChannelAdapter {
      * @param msg received corfu message
      */
     public void receive(ResponseMsg msg) {
-        router.receive(msg);
-    }
-
-    public void receive(RequestMsg msg) {
-        router.receive(msg);
+        getRouter().receive(msg);
     }
 
     /**
      * Callback upon connectivity.
      *
-     * The implementer of the adapter must notify back on a connection being established.
+     * The implementer of the adapter must notify back on a connection being stablished.
      *
      * @param nodeId remote node id for which the connection was established.
      */
-    public void onConnectionUp(String nodeId, LogReplicationSession session) {
-        router.onConnectionUp(nodeId, session);
+    public void onConnectionUp(String nodeId) {
+        getRouter().onConnectionUp(nodeId);
     }
 
     /**
@@ -123,8 +116,8 @@ public abstract class IClientChannelAdapter {
      *
      * @param nodeId remote node id for which the connection was lost.
      */
-    public void onConnectionDown(String nodeId, LogReplicationSession session) {
-        router.onConnectionDown(nodeId, session);
+    public void onConnectionDown(String nodeId) {
+        getRouter().onConnectionDown(nodeId);
     }
 
     /**
@@ -134,8 +127,8 @@ public abstract class IClientChannelAdapter {
      *
      * @param t
      */
-    public void onError(Throwable t, LogReplicationSession session) {
-        router.onError(t, session);
+    public void onError(Throwable t) {
+        getRouter().onError(t);
     }
 
     /**
@@ -143,8 +136,8 @@ public abstract class IClientChannelAdapter {
      *
      * @return leader in remote cluster
      */
-    public Optional<String> getRemoteLeader(LogReplicationSession session) {
-        return router.getRemoteLeaderNodeId();
+    public Optional<String> getRemoteLeader() {
+        return getRouter().getRemoteLeaderNodeId();
     }
 
     public abstract void resetRemoteLeader();

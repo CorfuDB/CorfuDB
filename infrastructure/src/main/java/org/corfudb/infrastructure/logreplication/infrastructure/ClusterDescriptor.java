@@ -5,7 +5,6 @@ import lombok.Getter;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 
 import static org.corfudb.common.util.URLUtils.getVersionFormattedHostAddress;
 
@@ -28,24 +27,6 @@ public class ClusterDescriptor {
         this.clusterId = clusterId;
         this.corfuPort = corfuPort;
         this.nodeDescriptors = nodes;
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
-        ClusterDescriptor that = (ClusterDescriptor) o;
-        return corfuPort == that.corfuPort && clusterId.equals(that.clusterId) &&
-                nodeDescriptors.equals(that.nodeDescriptors);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(clusterId, nodeDescriptors, corfuPort);
     }
 
     public static String listToString(List<?> list) {
