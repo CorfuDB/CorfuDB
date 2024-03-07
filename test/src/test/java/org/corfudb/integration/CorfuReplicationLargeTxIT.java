@@ -50,7 +50,7 @@ public class CorfuReplicationLargeTxIT extends LogReplicationAbstractIT {
     private static final int NUM_ENTRIES_PER_TABLE = 20;
 
     // Max transaction size(in bytes) for applying snapshot sync updates
-    private static final int MAX_WRITE_SIZE_BYTES = 9000;
+    private static final int MAX_WRITE_SIZE_BYTES = 8000;
 
     // Max number of entries applied in a single transaction during snapshot sync
     private static final int MAX_SNAPSHOT_ENTRIES_APPLIED = 1;
@@ -58,7 +58,7 @@ public class CorfuReplicationLargeTxIT extends LogReplicationAbstractIT {
     /**
      * MAX_WRITE_SIZE_BYTES is the maximum number of bytes which can be written in a single transaction during
      * snapshot sync apply on the Sink.  It was empirically determined that NUM_ENTRIES_PER_TABLE had a serialized
-     * size of 8.5k bytes approx.  Hence, a snapshot sync with this much data will be applied in a single transaction.
+     * size of 7.5k bytes approx.  Hence, a snapshot sync with this much data will be applied in a single transaction.
      * @throws Exception
      */
     @Test
@@ -69,7 +69,7 @@ public class CorfuReplicationLargeTxIT extends LogReplicationAbstractIT {
     /**
      * MAX_WRITE_SIZE_BYTES is the maximum number of bytes which can be written in a single transaction during
      * snapshot sync apply on the Sink.  It was empirically determined that NUM_ENTRIES_PER_TABLE had a serialized
-     * size of 8.5k bytes approx.  Hence, a snapshot sync with twice the data(2*NUM_ENTRIES_PER_TABLE) will be
+     * size of 7.5k bytes approx.  Hence, a snapshot sync with twice the data(2*NUM_ENTRIES_PER_TABLE) will be
      * applied in 2 transactions.
      * @throws Exception
      */
@@ -99,7 +99,7 @@ public class CorfuReplicationLargeTxIT extends LogReplicationAbstractIT {
 
         // Subscribe to replication status table on Sink (to be sure data
         // change on status are captured)
-        int totalSinkStatusUpdates = 3;
+        int totalSinkStatusUpdates = 2;
         corfuStoreSink.openTable(LogReplicationMetadataManager.NAMESPACE,
             LogReplicationMetadataManager.REPLICATION_STATUS_TABLE_NAME,
             LogReplicationSession.class,
@@ -141,12 +141,7 @@ public class CorfuReplicationLargeTxIT extends LogReplicationAbstractIT {
 
         log.debug("Wait for snapshot sync to finish");
         statusUpdateLatch.await();
-
-        log.debug("Wait for the expected number of updates to replicated tables, other than the protobuf descriptor " +
-            "table");
         streamingUpdatesLatch.await();
-
-        log.debug("Wait for the expected number of updates to the Protobuf Descriptor table");
         protobufDescriptorTxLatch.await();
 
         // Verify that updates were received for all replicated tables with data
@@ -193,7 +188,6 @@ public class CorfuReplicationLargeTxIT extends LogReplicationAbstractIT {
 
         corfuStoreSink.unsubscribeListener(sinkListener);
         corfuStoreSink.unsubscribeListener(streamingUpdateListener);
-        corfuStoreSink.unsubscribeListener(protobufDescriptorTxListener);
         shutDown();
     }
 
@@ -320,11 +314,6 @@ public class CorfuReplicationLargeTxIT extends LogReplicationAbstractIT {
         public void onNext(CorfuStreamEntries results) {
             for (Map.Entry<TableSchema, List<CorfuStreamEntry>> entry :
                 results.getEntries().entrySet()) {
-
-                if (entry.getKey().getTableName().equals(TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME)) {
-                    // Updates on the protobuf descriptor table are not accumulated in the test
-                    continue;
-                }
 
                 List<CorfuStreamEntry<Sample.StringKey,
                     SampleSchema.ValueFieldTagOne, Sample.Metadata>> tableEntries =

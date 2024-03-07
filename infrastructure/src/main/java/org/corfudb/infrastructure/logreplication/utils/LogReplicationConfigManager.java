@@ -13,12 +13,10 @@ import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.view.Address;
-import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -108,15 +106,6 @@ public class LogReplicationConfigManager {
 
             // TODO: Add other cases once the protobuf options for other subscribers are available
         });
-
-        // Add the Log Replication Stream Tag for MERGE_ONLY_STREAMS
-        streamToTagsMap.put(CorfuRuntime.getStreamID(
-                getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, REGISTRY_TABLE_NAME)),
-                Collections.singletonList(ObjectsView.getLogReplicatorStreamId()));
-
-        streamToTagsMap.put(CorfuRuntime.getStreamID(
-                getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, PROTOBUF_DESCRIPTOR_TABLE_NAME)),
-                Collections.singletonList(ObjectsView.getLogReplicatorStreamId()));
 
         return new LogReplicationConfig(streamsToReplicate, streamsToDrop, streamToTagsMap, serverContext);
     }
