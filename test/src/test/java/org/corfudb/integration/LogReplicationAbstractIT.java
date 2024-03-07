@@ -242,7 +242,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
             writeToSource(numWrites, numWrites / 2);
 
             log.info(">> Wait ... Delta log replication in progress ...");
-            verifyDataOnSink(numWrites + (numWrites / 2));
+            verifyDataOnSink((numWrites + (numWrites / 2)));
 
             // Verify Sink Status Listener received all expected updates (is_data_consistent)
             log.info(">> Wait ... Replication status UPDATE ...");
