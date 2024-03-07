@@ -75,7 +75,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
     @Override
     public void connectAsync() {
         this.executorService.submit(() ->
-        getRemoteClusterDescriptor().getNodeDescriptors().forEach(node -> {
+        getRemoteClusterDescriptor().getNodesDescriptors().forEach(node -> {
             try {
                 NodeLocator nodeLocator = NodeLocator.parseString(node.getEndpoint());
                 log.info("GRPC create connection to node{}@{}:{}", node.getNodeId(), nodeLocator.getHost(), nodeLocator.getPort());
@@ -94,7 +94,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
 
     @Override
     public void connectAsync(String nodeId) {
-        Optional<String> endpoint = getRemoteClusterDescriptor().getNodeDescriptors()
+        Optional<String> endpoint = getRemoteClusterDescriptor().getNodesDescriptors()
                 .stream()
                 .filter(nodeDescriptor -> nodeDescriptor.getNodeId().toString().equals(nodeId))
                 .map(NodeDescriptor::getEndpoint)

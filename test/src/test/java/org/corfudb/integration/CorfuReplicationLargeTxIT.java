@@ -82,7 +82,6 @@ public class CorfuReplicationLargeTxIT extends LogReplicationAbstractIT {
                                 int expectedStreamingUpdatesPerTable) throws Exception {
         log.debug("Setup Source and Sink Corfu's");
         setupSourceAndSinkCorfu();
-        initSingleSourceSinkCluster();
 
         log.debug("Open map on Source and Sink");
         openMaps(2, false);

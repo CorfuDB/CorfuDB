@@ -43,7 +43,7 @@ public class NettyLogReplicationClientChannelAdapter extends IClientChannelAdapt
     public void connectAsync() {
         executorService.submit(() -> {
             ClusterDescriptor remoteCluster = getRemoteClusterDescriptor();
-            for (NodeDescriptor node : remoteCluster.getNodeDescriptors()) {
+            for (NodeDescriptor node : remoteCluster.getNodesDescriptors()) {
                 log.info("Create Netty Channel to remote node {}@{}:{}", node.getNodeId(), node.getHost(), node.getPort());
                 CorfuNettyClientChannel channel = new CorfuNettyClientChannel(node, getRouter().getParameters().getNettyEventLoop(), this);
                 this.channels.put(node.getNodeId(), channel);

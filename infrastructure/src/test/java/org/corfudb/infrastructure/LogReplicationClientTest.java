@@ -21,7 +21,6 @@ import org.junit.Before;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
 
-import java.util.ArrayList;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -38,8 +37,7 @@ import static org.mockito.Mockito.verify;
 @Slf4j
 public class LogReplicationClientTest {
 
-    private static final String SAMPLE_CLUSTER = "CLUSTER";
-    private static final int SAMPLE_PORT = 0;
+    private final static String SAMPLE_CLUSTER = "CLUSTER";
 
     LogReplicationClientRouter lrClient;
     LogReplicationRuntimeParameters lrRuntimeParameters;
@@ -53,8 +51,7 @@ public class LogReplicationClientTest {
         handlerMap = spy(new ConcurrentHashMap<>());
         lrFsm = mock(CorfuLogReplicationRuntime.class);
         lrRuntimeParameters = mock(LogReplicationRuntimeParameters.class);
-        doReturn(new ClusterDescriptor(SAMPLE_CLUSTER, SAMPLE_PORT, new ArrayList<>()))
-                .when(lrRuntimeParameters).getRemoteClusterDescriptor();
+        doReturn(new ClusterDescriptor(SAMPLE_CLUSTER)).when(lrRuntimeParameters).getRemoteClusterDescriptor();
         lrClient = spy(new LogReplicationClientRouter(lrRuntimeParameters, lrFsm));
 
         lrClientHandler = spy(new LogReplicationHandler());

@@ -30,7 +30,6 @@ import org.corfudb.test.SampleSchema.SampleTableAMsg;
 import org.corfudb.test.SampleSchema.ValueFieldTagOne;
 import org.corfudb.test.SampleSchema.ValueFieldTagOneAndTwo;
 import org.corfudb.util.Sleep;
-import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -107,7 +106,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
     public void testSinkClusterReset() throws Exception {
         // (1) Snapshot and Log Entry Sync
         log.debug(">>> (1) Start Snapshot and Log Entry Sync");
-        testEndToEndSnapshotAndLogEntrySyncUFO(false, false, 1);
+        testEndToEndSnapshotAndLogEntrySyncUFO(false, false);
 
         ExecutorService writerService = Executors.newSingleThreadExecutor();
 
@@ -145,7 +144,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
 
         // (1) Snapshot and Log Entry Sync
         log.debug(">>> (1) Start Snapshot and Log Entry Sync");
-        testEndToEndSnapshotAndLogEntrySyncUFO(false, false, 1);
+        testEndToEndSnapshotAndLogEntrySyncUFO(false, false);
 
         ExecutorService writerService = Executors.newSingleThreadExecutor();
 
@@ -475,7 +474,6 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
             final int totalEntries = 20;
 
             setupSourceAndSinkCorfu();
-            initSingleSourceSinkCluster();
             openMaps();
 
             Set<UUID> tablesToListen = getTablesToListen();
@@ -786,25 +784,5 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
         tablesToListen.add(CorfuRuntime.getStreamID(NAMESPACE + SEPARATOR + TABLE_PREFIX + indexOne));
         tablesToListen.add(CorfuRuntime.getStreamID(NAMESPACE + SEPARATOR + TABLE_PREFIX + indexTwo));
         return tablesToListen;
-    }
-
-    @After
-    public void tearDown() throws Exception {
-
-        if (sourceCorfu != null) {
-            sourceCorfu.destroy();
-        }
-
-        if (sinkCorfu != null) {
-            sinkCorfu.destroy();
-        }
-
-        if (sourceReplicationServer != null) {
-            sourceReplicationServer.destroy();
-        }
-
-        if (sinkReplicationServer != null) {
-            sinkReplicationServer.destroy();
-        }
     }
 }

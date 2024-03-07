@@ -53,7 +53,6 @@ public class LogReplicationSinkWriterIT extends LogReplicationAbstractIT {
     @SuppressWarnings("checkstyle:magicnumber")
     public void testFilterAndApplyRegistryTableEntries() throws Exception {
         setupSourceAndSinkCorfu();
-        initSingleSourceSinkCluster();
         openLogReplicationStatusTable();
 
         // Initial setup for streams to replicate for both source and sink side
