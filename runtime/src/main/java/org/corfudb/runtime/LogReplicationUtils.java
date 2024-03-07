@@ -37,8 +37,7 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 public final class LogReplicationUtils {
     public static final String LR_STATUS_STREAM_TAG = "lr_status";
 
-    // Retain the old name from LR v1 to avoid polluting the registry table with stale entries.
-    public static final String REPLICATION_STATUS_TABLE_NAME = "LogReplicationStatus";
+    public static final String REPLICATION_STATUS_TABLE_NAME = "LogReplicationStatusSource";
 
     private LogReplicationUtils() { }
 

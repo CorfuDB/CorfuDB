@@ -360,8 +360,7 @@ public class CorfuInterClusterReplicationServer implements Runnable {
     private boolean isUpgradeInProgress(LogReplicationUpgradeManager upgradeManager, CorfuStore corfuStore) {
         boolean isUpgraded = true;
         try (TxnContext txnContext = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            isUpgraded = upgradeManager.getLrRollingUpgradeHandler()
-                    .isLRUpgradeInProgress(txnContext);
+            isUpgraded = upgradeManager.getLrRollingUpgradeHandler().isLRUpgradeInProgress(txnContext);
             txnContext.commit();
         } catch (TransactionAbortedException e) {
             // TODO V2: This exception needs to be caught to handle concurrent writes to the Replication Event table

@@ -466,33 +466,22 @@ public class LogReplicationAbstractIT extends AbstractIT {
         @Override
         public void onNext(CorfuStreamEntries results) {
             results.getEntries().forEach((schema, entries) -> entries.forEach(e -> {
-                log.info("Operation: {}", e.getOperation());
-                // TODO pankti:  Clean up and add a comment when this operation will be received and reason for this
-                //  condition.
-                if (e.getOperation() == CorfuStreamEntry.OperationType.CLEAR) {
-                    return;
-                }
-                ReplicationStatus status = (ReplicationStatus) e.getPayload();
-
-                log.info("Status: {}", status);
-                log.info("Adding: {}", status);
-                accumulatedStatus.add(status.getSinkStatus().getDataConsistent());
-                if (this.waitSnapshotStatusComplete &&
-                    status.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus()
-                        .equals(SyncStatus.COMPLETED)) {
-                    countDownLatch.countDown();
-                }
+                    ReplicationStatus status = (ReplicationStatus)e.getPayload();
+                    accumulatedStatus.add(status.getSinkStatus().getDataConsistent());
+                    if (this.waitSnapshotStatusComplete &&
+                            status.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus()
+                                .equals(SyncStatus.COMPLETED)) {
+                        countDownLatch.countDown();
+                    }
             }));
 
             if (!this.waitSnapshotStatusComplete) {
-                log.info("Counting Down");
                 countDownLatch.countDown();
             }
         }
 
         @Override
         public void onError(Throwable throwable) {
-            log.error("Error in Replication Status Listener: {}", throwable);
             fail("onError for ReplicationStatusListener : " + throwable.toString());
         }
     }
