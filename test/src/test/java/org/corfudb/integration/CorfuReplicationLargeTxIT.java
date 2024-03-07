@@ -41,10 +41,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class CorfuReplicationLargeTxIT extends LogReplicationAbstractIT {
 
     private Map<String, Table<Sample.StringKey, SampleSchema.ValueFieldTagOne,
-        Sample.Metadata>> mapNameToMapSource = new HashMap<>();
+        Sample.Metadata>> mapNameToMapActive = new HashMap<>();
 
     private Map<String, Table<Sample.StringKey, SampleSchema.ValueFieldTagOne,
-        Sample.Metadata>> mapNameToMapSink = new HashMap<>();
+        Sample.Metadata>> mapNameToMapStandby = new HashMap<>();
 
     private static final int NUM_ENTRIES_PER_TABLE = 20;
 
@@ -80,7 +80,7 @@ public class CorfuReplicationLargeTxIT extends LogReplicationAbstractIT {
     private void testTxChunking(int numEntriesToWrite,
                                 int expectedStreamingUpdatesPerTable) throws Exception {
         log.debug("Setup Source and Sink Corfu's");
-        setupSourceAndSinkCorfu();
+        setupActiveAndStandbyCorfu();
 
         log.debug("Open map on Source and Sink");
         openMaps(2, false);
@@ -89,36 +89,36 @@ public class CorfuReplicationLargeTxIT extends LogReplicationAbstractIT {
         writeOnSender(0, numEntriesToWrite);
 
         log.debug("Verify data exists on the Source and none on the Sink");
-        // Confirm data does exist on source Cluster
+        // Confirm data does exist on Active Cluster
         verifyDataOnSender(numEntriesToWrite);
 
-        // Confirm data does not exist on Sink Cluster
+        // Confirm data does not exist on Standby Cluster
         verifyDataOnReceiver(0);
 
         // Subscribe to replication status table on Sink (to be sure data
         // change on status are captured)
-        int totalSinkStatusUpdates = 2;
-        corfuStoreSink.openTable(LogReplicationMetadataManager.NAMESPACE,
+        int totalStandbyStatusUpdates = 2;
+        corfuStoreStandby.openTable(LogReplicationMetadataManager.NAMESPACE,
             LogReplicationMetadataManager.REPLICATION_STATUS_TABLE,
             LogReplicationMetadata.ReplicationStatusKey.class,
             LogReplicationMetadata.ReplicationStatusVal.class,
             null,
             TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
 
-        CountDownLatch statusUpdateLatch = new CountDownLatch(totalSinkStatusUpdates);
-        ReplicationStatusListener sinkListener =
+        CountDownLatch statusUpdateLatch = new CountDownLatch(totalStandbyStatusUpdates);
+        ReplicationStatusListener standbyListener =
             new ReplicationStatusListener(statusUpdateLatch, false);
-        corfuStoreSink.subscribeListener(sinkListener, LogReplicationMetadataManager.NAMESPACE,
+        corfuStoreStandby.subscribeListener(standbyListener, LogReplicationMetadataManager.NAMESPACE,
             LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
 
         // Calculate the expected total number of streaming updates across all tables
         int totalStreamingUpdates =
-            expectedStreamingUpdatesPerTable * mapNameToMapSink.size();
+            expectedStreamingUpdatesPerTable * mapNameToMapStandby.size();
 
         // MAX_SNAPSHOT_ENTRIES_APPLIED = 1.  So entries to the ProtobufDescriptor table will be applied in a batch
         // of 1.  Hence, the number of transactions made = number of entries received from the Source Cluster(1 TX
         // per entry).
-        int numExpectedTxOnProtobufDescriptorTable = sourceRuntime.getTableRegistry().getProtobufDescriptorTable().size();
+        int numExpectedTxOnProtobufDescriptorTable = activeRuntime.getTableRegistry().getProtobufDescriptorTable().size();
 
         // The number of entries in the protobuf descriptor table on Source(or numExpectedTxOnProtobufDescriptorTable)
         // must not be equal to MAX_SNAPSHOT_ENTRIES_APPLIED.  Otherwise we cannot verify that it was applied in
@@ -126,13 +126,13 @@ public class CorfuReplicationLargeTxIT extends LogReplicationAbstractIT {
         Assert.assertNotEquals(numExpectedTxOnProtobufDescriptorTable, MAX_SNAPSHOT_ENTRIES_APPLIED);
         CountDownLatch protobufDescriptorTxLatch = new CountDownLatch(numExpectedTxOnProtobufDescriptorTable);
         StreamingUpdateListener protobufDescriptorTxListener = new StreamingUpdateListener(protobufDescriptorTxLatch);
-        corfuStoreSink.subscribeListener(protobufDescriptorTxListener, TableRegistry.CORFU_SYSTEM_NAMESPACE,
+        corfuStoreStandby.subscribeListener(protobufDescriptorTxListener, TableRegistry.CORFU_SYSTEM_NAMESPACE,
             ObjectsView.getLogReplicatorStreamId().toString(),
             Arrays.asList(TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME));
 
         CountDownLatch streamingUpdatesLatch = new CountDownLatch(totalStreamingUpdates);
         StreamingUpdateListener streamingUpdateListener = new StreamingUpdateListener(streamingUpdatesLatch);
-        corfuStoreSink.subscribeListener(streamingUpdateListener, NAMESPACE, TAG_ONE);
+        corfuStoreStandby.subscribeListener(streamingUpdateListener, NAMESPACE, TAG_ONE);
 
         // Start LR on both clusters with custom write sizes.
         startLogReplicatorServersWithCustomMaxWriteSize();
@@ -143,10 +143,10 @@ public class CorfuReplicationLargeTxIT extends LogReplicationAbstractIT {
         protobufDescriptorTxLatch.await();
 
         // Verify that updates were received for all replicated tables with data
-        Assert.assertEquals(mapNameToMapSink.size(),
+        Assert.assertEquals(mapNameToMapStandby.size(),
             streamingUpdateListener.getTableNameToUpdatesMap().size());
 
-        mapNameToMapSink.keySet().forEach(key ->
+        mapNameToMapStandby.keySet().forEach(key ->
             Assert.assertTrue(streamingUpdateListener.getTableNameToUpdatesMap()
                 .containsKey(key)));
 
@@ -186,36 +186,36 @@ public class CorfuReplicationLargeTxIT extends LogReplicationAbstractIT {
 
         verifyDataOnReceiver(numEntriesToWrite);
 
-        corfuStoreSink.unsubscribeListener(sinkListener);
-        corfuStoreSink.unsubscribeListener(streamingUpdateListener);
+        corfuStoreStandby.unsubscribeListener(standbyListener);
+        corfuStoreStandby.unsubscribeListener(streamingUpdateListener);
         shutDown();
     }
 
     @Override
     public void openMaps(int mapCount, boolean diskBased) throws Exception {
-        mapNameToMapSource = new HashMap<>();
-        mapNameToMapSink = new HashMap<>();
+        mapNameToMapActive = new HashMap<>();
+        mapNameToMapStandby = new HashMap<>();
 
         for (int i = 1; i <= mapCount; i++) {
             String mapName = TABLE_PREFIX + i;
 
-            Table<Sample.StringKey, SampleSchema.ValueFieldTagOne, Sample.Metadata> mapSource =
-                corfuStoreSource.openTable(NAMESPACE, mapName,
+            Table<Sample.StringKey, SampleSchema.ValueFieldTagOne, Sample.Metadata> mapActive =
+                corfuStoreActive.openTable(NAMESPACE, mapName,
                     Sample.StringKey.class, SampleSchema.ValueFieldTagOne.class,
                     Sample.Metadata.class, TableOptions.fromProtoSchema(
                         SampleSchema.ValueFieldTagOne.class));
 
-            Table<Sample.StringKey, SampleSchema.ValueFieldTagOne, Sample.Metadata> mapSink =
-                corfuStoreSink.openTable(NAMESPACE, mapName,
+            Table<Sample.StringKey, SampleSchema.ValueFieldTagOne, Sample.Metadata> mapStandby =
+                corfuStoreStandby.openTable(NAMESPACE, mapName,
                     Sample.StringKey.class, SampleSchema.ValueFieldTagOne.class,
                     Sample.Metadata.class, TableOptions.fromProtoSchema(
                         SampleSchema.ValueFieldTagOne.class));
 
-            mapNameToMapSource.put(mapName, mapSource);
-            mapNameToMapSink.put(mapName, mapSink);
+            mapNameToMapActive.put(mapName, mapActive);
+            mapNameToMapStandby.put(mapName, mapStandby);
 
-            assertThat(mapSource.count()).isEqualTo(0);
-            assertThat(mapSink.count()).isEqualTo(0);
+            assertThat(mapActive.count()).isEqualTo(0);
+            assertThat(mapStandby.count()).isEqualTo(0);
         }
     }
 
@@ -224,7 +224,7 @@ public class CorfuReplicationLargeTxIT extends LogReplicationAbstractIT {
 
         for(Map.Entry<String, Table<Sample.StringKey,
             SampleSchema.ValueFieldTagOne, Sample.Metadata>> entry :
-            mapNameToMapSource.entrySet()) {
+            mapNameToMapActive.entrySet()) {
 
             Table<Sample.StringKey, SampleSchema.ValueFieldTagOne,
                 Sample.Metadata> map = entry.getValue();
@@ -237,7 +237,7 @@ public class CorfuReplicationLargeTxIT extends LogReplicationAbstractIT {
                     .setPayload(String.valueOf(i)).build();
                 Sample.Metadata metadata = Sample.Metadata.newBuilder()
                     .setMetadata("Metadata_" + i).build();
-                try (TxnContext txn = corfuStoreSource.txn(NAMESPACE)) {
+                try (TxnContext txn = corfuStoreActive.txn(NAMESPACE)) {
                     txn.putRecord(map, stringKey, value, metadata);
                     txn.commit();
                 }
@@ -248,7 +248,7 @@ public class CorfuReplicationLargeTxIT extends LogReplicationAbstractIT {
     private void verifyDataOnSender(int expectedSize) {
         for(Map.Entry<String, Table<Sample.StringKey,
             SampleSchema.ValueFieldTagOne, Sample.Metadata>> entry :
-            mapNameToMapSource.entrySet()) {
+            mapNameToMapActive.entrySet()) {
             Table<Sample.StringKey, SampleSchema.ValueFieldTagOne,
                 Sample.Metadata> map = entry.getValue();
             Assert.assertEquals(expectedSize, map.count());
@@ -258,7 +258,7 @@ public class CorfuReplicationLargeTxIT extends LogReplicationAbstractIT {
     private void verifyDataOnReceiver(long expectedSize) {
         for(Map.Entry<String, Table<Sample.StringKey,
             SampleSchema.ValueFieldTagOne, Sample.Metadata>> entry :
-            mapNameToMapSink.entrySet()) {
+            mapNameToMapStandby.entrySet()) {
 
             Table<Sample.StringKey, SampleSchema.ValueFieldTagOne,
                 Sample.Metadata> map = entry.getValue();
@@ -267,33 +267,33 @@ public class CorfuReplicationLargeTxIT extends LogReplicationAbstractIT {
     }
 
     private void startLogReplicatorServersWithCustomMaxWriteSize() throws Exception {
-        sourceReplicationServer =
-            runReplicationServerCustomMaxWriteSize(sourceReplicationServerPort,
+        activeReplicationServer =
+            runReplicationServerCustomMaxWriteSize(activeReplicationServerPort,
                 pluginConfigFilePath, MAX_WRITE_SIZE_BYTES, MAX_SNAPSHOT_ENTRIES_APPLIED);
 
         // Start Log Replication Server on Sink Site
-        sinkReplicationServer =
-            runReplicationServerCustomMaxWriteSize(sinkReplicationServerPort,
+        standbyReplicationServer =
+            runReplicationServerCustomMaxWriteSize(standbyReplicationServerPort,
                 pluginConfigFilePath, MAX_WRITE_SIZE_BYTES, MAX_SNAPSHOT_ENTRIES_APPLIED);
     }
 
     private void shutDown() {
         executorService.shutdownNow();
 
-        if (sourceCorfu != null) {
-            sourceCorfu.destroy();
+        if (activeCorfu != null) {
+            activeCorfu.destroy();
         }
 
-        if (sinkCorfu != null) {
-            sinkCorfu.destroy();
+        if (standbyCorfu != null) {
+            standbyCorfu.destroy();
         }
 
-        if (sourceReplicationServer != null) {
-            sourceReplicationServer.destroy();
+        if (activeReplicationServer != null) {
+            activeReplicationServer.destroy();
         }
 
-        if (sinkReplicationServer != null) {
-            sinkReplicationServer.destroy();
+        if (standbyReplicationServer != null) {
+            standbyReplicationServer.destroy();
         }
     }
 

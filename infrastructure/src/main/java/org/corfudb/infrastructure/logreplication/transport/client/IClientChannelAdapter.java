@@ -37,7 +37,7 @@ public abstract class IClientChannelAdapter {
      * Default Constructor
      *
      * @param localClusterId local cluster unique identifier
-     * @param remoteClusterDescriptor descriptor of the remote cluster (sink)
+     * @param remoteClusterDescriptor descriptor of the remote cluster (standby)
      * @param router interface to forward
      */
     public IClientChannelAdapter(@Nonnull String localClusterId,
@@ -84,7 +84,7 @@ public abstract class IClientChannelAdapter {
      * Since the adapter manages the connections to the remote site it must close or open
      * connections accordingly.
      *
-     * @param remoteClusterDescriptor new descriptor for remote (sink) cluster
+     * @param remoteClusterDescriptor new descriptor for remote (standby) cluster
      */
     public void clusterChangeNotification(ClusterDescriptor remoteClusterDescriptor) {}
 

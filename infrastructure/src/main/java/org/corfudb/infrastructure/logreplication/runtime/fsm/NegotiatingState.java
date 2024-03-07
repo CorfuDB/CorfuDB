@@ -80,7 +80,7 @@ public class NegotiatingState implements LogReplicationRuntimeState {
                 if (tableManagerPlugin.isUpgraded()) {
                     // Force a snapshot sync if an upgrade has been identified. This will guarantee that
                     // changes in the streams to replicate are captured by the destination.
-                    log.info("A forced snapshot sync will be done as Source side LR has been upgraded.");
+                    log.info("A forced snapshot sync will be done as Active side LR has been upgraded.");
                     ((ReplicatingState) fsm.getStates().get(LogReplicationRuntimeStateType.REPLICATING))
                             .setReplicationEvent(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_SYNC_REQUEST));
                 } else {
@@ -167,7 +167,7 @@ public class NegotiatingState implements LogReplicationRuntimeState {
     }
 
     /**
-     * It will decide to do a full snapshot sync or log entry sync according to the metadata received from the sink site.
+     * It will decide to do a full snapshot sync or log entry sync according to the metadata received from the standby site.
      *
      * @param negotiationResponse
      * @return
@@ -179,21 +179,21 @@ public class NegotiatingState implements LogReplicationRuntimeState {
         log.debug("Process negotiation response {} from {}", negotiationResponse, fsm.getRemoteClusterId());
 
         /*
-         * The sink site has a smaller config ID, redo the discovery for this sink site when
-         * getting a new notification of the site config change if this sink is in the new config.
+         * The standby site has a smaller config ID, redo the discovery for this standby site when
+         * getting a new notification of the site config change if this standby is in the new config.
          */
         if (negotiationResponse.getTopologyConfigID() < metadataManager.getTopologyConfigId()) {
-            log.error("The source site configID {} is bigger than the sink configID {} ",
+            log.error("The active site configID {} is bigger than the standby configID {} ",
                     metadataManager.getTopologyConfigId(), negotiationResponse.getTopologyConfigID());
             throw new LogReplicationNegotiationException("Mismatch of configID");
         }
 
         /*
-         * The sink site has larger config ID, redo the whole discovery for the source site
+         * The standby site has larger config ID, redo the whole discovery for the active site
          * it will be triggered by a notification of the site config change.
          */
         if (negotiationResponse.getTopologyConfigID() > metadataManager.getTopologyConfigId()) {
-            log.error("The active site configID {} is smaller than the sink configID {} ",
+            log.error("The active site configID {} is smaller than the standby configID {} ",
                     metadataManager.getTopologyConfigId(), negotiationResponse.getTopologyConfigID());
             throw new LogReplicationNegotiationException("Mismatch of configID");
         }
@@ -205,7 +205,7 @@ public class NegotiatingState implements LogReplicationRuntimeState {
 
         /*
          * It is a fresh start, start snapshot full sync.
-         * Following is an example that metadata value indicates a fresh start, no replicated data at sink site:
+         * Following is an example that metadata value indicates a fresh start, no replicated data at standby site:
          * "topologyConfigId": "10"
          * "version": "release-1.0"
          * "snapshotStart": "-1"
@@ -242,9 +242,9 @@ public class NegotiatingState implements LogReplicationRuntimeState {
 
         /*
          * If it is in the snapshot full sync transfer phase (Phase II):
-         * the data has been transferred to the sink site and the the sink site is applying data from shadow streams
+         * the data has been transferred to the standby site and the the standby site is applying data from shadow streams
          * to the real streams.
-         * It doesn't need to transfer the data again, just send a SNAPSHOT_COMPLETE message to the sink site.
+         * It doesn't need to transfer the data again, just send a SNAPSHOT_COMPLETE message to the standby site.
          * An example of in Snapshot sync phase II: applying phase
          * "topologyConfigId": "10"
          * "version": "release-1.0"
@@ -267,8 +267,8 @@ public class NegotiatingState implements LogReplicationRuntimeState {
         }
 
         /* If it is in log entry sync state, continues log entry sync state.
-         * An example to show the sink site is in log entry sync phase.
-         * A full snapshot transfer based on timestamp 100 has been completed, and this sink has processed all log entries
+         * An example to show the standby site is in log entry sync phase.
+         * A full snapshot transfer based on timestamp 100 has been completed, and this standby has processed all log entries
          * between 100 to 200. A log entry sync should be restart if log entry 201 is not trimmed.
          * Otherwise, start a full snapshot full sync.
          * "topologyConfigId": "10"
@@ -311,9 +311,9 @@ public class NegotiatingState implements LogReplicationRuntimeState {
         // TODO(Future): consider continue snapshot sync from a remaining point (insert new event in LogReplicationFSM) -> efficiency
 
         /*
-         * For other scenarios, the sink site is in a non-recognizable state, trigger a snapshot full sync.
+         * For other scenarios, the standby site is in a non-recognizable state, trigger a snapshot full sync.
          */
-        log.warn("Could not recognize the sink cluster state according to the response {}, will restart with a snapshot full sync event" ,
+        log.warn("Could not recognize the standby cluster state according to the response {}, will restart with a snapshot full sync event" ,
                 negotiationResponse);
         fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.NEGOTIATION_COMPLETE,
                 new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_SYNC_REQUEST)));

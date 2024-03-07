@@ -432,7 +432,7 @@ public class LogReplicationMetadataManager {
             // Set 'isDataConsistent' flag on replication status table atomically with snapshot sync completed
             // information, to prevent any inconsistency between flag and state of snapshot sync completion in
             // the event of crashes
-            setDataConsistentOnSink(true, txn);
+            setDataConsistentOnStandby(true, txn);
             txn.commit();
             log.debug("Commit snapshot apply complete timestamp={}, for topologyConfigId={}", ts, topologyConfigId);
         }
@@ -443,7 +443,7 @@ public class LogReplicationMetadataManager {
      *
      * Note: TransactionAbortedException has been handled by upper level.
      *
-     * @param clusterId sink cluster id
+     * @param clusterId standby cluster id
      */
     public void updateSnapshotSyncStatusOngoing(String clusterId, boolean forced, UUID eventId,
                                                 long baseVersion, long remainingEntries) {
@@ -485,7 +485,7 @@ public class LogReplicationMetadataManager {
      *
      * Note: TransactionAbortedException has been handled by upper level.
      *
-     * @param clusterId sink cluster id
+     * @param clusterId standby cluster id
      */
     public void updateSnapshotSyncStatusCompleted(String clusterId, long remainingEntriesToSend, long baseSnapshot) {
         Instant time = Instant.now();
@@ -535,7 +535,7 @@ public class LogReplicationMetadataManager {
      *
      * Note: TransactionAbortedException has been handled by upper level.
      *
-     * @param clusterId sink cluster id
+     * @param clusterId standby cluster id
      */
     public void updateSyncStatus(String clusterId, SyncType lastSyncType, SyncStatus status) {
         ReplicationStatusKey key = ReplicationStatusKey.newBuilder().setClusterId(clusterId).build();
@@ -577,7 +577,7 @@ public class LogReplicationMetadataManager {
      *
      * Note: TransactionAbortedException has been handled by upper level.
      *
-     * @param clusterId sink cluster id
+     * @param clusterId standby cluster id
      * @param remainingEntries num of remaining entries to send
      * @param type sync type
      */
@@ -636,13 +636,13 @@ public class LogReplicationMetadataManager {
     }
 
     /**
-     * Set DataConsistent field in status table on sink side.
+     * Set DataConsistent field in status table on standby side.
      *
      * Note: TransactionAbortedException has been handled by upper level.
      *
      * @param isConsistent data is consistent or not
      */
-    public void setDataConsistentOnSink(boolean isConsistent) {
+    public void setDataConsistentOnStandby(boolean isConsistent) {
         ReplicationStatusKey key =
             ReplicationStatusKey.newBuilder().setClusterId(remoteClusterId).build();
         ReplicationStatusVal val = ReplicationStatusVal.newBuilder()
@@ -654,11 +654,11 @@ public class LogReplicationMetadataManager {
             txn.commit();
         }
 
-        log.debug("setDataConsistentOnSink: remoteClusterId: {}, " +
+        log.debug("setDataConsistentOnStandby: remoteClusterId: {}, " +
             "isConsistent: {}", remoteClusterId, isConsistent);
     }
 
-    public void setDataConsistentOnSink(boolean isConsistent, TxnContext txn) {
+    public void setDataConsistentOnStandby(boolean isConsistent, TxnContext txn) {
         ReplicationStatusKey key =
             ReplicationStatusKey.newBuilder().setClusterId(remoteClusterId).build();
         ReplicationStatusVal val = ReplicationStatusVal.newBuilder()
@@ -735,9 +735,9 @@ public class LogReplicationMetadataManager {
         for (Map.Entry<String, ReplicationStatusVal> entry :
             replicationStatusMap.entrySet()) {
             builder.append(entry.getKey())
-                .append("Remaining Entries to Send(if source): ")
+                .append("Remaining Entries to Send(if active/source): ")
                 .append(entry.getValue().getRemainingEntriesToSend())
-                .append("Data Consistent(if sink):")
+                .append("Data Consistent(if standby/sink):")
                 .append(entry.getValue().getDataConsistent());
         }
         return builder.toString();
@@ -823,7 +823,7 @@ public class LogReplicationMetadataManager {
         CURRENT_CYCLE_MIN_SHADOW_STREAM_TS("minShadowStreamTimestamp"),
         LAST_LOG_ENTRY_BATCH_PROCESSED("lastLogEntryProcessed"),
         REMAINING_REPLICATION_PERCENT("replicationStatus"),
-        DATA_CONSISTENT_ON_SINK("dataConsistentOnSink"),
+        DATA_CONSISTENT_ON_STANDBY("dataConsistentOnStandby"),
         SNAPSHOT_SYNC_TYPE("snapshotSyncType"),
         SNAPSHOT_SYNC_COMPLETE_TIME("snapshotSyncCompleteTime"),
         LAST_LOG_ENTRY_APPLIED("lastLongEntryApplied");
