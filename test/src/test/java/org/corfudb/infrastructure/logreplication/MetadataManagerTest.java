@@ -1,7 +1,6 @@
 package org.corfudb.infrastructure.logreplication;
 
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogEntryWriter;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
@@ -31,22 +30,19 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 public class MetadataManagerTest extends AbstractViewTest {
 
     private CorfuRuntime corfuRuntime;
-
-    private LogReplicationConfigManager configManager = Mockito.mock(LogReplicationConfigManager.class);
-
-
+    private LogReplicationConfigManager configManager;
     private boolean success;
-    private final Long topologyConfigId = 5L;
-    private final String localClusterId = "Test Cluster";
+    private Long topologyConfigId = 5L;
+    private String localClusterId = "Test Cluster";
     private TestUtils utils;
-    private final String remoteClusterId = "Remote Cluster";
-    private final ReplicationSession replicationSession =
+    private String remoteClusterId = "Remote Cluster";
+    private ReplicationSession replicationSession =
         ReplicationSession.getDefaultReplicationSessionForCluster(remoteClusterId);
 
     @Before
     public void setUp() {
         corfuRuntime = getDefaultRuntime();
-
+        
         Mockito.doReturn(corfuRuntime).when(configManager).getRuntime();
         utils = new TestUtils();
     }
@@ -65,7 +61,7 @@ public class MetadataManagerTest extends AbstractViewTest {
 
         LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(corfuRuntime, topologyConfigId,
             localClusterId);
-        LogEntryWriter writer = new LogEntryWriter(replicationContext, metadataManager, replicationSession);
+        LogEntryWriter writer = new LogEntryWriter(configManager, metadataManager, replicationSession);
 
         Long numOpaqueEntries = 3L;
         LogReplication.LogReplicationEntryMsg lrEntryMsg = utils.generateLogEntryMsg(1, numOpaqueEntries,
@@ -123,7 +119,7 @@ public class MetadataManagerTest extends AbstractViewTest {
 
         LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(corfuRuntime, topologyConfigId,
             localClusterId);
-        LogEntryWriter writer = new LogEntryWriter(replicationContext, metadataManager, replicationSession);
+        LogEntryWriter writer = new LogEntryWriter(configManager, metadataManager, replicationSession);
 
         // Create a message with 50 opaque entries
         Long numOpaqueEntries = 50L;

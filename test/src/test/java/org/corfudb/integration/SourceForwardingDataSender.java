@@ -6,7 +6,7 @@ import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.logreplication.DataSender;
-import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
+import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.replication.LogReplicationSourceManager;
@@ -15,6 +15,7 @@ import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicat
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationSinkManager;
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationError;
 import org.corfudb.infrastructure.logreplication.replication.fsm.ObservableAckMsg;
+import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.integration.DefaultDataControl.DefaultDataControlConfig;
 import org.corfudb.runtime.CorfuRuntime;
@@ -99,7 +100,7 @@ public class SourceForwardingDataSender extends AbstractIT implements DataSender
     private static final String REPLICATION_STATUS_TABLE = "LogReplicationStatus";
 
     @SneakyThrows
-    public SourceForwardingDataSender(String destinationEndpoint, LogReplicationContext replicationContext,
+    public SourceForwardingDataSender(String destinationEndpoint, LogReplicationConfigManager configManager,
                                       LogReplicationIT.TestConfig testConfig,
                                       LogReplicationMetadataManager metadataManager,
                                       String pluginConfigFilePath, LogReplicationIT.TransitionSource function) {
@@ -114,7 +115,7 @@ public class SourceForwardingDataSender extends AbstractIT implements DataSender
 
         // TODO pankti: This test-only constructor can be removed
         this.destinationLogReplicationManager = new LogReplicationSinkManager(runtime.getLayoutServers().get(0),
-            replicationContext, metadataManager, pluginConfigFilePath, replicationSession);
+            configManager, metadataManager, pluginConfigFilePath, replicationSession);
 
         this.ifDropMsg = testConfig.getDropMessageLevel();
         this.delayedApplyCycles = testConfig.getDelayedApplyCycles();
