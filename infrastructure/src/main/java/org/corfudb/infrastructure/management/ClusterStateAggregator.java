@@ -1,11 +1,13 @@
 package org.corfudb.infrastructure.management;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import lombok.Builder;
 import lombok.NonNull;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.NodeState;
+import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.NodeConnectivityType;
 
 import java.util.HashMap;
@@ -62,10 +64,45 @@ public class ClusterStateAggregator {
                         NodeState currNodeState = currNodes.get(endpoint);
 
                         //update the old node state by the new one
-                        if (currNodeState.isConnected() || !prevNodeState.isConnected()) {
+
+                        if (!prevNodeState.isConnected() && currNodeState.isConnected()) {
                             actualState.put(endpoint, currNodeState);
-                        } else {
+                        } else if (prevNodeState.isConnected() && currNodeState.isConnected()) {
+                            Map<String, NodeConnectivity.ConnectionStatus> mergedStates = new HashMap<>(
+                                    prevNodeState
+                                            .getConnectivity()
+                                            .getConnectivity());
+
+                            currNodeState.getConnectivity().getConnectivity().forEach((k, v) ->
+                                    mergedStates.merge(k, v, (item1, item2) ->
+                                            item1 == NodeConnectivity.ConnectionStatus.OK
+                                                    || item2 == NodeConnectivity.ConnectionStatus.OK ?
+                                                    NodeConnectivity.ConnectionStatus.OK :
+                                                    NodeConnectivity.ConnectionStatus.FAILED));
+
+                            long prevNodeEpoch = prevNodeState.getConnectivity().getEpoch();
+                            long curNodeEpoch = currNodeState.getConnectivity().getEpoch();
+                            Preconditions.checkArgument(prevNodeEpoch == curNodeEpoch,
+                                    "%s should be equal to %s", prevNodeEpoch, curNodeEpoch);
+                            NodeConnectivity nodeConnectivity = NodeConnectivity.builder()
+                                    .endpoint(endpoint)
+                                    .type(currNodeState.getConnectivity().getType())
+                                    .connectivity(ImmutableMap.copyOf(mergedStates))
+                                    .epoch(currNodeState.getConnectivity().getEpoch())
+                                    .build();
+
+                            NodeState mergedNodeState = NodeState.builder()
+                                    .sequencerMetrics(currNodeState.getSequencerMetrics())
+                                    .connectivity(nodeConnectivity)
+                                    .fileSystem(currNodeState.getFileSystem())
+                                    .build();
+
+                            actualState.put(endpoint, mergedNodeState);
+
+                        } else if (prevNodeState.isConnected() && !currNodeState.isConnected()) {
                             actualState.put(endpoint, prevNodeState);
+                        } else {
+                            actualState.put(endpoint, currNodeState);
                         }
                     }
 
