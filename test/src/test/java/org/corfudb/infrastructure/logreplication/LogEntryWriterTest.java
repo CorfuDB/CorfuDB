@@ -33,7 +33,6 @@ public class LogEntryWriterTest extends AbstractViewTest {
     private TxnContext txnContext = Mockito.mock(TxnContext.class);
 
     private LogEntryWriter logEntryWriter;
-    private TxnContext txnContext;
     private TestUtils utils;
     private int numOpaqueEntries;
     private int topologyConfigId;
