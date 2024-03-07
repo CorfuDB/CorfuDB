@@ -61,17 +61,4 @@ public interface CorfuReplicationClusterManagerAdapter {
      * @param session
      */
     UUID forceSnapshotSync(LogReplicationSession session) throws LogReplicationDiscoveryServiceException;
-
-    /**
-     * Get the local node ID
-     *
-     * @return node ID
-     */
-    String getLocalNodeId();
-
-    /**
-     * Get if the current deployment is SaaS or on-prem
-     * @return true if SaaS, otherwise false
-     */
-    boolean isSaasDeployment();
 }
