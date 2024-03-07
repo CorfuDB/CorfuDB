@@ -1,8 +1,8 @@
 package org.corfudb.infrastructure.logreplication.infrastructure;
 
 import lombok.Getter;
-import lombok.Setter;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
+import org.corfudb.infrastructure.logreplication.transport.IChannelContext;
 
 /**
  * This class represents the Log Replication Context.
@@ -18,18 +18,22 @@ public class LogReplicationContext {
     private LogReplicationConfig config;
 
     @Getter
-    @Setter
     private TopologyDescriptor topology;
 
     @Getter
     private String localCorfuEndpoint;
 
+    @Getter
+    private IChannelContext channelContext;
+
     /**
      * Constructor
      **/
-    public LogReplicationContext(LogReplicationConfig config,  TopologyDescriptor topology, String localCorfuEndpoint) {
+    public LogReplicationContext(LogReplicationConfig config,  TopologyDescriptor topology, String localCorfuEndpoint,
+                                 IChannelContext channelContext) {
         this.config = config;
         this.topology = topology;
         this.localCorfuEndpoint = localCorfuEndpoint;
+        this.channelContext = channelContext;
     }
 }
