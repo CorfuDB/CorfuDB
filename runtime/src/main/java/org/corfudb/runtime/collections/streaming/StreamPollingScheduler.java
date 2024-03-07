@@ -102,7 +102,6 @@ public class StreamPollingScheduler {
     private final SequencerView sequencerView;
     private final CorfuRuntime runtime;
 
-
     public StreamPollingScheduler(CorfuRuntime runtime, ScheduledExecutorService scheduler, ExecutorService workers,
                                   Duration pollPeriod, int pollBatchSize, int pollThreshold) {
         Preconditions.checkArgument(pollBatchSize > 1, "pollBatchSize=%s has to be > 1",
@@ -160,26 +159,6 @@ public class StreamPollingScheduler {
         }
     }
 
-    public void addLRTask(@Nonnull StreamListener streamListener,
-                        @Nonnull Map<String, String> nsToStreamTags,
-                        @Nonnull Map<String, List<String>> nsToTables, long lastAddress,
-                        int bufferSize) {
-        Preconditions.checkArgument(bufferSize >= pollThreshold);
-        synchronized (allTasks) {
-            if (allTasks.containsKey(streamListener)) {
-                // Multiple subscribers subscribing to same namespace and table is allowed
-                // as long as the hashcode() and equals() method of the listeners are different.
-                throw new StreamingException(
-                        "StreamingManager::subscribe: listener already registered " + streamListener);
-            }
-            StreamingTask task = new LRStreamingTask(runtime, workers, nsToStreamTags, nsToTables, streamListener,
-                    lastAddress, bufferSize);
-            allTasks.put(streamListener, task);
-            log.info("addTask: added {} for {} address {}", streamListener, nsToStreamTags, lastAddress);
-            allTasks.notifyAll();
-        }
-    }
-
     public void removeTask(@Nonnull StreamListener streamListener) {
         synchronized (allTasks) {
             allTasks.remove(streamListener);
@@ -211,15 +190,8 @@ public class StreamPollingScheduler {
     private List<StreamAddressRange> getPollQueries(List<StreamingTask> tasks) {
         List<StreamAddressRange> pollRequests = new ArrayList<>(tasks.size());
         for (StreamingTask task : tasks) {
-            DeltaStream deltaStream = task.getStream();
-            if (task instanceof LRStreamingTask) {
-                List<UUID> streamsTracked = ((LRDeltaStream)deltaStream).getStreamsTracked();
-                streamsTracked.forEach(streamTracked -> pollRequests.add(new StreamAddressRange(streamTracked,
-                        Address.MAX, deltaStream.getMaxAddressSeen())));
-            } else {
-                pollRequests.add(new StreamAddressRange(deltaStream.getStreamId(), Address.MAX,
-                        deltaStream.getMaxAddressSeen()));
-            }
+            DeltaStream stream = task.getStream();
+            pollRequests.add(new StreamAddressRange(stream.getStreamId(), Address.MAX, stream.getMaxAddressSeen()));
         }
         return pollRequests;
     }
@@ -254,75 +226,23 @@ public class StreamPollingScheduler {
             allQueryResults.putAll(res);
         }
 
-        validateQuerySize(tasks, queries);
+        Preconditions.checkState(tasks.size() == queries.size());
 
-        int queryIdx = 0;
-        for (StreamingTask task : tasks) {
-            StreamAddressSpace sas;
+        for (int idx = 0; idx < tasks.size(); idx++) {
+            StreamingTask task = tasks.get(idx);
             try {
-                if (task instanceof LRStreamingTask) {
-                    sas = getMergedAddressSpace((LRStreamingTask)task, queries, allQueryResults, queryIdx);
-                    // LRDeltaStream(used in LRStreamingTask) tracks 2 streams.  The list of streamAddressRangeQueries is a
-                    // flattened list of all streams across all tasks.  For LRDeltaStream, the mapping of task -> query will not
-                    // be 1:1.  So queryIdx is incremented by the number of streams tracked
-                    queryIdx += ((LRDeltaStream)task.getStream()).getStreamsTracked().size();
-                } else {
-                    StreamAddressRange taskQuery = queries.get(queryIdx);
-                    Preconditions.checkState(task.getStream().getStreamId().equals(taskQuery.getStreamID()));
-                    Preconditions.checkState(allQueryResults.containsKey(taskQuery.getStreamID()),
+                StreamAddressRange taskQuery = queries.get(idx);
+                Preconditions.checkState(task.getStream().getStreamId().equals(taskQuery.getStreamID()));
+                Preconditions.checkState(allQueryResults.containsKey(taskQuery.getStreamID()),
                         "StreamAddressSpace missing for %s", task.getStream().getStreamId());
-                    sas = allQueryResults.get(task.getStream().getStreamId()).getAddressesInRange(taskQuery);
-                    queryIdx++;
-                }
+                StreamAddressSpace sas = allQueryResults.get(task.getStream().getStreamId()).getAddressesInRange(taskQuery);
                 task.getStream().refresh(sas);
             } catch (Throwable throwable) {
                 task.setError(throwable);
                 log.error("StreamingPollingScheduler: encountered exception {} during streaming task scheduling. " +
-                    "Notify stream listener {} with id={} onError.", throwable, task.getListener(), task.getListenerId());
+                        "Notify stream listener {} with id={} onError.", throwable, task.getListener(), task.getListenerId());
             }
         }
-    }
-
-    private void validateQuerySize(List<StreamingTask> tasks, List<StreamAddressRange> addressRangeQueries) {
-        int numLRStreamingTasks = 0;
-        for (StreamingTask task : tasks) {
-            if (task instanceof LRStreamingTask) {
-                numLRStreamingTasks++;
-            }
-        }
-
-        int numRemainingTasks = tasks.size() - numLRStreamingTasks;
-
-        // LRDeltaStream(used in LRStreamingTask) tracks 2 streams for which the stream address space is queried.  So
-        // the number of queries should be numLRStreamingTasks*2 + numRemainingStreamingTasks
-        int numExpectedQueries = numLRStreamingTasks*2 + numRemainingTasks;
-        Preconditions.checkState(numExpectedQueries == addressRangeQueries.size());
-    }
-
-    /**
-     * Return a merged address space of the streams tracked by this LRStreamingTask
-     */
-    private StreamAddressSpace getMergedAddressSpace(LRStreamingTask task, List<StreamAddressRange> queries,
-                                                     Map<UUID, StreamAddressSpace> allQueryResults, int queryIdx) {
-
-        int idx = queryIdx;
-        List<StreamAddressSpace> streamAddressSpaces = new ArrayList<>();
-
-        for (UUID stream : ((LRDeltaStream)task.getStream()).getStreamsTracked()) {
-            StreamAddressRange taskQuery = queries.get(idx);
-            Preconditions.checkState(stream.equals(taskQuery.getStreamID()));
-            Preconditions.checkState(allQueryResults.containsKey(stream),
-                    "StreamAddressSpace missing for %s", task.getStream().getStreamId());
-            streamAddressSpaces.add(allQueryResults.get(stream).getAddressesInRange(taskQuery));
-            idx++;
-        }
-
-        StreamAddressSpace mergedStreamAddressSpace = streamAddressSpaces.get(0);
-        for (int i = 1; i < streamAddressSpaces.size(); i++) {
-            mergedStreamAddressSpace = StreamAddressSpace.merge(mergedStreamAddressSpace,
-                streamAddressSpaces.get(i));
-        }
-        return mergedStreamAddressSpace;
     }
 
     @Data

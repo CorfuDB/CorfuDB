@@ -56,7 +56,7 @@ public class StreamingTask<K extends Message, V extends Message, M extends Messa
     private final StreamListener listener;
 
     // The table id to schema map of the interested tables.
-    protected final Map<UUID, TableSchema<K, V, M>> tableSchemas = new HashMap<>();
+    private final Map<UUID, TableSchema<K, V, M>> tableSchemas;
 
     @Getter
     private final String listenerId;
@@ -65,28 +65,24 @@ public class StreamingTask<K extends Message, V extends Message, M extends Messa
 
     private final ExecutorService workerPool;
 
-    protected DeltaStream stream;
+    private final DeltaStream stream;
 
-    protected final AtomicReference<StreamStatus> status = new AtomicReference<>();
+    private final AtomicReference<StreamStatus> status;
 
     private volatile Throwable error;
-
-    protected StreamingTask(CorfuRuntime runtime, ExecutorService workerPool, StreamListener listener,
-                            String listenerId) {
-        this.runtime = runtime;
-        this.workerPool = workerPool;
-        this.listener = listener;
-        this.listenerId = listenerId;
-    }
 
     public StreamingTask(CorfuRuntime runtime, ExecutorService workerPool, String namespace, String streamTag,
                          StreamListener listener,
                          List<String> tablesOfInterest,
                          long address,
                          int bufferSize) {
-        this(runtime, workerPool, listener, String.format("listener_%s_%s_%s", listener, namespace, streamTag));
+
+        this.runtime = runtime;
+        this.workerPool = workerPool;
+        this.listenerId = String.format("listener_%s_%s_%s", listener, namespace, streamTag);
+        this.listener = listener;
         TableRegistry registry = runtime.getTableRegistry();
-        UUID streamId;
+        final UUID streamId;
         // Federated tables do not have a stream tag, only an option isFederated set to true. Internally,
         // their stream tag is constructed when the table is opened. This stream tag is constructed differently than
         // other tables. So for subscribers on this tag, do not construct the streamId using the generic algorithm.
@@ -96,37 +92,37 @@ public class StreamingTask<K extends Message, V extends Message, M extends Messa
             streamId = TableRegistry.getStreamIdForStreamTag(namespace, streamTag);
         }
         this.stream = new DeltaStream(runtime.getAddressSpaceView(), streamId, address, bufferSize);
-
-        for (String tableOfInterest : tablesOfInterest) {
-            UUID tableId = CorfuRuntime.getStreamID(TableRegistry.getFullyQualifiedTableName(namespace, tableOfInterest));
-
-            // Subscription on special tables(ProtobufDescriptor and Registry tables) is not possible
-            // with the regular workflow as they are not opened using CorfuStore.openTable().
-            // However, these tables do have the stream tag for Log Replication and it is useful to
-            // subscribe to them for testing purposes. The below is special handling to allow for such a
-            // subscription.
-            if (streamId.equals(ObjectsView.getLogReplicatorStreamId()) && namespace.equals(
-                TableRegistry.CORFU_SYSTEM_NAMESPACE) &&
-                tableOfInterest.equals(TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME)) {
-                tableSchemas.put(tableId, new TableSchema(tableOfInterest, ProtobufFileName.class, ProtobufFileDescriptor.class,
-                        TableMetadata.class));
-            } else if (streamId.equals(ObjectsView.getLogReplicatorStreamId()) && namespace.equals(
-                TableRegistry.CORFU_SYSTEM_NAMESPACE) &&
-                tableOfInterest.equals(TableRegistry.REGISTRY_TABLE_NAME)) {
-                tableSchemas.put(tableId, new TableSchema(tableOfInterest, TableName.class, TableDescriptors.class,
-                        TableMetadata.class));
-            } else {
-                // The table should be opened with full schema before subscription.
-                Table<K, V, M> t = registry.getTable(namespace, tableOfInterest);
-                if (!t.getStreamTags().contains(streamId)) {
-                        throw new IllegalArgumentException(String.format("Interested table: %s does not " +
-                            "have specified stream tag: %s", t.getFullyQualifiedTableName(), streamTag));
-                }
-                tableSchemas.put(tableId, new TableSchema<>(tableOfInterest, t.getKeyClass(), t.getValueClass(),
-                        t.getMetadataClass()));
-            }
-        }
-        status.set(StreamStatus.RUNNABLE);
+        this.tableSchemas = tablesOfInterest
+                .stream()
+                .collect(Collectors.toMap(
+                        tName -> CorfuRuntime.getStreamID(TableRegistry.getFullyQualifiedTableName(namespace, tName)),
+                        tName -> {
+                            // Subscription on special tables(ProtobufDescriptor and Registry tables) is not possible
+                            // with the regular workflow as they are not opened using CorfuStore.openTable().
+                            // However, these tables do have the stream tag for Log Replication and it is useful to
+                            // subscribe to them for testing purposes. The below is special handling to allow for such a
+                            // subscription.
+                            if (streamId.equals(ObjectsView.getLogReplicatorStreamId()) && namespace.equals(
+                                TableRegistry.CORFU_SYSTEM_NAMESPACE) &&
+                                tName.equals(TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME)) {
+                                return new TableSchema(tName, ProtobufFileName.class, ProtobufFileDescriptor.class,
+                                        TableMetadata.class);
+                            } else if (streamId.equals(ObjectsView.getLogReplicatorStreamId()) && namespace.equals(
+                                TableRegistry.CORFU_SYSTEM_NAMESPACE) &&
+                                tName.equals(TableRegistry.REGISTRY_TABLE_NAME)) {
+                                return new TableSchema(tName, TableName.class, TableDescriptors.class,
+                                        TableMetadata.class);
+                            } else {
+                                // The table should be opened with full schema before subscription.
+                                Table<K, V, M> t = registry.getTable(namespace, tName);
+                                if (!t.getStreamTags().contains(streamId)) {
+                                    throw new IllegalArgumentException(String.format("Interested table: %s does not " +
+                                        "have specified stream tag: %s", t.getFullyQualifiedTableName(), streamTag));
+                                }
+                                return new TableSchema<>(tName, t.getKeyClass(), t.getValueClass(), t.getMetadataClass());
+                            }
+                        }));
+        this.status = new AtomicReference<>(StreamStatus.RUNNABLE);
     }
 
     public StreamStatus getStatus() {
