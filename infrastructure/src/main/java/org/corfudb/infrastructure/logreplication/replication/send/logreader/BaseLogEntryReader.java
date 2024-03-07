@@ -39,8 +39,7 @@ import static org.corfudb.protocols.service.CorfuProtocolLogReplication.getLrEnt
 @Slf4j
 public abstract class BaseLogEntryReader extends LogEntryReader {
 
-    private static final LogReplication.LogReplicationEntryType MSG_TYPE =
-            LogReplication.LogReplicationEntryType.LOG_ENTRY_MESSAGE;
+    private final LogReplication.LogReplicationEntryType MSG_TYPE = LogReplication.LogReplicationEntryType.LOG_ENTRY_MESSAGE;
 
     // Opaque Stream wrapper for the stream to track for a given replication model
     private ModelBasedOpaqueStream modelBasedOpaqueStream;

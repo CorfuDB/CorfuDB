@@ -98,6 +98,20 @@ public class LogReplicationServer extends LogReplicationAbstractServer {
         this.executor = context.getExecutorService(1, EXECUTOR_NAME_PREFIX);
     }
 
+    @VisibleForTesting
+    public LogReplicationServer(@Nonnull ServerContext context, LogReplicationSinkManager sinkManager,
+                                Set<LogReplicationSession> sessions,
+                                LogReplicationMetadataManager metadataManager, String localNodeId, String localClusterId,
+                                LogReplicationContext replicationContext) {
+        this.serverContext = context;
+        this.localNodeId = localNodeId;
+        this.localClusterId = localClusterId;
+        this.allSessions = sessions;
+        this.metadataManager = metadataManager;
+        this.replicationContext = replicationContext;
+        this.executor = context.getExecutorService(1, EXECUTOR_NAME_PREFIX);
+    }
+
     public LogReplicationSinkManager createSinkManager(LogReplicationSession session) {
         if(sessionToSinkManagerMap.containsKey(session)) {
             log.trace("Sink manager already exists for session {}", session);
