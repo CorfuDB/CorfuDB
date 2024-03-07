@@ -153,14 +153,8 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         verifyInitialSnapshotSyncAfterStartup(FIVE, NUM_WRITES);
 
         // Upgrade the sink site
-        CountDownLatch statusUpdateLatch = new CountDownLatch(NUM_INIT_UPDATES_ON_SINK_STATUS_TABLE + 1);
-        sinkListener = new ReplicationStatusListener(statusUpdateLatch, false);
-        corfuStoreSink.subscribeListener(sinkListener, CORFU_SYSTEM_NAMESPACE, LR_STATUS_STREAM_TAG);
         log.info(">> Upgrading the sink site ...");
         performRollingUpgrade(false);
-
-        statusUpdateLatch.await();
-        corfuStoreSink.unsubscribeListener(sinkListener);
 
         // Trigger a snapshot sync by stopping the source LR and running a CP+trim.  Verify that snapshot sync took
         // place
@@ -176,17 +170,7 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
 
         // Upgrade the sink site first
         log.info(">> Upgrading the sink site ...");
-        // TODO pankti: Add a comment here
-        CountDownLatch statusUpdateLatch = new CountDownLatch(NUM_INIT_UPDATES_ON_SINK_STATUS_TABLE + 1);
-        sinkListener = new ReplicationStatusListener(statusUpdateLatch, false);
-        corfuStoreSink.subscribeListener(sinkListener, CORFU_SYSTEM_NAMESPACE, LR_STATUS_STREAM_TAG);
-
         performRollingUpgrade(false);
-
-        log.info("Wait for the initial write");
-        statusUpdateLatch.await();
-        log.info("Initial Write received");
-        corfuStoreSink.unsubscribeListener(sinkListener);
 
         // Upgrading the source site will force a snapshot sync
         verifySnapshotSyncAfterSourceUpgrade();
@@ -257,17 +241,13 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
 
         // Upgrade the sink site
 
-        CountDownLatch statusUpdateLatch = new CountDownLatch(NUM_INIT_UPDATES_ON_SINK_STATUS_TABLE + 1);
-        sinkListener = new ReplicationStatusListener(statusUpdateLatch, false);
-        corfuStoreSink.subscribeListener(sinkListener, CORFU_SYSTEM_NAMESPACE, LR_STATUS_STREAM_TAG);
         log.info(">> Upgrading the sink site ...");
         Set<String> streamsToReplicateSink = new HashSet<>();
         for (int i = 2; i <= 3; i++) {
             streamsToReplicateSink.add(TABLE_PREFIX + i);
         }
         performRollingUpgrade(false);
-        statusUpdateLatch.await();
-        corfuStoreSink.unsubscribeListener(sinkListener);
+
 
         stopSourceLogReplicator();
 
@@ -299,7 +279,7 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         snapshotSyncPluginListener = new SnapshotSyncPluginListener(latchSnapshotSyncPlugin);
         subscribeToSnapshotSyncPluginTable(snapshotSyncPluginListener);
 
-        statusUpdateLatch = new CountDownLatch(NUM_SNAPSHOT_SYNC_UPDATES_ON_SINK_STATUS_TABLE);
+        CountDownLatch statusUpdateLatch = new CountDownLatch(NUM_SNAPSHOT_SYNC_UPDATES_ON_SINK_STATUS_TABLE);
         sinkListener = new ReplicationStatusListener(statusUpdateLatch, false);
         corfuStoreSink.subscribeListener(sinkListener, CORFU_SYSTEM_NAMESPACE, LR_STATUS_STREAM_TAG);
 
@@ -339,15 +319,7 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
             streamsToReplicateSink.add(TABLE_PREFIX + i);
         }
 
-        // TODO pankti: Add a comment here
-        CountDownLatch statusUpdateLatch = new CountDownLatch(NUM_INIT_UPDATES_ON_SINK_STATUS_TABLE + 1);
-        sinkListener = new ReplicationStatusListener(statusUpdateLatch, false);
-        corfuStoreSink.subscribeListener(sinkListener, CORFU_SYSTEM_NAMESPACE, LR_STATUS_STREAM_TAG);
-
         performRollingUpgrade(false);
-
-        statusUpdateLatch.await();
-        corfuStoreSink.unsubscribeListener(sinkListener);
 
         List<String> sourceOnlyStreams = streamsToReplicateSource.stream()
                 .filter(s -> !streamsToReplicateSink.contains(s))
@@ -377,16 +349,17 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         verifyDataOnSink(sourceOnlyStreams, NUM_WRITES);
         verifyDataOnSink(sinkOnlyStreams, 0);
 
-/*        corfuStoreSink.unsubscribeListener(sinkListener);
-        corfuStoreSink.unsubscribeListener(snapshotSyncPluginListener);*/
+        corfuStoreSink.unsubscribeListener(sinkListener);
+        corfuStoreSink.unsubscribeListener(snapshotSyncPluginListener);
 
         CountDownLatch latchSnapshotSyncPlugin = new CountDownLatch(2);
         snapshotSyncPluginListener = new SnapshotSyncPluginListener(latchSnapshotSyncPlugin);
         subscribeToSnapshotSyncPluginTable(snapshotSyncPluginListener);
 
-        statusUpdateLatch = new CountDownLatch(NUM_SNAPSHOT_SYNC_UPDATES_ON_SINK_STATUS_TABLE);
+        CountDownLatch statusUpdateLatch = new CountDownLatch(NUM_SNAPSHOT_SYNC_UPDATES_ON_SINK_STATUS_TABLE);
         sinkListener = new ReplicationStatusListener(statusUpdateLatch, false);
         corfuStoreSink.subscribeListener(sinkListener, CORFU_SYSTEM_NAMESPACE, LR_STATUS_STREAM_TAG);
+
 
         // Now upgrade the source site
         openMapsAfterUpgradeSource(sourceOnlyStreams, sinkOnlyStreams);

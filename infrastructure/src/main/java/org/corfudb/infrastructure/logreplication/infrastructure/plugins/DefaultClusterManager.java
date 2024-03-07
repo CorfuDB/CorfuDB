@@ -742,97 +742,88 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
                     .findFirst()
                     .map(corfuStreamEntries -> corfuStreamEntries.get(0))
                     .orElse(null);
-            if (entry == null) {
-                log.warn("configManager:onNext() did not find any entries");
-                return;
-            }
-            if (!entry.getOperation().equals(CorfuStreamEntry.OperationType.UPDATE)) {
-                if (entry.getOperation() == CorfuStreamEntry.OperationType.CLEAR) {
-                    log.warn("Config listener ignoring a clear operation");
-                } else {
-                    log.info("onNext :: operation={}, key={}, payload={}, metadata={}", entry.getOperation().name(),
-                            entry.getKey(), entry.getPayload(), entry.getMetadata());
-                }
-                return;
-            }
+            if (entry != null && entry.getOperation().equals(CorfuStreamEntry.OperationType.UPDATE)) {
+                log.info("onNext :: key={}, payload={}, metadata={}", entry.getKey(), entry.getPayload(), entry.getMetadata());
+                if (entry.getKey().equals(OP_SWITCH)) {
+                    clusterManager.getClusterManagerCallback()
+                            .applyNewTopologyConfig(clusterManager.generateConfigWithRoleSwitch());
+                } else if (entry.getKey().equals(OP_TWO_SOURCE)) {
+                    clusterManager.getClusterManagerCallback()
+                            .applyNewTopologyConfig(clusterManager.generateConfigWithAllSource());
+                } else if (entry.getKey().equals(OP_ALL_SINK)) {
+                    clusterManager.getClusterManagerCallback()
+                            .applyNewTopologyConfig(clusterManager.generateConfigWithAllSink());
+                } else if (entry.getKey().equals(OP_INVALID)) {
+                    clusterManager.getClusterManagerCallback()
+                            .applyNewTopologyConfig(clusterManager.generateConfigWithInvalid());
+                } else if (entry.getKey().equals(OP_RESUME)) {
+                    clusterManager.getClusterManagerCallback()
+                            .applyNewTopologyConfig(clusterManager.generateSingleSourceSinkTopolgy());
+                } else if (entry.getKey().equals(OP_ENFORCE_SNAPSHOT_FULL_SYNC)) {
+                    try {
+                        ClusterDescriptor localCluster = clusterManager.findLocalCluster();
+                        if (DefaultClusterConfig.getSinkClusterIds().contains(localCluster.getClusterId())) {
+                            return;
+                        }
+                        // Enforce snapshot sync on the 1st sink cluster
+                        TopologyDescriptor currentTopology = clusterManager.topologyConfig;
+                        String sinkClusterId = currentTopology.getRemoteSinkClusters().keySet().stream()
+                                .filter(clusterId -> clusterId.equals(DefaultClusterConfig.getSinkClusterIds().get(0)))
+                                .findFirst().get();
 
-            log.info("onNext :: key={}, payload={}, metadata={}", entry.getKey(), entry.getPayload(), entry.getMetadata());
-            if (entry.getKey().equals(OP_SWITCH)) {
-                clusterManager.getClusterManagerCallback()
-                        .applyNewTopologyConfig(clusterManager.generateConfigWithRoleSwitch());
-            } else if (entry.getKey().equals(OP_TWO_SOURCE)) {
-                clusterManager.getClusterManagerCallback()
-                        .applyNewTopologyConfig(clusterManager.generateConfigWithAllSource());
-            } else if (entry.getKey().equals(OP_ALL_SINK)) {
-                clusterManager.getClusterManagerCallback()
-                        .applyNewTopologyConfig(clusterManager.generateConfigWithAllSink());
-            } else if (entry.getKey().equals(OP_INVALID)) {
-                clusterManager.getClusterManagerCallback()
-                        .applyNewTopologyConfig(clusterManager.generateConfigWithInvalid());
-            } else if (entry.getKey().equals(OP_RESUME)) {
-                clusterManager.getClusterManagerCallback()
-                        .applyNewTopologyConfig(clusterManager.generateSingleSourceSinkTopolgy());
-            } else if (entry.getKey().equals(OP_ENFORCE_SNAPSHOT_FULL_SYNC)) {
-                try {
-                    ClusterDescriptor localCluster = clusterManager.findLocalCluster();
-                    if (DefaultClusterConfig.getSinkClusterIds().contains(localCluster.getClusterId())) {
-                        return;
+                        String sourceClusterId = localCluster.getClusterId();
+
+                        LogReplicationSession session = LogReplicationSession.newBuilder()
+                                .setSinkClusterId(sinkClusterId)
+                                .setSourceClusterId(sourceClusterId)
+                                .setSubscriber(LogReplicationConfigManager.getDefaultSubscriber())
+                                .build();
+                        clusterManager.forceSnapshotSync(session);
+                    } catch (LogReplicationDiscoveryServiceException e) {
+                        log.warn("Caught a RuntimeException ", e);
+                        String clusterId = clusterManager.topologyConfig.getLocalClusterDescriptor().getClusterId();
+                        if (DefaultClusterConfig.getSourceClusterIds().contains(clusterId)) {
+                            log.error("The current cluster role is SOURCE but forcedSnapshot Sync failed with an " +
+                                    "exception", e);
+                            throw new RuntimeException(e);
+                        }
                     }
-                    // Enforce snapshot sync on the 1st sink cluster
-                    TopologyDescriptor currentTopology = clusterManager.topologyConfig;
-                    String sinkClusterId = currentTopology.getRemoteSinkClusters().keySet().stream()
-                            .filter(clusterId -> clusterId.equals(DefaultClusterConfig.getSinkClusterIds().get(0)))
-                            .findFirst().get();
-
-                    String sourceClusterId = localCluster.getClusterId();
-
-                    LogReplicationSession session = LogReplicationSession.newBuilder()
-                            .setSinkClusterId(sinkClusterId)
-                            .setSourceClusterId(sourceClusterId)
-                            .setSubscriber(LogReplicationConfigManager.getDefaultSubscriber())
-                            .build();
-                    clusterManager.forceSnapshotSync(session);
-                } catch (LogReplicationDiscoveryServiceException e) {
-                    log.warn("Caught a RuntimeException ", e);
-                    String clusterId = clusterManager.topologyConfig.getLocalClusterDescriptor().getClusterId();
-                    if (DefaultClusterConfig.getSourceClusterIds().contains(clusterId)) {
-                        log.error("The current cluster role is SOURCE but forcedSnapshot Sync failed with an " +
-                                "exception", e);
-                        throw new RuntimeException(e);
-                    }
+                } else if (entry.getKey().equals(OP_BACKUP)) {
+                    clusterManager.getClusterManagerCallback()
+                            .applyNewTopologyConfig(clusterManager.generateConfigWithBackup());
+                } else if (entry.getKey().equals(OP_TWO_SINK_MIXED)) {
+                    clusterManager.isSinkConnectionStarter = true;
+                    clusterManager.getClusterManagerCallback()
+                            .applyNewTopologyConfig(clusterManager.generateTwoSinkMixedModelTopology());
+                } else if (entry.getKey().equals(TP_SINGLE_SOURCE_SINK)) {
+                    clusterManager.initSingleSourceSinkTopology();
+                } else if (entry.getKey().equals(TP_MULTI_SINK)) {
+                    clusterManager.createSingleSourceMultiSinkTopology();
+                } else if (entry.getKey().equals(TP_MULTI_SOURCE)) {
+                    clusterManager.createMultiSourceSingleSinkTopology();
+                } else if (entry.getKey().equals(TP_MIXED_MODEL_THREE_SINK)) {
+                    clusterManager.isSinkConnectionStarter = true;
+                    clusterManager.createThreeSinkMixedModelTopology();
+                } else if (entry.getKey().equals(TP_MULTI_SINK_REV_CONNECTION)) {
+                    clusterManager.isSinkConnectionStarter = true;
+                    clusterManager.createSingleSourceMultiSinkTopology();
+                } else if (entry.getKey().equals(TP_MULTI_SOURCE_REV_CONNECTION)) {
+                    clusterManager.isSinkConnectionStarter = true;
+                    clusterManager.createMultiSourceSingleSinkTopology();
+                } else if (entry.getKey().equals(TP_SINGLE_SOURCE_SINK_REV_CONNECTION)) {
+                    clusterManager.isSinkConnectionStarter = true;
+                    clusterManager.initSingleSourceSinkTopology();
                 }
-            } else if (entry.getKey().equals(OP_BACKUP)) {
-                clusterManager.getClusterManagerCallback()
-                        .applyNewTopologyConfig(clusterManager.generateConfigWithBackup());
-            } else if (entry.getKey().equals(OP_TWO_SINK_MIXED)) {
-                clusterManager.isSinkConnectionStarter = true;
-                clusterManager.getClusterManagerCallback()
-                        .applyNewTopologyConfig(clusterManager.generateTwoSinkMixedModelTopology());
-            } else if (entry.getKey().equals(TP_SINGLE_SOURCE_SINK)) {
-                clusterManager.initSingleSourceSinkTopology();
-            } else if (entry.getKey().equals(TP_MULTI_SINK)) {
-                clusterManager.createSingleSourceMultiSinkTopology();
-            } else if (entry.getKey().equals(TP_MULTI_SOURCE)) {
-                clusterManager.createMultiSourceSingleSinkTopology();
-            } else if (entry.getKey().equals(TP_MIXED_MODEL_THREE_SINK)) {
-                clusterManager.isSinkConnectionStarter = true;
-                clusterManager.createThreeSinkMixedModelTopology();
-            } else if (entry.getKey().equals(TP_MULTI_SINK_REV_CONNECTION)) {
-                clusterManager.isSinkConnectionStarter = true;
-                clusterManager.createSingleSourceMultiSinkTopology();
-            } else if (entry.getKey().equals(TP_MULTI_SOURCE_REV_CONNECTION)) {
-                clusterManager.isSinkConnectionStarter = true;
-                clusterManager.createMultiSourceSingleSinkTopology();
-            } else if (entry.getKey().equals(TP_SINGLE_SOURCE_SINK_REV_CONNECTION)) {
-                clusterManager.isSinkConnectionStarter = true;
-                clusterManager.initSingleSourceSinkTopology();
+            } else {
+                log.info("onNext :: operation={}, key={}, payload={}, metadata={}", entry.getOperation().name(),
+                        entry.getKey(), entry.getPayload(), entry.getMetadata());
             }
-    }
+        }
 
-    @Override
-    public void onError(Throwable throwable) {
-        // Ignore
+        @Override
+        public void onError(Throwable throwable) {
+            // Ignore
+        }
     }
-}
 
 }

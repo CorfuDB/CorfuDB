@@ -71,10 +71,6 @@ public final class LogReplicationEventListener implements StreamListener {
             // service event queue.
             for (List<CorfuStreamEntry> entryList : results.getEntries().values()) {
                 for (CorfuStreamEntry entry : entryList) {
-                    if (entry.getOperation() == CorfuStreamEntry.OperationType.CLEAR) {
-                        log.warn("LREventListener ignoring a CLEAR operation");
-                        continue;
-                    }
                     ReplicationEventInfoKey key = (ReplicationEventInfoKey) entry.getKey();
                     ReplicationEvent event = (ReplicationEvent) entry.getPayload();
                     log.info("Received event :: id={}, type={}, session={}, ts={}", event.getEventId(), event.getType(),
