@@ -149,13 +149,11 @@ message ResponsePayloadMsg {
     LogReplicationLeadershipResponseMsg lr_leadership_response = 72;
 
     LogReplicationLeadershipLossResponseMsg lr_leadership_loss = 73;
-    ReverseReplicateMsg lr_reverse_replicate_msg = 74;
 
     // Server Error
     ServerErrorMsg server_error = 200;
   }
 }
-
 
 /**
  * Protobuf representation of a request sent from

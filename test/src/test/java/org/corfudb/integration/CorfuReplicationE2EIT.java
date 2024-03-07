@@ -1,9 +1,6 @@
 package org.corfudb.integration;
 
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.tuple.Pair;
-import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager;
-import org.corfudb.runtime.ExampleSchemas;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -18,37 +15,29 @@ import java.util.List;
 @RunWith(Parameterized.class)
 public class CorfuReplicationE2EIT extends LogReplicationAbstractIT {
 
-    public CorfuReplicationE2EIT(Pair<String, ExampleSchemas.ClusterUuidMsg> pluginAndTopologyType) {
-        this.pluginConfigFilePath = pluginAndTopologyType.getKey();
-        this.topologyType = pluginAndTopologyType.getValue();
+    public CorfuReplicationE2EIT(String plugin) {
+        this.pluginConfigFilePath = plugin;
     }
 
     // Static method that generates and returns test data (automatically test for two transport protocols: netty and GRPC)
     @Parameterized.Parameters
-    public static Collection<Pair<String, ExampleSchemas.ClusterUuidMsg>> input() {
+    public static Collection<String> input() {
 
         List<String> transportPlugins = Arrays.asList(
-                "src/test/resources/transport/grpcConfig.properties"
-//                "src/test/resources/transport/nettyConfig.properties"
-        );
-
-        List<ExampleSchemas.ClusterUuidMsg> topologyTypes = Arrays.asList(
-                DefaultClusterManager.TP_SINGLE_SOURCE_SINK,
-                DefaultClusterManager.TP_SINGLE_SOURCE_SINK_REV_CONNECTION
-        );
-
-        List<Pair<String, ExampleSchemas.ClusterUuidMsg>> absolutePathPlugins = new ArrayList<>();
+                "src/test/resources/transport/grpcConfig.properties",
+                "src/test/resources/transport/nettyConfig.properties");
 
         if(runProcess) {
-            transportPlugins.stream().map(File::new).forEach(f ->
-                    topologyTypes.stream().forEach(type -> absolutePathPlugins.add(Pair.of(f.getAbsolutePath(), type))));
-        } else {
+            List<String> absolutePathPlugins = new ArrayList<>();
+            transportPlugins.forEach(plugin -> {
+                File f = new File(plugin);
+                absolutePathPlugins.add(f.getAbsolutePath());
+            });
 
-            transportPlugins.stream().forEach(f ->
-                    topologyTypes.stream().forEach(type -> absolutePathPlugins.add(Pair.of(f, type))));
+            return absolutePathPlugins;
         }
 
-        return absolutePathPlugins;
+        return transportPlugins;
     }
 
     /**
@@ -68,26 +57,26 @@ public class CorfuReplicationE2EIT extends LogReplicationAbstractIT {
     @Test
     public void testLogReplicationEndToEnd() throws Exception {
         log.debug("Using plugin :: {}", pluginConfigFilePath);
-        testEndToEndSnapshotAndLogEntrySyncUFO(false, true, 1, true);
+        testEndToEndSnapshotAndLogEntrySyncUFO(false, true, 1);
     }
 
     @Test
     public void testSnapshotSyncMultipleTables() throws Exception {
         log.debug("Using plugin :: {}", pluginConfigFilePath);
         final int totalNumMaps = 3;
-        testEndToEndSnapshotAndLogEntrySyncUFO(totalNumMaps, false, true, 1, true);
+        testEndToEndSnapshotAndLogEntrySyncUFO(totalNumMaps, false, true, 1);
     }
 
     @Test
     public void testDiskBasedLogReplicationEndToEnd() throws Exception {
         log.debug("Using plugin :: {}", pluginConfigFilePath);
-        testEndToEndSnapshotAndLogEntrySyncUFO(true, true, 1, true);
+        testEndToEndSnapshotAndLogEntrySyncUFO(true, true, 1);
     }
 
     @Test
     public void testDiskBasedSnapshotSyncMultipleTables() throws Exception {
         log.debug("Using plugin :: {}", pluginConfigFilePath);
         final int totalNumMaps = 3;
-        testEndToEndSnapshotAndLogEntrySyncUFO(totalNumMaps, true, true, 1, true);
+        testEndToEndSnapshotAndLogEntrySyncUFO(totalNumMaps, true, true, 1);
     }
 }

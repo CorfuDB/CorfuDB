@@ -54,7 +54,6 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.Semaphore;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static java.lang.Thread.sleep;
@@ -79,7 +78,6 @@ import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
 public class LogReplicationIT extends AbstractIT implements Observer {
 
     public static final String nettyConfig = "./test/src/test/resources/transport/nettyConfig.properties";
-    public static final String grpcConfig = "./test/src/test/resources/transport/grpcConfig.properties";
 
     private static final String SOURCE_ENDPOINT = DEFAULT_HOST + ":" + DEFAULT_PORT;
     private static final int WRITER_PORT = DEFAULT_PORT + 1;
@@ -245,9 +243,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         srcCorfuStore = new CorfuStore(srcDataRuntime);
         dstCorfuStore = new CorfuStore(dstDataRuntime);
 
-        metadataManager = new LogReplicationMetadataManager(dstTestRuntime,
-                new LogReplicationContext(new LogReplicationConfigManager(dstTestRuntime), 0,
-                "test" + SERVERS.PORT_0, true));
+        metadataManager = new LogReplicationMetadataManager(dstTestRuntime, 0);
         metadataManager.addSession(session, 0, true);
 
         expectedAckTimestamp = new AtomicLong(Long.MAX_VALUE);
@@ -1236,7 +1232,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         TransitionSource function) throws InterruptedException {
 
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(srcTestRuntime);
-        LogReplicationUpgradeManager upgradeManager = new LogReplicationUpgradeManager(srcTestRuntime, grpcConfig);
+        LogReplicationUpgradeManager upgradeManager = new LogReplicationUpgradeManager(srcTestRuntime, nettyConfig);
 
         // This IT requires custom values to be set for the replication config.  Set these values so that the default
         // values are not used
@@ -1248,7 +1244,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         // Data Sender
         sourceDataSender = new SourceForwardingDataSender(DESTINATION_ENDPOINT, testConfig, metadataManager,
-                grpcConfig, function, context);
+                nettyConfig, function, context);
 
         // Source Manager
         LogReplicationRuntimeParameters runtimeParameters = LogReplicationRuntimeParameters.builder()
