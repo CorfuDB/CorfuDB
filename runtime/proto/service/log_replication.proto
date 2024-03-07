@@ -88,14 +88,3 @@ message ClientRegistrationInfo {
   ReplicationModel model = 2;
   google.protobuf.Timestamp registration_time = 3;
 }
-
-message LogReplicationSession {
-  string sink_cluster_id = 1;
-  string source_cluster_id = 2;
-  ReplicationSubscriber subscriber = 3;
-}
-
-message ReplicationSubscriber {
-  ReplicationModel model = 1;
-  string client_name = 2;
-}

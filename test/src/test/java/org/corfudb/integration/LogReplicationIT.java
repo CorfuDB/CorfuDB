@@ -8,15 +8,13 @@ import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
-import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
+import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationMetadata;
-import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
 import org.corfudb.infrastructure.logreplication.proto.Sample.IntValue;
 import org.corfudb.infrastructure.logreplication.proto.Sample.Metadata;
 import org.corfudb.infrastructure.logreplication.proto.Sample.StringKey;
-import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationSourceManager;
+import org.corfudb.infrastructure.logreplication.replication.LogReplicationSourceManager;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationFSM;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationStateType;
@@ -35,7 +33,7 @@ import org.corfudb.runtime.collections.CorfuStoreEntry;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
-
+import org.corfudb.runtime.proto.service.CorfuMessage;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.util.Utils;
 import org.junit.Test;
@@ -123,8 +121,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
     private SourceForwardingDataSender sourceDataSender;
 
-    private final LogReplicationSession session = DefaultClusterConfig.getSessions().get(0);
-
     // List of all opened maps backed by Corfu on Source and Destination
     private Map<String, Table<StringKey, IntValue, Metadata>> srcCorfuTables = new HashMap<>();
     private Map<String, Table<StringKey, IntValue, Metadata>> dstCorfuTables = new HashMap<>();
@@ -182,7 +178,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
     private final Semaphore blockUntilExpectedAckTs = new Semaphore(1, true);
 
-    private LogReplicationMetadataManager metadataManager;
+    private LogReplicationMetadataManager logReplicationMetadataManager;
 
     private final String t0Name = TABLE_PREFIX + 0;
     private final String t1Name = TABLE_PREFIX + 1;
@@ -244,9 +240,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         srcCorfuStore = new CorfuStore(srcDataRuntime);
         dstCorfuStore = new CorfuStore(dstDataRuntime);
 
-        metadataManager = new LogReplicationMetadataManager(dstTestRuntime, 0);
-        metadataManager.addSession(session, 0, true);
-
+        logReplicationMetadataManager = new LogReplicationMetadataManager(dstTestRuntime, 0, REMOTE_CLUSTER_ID);
         expectedAckTimestamp = new AtomicLong(Long.MAX_VALUE);
         testConfig.clear().setRemoteClusterId(REMOTE_CLUSTER_ID);
     }
@@ -367,17 +361,17 @@ public class LogReplicationIT extends AbstractIT implements Observer {
                             Map<String, Map<String, Integer>> hashMap) {
         for (String name : hashMap.keySet()) {
             Table<StringKey, IntValue, Metadata> table = tables.get(name);
-            Map<String, Integer> map = hashMap.get(name);
+            Map<String, Integer> mapKeys = hashMap.get(name);
 
             log.debug("Table[" + name + "]: " + table.count() + " keys; Expected "
-                    + map.size() + " keys");
+                    + mapKeys.size() + " keys");
 
-            assertThat(table.count()).isEqualTo(map.size());
+            assertThat(table.count()).isEqualTo(mapKeys.size());
             try (TxnContext txn = corfuStore.txn(TEST_NAMESPACE)) {
-                for (String key : map.keySet()) {
+                for (String key : mapKeys.keySet()) {
                     StringKey tableKey = StringKey.newBuilder().setKey(key).build();
                     CorfuStoreEntry<StringKey, IntValue, Metadata> entry = txn.getRecord(table, tableKey);
-                    assertThat(entry.getPayload().getValue()).isEqualTo(map.get(key));
+                    assertThat(entry.getPayload().getValue()).isEqualTo(mapKeys.get(key));
                 }
                 txn.commit();
             }
@@ -700,7 +694,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     }
 
     /**
-     * While replicating log entries from src to dst, still continue to pump data at the src with transactions
+     * While replication log entries from src to dst, still continue to pump data at the src with transactions
      * The transactions will include both put and delete entries.
      * @throws Exception
      */
@@ -728,10 +722,10 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         // Verify Data on Destination
         verifyData(dstCorfuStore, dstCorfuTables, srcDataForVerification);
 
-        verifyPersistedSnapshotMetadata();
-
         // expectedAckTimestamp was set in 'startLogEntrySync' to the tail of the Log Replication Stream.  Verify
         // that the metadata table was updated with it after a successful LogEntrySync
+        assertThat(expectedAckTimestamp.get()).isEqualTo(logReplicationMetadataManager.getLastProcessedLogEntryBatchTimestamp());
+        verifyPersistedSnapshotMetadata();
         verifyPersistedLogEntryMetadata();
 
         cleanEnv();
@@ -1051,22 +1045,15 @@ public class LogReplicationIT extends AbstractIT implements Observer {
                 LogReplicationStateType.INITIALIZED, true);
         testConfig.clear();
 
-        // Add a listener to ACKs received. This is used to unblock the current thread before the final verification.
+        // add a listner to ACKs received. This is used to unblock the current thread before the final verification.
         ackMessages = sourceDataSender.getAckMessages();
         ackMessages.addObserver(this);
 
-        // Simulate negotiation. Return metadata from the sink
-        ReplicationMetadata metadata = sourceDataSender.getSinkManager()
-                .getMetadataManager()
-                .getReplicationMetadata(session);
-        LogReplicationMetadataResponseMsg negotiationResponse = LogReplicationMetadataResponseMsg.newBuilder()
-                .setTopologyConfigID(metadata.getTopologyConfigId())
-                .setVersion(metadata.getVersion())
-                .setSnapshotStart(metadata.getLastSnapshotStarted())
-                .setSnapshotTransferred(metadata.getLastSnapshotTransferred())
-                .setSnapshotApplied(metadata.getLastSnapshotApplied())
-                .setLastLogEntryTimestamp(metadata.getLastLogEntryBatchProcessed())
-                .build();
+        // simulate negotiation. Return metadata from the sink
+        LogReplicationMetadataResponseMsg negotiationResponse = sourceDataSender.getSinkManager()
+                .getLogReplicationMetadataManager()
+                .getMetadataResponse(CorfuMessage.HeaderMsg.newBuilder().build())
+                .getPayload().getLrMetadataResponse();
 
         logReplicationSourceManager.getLogReplicationFSM().input(
                 new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.LOG_ENTRY_SYNC_REQUEST,
@@ -1241,20 +1228,21 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         configManager.getConfig().setMaxMsgSize(SMALL_MSG_SIZE);
         configManager.getConfig().setMaxDataSizePerMsg(SMALL_MSG_SIZE * LogReplicationConfig.DATA_FRACTION_PER_MSG / 100);
 
-        LogReplicationContext context = new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT);
+        LogReplicationContext replicationContext = new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT);
 
         // Data Sender
-        sourceDataSender = new SourceForwardingDataSender(DESTINATION_ENDPOINT, testConfig, metadataManager,
-                nettyConfig, function, context);
+        sourceDataSender = new SourceForwardingDataSender(DESTINATION_ENDPOINT, replicationContext, testConfig,
+            logReplicationMetadataManager, nettyConfig, function);
+
+        ReplicationSession replicationSession =
+            ReplicationSession.getDefaultReplicationSessionForCluster(REMOTE_CLUSTER_ID);
 
         // Source Manager
-        LogReplicationRuntimeParameters runtimeParameters = LogReplicationRuntimeParameters.builder()
-                .remoteClusterDescriptor(new ClusterDescriptor(REMOTE_CLUSTER_ID,
-                        LogReplicationClusterInfo.ClusterRole.SOURCE, CORFU_PORT))
-                .localCorfuEndpoint(SOURCE_ENDPOINT)
-                .build();
-        LogReplicationSourceManager logReplicationSourceManager = new LogReplicationSourceManager(runtimeParameters,
-                metadataManager, sourceDataSender, upgradeManager, session, context);
+        LogReplicationSourceManager logReplicationSourceManager = new LogReplicationSourceManager(
+            LogReplicationRuntimeParameters.builder().remoteClusterDescriptor(new ClusterDescriptor(REMOTE_CLUSTER_ID,
+                LogReplicationClusterInfo.ClusterRole.SOURCE, CORFU_PORT)).replicationConfig(configManager.getConfig())
+                .localCorfuEndpoint(SOURCE_ENDPOINT).build(), logReplicationMetadataManager, sourceDataSender,
+                replicationContext, upgradeManager, replicationSession);
 
         // Set Log Replication Source Manager so we can emulate the channel for data & control messages (required
         // for testing)
@@ -1363,15 +1351,15 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     }
 
     private void verifyPersistedSnapshotMetadata() {
-        ReplicationMetadata metadata = metadataManager.getReplicationMetadata(session);
-        long lastSnapshotStart = metadata.getLastSnapshotStarted();
-        long lastSnapshotDone = metadata.getLastSnapshotApplied();
+        long lastSnapshotStart = logReplicationMetadataManager.getLastStartedSnapshotTimestamp();
+        long lastSnapshotDone = logReplicationMetadataManager.getLastAppliedSnapshotTimestamp();
         assertThat(lastSnapshotStart).isEqualTo(lastSnapshotDone);
     }
 
     private void verifyPersistedLogEntryMetadata() {
-        long lastLogProcessed = metadataManager.getReplicationMetadata(session)
-                .getLastLogEntryBatchProcessed();
+        long lastLogProcessed = logReplicationMetadataManager.getLastProcessedLogEntryBatchTimestamp();
+
+        log.debug("\nlastLogProcessed " + lastLogProcessed + " expectedTimestamp " + expectedAckTimestamp.get());
         assertThat(expectedAckTimestamp.get() == lastLogProcessed).isTrue();
     }
 
@@ -1386,7 +1374,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     }
 
     @FunctionalInterface
-    public interface TransitionSource {
+    public static interface TransitionSource {
         void changeState();
     }
 

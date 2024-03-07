@@ -2,7 +2,7 @@ package org.corfudb.integration;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatus;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
@@ -12,7 +12,6 @@ import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TableSchema;
 import org.corfudb.runtime.collections.TxnContext;
-import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.test.SampleSchema;
@@ -100,11 +99,11 @@ public class CorfuReplicationLargeTxIT extends LogReplicationAbstractIT {
         // change on status are captured)
         int totalSinkStatusUpdates = 2;
         corfuStoreSink.openTable(LogReplicationMetadataManager.NAMESPACE,
-            LogReplicationMetadataManager.REPLICATION_STATUS_TABLE_NAME,
-            LogReplicationSession.class,
-            ReplicationStatus.class,
+            LogReplicationMetadataManager.REPLICATION_STATUS_TABLE,
+            LogReplicationMetadata.ReplicationStatusKey.class,
+            LogReplicationMetadata.ReplicationStatusVal.class,
             null,
-            TableOptions.fromProtoSchema(ReplicationStatus.class));
+            TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
 
         CountDownLatch statusUpdateLatch = new CountDownLatch(totalSinkStatusUpdates);
         ReplicationStatusListener sinkListener =
@@ -144,10 +143,12 @@ public class CorfuReplicationLargeTxIT extends LogReplicationAbstractIT {
         protobufDescriptorTxLatch.await();
 
         // Verify that updates were received for all replicated tables with data
-        Assert.assertEquals(mapNameToMapSink.size(), streamingUpdateListener.getTableNameToUpdatesMap().size());
+        Assert.assertEquals(mapNameToMapSink.size(),
+            streamingUpdateListener.getTableNameToUpdatesMap().size());
 
         mapNameToMapSink.keySet().forEach(key ->
-            Assert.assertTrue(streamingUpdateListener.getTableNameToUpdatesMap().containsKey(key)));
+            Assert.assertTrue(streamingUpdateListener.getTableNameToUpdatesMap()
+                .containsKey(key)));
 
         // Verify that the right number of entries are contained in the
         // streaming update.  Also verify that the first entry is a 'clear'
@@ -221,21 +222,21 @@ public class CorfuReplicationLargeTxIT extends LogReplicationAbstractIT {
     private void writeOnSender(int startIndex, int totalEntries) {
         int maxIndex = totalEntries + startIndex;
 
-        for (Map.Entry<String, Table<Sample.StringKey,
+        for(Map.Entry<String, Table<Sample.StringKey,
             SampleSchema.ValueFieldTagOne, Sample.Metadata>> entry :
             mapNameToMapSource.entrySet()) {
 
             Table<Sample.StringKey, SampleSchema.ValueFieldTagOne,
-                    Sample.Metadata> map = entry.getValue();
+                Sample.Metadata> map = entry.getValue();
 
             for (int i = startIndex; i < maxIndex; i++) {
                 Sample.StringKey stringKey = Sample.StringKey.newBuilder()
-                        .setKey(String.valueOf(i)).build();
+                    .setKey(String.valueOf(i)).build();
                 SampleSchema.ValueFieldTagOne value = SampleSchema
-                        .ValueFieldTagOne.newBuilder()
-                        .setPayload(String.valueOf(i)).build();
+                    .ValueFieldTagOne.newBuilder()
+                    .setPayload(String.valueOf(i)).build();
                 Sample.Metadata metadata = Sample.Metadata.newBuilder()
-                        .setMetadata("Metadata_" + i).build();
+                    .setMetadata("Metadata_" + i).build();
                 try (TxnContext txn = corfuStoreSource.txn(NAMESPACE)) {
                     txn.putRecord(map, stringKey, value, metadata);
                     txn.commit();

@@ -12,7 +12,7 @@ import static org.corfudb.util.serializer.ProtobufSerializer.PROTOBUF_SERIALIZER
  * This class represents the Log Replication Context.
  *
  * It contains all abstractions required to initiate log replication either as
- * a source or as sink cluster.
+ * an active cluster (source) or as standby cluster (standby).
  *
  * @author amartinezman
  */
@@ -28,11 +28,11 @@ public class LogReplicationContext {
     @Setter
     private long topologyConfigId;
 
+
     /**
      * Constructor
      **/
-    public LogReplicationContext(LogReplicationConfigManager configManager, long topologyConfigId,
-                                 String localCorfuEndpoint) {
+    public LogReplicationContext(LogReplicationConfigManager configManager, long topologyConfigId, String localCorfuEndpoint) {
         this.configManager = configManager;
         this.topologyConfigId = topologyConfigId;
         this.localCorfuEndpoint = localCorfuEndpoint;

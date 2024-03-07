@@ -1,11 +1,9 @@
 package org.corfudb.infrastructure.logreplication.infrastructure.plugins;
 
 import lombok.Getter;
-import org.corfudb.infrastructure.logreplication.infrastructure.SessionManager;
-import org.corfudb.runtime.LogReplication.LogReplicationSession;
+
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
 
@@ -57,7 +55,7 @@ public final class DefaultClusterConfig {
     private final List<String> sinkIpAddresses = Arrays.asList(defaultHost, defaultHost, defaultHost);
 
     @Getter
-    private static final List<String> sourceClusterIds =
+    private final List<String> sourceClusterIds =
         Arrays.asList("456e4567-e89b-12d3-a456-556642440001",
             "456e4567-e89b-12d3-a456-556642440003",
             "456e4567-e89b-12d3-a456-556642440005");
@@ -70,7 +68,7 @@ public final class DefaultClusterConfig {
         Arrays.asList("9010", "9011", "9012");
 
     @Getter
-    private static final List<String> sinkClusterIds = Arrays.asList(
+    private final List<String> sinkClusterIds = Arrays.asList(
         "456e4567-e89b-12d3-a456-556642440002",
         "456e4567-e89b-12d3-a456-556642440004",
         "456e4567-e89b-12d3-a456-556642440006");
@@ -94,20 +92,6 @@ public final class DefaultClusterConfig {
 
     @Getter
     private final int logSinkAckCycleTimer = 1000;
-
-    public static List<LogReplicationSession> getSessions() {
-        List<LogReplicationSession> sessions = new LinkedList<>();
-        for(String sourceClusterId : sourceClusterIds) {
-            for(String sinkClusterId : sinkClusterIds) {
-                sessions.add(LogReplicationSession.newBuilder()
-                        .setSourceClusterId(sourceClusterId)
-                        .setSinkClusterId(sinkClusterId)
-                        .setSubscriber(SessionManager.getDefaultSubscriber())
-                        .build());
-            }
-        }
-        return sessions;
-    }
 
     public String getDefaultNodeId(String endpoint) {
         String port = getPortFromEndpointURL(endpoint);

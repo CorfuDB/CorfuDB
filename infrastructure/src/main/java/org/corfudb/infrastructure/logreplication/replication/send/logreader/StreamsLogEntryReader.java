@@ -9,7 +9,7 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
-import org.corfudb.runtime.LogReplication.LogReplicationSession;
+import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuRuntime;
@@ -48,6 +48,8 @@ public class StreamsLogEntryReader extends LogEntryReader {
 
     private final LogReplicationEntryType MSG_TYPE = LogReplicationEntryType.LOG_ENTRY_MESSAGE;
 
+    private final LogReplicationContext replicationContext;
+
     // Set of UUIDs for the corresponding streams
     private Set<UUID> streamUUIDs;
 
@@ -77,21 +79,19 @@ public class StreamsLogEntryReader extends LogEntryReader {
 
     private StreamIteratorMetadata currentProcessedEntryMetadata;
 
-    private LogReplicationSession session;
+    private ReplicationSession session;
 
-    private LogReplicationContext replicationContext;
-
-    public StreamsLogEntryReader(CorfuRuntime runtime, LogReplicationSession replicationSession,
-                                 LogReplicationContext replicationContext) {
+    public StreamsLogEntryReader(CorfuRuntime runtime, LogReplicationContext replicationContext,
+                                 ReplicationSession replicationSession) {
         runtime.parseConfigurationString(runtime.getLayoutServers().get(0)).connect();
-        this.maxDataSizePerMsg = replicationContext.getConfigManager().getConfig().getMaxDataSizePerMsg();
+        this.replicationContext = replicationContext;
+        this.maxDataSizePerMsg = replicationContext.getConfig().getMaxDataSizePerMsg();
         this.currentProcessedEntryMetadata = new StreamIteratorMetadata(Address.NON_ADDRESS, false);
         this.messageSizeDistributionSummary = configureMessageSizeDistributionSummary();
         this.deltaCounter = configureDeltaCounter();
         this.validDeltaCounter = configureValidDeltaCounter();
         this.opaqueEntryCounter = configureOpaqueEntryCounter();
         this.session = replicationSession;
-        this.replicationContext = replicationContext;
 
         // Get UUIDs for streams to replicate
         refreshStreamUUIDs();
@@ -106,7 +106,7 @@ public class StreamsLogEntryReader extends LogEntryReader {
      * constructor and when LogReplicationConfig is synced with registry table.
      */
     private void refreshStreamUUIDs() {
-        Set<String> streams = replicationContext.getConfig().getStreamsToReplicate();
+        Set<String> streams = replicationContext.getConfig().getReplicationSubscriberToStreamsMap().get(session.getSubscriber());
         streamUUIDs = new HashSet<>();
         for (String s : streams) {
             streamUUIDs.add(CorfuRuntime.getStreamID(s));
@@ -233,7 +233,7 @@ public class StreamsLogEntryReader extends LogEntryReader {
                 if (lastOpaqueEntryValid) {
                     validDeltaCounter.ifPresent(Counter::increment);
                 }
-                currentProcessedEntryMetadata = new StreamIteratorMetadata(txOpaqueStream.logReplicatorOpaqueStream.pos(), lastOpaqueEntryValid);
+                currentProcessedEntryMetadata = new StreamIteratorMetadata(txOpaqueStream.txStream.pos(), lastOpaqueEntryValid);
             }
 
             log.trace("Generate LogEntryDataMessage size {} with {} entries for maxDataSizePerMsg {}. lastEntry size {}",
@@ -315,12 +315,13 @@ public class StreamsLogEntryReader extends LogEntryReader {
      */
     public static class TxOpaqueStream {
         private CorfuRuntime rt;
-        private OpaqueStream logReplicatorOpaqueStream;
+        private OpaqueStream txStream;
         private Iterator iterator;
 
         public TxOpaqueStream(CorfuRuntime rt) {
+            //create an opaque stream for transaction stream
             this.rt = rt;
-            logReplicatorOpaqueStream = new OpaqueStream(rt.getStreamsView().get(ObjectsView.getLogReplicatorStreamId()));
+            txStream = new OpaqueStream(rt.getStreamsView().get(ObjectsView.getLogReplicatorStreamId()));
             streamUpTo();
         }
 
@@ -331,7 +332,7 @@ public class StreamsLogEntryReader extends LogEntryReader {
          */
         private void streamUpTo(long snapshot) {
             log.trace("StreamUpTo {}", snapshot);
-            iterator = logReplicatorOpaqueStream.streamUpTo(snapshot).iterator();
+            iterator = txStream.streamUpTo(snapshot).iterator();
         }
 
         /**
@@ -371,7 +372,7 @@ public class StreamsLogEntryReader extends LogEntryReader {
          */
         public void seek(long firstAddress) {
             log.trace("seek head {}", firstAddress);
-            logReplicatorOpaqueStream.seek(firstAddress);
+            txStream.seek(firstAddress);
             streamUpTo();
         }
     }

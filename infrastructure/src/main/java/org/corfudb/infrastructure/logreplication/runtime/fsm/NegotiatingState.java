@@ -11,7 +11,6 @@ import org.corfudb.infrastructure.logreplication.utils.LogReplicationUpgradeMana
 import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage;
-import org.corfudb.runtime.view.Address;
 
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -179,15 +178,13 @@ public class NegotiatingState implements LogReplicationRuntimeState {
 
         log.debug("Process negotiation response {} from {}", negotiationResponse, fsm.getRemoteClusterId());
 
-        long topologyConfigId = metadataManager.getTopologyConfigId();
-
         /*
          * The sink site has a smaller config ID, redo the discovery for this sink site when
          * getting a new notification of the site config change if this sink is in the new config.
          */
-        if (negotiationResponse.getTopologyConfigID() < topologyConfigId) {
+        if (negotiationResponse.getTopologyConfigID() < metadataManager.getTopologyConfigId()) {
             log.error("The source site configID {} is bigger than the sink configID {} ",
-                topologyConfigId, negotiationResponse.getTopologyConfigID());
+                    metadataManager.getTopologyConfigId(), negotiationResponse.getTopologyConfigID());
             throw new LogReplicationNegotiationException("Mismatch of configID");
         }
 
@@ -195,9 +192,9 @@ public class NegotiatingState implements LogReplicationRuntimeState {
          * The sink site has larger config ID, redo the whole discovery for the source site
          * it will be triggered by a notification of the site config change.
          */
-        if (negotiationResponse.getTopologyConfigID() > topologyConfigId) {
-            log.error("The source site configID {} is smaller than the sink configID {} ",
-                topologyConfigId, negotiationResponse.getTopologyConfigID());
+        if (negotiationResponse.getTopologyConfigID() > metadataManager.getTopologyConfigId()) {
+            log.error("The active site configID {} is smaller than the sink configID {} ",
+                    metadataManager.getTopologyConfigId(), negotiationResponse.getTopologyConfigID());
             throw new LogReplicationNegotiationException("Mismatch of configID");
         }
 
@@ -217,8 +214,8 @@ public class NegotiatingState implements LogReplicationRuntimeState {
          * "snapshotApplied": "-1"
          * "lastLogEntryProcessed": "-1"
          */
-        if (negotiationResponse.getSnapshotStart() == Address.NON_ADDRESS) {
-            log.info("No snapshot available in remote. Initiate SNAPSHOT sync to {}", fsm.getSession());
+        if (negotiationResponse.getSnapshotStart() == -1) {
+            log.info("No snapshot available in remote. Initiate SNAPSHOT sync to {}", fsm.getRemoteClusterId());
             fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.NEGOTIATION_COMPLETE,
                     new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_SYNC_REQUEST)));
             return;
