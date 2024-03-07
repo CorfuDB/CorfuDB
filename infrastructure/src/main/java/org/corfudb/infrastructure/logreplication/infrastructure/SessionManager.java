@@ -12,6 +12,7 @@ import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.Re
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientServerRouter;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.sink.RemoteSourceLeadershipManager;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
+import org.corfudb.infrastructure.logreplication.utils.LogReplicationUpgradeManager;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplication.ReplicationStatus;
 import org.corfudb.runtime.LogReplication.ReplicationModel;
@@ -92,9 +93,10 @@ public class SessionManager {
      * @param topology            the current topology
      * @param corfuRuntime        runtime for database access
      * @param serverContext       the server context
+     * @param upgradeManager      upgrade management module
      */
     public SessionManager(@Nonnull TopologyDescriptor topology, CorfuRuntime corfuRuntime,
-                          ServerContext serverContext) {
+                          ServerContext serverContext, LogReplicationUpgradeManager upgradeManager) {
         this.topology = topology;
         this.runtime = corfuRuntime;
         this.corfuStore = new CorfuStore(corfuRuntime);
@@ -122,7 +124,8 @@ public class SessionManager {
         this.metadataManager = new LogReplicationMetadataManager(corfuRuntime, replicationContext);
 
         this.replicationManager = new CorfuReplicationManager(topology, metadataManager,
-                configManager.getServerContext().getPluginConfigFilePath(), runtime, replicationContext);
+                configManager.getServerContext().getPluginConfigFilePath(), runtime, upgradeManager,
+                replicationContext);
 
         this.incomingMsgHandler = new LogReplicationServer(serverContext, sessions, metadataManager,
                 topology.getLocalNodeDescriptor().getNodeId(), topology.getLocalNodeDescriptor().getClusterId(),

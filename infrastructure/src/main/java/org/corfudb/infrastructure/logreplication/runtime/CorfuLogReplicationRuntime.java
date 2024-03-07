@@ -7,6 +7,7 @@ import org.checkerframework.checker.units.qual.C;
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
+import org.corfudb.infrastructure.logreplication.utils.LogReplicationUpgradeManager;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationSourceManager;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
@@ -161,12 +162,13 @@ public class CorfuLogReplicationRuntime {
      * Default Constructor
      */
     public CorfuLogReplicationRuntime(LogReplicationRuntimeParameters parameters,
-                                      LogReplicationMetadataManager metadataManager, LogReplicationSession session,
-                                      LogReplicationContext replicationContext, LogReplicationClientServerRouter router) {
+                                      LogReplicationMetadataManager metadataManager, LogReplicationUpgradeManager upgradeManager,
+                                      LogReplicationSession session, LogReplicationContext replicationContext,
+                                      LogReplicationClientServerRouter router) {
         this.remoteClusterId = session.getSinkClusterId();
         this.session = session;
         this.router = router;
-        this.sourceManager = new LogReplicationSourceManager(parameters,router, metadataManager,
+        this.sourceManager = new LogReplicationSourceManager(parameters,router, metadataManager, upgradeManager,
                 session, replicationContext);
         this.connectedNodes = new HashSet<>();
 
@@ -180,7 +182,7 @@ public class CorfuLogReplicationRuntime {
                 ThreadFactoryBuilder().setNameFormat(
                     "runtime-fsm-consumer-"+session.hashCode()).build());
 
-        initializeStates(metadataManager);
+        initializeStates(metadataManager, upgradeManager);
         this.state = states.get(LogReplicationRuntimeStateType.WAITING_FOR_CONNECTIVITY);
 
         log.info("Log Replication Runtime State Machine initialized");
@@ -198,7 +200,7 @@ public class CorfuLogReplicationRuntime {
     /**
      * Initialize all states for the Log Replication Runtime FSM.
      */
-    private void initializeStates(LogReplicationMetadataManager metadataManager) {
+    private void initializeStates(LogReplicationMetadataManager metadataManager, LogReplicationUpgradeManager upgradeManager) {
         /*
          * Log Replication Runtime State instances are kept in a map to be reused in transitions, avoid creating one
          * per every transition (reduce GC cycles).
@@ -207,7 +209,7 @@ public class CorfuLogReplicationRuntime {
         states.put(LogReplicationRuntimeStateType.VERIFYING_REMOTE_LEADER, new VerifyingRemoteSinkLeaderState(this,
             communicationFSMWorkers, router));
         states.put(LogReplicationRuntimeStateType.NEGOTIATING, new NegotiatingState(this, communicationFSMWorkers,
-                router, metadataManager));
+                router, metadataManager, upgradeManager));
         states.put(LogReplicationRuntimeStateType.REPLICATING, new ReplicatingState(this, sourceManager));
         states.put(LogReplicationRuntimeStateType.STOPPED, new StoppedState(sourceManager));
         states.put(LogReplicationRuntimeStateType.UNRECOVERABLE, new UnrecoverableState());

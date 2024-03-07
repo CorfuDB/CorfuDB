@@ -7,6 +7,7 @@ import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicat
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationEventMetadata;
 import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientServerRouter;
+import org.corfudb.infrastructure.logreplication.utils.LogReplicationUpgradeManager;
 import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage;
@@ -39,12 +40,16 @@ public class NegotiatingState implements LogReplicationRuntimeState {
 
     private final LogReplicationMetadataManager metadataManager;
 
+    private final LogReplicationUpgradeManager upgradeManager;
+
     public NegotiatingState(CorfuLogReplicationRuntime fsm, ThreadPoolExecutor worker,
-                            LogReplicationClientServerRouter router, LogReplicationMetadataManager metadataManager) {
+                            LogReplicationClientServerRouter router, LogReplicationMetadataManager metadataManager,
+                            LogReplicationUpgradeManager upgradeManager) {
         this.fsm = fsm;
         this.metadataManager = metadataManager;
         this.worker = worker;
         this.router = router;
+        this.upgradeManager = upgradeManager;
     }
 
     @Override
@@ -74,7 +79,15 @@ public class NegotiatingState implements LogReplicationRuntimeState {
                 return null;
             case NEGOTIATION_COMPLETE:
                 log.info("Negotiation complete, result={}", event.getNegotiationResult());
-                ((ReplicatingState)fsm.getStates().get(LogReplicationRuntimeStateType.REPLICATING)).setReplicationEvent(event.getNegotiationResult());
+                if (upgradeManager.isUpgraded()) {
+                    // Force a snapshot sync if an upgrade has been identified. This will guarantee that
+                    // changes in the streams to replicate are captured by the destination.
+                    log.info("A forced snapshot sync will be done as Source side LR has been upgraded.");
+                    ((ReplicatingState) fsm.getStates().get(LogReplicationRuntimeStateType.REPLICATING))
+                            .setReplicationEvent(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_SYNC_REQUEST));
+                } else {
+                    ((ReplicatingState)fsm.getStates().get(LogReplicationRuntimeStateType.REPLICATING)).setReplicationEvent(event.getNegotiationResult());
+                }
                 return fsm.getStates().get(LogReplicationRuntimeStateType.REPLICATING);
             case NEGOTIATION_FAILED:
                 return this;

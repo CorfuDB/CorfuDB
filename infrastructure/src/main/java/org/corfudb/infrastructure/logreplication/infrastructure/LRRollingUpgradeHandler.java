@@ -1,19 +1,8 @@
 package org.corfudb.infrastructure.logreplication.infrastructure;
 
-import com.google.protobuf.Message;
-import com.google.protobuf.Timestamp;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.ILogReplicationVersionAdapter;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
-import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TxnContext;
-
-import java.time.Instant;
-import java.util.NoSuchElementException;
-import java.util.UUID;
-
-import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.REPLICATION_EVENT_TABLE_NAME;
-import static org.corfudb.infrastructure.logreplication.utils.LogReplicationUpgradeManager.LOG_REPLICATION_PLUGIN_VERSION_TABLE;
 
 /**
  * Rolling upgrade handling means cluster must function in a mode where not all
@@ -58,37 +47,28 @@ public class LRRollingUpgradeHandler {
     }
 
     public boolean isLRUpgradeInProgress(TxnContext txnContext) {
-        try {
-            // If LOG_REPLICATION_PLUGIN_VERSION_TABLE exists, it indicates an upgrade from a
-            // previous version was performed. It has since been removed in the current version.
-            txnContext.getTable(LOG_REPLICATION_PLUGIN_VERSION_TABLE);
-
-            if (isClusterAllAtV2) {
-                return false;
-            }
-            String nodeVersion = versionAdapter.getNodeVersion();
-            /**
-             * The ideal way to check the versions is to encapsulate the code version
-             * into Corfu's Layout information so that even when nodes are down
-             * or unresponsive it would be possible to determine if rolling upgrade
-             * is running. But since that is a bigger change we resort to the
-             * boolean check while ensuring migrateData() is idempotent and is a NO-OP
-             * when invoked on a fully upgraded cluster.
-             */
-            String pinnedClusterVersion = versionAdapter.getPinnedClusterVersion(txnContext);
-            boolean isClusterUpgradeInProgress = !nodeVersion.equals(pinnedClusterVersion);
-            if (isClusterUpgradeInProgress) {
-                return true;
-            } // else implies cluster upgrade has completed
-
-            log.info("LRRollingUpgrade upgrade completed to version {}", nodeVersion);
-            migrateData(txnContext);
-            isClusterAllAtV2 = true;
-            return false;
-        } catch (NoSuchElementException e) {
-            log.info("Version table is not present, setup is a new installation", e);
+        if (isClusterAllAtV2) {
             return false;
         }
+        String nodeVersion = versionAdapter.getNodeVersion();
+        /**
+         * The ideal way to check the versions is to encapsulate the code version
+         * into Corfu's Layout information so that even when nodes are down
+         * or unresponsive it would be possible to determine if rolling upgrade
+         * is running. But since that is a bigger change we resort to the
+         * boolean check while ensuring migrateData() is idempotent and is a NO-OP
+         * when invoked on a fully upgraded cluster.
+         */
+        String pinnedClusterVersion = versionAdapter.getPinnedClusterVersion(txnContext);
+        boolean isClusterUpgradeInProgress = !nodeVersion.equals(pinnedClusterVersion);
+        if (isClusterUpgradeInProgress) {
+            return true;
+        } // else implies cluster upgrade has completed
+
+        log.info("LRRollingUpgrade upgrade completed to version {}", nodeVersion);
+        migrateData(txnContext);
+        isClusterAllAtV2 = true;
+        return false;
     }
 
     /**
@@ -101,29 +81,5 @@ public class LRRollingUpgradeHandler {
      */
     public void migrateData(TxnContext txnContext) {
         // Data migration to be added here.
-        addSnapshotSyncEventOnUpgradeCompletion(txnContext);
-    }
-
-    /**
-     * Add flag to event table to trigger snapshot sync.
-     */
-    public void addSnapshotSyncEventOnUpgradeCompletion(TxnContext txnContext) {
-        UUID rollingUpgradeForceSyncId = UUID.randomUUID();
-
-        // Write a rolling upgrade force snapshot sync event to the logReplicationEventTable
-        LogReplicationMetadata.ReplicationEventInfoKey key = LogReplicationMetadata.ReplicationEventInfoKey.newBuilder()
-                .build();
-
-        LogReplicationMetadata.ReplicationEvent event = LogReplicationMetadata.ReplicationEvent.newBuilder()
-                .setEventId(rollingUpgradeForceSyncId.toString())
-                .setType(LogReplicationMetadata.ReplicationEvent.ReplicationEventType.UPGRADE_COMPLETION_FORCE_SNAPSHOT_SYNC)
-                .setEventTimestamp(Timestamp.newBuilder().setSeconds(Instant.now().getEpochSecond()).build())
-                .build();
-
-        Table<LogReplicationMetadata.ReplicationEventInfoKey, LogReplicationMetadata.ReplicationEvent, Message> replicationEventTable =
-                txnContext.getTable(REPLICATION_EVENT_TABLE_NAME);
-
-        log.info("Forced snapshot sync will be triggered due to completion of rolling upgrade");
-        txnContext.putRecord(replicationEventTable, key, event, null);
     }
 }
