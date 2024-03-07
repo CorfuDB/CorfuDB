@@ -22,12 +22,10 @@ import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
 import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
-import org.corfudb.runtime.LogReplicationUtils;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
-import org.corfudb.runtime.LogReplication.ReplicationStatus;
 import org.corfudb.runtime.view.Address;
 
 import java.util.List;
@@ -97,7 +95,7 @@ public class SourceForwardingDataSender extends AbstractIT implements DataSender
 
     private CorfuStore sinkCorfuStore;
 
-    private static final String REPLICATION_STATUS_TABLE = LogReplicationUtils.REPLICATION_STATUS_TABLE_NAME;
+    private static final String REPLICATION_STATUS_TABLE = LogReplicationMetadataManager.REPLICATION_STATUS_TABLE_NAME;
 
     private LogReplicationSession session = DefaultClusterConfig.getSessions().get(0);
 
@@ -128,9 +126,9 @@ public class SourceForwardingDataSender extends AbstractIT implements DataSender
         sinkCorfuStore.openTable(LogReplicationMetadataManager.NAMESPACE,
                 REPLICATION_STATUS_TABLE,
                 LogReplicationSession.class,
-                ReplicationStatus.class,
+                LogReplicationMetadata.ReplicationStatus.class,
                 null,
-                TableOptions.fromProtoSchema(ReplicationStatus.class));
+                TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatus.class));
     }
 
     @Override
@@ -329,7 +327,8 @@ public class SourceForwardingDataSender extends AbstractIT implements DataSender
 
     public void checkStatusOnSink(boolean expectedDataConsistent) {
         try (TxnContext txn = sinkCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
-            ReplicationStatus status = (ReplicationStatus) txn.getRecord(REPLICATION_STATUS_TABLE, session).getPayload();
+            LogReplicationMetadata.ReplicationStatus status = (LogReplicationMetadata.ReplicationStatus)
+                txn.getRecord(REPLICATION_STATUS_TABLE, session).getPayload();
             assertThat(status.getSinkStatus().getDataConsistent()).isEqualTo(expectedDataConsistent);
         }
     }

@@ -5,12 +5,12 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.ExampleSchemas;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
-import org.corfudb.runtime.LogReplication.ReplicationStatus;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
 import org.corfudb.runtime.collections.CorfuStreamEntry;
@@ -31,8 +31,7 @@ import java.util.Objects;
 import java.util.concurrent.CountDownLatch;
 
 import static org.assertj.core.api.Assertions.fail;
-import static org.corfudb.runtime.LogReplicationUtils.LR_STATUS_STREAM_TAG;
-import static org.corfudb.runtime.LogReplicationUtils.REPLICATION_STATUS_TABLE_NAME;
+import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.LR_STATUS_STREAM_TAG;
 
 @Slf4j
 public class CorfuReplicationMultiSourceSinkIT extends AbstractIT {
@@ -255,9 +254,9 @@ public class CorfuReplicationMultiSourceSinkIT extends AbstractIT {
 
             // Replication Status Listeners
             sinkCorfuStores.get(i).openTable(LogReplicationMetadataManager.NAMESPACE,
-                REPLICATION_STATUS_TABLE_NAME, LogReplicationSession.class,
-                ReplicationStatus.class, null,
-                TableOptions.fromProtoSchema(ReplicationStatus.class));
+                LogReplicationMetadataManager.REPLICATION_STATUS_TABLE_NAME, LogReplicationSession.class,
+                LogReplicationMetadata.ReplicationStatus.class, null,
+                TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatus.class));
             statusLatch = new CountDownLatch(numDataConsistentUpdates);
             statusLatches.add(statusLatch);
 
@@ -479,7 +478,7 @@ public class CorfuReplicationMultiSourceSinkIT extends AbstractIT {
             results.getEntries().forEach((schema, entries) -> entries.forEach(e -> {
                 if (e.getOperation() != CorfuStreamEntry.OperationType.CLEAR &&
                     e.getOperation() != CorfuStreamEntry.OperationType.DELETE &&
-                    ((ReplicationStatus)e.getPayload()).getSinkStatus().getDataConsistent()) {
+                    ((LogReplicationMetadata.ReplicationStatus)e.getPayload()).getSinkStatus().getDataConsistent()) {
                     countDownLatch.countDown();
                 }
             }));

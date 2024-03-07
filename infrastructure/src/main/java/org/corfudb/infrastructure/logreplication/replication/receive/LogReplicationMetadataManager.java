@@ -9,22 +9,21 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEventInfoKey;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatus;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationInfo;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SyncType;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SinkReplicationStatus;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SourceReplicationStatus;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEvent;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEventInfoKey;
-import org.corfudb.runtime.LogReplication.ReplicationStatus;
-import org.corfudb.runtime.LogReplication.ReplicationInfo;
-import org.corfudb.runtime.LogReplication.SyncType;
-import org.corfudb.runtime.LogReplication.SinkReplicationStatus;
-import org.corfudb.runtime.LogReplication.SnapshotSyncInfo;
-import org.corfudb.runtime.LogReplication.SnapshotSyncInfo.SnapshotSyncType;
-import org.corfudb.runtime.LogReplication.SourceReplicationStatus;
-import org.corfudb.runtime.LogReplication.SyncStatus;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SnapshotSyncInfo;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SyncStatus;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
-import org.corfudb.runtime.LogReplicationUtils;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStoreEntry;
 import org.corfudb.runtime.collections.Table;
@@ -70,6 +69,8 @@ public class LogReplicationMetadataManager {
 
     public static final String NAMESPACE = CORFU_SYSTEM_NAMESPACE;
     public static final String METADATA_TABLE_NAME = "LogReplicationMetadataTable";
+    public static final String REPLICATION_STATUS_TABLE_NAME = "LogReplicationStatusSource";
+    public static final String LR_STATUS_STREAM_TAG = "lr_status";
     public static final String REPLICATION_EVENT_TABLE_NAME = "LogReplicationEventTable";
     public static final String LR_STREAM_TAG = "log_replication";
 
@@ -103,7 +104,7 @@ public class LogReplicationMetadataManager {
                     LogReplicationSession.class, ReplicationMetadata.class, null,
                     TableOptions.fromProtoSchema(ReplicationMetadata.class));
 
-            this.statusTable = this.corfuStore.openTable(NAMESPACE, LogReplicationUtils.REPLICATION_STATUS_TABLE_NAME,
+            this.statusTable = this.corfuStore.openTable(NAMESPACE, REPLICATION_STATUS_TABLE_NAME,
                     LogReplicationSession.class, ReplicationStatus.class, null,
                     TableOptions.fromProtoSchema(ReplicationStatus.class));
 
@@ -456,7 +457,7 @@ public class LogReplicationMetadataManager {
                     .setSinkStatus(SinkReplicationStatus.newBuilder()
                             .setDataConsistent(true)
                             .setReplicationInfo(ReplicationInfo.newBuilder()
-                                    .setStatus(SyncStatus.NOT_AVAILABLE)
+                                    .setStatus(SyncStatus.UNAVAILABLE)
                                     .build())
                             .build())
                     .build();
