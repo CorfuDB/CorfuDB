@@ -31,7 +31,6 @@ public class LogEntryWriterTest extends AbstractViewTest {
     private LogReplicationMetadataManager metadataManager = Mockito.mock(LogReplicationMetadataManager.class);
     private TxnContext txnContext = Mockito.mock(TxnContext.class);
     private LogEntryWriter logEntryWriter;
-    private TxnContext txnContext;
     private TestUtils utils;
     private int numOpaqueEntries;
     private int topologyConfigId;

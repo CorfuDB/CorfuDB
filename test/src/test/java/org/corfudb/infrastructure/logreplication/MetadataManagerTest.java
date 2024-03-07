@@ -29,7 +29,8 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 public class MetadataManagerTest extends AbstractViewTest {
 
     private CorfuRuntime corfuRuntime;
-    private LogReplicationConfigManager configManager = Mockito.mock(LogReplicationConfig.class);
+    private LogReplicationConfig replicationConfig = Mockito.mock(LogReplicationConfig.class);
+    private LogReplicationConfigManager configManager = Mockito.mock(LogReplicationConfigManager.class);
 
     private boolean success;
     private Long topologyConfigId = 5L;
@@ -39,6 +40,8 @@ public class MetadataManagerTest extends AbstractViewTest {
     @Before
     public void setUp() {
         corfuRuntime = getDefaultRuntime();
+        Mockito.when(replicationConfig.getConfigManager()).thenReturn(configManager);
+        Mockito.when(configManager.getConfigRuntime()).thenReturn(corfuRuntime);
         utils = new TestUtils();
     }
 
