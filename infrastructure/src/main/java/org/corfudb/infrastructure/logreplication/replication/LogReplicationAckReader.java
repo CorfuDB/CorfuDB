@@ -10,7 +10,7 @@ import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.Sy
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.replication.send.LogEntrySender;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.LogEntryReader;
-import org.corfudb.infrastructure.logreplication.replication.send.logreader.LogEntryReader.StreamIteratorMetadata;
+import org.corfudb.infrastructure.logreplication.replication.send.logreader.StreamsLogEntryReader.StreamIteratorMetadata;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.runtime.CorfuRuntime;

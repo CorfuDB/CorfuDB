@@ -1,7 +1,7 @@
 package org.corfudb.infrastructure.logreplication.infrastructure;
 
 import lombok.Getter;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationModel;
+import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import java.util.Objects;
 
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.SAMPLE_CLIENT;
@@ -19,18 +19,14 @@ import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.SAM
 public class ReplicationSubscriber {
 
     @Getter
-    private final ReplicationModel replicationModel;
+    private final LogReplicationConfig.ReplicationModel replicationModel;
 
     @Getter
     private final String client;
 
-    public ReplicationSubscriber(ReplicationModel model, String client) {
+    public ReplicationSubscriber(LogReplicationConfig.ReplicationModel model, String client) {
         this.replicationModel = model;
         this.client = client;
-    }
-
-    public static ReplicationSubscriber getDefaultReplicationSubscriber() {
-        return new ReplicationSubscriber(ReplicationModel.FULL_TABLE, SAMPLE_CLIENT);
     }
 
     @Override
@@ -42,7 +38,11 @@ public class ReplicationSubscriber {
             return false;
         }
         ReplicationSubscriber that = (ReplicationSubscriber) o;
-        return replicationModel == that.getReplicationModel() && client.equals(that.getClient());
+        return replicationModel == that.replicationModel && client.equals(that.client);
+    }
+
+    public static ReplicationSubscriber getDefaultReplicationSubscriber() {
+        return new ReplicationSubscriber(LogReplicationConfig.ReplicationModel.SINGLE_SOURCE_SINK, SAMPLE_CLIENT);
     }
 
     @Override
@@ -55,7 +55,7 @@ public class ReplicationSubscriber {
         return new StringBuffer()
             .append("ReplicationModel: ")
             .append(replicationModel)
-            .append(" Client: ")
+            .append("Client: ")
             .append(client)
             .toString();
     }
