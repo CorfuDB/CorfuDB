@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
+import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationUpgradeManager;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.retry.IRetry;
@@ -25,7 +26,7 @@ public class CorfuReplicationManager {
     private final Map<ReplicationSession, CorfuLogReplicationRuntime> runtimeToRemoteSession = new HashMap<>();
 
     @Setter
-    private LogReplicationContext replicationContext;
+    private LogReplicationContext context;
 
     private final NodeDescriptor localNodeDescriptor;
 
@@ -35,34 +36,42 @@ public class CorfuReplicationManager {
 
     private final String pluginFilePath;
 
+    private final LogReplicationConfigManager replicationConfigManager;
+
     private final LogReplicationUpgradeManager upgradeManager;
 
     /**
      * Constructor
      */
-    public CorfuReplicationManager(LogReplicationContext replicationContext, NodeDescriptor localNodeDescriptor,
+    public CorfuReplicationManager(LogReplicationContext context, NodeDescriptor localNodeDescriptor,
                                    Map<ReplicationSession, LogReplicationMetadataManager> metadataManagerMap,
-                                   String pluginFilePath, CorfuRuntime corfuRuntime, LogReplicationUpgradeManager upgradeManager) {
-        this.replicationContext = replicationContext;
+                                   String pluginFilePath, CorfuRuntime corfuRuntime,
+                                   LogReplicationConfigManager replicationConfigManager,
+                                   LogReplicationUpgradeManager upgradeManager) {
+        this.context = context;
         this.metadataManagerMap = metadataManagerMap;
         this.pluginFilePath = pluginFilePath;
         this.corfuRuntime = corfuRuntime;
         this.localNodeDescriptor = localNodeDescriptor;
+        this.replicationConfigManager = replicationConfigManager;
         this.upgradeManager = upgradeManager;
     }
 
     /**
-     * Start log replication runtime for a given remote cluster (sink), which further drives the log replication.
+     * Start Log Replication Manager, this will initiate a runtime against
+     * each Sink session(cluster + replication model + client), to further start log replication.
      */
-    public void start(ClusterDescriptor remoteCluster, LogReplicationContext context) {
-        for (ReplicationSubscriber subscriber : context.getConfig().getReplicationSubscriberToStreamsMap().keySet()) {
-            try {
-                startLogReplicationRuntime(remoteCluster, new ReplicationSession(remoteCluster.getClusterId(),
-                    subscriber));
-            } catch (Exception e) {
-                log.error("Failed to start log replication runtime for remote session {}, replication model {}, " +
-                    "client {}", remoteCluster.getClusterId(), subscriber.getReplicationModel(),
-                    subscriber.getClient());
+    public void start() {
+        for (ClusterDescriptor remoteCluster : context.getTopology().getSinkClusters().values()) {
+            for (ReplicationSubscriber subscriber : context.getConfig().getReplicationSubscriberToStreamsMap().keySet()) {
+                try {
+                    startLogReplicationRuntime(remoteCluster, new ReplicationSession(remoteCluster.getClusterId(),
+                        subscriber));
+                } catch (Exception e) {
+                    log.error("Failed to start log replication runtime for remote session {}, replication model {}, " +
+                        "client {}", remoteCluster.getClusterId(), subscriber.getReplicationModel(),
+                        subscriber.getClient());
+                }
             }
         }
     }
@@ -111,12 +120,12 @@ public class CorfuReplicationManager {
             IRetry.build(IntervalRetry.class, () -> {
                 try {
                     LogReplicationRuntimeParameters parameters = LogReplicationRuntimeParameters.builder()
-                            .localCorfuEndpoint(replicationContext.getLocalCorfuEndpoint())
+                            .localCorfuEndpoint(context.getLocalCorfuEndpoint())
                             .remoteClusterDescriptor(remoteCluster)
                             .localClusterId(localNodeDescriptor.getClusterId())
-                            .replicationConfig(replicationContext.getConfig())
+                            .replicationConfig(context.getConfig())
                             .pluginFilePath(pluginFilePath)
-                            .topologyConfigId(replicationContext.getTopologyConfigId())
+                            .topologyConfigId(context.getTopology().getTopologyConfigId())
                             .keyStore(corfuRuntime.getParameters().getKeyStore())
                             .tlsEnabled(corfuRuntime.getParameters().isTlsEnabled())
                             .ksPasswordFile(corfuRuntime.getParameters().getKsPasswordFile())
@@ -125,7 +134,7 @@ public class CorfuReplicationManager {
                             .maxWriteSize(corfuRuntime.getParameters().getMaxWriteSize())
                             .build();
                     CorfuLogReplicationRuntime replicationRuntime = new CorfuLogReplicationRuntime(parameters,
-                        metadataManagerMap.get(session), upgradeManager, replicationContext, session);
+                        metadataManagerMap.get(session), upgradeManager, replicationConfigManager, session);
                     replicationRuntime.start();
                     runtimeToRemoteSession.put(session, replicationRuntime);
                 } catch (Exception e) {
@@ -173,11 +182,11 @@ public class CorfuReplicationManager {
     public void processSinkChange(TopologyDescriptor newConfig, Set<String> sinksToAdd, Set<String> sinksToRemove,
                                   Set<String> intersection) {
 
-        long oldTopologyConfigId = replicationContext.getTopologyConfigId();
-        replicationContext.setTopologyConfigId(newConfig.getTopologyConfigId());
+        long oldTopologyConfigId = context.getTopology().getTopologyConfigId();
+        context.setTopology(newConfig);
 
         // Get all subscribers
-        Set<ReplicationSubscriber> subscribers = replicationContext.getConfig().getReplicationSubscriberToStreamsMap().keySet();
+        Set<ReplicationSubscriber> subscribers = context.getConfig().getReplicationSubscriberToStreamsMap().keySet();
 
         // Remove Sinks that are not in the new config
         for (String clusterId : sinksToRemove) {

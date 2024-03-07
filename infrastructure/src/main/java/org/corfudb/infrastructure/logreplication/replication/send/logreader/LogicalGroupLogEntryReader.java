@@ -1,7 +1,7 @@
 package org.corfudb.infrastructure.logreplication.replication.send.logreader;
 
-import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
+import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.exceptions.TrimmedException;
@@ -16,7 +16,7 @@ import java.util.UUID;
  */
 public class LogicalGroupLogEntryReader extends LogEntryReader {
 
-    public LogicalGroupLogEntryReader(CorfuRuntime runtime, LogReplicationContext replicationContext,
+    public LogicalGroupLogEntryReader(CorfuRuntime runtime, LogReplicationConfigManager configManager,
                                       ReplicationSession session) {
     }
 

@@ -54,7 +54,7 @@ public class LogReplicationConfig {
         getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, TableRegistry.REGISTRY_TABLE_NAME));
 
     // A map consisting of the streams to replicate for each supported replication model
-    private Map<ReplicationSubscriber, Set<String>> replicationSubscriberToStreamsMap;
+    private Map<ReplicationSubscriber, Set<String>> replicationSubscriberToStreamsMap = new HashMap<>();
 
     public static final UUID PROTOBUF_TABLE_ID = CorfuRuntime.getStreamID(
             getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME));
