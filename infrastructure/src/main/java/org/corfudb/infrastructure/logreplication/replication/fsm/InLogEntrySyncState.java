@@ -2,6 +2,7 @@ package org.corfudb.infrastructure.logreplication.replication.fsm;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.LogReplication.SyncType;
+import org.corfudb.runtime.LogReplication.SyncStatus;
 import org.corfudb.infrastructure.logreplication.replication.send.LogEntrySender;
 
 import java.util.UUID;
@@ -153,6 +154,14 @@ public class InLogEntrySyncState implements LogReplicationState {
 
         } catch (Throwable t) {
             log.error("Error on entry of InLogEntrySyncState", t);
+        }
+    }
+
+    @Override
+    public void onExit(LogReplicationState to) {
+        if (to.getType().equals(LogReplicationStateType.INITIALIZED)) {
+            fsm.getAckReader().markSyncStatus(SyncStatus.STOPPED);
+            log.debug("Log Entry replication status changed to STOPPED");
         }
     }
 
