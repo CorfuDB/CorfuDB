@@ -7,7 +7,6 @@ import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.Re
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEvent.ReplicationEventType;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
 import org.corfudb.runtime.collections.CorfuStreamEntry;
@@ -73,13 +72,6 @@ public final class LogReplicationEventListener implements StreamListener {
                     if (event.getType().equals(ReplicationEventType.FORCE_SNAPSHOT_SYNC)) {
                         discoveryService.input(new DiscoveryServiceEvent(DiscoveryServiceEventType.ENFORCE_SNAPSHOT_SYNC,
                             key.getSession(), event.getEventId()));
-                    } else if (event.getType().equals(ReplicationEventType.UPGRADE_COMPLETION_FORCE_SNAPSHOT_SYNC)) {
-                        for (LogReplicationSession session : discoveryService.getSessionManager().getSessions()) {
-                            log.info("Adding event for forced snapshot sync request for session {}, sync_id={}",
-                                    session, event.getEventId());
-                            discoveryService.input(new DiscoveryServiceEvent(DiscoveryServiceEventType.ENFORCE_SNAPSHOT_SYNC,
-                                    session, event.getEventId()));
-                        }
                     } else {
                         log.warn("Received invalid event :: id={}, type={}, cluster_id={} ts={}", event.getEventId(),
                             event.getType(), event.getClusterId(), event.getEventTimestamp());

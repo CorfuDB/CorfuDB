@@ -23,6 +23,7 @@ import org.corfudb.infrastructure.logreplication.replication.fsm.ObservableAckMs
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationEventMetadata;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
+import org.corfudb.infrastructure.logreplication.utils.LogReplicationUpgradeManager;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
@@ -1236,6 +1237,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         TransitionSource function) throws InterruptedException {
 
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(srcTestRuntime, LOCAL_SOURCE_CLUSTER_ID);
+        LogReplicationUpgradeManager upgradeManager = new LogReplicationUpgradeManager(srcTestRuntime, nettyConfig);
         LogReplicationContext context = new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT);
         configManager.generateConfig(Collections.singleton(session));
 
@@ -1255,7 +1257,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
                 .localCorfuEndpoint(SOURCE_ENDPOINT)
                 .build();
         LogReplicationSourceManager logReplicationSourceManager = new LogReplicationSourceManager(runtimeParameters,
-                metadataManager, sourceDataSender, session, context);
+                metadataManager, sourceDataSender, upgradeManager, session, context);
 
         // Set Log Replication Source Manager so we can emulate the channel for data & control messages (required
         // for testing)
