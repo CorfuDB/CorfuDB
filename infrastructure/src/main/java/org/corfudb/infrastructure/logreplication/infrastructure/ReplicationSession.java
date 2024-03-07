@@ -61,7 +61,7 @@ public class ReplicationSession {
         return new StringBuffer()
             .append("Remote Cluster: ")
             .append(remoteClusterId)
-            .append(" Replication Subscriber: ")
+            .append("Replication Subscriber: ")
             .append(subscriber)
             .toString();
     }

@@ -50,7 +50,7 @@ import static org.corfudb.protocols.service.CorfuProtocolLogReplication.getLrEnt
  *  This implementation provides reads at the stream level (no coalesced state).
  *  It generates TxMessages which will be transmitted by the DataSender (provided by the application).
  */
-public class StreamsSnapshotReader extends SnapshotReader {
+public class StreamsSnapshotReader implements SnapshotReader {
 
     /**
      * The max size of data for SMR entries in data message.
@@ -70,6 +70,9 @@ public class StreamsSnapshotReader extends SnapshotReader {
 
     @Getter
     private ObservableValue<Integer> observeBiggerMsg = new ObservableValue(0);
+
+    @Setter
+    private long topologyConfigId;
 
     private final ReplicationSession replicationSession;
 
@@ -303,6 +306,11 @@ public class StreamsSnapshotReader extends SnapshotReader {
             iterator = stream.iterator();
             maxVersion = 0;
          }
+    }
+
+    @Override
+    public void setTopologyConfigId(long topologyConfigId) {
+        this.topologyConfigId = topologyConfigId;
     }
 
     private Optional<DistributionSummary> configureMessageSizeDistributionSummary() {
