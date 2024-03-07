@@ -232,6 +232,8 @@ public class LogReplicationConfigManager {
                 streamToTagsMap.put(streamId, Collections.singletonList(LOG_REPLICATOR_STREAM_INFO.getStreamId()));
             } else if (entry.getValue().getMetadata().getTableOptions().hasReplicationGroup()) {
                 // Find streams to replicate for every logical group for this session
+                String clientName = entry.getValue().getMetadata().getTableOptions()
+                        .getReplicationGroup().getClientName();
                 String logicalGroup = entry.getValue().getMetadata().getTableOptions()
                         .getReplicationGroup().getLogicalGroup();
                 // TODO (V2): Client name should be checked after the rpc stream is added for Sink side session creation.
