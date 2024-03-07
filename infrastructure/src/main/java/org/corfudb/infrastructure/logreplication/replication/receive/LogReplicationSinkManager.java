@@ -8,10 +8,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.config.ConfigParamNames;
 import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.ServerContext;
-import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
+import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.ISnapshotSyncPlugin;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
-import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMetadataMsg;
@@ -74,10 +73,9 @@ public class LogReplicationSinkManager implements DataReceiver {
 
     @Getter
     private LogReplicationMetadataManager logReplicationMetadataManager;
-
-    private LogReplicationConfigManager configManager;
-
     private RxState rxState;
+
+    private LogReplicationConfig config;
 
     private long baseSnapshotTimestamp = Address.NON_ADDRESS - 1;
     private UUID lastSnapshotSyncId = null;
@@ -85,9 +83,9 @@ public class LogReplicationSinkManager implements DataReceiver {
     // Current topologyConfigId, used to drop out of date messages.
     private long topologyConfigId = 0;
 
-    // Replication Session corresponding to the Source cluster from which this Sink Manager receives updates
+    // Cluster id of the Source cluster from which this Sink Manager receives updates
     @Getter
-    private ReplicationSession sourceSession = null;
+    private String sourceClusterId = null;
 
     @VisibleForTesting
     private int rxMessageCounter = 0;
@@ -110,13 +108,14 @@ public class LogReplicationSinkManager implements DataReceiver {
      * Constructor Sink Manager
      *
      * @param localCorfuEndpoint endpoint for local corfu server
-     * @param configManager log replication configuration manager
+     * @param config log replication configuration
      * @param metadataManager
      * @param context
      */
-    public LogReplicationSinkManager(String localCorfuEndpoint, LogReplicationConfigManager configManager,
-                                     LogReplicationMetadataManager metadataManager, ServerContext context,
-                                     long topologyConfigId, ReplicationSession replicationSession) {
+    public LogReplicationSinkManager(String localCorfuEndpoint, LogReplicationConfig config,
+                                     LogReplicationMetadataManager metadataManager,
+                                     ServerContext context, long topologyConfigId,
+                                     String remoteClusterId) {
 
         this.runtime = CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder()
                 .trustStore((String) context.getServerConfig().get(ConfigParamNames.TRUST_STORE))
@@ -124,43 +123,42 @@ public class LogReplicationSinkManager implements DataReceiver {
                 .keyStore((String) context.getServerConfig().get(ConfigParamNames.KEY_STORE))
                 .ksPasswordFile((String) context.getServerConfig().get(ConfigParamNames.KEY_STORE_PASS_FILE))
                 .tlsEnabled((Boolean) context.getServerConfig().get("--enable-tls"))
-                .maxCacheEntries(configManager.getConfig().getMaxCacheSize())
+                .maxCacheEntries(config.getMaxCacheSize())
                 .maxWriteSize(context.getMaxWriteSize())
                 .build())
                 .parseConfigurationString(localCorfuEndpoint).connect();
         this.pluginConfigFilePath = context.getPluginConfigFilePath();
         this.topologyConfigId = topologyConfigId;
-        init(metadataManager, configManager, replicationSession);
+        init(metadataManager, config, remoteClusterId);
     }
 
     /**
      * Constructor Sink Manager
      *
      * @param localCorfuEndpoint endpoint for local corfu server
-     * @param configManager log replication configuration manager
+     * @param config log replication configuration
      */
     @VisibleForTesting
-    public LogReplicationSinkManager(String localCorfuEndpoint, LogReplicationConfigManager configManager,
-                                     LogReplicationMetadataManager metadataManager, String pluginConfigFilePath,
-                                     ReplicationSession replicationSession) {
+    public LogReplicationSinkManager(String localCorfuEndpoint, LogReplicationConfig config,
+                                     LogReplicationMetadataManager metadataManager, String pluginConfigFilePath) {
         this.runtime =  CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder()
-                .maxCacheEntries(configManager.getConfig().getMaxCacheSize()).build())
+                .maxCacheEntries(config.getMaxCacheSize()).build())
                 .parseConfigurationString(localCorfuEndpoint).connect();
         this.pluginConfigFilePath = pluginConfigFilePath;
-        init(metadataManager, configManager, replicationSession);
+        init(metadataManager, config, sourceClusterId);
     }
 
     /**
      * Initialize common parameters
      *
      * @param metadataManager metadata manager instance
-     * @param configManager log replication configuration manager
+     * @param config log replication configuration
      */
-    private void init(LogReplicationMetadataManager metadataManager, LogReplicationConfigManager configManager,
-                      ReplicationSession replicationSession) {
-        this.sourceSession = replicationSession;
+    private void init(LogReplicationMetadataManager metadataManager,
+                      LogReplicationConfig config, String remoteClusterId) {
+        this.sourceClusterId = remoteClusterId;
         this.logReplicationMetadataManager = metadataManager;
-        this.configManager = configManager;
+        this.config = config;
 
         // When the server is up, it will be at LOG_ENTRY_SYNC state by default.
         // The sender will query receiver's status and decide what type of replication to start with.
@@ -170,7 +168,7 @@ public class LogReplicationSinkManager implements DataReceiver {
         this.applyExecutor = Executors.newSingleThreadExecutor(
                 new ThreadFactoryBuilder()
                         .setDaemon(true)
-                        .setNameFormat("snapshotSyncApplyExecutor-" + replicationSession.getRemoteClusterId())
+                        .setNameFormat("snapshotSyncApplyExecutor-" + remoteClusterId)
                         .build());
 
         initWriterAndBufferMgr();
@@ -207,8 +205,8 @@ public class LogReplicationSinkManager implements DataReceiver {
         // of a snapshot sync.
         snapshotSyncPlugin = getOnSnapshotSyncPlugin();
 
-        snapshotWriter = new StreamsSnapshotWriter(runtime, configManager, logReplicationMetadataManager, sourceSession);
-        logEntryWriter = new LogEntryWriter(configManager, logReplicationMetadataManager, sourceSession);
+        snapshotWriter = new StreamsSnapshotWriter(runtime, config, logReplicationMetadataManager);
+        logEntryWriter = new LogEntryWriter(config, logReplicationMetadataManager);
 
         logEntrySinkBufferManager = new LogEntrySinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,
                 logReplicationMetadataManager.getLastProcessedLogEntryBatchTimestamp(), this);
@@ -247,8 +245,8 @@ public class LogReplicationSinkManager implements DataReceiver {
         } catch (IOException e) {
             log.error("IO Exception when reading config file", e);
         }
-        log.info("Sink Manager Buffer config queue size {} ackCycleCnt {} ackCycleTime {}", bufferSize, ackCycleCnt,
-            ackCycleTime);
+        log.info("Sink Manager Buffer config queue size {} ackCycleCnt {} ackCycleTime {}",
+                bufferSize, ackCycleCnt, ackCycleTime);
     }
 
     /**
@@ -483,7 +481,7 @@ public class LogReplicationSinkManager implements DataReceiver {
         
         // Sync with registry after transfer phase to capture local updates, as transfer phase could
         // take a relatively long time.
-        configManager.getUpdatedConfig();
+        config.syncWithRegistry();
         snapshotWriter.clearLocalStreams();
         snapshotWriter.startSnapshotSyncApply();
         completeSnapshotApply(entry);

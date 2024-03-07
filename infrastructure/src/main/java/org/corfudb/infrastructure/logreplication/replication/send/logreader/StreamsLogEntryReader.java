@@ -8,8 +8,7 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
-import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
-import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
+import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuRuntime;
@@ -49,7 +48,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
 
     private final LogReplicationEntryType MSG_TYPE = LogReplicationEntryType.LOG_ENTRY_MESSAGE;
 
-    private final LogReplicationConfigManager configManager;
+    private final LogReplicationConfig config;
 
     // Set of UUIDs for the corresponding streams
     private Set<UUID> streamUUIDs;
@@ -84,24 +83,19 @@ public class StreamsLogEntryReader implements LogEntryReader {
 
     private StreamIteratorMetadata currentProcessedEntryMetadata;
 
-    private ReplicationSession session;
-
-    public StreamsLogEntryReader(CorfuRuntime runtime, LogReplicationConfigManager configManager,
-                                 ReplicationSession replicationSession) {
+    public StreamsLogEntryReader(CorfuRuntime runtime, LogReplicationConfig config) {
         runtime.parseConfigurationString(runtime.getLayoutServers().get(0)).connect();
-        this.configManager = configManager;
-        this.maxDataSizePerMsg = configManager.getConfig().getMaxDataSizePerMsg();
+        this.config = config;
+        this.maxDataSizePerMsg = config.getMaxDataSizePerMsg();
         this.currentProcessedEntryMetadata = new StreamIteratorMetadata(Address.NON_ADDRESS, false);
         this.messageSizeDistributionSummary = configureMessageSizeDistributionSummary();
         this.deltaCounter = configureDeltaCounter();
         this.validDeltaCounter = configureValidDeltaCounter();
         this.opaqueEntryCounter = configureOpaqueEntryCounter();
-        this.session = replicationSession;
 
         // Get UUIDs for streams to replicate
         refreshStreamUUIDs();
         log.info("Total of {} streams to replicate at initialization.", this.streamUUIDs.size());
-
         //create an opaque stream for transaction stream
         txOpaqueStream = new TxOpaqueStream(runtime);
     }
@@ -111,7 +105,8 @@ public class StreamsLogEntryReader implements LogEntryReader {
      * constructor and when LogReplicationConfig is synced with registry table.
      */
     private void refreshStreamUUIDs() {
-        Set<String> streams = configManager.getConfig().getReplicationSubscriberToStreamsMap().get(session.getSubscriber());
+        Set<String> streams = config.getStreamsToReplicate();
+
         streamUUIDs = new HashSet<>();
         for (String s : streams) {
             streamUUIDs.add(CorfuRuntime.getStreamID(s));
@@ -168,7 +163,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
         // table and add them to the list in that case.
         if (!streamUUIDs.containsAll(txEntryStreamIds)) {
             log.info("There could be additional streams to replicate in tx stream. Checking with registry table.");
-            configManager.getUpdatedConfig();
+            config.syncWithRegistry();
             refreshStreamUUIDs();
             // TODO: Add log message here for the newly found streams when we support incremental refresh.
         }
@@ -313,7 +308,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
     @Override
     public void reset(long lastSentBaseSnapshotTimestamp, long lastAckedTimestamp) {
         // Sync with registry when entering into IN_LOG_ENTRY_SYNC state
-        configManager.getUpdatedConfig();
+        config.syncWithRegistry();
         refreshStreamUUIDs();
         messageExceededSize = false;
         this.currentProcessedEntryMetadata = new StreamIteratorMetadata(Address.NON_ADDRESS, false);

@@ -3,7 +3,6 @@ package org.corfudb.infrastructure;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.extern.slf4j.Slf4j;
 import org.assertj.core.api.Assertions;
-import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationServer;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationSinkManager;
@@ -45,8 +44,6 @@ public class LogReplicationServerTest {
 
     UuidMsg clusterId = UuidMsg.newBuilder().setLsb(5).setMsb(5).build();
     String sourceClusterId = getUUID(clusterId).toString();
-    ReplicationSession replicationSession =
-        ReplicationSession.getDefaultReplicationSessionForCluster(sourceClusterId);
 
     /**
      * Stub most of the {@link LogReplicationServer} functionality, but spy on the actual instance.
@@ -56,7 +53,7 @@ public class LogReplicationServerTest {
         context = mock(ServerContext.class);
         metadataManager = mock(LogReplicationMetadataManager.class);
         sinkManager = mock(LogReplicationSinkManager.class);
-        doReturn(replicationSession).when(sinkManager).getSourceSession();
+        doReturn(sourceClusterId).when(sinkManager).getSourceClusterId();
         lrServer = spy(new LogReplicationServer(context, sinkManager,"nodeId"));
         mockHandlerContext = mock(ChannelHandlerContext.class);
         mockServerRouter = mock(IServerRouter.class);
