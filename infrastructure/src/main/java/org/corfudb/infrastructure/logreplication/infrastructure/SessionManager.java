@@ -94,12 +94,24 @@ public class SessionManager {
      * @param serverContext       the server context
      */
     public SessionManager(@Nonnull TopologyDescriptor topology, CorfuRuntime corfuRuntime,
-                          ServerContext serverContext, String localCorfuEndpoint) {
+                          ServerContext serverContext) {
         this.topology = topology;
         this.runtime = corfuRuntime;
         this.corfuStore = new CorfuStore(corfuRuntime);
 
-        this.localCorfuEndpoint = localCorfuEndpoint;
+        // serverContext.getLocalEndpoint currently provides a string with address = localhost and port = LR server
+        // port.  But the endpoint needed here is with the Corfu port, i.e., 9000.  So create a NodeLocator
+        // using the endpoint available from serverContext first and then create a new NodeLocator which replaces the
+        // port with the Corfu port.
+        // TODO: Once IPv6 changes are available, the 2nd NodeLocator need not be created.  A utility method which
+        //  generates the endpoint given an IP address and port - getVersionFormattedHostAddressWithPort() - should be
+        //  used
+        NodeLocator nodeLocator = NodeLocator.parseString(serverContext.getLocalEndpoint());
+        NodeLocator lrNodeLocator = NodeLocator.builder().host(nodeLocator.getHost())
+                .port(topology.getLocalClusterDescriptor().getCorfuPort())
+                .build();
+
+        this.localCorfuEndpoint = lrNodeLocator.toEndpointUrl();
 
         this.configManager = new LogReplicationConfigManager(runtime, serverContext,
                 topology.getLocalClusterDescriptor().getClusterId());
