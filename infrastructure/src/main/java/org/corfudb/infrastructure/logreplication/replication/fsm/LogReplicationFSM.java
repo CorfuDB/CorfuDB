@@ -22,7 +22,6 @@ import org.corfudb.infrastructure.logreplication.replication.send.logreader.Rout
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.StreamsLogEntryReader;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.StreamsSnapshotReader;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
-import org.corfudb.infrastructure.logreplication.utils.LogReplicationUpgradeManager;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Address;
 
@@ -178,7 +177,7 @@ public class LogReplicationFSM {
     /**
      * Used for checking if LR is in upgrading path
      */
-    private final LogReplicationUpgradeManager upgradeManager;
+    private final LogReplicationConfigManager tableManagerPlugin;
 
     /**
      * Version on which snapshot sync is based on.
@@ -221,17 +220,17 @@ public class LogReplicationFSM {
      * @param readProcessor read processor for data transformation
      * @param workers FSM executor service for state tasks
      * @param ackReader AckReader which listens to acks from the Sink and updates the replication status accordingly
-     * @param upgradeManager version and upgrade related utility
+     * @param tableManagerPlugin Plugin which builds the streams to replicate
      * @param session Replication Session to the remote(Sink) cluster
      */
     public LogReplicationFSM(CorfuRuntime runtime, LogReplicationConfigManager configManager, DataSender dataSender,
                              ReadProcessor readProcessor, ExecutorService workers, LogReplicationAckReader ackReader,
-                             LogReplicationUpgradeManager upgradeManager, ReplicationSession session) {
+                             LogReplicationConfigManager tableManagerPlugin, ReplicationSession session) {
 
         this.snapshotReader = createSnapshotReader(runtime, configManager, session);
         this.logEntryReader = createLogEntryReader(runtime, configManager, session);
         this.ackReader = ackReader;
-        this.upgradeManager = upgradeManager;
+        this.tableManagerPlugin = tableManagerPlugin;
         this.snapshotSender = new SnapshotSender(runtime, snapshotReader, dataSender, readProcessor,
                 configManager.getConfig().getMaxNumMsgPerBatch(), this);
         this.logEntrySender = new LogEntrySender(logEntryReader, dataSender, this);
@@ -259,12 +258,12 @@ public class LogReplicationFSM {
                              LogEntryReader logEntryReader, ReadProcessor readProcessor,
                              LogReplicationConfigManager configManager,
                              ExecutorService workers, LogReplicationAckReader ackReader,
-                             LogReplicationUpgradeManager upgradeManager, ReplicationSession session) {
+                             LogReplicationConfigManager tableManagerPlugin, ReplicationSession session) {
 
         this.snapshotReader = snapshotReader;
         this.logEntryReader = logEntryReader;
         this.ackReader = ackReader;
-        this.upgradeManager = upgradeManager;
+        this.tableManagerPlugin = tableManagerPlugin;
         this.snapshotSender = new SnapshotSender(runtime, snapshotReader, dataSender, readProcessor,
                 configManager.getConfig().getMaxNumMsgPerBatch(), this);
         this.logEntrySender = new LogEntrySender(logEntryReader, dataSender, this);
@@ -349,8 +348,7 @@ public class LogReplicationFSM {
          */
         states.put(LogReplicationStateType.INITIALIZED, new InitializedState(this));
         states.put(LogReplicationStateType.IN_SNAPSHOT_SYNC, new InSnapshotSyncState(this, snapshotSender));
-        states.put(LogReplicationStateType.WAIT_SNAPSHOT_APPLY, new WaitSnapshotApplyState(this, dataSender,
-            upgradeManager));
+        states.put(LogReplicationStateType.WAIT_SNAPSHOT_APPLY, new WaitSnapshotApplyState(this, dataSender, tableManagerPlugin));
         states.put(LogReplicationStateType.IN_LOG_ENTRY_SYNC, new InLogEntrySyncState(this, logEntrySender));
         states.put(LogReplicationStateType.ERROR, new ErrorState(this));
     }
