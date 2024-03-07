@@ -129,14 +129,10 @@ public class LogReplicationAbstractIT extends AbstractIT {
 
     private final long longInterval = 20L;
 
-    // default is single Source-Sink topology
-    public ExampleSchemas.ClusterUuidMsg topologyType = DefaultClusterManager.TP_SINGLE_SOURCE_SINK;
-
     public void testEndToEndSnapshotAndLogEntrySync() throws Exception {
         try {
             log.debug("Setup source and sink Corfu's");
             setupSourceAndSinkCorfu();
-            initSingleSourceSinkCluster();
 
             log.debug("Open map on source and sink");
             openMap();
@@ -184,13 +180,11 @@ public class LogReplicationAbstractIT extends AbstractIT {
 
     }
 
-    public void testEndToEndSnapshotAndLogEntrySyncUFO(boolean diskBased, boolean checkRemainingEntriesOnSecondLogEntrySync, int numSourceClusters) throws Exception {
-        testEndToEndSnapshotAndLogEntrySyncUFO(1, diskBased, checkRemainingEntriesOnSecondLogEntrySync, numSourceClusters);
+    public void testEndToEndSnapshotAndLogEntrySyncUFO(boolean diskBased, boolean checkRemainingEntriesOnSecondLogEntrySync) throws Exception {
+        testEndToEndSnapshotAndLogEntrySyncUFO(1, diskBased, checkRemainingEntriesOnSecondLogEntrySync);
     }
 
-    public void testEndToEndSnapshotAndLogEntrySyncUFO(int totalNumMaps, boolean diskBased,
-                                                       boolean checkRemainingEntriesOnSecondLogEntrySync,
-                                                       int numSourceClusters) throws Exception {
+    public void testEndToEndSnapshotAndLogEntrySyncUFO(int totalNumMaps, boolean diskBased, boolean checkRemainingEntriesOnSecondLogEntrySync) throws Exception {
         // For the purpose of this test, Sink should get 3 transactions for status update:
         // (1) On startup, init the replication status for each Source cluster in a single transaction
         // (2) When starting snapshot sync apply : is_data_consistent = false
@@ -198,13 +192,12 @@ public class LogReplicationAbstractIT extends AbstractIT {
         final int totalSinkStatusUpdateTx = 3;
 
         // Across the above 3 transactions, there will be 5 updates/entries:
-        // 1 (1 init update corresponding to each Source cluster )   +      1 (is_data_consistent = false)    + 1
+        // 3 (1 init update corresponding to each Source cluster )   +      1 (is_data_consistent = false)    + 1
         // (is_data_consistent = true)
-        final int totalSinkStatusUpdateEntries = numSourceClusters + 2;
+        final int totalSinkStatusUpdateEntries = 5;
         try {
             log.info(">> Setup source and sink Corfu's");
             setupSourceAndSinkCorfu();
-            initSingleSourceSinkCluster();
 
             // Two updates are expected onStart of snapshot sync and onEnd.
             CountDownLatch latchSnapshotSyncPlugin = new CountDownLatch(2);
@@ -290,19 +283,6 @@ public class LogReplicationAbstractIT extends AbstractIT {
             if (sinkReplicationServer != null) {
                 sinkReplicationServer.destroy();
             }
-        }
-    }
-
-    public void initSingleSourceSinkCluster() throws Exception {
-        Table<ExampleSchemas.ClusterUuidMsg, ExampleSchemas.ClusterUuidMsg, ExampleSchemas.ClusterUuidMsg> configTable =
-                corfuStoreSource.openTable(
-                        DefaultClusterManager.CONFIG_NAMESPACE, DefaultClusterManager.CONFIG_TABLE_NAME,
-                        ExampleSchemas.ClusterUuidMsg.class, ExampleSchemas.ClusterUuidMsg.class, ExampleSchemas.ClusterUuidMsg.class,
-                        TableOptions.fromProtoSchema(ExampleSchemas.ClusterUuidMsg.class)
-                );
-        try (TxnContext txn = corfuStoreSource.txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
-            txn.putRecord(configTable, this.topologyType, this.topologyType, this.topologyType);
-            txn.commit();
         }
     }
 

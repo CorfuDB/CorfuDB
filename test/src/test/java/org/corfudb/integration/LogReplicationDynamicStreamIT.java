@@ -73,7 +73,6 @@ public class LogReplicationDynamicStreamIT extends LogReplicationAbstractIT {
                 ReplicationStatus.class,
                 null,
                 TableOptions.fromProtoSchema(ReplicationStatus.class));
-        initSingleSourceSinkCluster();
     }
 
     /*

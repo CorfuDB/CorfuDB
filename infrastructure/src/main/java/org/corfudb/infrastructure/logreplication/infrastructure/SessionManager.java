@@ -52,7 +52,6 @@ public class SessionManager {
 
     private LogReplicationConfigManager configManager;
 
-    @Getter
     private Set<LogReplicationSession> sessions = new HashSet<>();
 
     private Set<LogReplicationSession> incomingSessions = new HashSet<>();
@@ -135,20 +134,18 @@ public class SessionManager {
      *
      * @param newTopology   the new discovered topology
      */
-    // TODO [V2]: In the connectionModel PR, ensure that refresh is called by the leader node only. Otherwise the
-    //  metadata/status tables will be overwritten by all the nodes in the cluster
     public synchronized void refresh(@Nonnull TopologyDescriptor newTopology) {
 
         // TODO V2: Make this method a no-op if the new topology has not changed.  Need to override equals and
         //  hashcode in all TopologyDescriptor and all its members.  It is being taken care of in a subsequent PR
         //  which contains changes to the Connection Model.
 
-        Set<String> newSources = newTopology.getRemoteSourceClusters().keySet();
-        Set<String> currentSources = topology.getRemoteSourceClusters().keySet();
+        Set<String> newSources = newTopology.getSourceClusters().keySet();
+        Set<String> currentSources = topology.getSourceClusters().keySet();
         Set<String> sourcesToRemove = Sets.difference(currentSources, newSources);
 
-        Set<String> newSinks = newTopology.getRemoteSinkClusters().keySet();
-        Set<String> currentSinks = topology.getRemoteSinkClusters().keySet();
+        Set<String> newSinks = newTopology.getSinkClusters().keySet();
+        Set<String> currentSinks = topology.getSinkClusters().keySet();
         Set<String> sinksToRemove = Sets.difference(currentSinks, newSinks);
         Set<String> sinkClustersUnchanged = Sets.intersection(newSinks, currentSinks);
 
@@ -198,7 +195,7 @@ public class SessionManager {
             return;
         }
         for (LogReplicationSession session : sessionsUnchanged) {
-            ClusterDescriptor cluster = topology.getRemoteSinkClusters().get(session.getSinkClusterId());
+            ClusterDescriptor cluster = topology.getSinkClusters().get(session.getSinkClusterId());
             replicationManager.refreshRuntime(session, cluster, topology.getTopologyConfigId());
         }
     }
@@ -213,28 +210,33 @@ public class SessionManager {
         Set<LogReplicationSession> outgoingSessionsToAdd = new HashSet<>();
 
         try {
-            String localClusterId = topology.getLocalClusterDescriptor().getClusterId();
-
             IRetry.build(IntervalRetry.class, () -> {
                 try (TxnContext txn = corfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
 
-                    for(ClusterDescriptor remoteSinkCluster : topology.getRemoteSinkClusters().values()) {
-                        // TODO(V2): for now only creating sessions for FULL TABLE replication model (assumed as default)
-                        LogReplicationSession session = constructSession(localClusterId, remoteSinkCluster.clusterId);
-                        if (!sessions.contains(session)) {
-                            sessionsToAdd.add(session);
-                            outgoingSessionsToAdd.add(session);
-                            metadataManager.addSession(txn, session, topology.getTopologyConfigId(), false);
-                        }
-                    }
+                    for (ClusterDescriptor sourceCluster : topology.getSourceClusters().values()) {
+                        for (ClusterDescriptor sinkCluster : topology.getSinkClusters().values()) {
 
-                    for(ClusterDescriptor remoteSourceCluster : topology.getRemoteSourceClusters().values()) {
-                        // TODO(V2): for now only creating sessions for FULL TABLE replication model (assumed as default)
-                        LogReplicationSession session = constructSession(remoteSourceCluster.getClusterId(), localClusterId);
-                        if (!sessions.contains(session)) {
-                            sessionsToAdd.add(session);
-                            incomingSessionsToAdd.add(session);
-                            metadataManager.addSession(txn, session, topology.getTopologyConfigId(), true);
+                            // TODO(V2): for now only creating sessions for FULL TABLE replication model (assumed as default)
+                            LogReplicationSession session = LogReplicationSession.newBuilder()
+                                .setSourceClusterId(sourceCluster.clusterId)
+                                .setSinkClusterId(sinkCluster.clusterId)
+                                .setSubscriber(getDefaultSubscriber())
+                                .build();
+
+                            if (!sessions.contains(session)) {
+                                if (session.getSourceClusterId() == topology.getLocalClusterDescriptor().getClusterId()) {
+                                    sessionsToAdd.add(session);
+                                    outgoingSessionsToAdd.add(session);
+                                    metadataManager.addSession(txn, session, topology.getTopologyConfigId(), false);
+                                } else if (session.getSinkClusterId() == topology.getLocalClusterDescriptor().getClusterId()) {
+                                    sessionsToAdd.add(session);
+                                    incomingSessionsToAdd.add(session);
+                                    metadataManager.addSession(txn, session, topology.getTopologyConfigId(), true);
+                                } else {
+                                    log.info("Session {} does not contain current node {} - skipping", session,
+                                        topology.getLocalClusterDescriptor().getClusterId());
+                                }
+                            }
                         }
                     }
                     txn.commit();
@@ -264,23 +266,11 @@ public class SessionManager {
                 incomingSessions.size(), sessions);
     }
 
-
     private void logNewlyAddedSessionInfo(Set<LogReplicationSession> newlyAddedSessions) {
         log.info("========= HashCode -> Session mapping for newly added session: =========");
         for (LogReplicationSession session : newlyAddedSessions) {
             log.info("HashCode: {}, Session: {}", session.hashCode(), session);
         }
-    }
-
-    /**
-     * Construct session.
-     */
-    private LogReplicationSession constructSession(String sourceClusterId, String sinkClusterId) {
-        return LogReplicationSession.newBuilder()
-                .setSourceClusterId(sourceClusterId)
-                .setSinkClusterId(sinkClusterId)
-                .setSubscriber(getDefaultSubscriber())
-                .build();
     }
 
     /**
@@ -352,7 +342,7 @@ public class SessionManager {
 
         createSessions();
         outgoingSessions.forEach(session -> {
-            ClusterDescriptor remoteClusterDescriptor = topology.getRemoteSinkClusters().get(session.getSinkClusterId());
+            ClusterDescriptor remoteClusterDescriptor = topology.getSinkClusters().get(session.getSinkClusterId());
             replicationManager.start(remoteClusterDescriptor, session, replicationContext);
         });
     }

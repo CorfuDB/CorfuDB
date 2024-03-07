@@ -57,26 +57,26 @@ public class CorfuReplicationE2EIT extends LogReplicationAbstractIT {
     @Test
     public void testLogReplicationEndToEnd() throws Exception {
         log.debug("Using plugin :: {}", pluginConfigFilePath);
-        testEndToEndSnapshotAndLogEntrySyncUFO(false, true, 1);
+        testEndToEndSnapshotAndLogEntrySyncUFO(false, true);
     }
 
     @Test
     public void testSnapshotSyncMultipleTables() throws Exception {
         log.debug("Using plugin :: {}", pluginConfigFilePath);
         final int totalNumMaps = 3;
-        testEndToEndSnapshotAndLogEntrySyncUFO(totalNumMaps, false, true, 1);
+        testEndToEndSnapshotAndLogEntrySyncUFO(totalNumMaps, false, true);
     }
 
     @Test
     public void testDiskBasedLogReplicationEndToEnd() throws Exception {
         log.debug("Using plugin :: {}", pluginConfigFilePath);
-        testEndToEndSnapshotAndLogEntrySyncUFO(true, true, 1);
+        testEndToEndSnapshotAndLogEntrySyncUFO(true, true);
     }
 
     @Test
     public void testDiskBasedSnapshotSyncMultipleTables() throws Exception {
         log.debug("Using plugin :: {}", pluginConfigFilePath);
         final int totalNumMaps = 3;
-        testEndToEndSnapshotAndLogEntrySyncUFO(totalNumMaps, true, true, 1);
+        testEndToEndSnapshotAndLogEntrySyncUFO(totalNumMaps, true, true);
     }
 }
