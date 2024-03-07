@@ -7,7 +7,7 @@ import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicat
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationEventMetadata;
 import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientRouter;
-import org.corfudb.infrastructure.logreplication.utils.LogReplicationUpgradeManager;
+import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage;
@@ -39,15 +39,15 @@ public class NegotiatingState implements LogReplicationRuntimeState {
 
     private final LogReplicationMetadataManager metadataManager;
 
-    private final LogReplicationUpgradeManager upgradeManager;
+    private final LogReplicationConfigManager tableManagerPlugin;
 
     public NegotiatingState(CorfuLogReplicationRuntime fsm, ThreadPoolExecutor worker, LogReplicationClientRouter router,
-                            LogReplicationMetadataManager metadataManager, LogReplicationUpgradeManager upgradeManager) {
+                            LogReplicationMetadataManager metadataManager, LogReplicationConfigManager tableManagerPlugin) {
         this.fsm = fsm;
         this.metadataManager = metadataManager;
         this.worker = worker;
         this.router = router;
-        this.upgradeManager = upgradeManager;
+        this.tableManagerPlugin = tableManagerPlugin;
     }
 
     @Override
@@ -77,7 +77,7 @@ public class NegotiatingState implements LogReplicationRuntimeState {
                 return null;
             case NEGOTIATION_COMPLETE:
                 log.info("Negotiation complete, result={}", event.getNegotiationResult());
-                if (upgradeManager.isUpgraded()) {
+                if (tableManagerPlugin.isUpgraded()) {
                     // Force a snapshot sync if an upgrade has been identified. This will guarantee that
                     // changes in the streams to replicate are captured by the destination.
                     log.info("A forced snapshot sync will be done as Source side LR has been upgraded.");

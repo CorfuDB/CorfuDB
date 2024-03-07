@@ -20,7 +20,6 @@ import org.corfudb.infrastructure.logreplication.runtime.fsm.UnrecoverableState;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.VerifyingRemoteLeaderState;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.WaitingForConnectionsState;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
-import org.corfudb.infrastructure.logreplication.utils.LogReplicationUpgradeManager;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -151,7 +150,6 @@ public class CorfuLogReplicationRuntime {
 
     private final LogReplicationClientRouter router;
     private final LogReplicationMetadataManager metadataManager;
-    private final LogReplicationUpgradeManager upgradeManager;
 
     @Getter
     private final LogReplicationSourceManager sourceManager;
@@ -164,19 +162,14 @@ public class CorfuLogReplicationRuntime {
     /**
      * Default Constructor
      */
-    public CorfuLogReplicationRuntime(LogReplicationRuntimeParameters parameters,
-                                      LogReplicationMetadataManager metadataManager,
-                                      LogReplicationUpgradeManager upgradeManager,
-                                      LogReplicationConfigManager replicationConfigManager,
-                                      ReplicationSession replicationSession) {
+    public CorfuLogReplicationRuntime(LogReplicationRuntimeParameters parameters, LogReplicationMetadataManager metadataManager,
+        LogReplicationConfigManager replicationConfigManager, ReplicationSession replicationSession) {
         this.remoteClusterId = replicationSession.getRemoteClusterId();
         this.metadataManager = metadataManager;
-        this.upgradeManager = upgradeManager;
         this.router = new LogReplicationClientRouter(parameters, this);
         this.router.addClient(new LogReplicationHandler());
         this.sourceManager = new LogReplicationSourceManager(parameters,
-            new LogReplicationClient(router, remoteClusterId), metadataManager, replicationConfigManager,
-            upgradeManager, replicationSession);
+            new LogReplicationClient(router, remoteClusterId), metadataManager, replicationConfigManager, replicationSession);
         this.connectedNodes = new HashSet<>();
 
         ThreadFactory threadFactory = new ThreadFactoryBuilder().setNameFormat("runtime-fsm-worker-"+remoteClusterId)
@@ -219,7 +212,7 @@ public class CorfuLogReplicationRuntime {
         states.put(LogReplicationRuntimeStateType.VERIFYING_REMOTE_LEADER, new VerifyingRemoteLeaderState(this,
             communicationFSMWorkers, router));
         states.put(LogReplicationRuntimeStateType.NEGOTIATING, new NegotiatingState(this, communicationFSMWorkers,
-                router, metadataManager, upgradeManager));
+                router, metadataManager, replicationConfigManager));
         states.put(LogReplicationRuntimeStateType.REPLICATING, new ReplicatingState(this, sourceManager));
         states.put(LogReplicationRuntimeStateType.STOPPED, new StoppedState(sourceManager));
         states.put(LogReplicationRuntimeStateType.UNRECOVERABLE, new UnrecoverableState());

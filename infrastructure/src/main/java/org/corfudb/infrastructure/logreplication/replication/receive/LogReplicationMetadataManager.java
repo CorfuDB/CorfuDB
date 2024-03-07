@@ -15,7 +15,7 @@ import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.Re
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal.SyncType;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SnapshotSyncInfo;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SyncStatus;
-import org.corfudb.infrastructure.logreplication.utils.LogReplicationUpgradeManager;
+import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.LogReplication;
@@ -291,7 +291,7 @@ public class LogReplicationMetadataManager {
                         } else if (type == LogReplicationMetadataType.VERSION) {
                             // TODO: We should update the version in metadata manager
                             //  when the version is read from static file
-                            String version = LogReplicationUpgradeManager.getNodeVersion();
+                            String version = LogReplicationConfigManager.getCurrentVersion();
                             if (version == null) {
                                 log.error("Failed to fetch version from plugin.");
                                 appendUpdate(txn, type, Address.NON_ADDRESS);
