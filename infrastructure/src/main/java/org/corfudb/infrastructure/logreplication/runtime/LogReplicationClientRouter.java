@@ -94,6 +94,13 @@ public class LogReplicationClientRouter implements IClientRouter {
     public long timeoutResponse;
 
     /**
+     * Sync call connection timeout (milliseconds).
+     */
+    @Getter
+    @Setter
+    public long timeoutConnect;
+
+    /**
      * The outstanding requests on this router.
      */
     public final Map<Long, CompletableFuture> outstandingRequests;
@@ -130,6 +137,7 @@ public class LogReplicationClientRouter implements IClientRouter {
         this.remoteClusterId = remoteClusterDescriptor.getClusterId();
         this.parameters = parameters;
         this.timeoutResponse = parameters.getRequestTimeout().toMillis();
+        this.timeoutConnect = parameters.getConnectionTimeout().toMillis();
         this.runtimeFSM = runtimeFSM;
 
         this.handlerMap = new ConcurrentHashMap<>();
@@ -328,6 +336,13 @@ public class LogReplicationClientRouter implements IClientRouter {
         channelAdapter.stop();
         remoteLeaderConnectionFuture = new CompletableFuture<>();
         remoteLeaderConnectionFuture.completeExceptionally(new NetworkException("Router stopped", remoteClusterId));
+    }
+
+    @Override
+    public void reconnect() {
+        log.info("reconnect: reconnecting. Closing the existing channel.");
+        channelAdapter.stop();
+        connect();
     }
 
     @Override
