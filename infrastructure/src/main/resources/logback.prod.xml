@@ -73,6 +73,16 @@
         <queueSize>1024</queueSize>
         <maxFlushTime>5000</maxFlushTime>
     </appender>
+    <appender name="SYSLOG" class="ch.qos.logback.classic.net.SyslogAppender">
+        <syslogHost>127.0.0.1</syslogHost>
+        <port>514</port>
+        <facility>LOCAL6</facility>
+        <throwableExcluded>true</throwableExcluded>
+        <suffixPattern>corfu %logger %msg%n%ex{5}</suffixPattern>
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>ERROR</level>
+        </filter>
+    </appender>
 
     <logger additivity="false" level="debug" name="org.corfudb.metricsdata">
         <appender-ref ref="async_metrics_file"/>
@@ -81,6 +91,9 @@
 
     <logger additivity="false" name="compactor-leader" level="debug">
 	    <appender-ref ref="async_compactor_leader_file"/>
+    </logger>
+    <logger name="org.corfudb.infrastructure.NettyServerRouter" level="ERROR" additivity="yes">
+        <appender-ref ref="SYSLOG" />
     </logger>
     <root level="info">
         <appender-ref ref="async_file"/>
