@@ -35,8 +35,9 @@ COMPACTOR_JVM_XMX = 1024
 FORCE_DISABLE_CHECKPOINTING = "FORCE_DISABLE_CHECKPOINTING"
 POD_NAME = "POD_NAME"
 POD_NAMESPACE = "POD_NAMESPACE"
-SMALL_XMX = 512
-MEDIUM_XMX = 1000
+IN_MEM_MIN_XMX = 512
+DISK_BACKED_MIN_XMX = 150
+DISK_BACKED_MAX_XMX = 1500
 
 logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
@@ -59,27 +60,22 @@ class Config(object):
         self.unfreezeCompaction = None
         self.disableCompaction = None
         self.enableCompaction = None
-        self.xmx_min_in_mb = 150  # arbitrary
-        self.xmx_perc = 0.65
+        self.xmx_perc = 0.65 # arbitrary
 
 class CommandBuilder(object):
     def __init__(self, config):
         self._config = config
 
-    def derive_xmx_value(self, diskBacked, compactor_config):
+    def derive_xmx_value(self, disk_backed, use_std_disk_backed_config, compactor_config):
         try:
             mem_bytes = os.sysconf('SC_PAGE_SIZE') * os.sysconf('SC_PHYS_PAGES')
             mem_mb = int(mem_bytes / (1024. ** 2))
-            xmx = max(SMALL_XMX, int(mem_mb * 0.04))
-            if diskBacked is True:
-                if xmx > MEDIUM_XMX and "Large" in compactor_config["MemoryOptions"]:
-                    xmx = compactor_config["MemoryOptions"]["Large"]
-                elif xmx > SMALL_XMX and xmx < MEDIUM_XMX and "Medium" in compactor_config["MemoryOptions"]:
-                    xmx = compactor_config["MemoryOptions"]["Medium"]
-                elif xmx == SMALL_XMX and "Small" in compactor_config["MemoryOptions"]:
-                    xmx = compactor_config["MemoryOptions"]["Small"]
-                else:
-                    xmx = max(self._config.xmx_min_in_mb, int(mem_mb * float(self._config.xmx_perc)/100))
+            if disk_backed is False:
+                xmx = max(IN_MEM_MIN_XMX, int(mem_mb * 0.04))
+            elif use_std_disk_backed_config is True:
+                xmx = max(DISK_BACKED_MIN_XMX, int(mem_mb * float(self._config.xmx_perc)/100))
+            else:
+                xmx = min(DISK_BACKED_MAX_XMX, int(mem_mb * 0.025))
             return xmx
         except Exception as ex:
             return COMPACTOR_JVM_XMX
@@ -119,10 +115,13 @@ class CommandBuilder(object):
         return " ".join(cmd)
 
     def get_corfu_compactor_cmd(self, compactor_config, class_to_invoke):
-        diskBacked = False
+        disk_backed = False
+        use_std_disk_backed_config = False
         if "DiskBacked" in compactor_config["MemoryOptions"] and compactor_config["MemoryOptions"]['DiskBacked'] is True:
-            diskBacked = True
-        xmx = self.derive_xmx_value(diskBacked, compactor_config)
+            disk_backed = True
+        if "UseStdDiskBackedConfig" in compactor_config["MemoryOptions"] and compactor_config["MemoryOptions"]['UseStdDiskBackedConfig'] is True:
+            use_std_disk_backed_config = True
+        xmx = self.derive_xmx_value(disk_backed, use_std_disk_backed_config, compactor_config)
 
         cmd = []
         cmd.append("MALLOC_TRIM_THRESHOLD_=1310720")
@@ -152,7 +151,7 @@ class CommandBuilder(object):
         cmd.append("--truststore=" + Security["Truststore"])
         cmd.append("--truststore_password=" + Security["TruststorePassword"])
 
-        if diskBacked is True:
+        if disk_backed is True:
             cmd.append("--persistedCacheRoot=" + compactor_config["MemoryOptions"]["DiskPath"])
 
         if not self._config.startCheckpointing:

@@ -18,6 +18,10 @@ CorfuPaths:
   CorfuMemLogPrefix: /dev/shm/corfu.jvm.gc.
   CorfuDiskLogDir: /var/log/corfu/jvm
 
+MemoryOptions:
+  DiskBacked: yes
+  DiskPath: /config/corfu-compactor/
+
 Security:
   Keystore: /certs/keystore.jks
   KsPassword: /password/password
