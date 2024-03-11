@@ -2,6 +2,11 @@ name: Injection Framework Test
 
 on: pull_request
 
+# Cancel Previous Runs
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   injection_framework_test:
     # https://docs.github.com/en/free-pro-team@latest/actions/reference/workflow-syntax-for-github-actions#jobsjob_idruns-on
@@ -12,20 +17,7 @@ jobs:
       PUBLISH_TOKEN: ${{ secrets.publish_token }}
 
     steps:
-      - uses: actions/checkout@v2
-
-      - name: Cancel Previous Runs
-        uses: styfle/cancel-workflow-action@0.6.0
-        with:
-          access_token: ${{ github.token }}
-
-      - name: Cache local Maven repository
-        uses: actions/cache@v2
-        with:
-          path: ~/.m2/repository
-          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
-          restore-keys: |
-            ${{ runner.os }}-maven-
+      - uses: actions/checkout@v4
 
       - name: Set up JDK 11
         uses: actions/setup-java@v4
@@ -33,9 +25,20 @@ jobs:
           distribution: 'corretto'
           java-version: '11'
           check-latest: true
+          cache-dependency-path: '**/pom.xml'
 
-      - uses: satackey/action-docker-layer-caching@v0.0.8
-        continue-on-error: true
+      - name: Cache local Maven repository
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.m2/repository
+            ~/.m2/wrapper/
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Prepare top of trunk docker image
         run: |

@@ -4,8 +4,12 @@ on:
   workflow_dispatch:
   pull_request:
 
-jobs:
+# Cancel Previous Runs
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
+jobs:
   could-deployment-test:
     runs-on: ubuntu-latest
 
@@ -14,7 +18,7 @@ jobs:
         jdk_base_image_version: ['openjdk:11-jdk-bullseye', 'openjdk:17-jdk-bullseye']
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
 
       - name: Set up JDK 11
         uses: actions/setup-java@v4
@@ -22,26 +26,25 @@ jobs:
           distribution: 'corretto'
           java-version: '11'
           check-latest: true
-
-      - uses: docker/setup-buildx-action@v2
-
-      - name: Cancel Previous Runs
-        uses: styfle/cancel-workflow-action@0.6.0
-        with:
-          access_token: ${{ github.token }}
+          cache-dependency-path: '**/pom.xml'
 
       - name: Cache local Maven repository
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
-          path: ~/.m2/repository
+          path: |
+            ~/.m2/repository
+            ~/.m2/wrapper/
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
           restore-keys: |
             ${{ runner.os }}-maven-
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: build docker image
         run: .ci/infrastructure-docker-build.sh docker ${{ matrix.jdk_base_image }}
 
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
         with:
           repository: 'CorfuDB/corfudb-cloud'
 
