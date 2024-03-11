@@ -4,6 +4,7 @@ import com.google.common.collect.Streams;
 import com.google.common.math.Quantiles;
 import com.google.gson.Gson;
 import com.google.protobuf.Message;
+import io.micrometer.core.instrument.Counter;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
 import lombok.Builder;
@@ -23,6 +24,7 @@ import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.function.Failable;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
+import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuOptions.ConsistencyModel;
 import org.corfudb.runtime.CorfuOptions.SizeComputationModel;
@@ -53,6 +55,7 @@ import org.rocksdb.RocksDB;
 import org.rocksdb.RocksDBException;
 import org.rocksdb.SstFileManager;
 import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.InvalidObjectException;
@@ -849,6 +852,48 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
 
             // The database has not been compacted yet.
             executeTx(() -> assertThat(table.size()).isEqualTo(intended.size() * 2));
+        }
+    }
+
+    @Property(tries = NUM_OF_TRIES)
+    void testSnapshotMetrics(@ForAll @UniqueElements @Size(SAMPLE_SIZE)
+                             Set<@AlphaChars @StringLength(min = 1) String> intended) throws InterruptedException {
+        resetTests();
+
+        final Logger logger = Mockito.mock(Logger.class);
+        final List<String> logMessages = new ArrayList<>();
+        final CountDownLatch countDownLatch = new CountDownLatch(1);
+        final String tableFolderName = "metered-table";
+
+        Mockito.doAnswer(invocation -> {
+            synchronized (this) {
+                String logMessage = invocation.getArgument(0, String.class);
+                countDownLatch.countDown();
+                logMessages.add(logMessage);
+                return null;
+            }
+        }).when(logger).debug(logCaptor.capture());
+
+        final Duration loggingInterval = Duration.ofMillis(10);
+        initClientMetrics(logger, loggingInterval, PersistedCorfuTableTest.class.toString());
+
+        System.out.println(logger.isDebugEnabled());
+        System.out.println(logger.isInfoEnabled());
+
+        Counter c = MicroMeterUtils.counter("test-counter").get();;
+        c.increment();
+        c.increment();
+
+        countDownLatch.await();
+        System.out.println(c.count());
+        MicroMeterUtils.counterIncrement(1.0, "test-counter");
+
+        MicroMeterUtils.counterIncrement(1.0, "test-counter");
+        System.out.println(MicroMeterUtils.counter("test-counter").get().count());
+
+        try (final PersistedCorfuTable<String, String> table =
+                     setupTable(defaultTableName, ENABLE_READ_YOUR_WRITES, !EXACT_SIZE)) {
+                intended.forEach(entry -> executeTx(() -> table.insert(entry, entry)));
         }
     }
 
