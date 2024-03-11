@@ -4,6 +4,7 @@ import com.google.common.collect.Streams;
 import com.google.common.math.Quantiles;
 import com.google.gson.Gson;
 import com.google.protobuf.Message;
+import io.micrometer.core.instrument.Counter;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
 import lombok.Builder;
@@ -23,6 +24,7 @@ import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.function.Failable;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
+import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuOptions.ConsistencyModel;
 import org.corfudb.runtime.CorfuOptions.SizeComputationModel;
@@ -32,6 +34,7 @@ import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.runtime.object.DiskBackedSMRSnapshot;
 import org.corfudb.runtime.object.PersistenceOptions;
 import org.corfudb.runtime.object.PersistenceOptions.PersistenceOptionsBuilder;
 import org.corfudb.runtime.object.RocksDbReadCommittedTx;
@@ -53,6 +56,7 @@ import org.rocksdb.RocksDB;
 import org.rocksdb.RocksDBException;
 import org.rocksdb.SstFileManager;
 import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.InvalidObjectException;
@@ -850,6 +854,46 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
             // The database has not been compacted yet.
             executeTx(() -> assertThat(table.size()).isEqualTo(intended.size() * 2));
         }
+    }
+
+    @Property(tries = NUM_OF_TRIES)
+    void testSnapshotMetrics(
+            @ForAll @UniqueElements @Size(SAMPLE_SIZE)
+            Set<@AlphaChars @StringLength(min = 1) String> intended)
+            throws InterruptedException {
+
+        resetTests();
+
+        final Logger logger = Mockito.mock(Logger.class);
+        final CountDownLatch createdLatch = new CountDownLatch(1);
+        final CountDownLatch releasedLatch = new CountDownLatch(1);
+        final String valueMatch = String.format("value=%d", SAMPLE_SIZE);
+
+        Mockito.doAnswer(invocation -> {
+            synchronized (this) {
+                String logMessage = invocation.getArgument(0, String.class);
+                if (logMessage.startsWith("snapshots_created") && logMessage.contains(valueMatch)) {
+                    assertThat(logMessage).contains("objectId");
+                    createdLatch.countDown();
+                }
+                if (logMessage.startsWith("snapshots_released") && logMessage.contains(valueMatch)) {
+                    assertThat(logMessage).contains("objectId");
+                    releasedLatch.countDown();
+                }
+                return null;
+            }
+        }).when(logger).debug(logCaptor.capture());
+
+        final Duration loggingInterval = Duration.ofMillis(100);
+        initClientMetrics(logger, loggingInterval, PersistedCorfuTableTest.class.toString());
+
+        try (final PersistedCorfuTable<String, String> table =
+                     setupTable(defaultTableName, ENABLE_READ_YOUR_WRITES, !EXACT_SIZE)) {
+                intended.forEach(entry -> executeTx(() -> table.insert(entry, entry)));
+        }
+
+        createdLatch.await();
+        releasedLatch.await();
     }
 
     @Property(tries = NUM_OF_TRIES)
