@@ -2,6 +2,7 @@ package org.corfudb.runtime.object;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.runtime.collections.RocksDbEntryIterator;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.util.serializer.ISerializer;
@@ -13,7 +14,10 @@ import org.rocksdb.WriteOptions;
 
 import java.util.Collections;
 import java.util.Set;
+import java.util.UUID;
 import java.util.WeakHashMap;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.StampedLock;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -23,6 +27,15 @@ import static org.corfudb.runtime.collections.RocksDbEntryIterator.LOAD_VALUES;
 
 @Slf4j
 public class DiskBackedSMRSnapshot<S extends SnapshotGenerator<S>> implements SMRSnapshot<S> {
+
+    private static final String SNAPSHOT_CREATED_METRIC = "snapshots.created";
+    private static final String SNAPSHOT_RELEASED_METRIC = "snapshots.released";
+    private static final String OBJECT_ID_TAG = "objectId";
+
+    // Need to keep track of accumulative values. MicroMeter's Counter is
+    // not suffice here as it only keeps track of the rate
+    private static final ConcurrentHashMap<UUID, AtomicLong> createdSnapshots = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<UUID, AtomicLong> releasedSnapshots = new ConcurrentHashMap<>();
 
     private final VersionedObjectIdentifier version;
     private final StampedLock lock = new StampedLock();
@@ -45,6 +58,7 @@ public class DiskBackedSMRSnapshot<S extends SnapshotGenerator<S>> implements SM
         this.writeOptions = writeOptions;
         this.viewGenerator = viewGenerator;
         this.snapshot = rocksDb.getSnapshot();
+        incrementGauge(SNAPSHOT_CREATED_METRIC, createdSnapshots, version.getObjectId());
         this.readOptions = new ReadOptions().setSnapshot(this.snapshot);
         this.version = version;
         this.columnFamilyRegistry = columnFamilyRegistry;
@@ -112,10 +126,13 @@ public class DiskBackedSMRSnapshot<S extends SnapshotGenerator<S>> implements SM
             if (isInvalid()) {
                 return;
             }
+            // Since release() is called under a write-lock,
+            // the order of these operations does not matter.
+            readOptions.close();
             rocksDb.releaseSnapshot(snapshot);
+            incrementGauge(SNAPSHOT_RELEASED_METRIC, releasedSnapshots, version.getObjectId());
             set.forEach(RocksDbEntryIterator::invalidateIterator);
             set.clear();
-            readOptions.close();
         } finally {
             lock.unlockWrite(stamp);
         }
@@ -133,5 +150,13 @@ public class DiskBackedSMRSnapshot<S extends SnapshotGenerator<S>> implements SM
             set.add(iterator);
             return iterator;
         });
+    }
+
+    private void incrementGauge(String name, ConcurrentHashMap<UUID, AtomicLong> map, UUID objectId) {
+        map.computeIfAbsent(objectId, id -> {
+            final AtomicLong counter = new AtomicLong();
+            MicroMeterUtils.gauge(name, counter, AtomicLong::get, OBJECT_ID_TAG, objectId.toString());
+            return counter;
+        }).incrementAndGet();
     }
 }
