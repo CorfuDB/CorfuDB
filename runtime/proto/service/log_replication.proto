@@ -39,6 +39,7 @@ message LogReplicationLeadershipLossMsg {
 }
 
 message LogReplicationLeadershipRequestMsg {
+  LogReplicationSession session = 1;
 }
 
 message LogReplicationLeadershipResponseMsg {
@@ -57,11 +58,10 @@ enum LogReplicationEntryType {
 }
 
 enum ReplicationModel {
-  NONE = 0;
-  FULL_TABLE = 1;                 // Full table replication (Single Source to Single Sink = 1:1)
-  ROUTING_QUEUES = 2;             // Routing queue replication (used for entry-level replication) (1:1)
-  LOGICAL_GROUPS = 3;             // Table association to logical group (1:1)
-  MULTI_SOURCE_MERGE = 4;         // Same table replication from multiple sources to single sink (n:1)
+  FULL_TABLE = 0;                 // Full table replication (Single Source to Single Sink = 1:1)
+  ROUTING_QUEUES = 1;             // Routing queue replication (used for entry-level replication) (1:1)
+  LOGICAL_GROUPS = 2;             // Table association to logical group (1:1)
+  MULTI_SOURCE_MERGE = 3;         // Same table replication from multiple sources to single sink (n:1)
 }
 
 // Key for LogReplicationModelMetadataTable

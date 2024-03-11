@@ -112,9 +112,7 @@ public class SessionManager {
         this.replicationManager = new CorfuReplicationManager(topology, metadataManager, runtime,
                 replicationContext);
 
-        this.incomingMsgHandler = new LogReplicationServer(serverContext, sessions, metadataManager,
-                topology.getLocalNodeDescriptor().getNodeId(), topology.getLocalNodeDescriptor().getClusterId(),
-                replicationContext);
+        this.incomingMsgHandler = new LogReplicationServer(serverContext, sessions, topology, metadataManager, replicationContext);
 
         this.router = new LogReplicationClientServerRouter(replicationManager,
                 topology.getLocalNodeDescriptor().getClusterId(), topology.getLocalNodeDescriptor().getNodeId(),
@@ -471,8 +469,6 @@ public class SessionManager {
      */
     public void stopReplication() {
         log.info("Stopping log replication.");
-        // Stop config listener if required
-        stopClientConfigListener();
         stopReplication(sessions);
     }
 

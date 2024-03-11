@@ -42,10 +42,10 @@
         <!-- Dependency versions -->
         <slf4j.version>1.7.32</slf4j.version>
         <netty.version>4.1.89.Final</netty.version>
-        <netty.tcnative.version>2.0.56.Final</netty.tcnative.version>
+        <netty.tcnative.version>2.0.60.Final</netty.tcnative.version>
         <protobuf.version>3.21.7</protobuf.version>
         <commons.io.version>2.11.0</commons.io.version>
-        <lombok.version>1.18.24</lombok.version>
+        <lombok.version>1.18.30</lombok.version>
         <guava.version>32.1.2-jre</guava.version>
         <junit.jupiter.version>5.10.1</junit.jupiter.version>
         <mockito.version>4.11.0</mockito.version>
@@ -109,12 +109,20 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-javadoc-plugin</artifactId>
+                <reportSets>
+                    <reportSet>
+                        <reports>
+                            <report>aggregate-no-fork</report>
+                            <report>test-aggregate-no-fork</report>
+                        </reports>
+                    </reportSet>
+                </reportSets>
                 <configuration>
                     <links>
-                        <link>http://docs.oracle.com/javase8/docs/api</link>
+                        <link>https://docs.oracle.com/en/java/javase/11/docs/api</link>
                     </links>
                     <failOnError>false</failOnError>
-                    <additionalparam>-Xdoclint:none</additionalparam>
+                    <doclint>none</doclint>
                 </configuration>
             </plugin>
         </plugins>
@@ -347,11 +355,9 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.10.1</version>
+                <version>3.11.0</version>
                 <configuration>
-                    <compilerVersion>1.8</compilerVersion>
-                    <source>1.8</source>
-                    <target>1.8</target>
+                    <release>11</release>
                     <encoding>${project.build.sourceEncoding}</encoding>
                     <showDeprecation>false</showDeprecation>
                     <compilerArgs>
@@ -382,10 +388,27 @@
                     <strictCheck>true</strictCheck>
                 </configuration>
             </plugin>
+            <!-- https://projectlombok.org/features/delombok
+            Lombok cannot plug into javadoc which runs on java sources.
+            Delombok still allows you to use lombok with these tools by preprocessing
+            your java code into java code with all of lombok's transformations already applied. -->
+            <plugin>
+                <groupId>org.projectlombok</groupId>
+                <artifactId>lombok-maven-plugin</artifactId>
+                <version>1.18.20.0</version>
+                <executions>
+                    <execution>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>delombok</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-javadoc-plugin</artifactId>
-                <version>2.10.1</version>
+                <version>3.6.3</version>
                 <executions>
                     <execution>
                         <id>attach-javadocs</id>
@@ -395,8 +418,8 @@
                     </execution>
                 </executions>
                 <configuration>
-                    <aggregate>true</aggregate>
-                    <additionalparam>-Xdoclint:none</additionalparam>
+                    <failOnError>false</failOnError>
+                    <doclint>none</doclint>
                 </configuration>
             </plugin>
             <plugin>

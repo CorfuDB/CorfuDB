@@ -255,6 +255,7 @@ public abstract class AbstractTransactionalContext implements
     public void abortTransaction(TransactionAbortedException ae) {
         AbstractTransactionalContext.log.debug("TXAbort[{}]", this);
         commitAddress = ABORTED_ADDRESS;
+        txnContext = null;
     }
 
     /**
@@ -412,5 +413,6 @@ public abstract class AbstractTransactionalContext implements
     public void close() {
         snapshotProxyMap.forEach((version, snapshot) -> snapshot.releaseView());
         snapshotProxyMap.clear();
+        txnContext = null;
     }
 }

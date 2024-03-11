@@ -106,6 +106,7 @@ public class InSnapshotSyncState implements LogReplicationState {
                             .get(LogReplicationStateType.WAIT_SNAPSHOT_APPLY);
                     waitSnapshotApplyState.setTransitionSyncId(transitionSyncId);
                     waitSnapshotApplyState.setBaseSnapshotTimestamp(snapshotSender.getBaseSnapshotTimestamp());
+                    waitSnapshotApplyState.setForcedSnapshotSync(event.getMetadata().isForcedSnapshotSync());
                     fsm.setBaseSnapshot(event.getMetadata().getLastTransferredBaseSnapshot());
                     fsm.setAckedTimestamp(event.getMetadata().getLastLogEntrySyncedTimestamp());
                     snapshotSyncAcksCounter.ifPresent(AtomicLong::getAndIncrement);
@@ -118,10 +119,12 @@ public class InSnapshotSyncState implements LogReplicationState {
                 // If cancel was intended for current snapshot sync task, cancel and transition to new state
                 if (fsm.isValidTransition(transitionSyncId, event.getMetadata().getSyncId())) {
                     cancelSnapshotSync("cancellation request.");
-                    // Re-trigger SnapshotSync due to error, generate a new event Id for the new snapshot sync
+                    // Re-trigger SnapshotSync due to error.
                     LogReplicationState inSnapshotSyncState = fsm.getStates().get(LogReplicationStateType.IN_SNAPSHOT_SYNC);
-                    UUID newSnapshotSyncId = UUID.randomUUID();
-                    log.debug("Starting new snapshot sync after cancellation id={}", newSnapshotSyncId);
+                    // If the cancelled sync is a force snapshot sync, retain the syncID. This is to track and clear
+                    // the snapshot sync requests in the eventTable
+                    UUID newSnapshotSyncId = event.getMetadata().isForcedSnapshotSync() ? event.getMetadata().getSyncId() : UUID.randomUUID();
+                    log.debug("Starting new snapshot sync after cancellation. forced {} ID={}", event.getMetadata().isForcedSnapshotSync(), newSnapshotSyncId);
                     inSnapshotSyncState.setTransitionSyncId(newSnapshotSyncId);
                     // If a force snapshot sync gets cancelled due to ACK timeout, a new snapshot sync is triggered.
                     // Retain the 'forced' information in the subsequent snapshot syncs

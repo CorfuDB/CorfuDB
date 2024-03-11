@@ -45,15 +45,20 @@ import org.corfudb.util.serializer.DynamicProtobufSerializer;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.ProtobufSerializer;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
@@ -349,11 +354,12 @@ public class CorfuStoreIT extends AbstractIT {
         CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
         CorfuStore store = new CorfuStore(runtime);
 
-        String tempDiskPath = com.google.common.io.Files.createTempDir()
-                .getAbsolutePath();
+        Path tempDiskPath = Files.createTempDirectory(tableName);
+        final CorfuOptions.PersistenceOptions persistenceOptions = CorfuOptions.PersistenceOptions.newBuilder()
+                .setDataPath(tempDiskPath.toAbsolutePath().toString()).build();
         final Table<Uuid, Uuid, ManagedResources> table = store.openTable(namespace, tableName,
                 Uuid.class, Uuid.class, ManagedResources.class,
-                TableOptions.builder().persistentDataPath(Paths.get(tempDiskPath)).build());
+                TableOptions.builder().persistenceOptions(persistenceOptions).build());
 
         final long aLong = 1L;
         Uuid uuidVal = Uuid.newBuilder().setMsb(aLong).setLsb(aLong).build();
@@ -378,7 +384,7 @@ public class CorfuStoreIT extends AbstractIT {
         CorfuRuntime runtimeC = new CorfuRuntime(singleNodeEndpoint)
                 .setCacheDisabled(true)
                 .connect();
-        checkpointAndTrimCorfuStore(runtimeC, false, tempDiskPath);
+        checkpointAndTrimCorfuStore(runtimeC, false, tempDiskPath.toAbsolutePath().toString());
         runtimeC.shutdown();
 
         runtime = createRuntime(singleNodeEndpoint);
@@ -391,6 +397,54 @@ public class CorfuStoreIT extends AbstractIT {
         assertThat(table2.count()).isEqualTo(numRecords);
 
         assertThat(shutdownCorfuServer(corfuServer)).isTrue();
+    }
+
+
+    /**
+     * Verify concurrent execution on the same snapshot for
+     * disk-backed Corfu. This test is probabilistic in nature.
+     *
+     * @throws IOException during Corfu Server startup or Table open
+     */
+    @Test
+    @Ignore("Failing after JDK-11, this test will be fixed in future patches.")
+    public void concurrentExecuteQueryDiskBacked() throws Exception {
+        final String namespace = "test-namespace";
+        final String tableName = "test-table";
+        final int numRecords = PARAMETERS.NUM_ITERATIONS_MODERATE;
+
+        final Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
+
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
+        CorfuStore store = new CorfuStore(runtime);
+
+        Path tempDiskPath = Files.createTempDirectory(tableName);
+        final Table<Uuid, Uuid, ManagedResources> diskBackedTable2 = store.openTable(
+                namespace, tableName,
+                Uuid.class, Uuid.class, ManagedResources.class,
+                TableOptions.builder().persistenceOptions(CorfuOptions.PersistenceOptions.newBuilder()
+                                .setDataPath(tempDiskPath.toAbsolutePath().toString())
+                                .setConsistencyModel(CorfuOptions.ConsistencyModel.READ_YOUR_WRITES).build())
+                        .build());
+
+        List<Uuid> records = new ArrayList<>();
+        for (int i = 0; i < numRecords; i++) {
+            records.add(Uuid.newBuilder().setMsb(i).build());
+        }
+
+        records.forEach(entry -> {
+            try (TxnContext tx = store.txn(namespace)) {
+                tx.putRecord(diskBackedTable2, entry, entry, null);
+                tx.commit();
+            }
+        });
+
+        records.parallelStream().forEach(record -> {
+            try (TxnContext tx = store.txn(namespace)) {
+                assertThat(tx.executeQuery(diskBackedTable2, entry -> entry.getPayload().equals(record)).size())
+                        .isEqualTo(1);
+            }
+        });
     }
 
     /**

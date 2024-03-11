@@ -2,6 +2,7 @@ package org.corfudb.runtime.object;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.runtime.collections.RocksDbEntryIterator;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.util.serializer.ISerializer;
@@ -24,6 +25,8 @@ import static org.corfudb.runtime.collections.RocksDbEntryIterator.LOAD_VALUES;
 @Slf4j
 public class DiskBackedSMRSnapshot<S extends SnapshotGenerator<S>> implements SMRSnapshot<S> {
 
+    private static String SNAPSHOT_CONSUMED_COUNTER = "snapshots.created";
+    private static String SNAPSHOT_RELEASED_COUNTER = "snapshots.released.";
     private final VersionedObjectIdentifier version;
     private final StampedLock lock = new StampedLock();
     private final OptimisticTransactionDB rocksDb;
@@ -45,6 +48,7 @@ public class DiskBackedSMRSnapshot<S extends SnapshotGenerator<S>> implements SM
         this.writeOptions = writeOptions;
         this.viewGenerator = viewGenerator;
         this.snapshot = rocksDb.getSnapshot();
+        MicroMeterUtils.counterIncrement(1.0, SNAPSHOT_CONSUMED_COUNTER);
         this.readOptions = new ReadOptions().setSnapshot(this.snapshot);
         this.version = version;
         this.columnFamilyRegistry = columnFamilyRegistry;
@@ -112,17 +116,20 @@ public class DiskBackedSMRSnapshot<S extends SnapshotGenerator<S>> implements SM
             if (isInvalid()) {
                 return;
             }
+            // Since release() is called under a write-lock,
+            // the order of these operations does not matter.
+            readOptions.close();
             rocksDb.releaseSnapshot(snapshot);
+            MicroMeterUtils.counterIncrement(1.0, SNAPSHOT_RELEASED_COUNTER + version.getObjectId());
             set.forEach(RocksDbEntryIterator::invalidateIterator);
             set.clear();
-            readOptions.close();
         } finally {
             lock.unlockWrite(stamp);
         }
     }
 
     public <K, V> RocksDbEntryIterator<K, V> newIterator(ISerializer serializer, Transaction transaction) {
-        // When newIterator is invoked, it's possible that this snapshot has since been invalidated.
+        // When getIterator is invoked, it's possible that this snapshot has since been invalidated.
         // Requesting an iterator from the RocksDB transaction with an invalid snapshot/readOptions causes
         // an internal assertion failure. Hence, CheckedRocksIterator performs necessary validation before
         // creating the new iterator.

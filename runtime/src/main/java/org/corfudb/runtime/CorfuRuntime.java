@@ -154,7 +154,7 @@ public class CorfuRuntime {
      * File watcher for SSL key store to support auto hot-swapping.
      */
     @Getter
-    private Optional<FileWatcher> sslCertWatcher;
+    private volatile Optional<FileWatcher> sslCertWatcher = Optional.empty();
 
     /**
      * A completable future containing a layout, when completed.
@@ -361,11 +361,6 @@ public class CorfuRuntime {
          */
         Duration runtimeGCPeriod = Duration.ofMinutes(20);
 
-        /**
-         * The period at which the file watcher will poll the file from disk
-         */
-        Duration fileWatcherPollPeriod = Duration.ofMinutes(1);
-
         /*
          * The {@link UUID} for the cluster this client is connecting to, or
          * {@code null} if the client should adopt the {@link UUID} of the first
@@ -470,7 +465,6 @@ public class CorfuRuntime {
             private int streamBatchSize = 10;
             private int checkpointReadBatchSize = 1;
             private Duration runtimeGCPeriod = Duration.ofMinutes(20);
-            private Duration fileWatcherPollPeriod = Duration.ofMinutes(1);
             private UUID clusterId = null;
             private int systemDownHandlerTriggerLimit = 20;
             private List<NodeLocator> layoutServers = new ArrayList<>();
@@ -763,11 +757,6 @@ public class CorfuRuntime {
                 return this;
             }
 
-            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder fileWatcherPollPeriod(Duration fileWatcherPollPeriod) {
-                this.fileWatcherPollPeriod = fileWatcherPollPeriod;
-                return this;
-            }
-
             public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder clusterId(UUID clusterId) {
                 this.clusterId = clusterId;
                 return this;
@@ -853,7 +842,6 @@ public class CorfuRuntime {
                 corfuRuntimeParameters.setStreamBatchSize(streamBatchSize);
                 corfuRuntimeParameters.setCheckpointReadBatchSize(checkpointReadBatchSize);
                 corfuRuntimeParameters.setRuntimeGCPeriod(runtimeGCPeriod);
-                corfuRuntimeParameters.setFileWatcherPollPeriod(fileWatcherPollPeriod);
                 corfuRuntimeParameters.setClusterId(clusterId);
                 corfuRuntimeParameters.setSystemDownHandlerTriggerLimit(systemDownHandlerTriggerLimit);
                 corfuRuntimeParameters.setLayoutServers(layoutServers);
@@ -987,9 +975,6 @@ public class CorfuRuntime {
         // Initializing the node router pool.
         nodeRouterPool = new NodeRouterPool(getRouterFunction);
 
-        // Start file watcher on Ssl certs
-        sslCertWatcher = getSslCertWatcher();
-
         if (parameters.metricsEnabled) {
             Logger logger = LoggerFactory.getLogger("org.corfudb.client.metricsdata");
             if (logger.isDebugEnabled()) {
@@ -1049,12 +1034,12 @@ public class CorfuRuntime {
      *
      * @return The Optional of FileWatcher on Keystore file. Empty if keystore is not set in runtime.
      */
-    private Optional<FileWatcher> getSslCertWatcher() {
+    private Optional<FileWatcher> initializeSslCertWatcher() {
         String keyStorePath = this.parameters.getKeyStore();
         if (keyStorePath == null || keyStorePath.isEmpty()) {
             return Optional.empty();
         }
-        FileWatcher sslWatcher = new FileWatcher(keyStorePath, this::reconnect, this.parameters.fileWatcherPollPeriod);
+        FileWatcher sslWatcher = new FileWatcher(keyStorePath, this::reconnect);
         return Optional.of(sslWatcher);
     }
 
@@ -1110,11 +1095,11 @@ public class CorfuRuntime {
      * Stop all routers associated with this Corfu Runtime.
      **/
     public void stop(boolean shutdown) {
-        sslCertWatcher.ifPresent(FileWatcher::close);
-        nodeRouterPool.shutdown();
-
-        if (!shutdown) {
-            sslCertWatcher = getSslCertWatcher();
+        if (shutdown) {
+            sslCertWatcher.ifPresent(FileWatcher::close);
+            nodeRouterPool.shutdown();
+        } else {
+            log.info("stop: Re-Initializing nodeRouterPool.");
             nodeRouterPool = new NodeRouterPool(getRouterFunction);
         }
     }
@@ -1197,14 +1182,8 @@ public class CorfuRuntime {
             List<String> servers = Optional.ofNullable(latestLayout)
                     .map(Layout::getLayoutServers)
                     .orElse(bootstrapLayoutServers);
-            final List<String> responsiveServer =
-                    servers.stream().filter(server -> !latestLayout.getUnresponsiveServers()
-                            .contains(server))
-                            .collect(Collectors.toList());
-            if (responsiveServer.isEmpty()) {
-                throw new IllegalStateException("All servers are unresponsive");
-            }
-            layout = fetchLayout(responsiveServer);
+
+            layout = fetchLayout(servers);
         }
 
         return layout;
@@ -1317,7 +1296,8 @@ public class CorfuRuntime {
                         MicroMeterUtils.time(fetchSample, "runtime.fetch_layout.timer");
                         return l;
                     } catch (InterruptedException ie) {
-                        throw new UnrecoverableCorfuInterruptedError("Interrupted during layout fetch", ie);
+                        throw new UnrecoverableCorfuInterruptedError(
+                                "Interrupted during layout fetch", ie);
                     } catch (WrongClusterException we) {
                         // It is futile trying to re-connect to the wrong cluster
                         log.warn("Giving up since cluster is incorrect or reconfigured!");
@@ -1360,6 +1340,12 @@ public class CorfuRuntime {
     public synchronized CorfuRuntime connect() {
 
         log.info("connect: runtime parameters {}", getParameters());
+
+        // Start file watcher on Ssl certs
+        if (!sslCertWatcher.isPresent()) {
+            log.info("connect: Initializing sslCertWatcher.");
+            sslCertWatcher = initializeSslCertWatcher();
+        }
 
         if (layout == null) {
             log.info("Connecting to Corfu server instance, layout servers={}", bootstrapLayoutServers);
@@ -1438,6 +1424,7 @@ public class CorfuRuntime {
         parameters.trustStore = trustStore;
         parameters.tsPasswordFile = tsPasswordFile;
         parameters.tlsEnabled = true;
+
         return this;
     }
 

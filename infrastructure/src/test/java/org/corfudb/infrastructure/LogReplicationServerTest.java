@@ -3,7 +3,10 @@ package org.corfudb.infrastructure;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.extern.slf4j.Slf4j;
 import org.assertj.core.api.Assertions;
+import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
+import org.corfudb.infrastructure.logreplication.infrastructure.NodeDescriptor;
+import org.corfudb.infrastructure.logreplication.infrastructure.TopologyDescriptor;
 import org.corfudb.infrastructure.logreplication.infrastructure.msghandlers.LogReplicationServer;
 import org.corfudb.infrastructure.logreplication.infrastructure.SessionManager;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
@@ -12,6 +15,7 @@ import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicat
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationSinkManager;
 import org.corfudb.infrastructure.logreplication.transport.IClientServerRouter;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
+import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationLeadershipResponseMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
@@ -27,11 +31,17 @@ import org.junit.Before;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
 
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
+import static org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg;
+import static org.corfudb.protocols.service.CorfuProtocolMessage.getDefaultProtocolVersionMsg;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getRequestMsg;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.same;
@@ -41,6 +51,7 @@ import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.atMost;
+import static org.mockito.Mockito.when;
 
 /**
  * Tests {@link LogReplicationServer} message handing.
@@ -60,6 +71,9 @@ public class LogReplicationServerTest {
     ChannelHandlerContext mockHandlerContext;
     IClientServerRouter mockServerRouter;
     AtomicBoolean isLeader = new AtomicBoolean(true);
+    TopologyDescriptor topology;
+    LogReplicationContext replicationContext;
+    Set<LogReplicationSession> sessionSet;
 
     UuidMsg sourceClusterUuid = UuidMsg.newBuilder().setLsb(5).setMsb(5).build();
     String sourceClusterId = getUUID(sourceClusterUuid).toString();
@@ -78,11 +92,22 @@ public class LogReplicationServerTest {
         metadataManager = mock(LogReplicationMetadataManager.class);
         sessionManager = mock(SessionManager.class);
         sinkManager = mock(LogReplicationSinkManager.class);
-        Set<LogReplicationSession> sessionSet = new HashSet<>();
+
+        topology = mock(TopologyDescriptor.class);
+        NodeDescriptor sinkNodeDescriptor = new NodeDescriptor("host", "port",SINK_CLUSTER_ID, "", SINK_NODE_ID);
+        ClusterDescriptor sourceCluster = new ClusterDescriptor(sourceClusterId, 9000, Collections.singletonList(sinkNodeDescriptor));
+        ClusterDescriptor sinkCluster = new ClusterDescriptor(SINK_CLUSTER_ID, 9000, Collections.singletonList(sinkNodeDescriptor));
+        when(topology.getLocalNodeDescriptor()).thenReturn(sinkNodeDescriptor);
+        Map<ClusterDescriptor, Set<LogReplication.ReplicationModel>> remoteSourceToReplicationModel = new HashMap();
+        remoteSourceToReplicationModel.put(sourceCluster, Collections.singleton(LogReplication.ReplicationModel.FULL_TABLE));
+        when(topology.getRemoteSourceClusterToReplicationModels()).thenReturn(remoteSourceToReplicationModel);
+        when(topology.getLocalClusterDescriptor()).thenReturn(sinkCluster);
+
+        sessionSet = new HashSet<>();
         sessionSet.add(session);
-        LogReplicationContext replicationContext = new LogReplicationContext(mock(LogReplicationConfigManager.class),
+        replicationContext = new LogReplicationContext(mock(LogReplicationConfigManager.class),
                 0L, SAMPLE_HOSTNAME, true, mock(LogReplicationPluginConfig.class));
-        lrServer = spy(new LogReplicationServer(context, sessionSet, metadataManager, SINK_NODE_ID, SINK_CLUSTER_ID,
+        lrServer = spy(new LogReplicationServer(context, sessionSet, topology, metadataManager,
                 replicationContext));
         lrServer.getSessionToSinkManagerMap().put(session, sinkManager);
         mockHandlerContext = mock(ChannelHandlerContext.class);
@@ -103,22 +128,29 @@ public class LogReplicationServerTest {
                 .setLrMetadataRequest(metadataRequest).build());
 
         doReturn(LogReplicationMetadata.ReplicationMetadata.getDefaultInstance()).when(metadataManager)
-            .getReplicationMetadata(session);
+                .getReplicationMetadata(session);
         doReturn(metadataManager).when(sessionManager).getMetadataManager();
 
         lrServer.getHandlerMethods().handle(request, null, mockServerRouter);
-
         verify(metadataManager).getReplicationMetadata(session);
     }
 
     /**
      * Make sure that the LogReplicationServer will process {@link LogReplicationLeadershipRequestMsg}
      * and provide an appropriate {@link ResponseMsg} message.
+     *
+     * Here both the source and sink are on the same version, and hence the request has the session information.
+     * We test the following cases where the leadership request arrives:
+     * (i) at the leader and the sessionManager already knows about the session
+     * (ii) at the leader, but the sessionManager is yet to create the session.
+     * (iii) at a non-leader node. Since session is created only on the leader node, the sessionManager will not know
+     * about the incoming session
+     * (iv) at leader node, but the topology does not contain a FULL_TABLE replication model
      */
     @Test
     public void testHandleLeadershipQuery() {
         final LogReplicationLeadershipRequestMsg leadershipQuery =
-            LogReplicationLeadershipRequestMsg.newBuilder().build();
+            LogReplicationLeadershipRequestMsg.newBuilder().setSession(session).build();
         final RequestMsg request =
             getRequestMsg(HeaderMsg.newBuilder().setClusterId(sourceClusterUuid).build(),
                 CorfuMessage.RequestPayloadMsg.newBuilder()
@@ -126,19 +158,95 @@ public class LogReplicationServerTest {
 
         doReturn(SAMPLE_HOSTNAME).when(context).getLocalEndpoint();
 
-        // verify the response when not the leader
-        lrServer.getHandlerMethods().handle(request, null,
-            mockServerRouter);
+        //verify the response when leader and sessionManager knows about the session
+        lrServer.getHandlerMethods().handle(request, null, mockServerRouter);
         ArgumentCaptor<ResponseMsg> argument = ArgumentCaptor.forClass(ResponseMsg.class);
-        verify(mockServerRouter).sendResponse(argument.capture());
+        verify(mockServerRouter, times(1)).sendResponse(argument.capture());
+        Assertions.assertThat(argument.getValue().getPayload().getLrLeadershipResponse().getIsLeader()).isTrue();
 
-        lrServer.getHandlerMethods().handle(request, null,
-            mockServerRouter);
+        // verify the response when leader but sessionManager does not know about the session yet
+        lrServer = spy(new LogReplicationServer(context, new HashSet<>(), topology, metadataManager,
+                replicationContext));
+        mockServerRouter = mock(IClientServerRouter.class);
+        lrServer.getHandlerMethods().handle(request, null, mockServerRouter);
         argument = ArgumentCaptor.forClass(ResponseMsg.class);
-        verify(mockServerRouter, atMost(2))
-            .sendResponse(argument.capture());
+        verify(mockServerRouter, times(1)).sendResponse(argument.capture());
+        Assertions.assertThat(argument.getValue().getPayload().getLrLeadershipResponse().getIsLeader()).isFalse();
+
+        // verify the response when not the leader
+        replicationContext = new LogReplicationContext(mock(LogReplicationConfigManager.class),
+                0L, SAMPLE_HOSTNAME, false, mock(LogReplicationPluginConfig.class));
+        lrServer = spy(new LogReplicationServer(context, new HashSet<>(), topology, metadataManager,
+                replicationContext));
+        mockServerRouter = mock(IClientServerRouter.class);
+        lrServer.getHandlerMethods().handle(request, null, mockServerRouter);
+        argument = ArgumentCaptor.forClass(ResponseMsg.class);
+        verify(mockServerRouter, times(1)).sendResponse(argument.capture());
+        Assertions.assertThat(argument.getValue().getPayload().getLrLeadershipResponse().getIsLeader()).isFalse();
+
+        // verify the response when leader but the topology does not have FULL_TABLE
+        replicationContext = new LogReplicationContext(mock(LogReplicationConfigManager.class),
+                0L, SAMPLE_HOSTNAME, true, mock(LogReplicationPluginConfig.class));
+        when(topology.getRemoteSourceClusterToReplicationModels()).thenReturn(new HashMap<>());
+        lrServer = spy(new LogReplicationServer(context, new HashSet<>(), topology, metadataManager,
+                replicationContext));
+        mockServerRouter = mock(IClientServerRouter.class);
+        lrServer.getHandlerMethods().handle(request, null, mockServerRouter);
+        argument = ArgumentCaptor.forClass(ResponseMsg.class);
+        verify(mockServerRouter, times(1)).sendResponse(argument.capture());
+        Assertions.assertThat(argument.getValue().getPayload().getLrLeadershipResponse().getIsLeader()).isFalse();
+    }
+
+    /**
+     * Make sure that the LogReplicationServer will process {@link LogReplicationLeadershipRequestMsg}
+     * and provide an appropriate {@link ResponseMsg} message.
+     *
+     * Here both the source is on a older version, but the sink is in LR V2 version. Hence the request neither has the session information nor the source clusterID
+     * We test the following cases where the leadership request arrives:
+     * (i) at the leader and the sessionManager already knows about the session
+     * (ii) at the leader, but the sessionManager is yet to create the session.
+     * (iii) at leader node, but the topology does not contain a FULL_TABLE replication model
+     */
+    @Test
+    public void testHandleLeadershipQueryOnMixedVersion() {
+        final LogReplicationLeadershipRequestMsg leadershipQuery =
+                LogReplicationLeadershipRequestMsg.newBuilder().build();
+        final RequestMsg request =
+                getRequestMsg(HeaderMsg.newBuilder()
+                                .setVersion(getDefaultProtocolVersionMsg())
+                                .setIgnoreClusterId(true)
+                                .setIgnoreEpoch(true)
+                                .setClientId(getUuidMsg(UUID.randomUUID()))
+                                .build(),
+                        CorfuMessage.RequestPayloadMsg.newBuilder()
+                                .setLrLeadershipQuery(leadershipQuery).build());
+
+        doReturn(SAMPLE_HOSTNAME).when(context).getLocalEndpoint();
+
+        // when node is the leader and when sessionManger knows about the session
+        lrServer.getHandlerMethods().handle(request, null, mockServerRouter);
+        ArgumentCaptor<ResponseMsg> argument = ArgumentCaptor.forClass(ResponseMsg.class);
+        verify(mockServerRouter, times(1)).sendResponse(argument.capture());
         Assertions.assertThat(argument.getValue().getPayload()
-            .getLrLeadershipResponse().getIsLeader()).isTrue();
+                .getLrLeadershipResponse().getIsLeader()).isTrue();
+
+        //when node is the leader and sessionManager does not know about the session
+        lrServer = spy(new LogReplicationServer(context, new HashSet<>(), topology, metadataManager, replicationContext));
+        mockServerRouter = mock(IClientServerRouter.class);
+        lrServer.getHandlerMethods().handle(request, null, mockServerRouter);
+        argument = ArgumentCaptor.forClass(ResponseMsg.class);
+        verify(mockServerRouter, times(1)).sendResponse(argument.capture());
+        Assertions.assertThat(argument.getValue().getPayload().getLrLeadershipResponse().getIsLeader()).isFalse();
+
+        // verify the response when leader but the topology does not have FULL_TABLE
+        when(topology.getRemoteSourceClusterToReplicationModels()).thenReturn(new HashMap<>());
+        lrServer = spy(new LogReplicationServer(context, new HashSet<>(), topology, metadataManager,
+                replicationContext));
+        mockServerRouter = mock(IClientServerRouter.class);
+        lrServer.getHandlerMethods().handle(request, null, mockServerRouter);
+        argument = ArgumentCaptor.forClass(ResponseMsg.class);
+        verify(mockServerRouter, times(1)).sendResponse(argument.capture());
+        Assertions.assertThat(argument.getValue().getPayload().getLrLeadershipResponse().getIsLeader()).isFalse();
     }
 
     /**

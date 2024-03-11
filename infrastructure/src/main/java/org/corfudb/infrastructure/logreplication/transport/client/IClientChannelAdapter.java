@@ -51,7 +51,7 @@ public abstract class IClientChannelAdapter {
     /**
      * If connection is lost to a specific endpoint, attempt to reconnect to the specific node.
      */
-    public abstract void connectAsync(ClusterDescriptor remoteCluster, String nodeId, LogReplicationSession sessionMsg);
+    public abstract void connectAsync(ClusterDescriptor remoteCluster, String nodeId, LogReplicationSession sessionMsg) throws Exception;
 
     /**
      * Stop communication across all remote clusters.

@@ -4,6 +4,7 @@ import com.google.common.collect.Streams;
 import com.google.common.math.Quantiles;
 import com.google.gson.Gson;
 import com.google.protobuf.Message;
+import io.micrometer.core.instrument.Counter;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
 import lombok.Builder;
@@ -23,6 +24,7 @@ import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.function.Failable;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
+import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuOptions.ConsistencyModel;
 import org.corfudb.runtime.CorfuOptions.SizeComputationModel;
@@ -53,6 +55,7 @@ import org.rocksdb.RocksDB;
 import org.rocksdb.RocksDBException;
 import org.rocksdb.SstFileManager;
 import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -64,6 +67,7 @@ import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.AbstractMap.SimpleEntry;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
@@ -71,6 +75,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 import java.util.stream.LongStream;
@@ -93,6 +98,7 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
     private static final Options defaultOptions = new Options().setCreateIfMissing(true);
     private static final ISerializer defaultSerializer = new PojoSerializer(String.class);
     private static final int SAMPLE_SIZE = 100;
+    private static final int SAMPLE_SIZE_TWO = 2;
     private static final int NUM_OF_TRIES = 1;
     private static final int STRING_MIN = 5;
     private static final int STRING_MAX = 10;
@@ -805,6 +811,43 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
         }
     }
 
+    private void entryStreamIterate(PersistedCorfuTable<String, String> table) {
+        final long startTime = System.currentTimeMillis();
+        final long duration = TimeUnit.SECONDS.toMillis(10);
+
+        while (System.currentTimeMillis() - startTime < duration) {executeTx(() -> table.entryStream().count());
+        }
+    }
+
+    /**
+     * Two threads will perform a concurrent scan and filter for N seconds.
+     * This tests ensure that there are no deadlocks on that path.
+     * NOTE: If this tests fails due to a timeout, then that means there is a bug.
+     *
+     * @param intended
+     * @throws InterruptedException
+     */
+    @Property(tries = NUM_OF_TRIES)
+    void concurrentEntryStream(@ForAll @Size(SAMPLE_SIZE_TWO) Set<String> intended) throws InterruptedException {
+        resetTests(CorfuRuntimeParameters.builder().mvoCacheExpiry(Duration.ofNanos(0)).build());
+        try (final PersistedCorfuTable<String, String> table = setupTable()) {
+
+            executeTx(() -> {
+                intended.forEach(entry -> table.insert(entry, entry));
+                intended.forEach(entry -> assertThat(table.get(entry)).isEqualTo(entry));
+            });
+
+            List<Thread> threads = Arrays.asList(
+                    new Thread(() -> entryStreamIterate(table), "T1"),
+                    new Thread(() -> entryStreamIterate(table), "T2"));
+
+            threads.forEach(Thread::start);
+            for (Thread thread : threads) {
+                thread.join();
+            }
+        }
+    }
+
     @Property(tries = NUM_OF_TRIES)
     void noReadYourOwnWrites(@ForAll @Size(SAMPLE_SIZE) Set<String> intended) throws Exception {
         resetTests();
@@ -876,6 +919,48 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
 
             // The database has not been compacted yet.
             executeTx(() -> assertThat(table.size()).isEqualTo(intended.size() * 2));
+        }
+    }
+
+    @Property(tries = NUM_OF_TRIES)
+    void testSnapshotMetrics(@ForAll @UniqueElements @Size(SAMPLE_SIZE)
+                             Set<@AlphaChars @StringLength(min = 1) String> intended) throws InterruptedException {
+        resetTests();
+
+        final Logger logger = Mockito.mock(Logger.class);
+        final List<String> logMessages = new ArrayList<>();
+        final CountDownLatch countDownLatch = new CountDownLatch(1);
+        final String tableFolderName = "metered-table";
+
+        Mockito.doAnswer(invocation -> {
+            synchronized (this) {
+                String logMessage = invocation.getArgument(0, String.class);
+                countDownLatch.countDown();
+                logMessages.add(logMessage);
+                return null;
+            }
+        }).when(logger).debug(logCaptor.capture());
+
+        final Duration loggingInterval = Duration.ofMillis(10);
+        initClientMetrics(logger, loggingInterval, PersistedCorfuTableTest.class.toString());
+
+        System.out.println(logger.isDebugEnabled());
+        System.out.println(logger.isInfoEnabled());
+
+        Counter c = MicroMeterUtils.counter("test-counter").get();;
+        c.increment();
+        c.increment();
+
+        countDownLatch.await();
+        System.out.println(c.count());
+        MicroMeterUtils.counterIncrement(1.0, "test-counter");
+
+        MicroMeterUtils.counterIncrement(1.0, "test-counter");
+        System.out.println(MicroMeterUtils.counter("test-counter").get().count());
+
+        try (final PersistedCorfuTable<String, String> table =
+                     setupTable(defaultTableName, ENABLE_READ_YOUR_WRITES, !EXACT_SIZE)) {
+                intended.forEach(entry -> executeTx(() -> table.insert(entry, entry)));
         }
     }
 

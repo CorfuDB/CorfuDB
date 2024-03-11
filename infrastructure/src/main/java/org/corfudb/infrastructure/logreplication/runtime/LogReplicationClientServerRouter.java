@@ -386,11 +386,12 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
             final CompletableFuture<T> cfTimeout =
                     CFUtils.within(cf, Duration.ofMillis(timeoutResponse));
             final long finalRequestId = requestId;
+            String finalNodeId = nodeId;
             cfTimeout.exceptionally(e -> {
                 if (e.getCause() instanceof TimeoutException) {
                     sessionToOutstandingRequests.get(session).remove(finalRequestId);
-                    log.debug("sendMessageAndGetCompletable: Remove request {} to {} due to timeout! Message:{}",
-                            finalRequestId, sessionToRemoteClusterDescriptor.get(session).getClusterId(), payload.getPayloadCase());
+                    log.debug("sendMessageAndGetCompletable: Remove request {} to {}/{} due to timeout! Message:{}",
+                            finalRequestId, sessionToRemoteClusterDescriptor.get(session).getClusterId(), finalNodeId, payload.getPayloadCase());
                 }
                 return null;
             });
@@ -415,8 +416,8 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
             removeSessionInfo(session);
         } catch (Exception e) {
             sessionToOutstandingRequests.get(session).remove(requestId);
-            log.error("sendMessageAndGetCompletable: Remove request {} to {} due to exception! Message:{}",
-                    requestId, sessionToRemoteClusterDescriptor.get(session).getClusterId(), payload.getPayloadCase(), e);
+            log.error("sendMessageAndGetCompletable: Remove request {} to {}/{} due to exception! Message:{}",
+                    requestId, sessionToRemoteClusterDescriptor.get(session).getClusterId(), nodeId, payload.getPayloadCase(), e);
             cf.completeExceptionally(e);
         }
         return cf;
@@ -511,8 +512,6 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
                             .input(new LogReplicationSinkEvent(LogReplicationSinkEvent
                                     .LogReplicationSinkEventType.REMOTE_LEADER_LOSS, nodeId));
                 }
-                completeRequest(msg.getHeader().getSession(), msg.getHeader().getRequestId(),
-                        msg.getPayload().getLrLeadershipLoss());
                 return;
             }
 
@@ -758,10 +757,25 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
             }
         } catch (NullPointerException npe) {
             log.info("The replication components are already stopped for session {}", session);
+            return;
         }
 
-        if (isConnectionStarterForSession(session)) {
-            this.clientChannelAdapter.connectAsync(sessionToRemoteClusterDescriptor.get(session), nodeId, session);
+        try {
+            IRetry.build(IntervalRetry.class, () -> {
+                try {
+                    this.clientChannelAdapter.connectAsync(sessionToRemoteClusterDescriptor.get(session), nodeId, session);
+                } catch(NullPointerException npe) {
+                    log.info("The session is already stopped. Abort trying to reconnect {}", session);
+                    return null;
+                } catch (Exception e) {
+                    log.error("Failed to connect to remote node {} for session {}. Retry after 1 second. Exception {}.",
+                            nodeId, session, e);
+                    throw new RetryNeededException();
+                }
+                return null;
+            }).run();
+        } catch (InterruptedException e) {
+            log.error("Unrecoverable exception when attempting to connect to remote node {}.", nodeId, e);
         }
     }
 
@@ -786,5 +800,11 @@ public class LogReplicationClientServerRouter implements IClientServerRouter {
      */
     public void updateTopologyConfigId(long topologyId) {
         msgHandler.updateTopologyConfigId(topologyId);
+    }
+
+    public void resetRemoteLeader(LogReplicationSession session) {
+        if (isConnectionStarterForSession(session)) {
+            this.clientChannelAdapter.resetRemoteLeader();
+        }
     }
 }

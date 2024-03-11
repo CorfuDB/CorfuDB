@@ -453,8 +453,18 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
      * Stop Log Replication
      */
     private void stopLogReplication(boolean lockReleased) {
+
+        // If the node has not yet been bootstrapped, return.
+        if (!bootstrapComplete) {
+            return;
+        }
+
         if (lockReleased || sessionManager.getReplicationContext().getIsLeader().get()) {
             log.info("Stopping log replication.");
+            if(logReplicationEventListener != null) {
+                logReplicationEventListener.stop();
+            }
+            sessionManager.stopClientConfigListener();
             sessionManager.stopReplication();
         }
     }

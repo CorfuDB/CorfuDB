@@ -9,6 +9,7 @@ import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters.CorfuRuntimeParam
 import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.exceptions.UnreachableClusterException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.util.FileWatcher;
 import org.corfudb.util.NodeLocator;
 import org.junit.Before;
 import org.junit.Test;
@@ -19,6 +20,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.Arrays;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.common.util.URLUtils.getVersionFormattedEndpointURL;
@@ -329,6 +331,54 @@ public class SecurityIT extends AbstractIT {
         corfuRuntime.shutdown();
     }
 
+    /**
+     * Test that FileWatcher is started in {@link CorfuRuntime#connect()} method and stopped  after
+     * it the runtime is shut down.
+     * @throws IOException when File IO Error occurs while loading certs
+     */
+    @Test
+    public void testRuntimeFileWatcherLifeCycleWithServer() throws Exception {
+        // Run a corfu server
+        // Enable Tls Mutual Auth to trigger CheckClientTrusted() in ReloadableTrustManager
+        Process corfuServer = runSinglePersistentServerTls(true);
+
+        // Create Runtime parameters for enabling TLS, without calling connect() yet
+        final CorfuRuntimeParameters rtParams = CorfuRuntime.CorfuRuntimeParameters
+                .builder()
+                .tlsEnabled(tlsEnabled)
+                .keyStore(runtimePathToKeyStore)
+                .ksPasswordFile(runtimePathToKeyStorePassword)
+                .trustStore(runtimePathToTrustStore)
+                .tsPasswordFile(runtimePathToTrustStorePassword)
+                .systemDownHandler(getShutdownHandler())
+                .maxMvoCacheEntries(DEFAULT_MVO_CACHE_SIZE)
+                .cacheDisabled(true)
+                .build();
+
+        CorfuRuntime corfuRuntime = CorfuRuntime.fromParameters(rtParams)
+                    .parseConfigurationString(
+                            getVersionFormattedEndpointURL(corfuSingleNodeHost, corfuStringNodePort)
+                    );
+
+        // Before Runtime connects FileWatcher should not have been initialized
+        assertThat(corfuRuntime.getSslCertWatcher()).isEmpty();
+
+        corfuRuntime.connect();
+
+        // After Runtime connects FileWatcher should have been initialized
+        Optional<FileWatcher> sslCertWatcher = corfuRuntime.getSslCertWatcher();
+        assertThat(sslCertWatcher).isNotEmpty();
+        assertThat(sslCertWatcher.get().getIsStopped()).isFalse();
+        assertThat(sslCertWatcher.get().getIsRegistered()).isTrue();
+
+        assertThat(shutdownCorfuServer(corfuServer)).isTrue();
+        corfuRuntime.shutdown();
+
+        // After Runtime is shut down FileWatcher should have been stopped
+        assertThat(sslCertWatcher).isNotEmpty();
+        assertThat(sslCertWatcher.get().getIsStopped()).isTrue();
+        assertThat(sslCertWatcher.get().getIsRegistered()).isFalse();
+    }
 
     private Runnable getShutdownHandler() {
         return () -> {
