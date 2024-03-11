@@ -5,6 +5,11 @@ on:
     branches:
       - master
 
+# Cancel Previous Runs
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   publish_corfu_db_artifacts:
 
@@ -18,12 +23,7 @@ jobs:
       DOCKER_PASSWORD: ${{ secrets.docker_password }}
 
     steps:
-      - uses: actions/checkout@v2
-
-      - name: Cancel Previous Runs
-        uses: styfle/cancel-workflow-action@0.6.0
-        with:
-          access_token: ${{ github.token }}
+      - uses: actions/checkout@v4
 
       - name: Set up JDK 11
         uses: actions/setup-java@v4
@@ -31,17 +31,20 @@ jobs:
           distribution: 'corretto'
           java-version: '11'
           check-latest: true
+          cache-dependency-path: '**/pom.xml'
 
       - name: Cache local Maven repository
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
-          path: ~/.m2
+          path: |
+            ~/.m2/repository
+            ~/.m2/wrapper/
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
           restore-keys: |
             ${{ runner.os }}-maven-
 
-      - uses: satackey/action-docker-layer-caching@v0.0.11
-        continue-on-error: true
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Prepare Corfu
         run: |
