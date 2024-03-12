@@ -1,5 +1,6 @@
 package org.corfudb.runtime.collections;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Streams;
 import com.google.common.hash.HashFunction;
 import com.google.common.hash.Hashing;
@@ -116,7 +117,11 @@ public class DiskBackedCorfuTable<K, V> implements
 
     @Getter
     private final Statistics statistics;
+
+    @Getter
+    @VisibleForTesting
     private final RocksDbApi rocksApi;
+
     private final RocksDbSnapshotGenerator<DiskBackedCorfuTable<K, V>> rocksDbSnapshotGenerator;
     private final ColumnFamilyRegistry columnFamilyRegistry;
     private final ISerializer serializer;
@@ -151,6 +156,14 @@ public class DiskBackedCorfuTable<K, V> implements
             this.statistics.setStatsLevel(StatsLevel.ALL);
             rocksDbOptions.setStatistics(statistics);
             persistenceOptions.getWriteBufferSize().map(rocksDbOptions::setWriteBufferSize);
+
+            final BlockBasedTableConfig tableConfig = new BlockBasedTableConfig();
+            if (persistenceOptions.isDisableBlockCache()) {
+                tableConfig.setNoBlockCache(true);
+            } else {
+                persistenceOptions.getBlockCache().map(tableConfig::setBlockCache);
+            }
+            rocksDbOptions.setTableFormatConfig(tableConfig);
 
             final RocksDbStore<DiskBackedCorfuTable<K, V>> rocksDbStore = new RocksDbStore<>(
                     persistenceOptions.getDataPath(), rocksDbOptions, writeOptions);

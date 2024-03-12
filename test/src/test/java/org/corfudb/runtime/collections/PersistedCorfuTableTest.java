@@ -4,6 +4,7 @@ import com.google.common.collect.Streams;
 import com.google.common.math.Quantiles;
 import com.google.gson.Gson;
 import com.google.protobuf.Message;
+import io.micrometer.core.instrument.Counter;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
 import lombok.Builder;
@@ -23,6 +24,7 @@ import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.function.Failable;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
+import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuOptions.ConsistencyModel;
 import org.corfudb.runtime.CorfuOptions.SizeComputationModel;
@@ -46,6 +48,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
+import org.rocksdb.BlockBasedTableConfig;
 import org.rocksdb.Env;
 import org.rocksdb.OptimisticTransactionDB;
 import org.rocksdb.Options;
@@ -53,6 +56,7 @@ import org.rocksdb.RocksDB;
 import org.rocksdb.RocksDBException;
 import org.rocksdb.SstFileManager;
 import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.InvalidObjectException;
@@ -79,6 +83,7 @@ import java.util.stream.StreamSupport;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy;
 import static org.corfudb.common.metrics.micrometer.MeterRegistryProvider.MeterRegistryInitializer.initClientMetrics;
+import static org.corfudb.test.TestUtils.getRssInBytes;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.times;
 
@@ -101,6 +106,7 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
     private static final String defaultNewMapEntry = "newEntry";
     private static final boolean ENABLE_READ_YOUR_WRITES = true;
     private static final boolean EXACT_SIZE = true;
+    private static final long TABLE_OVERHEAD = 5 * 1024 * 1024;
 
     @Captor
     private ArgumentCaptor<String> logCaptor;
@@ -135,6 +141,31 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
 
     private PersistedCorfuTable<String, String> setupTable(Index.Registry<String, String> registry) {
         return setupTable(defaultTableName, registry, defaultOptions, defaultSerializer);
+    }
+
+    private <V> DiskBackedCorfuTable<String, V> setupTableInternal(String streamName) {
+        return setupTableInternal(streamName, ENABLE_READ_YOUR_WRITES, !EXACT_SIZE,
+                defaultOptions, defaultSerializer);
+    }
+
+    private <V> DiskBackedCorfuTable<String, V> setupTableInternal(
+            String streamName, boolean readYourWrites, boolean exact_size,
+            Options options, ISerializer serializer) {
+
+        PersistenceOptionsBuilder persistenceOptions = PersistenceOptions.builder()
+                .dataPath(Paths.get(diskBackedDirectory, streamName));
+        if (!readYourWrites) {
+            persistenceOptions.consistencyModel(ConsistencyModel.READ_COMMITTED);
+        }
+
+        if (exact_size) {
+            persistenceOptions.sizeComputationModel(SizeComputationModel.EXACT_SIZE);
+        } else {
+            persistenceOptions.sizeComputationModel(SizeComputationModel.ESTIMATE_NUM_KEYS);
+        }
+
+        getDefaultRuntime().getSerializers().registerSerializer(serializer);
+        return new DiskBackedCorfuTable<>(persistenceOptions.build(), options, serializer);
     }
 
     private <V> PersistedCorfuTable<String, V> setupTable(
@@ -814,6 +845,109 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
         }
     }
 
+    @Property(tries = NUM_OF_TRIES)
+    void verifyRss() throws IOException, InterruptedException {
+        resetTests();
+        try {
+            long firstRss;
+            long secondRss;
+            long heapDelta;
+
+            // Warm-up phase.
+            final DiskBackedCorfuTable<String, String> tableA = setupTableInternal("A");
+
+            // We need to keep heap consumption constant during our measurement,
+            // otherwise, we do not know how much memory is consumed by RocksDB
+            // and how much by the JVM.
+            do {
+                long heapStart = Runtime.getRuntime().totalMemory();
+                firstRss = getRssInBytes();
+
+                final DiskBackedCorfuTable<String, String> table = setupTableInternal("B");
+                long heapEnd = Runtime.getRuntime().totalMemory();
+                secondRss = getRssInBytes();
+
+                heapDelta = heapEnd - heapStart;
+
+                tableA.close();
+                table.close();
+            } while (heapDelta != 0);
+
+            assertThat(secondRss - firstRss).isLessThan(TABLE_OVERHEAD);
+        } catch (UnsupportedOperationException ignore) {
+            // Not supported on this platform.
+        }
+    }
+
+    private void populateTable(DiskBackedCorfuTable<String, String> table, long count) {
+        final int GC_INTERVAL_ITERATION = 1024;
+        final int VALUE_SIZE = 1024;
+
+        String randomString = RandomStringUtils.random(VALUE_SIZE);
+        for (int i = 0; i < count; i++) {
+            table.put(String.valueOf(i), randomString);
+            if (i % GC_INTERVAL_ITERATION == 0) {
+                // To ensure that heap size does not grow,
+                // periodically perform GC.
+                System.gc();
+            }
+        }
+        System.gc();
+    }
+
+    @Property(tries = NUM_OF_TRIES)
+    void verifyWriteBufferLimit() throws IOException, InterruptedException {
+        final long writeBufferSize = 4 * 1024 * 1024;
+        final long maxWriteBuffers = 2;
+        final long maxValueNum = 20 * 1024;
+        final long fudgeFactor = 2;
+
+        final Options options = new Options(defaultOptions);
+        options.setWriteBufferSize(writeBufferSize);
+        options.setTableFormatConfig(new BlockBasedTableConfig().setNoBlockCache(false));
+
+        resetTests();
+
+        long firstRss;
+        long secondRss;
+        long heapDelta;
+
+        do {
+            final DiskBackedCorfuTable<String, String> table =
+                    setupTableInternal("A", !ENABLE_READ_YOUR_WRITES, !EXACT_SIZE,
+                    options, defaultSerializer);
+            long heapStart = Runtime.getRuntime().totalMemory();
+
+            firstRss = getRssInBytes();
+            populateTable(table, maxValueNum);
+            secondRss = getRssInBytes();
+
+            long heapEnd = Runtime.getRuntime().totalMemory();
+            heapDelta = heapEnd - heapStart;
+            table.close();
+
+            if (heapDelta != 0) {
+                table.close();
+                log.info("Heap size has changed. Retrying...");
+                continue;
+            }
+
+
+            long rssDelta = secondRss - firstRss;
+            double rssDeltaMb = 1.0 * rssDelta / 1024 / 1024;
+            log.info("{} - {} = {} ({})", secondRss, firstRss, rssDelta, rssDeltaMb);
+            System.out.println("DELTA: " + rssDeltaMb);
+
+            assertThat(rssDelta).isPositive();
+            if (rssDelta < writeBufferSize * maxWriteBuffers * fudgeFactor) {
+                break;
+            }
+
+        } while (true);
+
+    }
+
+
     /**
      * Verify RocksDB persisted cache is cleaned up
      */
@@ -849,6 +983,48 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
 
             // The database has not been compacted yet.
             executeTx(() -> assertThat(table.size()).isEqualTo(intended.size() * 2));
+        }
+    }
+
+    @Property(tries = NUM_OF_TRIES)
+    void testSnapshotMetrics(@ForAll @UniqueElements @Size(SAMPLE_SIZE)
+                             Set<@AlphaChars @StringLength(min = 1) String> intended) throws InterruptedException {
+        resetTests();
+
+        final Logger logger = Mockito.mock(Logger.class);
+        final List<String> logMessages = new ArrayList<>();
+        final CountDownLatch countDownLatch = new CountDownLatch(1);
+        final String tableFolderName = "metered-table";
+
+        Mockito.doAnswer(invocation -> {
+            synchronized (this) {
+                String logMessage = invocation.getArgument(0, String.class);
+                countDownLatch.countDown();
+                logMessages.add(logMessage);
+                return null;
+            }
+        }).when(logger).debug(logCaptor.capture());
+
+        final Duration loggingInterval = Duration.ofMillis(10);
+        initClientMetrics(logger, loggingInterval, PersistedCorfuTableTest.class.toString());
+
+        System.out.println(logger.isDebugEnabled());
+        System.out.println(logger.isInfoEnabled());
+
+        Counter c = MicroMeterUtils.counter("test-counter").get();;
+        c.increment();
+        c.increment();
+
+        countDownLatch.await();
+        System.out.println(c.count());
+        MicroMeterUtils.counterIncrement(1.0, "test-counter");
+
+        MicroMeterUtils.counterIncrement(1.0, "test-counter");
+        System.out.println(MicroMeterUtils.counter("test-counter").get().count());
+
+        try (final PersistedCorfuTable<String, String> table =
+                     setupTable(defaultTableName, ENABLE_READ_YOUR_WRITES, !EXACT_SIZE)) {
+                intended.forEach(entry -> executeTx(() -> table.insert(entry, entry)));
         }
     }
 
