@@ -16,6 +16,7 @@ import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.ObjectOpenOption;
+import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.util.ReflectionUtils;
 import org.corfudb.util.Utils;
 import org.corfudb.util.serializer.ISerializer;
@@ -36,7 +37,9 @@ public class MVOCorfuCompileProxy<
 
     private final UUID streamID;
 
-    private final Class<S> type;
+    private final Class<?> type;
+    private final Class<?> wrapperType;
+
 
     @Getter
     private final ISerializer serializer;
@@ -48,12 +51,14 @@ public class MVOCorfuCompileProxy<
 
     private final ObjectOpenOption objectOpenOption;
 
-    public MVOCorfuCompileProxy(CorfuRuntime rt, UUID streamID, Class<S> type, Object[] args,
-                                ISerializer serializer, Set<UUID> streamTags, ICorfuSMR wrapperObject,
-                                ObjectOpenOption objectOpenOption, MVOCache<S> mvoCache) {
+    public MVOCorfuCompileProxy(CorfuRuntime rt, UUID streamID, Class<S> type, Class<?> wrapperType,
+                                Object[] args, ISerializer serializer, Set<UUID> streamTags,
+                                ICorfuSMR wrapperObject, ObjectOpenOption objectOpenOption,
+                                MVOCache<S> mvoCache) {
         this.rt = rt;
         this.streamID = streamID;
         this.type = type;
+        this.wrapperType = wrapperType;
         this.args = args;
         this.serializer = serializer;
         this.streamTags = streamTags;
@@ -195,5 +200,13 @@ public class MVOCorfuCompileProxy<
     @Override
     public boolean isObjectCached() {
         return objectOpenOption.equals(ObjectOpenOption.CACHE);
+    }
+
+    @Override
+    public void close() {
+        // Remove this object from the object cache.
+        // This prevents a cached version from being returned in the future.
+        rt.getObjectsView().getObjectCache().remove(new ObjectsView.ObjectID(streamID, wrapperType));
+        getUnderlyingMVO().close();
     }
 }

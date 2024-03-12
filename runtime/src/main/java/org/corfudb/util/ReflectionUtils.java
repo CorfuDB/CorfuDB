@@ -98,8 +98,7 @@ public class ReflectionUtils {
             @NonNull Constructor[] constructors, @NonNull Object[] args)
             throws IllegalAccessException, InvocationTargetException, InstantiationException {
         // Figure out the argument types.
-        final List<Class> argTypes = Arrays
-                .stream(args).map(Object::getClass)
+        final List<Class> argTypes = Arrays.stream(args).map(Object::getClass)
                 .collect(Collectors.toList());
         // Filter out the constructors that do not have the same arity.
         final List<Constructor> constructorCandidates = Arrays.stream(constructors)

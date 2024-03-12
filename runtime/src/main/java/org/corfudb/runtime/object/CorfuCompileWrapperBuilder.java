@@ -55,7 +55,7 @@ public class CorfuCompileWrapperBuilder {
             MVOCache<S> mvoCache = rt.getObjectsView().getMvoCache();
             // Note: args are used when invoking the internal immutable data structure constructor
             wrapperObject.setCorfuSMRProxy(new MVOCorfuCompileProxy<>(rt, streamID,
-                    immutableClass, args, serializer, streamTags, wrapperObject, objectOpenOption,
+                    immutableClass, wrapperClass, args, serializer, streamTags, wrapperObject, objectOpenOption,
                     mvoCache));
             return (T) wrapperObject;
         } else if (type.getName().equals(PERSISTED_CORFU_TABLE_CLASS_NAME)) {
@@ -76,7 +76,7 @@ public class CorfuCompileWrapperBuilder {
             // good reason to enforce a global cache.
             MVOCache<S> mvoCache = new MVOCache<>(rt.getParameters().getMvoCacheExpiry());
             wrapperObject.setCorfuSMRProxy(new MVOCorfuCompileProxy<>(rt, streamID,
-                    coreClass, args, serializer, streamTags, wrapperObject, objectOpenOption,
+                    coreClass, wrapperClass, args, serializer, streamTags, wrapperObject, objectOpenOption,
                     mvoCache));
             return (T) wrapperObject;
         }

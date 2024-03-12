@@ -485,6 +485,7 @@ public class MultiVersionObject<S extends SnapshotGenerator<S> & ConsistencyView
      */
     private void releaseSnapshots() {
         snapshotFifo.forEach(SMRSnapshot::release);
+        // Evict all versions of this Table from MVOCache
         mvoCache.invalidateAllVersionsOf(getSmrStream().getID());
     }
 

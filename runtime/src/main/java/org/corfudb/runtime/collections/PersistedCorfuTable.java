@@ -11,7 +11,6 @@ import org.corfudb.runtime.object.ICorfuSMRUpcallTarget;
 import javax.annotation.Nonnull;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -68,7 +67,7 @@ public class PersistedCorfuTable<K, V> implements
 
     @Override
     public void close() {
-        proxy.getUnderlyingMVO().close();
+        proxy.close();
     }
 
     @Override
