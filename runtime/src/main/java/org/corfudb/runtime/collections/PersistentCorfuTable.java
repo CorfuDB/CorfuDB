@@ -63,7 +63,8 @@ public class PersistentCorfuTable<K, V> implements
 
     @Override
     public void close() {
-        // NO OP
+        // Evict all versions of this Table from MVOCache
+        proxy.getUnderlyingMVO().getMvoCache().invalidateAllVersionsOf(getCorfuSMRProxy().getStreamID());
     }
 
     @Override
