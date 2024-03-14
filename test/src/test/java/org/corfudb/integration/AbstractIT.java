@@ -5,7 +5,6 @@ import lombok.NonNull;
 import lombok.Setter;
 import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
-import net.bytebuddy.agent.ByteBuddyAgent;
 import org.apache.commons.io.FileUtils;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.common.util.URLUtils.NetworkInterfaceVersion;
@@ -28,7 +27,6 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.lang.reflect.Field;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.file.Files;
@@ -38,6 +36,7 @@ import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutionException;
@@ -206,16 +205,19 @@ public class AbstractIT extends AbstractCorfuTest {
     public static boolean shutdownCorfuServer(Process corfuServerProcess) throws Exception {
         int retries = SHUTDOWN_RETRIES;
         while (true) {
-            long parentPid = getPid(corfuServerProcess);
-            // Get Children PIDs
-            List<Long> pidList = getChildPIDs(parentPid);
-            pidList.add(parentPid);
+            Optional<Long> processPid = getPid(corfuServerProcess);
+            if (processPid.isPresent()) {
+                long parentPid = processPid.get();
+                // Get Children PIDs
+                List<Long> pidList = getChildPIDs(parentPid);
+                pidList.add(parentPid);
 
-            ProcessBuilder builder = new ProcessBuilder();
-            for (Long pid : pidList) {
-                builder.command(SH, HYPHEN_C, KILL_COMMAND + pid);
-                Process p = builder.start();
-                p.waitFor();
+                ProcessBuilder builder = new ProcessBuilder();
+                for (Long pid : pidList) {
+                    builder.command(SH, HYPHEN_C, KILL_COMMAND + pid);
+                    Process p = builder.start();
+                    p.waitFor();
+                }
             }
 
             if (retries == 0) {
@@ -328,14 +330,15 @@ public class AbstractIT extends AbstractCorfuTest {
         }
     }
 
-    public static long getPid(Process p) {
-        long pid = -1;
+    public static Optional<Long> getPid(Process p) {
+        Optional<Long> pid = Optional.empty();
         try {
             if (p.getClass().getName().equals("java.lang.UNIXProcess")
                     || p.getClass().getName().equals("java.lang.ProcessImpl")) {
-                pid = p.pid();
+                pid = Optional.of(p.pid());
             }
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            log.info("Unable to get Process ID", e);
         }
         return pid;
     }
