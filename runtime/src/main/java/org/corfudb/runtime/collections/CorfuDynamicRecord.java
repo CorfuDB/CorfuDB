@@ -44,8 +44,13 @@ public class CorfuDynamicRecord {
                               @Nullable DynamicMessage metadata) {
         this.payloadTypeUrl = payloadTypeUrl;
         this.payload = new CorfuDynamicMessage(payload);
-        this.metadataTypeUrl = metadataTypeUrl;
-        this.metadata = new CorfuDynamicMessage(metadata);
+        if (metadata != null) {
+            this.metadataTypeUrl = metadataTypeUrl;
+            this.metadata = new CorfuDynamicMessage(metadata);
+        } else {
+            this.metadataTypeUrl = "";
+            this.metadata = null;
+        }
     }
 
     public DynamicMessage getPayload() {
@@ -53,7 +58,7 @@ public class CorfuDynamicRecord {
     }
 
     public DynamicMessage getMetadata() {
-        return metadata.getPayload();
+        return metadata != null ? metadata.getPayload() : null;
     }
 
 
@@ -73,8 +78,9 @@ public class CorfuDynamicRecord {
         boolean payloadMatch = payloadTypeUrl.equals(corfuDynamicRecord.payloadTypeUrl)
                 && payload.equals(corfuDynamicRecord.payload);
 
-        // Compare the metadata.
-        boolean metadataMatch = metadata.equals(corfuDynamicRecord.metadata);
+        // Compare the metadata only if both are not null.
+        boolean metadataMatch = metadata == corfuDynamicRecord.metadata || // true when both are null
+                Objects.equals(metadata, corfuDynamicRecord.metadata);
 
         // Compare the metadata typeUrl. The typeUrl is null if there is no metadata.
         boolean metadataTypeUrlMatch;

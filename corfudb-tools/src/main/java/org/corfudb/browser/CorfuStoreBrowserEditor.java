@@ -407,9 +407,20 @@ public class CorfuStoreBrowserEditor implements CorfuBrowserEditorCommands {
         DynamicMessage newValueMsg =
             dynamicProtobufSerializer.createDynamicMessageFromJson(defaultValueAny,
                 newValue);
+
+        // If the table did not have metadata configured, then when the table's entry
+        // is created in the registry table, its section of google.protobuf.Any metadata = 4;
+        // is never filled in. So reading that unfilled section into defaultMetadataAny gets us
+        // a defaultInstance of the Any type which has type Url as an empty string.
+        if (!defaultMetadataAny.getTypeUrl().isEmpty() && newMetadata == null) {
+            log.error("Please supply metadata! Table has metadata schema defined as {}. At least pass an '{ }'",
+                    defaultMetadataAny.getTypeUrl());
+            return null;
+        }
         DynamicMessage newMetadataMsg =
+                !defaultMetadataAny.getTypeUrl().isEmpty() ?
             dynamicProtobufSerializer.createDynamicMessageFromJson(defaultMetadataAny,
-                newMetadata);
+                newMetadata) : null;
 
         // Metadata can be empty or null but key or value should not
         if (newKeyMsg == null || newValueMsg == null) {
