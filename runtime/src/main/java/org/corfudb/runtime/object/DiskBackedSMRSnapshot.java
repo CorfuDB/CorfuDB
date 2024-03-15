@@ -52,17 +52,14 @@ public class DiskBackedSMRSnapshot<S extends SnapshotGenerator<S>> implements SM
     }
 
     private boolean isInvalid() {
-        if (!this.readOptions.isOwningHandle()) {
-            return true; // The snapshot has already been released.
-        }
-
         if (!this.rocksDb.isOwningHandle()) {
             log.error("Invalid RocksDB instance {} for snapshot {}.",
                     rocksDb.getNativeHandle(), version);
             return true; // RocksDB instance has already been closed.
         }
 
-        return false;
+        // Check if the snapshot has already been released.
+        return !this.readOptions.isOwningHandle();
     }
 
     public <V> V executeInSnapshot(Function<ReadOptions, V> function) {

@@ -157,6 +157,7 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
                 runtime,
                 UUID.nameUUIDFromBytes(fullyQualifiedTableName.getBytes()),
                 ImmutableCorfuTable.<K, CorfuRecord<V, M>>getTypeToken().getRawType(),
+                PersistentCorfuTable.class,
                 args,
                 runtime.getSerializers().getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE),
                 new HashSet<UUID>(),

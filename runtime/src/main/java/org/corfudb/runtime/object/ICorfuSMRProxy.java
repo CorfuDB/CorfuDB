@@ -12,7 +12,7 @@ import java.util.UUID;
  * @param <S> The type of the SMR object which must extend
  *            {@link SnapshotGenerator} and {@link ConsistencyView}
  */
-public interface ICorfuSMRProxy<S extends SnapshotGenerator<S> & ConsistencyView> {
+public interface ICorfuSMRProxy<S extends SnapshotGenerator<S> & ConsistencyView> extends AutoCloseable {
 
     /**
      * Access the state of the object.
@@ -70,4 +70,10 @@ public interface ICorfuSMRProxy<S extends SnapshotGenerator<S> & ConsistencyView
      * @return the serializer associated with this SMR object.
      */
     ISerializer getSerializer();
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    void close();
 }

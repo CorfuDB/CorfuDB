@@ -67,6 +67,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.corfudb.test.SampleAppliance.Appliance;
 import static org.corfudb.test.SampleSchema.FirewallRule;
 import static org.corfudb.test.SampleSchema.ManagedResources;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -1501,6 +1502,62 @@ public class CorfuStoreShimTest extends AbstractViewTest {
 
         inMemoryTable.close();
         diskBackedTable.close();
+    }
+
+    @Test
+    public void testCloseOpen() throws Exception {
+        final int numEntries = 1000;
+        // Get a Corfu Runtime instance.
+        CorfuRuntime corfuRuntime = getDefaultRuntime();
+
+        // Creating Corfu Store using a connected corfu client.
+        CorfuStoreShim shimStore = new CorfuStoreShim(corfuRuntime);
+
+        // Define a namespace for the table.
+        final String someNamespace = "some-namespace";
+        // Define table name.
+        final String tableName = "DiskTable";
+        final String dataPath = Files.createTempDirectory(tableName).toString();
+        final String LOCK_FILE = "LOCK";
+
+        PersistenceOptions persistenceOptions = PersistenceOptions.newBuilder()
+                .setDataPath(dataPath)
+                .build();
+
+        Table<SampleSchema.Uuid, SampleSchema.SampleTableAMsg, ManagedResources> table = shimStore.openTable(
+                someNamespace,
+                tableName,
+                SampleSchema.Uuid.class,
+                SampleSchema.SampleTableAMsg.class,
+                ManagedResources.class,
+                TableOptions.builder().persistenceOptions(persistenceOptions).build());
+
+
+        try (ManagedTxnContext txnContext = shimStore.tx(someNamespace)) {
+            for (int i = 0; i < numEntries; i++) {
+                SampleSchema.Uuid key = SampleSchema.Uuid.newBuilder().setLsb(i).setMsb(i).build();
+                SampleSchema.SampleTableAMsg value = SampleSchema.SampleTableAMsg.newBuilder()
+                        .setPayload(String.valueOf(i)).build();
+                txnContext.putRecord(table, key, value, null);
+            }
+
+            CorfuStoreMetadata.Timestamp ts = txnContext.commit();
+            assertThat(ts.getSequence()).isPositive();
+        }
+
+        assertTrue(Files.exists(Paths.get(dataPath, LOCK_FILE)));
+        table.close();
+        assertFalse(Files.exists(Paths.get(dataPath, LOCK_FILE)));
+
+        table = shimStore.openTable(
+                someNamespace,
+                tableName,
+                SampleSchema.Uuid.class,
+                SampleSchema.SampleTableAMsg.class,
+                ManagedResources.class,
+                TableOptions.builder().persistenceOptions(persistenceOptions).build());
+
+        assertThat(table.count()).isEqualTo(numEntries);
     }
 
     @Test

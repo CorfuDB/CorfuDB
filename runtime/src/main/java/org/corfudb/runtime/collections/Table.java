@@ -213,13 +213,12 @@ public class Table<K extends Message, V extends Message, M extends Message> impl
                 .type(getUnderlyingType())
                 .build();
 
-        corfuTable.close();
-
-        Object tableObject = runtime.getObjectsView().getObjectCache().remove(oid);
+        Object tableObject = runtime.getObjectsView().getObjectCache().get(oid);
         if (tableObject == null) {
             throw new NoSuchElementException("resetTableData: No object cache entry for "+ fullyQualifiedTableName);
         }
 
+        corfuTable.close();
         initializeCorfuTable(runtime);
     }
 
