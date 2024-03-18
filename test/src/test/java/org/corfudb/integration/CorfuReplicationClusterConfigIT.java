@@ -54,6 +54,9 @@ import java.util.function.IntPredicate;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
+import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.LogReplicationMetadataType.CURRENT_CYCLE_MIN_SHADOW_STREAM_TS;
+import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.METADATA_TABLE_PREFIX_NAME;
+import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.REPLICATION_EVENT_TABLE_NAME;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 
@@ -1385,12 +1388,28 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         }
         assertThat(mapActive.count()).isEqualTo(thirdBatch);
 
+        Table<LogReplicationMetadata.ReplicationEventKey, LogReplicationMetadata.ReplicationEvent, Message> eventTable =
+                activeCorfuStore.openTable(LogReplicationMetadataManager.NAMESPACE,
+                        REPLICATION_EVENT_TABLE_NAME,
+                        LogReplicationMetadata.ReplicationEventKey.class,
+                        LogReplicationMetadata.ReplicationEvent.class,
+                        null,
+                        TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationEvent.class));
+
+        assertThat(eventTable.count()).isZero();
+
         // Perform an enforce full snapshot sync
         try (TxnContext txn = activeCorfuStore.txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
             txn.putRecord(configTable, DefaultClusterManager.OP_ENFORCE_SNAPSHOT_FULL_SYNC,
                     DefaultClusterManager.OP_ENFORCE_SNAPSHOT_FULL_SYNC, DefaultClusterManager.OP_ENFORCE_SNAPSHOT_FULL_SYNC);
             txn.commit();
         }
+
+        while(eventTable.count() == 0) {
+            //wait
+        }
+        assertThat(eventTable.count()).isOne();
+
         TimeUnit.SECONDS.sleep(mediumInterval);
 
         // Standby map should have thirdBatch size, since topology config is resumed.
@@ -1402,6 +1421,22 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
             replicationStatusVal = (ReplicationStatusVal)txn.getRecord(REPLICATION_STATUS_TABLE, key).getPayload();
             txn.commit();
         }
+
+        String metadataTableName = METADATA_TABLE_PREFIX_NAME + DefaultClusterConfig.getStandbyClusterId();
+        standbyCorfuStore.openTable(LogReplicationMetadataManager.NAMESPACE,
+                metadataTableName,
+                LogReplicationMetadata.LogReplicationMetadataKey.class,
+                LogReplicationMetadata.LogReplicationMetadataVal.class,
+                null,
+                TableOptions.fromProtoSchema(LogReplicationMetadata.LogReplicationMetadataVal.class));
+
+        LogReplicationMetadata.LogReplicationMetadataVal metadata = null;
+        try (TxnContext txn = standbyCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
+            LogReplicationMetadata.LogReplicationMetadataKey metadataKey = LogReplicationMetadata.LogReplicationMetadataKey.newBuilder().setKey(CURRENT_CYCLE_MIN_SHADOW_STREAM_TS.getVal()).build();
+            metadata = (LogReplicationMetadata.LogReplicationMetadataVal) txn.getRecord(metadataTableName, metadataKey).getPayload();
+            txn.commit();
+        }
+        long shadowStreamTs = Long.parseLong(metadata.getVal());
 
         log.info("ReplicationStatusVal: RemainingEntriesToSend: {}, SyncType: {}, Status: {}",
                 replicationStatusVal.getRemainingEntriesToSend(), replicationStatusVal.getSyncType(),
@@ -1419,6 +1454,42 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
                 .isEqualTo(LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType.FORCED);
         assertThat(replicationStatusVal.getSnapshotSyncInfo().getStatus())
                 .isEqualTo(LogReplicationMetadata.SyncStatus.COMPLETED);
+
+        assertThat(eventTable.count()).isZero();
+
+        shutdownCorfuServer(activeReplicationServer);
+
+        // Remove the force snapshot operation enqueued above from the test configTable.
+        try (TxnContext txn = activeCorfuStore.txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
+            txn.delete(configTable, DefaultClusterManager.OP_ENFORCE_SNAPSHOT_FULL_SYNC);
+            txn.commit();
+        }
+
+        // Append to mapSource
+        for (int i = thirdBatch; i < fourthBatch; i++) {
+            try (TxnContext txn = activeCorfuStore.txn(NAMESPACE)) {
+                txn.putRecord(mapActive, StringKey.newBuilder().setKey(String.valueOf(i)).build(),
+                        IntValue.newBuilder().setValue(i).build(), null);
+                txn.commit();
+            }
+        }
+        assertThat(mapActive.count()).isEqualTo(fourthBatch);
+
+
+        activeReplicationServer = runReplicationServer(activeReplicationServerPort, nettyPluginPath);
+
+        // Sink map should have thirdBatch size, since topology config is resumed.
+        waitForReplication(size -> size == fourthBatch, mapStandby, fourthBatch);
+        assertThat(mapStandby.count()).isEqualTo(fourthBatch);
+
+        try (TxnContext txn = standbyCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
+            LogReplicationMetadata.LogReplicationMetadataKey metadataKey = LogReplicationMetadata.LogReplicationMetadataKey.newBuilder().setKey(CURRENT_CYCLE_MIN_SHADOW_STREAM_TS.getVal()).build();
+            metadata = (LogReplicationMetadata.LogReplicationMetadataVal) txn.getRecord(metadataTableName, metadataKey).getPayload();
+            txn.commit();
+        }
+        long oldShadowTs = shadowStreamTs;
+        // If the force snapshot sync was processed again, the CurrentCycleMinShadowStreamTs would be updated. Verify this hasn't happened.
+        assertThat(oldShadowTs).isEqualTo(Long.parseLong(metadata.getVal()));
     }
 
 

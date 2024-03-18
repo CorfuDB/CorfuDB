@@ -1,10 +1,12 @@
 package org.corfudb.infrastructure.logreplication.replication.receive;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.Message;
 import com.google.protobuf.Timestamp;
 import io.micrometer.core.instrument.Timer;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.tuple.Pair;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.LogReplicationMetadataKey;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.LogReplicationMetadataVal;
@@ -57,7 +59,7 @@ public class LogReplicationMetadataManager {
     public static final String METADATA_TABLE_PREFIX_NAME = "CORFU-REPLICATION-WRITER-";
     public static final String REPLICATION_STATUS_TABLE = "LogReplicationStatus";
     public static final String LR_STATUS_STREAM_TAG = "lr_status";
-    private static final String REPLICATION_EVENT_TABLE_NAME = "LogReplicationEventTable";
+    public static final String REPLICATION_EVENT_TABLE_NAME = "LogReplicationEventTable";
     private static final String LR_STREAM_TAG = "log_replication";
 
     private final CorfuStore corfuStore;
@@ -759,14 +761,11 @@ public class LogReplicationMetadataManager {
     public void setSnapshotSyncStartMarker(TxnContext txn, UUID currentSnapshotSyncId, CorfuStoreMetadata.Timestamp shadowStreamTs) {
 
         long currentSnapshotSyncIdLong = currentSnapshotSyncId.getMostSignificantBits() & Long.MAX_VALUE;
-        long persistedSnapshotId = queryMetadata(txn, LogReplicationMetadataType.CURRENT_SNAPSHOT_CYCLE_ID).get(LogReplicationMetadataType.CURRENT_SNAPSHOT_CYCLE_ID);
 
-        if (persistedSnapshotId != currentSnapshotSyncIdLong) {
-            // Update if current Snapshot Sync differs from the persisted one, otherwise ignore.
-            // It could have already been updated in the case that leader changed in between a snapshot sync cycle
-            appendUpdate(txn, LogReplicationMetadataType.CURRENT_SNAPSHOT_CYCLE_ID, currentSnapshotSyncIdLong);
-            appendUpdate(txn, LogReplicationMetadataType.CURRENT_CYCLE_MIN_SHADOW_STREAM_TS, shadowStreamTs.getSequence());
-        }
+        // Update if current Snapshot Sync differs from the persisted one, otherwise ignore.
+        // It could have already been updated in the case that leader changed in between a snapshot sync cycle
+        appendUpdate(txn, LogReplicationMetadataType.CURRENT_SNAPSHOT_CYCLE_ID, currentSnapshotSyncIdLong);
+        appendUpdate(txn, LogReplicationMetadataType.CURRENT_CYCLE_MIN_SHADOW_STREAM_TS, shadowStreamTs.getSequence());
     }
 
     /**
@@ -796,6 +795,34 @@ public class LogReplicationMetadataManager {
         }
     }
 
+    public Pair<List<CorfuStoreEntry<ReplicationEventKey, ReplicationEvent, Message>>, CorfuStoreMetadata.Timestamp> getReplicationEventTable() {
+        List<CorfuStoreEntry<ReplicationEventKey, ReplicationEvent, Message>> outstandingEvents;
+        CorfuStoreMetadata.Timestamp ts;
+        try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
+            outstandingEvents = txn.executeQuery(replicationEventTable, p -> true);
+            ts = txn.commit();
+        }
+        return Pair.of(outstandingEvents, ts);
+    }
+
+    public void deleteProcessedEvent(ReplicationEventKey keyToDelete) {
+        try {
+            IRetry.build(IntervalRetry.class, () -> {
+                try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
+                    txn.delete(REPLICATION_EVENT_TABLE_NAME, keyToDelete);
+                    txn.commit();
+                } catch (TransactionAbortedException tae) {
+                    log.error("Error while attempting to delete event", tae);
+                    throw new RetryNeededException();
+                }
+                return null;
+            }).run();
+        } catch (InterruptedException e) {
+            log.error("Unrecoverable exception when attempting to reset replication status", e);
+            throw new UnrecoverableCorfuInterruptedError(e);
+        }
+    }
+
     public void removeFromStatusTable(String clusterId) {
         ReplicationStatusKey key = ReplicationStatusKey.newBuilder().setClusterId(clusterId).build();
 
@@ -810,9 +837,9 @@ public class LogReplicationMetadataManager {
      * Subscribe to the logReplicationEventTable
      * @param listener
      */
-    public void subscribeReplicationEventTable(StreamListener listener) {
+    public void subscribeReplicationEventTable(StreamListener listener, CorfuStoreMetadata.Timestamp ts) {
         log.info("LogReplication start listener for table {}", REPLICATION_EVENT_TABLE_NAME);
-        corfuStore.subscribeListener(listener, NAMESPACE, LR_STREAM_TAG, Collections.singletonList(REPLICATION_EVENT_TABLE_NAME));
+        corfuStore.subscribeListener(listener, NAMESPACE, LR_STREAM_TAG, Collections.singletonList(REPLICATION_EVENT_TABLE_NAME), ts);
     }
 
     /**
