@@ -9,6 +9,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.object.CorfuCompileWrapperBuilder;
 import org.corfudb.runtime.object.ICorfuSMR;
+import org.corfudb.runtime.view.ObjectsView.ObjectID;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 
@@ -16,6 +17,7 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 
 /**
  *
@@ -139,34 +141,40 @@ public class SMRObject<T extends ICorfuSMR<?>> {
             final SMRObject<T> smrObject = build();
 
             try {
-                log.info(CorfuRuntime.LOG_NOT_IMPORTANT, "ObjectBuilder: open Corfu stream {} id {}", smrObject.getStreamName(),
-                        smrObject.getStreamID());
+                String msg = "ObjectBuilder: open Corfu stream {} id {}";
+                log.info(CorfuRuntime.LOG_NOT_IMPORTANT, msg, smrObject.getStreamName(), smrObject.getStreamID());
 
                 if (smrObject.getOpenOption() == ObjectOpenOption.NO_CACHE) {
                     return CorfuCompileWrapperBuilder.getWrapper(smrObject);
                 } else {
-                    ObjectsView.ObjectID<T> oid = new ObjectsView.ObjectID(streamID, type);
-                    return (T) smrObject.getRuntime().getObjectsView().objectCache.computeIfAbsent(oid, x -> {
-                                try {
-                                    T result = CorfuCompileWrapperBuilder.getWrapper(smrObject);
+                    ObjectsView.ObjectID<T> oid = new ObjectsView.ObjectID<>(streamID, type);
 
-                                    // Get object serializer to check if we didn't attempt to set another serializer
-                                    // to an already existing map
-                                    ISerializer objectSerializer = result.getCorfuSMRProxy().getSerializer();
-                                    if (smrObject.getSerializer() != objectSerializer) {
-                                        log.warn("open: Attempt to open an existing object with a different serializer {}. " +
-                                                        "Object {} opened with original serializer {}.",
-                                                smrObject.getSerializer().getClass().getSimpleName(),
-                                                oid,
-                                                objectSerializer.getClass().getSimpleName());
-                                    }
-                                    log.info("Added SMRObject {} to objectCache", oid);
-                                    return result;
-                                } catch (Exception ex) {
-                                    throw new UnrecoverableCorfuError(ex);
-                                }
+                    Function<ObjectID<?>, T> tableFactory = x -> {
+                        try {
+                            T result = CorfuCompileWrapperBuilder.getWrapper(smrObject);
+
+                            // Get object serializer to check if we didn't attempt to set another serializer
+                            // to an already existing map
+                            ISerializer objectSerializer = result.getCorfuSMRProxy().getSerializer();
+                            if (smrObject.getSerializer() != objectSerializer) {
+                                log.warn("open: Attempt to open an existing object with a different serializer {}. " +
+                                                "Object {} opened with original serializer {}.",
+                                        smrObject.getSerializer().getClass().getSimpleName(),
+                                        oid,
+                                        objectSerializer.getClass().getSimpleName());
                             }
-                    );
+                            log.info("Added SMRObject {} to objectCache", oid);
+                            return result;
+                        } catch (Exception ex) {
+                            throw new UnrecoverableCorfuError(ex);
+                        }
+                    };
+
+                    return (T) smrObject
+                            .getRuntime()
+                            .getObjectsView()
+                            .getObjectCache()
+                            .computeIfAbsent(oid, tableFactory);
                 }
 
             } catch (Exception ex) {

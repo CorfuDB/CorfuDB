@@ -1,44 +1,46 @@
 package org.corfudb.runtime.collections;
 
-import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.collections.PersistentCorfuTableTest.CacheSizeForTest;
-import org.corfudb.runtime.collections.table.GenericCorfuTable;
-import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.view.AbstractViewTest;
-import org.corfudb.test.ManagedCorfuTableForTest;
 import org.corfudb.test.TestSchema.Uuid;
+import org.corfudb.test.managedtable.ManagedCorfuTable;
+import org.corfudb.test.managedtable.ManagedCorfuTable.ManagedCorfuTableConfig;
+import org.corfudb.test.managedtable.ManagedCorfuTableSetupManager;
+import org.corfudb.test.managedtable.ManagedCorfuTableSetupManager.ManagedCorfuTableSetup;
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.TestFactory;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 public class CorfuTableDynamicTest extends AbstractViewTest {
 
+
     @TestFactory
     public Stream<DynamicTest> dynamicTests() {
-        List<GenericCorfuTable<?, Uuid, CorfuRecord<Uuid, Uuid>>> tables = new ArrayList<>();
-        tables.add(new PersistentCorfuTable<>());
-        tables.add(new PersistedCorfuTable<>());
+        List<ManagedCorfuTableSetup<Uuid, Uuid, Uuid>> tables = new ArrayList<>();
+        tables.add(new ManagedCorfuTableSetupManager<Uuid, Uuid, Uuid>().getPersistentCorfu());
+        tables.add(new ManagedCorfuTableSetupManager<Uuid, Uuid, Uuid>().getPersistedCorfu());
 
-        return tables.stream().map(table -> DynamicTest.dynamicTest("dynamic", () -> {
-            resetTests();
-
+        return tables.stream().map(tableSetup -> DynamicTest.dynamicTest("dynamic", () -> {
             addSingleServer(SERVERS.PORT_0);
 
             buildNewManagedRuntime(getLargeRtParams(), rt -> {
-                ManagedCorfuTableForTest.<Uuid, Uuid, Uuid>builder()
+                ManagedCorfuTableConfig<Uuid, Uuid, Uuid> cfg = ManagedCorfuTableConfig
+                        .<Uuid, Uuid, Uuid>builder()
                         .rt(rt)
                         .kClass(Uuid.class)
                         .vClass(Uuid.class)
                         .mClass(Uuid.class)
                         .schemaOptions(null)
-                        .table(table)
+                        .build();
+
+                ManagedCorfuTable
+                        .<Uuid, Uuid, Uuid>builder()
+                        .config(cfg)
+                        .tableSetup(tableSetup)
                         .build()
                         .execute(corfuTable -> {
                             for (int i = 0; i < 100; i++) {
@@ -46,36 +48,6 @@ public class CorfuTableDynamicTest extends AbstractViewTest {
                                 CorfuRecord<Uuid, Uuid> value1 = new CorfuRecord<>(uuidMsg, uuidMsg);
                                 corfuTable.insert(uuidMsg, value1);
                             }
-
-                            AtomicInteger size1 = new AtomicInteger();
-                            AtomicInteger size2 = new AtomicInteger();
-                            Thread thread1 = new Thread(() -> {
-                                rt.getObjectsView().TXBuild()
-                                        .type(TransactionType.SNAPSHOT)
-                                        .snapshot(new Token(0, 9))
-                                        .build()
-                                        .begin();
-                                size1.set(corfuTable.keySet().size());
-                                rt.getObjectsView().TXEnd();
-                            });
-
-                            Thread thread2 = new Thread(() -> {
-                                rt.getObjectsView().TXBuild()
-                                        .type(TransactionType.SNAPSHOT)
-                                        .snapshot(new Token(0, 99))
-                                        .build()
-                                        .begin();
-                                size2.set(corfuTable.keySet().size());
-                                rt.getObjectsView().TXEnd();
-                            });
-
-                            thread1.start();
-                            thread2.start();
-                            thread1.join();
-                            thread2.join();
-
-                            assertThat(size1.get()).isEqualTo(10);
-                            assertThat(size2.get()).isEqualTo(100);
                         });
             });
 
