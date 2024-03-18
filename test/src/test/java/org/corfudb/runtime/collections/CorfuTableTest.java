@@ -10,6 +10,7 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.view.AbstractViewTest;
+import org.corfudb.test.StringIndexer;
 import org.junit.Ignore;
 import org.junit.Test;
 
