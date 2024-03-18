@@ -430,13 +430,34 @@ public class LogReplicationSinkManager implements DataReceiver {
 
         processSnapshotSyncApplied(entry);
 
-        rxState = RxState.LOG_ENTRY_SYNC;
-        logEntrySinkBufferManager = new LogEntrySinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,
-                logReplicationMetadataManager.getLastProcessedLogEntryBatchTimestamp(), this);
-        logEntryWriter.reset(entry.getMetadata().getSnapshotTimestamp(), entry.getMetadata().getSnapshotTimestamp());
+        // TODO V2: revisit this when increasing the number of threads in logReplicationServer. (fix in PR 3750)
+        // snapshot_Start and completeSnapshotApply is executed by different threads, and they race on updating rxState.
+        // Consider this scenario: Thread1 is working on a snapshot apply with baseSnapshotTimestamp T1 and comes here
+        // to update the in-memory states.
+        // At the same time thread2 receives a snapshot_start msg and updates the baseSnapshotTimestamp to T2 and
+        // updates rxState to Snapshot_Sync.
+        // Thread1 updates rxState to Log_entry_sync and exits.
+        // Now, the incoming snapshot messages will be dropped as the rxState = Log_entry_sync.
+        // checking baseSnapshotTimestamp before updating rxState will resolve this race condition.
+        synchronized (this) {
+            if (entry.getMetadata().getSnapshotTimestamp() < baseSnapshotTimestamp) {
+                log.warn("Not transitioning to Log_Entry sync, applied snapshotTs {} is before the current " +
+                        "baseSnapshotTs {}", baseSnapshotTimestamp, entry.getMetadata().getSnapshotTimestamp());
+                return;
+            }
 
-        log.info("Snapshot apply complete, sync_id={}, snapshot={}, state={}", entry.getMetadata().getSyncRequestId(),
-                entry.getMetadata().getSnapshotTimestamp(), rxState);
+            rxState = RxState.LOG_ENTRY_SYNC;
+
+            // Create the Sink Buffer Manager with the last processed timestamp as the snapshot timestamp (log entry
+            // batch processed timestamp is already updated to the snapshot timestamp
+            logEntrySinkBufferManager = new LogEntrySinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,
+                    logReplicationMetadataManager.getLastProcessedLogEntryBatchTimestamp(), this);
+            logEntryWriter.reset(entry.getMetadata().getSnapshotTimestamp(), entry.getMetadata().getSnapshotTimestamp());
+
+            log.info("Snapshot apply complete, sync_id={}, snapshot={}, state={}", entry.getMetadata().getSyncRequestId(),
+                    entry.getMetadata().getSnapshotTimestamp(), rxState);
+        }
+
     }
 
     /**
