@@ -161,7 +161,7 @@ public class SnapshotSender {
                         // Snapshot Sync Transfer Completed
                         log.info("Snapshot sync transfer completed for {} on timestamp={}, ack={}", snapshotSyncEventId,
                                 baseSnapshotTimestamp, TextFormat.shortDebugString(ack.getMetadata()));
-                        snapshotSyncTransferComplete(snapshotSyncEventId);
+                        snapshotSyncTransferComplete(snapshotSyncEventId, forcedSnapshotSync);
                     } else {
                         log.warn("Expected ack for {}, but received for a different snapshot {}", baseSnapshotTimestamp,
                                 ack.getMetadata());
@@ -194,7 +194,7 @@ public class SnapshotSender {
                 dataSenderBufferManager.sendWithBuffering(getSnapshotSyncStartMarker(snapshotSyncEventId));
                 snapshotSyncAck = dataSenderBufferManager.sendWithBuffering(getSnapshotSyncEndMarker(snapshotSyncEventId));
                 snapshotSyncAck.get(DEFAULT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
-                snapshotSyncTransferComplete(snapshotSyncEventId);
+                snapshotSyncTransferComplete(snapshotSyncEventId, forcedSnapshotSync);
             } catch (Exception e) {
                 log.warn("Caught exception while sending data to sink.", e);
                 snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.UNKNOWN, forcedSnapshotSync);
@@ -270,11 +270,11 @@ public class SnapshotSender {
      *
      * @param snapshotSyncEventId unique identifier for the completed snapshot sync.
      */
-    private void snapshotSyncTransferComplete(UUID snapshotSyncEventId) {
+    private void snapshotSyncTransferComplete(UUID snapshotSyncEventId, boolean forcedSnapshotSync) {
         // We need to bind the internal event (COMPLETE) to the snapshotSyncEventId that originated it, this way
         // the state machine can correlate to the corresponding state (in case of delayed events)
         fsm.input(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_TRANSFER_COMPLETE,
-                new LogReplicationEventMetadata(snapshotSyncEventId, baseSnapshotTimestamp, baseSnapshotTimestamp)));
+                new LogReplicationEventMetadata(snapshotSyncEventId, baseSnapshotTimestamp, baseSnapshotTimestamp, forcedSnapshotSync)));
     }
 
     /**
