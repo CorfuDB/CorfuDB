@@ -20,6 +20,7 @@ import org.corfudb.runtime.exceptions.WriteSizeException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.MVOCache;
+import org.corfudb.runtime.object.SnapshotGenerator;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.object.transactions.Transaction;
 import org.corfudb.runtime.object.transactions.Transaction.TransactionBuilder;
@@ -65,11 +66,11 @@ public class ObjectsView extends AbstractView {
     }
 
     @Getter
-    Map<ObjectID, Object> objectCache = new ConcurrentHashMap<>();
+    private final Map<ObjectID<?>, ICorfuSMR<?>> objectCache = new ConcurrentHashMap<>();
 
     @Getter
     @Setter
-    MVOCache mvoCache = new MVOCache(runtime);
+    private MVOCache<? extends SnapshotGenerator<?>> mvoCache = new MVOCache<>(runtime);
 
     public ObjectsView(@Nonnull final CorfuRuntime runtime) {
         super(runtime);
@@ -238,8 +239,8 @@ public class ObjectsView extends AbstractView {
      * open with the NO_CACHE options will not be gc'd
      */
     public void gc(long trimMark) {
-        for (Object obj : getObjectCache().values()) {
-            ((ICorfuSMR) obj).getCorfuSMRProxy().getUnderlyingMVO().gc(trimMark);
+        for (ICorfuSMR<?> obj : getObjectCache().values()) {
+            obj.getCorfuSMRProxy().getUnderlyingMVO().gc(trimMark);
         }
     }
 

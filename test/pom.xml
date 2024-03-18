@@ -31,6 +31,12 @@
         </dependency>
         <dependency>
             <groupId>org.corfudb</groupId>
+            <artifactId>runtime</artifactId>
+            <version>${project.version}</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.corfudb</groupId>
             <artifactId>corfudb-tools</artifactId>
             <version>${project.version}</version>
             <scope>provided</scope>
