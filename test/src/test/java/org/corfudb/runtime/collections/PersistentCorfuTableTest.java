@@ -3,7 +3,6 @@ package org.corfudb.runtime.collections;
 import org.apache.commons.lang3.tuple.Pair;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.ExampleSchemas;
 import org.corfudb.runtime.ExampleSchemas.Adult;
 import org.corfudb.runtime.ExampleSchemas.Baseball;
@@ -30,8 +29,9 @@ import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.AddressSpaceView;
 import org.corfudb.runtime.view.ObjectOpenOption;
 import org.corfudb.runtime.view.SMRObject;
-import org.corfudb.test.managedtable.ManagedCorfuTable;
+import org.corfudb.test.CacheSizeForTest;
 import org.corfudb.test.TestSchema.Uuid;
+import org.corfudb.test.managedtable.ManagedCorfuTable;
 import org.corfudb.test.managedtable.ManagedCorfuTable.ManagedCorfuTableConfig;
 import org.corfudb.test.managedtable.ManagedCorfuTableSetupManager;
 import org.corfudb.util.serializer.ProtobufSerializer;
@@ -57,6 +57,9 @@ import static org.assertj.core.api.Assertions.fail;
 import static org.corfudb.runtime.ExampleSchemas.SportsProfessional;
 import static org.corfudb.runtime.ExampleSchemas.TrainingPlan;
 import static org.corfudb.runtime.view.ObjectsView.ObjectID;
+import static org.corfudb.test.RtParamsForTest.getLargeRtParams;
+import static org.corfudb.test.RtParamsForTest.getMediumRtParams;
+import static org.corfudb.test.RtParamsForTest.getSmallRtParams;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -112,24 +115,6 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
                 assertThat(size2.get()).isEqualTo(100);
             });
         });
-    }
-
-    private CorfuRuntimeParameters getLargeRtParams() {
-        return CorfuRuntimeParameters.builder()
-                .maxCacheEntries(CacheSizeForTest.LARGE.size)
-                .build();
-    }
-
-    private CorfuRuntimeParameters getMediumRtParams() {
-        return CorfuRuntimeParameters.builder()
-                .maxCacheEntries(CacheSizeForTest.MEDIUM.size)
-                .build();
-    }
-
-    private CorfuRuntimeParameters getSmallRtParams() {
-        return CorfuRuntimeParameters.builder()
-                .maxCacheEntries(CacheSizeForTest.SMALL.size)
-                .build();
     }
 
     @Test
@@ -462,8 +447,11 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
                             .kClass(Uuid.class)
                             .vClass(ExampleValue.class)
                             .mClass(ManagedMetadata.class)
-                            .schemaOptions(null)
+                            .withSchema(false)
                             .build()
+                    )
+                    .tableSetup(new ManagedCorfuTableSetupManager<Uuid, ExampleValue, ManagedMetadata>()
+                            .getPersistentCorfu()
                     )
                     .build()
                     .execute(corfuTable -> {
@@ -528,8 +516,10 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
                             .kClass(ExampleSchemas.Uuid.class)
                             .vClass(ExampleValue.class)
                             .mClass(ManagedMetadata.class)
-                            .schemaOptions(TableOptions.fromProtoSchema(ExampleValue.class).getSchemaOptions())
                             .build()
+                    )
+                    .tableSetup(new ManagedCorfuTableSetupManager<ExampleSchemas.Uuid, ExampleValue, ManagedMetadata>()
+                            .getPersistentCorfu()
                     )
                     .build()
                     .execute(corfuTable -> {
@@ -587,8 +577,10 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
                             .kClass(ExampleSchemas.Uuid.class)
                             .vClass(ExampleValue.class)
                             .mClass(ManagedMetadata.class)
-                            .schemaOptions(TableOptions.fromProtoSchema(ExampleValue.class).getSchemaOptions())
                             .build()
+                    )
+                    .tableSetup(new ManagedCorfuTableSetupManager<ExampleSchemas.Uuid, ExampleValue, ManagedMetadata>()
+                            .getPersistentCorfu()
                     )
                     .build()
                     .execute(table -> {
@@ -766,8 +758,10 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
                             .kClass(Uuid.class)
                             .vClass(Company.class)
                             .mClass(ManagedMetadata.class)
-                            .schemaOptions(TableOptions.fromProtoSchema(Company.class).getSchemaOptions())
                             .build()
+                    )
+                    .tableSetup(new ManagedCorfuTableSetupManager<Uuid, Company, ManagedMetadata>()
+                            .getPersistentCorfu()
                     )
                     .build()
                     .execute(table -> {
@@ -889,8 +883,10 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
                             .kClass(Uuid.class)
                             .vClass(Person.class)
                             .mClass(ManagedMetadata.class)
-                            .schemaOptions(TableOptions.fromProtoSchema(Person.class).getSchemaOptions())
                             .build()
+                    )
+                    .tableSetup(new ManagedCorfuTableSetupManager<Uuid, Person, ManagedMetadata>()
+                            .getPersistentCorfu()
                     )
                     .build()
                     .execute(table -> {
@@ -954,8 +950,10 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
                             .kClass(Uuid.class)
                             .vClass(Office.class)
                             .mClass(ManagedMetadata.class)
-                            .schemaOptions(TableOptions.fromProtoSchema(Office.class).getSchemaOptions())
                             .build()
+                    )
+                    .tableSetup(new ManagedCorfuTableSetupManager<Uuid, Office, ManagedMetadata>()
+                            .getPersistentCorfu()
                     )
                     .build()
                     .execute(table -> {
@@ -1040,8 +1038,10 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
                             .kClass(Uuid.class)
                             .vClass(Adult.class)
                             .mClass(ManagedMetadata.class)
-                            .schemaOptions(TableOptions.fromProtoSchema(Office.class).getSchemaOptions())
                             .build()
+                    )
+                    .tableSetup(new ManagedCorfuTableSetupManager<Uuid, Adult, ManagedMetadata>()
+                            .getPersistentCorfu()
                     )
                     .build()
                     .execute(table -> {
@@ -1141,7 +1141,6 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
                             .kClass(Uuid.class)
                             .vClass(SportsProfessional.class)
                             .mClass(ManagedMetadata.class)
-                            .schemaOptions(TableOptions.fromProtoSchema(Office.class).getSchemaOptions())
                             .build()
                     )
                     .tableSetup(new ManagedCorfuTableSetupManager<Uuid, SportsProfessional, ManagedMetadata>()
@@ -1387,14 +1386,5 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
                 }
             }
         });
-    }
-
-    public enum CacheSizeForTest {
-        SMALL(3), MEDIUM(100), LARGE(50_000);
-        public final long size;
-
-        CacheSizeForTest(long size) {
-            this.size = size;
-        }
     }
 }

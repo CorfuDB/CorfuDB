@@ -7,6 +7,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.PersistedCorfuTable;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
+import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.table.GenericCorfuTable;
 import org.corfudb.runtime.object.MVOCorfuCompileProxy;
 import org.corfudb.runtime.object.PersistenceOptions;
@@ -26,7 +27,6 @@ import java.util.UUID;
 
 public class ManagedCorfuTableSetupManager<K extends Message, V extends Message, M extends Message> {
 
-    @Getter
     private final ManagedCorfuTableSetup<K, V, M> persistedCorfu = config -> {
         String diskBackedDirectory = "/tmp/";
 
@@ -36,7 +36,8 @@ public class ManagedCorfuTableSetupManager<K extends Message, V extends Message,
         PersistenceOptionsBuilder persistenceOptions = PersistenceOptions.builder()
                 .dataPath(Paths.get(diskBackedDirectory, config.getTableName()));
 
-        return config.getRt()
+        return config
+                .getRt()
                 .getObjectsView()
                 .build()
                 .setTypeToken(PersistedCorfuTable.<K, CorfuRecord<V, M>>getTypeToken())
@@ -46,9 +47,8 @@ public class ManagedCorfuTableSetupManager<K extends Message, V extends Message,
                 .open();
     };
 
-    @Getter
     private final ManagedCorfuTableSetup<K, V, M> persistentCorfu = config -> {
-        String defaultInstanceMethodName = "getDefaultInstance";
+        String defaultInstanceMethodName = TableOptions.DEFAULT_INSTANCE_METHOD_NAME;
         K defaultKeyMessage = (K) config.getKClass().getMethod(defaultInstanceMethodName).invoke(null);
         addTypeToClassMap(config.getRt(), defaultKeyMessage);
 
@@ -82,6 +82,14 @@ public class ManagedCorfuTableSetupManager<K extends Message, V extends Message,
         return table;
     };
 
+    public ManagedCorfuTableSetup<K, V, M> getPersistentCorfu() {
+        return persistentCorfu.withToString("PersistentCT");
+    }
+
+    public ManagedCorfuTableSetup<K, V, M> getPersistedCorfu() {
+        return persistedCorfu.withToString("PersistedCT");
+    }
+
     /**
      * Adds the schema to the class map to enable serialization of this table data.
      */
@@ -112,5 +120,19 @@ public class ManagedCorfuTableSetupManager<K extends Message, V extends Message,
         GenericCorfuTable<? extends SnapshotGenerator<?>, K, CorfuRecord<V, M>> setup(
                 ManagedCorfuTableConfig<K, V, M> config
         ) throws Exception;
+
+        default ManagedCorfuTableSetup<K, V, M> withToString(String toString) {
+            return new ManagedCorfuTableSetup<K, V, M>(){
+                @Override
+                public GenericCorfuTable<? extends SnapshotGenerator<?>, K, CorfuRecord<V, M>> setup(
+                        ManagedCorfuTableConfig<K, V, M> config) throws Exception {
+                    return ManagedCorfuTableSetup.this.setup(config);
+                }
+
+                public String toString(){
+                    return toString;
+                }
+            };
+        }
     }
 }
