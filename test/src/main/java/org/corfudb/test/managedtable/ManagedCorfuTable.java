@@ -10,6 +10,7 @@ import org.corfudb.runtime.CorfuOptions.SchemaOptions;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.ExampleSchemas.ExampleValue;
 import org.corfudb.runtime.ExampleSchemas.ManagedMetadata;
+import org.corfudb.runtime.ExampleSchemas.Person;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.ProtobufIndexer;
 import org.corfudb.runtime.collections.TableOptions;
@@ -19,6 +20,9 @@ import org.corfudb.test.TestSchema.Uuid;
 import org.corfudb.test.managedtable.ManagedCorfuTableSetupManager.ManagedCorfuTableSetup;
 import org.corfudb.util.LambdaUtils.ThrowableConsumer;
 
+import java.lang.reflect.InvocationTargetException;
+import java.util.Optional;
+
 @Builder
 public class ManagedCorfuTable<K extends Message, V extends Message, M extends Message> {
     @NonNull
@@ -26,8 +30,7 @@ public class ManagedCorfuTable<K extends Message, V extends Message, M extends M
     @NonNull
     private final ManagedCorfuTableSetup<K, V, M> tableSetup;
 
-    public static ManagedCorfuTable<Uuid, ExampleValue, ManagedMetadata> buildExample(CorfuRuntime rt)
-            throws Exception {
+    public static ManagedCorfuTable<Uuid, ExampleValue, ManagedMetadata> buildExample(CorfuRuntime rt) {
 
         ManagedCorfuTableConfig<Uuid, ExampleValue, ManagedMetadata> cfg = ManagedCorfuTableConfig
                 .<Uuid, ExampleValue, ManagedMetadata>builder()
@@ -35,7 +38,6 @@ public class ManagedCorfuTable<K extends Message, V extends Message, M extends M
                 .kClass(Uuid.class)
                 .vClass(ExampleValue.class)
                 .mClass(ManagedMetadata.class)
-                .schemaOptions(TableOptions.fromProtoSchema(ExampleValue.class).getSchemaOptions())
                 .build();
 
         ManagedCorfuTableSetup<Uuid, ExampleValue, ManagedMetadata> tableInit =
@@ -56,7 +58,6 @@ public class ManagedCorfuTable<K extends Message, V extends Message, M extends M
                 .kClass(Uuid.class)
                 .vClass(Uuid.class)
                 .mClass(Uuid.class)
-                .schemaOptions(TableOptions.fromProtoSchema(Uuid.class).getSchemaOptions())
                 .build();
 
         ManagedCorfuTableSetup<Uuid, Uuid, Uuid> tableInit =
@@ -94,16 +95,16 @@ public class ManagedCorfuTable<K extends Message, V extends Message, M extends M
         @Default
         private final String tableName = "some-table";
 
-        private final SchemaOptions schemaOptions;
+        @Default
+        private final boolean withSchema = true;
 
-        Object[] getArgs(V defaultValueMessage) {
-            Object[] args = {};
-
-            // If no schema options are provided, omit secondary indexes.
-            if (schemaOptions != null) {
-                args = new Object[]{new ProtobufIndexer(defaultValueMessage, schemaOptions)};
+        Object[] getArgs(V defaultValueMessage) throws Exception {
+            if (withSchema) {
+                SchemaOptions schemaOptions = TableOptions.fromProtoSchema(vClass).getSchemaOptions();
+                return new Object[]{new ProtobufIndexer(defaultValueMessage, schemaOptions)};
+            } else {
+                return new Object[]{};
             }
-            return args;
         }
 
         /**

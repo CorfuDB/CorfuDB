@@ -5,6 +5,7 @@ import com.google.protobuf.Descriptors.OneofDescriptor;
 import com.google.protobuf.Message;
 import org.corfudb.common.util.ClassUtils;
 import org.corfudb.runtime.CorfuOptions;
+import org.corfudb.runtime.CorfuOptions.SchemaOptions;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -32,7 +33,7 @@ public class ProtobufIndexer implements Index.Registry<Message, CorfuRecord<Mess
     // Map from secondary index name to index path (index fully qualified name)
     private final HashMap<String, String> secondaryIndexNameToPath = new HashMap<>();
 
-    public ProtobufIndexer(Message payloadSchema, CorfuOptions.SchemaOptions schemaOptions) {
+    public ProtobufIndexer(Message payloadSchema, SchemaOptions schemaOptions) {
         registerSecondaryIndex(payloadSchema, schemaOptions);
     }
 
@@ -308,7 +309,7 @@ public class ProtobufIndexer implements Index.Registry<Message, CorfuRecord<Mess
     }
 
     private void registerSecondaryIndex(final Message payloadSchema,
-                                        final CorfuOptions.SchemaOptions schemaOptions) {
+                                        final SchemaOptions schemaOptions) {
         if (schemaOptions.getSecondaryKeyCount() > 0) {
             for (int i = 0; i < schemaOptions.getSecondaryKeyCount(); i++) {
                 CorfuOptions.SecondaryIndex secondaryIndex = schemaOptions
@@ -358,7 +359,7 @@ public class ProtobufIndexer implements Index.Registry<Message, CorfuRecord<Mess
      */
     private void validateSecondaryKey(String indexPath, FieldDescriptor fieldDescriptor) {
         if (fieldDescriptor == null) {
-            throw new IllegalArgumentException("Invalid secondary key ="+indexPath+". Field does not exist");
+            throw new IllegalArgumentException("Invalid secondary key="+indexPath+". Field does not exist");
         }
 
         if (!indexPath.isEmpty()) {
