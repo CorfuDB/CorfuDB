@@ -55,7 +55,7 @@ public class ObjectsView extends AbstractView {
     }
 
     @Getter
-    private final Map<ObjectID<?>, ICorfuSMR<?>> objectCache = new ConcurrentHashMap<>();
+    private final Map<ObjectID, ICorfuSMR<?>> objectCache = new ConcurrentHashMap<>();
 
     @Getter
     @Setter
