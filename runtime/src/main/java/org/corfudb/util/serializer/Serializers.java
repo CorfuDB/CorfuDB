@@ -25,14 +25,6 @@ public class Serializers {
     public static final PrimitiveSerializer PRIMITIVE = new PrimitiveSerializer((byte) 3);
     public static final CorfuQueueSerializer QUEUE_SERIALIZER = new CorfuQueueSerializer((byte) 4);
 
-
-    /**
-     * @return the recommended default serializer used for converting objects into write format.
-     */
-    public static final ISerializer getDefaultSerializer() {
-        return Serializers.JSON;
-    }
-
     public static final Map<Byte, ISerializer> serializersMap;
 
     static {
@@ -45,6 +37,13 @@ public class Serializers {
     }
 
     private final ConcurrentMap<Byte, ISerializer> customSerializers = new ConcurrentHashMap<>();
+
+    /**
+     * @return the recommended default serializer used for converting objects into write format.
+     */
+    public static ISerializer getDefaultSerializer() {
+        return Serializers.JSON;
+    }
 
     public <T extends ISerializer> T getSerializer(Byte type, Class<T> serializerType) {
         ISerializer serializer = getSerializer(type);
