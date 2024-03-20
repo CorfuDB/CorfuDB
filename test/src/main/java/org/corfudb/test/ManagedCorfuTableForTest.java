@@ -11,6 +11,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.ExampleSchemas.ExampleValue;
 import org.corfudb.runtime.ExampleSchemas.ManagedMetadata;
 import org.corfudb.runtime.collections.CorfuRecord;
+import org.corfudb.runtime.collections.ImmutableCorfuTable;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.collections.ProtobufIndexer;
 import org.corfudb.runtime.collections.TableOptions;
@@ -93,12 +94,13 @@ public class ManagedCorfuTableForTest<K extends Message, V extends Message, M ex
         Object[] args = getArgs(defaultValueMessage);
 
         ProtobufSerializer serializer = getSerializer();
-
         final String fullyQualifiedTableName = getFullyQualifiedTableName();
+
         MVOCorfuCompileProxy proxy = new MVOCorfuCompileProxy(
                 rt,
                 UUID.nameUUIDFromBytes(fullyQualifiedTableName.getBytes()),
                 table.getTableTypeToken().getRawType(),
+                PersistentCorfuTable.class,
                 args,
                 serializer,
                 new HashSet<UUID>(),

@@ -434,7 +434,7 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
                     tableB.size();
 
                     assertThat(rt.getObjectsView().getObjectCache())
-                            .containsOnlyKeys(new ObjectID<>(streamA, PersistentCorfuTable.class));
+                            .containsOnlyKeys(new ObjectID(streamA, PersistentCorfuTable.class));
 
                     Set<VersionedObjectIdentifier> allKeys = rt.getObjectsView().getMvoCache().keySet();
                     Set<UUID> allObjectIds = allKeys.stream()
