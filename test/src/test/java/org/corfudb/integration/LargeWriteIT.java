@@ -4,15 +4,21 @@ import com.google.common.reflect.TypeToken;
 import org.corfudb.common.compression.Codec;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters.CorfuRuntimeParametersBuilder;
+import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.WriteSizeException;
+import org.corfudb.util.TableHelper;
+import org.corfudb.util.TableHelper.TableType;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.corfudb.util.TableHelper.openTablePlain;
 
 /**
  * A set integration tests that exercise failure modes related to
@@ -52,8 +58,9 @@ public class LargeWriteIT extends AbstractIT {
         shutdownCorfuServer(server_1);
     }
 
-    @Test
-    public void largeTransaction() throws Exception {
+    @ParameterizedTest
+    @EnumSource(TableType.class)
+    public void largeTransaction(TableType tableType) throws Exception {
         final String tableName = "table1";
 
         // Start node one and populate it with data
@@ -74,12 +81,7 @@ public class LargeWriteIT extends AbstractIT {
         CorfuRuntime runtime = createRuntime(DEFAULT_ENDPOINT, paramsBuilder);
         byte[] largePayload = new byte[maxWriteSize * 2];
 
-        PersistentCorfuTable<String, byte[]> map = runtime.getObjectsView()
-                .build()
-                .setTypeToken(new TypeToken<PersistentCorfuTable<String, byte[]>>() {})
-                .setStreamName(tableName)
-                .setSerializer(Serializers.JAVA)
-                .open();
+        ICorfuTable<String, byte[]> map = openTablePlain(tableName, runtime, Serializers.JAVA, tableType);
 
         runtime.getObjectsView().TXBegin();
         map.insert("key1", largePayload);

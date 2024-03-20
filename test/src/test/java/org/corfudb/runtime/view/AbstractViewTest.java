@@ -38,6 +38,9 @@ import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.mockito.MockitoAnnotations;
 
 import javax.annotation.Nonnull;
@@ -196,6 +199,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
     /**
      * Before each test, reset the tests.
      */
+    @BeforeEach
     @Before
     public void resetTests() {
         runtime.parseConfigurationString(getDefaultConfigurationString());
@@ -407,6 +411,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
 
 
 
+    @BeforeAll
     @BeforeClass
     public static void initEventGroup() {
         NETTY_EVENT_LOOP =
@@ -424,6 +429,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
                 .build());
     }
 
+    @AfterAll
     @AfterClass
     public static void cleanEventGroup() {
         NETTY_EVENT_LOOP.shutdownGracefully(QUIET_PERIOD, TIMEOUT, TimeUnit.MILLISECONDS).syncUninterruptibly();

@@ -3,6 +3,7 @@ package org.corfudb.runtime.collections;
 import com.google.common.collect.Streams;
 import com.google.common.hash.HashFunction;
 import com.google.common.hash.Hashing;
+import com.google.common.reflect.TypeToken;
 import io.micrometer.core.instrument.Timer;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -142,6 +143,7 @@ public class DiskBackedCorfuTable<K, V> implements
         byte indexId = 0;
         for (Index.Spec<K, V, ?> index : indices) {
             this.secondaryIndexesAliasToPath.put(index.getAlias().get(), index.getName().get());
+            this.secondaryIndexesAliasToPath.put(index.getName().get(), index.getName().get());
             this.indexSpec.add(index);
             this.indexToId.put(index.getName().get(), indexId++);
         }
@@ -211,6 +213,10 @@ public class DiskBackedCorfuTable<K, V> implements
         options.setTableFormatConfig(blockBasedTableConfig);
 
         return options;
+    }
+
+    public static <K, V> TypeToken<DiskBackedCorfuTable<K, V>> getTypeToken() {
+        return new TypeToken<>() {};
     }
 
     public static int hashBytes(byte[] serializedObject, int offset, int length) {

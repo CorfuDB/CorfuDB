@@ -10,6 +10,9 @@ import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.Rule;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.rules.TestRule;
 import org.junit.runner.Description;
 import org.junit.runners.model.Statement;
@@ -68,6 +71,7 @@ public class AbstractCorfuTest {
             "testCheckpointTrimSinkDuringLogEntrySync"));
 
     @AfterClass
+    @AfterAll
     public static void shutdownNettyGroups() {
         TestThreadGroups.shutdownThreadGroups();
     }
@@ -329,17 +333,20 @@ public class AbstractCorfuTest {
         }
     }
 
+    @BeforeEach
     @Before
     public void clearTestStatus() {
         testStatus = "";
     }
 
+    @BeforeEach
     @Before
     public void setupScheduledThreads() {
         scheduledThreads = ConcurrentHashMap.newKeySet();
     }
 
 
+    @AfterEach
     @After
     public void cleanupScheduledThreads() {
         try {
@@ -353,6 +360,7 @@ public class AbstractCorfuTest {
 
     /** Clean the per test temporary directory (PARAMETERS.TEST_TEMP_DIR)
      */
+    @AfterEach
     @After
     public void cleanPerTestTempDir() {
         deleteFolder(new File(PARAMETERS.TEST_TEMP_DIR), false);
@@ -536,12 +544,14 @@ public class AbstractCorfuTest {
 
     }
 
+    @BeforeEach
     @Before
     public void resetThreadingTest() {
         threadsMap.clear();
         lastException = null;
     }
 
+    @AfterEach
     @After
     public void shutdownThreadingTest()
     throws Exception
@@ -773,6 +783,7 @@ public class AbstractCorfuTest {
     /** utilities for building a test state-machine
      *
      */
+    @BeforeEach
     @Before
     public void InitSM() {
         if (testSM != null)
