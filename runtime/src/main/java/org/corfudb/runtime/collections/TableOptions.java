@@ -17,6 +17,7 @@ import java.util.Optional;
  */
 @Builder(toBuilder = true)
 public class TableOptions {
+    public static final String DEFAULT_INSTANCE_METHOD_NAME = "getDefaultInstance";
 
     /**
      * @deprecated Please use {@link PersistenceOptions}.

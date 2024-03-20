@@ -2,12 +2,7 @@ package org.corfudb.runtime.collections;
 
 import com.google.common.collect.Streams;
 import com.google.common.math.Quantiles;
-import com.google.gson.Gson;
 import com.google.protobuf.Message;
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufUtil;
-import lombok.Builder;
-import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import net.jqwik.api.Arbitraries;
 import net.jqwik.api.Arbitrary;
@@ -26,7 +21,6 @@ import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuOptions.ConsistencyModel;
 import org.corfudb.runtime.CorfuOptions.SizeComputationModel;
-import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
@@ -36,9 +30,12 @@ import org.corfudb.runtime.object.PersistenceOptions;
 import org.corfudb.runtime.object.PersistenceOptions.PersistenceOptionsBuilder;
 import org.corfudb.runtime.object.RocksDbReadCommittedTx;
 import org.corfudb.runtime.view.AbstractViewTest;
+import org.corfudb.test.PojoSerializer;
+import org.corfudb.test.PojoSerializer.Pojo;
 import org.corfudb.test.SampleSchema;
 import org.corfudb.test.SampleSchema.EventInfo;
 import org.corfudb.test.SampleSchema.Uuid;
+import org.corfudb.test.StringIndexer;
 import org.corfudb.util.serializer.ISerializer;
 import org.junit.Test;
 import org.junit.jupiter.api.Assertions;
@@ -125,7 +122,9 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
 
         getDefaultRuntime().getSerializers().registerSerializer(serializer);
 
-        return getDefaultRuntime().getObjectsView().build()
+        return getDefaultRuntime()
+                .getObjectsView()
+                .build()
                 .setTypeToken(PersistedCorfuTable.<String, String>getTypeToken())
                 .setArguments(persistenceOptions.build(), options, serializer, registry)
                 .setStreamName(streamName)
@@ -1172,43 +1171,5 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
             table.close();
             myClassMock.verify(() -> MeterRegistryProvider.unregisterExternalSupplier(any()), times(1));
         }
-    }
-
-    /**
-     * Single type POJO serializer.
-     */
-    public static class PojoSerializer implements ISerializer {
-
-        private static final int SERIALIZER_OFFSET = 29;  // Random number.
-        private final Gson gson = new Gson();
-        private final Class<?> clazz;
-
-        PojoSerializer(Class<?> clazz) {
-            this.clazz = clazz;
-        }
-
-        @Override
-        public byte getType() {
-            return SERIALIZER_OFFSET;
-        }
-
-        @Override
-        public Object deserialize(ByteBuf b, CorfuRuntime rt) {
-            return gson.fromJson(new String(ByteBufUtil.getBytes(b)), clazz);
-        }
-
-        @Override
-        public void serialize(Object o, ByteBuf b) {
-            b.writeBytes(gson.toJson(o).getBytes());
-        }
-    }
-
-    /**
-     * Sample POJO class.
-     */
-    @Data
-    @Builder
-    public static class Pojo {
-        public final String payload;
     }
 }

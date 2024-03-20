@@ -52,7 +52,7 @@ public class CorfuCompileWrapperBuilder {
             ICorfuSMR wrapperObject = (ICorfuSMR) ReflectionUtils.
                     findMatchingConstructor(wrapperClass.getDeclaredConstructors(), new Object[0]);
 
-            MVOCache<S> mvoCache = rt.getObjectsView().getMvoCache();
+            MVOCache<S> mvoCache = (MVOCache<S>) rt.getObjectsView().getMvoCache();
             // Note: args are used when invoking the internal immutable data structure constructor
             wrapperObject.setCorfuSMRProxy(new MVOCorfuCompileProxy<>(rt, streamID,
                     immutableClass, wrapperClass, args, serializer, streamTags, wrapperObject, objectOpenOption,

@@ -1,10 +1,8 @@
 package org.corfudb.runtime.collections;
 
-import com.google.common.reflect.TypeToken;
 import org.apache.commons.lang3.tuple.Pair;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.ExampleSchemas;
 import org.corfudb.runtime.ExampleSchemas.Adult;
 import org.corfudb.runtime.ExampleSchemas.Baseball;
@@ -31,12 +29,13 @@ import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.AddressSpaceView;
 import org.corfudb.runtime.view.ObjectOpenOption;
 import org.corfudb.runtime.view.SMRObject;
-import org.corfudb.test.ManagedCorfuTableForTest;
+import org.corfudb.test.CacheSizeForTest;
 import org.corfudb.test.TestSchema.Uuid;
+import org.corfudb.test.managedtable.ManagedCorfuTable;
+import org.corfudb.test.managedtable.ManagedCorfuTable.ManagedCorfuTableConfig;
+import org.corfudb.test.managedtable.ManagedCorfuTableSetupManager;
 import org.corfudb.util.serializer.ProtobufSerializer;
 import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.mockito.junit.MockitoJUnitRunner;
 
 import javax.annotation.Nonnull;
 import java.util.ArrayList;
@@ -58,6 +57,9 @@ import static org.assertj.core.api.Assertions.fail;
 import static org.corfudb.runtime.ExampleSchemas.SportsProfessional;
 import static org.corfudb.runtime.ExampleSchemas.TrainingPlan;
 import static org.corfudb.runtime.view.ObjectsView.ObjectID;
+import static org.corfudb.test.RtParamsForTest.getLargeRtParams;
+import static org.corfudb.test.RtParamsForTest.getMediumRtParams;
+import static org.corfudb.test.RtParamsForTest.getSmallRtParams;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -66,7 +68,6 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.spy;
 
-@RunWith(MockitoJUnitRunner.class)
 public class PersistentCorfuTableTest extends AbstractViewTest {
 
     private static final String INTERRUPTED_ERROR_MSG = "Unexpected InterruptedException";
@@ -76,7 +77,7 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
         addSingleServer(SERVERS.PORT_0);
 
         buildNewManagedRuntime(getLargeRtParams(), rt -> {
-            ManagedCorfuTableForTest.buildDefault(rt).execute(corfuTable -> {
+            ManagedCorfuTable.buildDefault(rt).execute(corfuTable -> {
                 for (int i = 0; i < 100; i++) {
                     Uuid uuidMsg = Uuid.newBuilder().setLsb(i).setMsb(i).build();
                     CorfuRecord<Uuid, Uuid> value1 = new CorfuRecord<>(uuidMsg, uuidMsg);
@@ -116,29 +117,11 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
         });
     }
 
-    private CorfuRuntimeParameters getLargeRtParams() {
-        return CorfuRuntimeParameters.builder()
-                .maxCacheEntries(CacheSizeForTest.LARGE.size)
-                .build();
-    }
-
-    private CorfuRuntimeParameters getMediumRtParams() {
-        return CorfuRuntimeParameters.builder()
-                .maxCacheEntries(CacheSizeForTest.MEDIUM.size)
-                .build();
-    }
-
-    private CorfuRuntimeParameters getSmallRtParams() {
-        return CorfuRuntimeParameters.builder()
-                .maxCacheEntries(CacheSizeForTest.SMALL.size)
-                .build();
-    }
-
     @Test
     public void testMultiRuntime() throws Exception {
         addSingleServer(SERVERS.PORT_0);
         buildNewManagedRuntime(getLargeRtParams(), rt -> {
-            ManagedCorfuTableForTest.buildDefault(rt).execute(corfuTable -> {
+            ManagedCorfuTable.buildDefault(rt).execute(corfuTable -> {
                 Uuid key1 = Uuid.newBuilder().setLsb(1).setMsb(1).build();
                 Uuid payload1 = Uuid.newBuilder().setLsb(1).setMsb(1).build();
                 Uuid metadata1 = Uuid.newBuilder().setLsb(1).setMsb(1).build();
@@ -171,7 +154,7 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
 
                 setupSerializer(rt2, new ProtobufSerializer(new ConcurrentHashMap<>()));
 
-                ManagedCorfuTableForTest.buildDefault(rt).execute(ct -> {
+                ManagedCorfuTable.buildDefault(rt).execute(ct -> {
                     assertThat(ct.get(key1).getPayload().getLsb()).isEqualTo(payload1.getLsb());
                     assertThat(ct.get(key1).getPayload().getMsb()).isEqualTo(payload1.getMsb());
                     assertThat(ct.size()).isEqualTo(1);
@@ -184,7 +167,7 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
     public void testTxn() throws Exception {
         addSingleServer(SERVERS.PORT_0);
         buildNewManagedRuntime(getLargeRtParams(), rt -> {
-            ManagedCorfuTableForTest.buildDefault(rt).execute(corfuTable -> {
+            ManagedCorfuTable.buildDefault(rt).execute(corfuTable -> {
                 Uuid key1 = Uuid.newBuilder().setLsb(1).setMsb(1).build();
                 Uuid payload1 = Uuid.newBuilder().setLsb(1).setMsb(1).build();
                 Uuid metadata1 = Uuid.newBuilder().setLsb(1).setMsb(1).build();
@@ -268,7 +251,7 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
         addSingleServer(SERVERS.PORT_0);
 
         buildNewManagedRuntime(getSmallRtParams(), rt -> {
-            ManagedCorfuTableForTest.buildDefault(rt).execute(corfuTable -> {
+            ManagedCorfuTable.buildDefault(rt).execute(corfuTable -> {
                 int readSize = 100;
 
                 // 1st txn at v0 puts keys {0, .., readSize-1} into the table
@@ -330,7 +313,7 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
         addSingleServer(SERVERS.PORT_0);
 
         buildNewManagedRuntime(getLargeRtParams(), rt -> {
-            ManagedCorfuTableForTest.buildDefault(rt).execute(corfuTable -> {
+            ManagedCorfuTable.buildDefault(rt).execute(corfuTable -> {
                 Uuid key1 = Uuid.newBuilder().setLsb(1).setMsb(1).build();
                 Uuid payload1 = Uuid.newBuilder().setLsb(1).setMsb(1).build();
                 Uuid payload2 = Uuid.newBuilder().setLsb(2).setMsb(2).build();
@@ -418,8 +401,7 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
                 try (PersistentCorfuTable<String, String> tableB = rt.getObjectsView()
                         .build()
                         .setStreamID(streamB)
-                        .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {
-                        })
+                        .setTypeToken(PersistentCorfuTable.<String, String>getTypeToken())
                         .addOpenOption(ObjectOpenOption.NO_CACHE)
                         .open()) {
 
@@ -457,13 +439,22 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
         addSingleServer(SERVERS.PORT_0);
 
         buildNewManagedRuntime(getSmallRtParams(), rt -> {
-            ManagedCorfuTableForTest.<Uuid, ExampleValue, ManagedMetadata>builder()
-                    .rt(rt)
-                    .kClass(Uuid.class)
-                    .vClass(ExampleValue.class)
-                    .mClass(ManagedMetadata.class)
-                    .schemaOptions(null)
-                    .build().execute(corfuTable -> {
+            ManagedCorfuTable
+                    .<Uuid, ExampleValue, ManagedMetadata>builder()
+                    .config(ManagedCorfuTableConfig
+                            .<Uuid, ExampleValue, ManagedMetadata>builder()
+                            .rt(rt)
+                            .kClass(Uuid.class)
+                            .vClass(ExampleValue.class)
+                            .mClass(ManagedMetadata.class)
+                            .withSchema(false)
+                            .build()
+                    )
+                    .tableSetup(new ManagedCorfuTableSetupManager<Uuid, ExampleValue, ManagedMetadata>()
+                            .getPersistentCorfu()
+                    )
+                    .build()
+                    .execute(corfuTable -> {
                         ManagedMetadata user_1 = ManagedMetadata.newBuilder().setCreateUser("user_1").build();
 
                         for (long i = 0; i < CacheSizeForTest.SMALL.size; i++) {
@@ -496,7 +487,7 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
         addSingleServer(SERVERS.PORT_0);
 
         buildNewManagedRuntime(getMediumRtParams(), rt -> {
-            ManagedCorfuTableForTest.buildExample(rt).execute(corfuTable -> {
+            ManagedCorfuTable.buildExample(rt).execute(corfuTable -> {
                 rt.getObjectsView().TXBegin();
                 List<Map.Entry<Uuid, CorfuRecord<ExampleValue, ManagedMetadata>>>
                         entries = toList(corfuTable.getByIndex(() -> "anotherKey", 0));
@@ -517,12 +508,19 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
         addSingleServer(SERVERS.PORT_0);
 
         buildNewManagedRuntime(getMediumRtParams(), rt -> {
-            ManagedCorfuTableForTest.<ExampleSchemas.Uuid, ExampleValue, ManagedMetadata>builder()
-                    .rt(rt)
-                    .kClass(ExampleSchemas.Uuid.class)
-                    .vClass(ExampleValue.class)
-                    .mClass(ManagedMetadata.class)
-                    .schemaOptions(TableOptions.fromProtoSchema(ExampleValue.class).getSchemaOptions())
+            ManagedCorfuTable
+                    .<ExampleSchemas.Uuid, ExampleValue, ManagedMetadata>builder()
+                    .config(ManagedCorfuTableConfig
+                            .<ExampleSchemas.Uuid, ExampleValue, ManagedMetadata>builder()
+                            .rt(rt)
+                            .kClass(ExampleSchemas.Uuid.class)
+                            .vClass(ExampleValue.class)
+                            .mClass(ManagedMetadata.class)
+                            .build()
+                    )
+                    .tableSetup(new ManagedCorfuTableSetupManager<ExampleSchemas.Uuid, ExampleValue, ManagedMetadata>()
+                            .getPersistentCorfu()
+                    )
                     .build()
                     .execute(corfuTable -> {
                         final UUID uuid1 = UUID.nameUUIDFromBytes("1".getBytes());
@@ -571,12 +569,19 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
         addSingleServer(SERVERS.PORT_0);
 
         buildNewManagedRuntime(getSmallRtParams(), rt -> {
-            ManagedCorfuTableForTest.<ExampleSchemas.Uuid, ExampleValue, ManagedMetadata>builder()
-                    .rt(rt)
-                    .kClass(ExampleSchemas.Uuid.class)
-                    .vClass(ExampleValue.class)
-                    .mClass(ManagedMetadata.class)
-                    .schemaOptions(TableOptions.fromProtoSchema(ExampleValue.class).getSchemaOptions())
+            ManagedCorfuTable
+                    .<ExampleSchemas.Uuid, ExampleValue, ManagedMetadata>builder()
+                    .config(ManagedCorfuTableConfig
+                            .<ExampleSchemas.Uuid, ExampleValue, ManagedMetadata>builder()
+                            .rt(rt)
+                            .kClass(ExampleSchemas.Uuid.class)
+                            .vClass(ExampleValue.class)
+                            .mClass(ManagedMetadata.class)
+                            .build()
+                    )
+                    .tableSetup(new ManagedCorfuTableSetupManager<ExampleSchemas.Uuid, ExampleValue, ManagedMetadata>()
+                            .getPersistentCorfu()
+                    )
                     .build()
                     .execute(table -> {
                         ManagedMetadata user_1 = ManagedMetadata.newBuilder().setCreateUser("user_1").build();
@@ -666,7 +671,7 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
         addSingleServer(SERVERS.PORT_0);
 
         buildNewManagedRuntime(getSmallRtParams(), rt -> {
-            ManagedCorfuTableForTest.buildExample(rt).execute(table -> {
+            ManagedCorfuTable.buildExample(rt).execute(table -> {
                 // Create 100 records.
                 final int totalRecords = 100;
                 final long even = 0L;
@@ -745,12 +750,19 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
         addSingleServer(SERVERS.PORT_0);
 
         buildNewManagedRuntime(getSmallRtParams(), rt -> {
-            ManagedCorfuTableForTest.<Uuid, Company, ManagedMetadata>builder()
-                    .rt(rt)
-                    .kClass(Uuid.class)
-                    .vClass(Company.class)
-                    .mClass(ManagedMetadata.class)
-                    .schemaOptions(TableOptions.fromProtoSchema(Company.class).getSchemaOptions())
+            ManagedCorfuTable
+                    .<Uuid, Company, ManagedMetadata>builder()
+                    .config(ManagedCorfuTableConfig
+                            .<Uuid, Company, ManagedMetadata>builder()
+                            .rt(rt)
+                            .kClass(Uuid.class)
+                            .vClass(Company.class)
+                            .mClass(ManagedMetadata.class)
+                            .build()
+                    )
+                    .tableSetup(new ManagedCorfuTableSetupManager<Uuid, Company, ManagedMetadata>()
+                            .getPersistentCorfu()
+                    )
                     .build()
                     .execute(table -> {
                         final int totalCompanies = 100;
@@ -863,12 +875,19 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
         addSingleServer(SERVERS.PORT_0);
 
         buildNewManagedRuntime(getSmallRtParams(), rt -> {
-            ManagedCorfuTableForTest.<Uuid, Person, ManagedMetadata>builder()
-                    .rt(rt)
-                    .kClass(Uuid.class)
-                    .vClass(Person.class)
-                    .mClass(ManagedMetadata.class)
-                    .schemaOptions(TableOptions.fromProtoSchema(Person.class).getSchemaOptions())
+            ManagedCorfuTable
+                    .<Uuid, Person, ManagedMetadata>builder()
+                    .config(ManagedCorfuTableConfig
+                            .<Uuid, Person, ManagedMetadata>builder()
+                            .rt(rt)
+                            .kClass(Uuid.class)
+                            .vClass(Person.class)
+                            .mClass(ManagedMetadata.class)
+                            .build()
+                    )
+                    .tableSetup(new ManagedCorfuTableSetupManager<Uuid, Person, ManagedMetadata>()
+                            .getPersistentCorfu()
+                    )
                     .build()
                     .execute(table -> {
                         // Create 10 records.
@@ -923,12 +942,19 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
         addSingleServer(SERVERS.PORT_0);
 
         buildNewManagedRuntime(getSmallRtParams(), rt -> {
-            ManagedCorfuTableForTest.<Uuid, Office, ManagedMetadata>builder()
-                    .rt(rt)
-                    .kClass(Uuid.class)
-                    .vClass(Office.class)
-                    .mClass(ManagedMetadata.class)
-                    .schemaOptions(TableOptions.fromProtoSchema(Office.class).getSchemaOptions())
+            ManagedCorfuTable
+                    .<Uuid, Office, ManagedMetadata>builder()
+                    .config(ManagedCorfuTableConfig
+                            .<Uuid, Office, ManagedMetadata>builder()
+                            .rt(rt)
+                            .kClass(Uuid.class)
+                            .vClass(Office.class)
+                            .mClass(ManagedMetadata.class)
+                            .build()
+                    )
+                    .tableSetup(new ManagedCorfuTableSetupManager<Uuid, Office, ManagedMetadata>()
+                            .getPersistentCorfu()
+                    )
                     .build()
                     .execute(table -> {
                         // Create 6 records.
@@ -1004,12 +1030,19 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
     public void testSecondaryIndexAlias() throws Exception {
         addSingleServer(SERVERS.PORT_0);
         buildNewManagedRuntime(getSmallRtParams(), rt -> {
-            ManagedCorfuTableForTest.<Uuid, Adult, ManagedMetadata>builder()
-                    .rt(rt)
-                    .kClass(Uuid.class)
-                    .vClass(Adult.class)
-                    .mClass(ManagedMetadata.class)
-                    .schemaOptions(TableOptions.fromProtoSchema(Adult.class).getSchemaOptions())
+            ManagedCorfuTable
+                    .<Uuid, Adult, ManagedMetadata>builder()
+                    .config(ManagedCorfuTableConfig
+                            .<Uuid, Adult, ManagedMetadata>builder()
+                            .rt(rt)
+                            .kClass(Uuid.class)
+                            .vClass(Adult.class)
+                            .mClass(ManagedMetadata.class)
+                            .build()
+                    )
+                    .tableSetup(new ManagedCorfuTableSetupManager<Uuid, Adult, ManagedMetadata>()
+                            .getPersistentCorfu()
+                    )
                     .build()
                     .execute(table -> {
                         ManagedMetadata user = ManagedMetadata.newBuilder().setCreateUser("user_UT").build();
@@ -1100,12 +1133,19 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
     public void testNestedIndexesWithNullValues() throws Exception {
         addSingleServer(SERVERS.PORT_0);
         buildNewManagedRuntime(getSmallRtParams(), rt -> {
-            ManagedCorfuTableForTest.<Uuid, SportsProfessional, ManagedMetadata>builder()
-                    .rt(rt)
-                    .kClass(Uuid.class)
-                    .vClass(SportsProfessional.class)
-                    .mClass(ManagedMetadata.class)
-                    .schemaOptions(TableOptions.fromProtoSchema(SportsProfessional.class).getSchemaOptions())
+            ManagedCorfuTable
+                    .<Uuid, SportsProfessional, ManagedMetadata>builder()
+                    .config(ManagedCorfuTableConfig
+                            .<Uuid, SportsProfessional, ManagedMetadata>builder()
+                            .rt(rt)
+                            .kClass(Uuid.class)
+                            .vClass(SportsProfessional.class)
+                            .mClass(ManagedMetadata.class)
+                            .build()
+                    )
+                    .tableSetup(new ManagedCorfuTableSetupManager<Uuid, SportsProfessional, ManagedMetadata>()
+                            .getPersistentCorfu()
+                    )
                     .build()
                     .execute(table -> {
                         // Define a player and set only (1) oneOf type, then query for the unset field to confirm this
@@ -1346,14 +1386,5 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
                 }
             }
         });
-    }
-
-    private enum CacheSizeForTest {
-        SMALL(3), MEDIUM(100), LARGE(50_000);
-        private final long size;
-
-        CacheSizeForTest(long size) {
-            this.size = size;
-        }
     }
 }
