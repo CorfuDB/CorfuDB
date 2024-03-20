@@ -147,9 +147,9 @@ public class SMRObject<T extends ICorfuSMR<?>> {
                 if (smrObject.getOpenOption() == ObjectOpenOption.NO_CACHE) {
                     return CorfuCompileWrapperBuilder.getWrapper(smrObject);
                 } else {
-                    ObjectsView.ObjectID<T> oid = new ObjectsView.ObjectID<>(streamID, type);
+                    ObjectsView.ObjectID oid = new ObjectsView.ObjectID(streamID, type);
 
-                    Function<ObjectID<?>, T> tableFactory = x -> {
+                    Function<ObjectID, T> tableFactory = x -> {
                         try {
                             T result = CorfuCompileWrapperBuilder.getWrapper(smrObject);
 
