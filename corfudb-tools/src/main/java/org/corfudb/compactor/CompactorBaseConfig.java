@@ -71,8 +71,20 @@ public class CompactorBaseConfig {
             }
         });
 
-        builder.maxWriteSize(getOpt("--maxWriteSize").map(Integer::parseInt).orElse(
-                persistedCacheRoot.isPresent() ? DISK_BACKED_DEFAULT_CP_MAX_WRITE_SIZE : DEFAULT_CP_MAX_WRITE_SIZE));
+        Optional<String> maybeMaxWriteSize = getOpt("--maxWriteSize");
+        int maxWriteSize;
+        if (maybeMaxWriteSize.isPresent()) {
+            maxWriteSize = Integer.parseInt(maybeMaxWriteSize.get());
+        } else {
+            if (!persistedCacheRoot.isPresent()) {
+                // in-memory compaction
+                maxWriteSize = DEFAULT_CP_MAX_WRITE_SIZE;
+            } else {
+                // disk-backed compaction
+                maxWriteSize = DISK_BACKED_DEFAULT_CP_MAX_WRITE_SIZE;
+            }
+        }
+        builder.maxWriteSize(maxWriteSize);
 
         getOpt("--bulkReadSize").ifPresent(bulkReadSizeStr -> {
             builder.bulkReadSize(Integer.parseInt(bulkReadSizeStr));
