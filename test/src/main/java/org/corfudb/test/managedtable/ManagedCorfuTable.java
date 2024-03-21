@@ -50,8 +50,24 @@ public class ManagedCorfuTable<K extends Message, V extends Message, M extends M
 
     }
 
-    public static ManagedCorfuTable<Uuid, Uuid, Uuid> buildDefault(CorfuRuntime rt)
-            throws Exception {
+    public static ManagedCorfuTable<Uuid, Uuid, Uuid> buildWithUuid(
+            CorfuRuntime rt, ManagedCorfuTableSetup<Uuid, Uuid, Uuid> tableSetup) {
+        ManagedCorfuTableConfig<Uuid, Uuid, Uuid> cfg = ManagedCorfuTableConfig
+                .<Uuid, Uuid, Uuid>builder()
+                .rt(rt)
+                .kClass(Uuid.class)
+                .vClass(Uuid.class)
+                .mClass(Uuid.class)
+                .build();
+
+        return ManagedCorfuTable
+                .<Uuid, Uuid, Uuid>builder()
+                .config(cfg)
+                .tableSetup(tableSetup)
+                .build();
+    }
+
+    public static ManagedCorfuTable<Uuid, Uuid, Uuid> buildDefault(CorfuRuntime rt) {
         ManagedCorfuTableConfig<Uuid, Uuid, Uuid> cfg = ManagedCorfuTableConfig
                 .<Uuid, Uuid, Uuid>builder()
                 .rt(rt)
@@ -98,13 +114,35 @@ public class ManagedCorfuTable<K extends Message, V extends Message, M extends M
         @Default
         private final boolean withSchema = true;
 
-        Object[] getArgs(V defaultValueMessage) throws Exception {
+        private final String defaultInstanceMethodName = TableOptions.DEFAULT_INSTANCE_METHOD_NAME;
+
+        public static ManagedCorfuTableConfig<Uuid, Uuid, Uuid> buildUuid(CorfuRuntime rt) {
+            return ManagedCorfuTableConfig
+                    .<Uuid, Uuid, Uuid>builder()
+                    .rt(rt)
+                    .kClass(Uuid.class)
+                    .vClass(Uuid.class)
+                    .mClass(Uuid.class)
+                    .build();
+        }
+
+
+        Object[] getArgs() throws Exception {
             if (withSchema) {
-                SchemaOptions schemaOptions = TableOptions.fromProtoSchema(vClass).getSchemaOptions();
-                return new Object[]{new ProtobufIndexer(defaultValueMessage, schemaOptions)};
+                return new Object[]{getProtobufIndexer()};
             } else {
                 return new Object[]{};
             }
+        }
+
+        public ProtobufIndexer getProtobufIndexer() throws Exception {
+            SchemaOptions schemaOptions = getSchemaOptions();
+            V msg = getDefaultValueMessage();
+            return new ProtobufIndexer(msg, schemaOptions);
+        }
+
+        public SchemaOptions getSchemaOptions() throws Exception {
+            return TableOptions.fromProtoSchema(vClass).getSchemaOptions();
         }
 
         /**
@@ -112,6 +150,18 @@ public class ManagedCorfuTable<K extends Message, V extends Message, M extends M
          */
         String getFullyQualifiedTableName() {
             return namespace + "$" + tableName;
+        }
+
+        public V getDefaultValueMessage() throws Exception {
+            return (V) vClass.getMethod(defaultInstanceMethodName).invoke(null);
+        }
+
+        public K getDefaultKeyMessage() throws Exception {
+            return (K) kClass.getMethod(defaultInstanceMethodName).invoke(null);
+        }
+
+        public M getDefaultMetadataMessage() throws Exception {
+            return (M) mClass.getMethod(defaultInstanceMethodName).invoke(null);
         }
     }
 }

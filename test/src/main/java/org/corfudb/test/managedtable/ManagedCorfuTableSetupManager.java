@@ -2,22 +2,18 @@ package org.corfudb.test.managedtable;
 
 import com.google.protobuf.Descriptors.Descriptor;
 import com.google.protobuf.Message;
-import lombok.Getter;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.PersistedCorfuTable;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
-import org.corfudb.runtime.collections.TableOptions;
+import org.corfudb.runtime.collections.ProtobufIndexer;
 import org.corfudb.runtime.collections.table.GenericCorfuTable;
 import org.corfudb.runtime.object.MVOCorfuCompileProxy;
 import org.corfudb.runtime.object.PersistenceOptions;
 import org.corfudb.runtime.object.PersistenceOptions.PersistenceOptionsBuilder;
 import org.corfudb.runtime.object.SnapshotGenerator;
 import org.corfudb.runtime.view.ObjectOpenOption;
-import org.corfudb.test.PojoSerializer;
-import org.corfudb.test.StringIndexer;
 import org.corfudb.test.managedtable.ManagedCorfuTable.ManagedCorfuTableConfig;
-import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.ProtobufSerializer;
 import org.rocksdb.Options;
 
@@ -31,35 +27,28 @@ public class ManagedCorfuTableSetupManager<K extends Message, V extends Message,
         String diskBackedDirectory = "/tmp/";
 
         Options defaultOptions = new Options().setCreateIfMissing(true);
-        ISerializer defaultSerializer = new PojoSerializer(String.class);
 
         PersistenceOptionsBuilder persistenceOptions = PersistenceOptions.builder()
                 .dataPath(Paths.get(diskBackedDirectory, config.getTableName()));
+
+        setupTypes(config);
+        ProtobufIndexer indexer = config.getProtobufIndexer();
+        ProtobufSerializer serializer = getProtobufSerializer(config.getRt());
 
         return config
                 .getRt()
                 .getObjectsView()
                 .build()
                 .setTypeToken(PersistedCorfuTable.<K, CorfuRecord<V, M>>getTypeToken())
-                .setArguments(persistenceOptions.build(), defaultOptions, defaultSerializer, new StringIndexer())
+                .setArguments(persistenceOptions.build(), defaultOptions, serializer, indexer)
                 .setStreamName(config.getTableName())
-                .setSerializer(defaultSerializer)
+                .setSerializer(serializer)
                 .open();
     };
 
     private final ManagedCorfuTableSetup<K, V, M> persistentCorfu = config -> {
-        String defaultInstanceMethodName = TableOptions.DEFAULT_INSTANCE_METHOD_NAME;
-        K defaultKeyMessage = (K) config.getKClass().getMethod(defaultInstanceMethodName).invoke(null);
-        addTypeToClassMap(config.getRt(), defaultKeyMessage);
-
-        V defaultValueMessage = (V) config.getVClass().getMethod(defaultInstanceMethodName).invoke(null);
-        addTypeToClassMap(config.getRt(), defaultValueMessage);
-
-        M defaultMetadataMessage = (M) config.getMClass().getMethod(defaultInstanceMethodName).invoke(null);
-        addTypeToClassMap(config.getRt(), defaultMetadataMessage);
-
-        Object[] args = config.getArgs(defaultValueMessage);
-
+        setupTypes(config);
+        Object[] args = config.getArgs();
         ProtobufSerializer serializer = getProtobufSerializer(config.getRt());
 
         PersistentCorfuTable<K, CorfuRecord<V, M>> table = new PersistentCorfuTable<>();
@@ -82,6 +71,17 @@ public class ManagedCorfuTableSetupManager<K extends Message, V extends Message,
 
         return table;
     };
+
+    private void setupTypes(ManagedCorfuTableConfig<K, V, M> config) throws Exception {
+        K defaultKeyMessage = config.getDefaultKeyMessage();
+        addTypeToClassMap(config.getRt(), defaultKeyMessage);
+
+        V defaultValueMessage = config.getDefaultValueMessage();
+        addTypeToClassMap(config.getRt(), defaultValueMessage);
+
+        M defaultMetadataMessage = config.getDefaultMetadataMessage();
+        addTypeToClassMap(config.getRt(), defaultMetadataMessage);
+    }
 
     public ManagedCorfuTableSetup<K, V, M> getPersistentCorfu() {
         return persistentCorfu.withToString("PersistentCT");
