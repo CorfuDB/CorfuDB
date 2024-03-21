@@ -8,8 +8,8 @@
 ### Current metrics collected for LR:
 
 *   **logreplication.message.size.bytes**: Message size in bytes (throughput, mean and max), distinguished by replication type (snapshot, logentry).
-*   **logreplication.lock.duration.nanoseconds**: Duration of holding a leadership lock in nanoseconds, distinguished by role (source, sink).
-*   **logreplication.lock.acquire.count**: Number of times a leadership lock was acquired, distinguised by role (source, sink).
+*   **logreplication.lock.duration.nanoseconds**: Duration of holding a leadership lock in nanoseconds, distinguished by role (active, standby).
+*   **logreplication.lock.acquire.count**: Number of times a leadership lock was acquired, distinguised by role (active, standby).
 *   **logreplication.sender.duration.nanoseconds**: Duration of sending a log entry in nanoseconds (throughput, mean and max), distinguished by replication type (snapshot, logentry) and status (success, failure).
 *   **logreplication.snapshot.completed.count**: Number of snapshot syncs completed.
 *   **logreplication.snapshot.transfer.duration**: Duration of the TRANSFER phase of a snapshot sync in nanoseconds (throughput, mean and max).
@@ -20,10 +20,6 @@
 *   **logreplication.opaque.count\_per\_message**: Number of opaque entries per message (rate, mean, max).
 *   **logreplication.opaque.count\_total**: Number of overall opaque entries (rate, mean, max).
 *   **logreplication.opaque.count\_valid**: Number of valid opaque entries (rate, mean, max).
-*   **logreplication.subscribe.trim.count**: Number of times a Trimmed Exception was thrown from the MVO layer when subscribing to LogReplication listener.
-*   **logreplication.subscribe.conflict.count**: Number of times a Transaction Aborted Exception was thrown due to conflicting updates when subscribing to LogReplication listener.
-*   **logreplication.subscribe.duration**: Time taken to subscribe the LogReplication listener.
-*   **logreplication.client.fullsync.duration**: Time taken by the client subscribing to LogReplication listener to perform a full sync on its tables.
 
 ### Current metrics collected for Corfu Runtime:
 

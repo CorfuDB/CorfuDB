@@ -31,7 +31,7 @@ public class LogReplicationEvent {
                                     // replication for a shared thread pool)
         SYNC_CANCEL,                // External/Internal event requesting to cancel sync (snapshot or log entry)
         LOG_ENTRY_SYNC_REPLICATED,  // External event which signals a log entry sync has been successfully replicated
-                                    // on the sink cluster (ack)
+                                    // on the standby cluster (ack)
         REPLICATION_SHUTDOWN        // External/Internal event which signals log replication to be terminated (only a
                                     // JVM restart can enable log replication after this)
     }
@@ -57,9 +57,22 @@ public class LogReplicationEvent {
      * @param type log replication event type
      */
     public LogReplicationEvent(LogReplicationEventType type) {
+        this(type, LogReplicationEventMetadata.empty());
+    }
+
+    /**
+     * Constructor used when an event identifier is given in advance.
+     * This is used for the case of force snapshot sync for which an
+     * identifier was previously computed in order to provide the caller
+     * with a tracking identifier.
+     *
+     * @param type log replication event type
+     * @param eventId event unique identifier
+     */
+    public LogReplicationEvent(LogReplicationEventType type, UUID eventId) {
         this.type = type;
-        this.eventId = Utils.genPseudorandomUUID();
-        this.metadata = new LogReplicationEventMetadata(Utils.genPseudorandomUUID());
+        this.eventId = eventId;
+        this.metadata = new LogReplicationEventMetadata(true);
     }
 
     /**
