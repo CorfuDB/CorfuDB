@@ -1,6 +1,7 @@
 package org.corfudb.runtime.object;
 
 import lombok.AllArgsConstructor;
+import lombok.Getter;
 
 /**
  * An in-memory implementation of a snapshot.
@@ -11,6 +12,9 @@ import lombok.AllArgsConstructor;
 @AllArgsConstructor
 public class InMemorySMRSnapshot<T> implements SMRSnapshot<T> {
     private final T snapshot;
+
+    @Getter
+    private final VersionedObjectStats metrics = new VersionedObjectStats();
 
     /**
      * {@inheritDoc}
