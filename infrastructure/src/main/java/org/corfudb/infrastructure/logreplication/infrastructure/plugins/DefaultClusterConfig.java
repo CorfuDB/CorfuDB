@@ -11,7 +11,7 @@ import java.util.Objects;
 
 import static org.corfudb.common.util.URLUtils.getPortFromEndpointURL;
 
-public final class DefaultClusterConfig {
+public class DefaultClusterConfig {
 
     @Getter
     private static final int logSenderRetryCount = 5;
@@ -52,6 +52,10 @@ public final class DefaultClusterConfig {
 
     @Getter
     private final List<String> sourceIpAddresses = Arrays.asList(defaultHost, defaultHost, defaultHost);
+
+    @Getter
+    private final List<String> sinkNodeNames = Collections.singletonList(
+            "source_site_node0");
 
     @Getter
     private final List<String> sinkIpAddresses = Arrays.asList(defaultHost, defaultHost, defaultHost);

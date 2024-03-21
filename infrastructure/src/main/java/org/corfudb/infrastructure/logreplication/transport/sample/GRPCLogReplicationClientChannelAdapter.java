@@ -279,7 +279,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
 
             @Override
             public void onError(Throwable throwable) {
-                log.warn("Error encountered while receiving leadership response msg {}", throwable);
+                log.warn("Error encountered while receiving leadership response msg", throwable);
             }
 
             @Override

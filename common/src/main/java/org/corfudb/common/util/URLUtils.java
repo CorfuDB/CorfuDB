@@ -25,7 +25,7 @@ public final class URLUtils {
     private static final Predicate<String> SAAS_PATTERN1 = Pattern.compile("^[a-z-]+(-\\d+)?$").asPredicate();
 
     // Matches things like "corfu-0.corfu-headless.dev-env-23.svc.cluster.local"
-    private static final Predicate<String> SAAS_PATTERN2 = Pattern.compile("^[a-z-]+(-\\d+)?.[a-z-]+.[a-z0-9-]+.svc.cluster.local$").asPredicate();
+    private static final Predicate<String> SAAS_PATTERN2 = Pattern.compile("^[a-z0-9-]+(-\\d+)?.[a-z0-9-]+.[a-z0-9-]+.svc.cluster.local$").asPredicate();
 
     private static final Predicate<String> SAAS_PATTERN = SAAS_PATTERN1.or(SAAS_PATTERN2);
 
