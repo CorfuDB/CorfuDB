@@ -4,7 +4,6 @@ import org.corfudb.common.util.Memory;
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.runtime.CorfuRuntime;
 
-import java.util.Optional;
 import java.util.UUID;
 
 import static java.lang.Math.toIntExact;
@@ -54,12 +53,11 @@ public interface ILogData extends IMetadata, Comparable<ILogData> {
          * to the log data.
          *
          * @param data     the log data to manage
-         * @param limit if a value is passed, validate size of data against the limit
          * @param metadata whether metadata needs to be serialized
          */
-        public SerializationHandle(ILogData data, boolean metadata, Optional<Integer> limit) {
+        public SerializationHandle(ILogData data, boolean metadata) {
             this.data = data;
-            data.acquireBuffer(metadata, limit);
+            data.acquireBuffer(metadata);
         }
 
         /**
@@ -79,19 +77,7 @@ public interface ILogData extends IMetadata, Comparable<ILogData> {
      * @return a serialization handle of this entry
      */
     default SerializationHandle getSerializedForm(boolean metadata) {
-        return getSerializedForm(metadata, Optional.empty());
-    }
-
-    /**
-     * Get the serialization handle of this entry that manages
-     * the lifetime of the serialized copy.
-     *
-     * @param metadata whether metadata needs to be serialized
-     * @param limit if a value is passed, validate size of data against the limit
-     * @return a serialization handle of this entry
-     */
-    default SerializationHandle getSerializedForm(boolean metadata, Optional<Integer> limit) {
-        return new SerializationHandle(this, metadata, limit);
+        return new SerializationHandle(this, metadata);
     }
 
     /**
@@ -103,9 +89,8 @@ public interface ILogData extends IMetadata, Comparable<ILogData> {
      * Acquire the serialization buffer.
      *
      * @param metadata whether metadata needs to be serialized
-     * @param limit if a value is passed, validate size of data against the limit
      */
-    void acquireBuffer(boolean metadata, Optional<Integer> limit);
+    void acquireBuffer(boolean metadata);
 
     /**
      * Return the payload as a log entry.

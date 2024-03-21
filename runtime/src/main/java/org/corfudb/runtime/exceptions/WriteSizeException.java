@@ -8,8 +8,4 @@ public class WriteSizeException extends RuntimeException {
     public WriteSizeException(int size, int max) {
         super("Trying to write " + size + " bytes but max write limit is " + max + " bytes");
     }
-
-    public WriteSizeException(String message) {
-        super(message);
-    }
 }
