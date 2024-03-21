@@ -2,6 +2,7 @@ package org.corfudb.integration;
 
 import com.google.protobuf.Any;
 import com.google.protobuf.DynamicMessage;
+import com.google.protobuf.Message;
 import com.google.protobuf.UnknownFieldSet;
 import org.corfudb.browser.CorfuOfflineBrowserEditor;
 import org.corfudb.browser.CorfuStoreBrowserEditor;
@@ -802,6 +803,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
     public void addRecordTest() throws Exception {
         runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
+        final String table2Name = TABLE_NAME+"nometa";
         // Start a Corfu runtime
         CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
 
@@ -815,6 +817,13 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
             SampleSchema.Uuid.class,
             TableOptions.fromProtoSchema(SampleSchema.Uuid.class));
 
+        final Table<SampleSchema.Uuid, SampleSchema.Uuid, Message> table2 = store.openTable(
+                NAMESPACE,
+                table2Name,
+                SampleSchema.Uuid.class,
+                SampleSchema.Uuid.class,
+                null,
+                TableOptions.fromProtoSchema(SampleSchema.Uuid.class));
         final long keyUuid = 1L;
         final long valueUuid = 3L;
         final long metadataUuid = 5L;
@@ -833,6 +842,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
             .build();
         TxnContext tx = store.txn(NAMESPACE);
         tx.putRecord(table1, uuidKey, uuidVal, metadata);
+        tx.putRecord(table2, uuidKey, uuidVal, null);
         tx.commit();
         runtime.shutdown();
 
@@ -860,6 +870,13 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         CorfuDynamicRecord addedRecord = browser.addRecord(NAMESPACE,
             TABLE_NAME, newKeyString, newValString, newMetadataString);
         Assert.assertNotNull(addedRecord);
+        CorfuDynamicRecord badInput = browser.addRecord(NAMESPACE, TABLE_NAME, newKeyString,
+                newValString, null);
+        Assert.assertNull(badInput);
+
+        CorfuDynamicRecord addedRecord2 = browser.addRecord(NAMESPACE,
+                table2Name, newKeyString, newValString, null);
+        Assert.assertNotNull(addedRecord2);
 
         DynamicMessage dynamicValMessage = DynamicMessage.newBuilder(newValUuid)
             .build();
@@ -869,9 +886,18 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         String metadataTypeUrl = Any.pack(newMetadataUuid).getTypeUrl();
         CorfuDynamicRecord expectedRecord = new CorfuDynamicRecord(valTypeUrl,
             dynamicValMessage, metadataTypeUrl, dynamicMetadataMessage);
-
         Assert.assertEquals(expectedRecord, addedRecord);
         Assert.assertEquals(2, browser.printTable(NAMESPACE, TABLE_NAME));
+
+        // For tables that do not have metadata - we read from the metadata section
+        // which was never written to, so we construct the expected object the same way the
+        // browser does under the hood using Any's default instantiation.
+        String metadataTypeUrl2 = Any.pack(Any.getDefaultInstance()).getTypeUrl();
+
+        CorfuDynamicRecord expectedRecord2 = new CorfuDynamicRecord(valTypeUrl,
+                dynamicValMessage, metadataTypeUrl2, null);
+        Assert.assertEquals(expectedRecord2, addedRecord2);
+        Assert.assertEquals(2, browser.printTable(NAMESPACE, table2Name));
     }
 
     /**

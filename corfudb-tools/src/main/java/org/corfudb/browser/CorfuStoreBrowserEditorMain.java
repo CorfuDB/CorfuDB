@@ -310,8 +310,6 @@ public class CorfuStoreBrowserEditorMain {
                         "Key To Add is Null.");
                 Preconditions.checkNotNull(valueToAdd,
                         "New Value is null");
-                Preconditions.checkNotNull(metadataToAdd,
-                        "New Metadata is null");
                 CorfuDynamicRecord addedRecord = browser.addRecord(namespace, tableName, keyToAdd,
                         valueToAdd, metadataToAdd);
                 return addedRecord != null ? 1: 0;
