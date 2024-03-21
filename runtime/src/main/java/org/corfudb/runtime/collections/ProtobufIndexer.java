@@ -33,7 +33,7 @@ public class ProtobufIndexer implements Index.Registry<Message, CorfuRecord<Mess
     // Map from secondary index name to index path (index fully qualified name)
     private final HashMap<String, String> secondaryIndexNameToPath = new HashMap<>();
 
-    ProtobufIndexer(Message payloadSchema, CorfuOptions.SchemaOptions schemaOptions) {
+    public ProtobufIndexer(Message payloadSchema, CorfuOptions.SchemaOptions schemaOptions) {
         registerSecondaryIndex(payloadSchema, schemaOptions);
     }
 

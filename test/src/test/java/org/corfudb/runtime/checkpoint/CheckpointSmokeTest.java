@@ -19,8 +19,10 @@ import org.corfudb.runtime.collections.CorfuDynamicKey;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStoreEntry;
+import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.collections.OpaqueCorfuDynamicRecord;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
+import org.corfudb.runtime.collections.PersistentCorfuTableTest;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
@@ -37,10 +39,15 @@ import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.test.SampleAppliance;
 import org.corfudb.test.SampleSchema;
 import org.corfudb.util.NodeLocator;
+import org.corfudb.util.TableHelper;
+import org.corfudb.util.TableHelper.TableType;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.KeyDynamicProtobufSerializer;
 import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -57,6 +64,7 @@ import java.util.function.Function;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.runtime.view.TableRegistry.getFullyQualifiedTableName;
+import static org.corfudb.util.TableHelper.openTablePlain;
 import static org.junit.Assert.fail;
 
 /**
@@ -72,11 +80,12 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         PARAMETERS = new CorfuTestParameters(Duration.ofMinutes(5));
     }
 
-    @Before
+    @BeforeEach
     public void setRuntime() {
         // This module *really* needs separate & independent runtimes.
         r = getDefaultRuntime().connect(); // side-effect of using AbstractViewTest::getRouterFunction
         r = getNewRuntime(getDefaultNode()).setCacheDisabled(true).connect();
+        r.getSerializers().registerSerializer(serializer);
     }
 
     /**
@@ -126,15 +135,12 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         );
     }
 
-    @Test
-    public void testEmptyMapCP() throws Exception {
-        PersistentCorfuTable<String, String> table = r.getObjectsView()
-                .build()
-                .setTypeToken(PersistentCorfuTable.<String, String>getTypeToken())
-                .setStreamName("Map1")
-                .open();
+    @ParameterizedTest
+    @EnumSource(TableType.class)
+    public void testEmptyMapCP(TableType tableType) {
+        ICorfuTable<String, String> table = openTablePlain( "Map1", r, tableType);
 
-        MultiCheckpointWriter<PersistentCorfuTable<String, String>> mcw = new MultiCheckpointWriter<>();
+        MultiCheckpointWriter<ICorfuTable<String, String>> mcw = new MultiCheckpointWriter<>();
         mcw.addMap(table);
 
         // Verify that a CP was generated
@@ -178,8 +184,9 @@ public class CheckpointSmokeTest extends AbstractViewTest {
      *
      * @throws Exception error
      */
-    @Test
-	public void smoke1Test() throws Exception {
+    @ParameterizedTest
+    @EnumSource(TableType.class)
+	public void smoke1Test(TableType tableType) throws Exception {
         final String streamName = "mystream";
         final UUID streamId = CorfuRuntime.getStreamID(streamName);
         final String key1 = "key1";
@@ -197,7 +204,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         final String checkpointAuthor = "Hey, it's me!";
 
         // Put keys 1 & 2 into m
-        PersistentCorfuTable<String, Long> m = instantiateTable(streamName);
+        ICorfuTable<String, Long> m = openTablePlain(streamName, getDefaultRuntime(), tableType);
         m.insert(key1, key1Val);
         m.insert(key2, key2Val);
         // Run get so that these two puts are resolved in read queue
@@ -250,8 +257,9 @@ public class CheckpointSmokeTest extends AbstractViewTest {
      * @throws Exception error
      */
 
-    @Test
-    public void smoke2Test() throws Exception {
+    @ParameterizedTest
+    @EnumSource(TableType.class)
+    public void smoke2Test(TableType tableType) throws Exception {
         final String streamName = "mystream2";
         final UUID streamId = CorfuRuntime.getStreamID(streamName);
         final UUID checkpointId = UUID.randomUUID();
@@ -265,7 +273,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         final long key7Val = 7777;
         final String key8 = "key8";
         final long key8Val = 88;
-        Consumer<PersistentCorfuTable<String, Long>> testAssertions = (table) -> {
+        Consumer<ICorfuTable<String, Long>> testAssertions = (table) -> {
             for (int i = 0; i < numKeys; i++) {
                 assertThat(table.get(keyPrefixFirst + i)).isNull();
                 assertThat(table.get(keyPrefixMiddle1 + i)).isEqualTo(i);
@@ -276,7 +284,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
             assertThat(table.get(key8)).isEqualTo(key8Val);
         };
 
-        PersistentCorfuTable<String, Long> m = instantiateTable(streamName);
+        ICorfuTable<String, Long> m = openTablePlain(streamName, r, serializer, tableType);
         for (int i = 0; i < numKeys; i++) {
             m.insert(keyPrefixFirst + i, (long) i);
         }
@@ -291,7 +299,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         }
 
         setRuntime();
-        PersistentCorfuTable<String, Long> m2 = instantiateTable(streamName);
+        ICorfuTable<String, Long> m2 = openTablePlain(streamName, r, serializer, tableType);
         testAssertions.accept(m2);
 
         // Write incomplete checkpoint (no END record) with key7 and key8 values
@@ -304,7 +312,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
                 () -> {}, () -> {}, true, true, false);
 
         setRuntime();
-        PersistentCorfuTable<String, Long> m3 = instantiateTable(streamName);
+        ICorfuTable<String, Long> m3 = openTablePlain(streamName, r, serializer, tableType);
         testAssertions.accept(m3);
     }
 
@@ -1065,6 +1073,8 @@ public class CheckpointSmokeTest extends AbstractViewTest {
             assertThat(entryRead.getMetadata().getCreateUser())
                     .isEqualTo(entry.getValue().getMetadata().getCreateUser());
         }
+
+        txnReader.txAbort();
     }
 
     private int getSerializedSMREntrySize(
