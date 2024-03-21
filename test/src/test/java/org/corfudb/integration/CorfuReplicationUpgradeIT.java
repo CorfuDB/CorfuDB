@@ -1,10 +1,15 @@
 package org.corfudb.integration;
 
+import com.google.protobuf.Message;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultAdapterForUpgrade;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
+import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.LogReplication.ReplicationStatus;
+import org.corfudb.runtime.LogReplicationUtils;
+import org.corfudb.runtime.collections.CorfuStoreEntry;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
 import org.corfudb.runtime.collections.CorfuStreamEntry;
 import org.corfudb.runtime.collections.StreamListener;
@@ -24,6 +29,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.NAMESPACE;
+import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.REPLICATION_EVENT_TABLE_NAME;
 import static org.corfudb.runtime.LogReplicationUtils.REPLICATION_STATUS_TABLE_NAME;
 import static org.corfudb.runtime.LogReplicationUtils.LR_STATUS_STREAM_TAG;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
@@ -74,6 +81,7 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
 
         // Simulate a rolling upgrade on the plugin
         stopSinkLogReplicator();
+        clearSystemTableBeforeUpgrade(false);
         DefaultAdapterForUpgrade defaultAdapterForUpgrade = new DefaultAdapterForUpgrade();
         defaultAdapterForUpgrade.openVersionTable(sinkRuntime);
         defaultAdapterForUpgrade.startRollingUpgrade();
@@ -101,6 +109,7 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
 
         // Simulate a rolling upgrade on Source
         stopSourceLogReplicator();
+        clearSystemTableBeforeUpgrade(true);
         defaultAdapterForUpgrade = new DefaultAdapterForUpgrade();
         defaultAdapterForUpgrade.openVersionTable(sourceRuntime);
         defaultAdapterForUpgrade.openVersionTable(sourceRuntime);
@@ -119,6 +128,42 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         // Verify that a forced snapshot sync gets triggered
         statusUpdateLatch.await();
         verifyDataOnSink(NUM_WRITES + NUM_WRITES/2);
+    }
+
+    private void clearSystemTableBeforeUpgrade(boolean source) throws Exception{
+        if(source) {
+            // clear the status and event table to emulate LR being upgraded and opening the table in the new schema
+            // for the first time.
+            corfuStoreSource.openTable(CORFU_SYSTEM_NAMESPACE,
+                    REPLICATION_STATUS_TABLE_NAME,
+                    LogReplicationSession.class,
+                    ReplicationStatus.class,
+                    null,
+                    TableOptions.fromProtoSchema(ReplicationStatus.class));
+            corfuStoreSource.openTable(CORFU_SYSTEM_NAMESPACE,
+                    REPLICATION_EVENT_TABLE_NAME,
+                    LogReplicationMetadata.ReplicationEventInfoKey.class,
+                    LogReplicationMetadata.ReplicationEvent.class,
+                    null,
+                    TableOptions.fromProtoSchema(ReplicationStatus.class));
+            try (TxnContext txn = corfuStoreSource.txn(CORFU_SYSTEM_NAMESPACE)) {
+                txn.clear(REPLICATION_STATUS_TABLE_NAME);
+                txn.clear(REPLICATION_EVENT_TABLE_NAME);
+                txn.commit();
+            }
+        } else {
+            // clear the status table to emulate LR being upgraded and opening the table in the new schema for the first time.
+            corfuStoreSink.openTable(CORFU_SYSTEM_NAMESPACE,
+                    REPLICATION_STATUS_TABLE_NAME,
+                    LogReplicationSession.class,
+                    ReplicationStatus.class,
+                    null,
+                    TableOptions.fromProtoSchema(ReplicationStatus.class));
+            try (TxnContext txn = corfuStoreSink.txn(CORFU_SYSTEM_NAMESPACE)) {
+                txn.clear(REPLICATION_STATUS_TABLE_NAME);
+                txn.commit();
+            }
+        }
     }
 
     @Test
@@ -543,6 +588,7 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
             defaultAdapterForUpgrade = new DefaultAdapterForUpgrade();
             defaultAdapterForUpgrade.openVersionTable(sinkRuntime);
         }
+        clearSystemTableBeforeUpgrade(source);
 
         defaultAdapterForUpgrade.startRollingUpgrade();
 
