@@ -5,6 +5,7 @@ import com.google.protobuf.Any;
 import com.google.protobuf.DescriptorProtos.FileDescriptorProto;
 import com.google.protobuf.Descriptors.Descriptor;
 import com.google.protobuf.Descriptors.FileDescriptor;
+import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
 import com.google.protobuf.ProtocolStringList;
 import lombok.Getter;
@@ -193,12 +194,13 @@ public class TableRegistry {
      * @param <K>           Type of Key.
      * @param <V>           Type of Value.
      * @param <M>           Type of Metadata.
+     * @return CorfuRecord  The corfu record in the registry table after this method completes
      * @throws NoSuchMethodException     If this is not a protobuf message.
      * @throws InvocationTargetException If this is not a protobuf message.
      * @throws IllegalAccessException    If this is not a protobuf message.
      */
     private <K extends Message, V extends Message, M extends Message>
-    void registerTable(@Nonnull String namespace,
+    CorfuRecord<TableDescriptors, TableMetadata> registerTable(@Nonnull String namespace,
                        @Nonnull String tableName,
                        @Nonnull Class<K> keyClass,
                        @Nonnull Class<V> payloadClass,
@@ -244,6 +246,7 @@ public class TableRegistry {
             metadataBuilder.setTableOptions(tableOptions.getSchemaOptions());
         }
         TableMetadata tableMetadata = metadataBuilder.build();
+        CorfuRecord<TableDescriptors, TableMetadata> updatedRecord = null;
 
         // Since this is an internal transaction, retry a few times before giving up.
         final int minRetryCount = 16;
@@ -276,6 +279,7 @@ public class TableRegistry {
                         this.registryTable.get(tableNameKey);
                 CorfuRecord<TableDescriptors, TableMetadata> newRecord =
                         new CorfuRecord<>(tableDescriptors, tableMetadata);
+                updatedRecord = oldRecord;
                 boolean protoFileChanged = tryUpdateTableSchemas(allDescriptors);
 
                 String fullyQualifiedTableName = getFullyQualifiedTableName(namespace, tableName);
@@ -292,6 +296,7 @@ public class TableRegistry {
                 }
                 if (oldRecord == null || protoFileChanged || tableRecordChanged(oldRecord, newRecord)) {
                     this.registryTable.insert(tableNameKey, newRecord);
+                    updatedRecord = newRecord;
                 }
                 this.runtime.getObjectsView().TXEnd();
                 break;
@@ -310,12 +315,12 @@ public class TableRegistry {
                     throw txAbort;
                 }
                 log.info("registerTable: commit failed. Will retry {} times. Cause {}", numRetries, txAbort);
-            } finally {
-                if (TransactionalContext.isInTransaction()) { // Transaction failed or an exception occurred.
-                    this.runtime.getObjectsView().TXAbort(); // clear Txn context so thread can be reused.
-                }
+            } catch (Exception e) {
+                log.error("Table register failed", e);
+                throw e;
             }
         }
+        return updatedRecord;
     }
 
     /**
@@ -594,31 +599,32 @@ public class TableRegistry {
                              @Nonnull final Class<V> vClass,
                              @Nullable final Class<M> mClass,
                              @Nonnull final TableOptions tableOptions)
-            throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
+            throws NoSuchMethodException, InvocationTargetException, IllegalAccessException, ClassNotFoundException,
+        InvalidProtocolBufferException {
 
         // Register the schemas to schema table.
         if (kClass == null) {
             throw new IllegalArgumentException("Key type cannot be NULL.");
         }
-        K defaultKeyMessage = (K) kClass.getMethod("getDefaultInstance").invoke(null);
-        addTypeToClassMap(defaultKeyMessage);
+        /*K defaultKeyMessage = (K) kClass.getMethod("getDefaultInstance").invoke(null);
+        addTypeToClassMap(defaultKeyMessage);*/
 
         if (vClass == null) {
             throw new IllegalArgumentException("Value type cannot be NULL.");
         }
-        V defaultValueMessage = (V) vClass.getMethod("getDefaultInstance").invoke(null);
-        addTypeToClassMap(defaultValueMessage);
+        /*V defaultValueMessage = (V) vClass.getMethod("getDefaultInstance").invoke(null);
+        addTypeToClassMap(defaultValueMessage);*/
 
-        M defaultMetadataMessage = null;
+        /*M defaultMetadataMessage = null;
         if (mClass != null) {
             defaultMetadataMessage = (M) mClass.getMethod("getDefaultInstance").invoke(null);
             addTypeToClassMap(defaultMetadataMessage);
-        }
+        }*/
 
         String fullyQualifiedTableName = getFullyQualifiedTableName(namespace, tableName);
 
         // persistentDataPath is deprecated and needs to be removed.
-        CorfuOptions.PersistenceOptions persistenceOptions =
+        /*CorfuOptions.PersistenceOptions persistenceOptions =
                 tableOptions.getPersistenceOptions();
         if (tableOptions.getPersistentDataPath().isPresent()) {
             persistenceOptions = tableOptions.getPersistenceOptions().toBuilder().setDataPath(
@@ -631,12 +637,12 @@ public class TableRegistry {
         } else {
             tableSchemaOptions = CorfuOptions.SchemaOptions.getDefaultInstance();
         }
-        final Set<StreamTagInfo> streamTagInfoForTable = tableSchemaOptions
+        Set<StreamTagInfo> streamTagInfoForTable = tableSchemaOptions
                 .getStreamTagList().stream()
                 .map(tag -> new StreamTagInfo(tag, getStreamIdForStreamTag(namespace, tag)))
                 .collect(Collectors.toSet());
 
-        final boolean isFederated = tableSchemaOptions.getIsFederated();
+        boolean isFederated = tableSchemaOptions.getIsFederated();
         // If table is federated, add a new tagged stream (on which updates to federated tables will be appended for
         // streaming purposes)
         if (isFederated) {
@@ -651,30 +657,75 @@ public class TableRegistry {
         Set<UUID> streamTagIdsForTable = streamTagInfoForTable
                 .stream()
                 .map(StreamTagInfo::getStreamId)
-                .collect(Collectors.toSet());
+                .collect(Collectors.toSet());*/
 
-        log.info(CorfuRuntime.LOG_NOT_IMPORTANT, "openTable: opening {}${} with stream tags {}", namespace, tableName, streamTagInfoForTable);
+        CorfuRecord<TableDescriptors, TableMetadata> persistedRecord = registerTable(namespace, tableName, kClass,
+            vClass, mClass, tableOptions);
+        Class keyClass = Class.forName(persistedRecord.getPayload().getKey().getTypeUrl());
+        Class valueClass = Class.forName(persistedRecord.getPayload().getValue().getTypeUrl());
+        Class metadataClass = Class.forName(persistedRecord.getPayload().getMetadata().getTypeUrl());
+
+        // TODO pankti: The type must change from K, V, M
+        K keyMsg = (K) persistedRecord.getPayload().getKey().unpack(keyClass);
+        addTypeToClassMap(keyMsg);
+
+        V valueMsg = (V) persistedRecord.getPayload().getValue().unpack(valueClass);
+        addTypeToClassMap(valueMsg);
+
+        M metadataMsg = (M) persistedRecord.getPayload().getMetadata().unpack(metadataClass);
+        addTypeToClassMap(metadataMsg);
+
+        TableOptions persistedTableOptions =
+            TableOptions.builder().schemaOptions(persistedRecord.getMetadata().getTableOptions()).build();
+        if (persistedRecord.getMetadata().getDiskBased()) {
+            persistedTableOptions.getPersistenceOptions().toBuilder()
+                .setDataPath(tableOptions.getPersistentDataPath().toString()).build();
+        }
+
+        CorfuOptions.SchemaOptions tableSchemaOptions = persistedTableOptions.getSchemaOptions();
+
+        Set<StreamTagInfo> streamTagInfoForTable = tableSchemaOptions
+            .getStreamTagList().stream()
+            .map(tag -> new StreamTagInfo(tag, getStreamIdForStreamTag(namespace, tag)))
+            .collect(Collectors.toSet());
+
+        boolean isFederated = tableSchemaOptions.getIsFederated();
+        // If table is federated, add a new tagged stream (on which updates to federated tables will be appended for
+        // streaming purposes)
+        if (isFederated) {
+            streamTagInfoForTable.add(LOG_REPLICATOR_STREAM_INFO);
+        }
+
+        if (tableSchemaOptions.hasReplicationGroup()) {
+            streamTagInfoForTable.add(ObjectsView.getLogicalGroupStreamTagInfo(
+                tableSchemaOptions.getReplicationGroup().getClientName()));
+        }
+        Set<UUID> streamTagIdsForTable = streamTagInfoForTable
+            .stream()
+            .map(StreamTagInfo::getStreamId)
+            .collect(Collectors.toSet());
+
+        log.info(CorfuRuntime.LOG_NOT_IMPORTANT, "openTable: opening {}${} with stream tags {}", namespace, tableName,
+            streamTagInfoForTable);
 
         // Open and return table instance.
         Table<K, V, M> table = new Table<>(
                 TableParameters.<K, V, M>builder()
                         .namespace(namespace)
                         .fullyQualifiedTableName(fullyQualifiedTableName)
-                        .kClass(kClass)
-                        .vClass(vClass)
-                        .mClass(mClass)
-                        .valueSchema(defaultValueMessage)
-                        .metadataSchema(defaultMetadataMessage)
+                        .kClass(keyClass)
+                        .vClass(valueClass)
+                        .mClass(metadataClass)
+                        .valueSchema(valueMsg)
+                        .metadataSchema(metadataMsg)
                         .schemaOptions(tableSchemaOptions)
-                        .persistenceOptions(persistenceOptions)
+                        .persistenceOptions(persistedTableOptions.getPersistenceOptions())
                         .secondaryIndexesDisabled(tableOptions.isSecondaryIndexesDisabled())
                         .build(),
                 this.runtime,
                 this.protobufSerializer,
                 streamTagIdsForTable);
         tableMap.put(fullyQualifiedTableName, (Table<Message, Message, Message>) table);
-
-        registerTable(namespace, tableName, kClass, vClass, mClass, tableOptions);
         return table;
     }
 
