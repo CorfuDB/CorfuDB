@@ -17,7 +17,6 @@ import org.junit.Test;
 
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
@@ -31,9 +30,6 @@ import static org.mockito.Mockito.when;
 
 @SuppressWarnings("checkstyle:magicnumber")
 public class DeltaStreamTest {
-    protected final AddressSpaceView addressSpaceView = mock(AddressSpaceView.class);
-    protected UUID streamId = UUID.randomUUID();
-    protected DeltaStream deltaStream;
 
     private final ReadOptions options = ReadOptions
             .builder()
@@ -45,34 +41,34 @@ public class DeltaStreamTest {
 
     @Test
     public void badArguments() {
-        assertThatThrownBy(() -> createDeltaStream(-2, 0))
+        assertThatThrownBy(() -> new DeltaStream(mock(AddressSpaceView.class), UUID.randomUUID(),
+                -2, 0))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("lastAddressRead -2 must be >= -1");
-        assertThatThrownBy(() -> createDeltaStream(0,0))
+        assertThatThrownBy(() -> new DeltaStream(mock(AddressSpaceView.class), UUID.randomUUID(),
+                0, 0))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("The size must be greater than 0");
     }
 
-    protected void createDeltaStream(long lastAddressRead, int bufferSize) {
-        deltaStream = new DeltaStream(addressSpaceView, streamId, lastAddressRead, bufferSize);
-    }
-
     @Test
     public void trimmedLastAddressRead() {
+        UUID streamId = UUID.randomUUID();
+        AddressSpaceView addressSpaceView = mock(AddressSpaceView.class);
         final int bufferSize = 10;
         final long lastAddressRead = Address.NON_ADDRESS;
-        createDeltaStream(lastAddressRead, bufferSize);
+        DeltaStream stream = new DeltaStream(addressSpaceView, streamId, lastAddressRead, bufferSize);
 
-        assertThat(deltaStream.hasNext()).isFalse();
+        assertThat(stream.hasNext()).isFalse();
         StreamAddressSpace sas = new StreamAddressSpace();
         sas.setTrimMark(Address.NON_ADDRESS);
-        deltaStream.refresh(sas);
-        assertThat(deltaStream.hasNext()).isFalse();
+        stream.refresh(sas);
+        assertThat(stream.hasNext()).isFalse();
 
         sas.setTrimMark(5);
-        deltaStream.refresh(sas);
-        assertThat(deltaStream.hasNext()).isTrue();
-        assertThatThrownBy(deltaStream::next)
+        stream.refresh(sas);
+        assertThat(stream.hasNext()).isTrue();
+        assertThatThrownBy(stream::next)
                 .isInstanceOf(TrimmedException.class)
                 .hasMessage("lastAddressRead -1 trimMark 5");
     }
@@ -105,71 +101,75 @@ public class DeltaStreamTest {
 
     @Test
     public void deltaStreamTest() {
+        UUID streamId = UUID.randomUUID();
+        AddressSpaceView addressSpaceView = mock(AddressSpaceView.class);
         final int bufferSize = 10;
         final long lastAddressRead = 0;
-        createDeltaStream(lastAddressRead, bufferSize);
-        assertThat(deltaStream.getStreamId()).isEqualTo(streamId);
-        assertThat(deltaStream.availableSpace()).isEqualTo(bufferSize);
+        DeltaStream stream = new DeltaStream(addressSpaceView, streamId, lastAddressRead, bufferSize);
+        assertThat(stream.getStreamId()).isEqualTo(streamId);
+        assertThat(stream.availableSpace()).isEqualTo(bufferSize);
 
-        assertThat(deltaStream.hasNext()).isFalse();
-        assertThat(deltaStream.getMaxAddressSeen()).isEqualTo(lastAddressRead);
+        assertThat(stream.hasNext()).isFalse();
+        assertThat(stream.getMaxAddressSeen()).isEqualTo(lastAddressRead);
 
-        assertThatThrownBy(deltaStream::next)
+        assertThatThrownBy(stream::next)
                 .isInstanceOf(BufferUnderflowException.class);
 
         // Trigger a trim on an empty stream. This can happen when a stream lags behind, or isn't
         // checkpointed (i.e., data loss)
         StreamAddressSpace sas = new StreamAddressSpace();
         sas.setTrimMark(lastAddressRead);
-        assertThat(sas.getTrimMark()).isEqualTo(deltaStream.getMaxAddressSeen());
-        deltaStream.refresh(sas);
+        assertThat(sas.getTrimMark()).isEqualTo(stream.getMaxAddressSeen());
+        stream.refresh(sas);
 
         // Verify that hasNext() returns true after the refresh (i.e., when the buffer is empty, but a trim
         // exception has occurred
-        assertThat(deltaStream.hasNext()).isFalse();
+        assertThat(stream.hasNext()).isFalse();
 
         StreamAddressSpace sas2 = new StreamAddressSpace();
         sas2.setTrimMark(1);
-        deltaStream.refresh(sas2);
-        assertThat(deltaStream.hasNext()).isTrue();
-        assertThatThrownBy(deltaStream::next)
+        stream.refresh(sas2);
+        assertThat(stream.hasNext()).isTrue();
+        assertThatThrownBy(stream::next)
                 .isInstanceOf(TrimmedException.class)
                 .hasMessage("lastAddressRead 0 trimMark 1");
 
         // Verify that hasNext persists next has thrown an exception
-        assertThat(deltaStream.hasNext()).isTrue();
+        assertThat(stream.hasNext()).isTrue();
 
         sas.addAddress(1);
         sas.addAddress(2);
         sas.trim(1);
-        deltaStream.refresh(sas);
-        assertThat(deltaStream.hasNext()).isTrue();
+        stream.refresh(sas);
+        assertThat(stream.hasNext()).isTrue();
         // Verify that refresh doesn't add new addresses to the buffer once it detects a trimmed exception
-        assertThat(deltaStream.availableSpace()).isEqualTo(bufferSize);
+        assertThat(stream.availableSpace()).isEqualTo(bufferSize);
     }
 
     @Test
     public void deltaStreamReadTest() {
+        UUID streamId = UUID.randomUUID();
+        AddressSpaceView addressSpaceView = mock(AddressSpaceView.class);
         final int bufferSize = 10;
         final long lastAddressRead = 0;
-        createDeltaStream(lastAddressRead, bufferSize);
+        DeltaStream stream = new DeltaStream(addressSpaceView, streamId, lastAddressRead, bufferSize);
 
-        assertThat(deltaStream.availableSpace()).isEqualTo(bufferSize);
-        assertThat(deltaStream.hasNext()).isFalse();
+        assertThat(stream.availableSpace()).isEqualTo(bufferSize);
+        assertThat(stream.hasNext()).isFalse();
 
         StreamAddressSpace sas = new StreamAddressSpace();
         sas.addAddress(1);
         sas.addAddress(2);
 
-        deltaStream.refresh(sas);
-        assertThat(deltaStream.availableSpace()).isEqualTo(bufferSize - 2);
+        stream.refresh(sas);
+        assertThat(stream.availableSpace()).isEqualTo(bufferSize - 2);
 
         MultiObjectSMREntry mos = new MultiObjectSMREntry();
         mos.addTo(streamId, new SMREntry());
         mos.setGlobalAddress(1);
 
         LogData ld = new LogData(DataType.DATA, mos);
-        ld.setBackpointerMap(getTestBackpointerMap());
+        ld.setBackpointerMap(Collections.singletonMap(streamId, Address.NON_EXIST));
         ld.setGlobalAddress(1L);
 
         LogData hole = new LogData(DataType.HOLE);
@@ -180,68 +180,68 @@ public class DeltaStreamTest {
 
         // Verify that next can retrieve the addresses refreshed from the StreamAddressSpace
         // and that the buffer is being maintained correctly
-        assertThat(deltaStream.hasNext()).isTrue();
-        assertThat(deltaStream.next()).isEqualTo(ld);
-        assertThat(deltaStream.availableSpace()).isEqualTo(bufferSize - 1);
-        assertThat(deltaStream.hasNext()).isTrue();
-        assertThat(deltaStream.next()).isEqualTo(hole);
-        assertThat(deltaStream.hasNext()).isFalse();
-        assertThat(deltaStream.availableSpace()).isEqualTo(bufferSize);
+        assertThat(stream.hasNext()).isTrue();
+        assertThat(stream.next()).isEqualTo(ld);
+        assertThat(stream.availableSpace()).isEqualTo(bufferSize - 1);
+        assertThat(stream.hasNext()).isTrue();
+        assertThat(stream.next()).isEqualTo(hole);
+        assertThat(stream.hasNext()).isFalse();
+        assertThat(stream.availableSpace()).isEqualTo(bufferSize);
 
         // Verify that refreshing stream with the same stream address space, won't produce duplicates
-        assertThatThrownBy(() -> deltaStream.refresh(sas))
+        assertThatThrownBy(() -> stream.refresh(sas))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("maxAddressSeen 2 not < 1");
-        assertThat(deltaStream.hasNext()).isFalse();
-        assertThat(deltaStream.availableSpace()).isEqualTo(bufferSize);
-    }
-
-    protected Map<UUID, Long> getTestBackpointerMap() {
-        return Collections.singletonMap(streamId, Address.NON_EXIST);
+        assertThat(stream.hasNext()).isFalse();
+        assertThat(stream.availableSpace()).isEqualTo(bufferSize);
     }
 
     @Test
     public void refreshOverflow() {
+        UUID streamId = UUID.randomUUID();
+        AddressSpaceView addressSpaceView = mock(AddressSpaceView.class);
         final int bufferSize = 2;
         final long lastAddressRead = 0;
-        createDeltaStream(lastAddressRead, bufferSize);
+        DeltaStream stream = new DeltaStream(addressSpaceView, streamId, lastAddressRead, bufferSize);
         StreamAddressSpace sas = new StreamAddressSpace();
         sas.addAddress(1L);
         sas.addAddress(2L);
-        deltaStream.refresh(sas);
-        assertThat(deltaStream.availableSpace()).isEqualTo(0);
-        assertThat(deltaStream.getMaxAddressSeen()).isEqualTo(2L);
+        stream.refresh(sas);
+        assertThat(stream.availableSpace()).isEqualTo(0);
+        assertThat(stream.getMaxAddressSeen()).isEqualTo(2L);
 
         StreamAddressSpace sas2 = new StreamAddressSpace();
         sas2.addAddress(3L);
         sas2.addAddress(4L);
-        deltaStream.refresh(sas2);
-        assertThat(deltaStream.availableSpace()).isEqualTo(0);
-        assertThat(deltaStream.getMaxAddressSeen()).isEqualTo(2L);
+        stream.refresh(sas2);
+        assertThat(stream.availableSpace()).isEqualTo(0);
+        assertThat(stream.getMaxAddressSeen()).isEqualTo(2L);
 
         // Verify that the buffer can be partially replenished
         LogData hole = new LogData(DataType.HOLE);
         hole.setGlobalAddress(1L);
         when(addressSpaceView.read(1L, options)).thenReturn(hole);
-        assertThat(deltaStream.next()).isEqualTo(hole);
-        assertThat(deltaStream.availableSpace()).isEqualTo(1L);
-        assertThat(deltaStream.getMaxAddressSeen()).isEqualTo(2L);
+        assertThat(stream.next()).isEqualTo(hole);
+        assertThat(stream.availableSpace()).isEqualTo(1L);
+        assertThat(stream.getMaxAddressSeen()).isEqualTo(2L);
         // After partially replenishing the buffer the max address seen is incremented and the buffer is full again
-        deltaStream.refresh(sas2);
-        assertThat(deltaStream.availableSpace()).isEqualTo(0L);
-        assertThat(deltaStream.getMaxAddressSeen()).isEqualTo(3L);
-        assertThat(deltaStream.hasNext()).isTrue();
+        stream.refresh(sas2);
+        assertThat(stream.availableSpace()).isEqualTo(0L);
+        assertThat(stream.getMaxAddressSeen()).isEqualTo(3L);
+        assertThat(stream.hasNext()).isTrue();
     }
 
     @Test
     public void badStreamRead() {
+        UUID streamId = UUID.randomUUID();
+        AddressSpaceView addressSpaceView = mock(AddressSpaceView.class);
         final int bufferSize = 2;
         final long lastAddressRead = 0;
-        createDeltaStream(lastAddressRead, bufferSize);
+        DeltaStream stream = new DeltaStream(addressSpaceView, streamId, lastAddressRead, bufferSize);
         StreamAddressSpace sas = new StreamAddressSpace();
         sas.addAddress(1L);
         sas.addAddress(2L);
-        deltaStream.refresh(sas);
+        stream.refresh(sas);
 
         CheckpointEntry cp1 = new CheckpointEntry(CheckpointEntry.CheckpointEntryType.START,
                 "checkpointAuthor", UUID.randomUUID(), streamId,
@@ -253,30 +253,29 @@ public class DeltaStreamTest {
                 Address.NON_EXIST));
         when(addressSpaceView.read(1, options)).thenReturn(ld);
 
-        // We should only received LogData that belongs to the stream
-        verifyExceptionAndErrorBasedOnStreamType();
-    }
-
-    protected void verifyExceptionAndErrorBasedOnStreamType() {
-        assertThatThrownBy(deltaStream::next)
-            .isInstanceOf(IllegalStateException.class)
-            .hasMessage(String.format("[%s] must contain %s",
-                CorfuRuntime.getCheckpointStreamIdFromId(streamId), streamId));
+        // We should only LogData that belongs to the stream
+        assertThatThrownBy(stream::next)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage(String.format("[%s] must contain %s",
+                        CorfuRuntime.getCheckpointStreamIdFromId(streamId), streamId));
     }
 
     @Test
     public void concurrencyTest() throws Exception {
+
+        UUID streamId = UUID.randomUUID();
+        AddressSpaceView addressSpaceView = mock(AddressSpaceView.class);
         final int bufferSize = 1;
         final long lastAddressRead = -1;
-        createDeltaStream(lastAddressRead, bufferSize);
+        DeltaStream stream = new DeltaStream(addressSpaceView, streamId, lastAddressRead, bufferSize);
         List<ILogData> consumed = new CopyOnWriteArrayList<>();
         final int numToProduce = 50;
 
         CountDownLatch done = new CountDownLatch(numToProduce);
         Thread consumer = new Thread(() -> {
             while (true) {
-                if (deltaStream.hasNext()) {
-                    consumed.add(deltaStream.next());
+                if (stream.hasNext()) {
+                    consumed.add(stream.next());
                     done.countDown();
                     if (done.getCount() == 0) {
                         break;
@@ -297,12 +296,12 @@ public class DeltaStreamTest {
         Thread producer = new Thread(() -> {
             int numProduced = 0;
             while (numProduced < numToProduce) {
-                if (deltaStream.availableSpace() > 0) {
+                if (stream.availableSpace() > 0) {
                     // produce in batches of 3
-                    long nextAddressToProduce = deltaStream.getMaxAddressSeen() + 1;
+                    long nextAddressToProduce = stream.getMaxAddressSeen() + 1;
                     StreamAddressSpace sas = new StreamAddressSpace();
                     sas.addAddress(nextAddressToProduce);
-                    deltaStream.refresh(sas);
+                    stream.refresh(sas);
                     numProduced++;
                 }
             }

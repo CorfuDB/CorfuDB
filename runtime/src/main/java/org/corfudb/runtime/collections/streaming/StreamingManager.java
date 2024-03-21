@@ -4,7 +4,6 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.LogReplicationListener;
 import org.corfudb.runtime.collections.StreamListener;
 import org.corfudb.runtime.exceptions.StreamingException;
 import org.corfudb.runtime.exceptions.TrimmedException;
@@ -15,7 +14,6 @@ import org.corfudb.util.Utils;
 
 import javax.annotation.Nonnull;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -90,23 +88,6 @@ public class StreamingManager {
         this.scheduler.addTask(streamListener, namespace, streamTag, tablesOfInterest, lastAddress, bufferSize);
     }
 
-    /**
-     * This subscription is exclusive to Log Replication(LR).  It is used for subscribing to transaction updates across
-     * LR's metadata table(ReplicationStatus) in the CorfuSystem namespace and application-specific tables containing
-     * 'streamTag' within the application namespace.
-     *
-     * @param streamListener   client listener for callback
-     * @param nsToTableName    map of table namespace to list of tables of interest
-     * @param nsToStreamTags   map of table namespace to the stream tag polled
-     * @param lastAddress      last processed address, new notifications start from lastAddress + 1
-     * @param bufferSize       maximum size of buffered transaction entries
-     */
-    public void subscribeLogReplicationListener(@Nonnull LogReplicationListener streamListener, Map<String, List<String>> nsToTableName,
-                                                Map<String, String> nsToStreamTags, long lastAddress, int bufferSize) {
-        this.scheduler.addLRTask(streamListener, nsToStreamTags, nsToTableName, lastAddress,
-                bufferSize == 0 ? defaultBufferSize : bufferSize);
-    }
-
 
     // TODO(Maithem): this is obsolete, delta stream already detects this case, but can't be
     // removed until some tests that depend on this internal behavior are fixed
@@ -125,7 +106,7 @@ public class StreamingManager {
             TrimmedException te = new TrimmedException(String.format("Subscription Stream[%s$tag:%s][%s] :: sync start address falls " +
                             "behind trim mark. This will incur in data loss for data in the space [%s, %s] (inclusive)",
                     namespace, streamTag, Utils.toReadableId(txnStreamId), syncAddress, streamAddressSpace.getTrimMark()));
-            throw new StreamingException(te, StreamingException.ExceptionCause.TRIMMED_EXCEPTION);
+            throw new StreamingException(te);
         }
     }
 
@@ -140,25 +121,6 @@ public class StreamingManager {
         this.scheduler.removeTask(streamListener);
     }
 
-    /**
-     * Checks if a listener has already been subscribed.
-     *
-     * @param streamListener client listener to validate subscription
-     * @return true if listener has already been subscribed
-     */
-    public boolean isListenerSubscribed(@Nonnull StreamListener streamListener) {
-        return this.scheduler.containsTask(streamListener);
-    }
-
-    /**
-     * Validates the buffer size of a stream.
-     *
-     * @param bufferSize bufferSize
-     * @return true if stream has a sufficiently large buffer size
-     */
-    public boolean validateBufferSize(int bufferSize) {
-        return this.scheduler.hasEnoughBuffer(bufferSize == 0 ? defaultBufferSize : bufferSize);
-    }
 
     /**
      * Shutdown the streaming manager and clean up resources.

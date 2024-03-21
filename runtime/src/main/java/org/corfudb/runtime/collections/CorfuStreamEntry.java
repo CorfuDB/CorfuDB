@@ -85,7 +85,7 @@ public class CorfuStreamEntry<K extends Message, V extends Message, M extends Me
         return new CorfuStreamEntry<>(key, payload, metadata, operationType);
     }
 
-    public static OperationType getOperationType(@Nonnull SMREntry entry) {
+    private static OperationType getOperationType(@Nonnull SMREntry entry) {
         OperationType operationType;
         switch (entry.getSMRMethod()) {
             case "put":

@@ -1,7 +1,7 @@
 package org.corfudb.infrastructure.logreplication.replication.fsm;
 
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.LogReplication.SyncStatus;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 
 /**
  * This class represents the Init state of the Log Replication State Machine.
@@ -31,27 +31,27 @@ public class InitializedState implements LogReplicationState {
     public LogReplicationState processEvent(LogReplicationEvent event) throws IllegalTransitionException {
         switch (event.getType()) {
             case SNAPSHOT_SYNC_REQUEST:
-                log.info("Start Snapshot Sync, requestId={}", event.getMetadata().getSyncId());
+                log.info("Start Snapshot Sync, requestId={}", event.getEventId());
                 // Set the id of the event that caused the transition to the new state
                 // This is used to correlate trim or error events that derive from this state
                 LogReplicationState snapshotSyncState = fsm.getStates().get(LogReplicationStateType.IN_SNAPSHOT_SYNC);
-                snapshotSyncState.setTransitionSyncId(event.getMetadata().getSyncId());
+                snapshotSyncState.setTransitionEventId(event.getEventId());
                 ((InSnapshotSyncState)snapshotSyncState).setForcedSnapshotSync(event.getMetadata().isForcedSnapshotSync());
                 return snapshotSyncState;
             case SNAPSHOT_TRANSFER_COMPLETE:
                 log.info("Snapshot Sync transfer completed. Wait for snapshot apply to complete.");
                 WaitSnapshotApplyState waitSnapshotApplyState = (WaitSnapshotApplyState)fsm.getStates().get(LogReplicationStateType.WAIT_SNAPSHOT_APPLY);
-                waitSnapshotApplyState.setTransitionSyncId(event.getMetadata().getSyncId());
+                waitSnapshotApplyState.setTransitionEventId(event.getEventId());
                 waitSnapshotApplyState.setBaseSnapshotTimestamp(event.getMetadata().getLastTransferredBaseSnapshot());
                 fsm.setBaseSnapshot(event.getMetadata().getLastTransferredBaseSnapshot());
                 fsm.setAckedTimestamp(event.getMetadata().getLastLogEntrySyncedTimestamp());
                 return waitSnapshotApplyState;
             case LOG_ENTRY_SYNC_REQUEST:
-                log.info("Start Log Entry Sync, requestId={}", event.getMetadata().getSyncId());
+                log.info("Start Log Entry Sync, requestId={}", event.getEventId());
                 // Set the id of the event that caused the transition to the new state
                 // This is used to correlate trim or error events that derive from this state
                 LogReplicationState logEntrySyncState = fsm.getStates().get(LogReplicationStateType.IN_LOG_ENTRY_SYNC);
-                logEntrySyncState.setTransitionSyncId(event.getMetadata().getSyncId());
+                logEntrySyncState.setTransitionEventId(event.getEventId());
                 fsm.setBaseSnapshot(event.getMetadata().getLastTransferredBaseSnapshot());
                 fsm.setAckedTimestamp(event.getMetadata().getLastLogEntrySyncedTimestamp());
                 return logEntrySyncState;
@@ -69,8 +69,7 @@ public class InitializedState implements LogReplicationState {
     @Override
     public void onEntry(LogReplicationState from) {
         if (from != this) {
-            fsm.getAckReader().markSyncStatus(SyncStatus.STOPPED);
-            log.debug("Replication status changed to STOPPED");
+            fsm.getAckReader().markSyncStatus(LogReplicationMetadata.SyncStatus.STOPPED);
             // Disable periodic sync status periodic task while in initialized state (no actual replication occurring)
             fsm.getAckReader().stopSyncStatusUpdatePeriodicTask();
         }
@@ -78,7 +77,7 @@ public class InitializedState implements LogReplicationState {
 
     @Override
     public void onExit(LogReplicationState to) {
-        if (to != this && to.getType() != LogReplicationStateType.ERROR) {
+        if (!to.equals(this) && !to.getType().equals(LogReplicationStateType.ERROR)) {
             fsm.getAckReader().startSyncStatusUpdatePeriodicTask();
         }
     }

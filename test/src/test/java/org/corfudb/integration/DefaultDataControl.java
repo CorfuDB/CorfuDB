@@ -5,7 +5,7 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.logreplication.DataControl;
-import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationSourceManager;
+import org.corfudb.infrastructure.logreplication.replication.LogReplicationSourceManager;
 
 import static org.assertj.core.api.Assertions.fail;
 

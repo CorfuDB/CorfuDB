@@ -126,19 +126,3 @@ message ValueFieldTagOneAndTwo {
 
     optional string payload = 1;
 }
-
-message SampleGroupMsgA {
-    option (org.corfudb.runtime.table_schema).stream_tag = "tag_one";
-    option (org.corfudb.runtime.table_schema).is_federated = false;
-    option (org.corfudb.runtime.table_schema).replication_group = { logical_group: "groupA" client_name: "clientA"};
-
-    optional string payload = 1;
-}
-
-message SampleGroupMsgB {
-    option (org.corfudb.runtime.table_schema).stream_tag = "tag_one";
-    option (org.corfudb.runtime.table_schema).is_federated = false;
-    option (org.corfudb.runtime.table_schema).replication_group = { logical_group: "groupB" client_name: "clientB"};
-
-    optional string payload = 1;
-}

@@ -2,10 +2,7 @@ package org.corfudb.integration;
 
 import com.google.common.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
-import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
-import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
+import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
 import org.corfudb.infrastructure.logreplication.proto.Sample.IntValue;
 import org.corfudb.infrastructure.logreplication.proto.Sample.Metadata;
@@ -23,7 +20,6 @@ import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
-import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuStore;
@@ -41,15 +37,14 @@ import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
-import org.mockito.Mockito;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -58,6 +53,10 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_MAX_NUM_MSG_PER_BATCH;
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED;
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_CACHE_NUM_ENTRIES;
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_DATA_MSG_SIZE_SUPPORTED;
 
 @Slf4j
 public class LogReplicationReaderWriterIT extends AbstractIT {
@@ -68,12 +67,9 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
     private static final int NUM_KEYS = 10;
     private static final int NUM_STREAMS = 2;
     private static final int NUM_TRANSACTIONS = 20;
-    private static final String SOURCE_CLUSTER_ID = "Cluster-Paris";
-    private static final String SINK_CLUSTER_ID = "Cluster-London";
+    private static final String PRIMARY_SITE_ID = "Cluster-Paris";
     private static final String SHADOW_SUFFIX = "_SHADOW";
     private static final String TEST_NAMESPACE = "LR-Test";
-    private static final String LOCAL_SOURCE_CLUSTER_ID = DefaultClusterConfig.getSourceClusterIds().get(0);
-    private static final String LOCAL_SINK_CLUSTER_ID = DefaultClusterConfig.getSinkClusterIds().get(0);
 
     private static Semaphore waitSem = new Semaphore(1);
 
@@ -220,6 +216,19 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
         }
     }
 
+    void verifyTxStream(CorfuRuntime rt) {
+        StreamOptions options = StreamOptions.builder()
+                .cacheEntries(false)
+                .build();
+
+        IStreamView txStream = rt.getStreamsView().getUnsafe(ObjectsView.getLogReplicatorStreamId(), options);
+        List<ILogData> dataList = txStream.remaining();
+        log.debug("\ndataList size " + dataList.size());
+        for (ILogData data : txStream.remaining()) {
+            log.debug("{}", data);
+        }
+    }
+
     public static void printTails(String tag, CorfuRuntime rt0, CorfuRuntime rt1) {
         log.debug("\n" + tag);
         log.debug("src dataTail " + rt0.getAddressSpaceView().getLogTail());
@@ -227,14 +236,12 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
 
     }
 
-    public static void readSnapshotMsgs(List<LogReplicationEntryMsg> msgQ, CorfuRuntime rt, boolean blockOnSem) {
+    public static void readSnapLogMsgs(List<LogReplicationEntryMsg> msgQ, CorfuRuntime rt, boolean blockOnSem) {
         int cnt = 0;
-        LogReplicationConfigManager configManager = new LogReplicationConfigManager(rt, LOCAL_SOURCE_CLUSTER_ID);
-        configManager.generateConfig(Collections.singleton(getDefaultSession()), false);
-        LogReplicationContext context = new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT,
-                Mockito.mock(LogReplicationPluginConfig.class));
-
-        StreamsSnapshotReader reader = new StreamsSnapshotReader(rt, getDefaultSession(), context);
+        LogReplicationConfigManager configManager = new LogReplicationConfigManager(rt);
+        LogReplicationConfig config = new LogReplicationConfig(configManager, DEFAULT_MAX_NUM_MSG_PER_BATCH,
+                MAX_DATA_MSG_SIZE_SUPPORTED, MAX_CACHE_NUM_ENTRIES, DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED);
+        StreamsSnapshotReader reader = new StreamsSnapshotReader(rt, config);
 
         reader.reset(rt.getAddressSpaceView().getLogTail());
         while (true) {
@@ -261,18 +268,12 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
         }
     }
 
-    public void writeSnapshotMsgs(List<LogReplicationEntryMsg> msgQ, CorfuRuntime rt) {
-
-        LogReplicationConfigManager configManager = new LogReplicationConfigManager(rt, LOCAL_SINK_CLUSTER_ID);
-        configManager.generateConfig(Collections.singleton(getDefaultSession()), false);
-
-        LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt,
-                getReplicationContext(configManager, 0, "test", true));
-        logReplicationMetadataManager.addSession(getDefaultSession(), 0, true);
-
-        StreamsSnapshotWriter writer = new StreamsSnapshotWriter(rt, logReplicationMetadataManager,
-            getDefaultSession(), new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT,
-                Mockito.mock(LogReplicationPluginConfig.class)));
+    public static void writeSnapLogMsgs(List<LogReplicationEntryMsg> msgQ, CorfuRuntime rt) {
+        LogReplicationConfigManager configManager = new LogReplicationConfigManager(rt);
+        LogReplicationConfig config = new LogReplicationConfig(configManager, DEFAULT_MAX_NUM_MSG_PER_BATCH,
+                MAX_DATA_MSG_SIZE_SUPPORTED, MAX_CACHE_NUM_ENTRIES, DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED);
+        LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt, 0, PRIMARY_SITE_ID);
+        StreamsSnapshotWriter writer = new StreamsSnapshotWriter(rt, config, logReplicationMetadataManager);
 
         if (msgQ.isEmpty()) {
             log.debug("msgQ is empty");
@@ -280,8 +281,7 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
 
         long topologyConfigId = msgQ.get(0).getMetadata().getTopologyConfigID();
         long snapshot = msgQ.get(0).getMetadata().getSnapshotTimestamp();
-        logReplicationMetadataManager.updateReplicationMetadataField(getDefaultSession(),
-                LogReplicationMetadata.ReplicationMetadata.LASTSNAPSHOTSTARTED_FIELD_NUMBER, snapshot);
+        logReplicationMetadataManager.setBaseSnapshotStart(topologyConfigId, snapshot);
         writer.reset(topologyConfigId, snapshot);
 
         for (LogReplicationEntryMsg msg : msgQ) {
@@ -291,23 +291,11 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
         writer.applyShadowStreams();
     }
 
-    public static LogReplicationSession getDefaultSession() {
-        return LogReplicationSession.newBuilder()
-                .setSinkClusterId(SINK_CLUSTER_ID)
-                .setSourceClusterId(SOURCE_CLUSTER_ID)
-                .setSubscriber(LogReplicationConfigManager.getDefaultSubscriber())
-                .build();
-    }
-
-    public static void readLogEntryMsgs(List<LogReplicationEntryMsg> msgQ, CorfuRuntime rt,
-                                        boolean blockOnce) throws TrimmedException {
-
-        LogReplicationConfigManager configManager = new LogReplicationConfigManager(rt, LOCAL_SOURCE_CLUSTER_ID);
-        configManager.generateConfig(Collections.singleton(getDefaultSession()), false);
-
-        StreamsLogEntryReader reader = new StreamsLogEntryReader(rt, getDefaultSession(),
-                new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT,
-                        Mockito.mock(LogReplicationPluginConfig.class)));
+    public static void readLogEntryMsgs(List<LogReplicationEntryMsg> msgQ, CorfuRuntime rt, boolean blockOnce) throws TrimmedException {
+        LogReplicationConfigManager configManager = new LogReplicationConfigManager(rt);
+        LogReplicationConfig config = new LogReplicationConfig(configManager, DEFAULT_MAX_NUM_MSG_PER_BATCH,
+                MAX_DATA_MSG_SIZE_SUPPORTED, MAX_CACHE_NUM_ENTRIES, DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED);
+        StreamsLogEntryReader reader = new StreamsLogEntryReader(rt, config);
         reader.setGlobalBaseSnapshot(Address.NON_ADDRESS, Address.NON_ADDRESS);
 
         LogReplicationEntryMsg entry;
@@ -335,17 +323,12 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
         assertThat(reader.getLastOpaqueEntry()).isNull();
     }
 
-    private void writeLogEntryMsgs(List<LogReplicationEntryMsg> msgQ, CorfuRuntime rt) {
-
-        LogReplicationConfigManager configManager = new LogReplicationConfigManager(rt, LOCAL_SINK_CLUSTER_ID);
-        configManager.generateConfig(Collections.singleton(getDefaultSession()), false);
-
-        LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt,
-                getReplicationContext(configManager, 0, "test", true));
-        logReplicationMetadataManager.addSession(getDefaultSession(),0, true);
-        LogEntryWriter writer = new LogEntryWriter(logReplicationMetadataManager, getDefaultSession(),
-                new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT,
-                        Mockito.mock(LogReplicationPluginConfig.class)));
+    public static void writeLogEntryMsgs(List<LogReplicationEntryMsg> msgQ, Set<String> streams, CorfuRuntime rt) {
+        LogReplicationConfigManager configManager = new LogReplicationConfigManager(rt);
+        LogReplicationConfig config = new LogReplicationConfig(configManager, DEFAULT_MAX_NUM_MSG_PER_BATCH,
+                MAX_DATA_MSG_SIZE_SUPPORTED, MAX_CACHE_NUM_ENTRIES, DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED);
+        LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt, 0, PRIMARY_SITE_ID);
+        LogEntryWriter writer = new LogEntryWriter(config, logReplicationMetadataManager);
 
         if (msgQ.isEmpty()) {
             log.debug("msgQ is EMPTY");
@@ -354,12 +337,6 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
         for (LogReplicationEntryMsg msg : msgQ) {
             writer.apply(msg);
         }
-    }
-
-    private LogReplicationContext getReplicationContext(LogReplicationConfigManager configManager, long topologyConfigId,
-                                                        String localCorfuEndpoint, boolean isLeader) {
-        return new LogReplicationContext(configManager, topologyConfigId, localCorfuEndpoint, isLeader,
-                Mockito.mock(LogReplicationPluginConfig.class));
     }
 
     private void accessTxStream(Iterator<ILogData> iterator, int num) {
@@ -547,7 +524,7 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
         Exception result = null;
 
         try {
-            readSnapshotMsgs(msgQ, srcDataRuntime, true);
+            readSnapLogMsgs(msgQ, srcDataRuntime, true);
         } catch (Exception e) {
             result = e;
             log.debug("caught an exception " + e + " tail " + tail);
@@ -624,10 +601,10 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
         openStreams(dstTables, dstCorfuStore);
 
         // read snapshot from srcServer and put msgs into Queue
-        readSnapshotMsgs(msgQ, srcDataRuntime, false);
+        readSnapLogMsgs(msgQ, srcDataRuntime, false);
 
         // play messages at dst server
-        writeSnapshotMsgs(msgQ, dstDataRuntime);
+        writeSnapLogMsgs(msgQ, dstDataRuntime);
 
         printTails("after writing to server2", srcDataRuntime, dstDataRuntime);
 
@@ -657,7 +634,7 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
         dstWriterRuntime.parseConfigurationString(WRITER_ENDPOINT);
         dstWriterRuntime.connect();
         //play messages at dst server
-        writeLogEntryMsgs(msgQ, dstWriterRuntime);
+        writeLogEntryMsgs(msgQ, srcHashMap.keySet(), dstWriterRuntime);
 
         //verify data with hashtable
         openStreams(dstTables, dstCorfuStore, NUM_STREAMS, serializer);
@@ -667,7 +644,7 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
 
         cleanUp();
     }
-
+    
     /**
      * This test verifies that the Log Entry Reader sets the last processed entry
      * as NULL whenever all entries written to the TX stream are of no interest for

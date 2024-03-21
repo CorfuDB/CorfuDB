@@ -34,12 +34,11 @@ message LogReplicationMetadataResponseMsg {
   uint64 lastLogEntryTimestamp = 6;
 }
 
-message LogReplicationLeadershipLossMsg {
+message LogReplicationLeadershipLossResponseMsg {
   string nodeId = 1;
 }
 
 message LogReplicationLeadershipRequestMsg {
-  LogReplicationSession session = 1;
 }
 
 message LogReplicationLeadershipResponseMsg {
@@ -88,92 +87,4 @@ message ClientRegistrationInfo {
   string client_name = 1;
   ReplicationModel model = 2;
   google.protobuf.Timestamp registration_time = 3;
-}
-
-message LogReplicationSession {
-  string sink_cluster_id = 1;
-  string source_cluster_id = 2;
-  ReplicationSubscriber subscriber = 3;
-}
-
-message ReplicationSubscriber {
-  ReplicationModel model = 1;
-  string client_name = 2;
-}
-
-/*-------- Replication Status Table V2------*/
-
-enum SyncType {
-  SNAPSHOT = 0;
-  LOG_ENTRY = 1;
-}
-
-/*
- * SyncStatus
- *
- * COMPLETED:   Used in SnapshotSyncInfo only for the latest snapshot sync
- * ERROR:       Log Replication is unrecoverable, need to restart
- * NOT_STARTED: Log Replication might be in the very beginning state
- * STOPPED:     Log Replication is in initialized state
- */
-enum SyncStatus {
-  NOT_STARTED = 0;
-  ONGOING = 1;
-  COMPLETED = 2;
-  STOPPED = 3;
-  ERROR = 4;
-  NOT_AVAILABLE = 5;
-}
-
-message ReplicationStatus {
-  option (org.corfudb.runtime.table_schema).stream_tag = "lr_status";
-  oneof status {
-    SourceReplicationStatus source_status = 1;
-    SinkReplicationStatus sink_status = 2;
-  }
-}
-
-message SourceReplicationStatus {
-  option (org.corfudb.runtime.table_schema).stream_tag = "lr_status";
-
-  uint64 remainingEntriesToSend = 1;
-  ReplicationInfo replicationInfo = 2;
-}
-
-message SinkReplicationStatus {
-  option (org.corfudb.runtime.table_schema).stream_tag = "lr_status";
-  bool dataConsistent = 1;
-  ReplicationInfo replicationInfo = 2;
-}
-
-/*
- * Snapshot Sync Info
- *
- * If replication is in SNAPSHOT sync, this provides details of the
- * ongoing snapshot sync. If replication is in LOG ENTRY sync (delta).
- * this provides details of the previous SNAPSHOT sync leading up to
- * the log entry sync.
- */
-message SnapshotSyncInfo {
-  enum SnapshotSyncType {
-    DEFAULT = 0;
-    FORCED = 1;
-  }
-  SnapshotSyncType type = 1;
-  SyncStatus status = 2;
-  string snapshotRequestId = 3;
-  google.protobuf.Timestamp completedTime = 4;
-  uint64 baseSnapshot = 5;
-}
-
-message ReplicationInfo {
-  SyncType syncType = 1;
-  SyncStatus status = 2;
-  SnapshotSyncInfo snapshotSyncInfo = 3;
-}
-
-/*------------------------------------*/
-
-message ReverseReplicateMsg {
-  string sinkLeaderNodeId = 1;
 }
