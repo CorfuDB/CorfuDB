@@ -5,7 +5,6 @@ import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.AssertionsForInterfaceTypes.assertThat;
 
-@SuppressWarnings("checkstyle:magicnumber")
 public class SegmentIndexTest {
 
     @Test

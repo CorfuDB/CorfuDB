@@ -13,7 +13,7 @@ message SchemaOptions {
     optional bool version = 2;
     // Should this table be backed up by Corfu.
     optional bool requires_backup_support = 3;
-    // Should this table be log replicated over to remote sink site using corfu log replication.
+    // Should this table be log replicated over to remote standby site using corfu log replication.
     optional bool is_federated = 4;
     // Tag tables with unique stream listener tags for selectivity in receiving change notifications.
     repeated string stream_tag = 5;

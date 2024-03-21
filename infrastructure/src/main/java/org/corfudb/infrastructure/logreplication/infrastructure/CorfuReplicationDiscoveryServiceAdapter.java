@@ -1,50 +1,30 @@
 package org.corfudb.infrastructure.logreplication.infrastructure;
 
-import com.google.common.annotations.VisibleForTesting;
-import org.corfudb.runtime.LogReplication.ReplicationStatus;
-import org.corfudb.runtime.LogReplication.LogReplicationSession;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 
-/**
- * This class contains all the interfaces exposed from the Discovery Service to the Cluster Manager plugin.
- */
 public interface CorfuReplicationDiscoveryServiceAdapter {
 
     /**
-     * Update with new topology
-     * @param topologyConfiguration new topology
+     *
+     * @param topologyConfiguration
      */
-    void updateTopology(TopologyDescriptor topologyConfiguration);
+    void updateTopology(LogReplicationClusterInfo.TopologyConfigurationMsg topologyConfiguration);
 
     /**
-     * Query replication status
-     * @return Map of session and its corresponding replication status
+     *
+     * @return
      */
-    Map<LogReplicationSession, ReplicationStatus> queryReplicationStatus();
+    Map<String, LogReplicationMetadata.ReplicationStatusVal> queryReplicationStatus();
 
     /**
      * Enforce snapshotFullSync
      */
-    UUID forceSnapshotSync(LogReplicationSession session) throws LogReplicationDiscoveryServiceException;
-    
-    /**
-     * Get outgoing sessions
-     * @return a set of sessions where the local cluster is a SOURCE
-     */
-    Set<LogReplicationSession> getOutgoingSessions();
+    UUID forceSnapshotSync(String clusterId) throws LogReplicationDiscoveryServiceException;
 
-    /**
-     * Get incoming sessions
-     * @return a set of sessions where the local cluster is a SINK
-     */
-    Set<LogReplicationSession> getIncomingSessions();
 
-    /**
-     * Gets the replication endpoint of the local cluster. Used only for the ITs.
-     */
-    @VisibleForTesting
-    String getLocalEndpoint();
+    LogReplicationClusterInfo.ClusterRole getLocalClusterRoleType();
 }

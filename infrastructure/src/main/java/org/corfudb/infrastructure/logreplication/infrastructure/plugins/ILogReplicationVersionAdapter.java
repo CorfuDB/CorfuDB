@@ -1,6 +1,5 @@
 package org.corfudb.infrastructure.logreplication.infrastructure.plugins;
 
-import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.TxnContext;
 
 /**
@@ -27,16 +26,4 @@ public interface ILogReplicationVersionAdapter {
      * getNodeVersion() to determine if rolling upgrade has completed.
      */
     String getPinnedClusterVersion(TxnContext txnContext);
-
-    /**
-     * Get if the current deployment is SaaS or on-prem
-     * @return true if SaaS, otherwise false
-     */
-    boolean isSaasDeployment();
-
-    /**
-     * openVersionTable using the provided runtime
-     * @param runtime
-     */
-    void openVersionTable(CorfuRuntime runtime);
 }

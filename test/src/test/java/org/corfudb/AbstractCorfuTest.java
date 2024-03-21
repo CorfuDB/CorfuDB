@@ -18,7 +18,6 @@ import java.io.File;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -62,11 +61,6 @@ public class AbstractCorfuTest {
 
     public static final CorfuTestServers SERVERS = new CorfuTestServers();
 
-    // Tests cases in this set typically take more than 2 minutes to finish.
-    private static final Set<String> LONGER_TIMEOUT_TESTS = new HashSet<>(Arrays.asList(
-            "testCheckpointTrimSourceBetweenSnapshotSync",
-            "testCheckpointTrimSinkDuringLogEntrySync"));
-
     @AfterClass
     public static void shutdownNettyGroups() {
         TestThreadGroups.shutdownThreadGroups();
@@ -105,14 +99,9 @@ public class AbstractCorfuTest {
                         testThread.setName("test-main");
                         testThread.start();
 
-                        Duration timeoutDuration = PARAMETERS.TIMEOUT_LONG;
-                        if (LONGER_TIMEOUT_TESTS.contains(description.getMethodName())) {
-                            timeoutDuration = PARAMETERS.TIMEOUT_VERY_LONG;
-                        }
-
                         // Generate a timeout
                         CompletableFuture<Throwable> timeoutCompletion =
-                                CFUtils.within(testCompletion, timeoutDuration);
+                                CFUtils.within(testCompletion, PARAMETERS.TIMEOUT_LONG);
                         Throwable t;
                         try {
                             t = timeoutCompletion.join();

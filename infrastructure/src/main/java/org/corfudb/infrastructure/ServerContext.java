@@ -1,11 +1,5 @@
 package org.corfudb.infrastructure;
 
-import static org.corfudb.infrastructure.logreplication.config.LogReplicationConfig.DEFAULT_MAX_NUM_MSG_PER_BATCH;
-import static org.corfudb.infrastructure.logreplication.config.LogReplicationConfig.DEFAULT_MAX_DATA_MSG_SIZE;
-import static org.corfudb.infrastructure.logreplication.config.LogReplicationConfig.DEFAULT_MAX_CACHE_NUM_ENTRIES;
-import static org.corfudb.infrastructure.logreplication.config.LogReplicationConfig.DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED;
-import static org.corfudb.common.util.URLUtils.getVersionFormattedHostAddress;
-
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.channel.EventLoopGroup;
@@ -49,6 +43,13 @@ import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import static org.corfudb.common.util.URLUtils.getVersionFormattedHostAddress;
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_MAX_NUM_MSG_PER_BATCH;
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED;
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_CACHE_NUM_ENTRIES;
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_DATA_MSG_SIZE_SUPPORTED;
+
+
 /**
  * Server Context:
  * <ul>
@@ -90,6 +91,7 @@ public class ServerContext implements AutoCloseable {
 
     /** The node Id, stored as a base64 string. */
     private static final String NODE_ID = "NODE_ID";
+
 
     private static final KvRecord<String> NODE_ID_RECORD = KvRecord.of(NODE_ID, String.class);
 
@@ -271,23 +273,24 @@ public class ServerContext implements AutoCloseable {
     }
 
     /**
+     * Get the max size of the log replication data message used by both snapshot data message and
+     * log entry sync data message.
+     *
+     * @return max data message size
+     */
+    public int getLogReplicationMaxDataMessageSize() {
+        String val = getServerConfig(String.class, "--max-replication-data-message-size");
+        return val == null ? MAX_DATA_MSG_SIZE_SUPPORTED : Integer.parseInt(val);
+    }
+
+    /**
      * Get the max size of LR's runtime cache in number of entries.
+     *
      * @return max cache number of entries
      */
     public int getLogReplicationCacheMaxSize() {
         String val = getServerConfig(String.class, "--lrCacheSize");
-        return val == null ? DEFAULT_MAX_CACHE_NUM_ENTRIES : Integer.parseInt(val);
-    }
-
-    /**
-     * Max uncompressed size of a transaction written by LR's runtime.  In all known cases, it must be the same as
-     * Corfu Runtime's max uncompressed transaction size.  It is exposed as a parameter so that the value can be
-     * changed at runtime for any unforeseen bugs/customer issues.
-     * @return
-     */
-    public int getMaxUncompressedTxSize() {
-        String val = getServerConfig(String.class, "--runtime-max-uncompressed-size");
-        return val == null ? CorfuRuntime.MAX_UNCOMPRESSED_WRITE_SIZE : Integer.parseInt(val);
+        return val == null ? MAX_CACHE_NUM_ENTRIES : Integer.parseInt(val);
     }
 
     /**
@@ -302,11 +305,6 @@ public class ServerContext implements AutoCloseable {
     public int getMaxSnapshotEntriesApplied() {
         String val = getServerConfig(String.class, "--max-snapshot-entries-applied");
         return val == null ? DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED : Integer.parseInt(val);
-    }
-
-    public int getCorfuServerConnectionPort() {
-        String val = getServerConfig(String.class, "--corfu-port-for-lr");
-        return Integer.parseInt(val);
     }
 
     /**

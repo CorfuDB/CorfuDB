@@ -39,7 +39,6 @@ message HeaderMsg {
   UuidMsg client_id = 6;
   bool ignore_cluster_id = 7;
   bool ignore_epoch = 8;
-  LogReplicationSession session = 9;
 }
 
 message RequestPayloadMsg {
@@ -93,7 +92,6 @@ message RequestPayloadMsg {
     LogReplicationEntryMsg lr_entry = 70;
     LogReplicationMetadataRequestMsg lr_metadata_request = 71;
     LogReplicationLeadershipRequestMsg lr_leadership_query = 72;
-    LogReplicationLeadershipLossMsg lr_leadership_loss = 73;
   }
 }
 
@@ -149,14 +147,12 @@ message ResponsePayloadMsg {
     LogReplicationMetadataResponseMsg lr_metadata_response = 71;
     LogReplicationLeadershipResponseMsg lr_leadership_response = 72;
 
-    LogReplicationLeadershipLossMsg lr_leadership_loss = 73;
-    ReverseReplicateMsg lr_reverse_replicate_msg = 74;
+    LogReplicationLeadershipLossResponseMsg lr_leadership_loss = 73;
 
     // Server Error
     ServerErrorMsg server_error = 200;
   }
 }
-
 
 /**
  * Protobuf representation of a request sent from

@@ -10,7 +10,7 @@ import java.util.UUID;
 /**
  * Test Implementation of Log Entry Reader
  */
-public class TestLogEntryReader extends LogEntryReader {
+public class TestLogEntryReader implements LogEntryReader {
 
     @Override
     public LogReplication.LogReplicationEntryMsg read(UUID logEntryRequestId) {
@@ -20,6 +20,16 @@ public class TestLogEntryReader extends LogEntryReader {
     @Override
     public void reset(long lastSentBaseSnapshotTimestamp, long lastAckedTimestamp) {
         // Read everything from start
+    }
+
+    @Override
+    public void setTopologyConfigId(long siteConfigID) {
+
+    }
+
+    @Override
+    public boolean hasMessageExceededSize() {
+        return false;
     }
 
     @Override
