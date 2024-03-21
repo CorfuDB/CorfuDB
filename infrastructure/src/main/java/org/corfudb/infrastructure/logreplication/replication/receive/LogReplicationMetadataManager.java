@@ -80,7 +80,9 @@ public class LogReplicationMetadataManager {
     @Getter
     private final CorfuRuntime runtime;
 
+    @Getter
     private final Table<LogReplicationSession, ReplicationStatus, Message> statusTable;
+    @Getter
     private final Table<LogReplicationSession, ReplicationMetadata, Message> metadataTable;
     private final Table<ReplicationEventInfoKey, ReplicationEvent, Message> replicationEventTable;
 
@@ -175,7 +177,8 @@ public class LogReplicationMetadataManager {
      * of relying on the default value, as some clients of log replicator v1 consume the status table with hasField
      * check.
      */
-    private void initializeMetadata(TxnContext txn, LogReplicationSession session, boolean incomingSession,
+    @VisibleForTesting
+    public void initializeMetadata(TxnContext txn, LogReplicationSession session, boolean incomingSession,
                                     long topologyConfigId) {
         if (incomingSession) {
             // Add an entry for this session if it does not exist, otherwise, this is a resuming/ongoing session
