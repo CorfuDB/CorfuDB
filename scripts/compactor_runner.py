@@ -211,7 +211,10 @@ class CompactorRunner(object):
         flist = glob.glob(src_file_prefix + "*")
         for file in flist:
             try:
-                if file.find("current") == -1:
+                # Java 11 log rotation naming scheme:
+                # 1. The active GC log file has a ".log" extension
+                # 2. Rotated GC files have a ".log.[0-9]" extension
+                if file.split(".")[-1] != 'log':
                     cmd = "cp --preserve " + file + " " + dst_dir
                     output = check_output(cmd, shell=True)
                     os.remove(file)
