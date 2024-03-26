@@ -72,8 +72,6 @@ public class WaitSnapshotApplyState implements LogReplicationState {
 
     private final ScheduledExecutorService snapshotSyncApplyMonitorExecutor;
 
-    private final AtomicBoolean stopSnapshotApply = new AtomicBoolean(false);
-
     private Optional<Timer.Sample> snapshotSyncApplyTimerSample = Optional.empty();
 
     @Setter
@@ -169,7 +167,6 @@ public class WaitSnapshotApplyState implements LogReplicationState {
                 // No need to validate transitionId as REPLICATION_STOP comes either from enforceSnapshotSync or when
                 // the runtime FSM transitions back to VERIFYING_REMOTE_LEADER from REPLICATING state
                 log.debug("Stop Log Replication while waiting for snapshot sync apply to complete id={}", transitionSyncId);
-                stopSnapshotApply.set(true);
                 return fsm.getStates().get(LogReplicationStateType.INITIALIZED);
             case REPLICATION_SHUTDOWN:
                 log.debug("Shutdown Log Replication while waiting for snapshot sync apply to complete id={}", transitionSyncId);
@@ -205,7 +202,6 @@ public class WaitSnapshotApplyState implements LogReplicationState {
         log.info("OnEntry :: wait snapshot apply state");
         if (from.getType().equals(LogReplicationStateType.INITIALIZED)) {
             fsm.getAckReader().setSyncType(SyncType.SNAPSHOT);
-            stopSnapshotApply.set(false);
             fsm.getAckReader().markSnapshotSyncInfoOngoing();
         }
         if (from != this) {
@@ -244,32 +240,17 @@ public class WaitSnapshotApplyState implements LogReplicationState {
                         baseSnapshotTimestamp);
                 fsm.input(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_APPLY_COMPLETE,
                         new LogReplicationEventMetadata(transitionSyncId, baseSnapshotTimestamp, baseSnapshotTimestamp, forcedSnapshotSync)));
+                return;
             } else {
                 log.debug("Snapshot sync apply is still in progress, appliedTs={}, baseTs={}, sync_id={}", metadataResponse.getSnapshotApplied(),
                         baseSnapshotTimestamp, transitionSyncId);
-                if (!stopSnapshotApply.get()) {
-                    // Schedule a one time action which will verify the snapshot apply status after a given delay
-                    this.snapshotSyncApplyMonitorExecutor.schedule(this::scheduleSnapshotApplyVerification, SCHEDULE_APPLY_MONITOR_DELAY,
-                            TimeUnit.MILLISECONDS);
-                }
             }
-        } catch (TimeoutException te) {
-            log.error("Snapshot sync apply verification timed out.", te);
-            // Schedule a one time action which will verify the snapshot apply status after a given delay
-            this.snapshotSyncApplyMonitorExecutor.schedule(this::scheduleSnapshotApplyVerification, SCHEDULE_APPLY_MONITOR_DELAY,
-                    TimeUnit.MILLISECONDS);
-        } catch (ExecutionException ee) {
-            // Completable future completed exceptionally
-            log.error("Snapshot sync apply verification failed.", ee);
-            // Schedule a one time action which will verify the snapshot apply status after a given delay
-            this.snapshotSyncApplyMonitorExecutor.schedule(this::scheduleSnapshotApplyVerification, SCHEDULE_APPLY_MONITOR_DELAY,
-                    TimeUnit.MILLISECONDS);
         } catch (Exception e) {
             log.error("Snapshot sync apply verification failed.", e);
-            // Schedule a one time action which will verify the snapshot apply status after a given delay
-            this.snapshotSyncApplyMonitorExecutor.schedule(this::scheduleSnapshotApplyVerification, SCHEDULE_APPLY_MONITOR_DELAY,
-                    TimeUnit.MILLISECONDS);
         }
+        // Schedule a one time action which will verify the snapshot apply status after a given delay
+        this.snapshotSyncApplyMonitorExecutor.schedule(this::scheduleSnapshotApplyVerification, SCHEDULE_APPLY_MONITOR_DELAY,
+                TimeUnit.MILLISECONDS);
     }
 
     private void scheduleSnapshotApplyVerification() {
