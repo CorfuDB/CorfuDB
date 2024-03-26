@@ -7,6 +7,7 @@ import com.google.common.base.Preconditions;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.collections.CorfuDynamicRecord;
 import org.corfudb.runtime.proto.service.CorfuMessage;
 import org.corfudb.util.GitRepositoryState;
 import org.docopt.Docopt;
@@ -29,6 +30,7 @@ public class CorfuStoreBrowserEditorMain {
         listAllProtos,
         deleteRecord,
         editTable,
+        addRecord,
         listTags,
         listTablesForTag,
         listTagsForTable,
@@ -47,13 +49,13 @@ public class CorfuStoreBrowserEditorMain {
         "[--batchSize=<itemsPerTransaction>] "+
         "[--itemSize=<sizeOfEachRecordValue>] "
         + "[--keyToEdit=<keyToEdit>] [--newRecord=<newRecord>] [--tag=<tag>]"
-        + "[--keyToDelete=<keyToDelete>]"
+        + "[--keyToDelete=<keyToDelete>][--keyToAdd=<keyToAdd>] [--valueToAdd=<valueToAdd>] [--metadataToAdd=<metadataToAdd>]"
         + "[--tlsEnabled=<tls_enabled>]\n"
         + "Options:\n"
         + "--host=<host>   Hostname\n"
         + "--port=<port>   Port\n"
         + "--operation=<listTables|infoTable|showTable|clearTable" +
-        "|editTable|deleteRecord|loadTable|listenOnTable|listTags|listTagsMap" +
+        "|editTable|addRecord|deleteRecord|loadTable|listenOnTable|listTags|listTagsMap" +
         "|listTablesForTag|listTagsForTable|listAllProtos> Operation\n"
         + "--namespace=<namespace>   Namespace\n"
         + "--tablename=<tablename>   Table Name\n"
@@ -70,6 +72,9 @@ public class CorfuStoreBrowserEditorMain {
         + "--keyToEdit=<keyToEdit> Key of the record to edit\n"
         + "--keyToDelete=<keyToDelete> Key of the record to be deleted\n"
         + "--newRecord=<newRecord> New Edited record to insert\n"
+        + "--keyToAdd=<keyToAdd>\n"
+        + "--valueToAdd=<valueToAdd>\n"
+        + "--metadataToAdd=<metadataToAdd>\n"
         + "--tlsEnabled=<tls_enabled>";
 
     public static void main(String[] args) {
@@ -176,6 +181,36 @@ public class CorfuStoreBrowserEditorMain {
                         "New Record is null");
                     browser.editRecord(namespace, tableName, keyToEdit, newRecord);
                     break;
+                case addRecord:
+                    String keyToAdd = null;
+                    String valueToAdd = null;
+                    String metadataToAdd = null;
+
+                    String keyArg = "--keyToAdd";
+                    String valueArg = "--valueToAdd";
+                    String metadataArg = "--metadataToAdd";
+
+                    if (opts.get(keyArg) != null) {
+                        keyToAdd = String.valueOf(opts.get(keyArg));
+                    }
+                    if (opts.get(valueArg) != null) {
+                        valueToAdd = String.valueOf(opts.get(valueArg));
+                    }
+                    if (opts.get(metadataArg) != null) {
+                        metadataToAdd = String.valueOf(opts.get(metadataArg));
+                    }
+                    Preconditions.checkArgument(isValid(namespace),
+                        "Namespace is null or empty.");
+                    Preconditions.checkArgument(isValid(tableName),
+                        "Table name is null or empty.");
+                    Preconditions.checkNotNull(keyToAdd,
+                        "Key To Add is Null.");
+                    Preconditions.checkNotNull(valueToAdd,
+                        "New Value is null");
+                    CorfuDynamicRecord addedRecord = browser.addRecord(namespace, tableName, keyToAdd,
+                        valueToAdd, metadataToAdd);
+                    break;
+                    //return addedRecord != null ? 1: 0;
                 case deleteRecord:
                     String keyToDelete = null;
                     if (opts.get("--keyToDelete") != null) {

@@ -2,6 +2,7 @@ package org.corfudb.integration;
 
 import com.google.protobuf.Any;
 import com.google.protobuf.DynamicMessage;
+import com.google.protobuf.Message;
 import com.google.protobuf.UnknownFieldSet;
 
 import java.io.IOException;
@@ -643,5 +644,108 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         // Try to delete a deleted key and verify it is a no-op
         assertThat(browser.deleteRecord(namespace, tableName, keyString)).isZero();
         runtime.shutdown();
+    }
+
+    @Test
+    public void addRecordTest() throws Exception {
+        runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
+
+        final String NAMESPACE = "namespace";
+        final String TABLE_NAME = "table";
+        final String table2Name = TABLE_NAME+"nometa";
+        // Start a Corfu runtime
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
+
+        CorfuStore store = new CorfuStore(runtime);
+
+        final Table<SampleSchema.Uuid, SampleSchema.Uuid, SampleSchema.Uuid> table1 = store.openTable(
+            NAMESPACE,
+            TABLE_NAME,
+            SampleSchema.Uuid.class,
+            SampleSchema.Uuid.class,
+            SampleSchema.Uuid.class,
+            TableOptions.fromProtoSchema(SampleSchema.Uuid.class));
+
+        final Table<SampleSchema.Uuid, SampleSchema.Uuid, Message> table2 = store.openTable(
+            NAMESPACE,
+            table2Name,
+            SampleSchema.Uuid.class,
+            SampleSchema.Uuid.class,
+            null,
+            TableOptions.fromProtoSchema(SampleSchema.Uuid.class));
+        final long keyUuid = 1L;
+        final long valueUuid = 3L;
+        final long metadataUuid = 5L;
+
+        SampleSchema.Uuid uuidKey = SampleSchema.Uuid.newBuilder()
+            .setMsb(keyUuid)
+            .setLsb(keyUuid)
+            .build();
+        SampleSchema.Uuid uuidVal = SampleSchema.Uuid.newBuilder()
+            .setMsb(valueUuid)
+            .setLsb(valueUuid)
+            .build();
+        SampleSchema.Uuid metadata = SampleSchema.Uuid.newBuilder()
+            .setMsb(metadataUuid)
+            .setLsb(metadataUuid)
+            .build();
+        TxnContext tx = store.txn(NAMESPACE);
+        tx.putRecord(table1, uuidKey, uuidVal, metadata);
+        tx.putRecord(table2, uuidKey, uuidVal, null);
+        tx.commit();
+        runtime.shutdown();
+
+        runtime = createRuntime(singleNodeEndpoint);
+        CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime);
+        // Invoke listTables and verify table count
+        Assert.assertEquals(1, browser.printTable(NAMESPACE, TABLE_NAME));
+
+        // Add a new record
+        final String newKeyString = "{\"msb\": \"2\", \"lsb\": \"2\"}";
+        final String newValString = "{\"msb\": \"4\", \"lsb\": \"4\"}";
+        final String newMetadataString = "{\"msb\": \"6\", \"lsb\": \"6\"}";
+        final long newVal = 4L;
+        SampleSchema.Uuid newValUuid = SampleSchema.Uuid.newBuilder()
+            .setMsb(newVal)
+            .setLsb(newVal)
+            .build();
+
+        final long metadataVal = 6L;
+        SampleSchema.Uuid newMetadataUuid = SampleSchema.Uuid.newBuilder()
+            .setMsb(metadataVal)
+            .setLsb(metadataVal)
+            .build();
+
+        CorfuDynamicRecord addedRecord = browser.addRecord(NAMESPACE,
+            TABLE_NAME, newKeyString, newValString, newMetadataString);
+        Assert.assertNotNull(addedRecord);
+        CorfuDynamicRecord badInput = browser.addRecord(NAMESPACE, TABLE_NAME, newKeyString,
+            newValString, null);
+        Assert.assertNull(badInput);
+
+        CorfuDynamicRecord addedRecord2 = browser.addRecord(NAMESPACE,
+            table2Name, newKeyString, newValString, null);
+        Assert.assertNotNull(addedRecord2);
+
+        DynamicMessage dynamicValMessage = DynamicMessage.newBuilder(newValUuid)
+            .build();
+        String valTypeUrl = Any.pack(newValUuid).getTypeUrl();
+        DynamicMessage dynamicMetadataMessage =
+            DynamicMessage.newBuilder(newMetadataUuid).build();
+        String metadataTypeUrl = Any.pack(newMetadataUuid).getTypeUrl();
+        CorfuDynamicRecord expectedRecord = new CorfuDynamicRecord(valTypeUrl,
+            dynamicValMessage, metadataTypeUrl, dynamicMetadataMessage);
+        Assert.assertEquals(expectedRecord, addedRecord);
+        Assert.assertEquals(2, browser.printTable(NAMESPACE, TABLE_NAME));
+
+        // For tables that do not have metadata - we read from the metadata section
+        // which was never written to, so we construct the expected object the same way the
+        // browser does under the hood using Any's default instantiation.
+        String metadataTypeUrl2 = Any.pack(Any.getDefaultInstance()).getTypeUrl();
+
+        CorfuDynamicRecord expectedRecord2 = new CorfuDynamicRecord(valTypeUrl,
+            dynamicValMessage, metadataTypeUrl2, null);
+        Assert.assertEquals(expectedRecord2, addedRecord2);
+        Assert.assertEquals(2, browser.printTable(NAMESPACE, table2Name));
     }
 }
