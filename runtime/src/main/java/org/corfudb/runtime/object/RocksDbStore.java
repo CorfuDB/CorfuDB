@@ -39,7 +39,7 @@ public class RocksDbStore<S extends SnapshotGenerator<S>> implements
         RocksDbSnapshotGenerator<S>,
         ColumnFamilyRegistry {
 
-    private final OptimisticTransactionDB rocksDb;
+    private final OptimisticTransactionDB rocksDbInternal;
     private final String absolutePathString;
     private final WriteOptions writeOptions;
     private final Options rocksDbOptions;
@@ -58,8 +58,8 @@ public class RocksDbStore<S extends SnapshotGenerator<S>> implements
 
         // Open the RocksDB instance
         RocksDB.destroyDB(this.absolutePathString, this.rocksDbOptions);
-        this.rocksDb = OptimisticTransactionDB.open(rocksDbOptions, absolutePathString);
-        this.defaultColumnFamily = this.rocksDb.getDefaultColumnFamily();
+        this.rocksDbInternal = OptimisticTransactionDB.open(rocksDbOptions, this.absolutePathString);
+        this.defaultColumnFamily = this.rocksDbInternal.getDefaultColumnFamily();
 
         // There is no need to override default options and customize
         // the behavior of individual column families.
@@ -85,17 +85,18 @@ public class RocksDbStore<S extends SnapshotGenerator<S>> implements
             // MemTableConfig memTableConfig = new HashLinkedListMemTableConfig();
             // columnFamilyOptions.setMemTableConfig(memTableConfig);
 
-            this.secondaryIndexColumnFamily = this.rocksDb.createColumnFamily(
+            this.secondaryIndexColumnFamily = this.getRocksDb().createColumnFamily(
                     new ColumnFamilyDescriptor("secondary-indexes".getBytes(), columnFamilyOptions));
         }
 
-        log.info("Opened RocksDB instance {} at {}.", rocksDb.getNativeHandle(), absolutePathString);
+        log.info("Opened RocksDB instance {} at {}.",
+                getRocksDb().getNativeHandle(), this.absolutePathString);
     }
 
     @Override
     public byte[] get(@NonNull ColumnFamilyHandle columnFamilyHandle,
                       @NonNull ByteBuf keyPayload) throws RocksDBException {
-        return rocksDb.get(
+        return getRocksDb().get(
                 columnFamilyHandle,
                 keyPayload.array(), keyPayload.arrayOffset(), keyPayload.readableBytes());
     }
@@ -107,13 +108,13 @@ public class RocksDbStore<S extends SnapshotGenerator<S>> implements
             @NonNull List<ByteBuffer> values) throws RocksDBException {
         final List<ColumnFamilyHandle> columFamilies = keys.stream()
                 .map(ignore -> columnFamilyHandle).collect(Collectors.toList());
-        rocksDb.multiGetByteBuffers(columFamilies, keys, values);
+        getRocksDb().multiGetByteBuffers(columFamilies, keys, values);
     }
 
     @Override
     public void insert(@NonNull ColumnFamilyHandle columnFamilyHandle,
                        @NonNull ByteBuf keyPayload, @NonNull ByteBuf valuePayload) throws RocksDBException {
-        rocksDb.put(
+        getRocksDb().put(
                 columnFamilyHandle,
                 writeOptions,
                 keyPayload.array(), keyPayload.arrayOffset(), keyPayload.readableBytes(),
@@ -124,17 +125,17 @@ public class RocksDbStore<S extends SnapshotGenerator<S>> implements
     @Override
     public void delete(@NonNull ColumnFamilyHandle columnFamilyHandle,
                        @NonNull ByteBuf keyPayload) throws RocksDBException {
-        rocksDb.delete(columnFamilyHandle, writeOptions, keyPayload.array(), keyPayload.arrayOffset(), keyPayload.readableBytes());
+        getRocksDb().delete(columnFamilyHandle, writeOptions, keyPayload.array(), keyPayload.arrayOffset(), keyPayload.readableBytes());
     }
 
     @Override
     public <K, V> RocksDbEntryIterator<K, V> getIterator(@NonNull ISerializer serializer) {
-        return new RocksDbEntryIterator<>(rocksDb.newIterator(), serializer, new ReadOptions(), new StampedLock(), true);
+        return new RocksDbEntryIterator<>(getRocksDb().newIterator(), serializer, new ReadOptions(), new StampedLock(), true);
     }
 
     @Override
     public RocksIterator getRawIterator(ReadOptions readOptions, ColumnFamilyHandle columnFamilyHandle) {
-        return rocksDb.newIterator(columnFamilyHandle, readOptions);
+        return getRocksDb().newIterator(columnFamilyHandle, readOptions);
     }
 
     @Override
@@ -151,18 +152,18 @@ public class RocksDbStore<S extends SnapshotGenerator<S>> implements
 
     @Override
     public void clear() throws RocksDBException {
-        try (RocksIterator entryIterator = this.rocksDb.newIterator(defaultColumnFamily)) {
+        try (RocksIterator entryIterator = this.getRocksDb().newIterator(defaultColumnFamily)) {
             entryIterator.seekToFirst();
             while (entryIterator.isValid()) {
-                rocksDb.delete(defaultColumnFamily, entryIterator.key());
+                getRocksDb().delete(defaultColumnFamily, entryIterator.key());
                 entryIterator.next();
             }
         }
 
-        try (RocksIterator entryIterator = this.rocksDb.newIterator(secondaryIndexColumnFamily)) {
+        try (RocksIterator entryIterator = this.getRocksDb().newIterator(secondaryIndexColumnFamily)) {
             entryIterator.seekToFirst();
             while (entryIterator.isValid()) {
-                rocksDb.delete(secondaryIndexColumnFamily, entryIterator.key());
+                getRocksDb().delete(secondaryIndexColumnFamily, entryIterator.key());
                 entryIterator.next();
             }
         }
@@ -172,7 +173,7 @@ public class RocksDbStore<S extends SnapshotGenerator<S>> implements
     public long exactSize() {
         long count = 0;
 
-        try (RocksIterator entryIterator = this.rocksDb.newIterator()) {
+        try (RocksIterator entryIterator = getRocksDb().newIterator()) {
             entryIterator.seekToFirst();
             while (entryIterator.isValid()) {
                 entryIterator.next();
@@ -185,14 +186,19 @@ public class RocksDbStore<S extends SnapshotGenerator<S>> implements
 
     @Override
     public OptimisticTransactionDB getRocksDb() {
-        return this.rocksDb;
+        if (rocksDbInternal == null || !rocksDbInternal.isOwningHandle()) {
+            throw new IllegalStateException("Invalid RocksDB instance " + this.rocksDbInternal);
+        }
+        return this.rocksDbInternal;
     }
+
 
     @Override
     public void close() throws RocksDBException {
-        rocksDb.close();
+        final long nativeHandle = getRocksDb().getNativeHandle();
+        getRocksDb().close();
         RocksDB.destroyDB(absolutePathString, rocksDbOptions);
-        log.info("Closed RocksDB instance {} at {}.", rocksDb.getNativeHandle(), absolutePathString);
+        log.info("Closed RocksDB instance {} at {}.", nativeHandle, absolutePathString);
     }
 
     /**
@@ -207,7 +213,8 @@ public class RocksDbStore<S extends SnapshotGenerator<S>> implements
     @Override
     public SMRSnapshot<S> getSnapshot(@NonNull ViewGenerator<S> viewGenerator,
                                       @NonNull VersionedObjectIdentifier version) {
-        return new DiskBackedSMRSnapshot<>(rocksDb, writeOptions, version, viewGenerator, this);
+        return new DiskBackedSMRSnapshot<>(getRocksDb(), writeOptions, version,
+                viewGenerator, this);
     }
 
     /**
@@ -221,6 +228,6 @@ public class RocksDbStore<S extends SnapshotGenerator<S>> implements
     @Override
     public SMRSnapshot<S> getImplicitSnapshot(
             @NonNull ViewGenerator<S> viewGenerator) {
-        return new AlwaysLatestSnapshot<>(rocksDb, viewGenerator);
+        return new AlwaysLatestSnapshot<>(getRocksDb(), viewGenerator);
     }
 }
