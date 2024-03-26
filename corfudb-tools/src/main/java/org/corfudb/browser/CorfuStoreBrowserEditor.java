@@ -441,6 +441,83 @@ public class CorfuStoreBrowserEditor {
         return null;
     }
 
+    public CorfuDynamicRecord addRecord(String namespace, String tableName,
+                                        String newKey, String newValue,
+                                        String newMetadata) {
+        System.out.println("\n======================\n");
+
+        TableName tableNameProto = TableName.newBuilder().setTableName(tableName)
+            .setNamespace(namespace).build();
+
+        if (!dynamicProtobufSerializer.getCachedRegistryTable()
+            .containsKey(tableNameProto)) {
+            log.error("Table {} in namespace {} does not exist.", tableName,
+                namespace);
+            return null;
+        }
+
+        Any defaultKeyAny =
+            dynamicProtobufSerializer.getCachedRegistryTable().get(tableNameProto)
+                .getPayload().getKey();
+        Any defaultValueAny =
+            dynamicProtobufSerializer.getCachedRegistryTable().get(tableNameProto)
+                .getPayload().getValue();
+        Any defaultMetadataAny =
+            dynamicProtobufSerializer.getCachedRegistryTable().get(tableNameProto)
+                .getPayload().getMetadata();
+
+        DynamicMessage newKeyMsg =
+            dynamicProtobufSerializer.createDynamicMessageFromJson(defaultKeyAny,
+                newKey);
+        DynamicMessage newValueMsg =
+            dynamicProtobufSerializer.createDynamicMessageFromJson(defaultValueAny,
+                newValue);
+
+        // If the table did not have metadata configured, then when the table's entry
+        // is created in the registry table, its section of google.protobuf.Any metadata = 4;
+        // is never filled in. So reading that unfilled section into defaultMetadataAny gets us
+        // a defaultInstance of the Any type which has type Url as an empty string.
+        if (!defaultMetadataAny.getTypeUrl().isEmpty() && newMetadata == null) {
+            log.error("Please supply metadata! Table has metadata schema defined as {}. At least pass an '{ }'",
+                defaultMetadataAny.getTypeUrl());
+            return null;
+        }
+        DynamicMessage newMetadataMsg =
+            !defaultMetadataAny.getTypeUrl().isEmpty() ?
+                dynamicProtobufSerializer.createDynamicMessageFromJson(defaultMetadataAny,
+                    newMetadata) : null;
+
+        // Metadata can be empty or null but key or value should not
+        if (newKeyMsg == null || newValueMsg == null) {
+            log.error("New Key or Value message is null");
+            return null;
+        }
+
+        CorfuDynamicKey dynamicKey =
+            new CorfuDynamicKey(defaultKeyAny.getTypeUrl(), newKeyMsg);
+        CorfuDynamicRecord dynamicRecord =
+            new CorfuDynamicRecord(defaultValueAny.getTypeUrl(), newValueMsg,
+                defaultMetadataAny.getTypeUrl(), newMetadataMsg);
+
+        try {
+            CorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table =
+                getTable(namespace, tableName);
+            runtime.getObjectsView().TXBegin();
+            table.insert(dynamicKey, dynamicRecord);
+            runtime.getObjectsView().TXEnd();
+            System.out.println("\n======================\n");
+            return dynamicRecord;
+        } catch (TransactionAbortedException e) {
+            log.error("Transaction to add record aborted.", e);
+        } finally {
+            if (TransactionalContext.isInTransaction()) {
+                runtime.getObjectsView().TXAbort();
+            }
+        }
+        return null;
+    }
+
+
     /**
      * Delete a record in a table and namespace
      * @param namespace namespace of the table
