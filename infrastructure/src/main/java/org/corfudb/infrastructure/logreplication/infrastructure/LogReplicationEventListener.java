@@ -24,7 +24,7 @@ public final class LogReplicationEventListener implements StreamListener {
     public void start() {
         // perform full sync before subscribing to the table
         Pair<List<CorfuStoreEntry<LogReplicationMetadata.ReplicationEventKey, ReplicationEvent, Message>>, CorfuStoreMetadata.Timestamp> eventsAndSubscriptionTs =
-                discoveryService.getLogReplicationMetadataManager().getReplicationEventTable();
+                discoveryService.getLogReplicationMetadataManager().getoutstandingEvents();
         for(CorfuStoreEntry<LogReplicationMetadata.ReplicationEventKey, ReplicationEvent, Message> event: eventsAndSubscriptionTs.getLeft()) {
             processEvent(event.getPayload());
         }
@@ -44,7 +44,6 @@ public final class LogReplicationEventListener implements StreamListener {
                 log.info("The onNext call with {} will be skipped as the current node as it is not the leader.", results);
                 return;
             }
-
 
             log.info("LogReplicationEventListener onNext {} will be processed at node {} in the cluster {}",
                     results, discoveryService.getLocalNodeDescriptor(), discoveryService.getLocalClusterDescriptor());

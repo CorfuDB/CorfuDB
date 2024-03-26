@@ -762,8 +762,6 @@ public class LogReplicationMetadataManager {
 
         long currentSnapshotSyncIdLong = currentSnapshotSyncId.getMostSignificantBits() & Long.MAX_VALUE;
 
-        // Update if current Snapshot Sync differs from the persisted one, otherwise ignore.
-        // It could have already been updated in the case that leader changed in between a snapshot sync cycle
         appendUpdate(txn, LogReplicationMetadataType.CURRENT_SNAPSHOT_CYCLE_ID, currentSnapshotSyncIdLong);
         appendUpdate(txn, LogReplicationMetadataType.CURRENT_CYCLE_MIN_SHADOW_STREAM_TS, shadowStreamTs.getSequence());
     }
@@ -795,7 +793,7 @@ public class LogReplicationMetadataManager {
         }
     }
 
-    public Pair<List<CorfuStoreEntry<ReplicationEventKey, ReplicationEvent, Message>>, CorfuStoreMetadata.Timestamp> getReplicationEventTable() {
+    public Pair<List<CorfuStoreEntry<ReplicationEventKey, ReplicationEvent, Message>>, CorfuStoreMetadata.Timestamp> getoutstandingEvents() {
         List<CorfuStoreEntry<ReplicationEventKey, ReplicationEvent, Message>> outstandingEvents;
         CorfuStoreMetadata.Timestamp ts;
         try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
