@@ -387,7 +387,7 @@ public class LogReplicationSinkManager implements DataReceiver {
      *
      * @param entry a SNAPSHOT_START message
      */
-    private void processSnapshotStart(LogReplication.LogReplicationEntryMsg entry) {
+    private synchronized void processSnapshotStart(LogReplication.LogReplicationEntryMsg entry) {
         long topologyId = entry.getMetadata().getTopologyConfigID();
         long timestamp = entry.getMetadata().getSnapshotTimestamp();
 

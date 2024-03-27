@@ -189,7 +189,7 @@ public class WaitSnapshotApplyState implements LogReplicationState {
 
     private void deleteForcedSyncRequestFromEventTable() {
         List<CorfuStoreEntry<LogReplicationMetadata.ReplicationEventKey, LogReplicationMetadata.ReplicationEvent, Message>> eventsEnqueued =
-                fsm.getAckReader().getMetadataManager().getReplicationEventTable().getLeft();
+                fsm.getAckReader().getMetadataManager().getoutstandingEvents().getLeft();
 
         for(CorfuStoreEntry<LogReplicationMetadata.ReplicationEventKey, LogReplicationMetadata.ReplicationEvent, Message> event : eventsEnqueued) {
             if (event.getPayload() != null && event.getPayload().getEventId().equals(transitionSyncId.toString())) {
