@@ -22,6 +22,7 @@ import org.apache.commons.io.IOUtils;
 import org.corfudb.common.config.ConfigParamNames;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider.MeterRegistryInitializer;
+import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.infrastructure.ManagementServer.ManagementServerInitializer;
 import org.corfudb.infrastructure.health.HealthMonitor;
 import org.corfudb.infrastructure.health.HttpServerInitializer;
@@ -173,6 +174,11 @@ public class CorfuServerNode implements AutoCloseable {
                 }
             }
         });
+
+        MicroMeterUtils.gauge("netty.usedHeapMemory", PooledByteBufAllocator.DEFAULT, pool ->
+                pool.metric().usedHeapMemory());
+        MicroMeterUtils.gauge("netty.usedDirectMemory", PooledByteBufAllocator.DEFAULT, pool ->
+                pool.metric().usedDirectMemory());
 
         return bindFuture.syncUninterruptibly();
     }
