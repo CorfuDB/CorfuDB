@@ -6,6 +6,8 @@ import io.micrometer.core.instrument.binder.jvm.JvmMemoryMetrics;
 import io.micrometer.core.instrument.binder.jvm.JvmThreadMetrics;
 import lombok.Getter;
 import lombok.Data;
+import io.netty.buffer.PooledByteBufAllocator;
+import io.netty.buffer.UnpooledByteBufAllocator;
 
 import java.util.Optional;
 
@@ -54,6 +56,17 @@ public final class JVMMetrics {
         memoryMetrics.bindTo(meterRegistry);
     }
 
+    private static void subscribeNettyMetrics() {
+        MicroMeterUtils.gauge("netty.usedHeapMemory", PooledByteBufAllocator.DEFAULT, pool ->
+                pool.metric().usedHeapMemory(), "allocator", "pooled");
+        MicroMeterUtils.gauge("netty.usedDirectMemory", PooledByteBufAllocator.DEFAULT, pool ->
+                pool.metric().usedDirectMemory(), "allocator", "pooled");
+        MicroMeterUtils.gauge("netty.usedHeapMemory", UnpooledByteBufAllocator.DEFAULT, pool ->
+                pool.metric().usedHeapMemory(), "allocator", "unpooled");
+        MicroMeterUtils.gauge("netty.usedDirectMemory", UnpooledByteBufAllocator.DEFAULT, pool ->
+                pool.metric().usedDirectMemory(), "allocator", "unpooled");
+    }
+
     public static void register(Optional<MeterRegistry> metricsRegistry) {
 
         if (metricsRegistry.isPresent()) {
@@ -61,6 +74,7 @@ public final class JVMMetrics {
             subscribeMemoryMetrics(meterRegistry);
             subscribeThreadMetrics(meterRegistry);
             subscribeSafepointMetrics(meterRegistry);
+            subscribeNettyMetrics();
         }
     }
 }
