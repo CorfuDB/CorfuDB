@@ -140,36 +140,6 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
         return runtime;
     }
 
-    public void buildNewManagedRuntime(CorfuRuntimeParameters params, ThrowableConsumer<CorfuRuntime> action)
-            throws Exception {
-        Optional<CorfuRuntime> maybeManagedRt = Optional.empty();
-        try {
-            CorfuRuntime managedRt = getNewRuntime(params)
-                    .parseConfigurationString(getDefaultConfigurationString())
-                    .connect();
-            setupSerializer(managedRt);
-
-            maybeManagedRt = Optional.of(managedRt);
-            action.accept(managedRt);
-        } finally {
-            maybeManagedRt.ifPresent(CorfuRuntime::shutdown);
-        }
-    }
-
-    /**
-     * Register a giver serializer with a given runtime.
-     */
-    protected void setupSerializer(@Nonnull final CorfuRuntime runtime, @Nonnull final ISerializer serializer) {
-        runtime.getSerializers().registerSerializer(serializer);
-    }
-
-    /**
-     * Register a Protobuf serializer with the default runtime.
-     */
-    private void setupSerializer(CorfuRuntime rt) {
-        setupSerializer(rt, new ProtobufSerializer(new ConcurrentHashMap<>()));
-    }
-
     public CorfuRuntime getNewRuntime(@Nonnull CorfuRuntimeParameters parameters) {
         parameters.setNettyEventLoop(NETTY_EVENT_LOOP);
         CorfuRuntime rt = CorfuRuntime.fromParameters(parameters);

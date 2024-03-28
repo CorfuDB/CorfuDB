@@ -7,6 +7,7 @@ import lombok.Getter;
 import lombok.NonNull;
 import org.corfudb.runtime.CorfuOptions.PersistenceOptions;
 import org.corfudb.runtime.CorfuOptions.SchemaOptions;
+import org.corfudb.runtime.view.TableRegistry.TableDescriptor;
 
 /**
  * Table parameters including table's namespace, fullyQualifiedTableName,
@@ -64,4 +65,8 @@ public class TableParameters<K extends Message, V extends Message, M extends Mes
 
     @Getter
     private final boolean secondaryIndexesDisabled;
+
+    public TableDescriptor<K, V, M> getDescriptor() {
+        return new TableDescriptor<>(kClass, vClass, mClass);
+    }
 }

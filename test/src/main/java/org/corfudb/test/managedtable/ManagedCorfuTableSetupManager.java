@@ -2,6 +2,7 @@ package org.corfudb.test.managedtable;
 
 import com.google.protobuf.Descriptors.Descriptor;
 import com.google.protobuf.Message;
+import lombok.Builder;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.PersistedCorfuTable;
@@ -13,6 +14,7 @@ import org.corfudb.runtime.object.PersistenceOptions;
 import org.corfudb.runtime.object.PersistenceOptions.PersistenceOptionsBuilder;
 import org.corfudb.runtime.object.SnapshotGenerator;
 import org.corfudb.runtime.view.ObjectOpenOption;
+import org.corfudb.runtime.view.TableRegistry.TableDescriptor;
 import org.corfudb.test.managedtable.ManagedCorfuTable.ManagedCorfuTableConfig;
 import org.corfudb.util.serializer.ProtobufSerializer;
 import org.rocksdb.Options;
@@ -21,9 +23,10 @@ import java.nio.file.Paths;
 import java.util.HashSet;
 import java.util.UUID;
 
+@Builder
 public class ManagedCorfuTableSetupManager<K extends Message, V extends Message, M extends Message> {
 
-    private final ManagedCorfuTableSetup<K, V, M> persistedCorfu = config -> {
+    private final ManagedCorfuTableSetup<K, V, M> persistedCorfu = (rt, config) -> {
         String diskBackedDirectory = "/tmp/";
 
         Options defaultOptions = new Options().setCreateIfMissing(true);
@@ -31,12 +34,11 @@ public class ManagedCorfuTableSetupManager<K extends Message, V extends Message,
         PersistenceOptionsBuilder persistenceOptions = PersistenceOptions.builder()
                 .dataPath(Paths.get(diskBackedDirectory, config.getTableName()));
 
-        setupTypes(config);
+        setupTypes(rt, config);
         ProtobufIndexer indexer = config.getProtobufIndexer();
-        ProtobufSerializer serializer = getProtobufSerializer(config.getRt());
+        ProtobufSerializer serializer = getProtobufSerializer(rt);
 
-        return config
-                .getRt()
+        return rt
                 .getObjectsView()
                 .build()
                 .setTypeToken(PersistedCorfuTable.<K, CorfuRecord<V, M>>getTypeToken())
@@ -46,16 +48,16 @@ public class ManagedCorfuTableSetupManager<K extends Message, V extends Message,
                 .open();
     };
 
-    private final ManagedCorfuTableSetup<K, V, M> persistentCorfu = config -> {
-        setupTypes(config);
+    private final ManagedCorfuTableSetup<K, V, M> persistentCorfu = (rt, config) -> {
+        setupTypes(rt, config);
         Object[] args = config.getArgs();
-        ProtobufSerializer serializer = getProtobufSerializer(config.getRt());
+        ProtobufSerializer serializer = getProtobufSerializer(rt);
 
         PersistentCorfuTable<K, CorfuRecord<V, M>> table = new PersistentCorfuTable<>();
 
         String fullyQualifiedTableName = config.getFullyQualifiedTableName();
         MVOCorfuCompileProxy proxy = new MVOCorfuCompileProxy(
-                config.getRt(),
+                rt,
                 UUID.nameUUIDFromBytes(fullyQualifiedTableName.getBytes()),
                 table.getTableTypeToken().getRawType(),
                 PersistentCorfuTable.class,
@@ -64,7 +66,7 @@ public class ManagedCorfuTableSetupManager<K extends Message, V extends Message,
                 new HashSet<UUID>(),
                 table,
                 ObjectOpenOption.CACHE,
-                config.getRt().getObjectsView().getMvoCache()
+                rt.getObjectsView().getMvoCache()
         );
 
         table.setCorfuSMRProxy(proxy);
@@ -72,15 +74,30 @@ public class ManagedCorfuTableSetupManager<K extends Message, V extends Message,
         return table;
     };
 
-    private void setupTypes(ManagedCorfuTableConfig<K, V, M> config) throws Exception {
-        K defaultKeyMessage = config.getDefaultKeyMessage();
-        addTypeToClassMap(config.getRt(), defaultKeyMessage);
+    private void setupTypes(CorfuRuntime rt, ManagedCorfuTableConfig<K, V, M> config) throws Exception {
+        TableDescriptor<K, V, M> descriptor = config.tableDescriptor();
+        K defaultKeyMessage = descriptor.getDefaultKeyMessage();
+        addTypeToClassMap(rt, defaultKeyMessage);
 
-        V defaultValueMessage = config.getDefaultValueMessage();
-        addTypeToClassMap(config.getRt(), defaultValueMessage);
+        V defaultValueMessage = descriptor.getDefaultValueMessage();
+        addTypeToClassMap(rt, defaultValueMessage);
 
-        M defaultMetadataMessage = config.getDefaultMetadataMessage();
-        addTypeToClassMap(config.getRt(), defaultMetadataMessage);
+        M defaultMetadataMessage = descriptor.getDefaultMetadataMessage();
+        addTypeToClassMap(rt, defaultMetadataMessage);
+    }
+
+    public static <K extends Message, V extends Message, M extends Message> ManagedCorfuTableSetup<K, V, M> persistentCorfu() {
+        return ManagedCorfuTableSetupManager
+                .<K, V, M>builder()
+                .build()
+                .getPersistentCorfu();
+    }
+
+    public static <K extends Message, V extends Message, M extends Message> ManagedCorfuTableSetup<K, V, M> persistedCorfu() {
+        return ManagedCorfuTableSetupManager
+                .<K, V, M>builder()
+                .build()
+                .getPersistedCorfu();
     }
 
     public ManagedCorfuTableSetup<K, V, M> getPersistentCorfu() {
@@ -119,15 +136,15 @@ public class ManagedCorfuTableSetupManager<K extends Message, V extends Message,
     @FunctionalInterface
     public interface ManagedCorfuTableSetup<K extends Message, V extends Message, M extends Message> {
         GenericCorfuTable<? extends SnapshotGenerator<?>, K, CorfuRecord<V, M>> setup(
-                ManagedCorfuTableConfig<K, V, M> config
+                CorfuRuntime rt, ManagedCorfuTableConfig<K, V, M> config
         ) throws Exception;
 
         default ManagedCorfuTableSetup<K, V, M> withToString(String toString) {
-            return new ManagedCorfuTableSetup<K, V, M>(){
+            return new ManagedCorfuTableSetup<>(){
                 @Override
                 public GenericCorfuTable<? extends SnapshotGenerator<?>, K, CorfuRecord<V, M>> setup(
-                        ManagedCorfuTableConfig<K, V, M> config) throws Exception {
-                    return ManagedCorfuTableSetup.this.setup(config);
+                        CorfuRuntime rt, ManagedCorfuTableConfig<K, V, M> config) throws Exception {
+                    return ManagedCorfuTableSetup.this.setup(rt, config);
                 }
 
                 public String toString(){

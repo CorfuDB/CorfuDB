@@ -1,23 +1,23 @@
 package org.corfudb.runtime.collections.corfutable;
 
-import lombok.AllArgsConstructor;
+import com.google.protobuf.Message;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.table.GenericCorfuTable;
 import org.corfudb.runtime.object.transactions.TransactionType;
+import org.corfudb.test.CorfuTableSpec;
 import org.corfudb.test.TestSchema.Uuid;
 
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-@AllArgsConstructor
-public class GetVersionedObjectOptimizationSpec implements CorfuTableSpec {
-    private final GenericCorfuTable<?, Uuid, CorfuRecord<Uuid, Uuid>> corfuTable;
-    private final CorfuRuntime rt;
+public class GetVersionedObjectOptimizationSpec implements CorfuTableSpec<Uuid, Uuid, Uuid> {
 
-    public void test() throws Exception {
+    public void test(CorfuTableSpecContext<Uuid, Uuid, Uuid> ctx) throws Exception {
+        GenericCorfuTable<?, Uuid, CorfuRecord<Uuid, Uuid>> corfuTable = ctx.getCorfuTable();
+        CorfuRuntime rt = ctx.getRt();
 
         for (int i = 0; i < 100; i++) {
             Uuid uuidMsg = Uuid.newBuilder().setLsb(i).setMsb(i).build();

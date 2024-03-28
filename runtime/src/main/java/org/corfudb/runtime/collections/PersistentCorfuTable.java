@@ -23,7 +23,7 @@ public class PersistentCorfuTable<K, V> implements GenericCorfuTable<ImmutableCo
             .build();
 
     public static <K, V> TypeToken<PersistentCorfuTable<K, V>> getTypeToken() {
-        return new TypeToken<PersistentCorfuTable<K, V>>() {};
+        return new TypeToken<>() {};
     }
 
     public PersistentCorfuTable() {}

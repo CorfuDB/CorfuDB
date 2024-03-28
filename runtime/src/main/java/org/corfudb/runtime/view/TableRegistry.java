@@ -7,11 +7,16 @@ import com.google.protobuf.Descriptors.Descriptor;
 import com.google.protobuf.Descriptors.FileDescriptor;
 import com.google.protobuf.Message;
 import com.google.protobuf.ProtocolStringList;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.util.ClassUtils;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.runtime.CheckpointWriter;
 import org.corfudb.runtime.CorfuOptions;
+import org.corfudb.runtime.CorfuOptions.SchemaOptions;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.ProtobufFileDescriptor;
 import org.corfudb.runtime.CorfuStoreMetadata.ProtobufFileName;
@@ -24,6 +29,7 @@ import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TableParameters;
+import org.corfudb.runtime.collections.TableSchema;
 import org.corfudb.runtime.collections.streaming.StreamingManager;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.SerializerException;
@@ -166,16 +172,12 @@ public class TableRegistry {
         try {
             registerTable(CORFU_SYSTEM_NAMESPACE,
                 REGISTRY_TABLE_NAME,
-                TableName.class,
-                TableDescriptors.class,
-                TableMetadata.class,
+                new TableDescriptor<>(TableName.class, TableDescriptors.class, TableMetadata.class),
                 TableOptions.fromProtoSchema(TableDescriptors.class));
 
             registerTable(CORFU_SYSTEM_NAMESPACE,
                 PROTOBUF_DESCRIPTOR_TABLE_NAME,
-                ProtobufFileName.class,
-                ProtobufFileDescriptor.class,
-                TableMetadata.class,
+                new TableDescriptor<>(ProtobufFileName.class, ProtobufFileDescriptor.class, TableMetadata.class),
                 TableOptions.fromProtoSchema(ProtobufFileDescriptor.class));
         } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
             throw new RuntimeException(e);
@@ -187,9 +189,7 @@ public class TableRegistry {
      *
      * @param namespace     Namespace of the table to be registered.
      * @param tableName     Table name of the table to be registered.
-     * @param keyClass      Key class.
-     * @param payloadClass  Value class.
-     * @param metadataClass Metadata class.
+     * @param descriptor table descriptor.
      * @param <K>           Type of Key.
      * @param <V>           Type of Value.
      * @param <M>           Type of Metadata.
@@ -200,9 +200,7 @@ public class TableRegistry {
     private <K extends Message, V extends Message, M extends Message>
     void registerTable(@Nonnull String namespace,
                        @Nonnull String tableName,
-                       @Nonnull Class<K> keyClass,
-                       @Nonnull Class<V> payloadClass,
-                       @Nullable Class<M> metadataClass,
+                       @Nonnull TableDescriptor<K, V, M> descriptor,
                        @Nonnull final TableOptions tableOptions)
             throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
 
@@ -211,8 +209,8 @@ public class TableRegistry {
                 .setTableName(tableName)
                 .build();
 
-        K defaultKeyMessage = (K) keyClass.getMethod("getDefaultInstance").invoke(null);
-        V defaultValueMessage = (V) payloadClass.getMethod("getDefaultInstance").invoke(null);
+        K defaultKeyMessage = descriptor.getDefaultKeyMessage();
+        V defaultValueMessage = descriptor.getDefaultValueMessage();
 
         Map<ProtobufFileName, CorfuRecord<ProtobufFileDescriptor, TableMetadata>> allDescriptors = new HashMap<>();
         TableDescriptors.Builder tableDescriptorsBuilder = TableDescriptors.newBuilder();
@@ -222,8 +220,8 @@ public class TableRegistry {
         FileDescriptor valueFileDescriptor = defaultValueMessage.getDescriptorForType().getFile();
         insertAllDependingFileDescriptorProtos(tableDescriptorsBuilder, valueFileDescriptor, allDescriptors);
 
-        if (metadataClass != null) {
-            M defaultMetadataMessage = (M) metadataClass.getMethod("getDefaultInstance").invoke(null);
+        if (descriptor.mClass != null) {
+            M defaultMetadataMessage = descriptor.getDefaultMetadataMessage();
             FileDescriptor metaFileDescriptor = defaultMetadataMessage.getDescriptorForType().getFile();
             insertAllDependingFileDescriptorProtos(tableDescriptorsBuilder, metaFileDescriptor, allDescriptors);
             // Add Any for the metadata
@@ -570,14 +568,23 @@ public class TableRegistry {
                 .getClassMap().put(typeUrl, msg.getClass());
     }
 
+    public <K extends Message, V extends Message, M extends Message>
+    Table<K, V, M> openTable(@Nonnull final String namespace,
+                             @Nonnull final String tableName,
+                             @Nonnull final Class<K> kClass,
+                             @Nonnull final Class<V> vClass,
+                             @Nullable final Class<M> mClass,
+                             @Nonnull final TableOptions tableOptions)
+            throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
+        return openTable(namespace, tableName, new TableDescriptor<>(kClass, vClass, mClass), tableOptions);
+    }
+
     /**
      * Opens a Corfu table with the specified options.
      *
      * @param namespace    Namespace of the table.
      * @param tableName    Name of the table.
-     * @param kClass       Key class.
-     * @param vClass       Value class.
-     * @param mClass       Metadata class.
+     * @param descriptor   Table Descriptor.
      * @param tableOptions Table options.
      * @param <K>          Key type.
      * @param <V>          Value type.
@@ -590,28 +597,19 @@ public class TableRegistry {
     public <K extends Message, V extends Message, M extends Message>
     Table<K, V, M> openTable(@Nonnull final String namespace,
                              @Nonnull final String tableName,
-                             @Nonnull final Class<K> kClass,
-                             @Nonnull final Class<V> vClass,
-                             @Nullable final Class<M> mClass,
+                             @Nonnull final TableDescriptor<K, V, M> descriptor,
                              @Nonnull final TableOptions tableOptions)
             throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
 
-        // Register the schemas to schema table.
-        if (kClass == null) {
-            throw new IllegalArgumentException("Key type cannot be NULL.");
-        }
-        K defaultKeyMessage = (K) kClass.getMethod("getDefaultInstance").invoke(null);
+        K defaultKeyMessage = descriptor.getDefaultKeyMessage();
         addTypeToClassMap(defaultKeyMessage);
 
-        if (vClass == null) {
-            throw new IllegalArgumentException("Value type cannot be NULL.");
-        }
-        V defaultValueMessage = (V) vClass.getMethod("getDefaultInstance").invoke(null);
+        V defaultValueMessage = descriptor.getDefaultValueMessage();
         addTypeToClassMap(defaultValueMessage);
 
         M defaultMetadataMessage = null;
-        if (mClass != null) {
-            defaultMetadataMessage = (M) mClass.getMethod("getDefaultInstance").invoke(null);
+        if (descriptor.mClass != null) {
+            defaultMetadataMessage = descriptor.getDefaultMetadataMessage();
             addTypeToClassMap(defaultMetadataMessage);
         }
 
@@ -655,9 +653,9 @@ public class TableRegistry {
                 TableParameters.<K, V, M>builder()
                         .namespace(namespace)
                         .fullyQualifiedTableName(fullyQualifiedTableName)
-                        .kClass(kClass)
-                        .vClass(vClass)
-                        .mClass(mClass)
+                        .kClass(descriptor.kClass)
+                        .vClass(descriptor.vClass)
+                        .mClass(descriptor.mClass)
                         .valueSchema(defaultValueMessage)
                         .metadataSchema(defaultMetadataMessage)
                         .schemaOptions(tableSchemaOptions)
@@ -667,9 +665,9 @@ public class TableRegistry {
                 this.runtime,
                 this.protobufSerializer,
                 streamTagIdsForTable);
-        tableMap.put(fullyQualifiedTableName, (Table<Message, Message, Message>) table);
+        tableMap.put(fullyQualifiedTableName, ClassUtils.cast(table));
 
-        registerTable(namespace, tableName, kClass, vClass, mClass, tableOptions);
+        registerTable(namespace, tableName, descriptor, tableOptions);
         return table;
     }
 
@@ -876,6 +874,35 @@ public class TableRegistry {
     public void shutdown() {
         if (streamingManager != null) {
             streamingManager.shutdown();
+        }
+    }
+
+    @Builder
+    @AllArgsConstructor
+    @Getter
+    public static class TableDescriptor<K extends Message, V extends Message, M extends Message> {
+        @NonNull
+        private final Class<K> kClass;
+        @NonNull
+        private final Class<V> vClass;
+        private final Class<M> mClass;
+
+        private final String defaultInstanceMethodName = TableOptions.DEFAULT_INSTANCE_METHOD_NAME;
+
+        public SchemaOptions getSchemaOptions() throws Exception {
+            return TableOptions.fromProtoSchema(vClass).getSchemaOptions();
+        }
+
+        public V getDefaultValueMessage() throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
+            return ClassUtils.cast(vClass.getMethod(defaultInstanceMethodName).invoke(null));
+        }
+
+        public K getDefaultKeyMessage() throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
+            return ClassUtils.cast(kClass.getMethod(defaultInstanceMethodName).invoke(null));
+        }
+
+        public M getDefaultMetadataMessage() throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
+            return ClassUtils.cast(mClass.getMethod(defaultInstanceMethodName).invoke(null));
         }
     }
 }

@@ -6,6 +6,7 @@ import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.table.GenericCorfuTable;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.test.CacheSizeForTest;
+import org.corfudb.test.CorfuTableSpec;
 import org.corfudb.test.TestSchema.Uuid;
 import org.corfudb.test.managedtable.ManagedCorfuTable;
 import org.corfudb.util.serializer.ProtobufSerializer;
@@ -15,12 +16,13 @@ import java.util.concurrent.ConcurrentHashMap;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @AllArgsConstructor
-public class MultiRuntimeSpec extends AbstractViewTest implements CorfuTableSpec {
-    private final GenericCorfuTable<?, Uuid, CorfuRecord<Uuid, Uuid>> corfuTable;
-    private final CorfuRuntime rt;
+public class MultiRuntimeSpec extends AbstractViewTest implements CorfuTableSpec<Uuid, Uuid, Uuid> {
 
     @Override
-    public void test() throws Exception {
+    public void test(CorfuTableSpecContext<Uuid, Uuid, Uuid> ctx) throws Exception {
+        CorfuRuntime rt = ctx.getRt();
+        GenericCorfuTable<?, Uuid, CorfuRecord<Uuid, Uuid>> corfuTable = ctx.getCorfuTable();
+
 
         Uuid key1 = Uuid.newBuilder().setLsb(1).setMsb(1).build();
         Uuid payload1 = Uuid.newBuilder().setLsb(1).setMsb(1).build();

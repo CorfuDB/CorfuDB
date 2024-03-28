@@ -5,125 +5,122 @@ import lombok.Builder;
 import lombok.Builder.Default;
 import lombok.Getter;
 import lombok.NonNull;
+import lombok.Setter;
 import lombok.SneakyThrows;
+import lombok.experimental.Accessors;
 import org.corfudb.runtime.CorfuOptions.SchemaOptions;
-import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.ExampleSchemas.ExampleValue;
 import org.corfudb.runtime.ExampleSchemas.ManagedMetadata;
-import org.corfudb.runtime.ExampleSchemas.Person;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.ProtobufIndexer;
-import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.table.GenericCorfuTable;
 import org.corfudb.runtime.object.SnapshotGenerator;
+import org.corfudb.runtime.view.TableRegistry.TableDescriptor;
+import org.corfudb.test.CorfuTableSpec.CorfuTableSpecContext;
 import org.corfudb.test.TestSchema.Uuid;
 import org.corfudb.test.managedtable.ManagedCorfuTableSetupManager.ManagedCorfuTableSetup;
 import org.corfudb.util.LambdaUtils.ThrowableConsumer;
 
-import java.lang.reflect.InvocationTargetException;
-import java.util.Optional;
+import java.util.Objects;
+import java.util.function.Consumer;
 
-@Builder
+@Accessors(fluent = true, chain = true)
 public class ManagedCorfuTable<K extends Message, V extends Message, M extends Message> {
-    @NonNull
-    private final ManagedCorfuTableConfig<K, V, M> config;
-    @NonNull
-    private final ManagedCorfuTableSetup<K, V, M> tableSetup;
+    @Setter
+    private ManagedCorfuTableConfig<K, V, M> config;
+    @Setter
+    private ManagedRuntime managedRt;
+    @Setter
+    private ManagedCorfuTableSetup<K, V, M> tableSetup;
 
-    public static ManagedCorfuTable<Uuid, ExampleValue, ManagedMetadata> buildExample(CorfuRuntime rt) {
+    public static <K extends Message, V extends Message, M extends Message> ManagedCorfuTable<K, V, M> build() {
+        return new ManagedCorfuTable<>();
+    }
+
+    public static <K extends Message, V extends Message, M extends Message> ManagedCorfuTable<K, V, M>
+    from(ManagedCorfuTableConfig<K, V, M> config, ManagedRuntime managedRt) {
+        return new ManagedCorfuTable<K, V, M>()
+                .config(config)
+                .managedRt(managedRt);
+    }
+
+    public static ManagedCorfuTable<Uuid, ExampleValue, ManagedMetadata> buildExample(ManagedRuntime rt) {
 
         ManagedCorfuTableConfig<Uuid, ExampleValue, ManagedMetadata> cfg = ManagedCorfuTableConfig
                 .<Uuid, ExampleValue, ManagedMetadata>builder()
-                .rt(rt)
-                .kClass(Uuid.class)
-                .vClass(ExampleValue.class)
-                .mClass(ManagedMetadata.class)
+                .tableDescriptor(TableDescriptors.EXAMPLE_VALUE)
                 .build();
 
-        ManagedCorfuTableSetup<Uuid, ExampleValue, ManagedMetadata> tableInit =
-                new ManagedCorfuTableSetupManager<Uuid, ExampleValue, ManagedMetadata>().getPersistentCorfu();
-        return ManagedCorfuTable
-                .<Uuid, ExampleValue, ManagedMetadata>builder()
+        return ManagedCorfuTable.<Uuid, ExampleValue, ManagedMetadata>build()
                 .config(cfg)
-                .tableSetup(tableInit)
-                .build();
-
+                .managedRt(rt)
+                .tableSetup(ManagedCorfuTableSetupManager.persistentCorfu());
     }
 
-    public static ManagedCorfuTable<Uuid, Uuid, Uuid> buildWithUuid(
-            CorfuRuntime rt, ManagedCorfuTableSetup<Uuid, Uuid, Uuid> tableSetup) {
+    public static ManagedCorfuTable<Uuid, Uuid, Uuid> buildDefault(ManagedRuntime rt) {
         ManagedCorfuTableConfig<Uuid, Uuid, Uuid> cfg = ManagedCorfuTableConfig
                 .<Uuid, Uuid, Uuid>builder()
-                .rt(rt)
-                .kClass(Uuid.class)
-                .vClass(Uuid.class)
-                .mClass(Uuid.class)
+                .tableDescriptor(TableDescriptors.UUID)
                 .build();
 
         return ManagedCorfuTable
-                .<Uuid, Uuid, Uuid>builder()
+                .<Uuid, Uuid, Uuid>build()
                 .config(cfg)
-                .tableSetup(tableSetup)
-                .build();
-    }
-
-    public static ManagedCorfuTable<Uuid, Uuid, Uuid> buildDefault(CorfuRuntime rt) {
-        ManagedCorfuTableConfig<Uuid, Uuid, Uuid> cfg = ManagedCorfuTableConfig
-                .<Uuid, Uuid, Uuid>builder()
-                .rt(rt)
-                .kClass(Uuid.class)
-                .vClass(Uuid.class)
-                .mClass(Uuid.class)
-                .build();
-
-        ManagedCorfuTableSetup<Uuid, Uuid, Uuid> tableInit =
-                new ManagedCorfuTableSetupManager<Uuid, Uuid, Uuid>().getPersistentCorfu();
-
-        return ManagedCorfuTable
-                .<Uuid, Uuid, Uuid>builder()
-                .config(cfg)
-                .tableSetup(tableInit)
-                .build();
+                .managedRt(rt)
+                .tableSetup(ManagedCorfuTableSetupManager.persistentCorfu());
     }
 
     @SneakyThrows
-    public void execute(ThrowableConsumer<GenericCorfuTable<?, K, CorfuRecord<V, M>>> action) {
-        try (GenericCorfuTable<? extends SnapshotGenerator<?>, K, CorfuRecord<V, M>> table = tableSetup.setup(config)) {
-            action.accept(table);
-        }
+    public void execute(ThrowableConsumer<CorfuTableSpecContext<K, V, M>> action) throws Exception {
+        Objects.requireNonNull(tableSetup);
+
+        managedRt.connect(rt -> {
+            try (GenericCorfuTable<? extends SnapshotGenerator<?>, K, CorfuRecord<V, M>> table =
+                         tableSetup.setup(rt, config)) {
+                action.accept(new CorfuTableSpecContext<>(rt, table));
+            }
+        });
     }
+
+    public static class TableDescriptors {
+        public static TableDescriptor<Uuid, Uuid, Uuid> UUID = new TableDescriptor<>(Uuid.class, Uuid.class, Uuid.class);
+        public static TableDescriptor<Uuid, ExampleValue, ManagedMetadata> EXAMPLE_VALUE = new TableDescriptor<>(
+                Uuid.class, ExampleValue.class, ManagedMetadata.class
+        );
+    }
+
 
     @Builder
     @Getter
     public static class ManagedCorfuTableConfig<K extends Message, V extends Message, M extends Message> {
         @NonNull
-        private final CorfuRuntime rt;
-
-        @NonNull
-        private final Class<K> kClass;
-        @NonNull
-        private final Class<V> vClass;
-        @NonNull
-        private final Class<M> mClass;
+        private final TableDescriptor<K, V, M> tableDescriptor;
 
         @Default
         private final String namespace = "some-namespace";
+
         @Default
         private final String tableName = "some-table";
 
         @Default
         private final boolean withSchema = true;
 
-        private final String defaultInstanceMethodName = TableOptions.DEFAULT_INSTANCE_METHOD_NAME;
-
-        public static ManagedCorfuTableConfig<Uuid, Uuid, Uuid> buildUuid(CorfuRuntime rt) {
+        public static ManagedCorfuTableConfig<Uuid, Uuid, Uuid> buildUuid() {
             return ManagedCorfuTableConfig
                     .<Uuid, Uuid, Uuid>builder()
-                    .rt(rt)
-                    .kClass(Uuid.class)
-                    .vClass(Uuid.class)
-                    .mClass(Uuid.class)
+                    .tableDescriptor(TableDescriptors.UUID)
                     .build();
+        }
+
+        public static ManagedCorfuTableConfig<Uuid, ExampleValue, ManagedMetadata> buildExampleVal(
+                Consumer<ManagedCorfuTableConfigBuilder<Uuid, ExampleValue, ManagedMetadata>> customizer) {
+
+            ManagedCorfuTableConfigBuilder<Uuid, ExampleValue, ManagedMetadata> builder = ManagedCorfuTableConfig
+                    .<Uuid, ExampleValue, ManagedMetadata>builder()
+                    .tableDescriptor(TableDescriptors.EXAMPLE_VALUE);
+            customizer.accept(builder);
+
+            return builder.build();
         }
 
 
@@ -136,13 +133,9 @@ public class ManagedCorfuTable<K extends Message, V extends Message, M extends M
         }
 
         public ProtobufIndexer getProtobufIndexer() throws Exception {
-            SchemaOptions schemaOptions = getSchemaOptions();
-            V msg = getDefaultValueMessage();
+            SchemaOptions schemaOptions = tableDescriptor.getSchemaOptions();
+            V msg = tableDescriptor.getDefaultValueMessage();
             return new ProtobufIndexer(msg, schemaOptions);
-        }
-
-        public SchemaOptions getSchemaOptions() throws Exception {
-            return TableOptions.fromProtoSchema(vClass).getSchemaOptions();
         }
 
         /**
@@ -150,18 +143,6 @@ public class ManagedCorfuTable<K extends Message, V extends Message, M extends M
          */
         String getFullyQualifiedTableName() {
             return namespace + "$" + tableName;
-        }
-
-        public V getDefaultValueMessage() throws Exception {
-            return (V) vClass.getMethod(defaultInstanceMethodName).invoke(null);
-        }
-
-        public K getDefaultKeyMessage() throws Exception {
-            return (K) kClass.getMethod(defaultInstanceMethodName).invoke(null);
-        }
-
-        public M getDefaultMetadataMessage() throws Exception {
-            return (M) mClass.getMethod(defaultInstanceMethodName).invoke(null);
         }
     }
 }

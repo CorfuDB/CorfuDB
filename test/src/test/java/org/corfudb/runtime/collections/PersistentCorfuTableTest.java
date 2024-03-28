@@ -1,8 +1,11 @@
 package org.corfudb.runtime.collections;
 
+import com.google.protobuf.Message;
+import lombok.AllArgsConstructor;
 import org.apache.commons.lang3.tuple.Pair;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.ExampleSchemas;
 import org.corfudb.runtime.ExampleSchemas.Adult;
 import org.corfudb.runtime.ExampleSchemas.Baseball;
@@ -34,7 +37,7 @@ import org.corfudb.test.TestSchema.Uuid;
 import org.corfudb.test.managedtable.ManagedCorfuTable;
 import org.corfudb.test.managedtable.ManagedCorfuTable.ManagedCorfuTableConfig;
 import org.corfudb.test.managedtable.ManagedCorfuTableSetupManager;
-import org.corfudb.util.serializer.ProtobufSerializer;
+import org.corfudb.test.managedtable.ManagedRuntime;
 import org.junit.Test;
 
 import javax.annotation.Nonnull;
@@ -44,9 +47,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 import java.util.stream.LongStream;
@@ -73,90 +74,84 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
     private static final String INTERRUPTED_ERROR_MSG = "Unexpected InterruptedException";
 
     @Test
-    public void testMultiRuntime() throws Exception {
-
-    }
-
-    @Test
     public void testTxn() throws Exception {
         addSingleServer(SERVERS.PORT_0);
-        buildNewManagedRuntime(getLargeRtParams(), rt -> {
-            ManagedCorfuTable.buildDefault(rt).execute(corfuTable -> {
-                Uuid key1 = Uuid.newBuilder().setLsb(1).setMsb(1).build();
-                Uuid payload1 = Uuid.newBuilder().setLsb(1).setMsb(1).build();
-                Uuid metadata1 = Uuid.newBuilder().setLsb(1).setMsb(1).build();
-                CorfuRecord<Uuid, Uuid> value1 = new CorfuRecord<>(payload1, metadata1);
 
-                rt.getObjectsView().TXBegin();
+        largeUuidManagedTable().execute((rt, corfuTable) -> {
+            Uuid key1 = Uuid.newBuilder().setLsb(1).setMsb(1).build();
+            Uuid payload1 = Uuid.newBuilder().setLsb(1).setMsb(1).build();
+            Uuid metadata1 = Uuid.newBuilder().setLsb(1).setMsb(1).build();
+            CorfuRecord<Uuid, Uuid> value1 = new CorfuRecord<>(payload1, metadata1);
 
-                // Table should be empty
-                assertThat(corfuTable.get(key1)).isNull();
-                assertThat(corfuTable.size()).isZero();
+            rt.getObjectsView().TXBegin();
 
-                // Put key1
-                corfuTable.insert(key1, value1);
+            // Table should be empty
+            assertThat(corfuTable.get(key1)).isNull();
+            assertThat(corfuTable.size()).isZero();
 
-                // Table should now have size 1 and contain key1
-                assertThat(corfuTable.get(key1).getPayload().getLsb()).isEqualTo(payload1.getLsb());
-                assertThat(corfuTable.get(key1).getPayload().getMsb()).isEqualTo(payload1.getMsb());
-                assertThat(corfuTable.size()).isEqualTo(1);
-                rt.getObjectsView().TXEnd();
+            // Put key1
+            corfuTable.insert(key1, value1);
 
-                Uuid key2 = Uuid.newBuilder().setLsb(2).setMsb(2).build();
-                Uuid payload2 = Uuid.newBuilder().setLsb(2).setMsb(2).build();
-                Uuid metadata2 = Uuid.newBuilder().setLsb(2).setMsb(2).build();
-                CorfuRecord<Uuid, Uuid> value2 = new CorfuRecord<>(payload2, metadata2);
+            // Table should now have size 1 and contain key1
+            assertThat(corfuTable.get(key1).getPayload().getLsb()).isEqualTo(payload1.getLsb());
+            assertThat(corfuTable.get(key1).getPayload().getMsb()).isEqualTo(payload1.getMsb());
+            assertThat(corfuTable.size()).isEqualTo(1);
+            rt.getObjectsView().TXEnd();
 
-                Uuid nonExistingKey = Uuid.newBuilder().setLsb(3).setMsb(3).build();
+            Uuid key2 = Uuid.newBuilder().setLsb(2).setMsb(2).build();
+            Uuid payload2 = Uuid.newBuilder().setLsb(2).setMsb(2).build();
+            Uuid metadata2 = Uuid.newBuilder().setLsb(2).setMsb(2).build();
+            CorfuRecord<Uuid, Uuid> value2 = new CorfuRecord<>(payload2, metadata2);
 
-                rt.getObjectsView().TXBegin();
+            Uuid nonExistingKey = Uuid.newBuilder().setLsb(3).setMsb(3).build();
 
-                // Put key2
-                corfuTable.insert(key2, value2);
+            rt.getObjectsView().TXBegin();
 
-                // Table should contain both key1 and key2, but not nonExistingKey
-                assertThat(corfuTable.get(key2).getPayload().getLsb()).isEqualTo(payload2.getLsb());
-                assertThat(corfuTable.get(key2).getPayload().getMsb()).isEqualTo(payload2.getMsb());
-                assertThat(corfuTable.get(key1).getPayload().getLsb()).isEqualTo(payload1.getLsb());
-                assertThat(corfuTable.get(key1).getPayload().getMsb()).isEqualTo(payload1.getMsb());
-                assertThat(corfuTable.get(nonExistingKey)).isNull();
-                rt.getObjectsView().TXEnd();
+            // Put key2
+            corfuTable.insert(key2, value2);
 
-                // Verify the state of the table @ SEQ 0
-                rt.getObjectsView().TXBuild()
-                        .type(TransactionType.SNAPSHOT)
-                        .snapshot(new Token(0, 0))
-                        .build()
-                        .begin();
+            // Table should contain both key1 and key2, but not nonExistingKey
+            assertThat(corfuTable.get(key2).getPayload().getLsb()).isEqualTo(payload2.getLsb());
+            assertThat(corfuTable.get(key2).getPayload().getMsb()).isEqualTo(payload2.getMsb());
+            assertThat(corfuTable.get(key1).getPayload().getLsb()).isEqualTo(payload1.getLsb());
+            assertThat(corfuTable.get(key1).getPayload().getMsb()).isEqualTo(payload1.getMsb());
+            assertThat(corfuTable.get(nonExistingKey)).isNull();
+            rt.getObjectsView().TXEnd();
 
-                assertThat(corfuTable.get(key1).getPayload().getLsb()).isEqualTo(payload1.getLsb());
-                assertThat(corfuTable.get(key1).getPayload().getMsb()).isEqualTo(payload1.getMsb());
-                assertThat(corfuTable.get(nonExistingKey)).isNull();
-                assertThat(corfuTable.get(key2)).isNull();
-                assertThat(corfuTable.size()).isEqualTo(1);
-                rt.getObjectsView().TXEnd();
+            // Verify the state of the table @ SEQ 0
+            rt.getObjectsView().TXBuild()
+                    .type(TransactionType.SNAPSHOT)
+                    .snapshot(new Token(0, 0))
+                    .build()
+                    .begin();
 
-                // Verify the state of the table @ SEQ 1
-                rt.getObjectsView().TXBuild()
-                        .type(TransactionType.SNAPSHOT)
-                        .snapshot(new Token(0, 1))
-                        .build()
-                        .begin();
+            assertThat(corfuTable.get(key1).getPayload().getLsb()).isEqualTo(payload1.getLsb());
+            assertThat(corfuTable.get(key1).getPayload().getMsb()).isEqualTo(payload1.getMsb());
+            assertThat(corfuTable.get(nonExistingKey)).isNull();
+            assertThat(corfuTable.get(key2)).isNull();
+            assertThat(corfuTable.size()).isEqualTo(1);
+            rt.getObjectsView().TXEnd();
 
-                assertThat(corfuTable.get(key2).getPayload().getLsb()).isEqualTo(payload2.getLsb());
-                assertThat(corfuTable.get(key2).getPayload().getMsb()).isEqualTo(payload2.getMsb());
-                assertThat(corfuTable.get(key1).getPayload().getLsb()).isEqualTo(payload1.getLsb());
-                assertThat(corfuTable.get(key1).getPayload().getMsb()).isEqualTo(payload1.getMsb());
-                assertThat(corfuTable.get(nonExistingKey)).isNull();
-                assertThat(corfuTable.size()).isEqualTo(2);
-                rt.getObjectsView().TXEnd();
+            // Verify the state of the table @ SEQ 1
+            rt.getObjectsView().TXBuild()
+                    .type(TransactionType.SNAPSHOT)
+                    .snapshot(new Token(0, 1))
+                    .build()
+                    .begin();
 
-                // Verify the MVOCache has exactly 2 versions
-                Set<VersionedObjectIdentifier> voIds = rt.getObjectsView().getMvoCache().keySet();
-                assertThat(voIds).containsExactlyInAnyOrder(
-                        new VersionedObjectIdentifier(corfuTable.getCorfuSMRProxy().getStreamID(), -1L),
-                        new VersionedObjectIdentifier(corfuTable.getCorfuSMRProxy().getStreamID(), 0L));
-            });
+            assertThat(corfuTable.get(key2).getPayload().getLsb()).isEqualTo(payload2.getLsb());
+            assertThat(corfuTable.get(key2).getPayload().getMsb()).isEqualTo(payload2.getMsb());
+            assertThat(corfuTable.get(key1).getPayload().getLsb()).isEqualTo(payload1.getLsb());
+            assertThat(corfuTable.get(key1).getPayload().getMsb()).isEqualTo(payload1.getMsb());
+            assertThat(corfuTable.get(nonExistingKey)).isNull();
+            assertThat(corfuTable.size()).isEqualTo(2);
+            rt.getObjectsView().TXEnd();
+
+            // Verify the MVOCache has exactly 2 versions
+            Set<VersionedObjectIdentifier> voIds = rt.getObjectsView().getMvoCache().keySet();
+            assertThat(voIds).containsExactlyInAnyOrder(
+                    new VersionedObjectIdentifier(corfuTable.getCorfuSMRProxy().getStreamID(), -1L),
+                    new VersionedObjectIdentifier(corfuTable.getCorfuSMRProxy().getStreamID(), 0L));
         });
     }
 
@@ -164,58 +159,40 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
     public void simpleParallelAccess() throws Exception {
         addSingleServer(SERVERS.PORT_0);
 
-        buildNewManagedRuntime(getSmallRtParams(), rt -> {
-            ManagedCorfuTable.buildDefault(rt).execute(corfuTable -> {
-                int readSize = 100;
+        smallUuidManagedTable().execute((rt, corfuTable) -> {
+            int readSize = 100;
 
-                // 1st txn at v0 puts keys {0, .., readSize-1} into the table
-                rt.getObjectsView().TXBegin();
-                for (int i = 0; i < readSize; i++) {
-                    Uuid key = Uuid.newBuilder().setLsb(i).setMsb(i).build();
-                    Uuid payload = Uuid.newBuilder().setLsb(i).setMsb(i).build();
-                    Uuid metadata = Uuid.newBuilder().setLsb(i).setMsb(i).build();
-                    CorfuRecord<Uuid, Uuid> value = new CorfuRecord<>(payload, metadata);
-                    corfuTable.insert(key, value);
-                }
-                rt.getObjectsView().TXEnd();
+            // 1st txn at v0 puts keys {0, .., readSize-1} into the table
+            rt.getObjectsView().TXBegin();
+            for (int i = 0; i < readSize; i++) {
+                Uuid key = Uuid.newBuilder().setLsb(i).setMsb(i).build();
+                Uuid payload = Uuid.newBuilder().setLsb(i).setMsb(i).build();
+                Uuid metadata = Uuid.newBuilder().setLsb(i).setMsb(i).build();
+                CorfuRecord<Uuid, Uuid> value = new CorfuRecord<>(payload, metadata);
+                corfuTable.insert(key, value);
+            }
+            rt.getObjectsView().TXEnd();
 
-                // 2nd txn at v1 puts keys {readSize, ..., readSize*2-1} into the table
-                rt.getObjectsView().TXBegin();
-                for (int i = readSize; i < 2 * readSize; i++) {
-                    Uuid key = Uuid.newBuilder().setLsb(i).setMsb(i).build();
-                    Uuid payload = Uuid.newBuilder().setLsb(i).setMsb(i).build();
-                    Uuid metadata = Uuid.newBuilder().setLsb(i).setMsb(i).build();
-                    CorfuRecord<Uuid, Uuid> value = new CorfuRecord<>(payload, metadata);
-                    corfuTable.insert(key, value);
-                }
-                rt.getObjectsView().TXEnd();
+            // 2nd txn at v1 puts keys {readSize, ..., readSize*2-1} into the table
+            rt.getObjectsView().TXBegin();
+            for (int i = readSize; i < 2 * readSize; i++) {
+                Uuid key = Uuid.newBuilder().setLsb(i).setMsb(i).build();
+                Uuid payload = Uuid.newBuilder().setLsb(i).setMsb(i).build();
+                Uuid metadata = Uuid.newBuilder().setLsb(i).setMsb(i).build();
+                CorfuRecord<Uuid, Uuid> value = new CorfuRecord<>(payload, metadata);
+                corfuTable.insert(key, value);
+            }
+            rt.getObjectsView().TXEnd();
 
-                // Two threads doing snapshot read in parallel
-                Thread t1 = new Thread(() -> snapshotRead(rt, corfuTable, 0, 0, readSize));
-                Thread t2 = new Thread(() -> snapshotRead(rt, corfuTable, 1, readSize, 2 * readSize));
+            // Two threads doing snapshot read in parallel
+            Thread t1 = new Thread(() -> snapshotRead(rt, corfuTable, 0, 0, readSize));
+            Thread t2 = new Thread(() -> snapshotRead(rt, corfuTable, 1, readSize, 2 * readSize));
 
-                t1.start();
-                t2.start();
-                t1.join();
-                t2.join();
-            });
+            t1.start();
+            t2.start();
+            t1.join();
+            t2.join();
         });
-    }
-
-    private void snapshotRead(
-            CorfuRuntime rt, GenericCorfuTable<?, Uuid, CorfuRecord<Uuid, Uuid>> corfuTable,
-            long ts, int low, int high) {
-        rt.getObjectsView().TXBuild()
-                .type(TransactionType.SNAPSHOT)
-                .snapshot(new Token(0, ts))
-                .build()
-                .begin();
-        for (int i = low; i < high; i++) {
-            Uuid key = Uuid.newBuilder().setLsb(i).setMsb(i).build();
-            assertThat(corfuTable.get(key).getPayload().getLsb()).isEqualTo(i);
-            assertThat(corfuTable.get(key).getPayload().getMsb()).isEqualTo(i);
-        }
-        rt.getObjectsView().TXEnd();
     }
 
     /**
@@ -349,42 +326,32 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
      * when the index has never been specified for this PersistentCorfuTable.
      */
     @Test(expected = IllegalArgumentException.class)
-    public void cannotLookupByIndexWhenIndexNotSpecified() throws Exception {
+    public void cannotLookupByIndexWhenIndexNotSpecified() {
         addSingleServer(SERVERS.PORT_0);
 
-        buildNewManagedRuntime(getSmallRtParams(), rt -> {
-            ManagedCorfuTable
-                    .<Uuid, ExampleValue, ManagedMetadata>builder()
-                    .config(ManagedCorfuTableConfig
-                            .<Uuid, ExampleValue, ManagedMetadata>builder()
-                            .rt(rt)
-                            .kClass(Uuid.class)
-                            .vClass(ExampleValue.class)
-                            .mClass(ManagedMetadata.class)
-                            .withSchema(false)
-                            .build()
-                    )
-                    .tableSetup(new ManagedCorfuTableSetupManager<Uuid, ExampleValue, ManagedMetadata>()
-                            .getPersistentCorfu()
-                    )
-                    .build()
-                    .execute(corfuTable -> {
-                        ManagedMetadata user_1 = ManagedMetadata.newBuilder().setCreateUser("user_1").build();
+        ManagedCorfuTableConfig<Uuid, ExampleValue, ManagedMetadata> cfg = ManagedCorfuTableConfig
+                .buildExampleVal(tableCfg -> tableCfg.withSchema(false));
 
-                        for (long i = 0; i < CacheSizeForTest.SMALL.size; i++) {
-                            rt.getObjectsView().TXBegin();
-                            corfuTable.insert(Uuid.newBuilder().setLsb(i).setMsb(i).build(),
-                                    new CorfuRecord<>(ExampleValue.newBuilder()
-                                            .setPayload("abc")
-                                            .setAnotherKey(i)
-                                            .build(), user_1)
-                            );
-                            rt.getObjectsView().TXEnd();
-                        }
 
-                        corfuTable.getByIndex(() -> "anotherKey", 0);
-                    });
-        });
+        ManagedCorfuTable
+                .from(cfg, ManagedRuntime.from(getSmallRtParams()))
+                .tableSetup(ManagedCorfuTableSetupManager.persistentCorfu())
+                .execute((rt, corfuTable) -> {
+                    ManagedMetadata user_1 = ManagedMetadata.newBuilder().setCreateUser("user_1").build();
+
+                    for (long i = 0; i < CacheSizeForTest.SMALL.size; i++) {
+                        rt.getObjectsView().TXBegin();
+                        corfuTable.insert(Uuid.newBuilder().setLsb(i).setMsb(i).build(),
+                                new CorfuRecord<>(ExampleValue.newBuilder()
+                                        .setPayload("abc")
+                                        .setAnotherKey(i)
+                                        .build(), user_1)
+                        );
+                        rt.getObjectsView().TXEnd();
+                    }
+
+                    corfuTable.getByIndex(() -> "anotherKey", 0);
+                });
     }
 
     private <T> List<T> toList(@Nonnull Iterable<T> iterable) {
@@ -1300,5 +1267,41 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
                 }
             }
         });
+    }
+
+    private void snapshotRead(
+            CorfuRuntime rt, GenericCorfuTable<?, Uuid, CorfuRecord<Uuid, Uuid>> corfuTable,
+            long ts, int low, int high) {
+        rt.getObjectsView().TXBuild()
+                .type(TransactionType.SNAPSHOT)
+                .snapshot(new Token(0, ts))
+                .build()
+                .begin();
+        for (int i = low; i < high; i++) {
+            Uuid key = Uuid.newBuilder().setLsb(i).setMsb(i).build();
+            assertThat(corfuTable.get(key).getPayload().getLsb()).isEqualTo(i);
+            assertThat(corfuTable.get(key).getPayload().getMsb()).isEqualTo(i);
+        }
+        rt.getObjectsView().TXEnd();
+    }
+
+    private ManagedCorfuTable<Uuid, Uuid, Uuid> smallUuidManagedTable() {
+        return managedTable(getSmallRtParams());
+    }
+
+    private ManagedCorfuTable<Uuid, Uuid, Uuid> largeUuidManagedTable() {
+        return managedTable(getLargeRtParams());
+    }
+
+    private ManagedCorfuTable<Uuid, Uuid, Uuid> managedTable(CorfuRuntimeParameters rtParams) {
+        ManagedRuntime managedRt = ManagedRuntime
+                .from(rtParams)
+                .setup(rt -> rt.parseConfigurationString(getDefaultConfigurationString()));
+
+        return ManagedCorfuTable
+                .<Uuid, Uuid, Uuid>build()
+                .config(ManagedCorfuTableConfig.buildUuid())
+                .managedRt(managedRt)
+                .tableSetup(ManagedCorfuTableSetupManager.persistentCorfu());
     }
 }

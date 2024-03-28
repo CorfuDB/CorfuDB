@@ -37,7 +37,6 @@ public class OneNodeDownIT extends GenericIntegrationTest {
      */
     @Test(timeout = 300000)
     public void oneNodeDownTest() {
-
         workflow(wf -> {
             wf.deploy();
 
