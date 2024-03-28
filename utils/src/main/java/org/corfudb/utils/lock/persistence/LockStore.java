@@ -244,8 +244,8 @@ public class LockStore {
                                 Optional<LockData> lockDataOptional) {
 
         if (!lockDataOptional.isPresent()) {
-            // No lock in the database.  Return.
-            return false;
+            log.info("LockStore: lockId {} not present in store", lockId.getLockName());
+            return true;
         }
 
         ObservedLock observedLock = observedLocks.get(lockId);

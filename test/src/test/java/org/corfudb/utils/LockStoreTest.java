@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
@@ -261,7 +262,7 @@ public class LockStoreTest extends AbstractViewTest {
             // Wait till the duration of the lock lease expiry + an
             // additional delay of 10ms.
             // LockStore detects a lock as expired if (the duration between
-            // the time it was first read - lease expiry time) is before the
+            // the time it was first read + lease expiry time) is before the
             // current system clock time.  So adding an arbitrary 10ms so
             // that the lock is detected as
             // expired.
@@ -286,5 +287,29 @@ public class LockStoreTest extends AbstractViewTest {
 
             cleanupAfterIteration();
         }
+    }
+
+    /**
+     * This test verifies the behavior of 2 operations when the lock table is empty.
+     * 1)lock renewal and
+     * 2)filtering of locks with expired lease
+     * This table can be empty if no node has acquired leadership or it has been manually deleted.  The expected
+     * behavior is for renewal to fail and filtering shows the requested lock as revocable so that the querying node
+     * can acquire leadership.
+     * @throws Exception
+     */
+    @Test
+    public void testEmptyLockTable() throws Exception {
+        LockStore lockStore = new LockStore(runtime1, UUID.randomUUID());
+
+        // Renewal of a lock which has not yet been acquired is not valid
+        Assert.assertFalse(lockStore.renew(lockId));
+
+        // Get a list of locks with revocable lease.  As there is no lock currently acquired, the request lock can be
+        // revoked.
+        List<LockDataTypes.LockId> revocableLocks =
+            lockStore.filterLocksWithExpiredLeases(Collections.singletonList(lockId)).stream().collect(Collectors.toList());
+        Assert.assertEquals(1, revocableLocks.size());
+        Assert.assertEquals(lockId, revocableLocks.get(0));
     }
 }
