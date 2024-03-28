@@ -7,6 +7,7 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.BatchProcessor.BatchProcessorContext;
+import org.corfudb.infrastructure.BatchProcessor.ExitManager;
 import org.corfudb.infrastructure.health.Component;
 import org.corfudb.infrastructure.health.HealthMonitor;
 import org.corfudb.infrastructure.health.Issue;
@@ -60,8 +61,8 @@ import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getFlushCacheRe
 import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getInspectAddressesResponseMsg;
 import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getKnownAddressResponseMsg;
 import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getLogAddressSpaceResponseMsg;
-import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getRangeWriteLogResponseMsg;
 import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getReadLogResponseMsg;
+import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getRangeWriteLogResponseMsg;
 import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getResetLogUnitResponseMsg;
 import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getTailResponseMsg;
 import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getTrimLogResponseMsg;
@@ -527,8 +528,6 @@ public class LogUnitServer extends AbstractServer {
 
         serverContext.setLogUnitEpochWaterMark(req.getPayload().getResetLogUnitRequest().getEpoch());
 
-        batchProcessor.restart();
-
         batchProcessor.addTask(BatchWriterOperation.Type.RESET, req)
                 .thenRun(() -> {
                     dataCache.invalidateAll();
@@ -630,7 +629,7 @@ public class LogUnitServer extends AbstractServer {
                                            @Nonnull ServerContext serverContext,
                                            @Nonnull BatchProcessorContext batchProcessorContext) {
             return new BatchProcessor(
-                    streamLog, batchProcessorContext, serverContext.getServerEpoch(), !config.isNoSync()
+                    streamLog, batchProcessorContext, new ExitManager(), serverContext.getServerEpoch(), !config.isNoSync()
             );
         }
 

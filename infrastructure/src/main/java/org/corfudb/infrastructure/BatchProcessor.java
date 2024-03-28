@@ -4,6 +4,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.google.protobuf.TextFormat;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.infrastructure.BatchWriterOperation.Type;
@@ -52,6 +53,8 @@ public class BatchProcessor implements AutoCloseable {
     private final BlockingQueue<BatchWriterOperation<?>> operationsQueue;
     private final ExecutorService processorService;
 
+    private final ExitManager exitManager;
+
     /**
      * The sealEpoch is the epoch up to which all operations have been sealed. Any
      * BatchWriterOperation arriving after the sealEpoch with an epoch less than the sealEpoch
@@ -66,15 +69,19 @@ public class BatchProcessor implements AutoCloseable {
     /**
      * Returns a new BatchProcessor for a stream log.
      *
-     * @param streamLog stream log for writes (can be in memory or file)
+     * @param streamLog stream log for writes (can be in memory or file).
+     * @param context the underlying batch processor context.
+     * @param exitManager the exit manger to use when the main BP thread encounters an unrecoverable error.
      * @param sealEpoch All operations stamped with epoch less than the epochWaterMark are discarded.
-     * @param sync      If true, the batch writer will sync writes to secondary storage
+     * @param sync      If true, the batch writer will sync writes to secondary storage.
      */
-    public BatchProcessor(StreamLog streamLog, BatchProcessorContext context, long sealEpoch, boolean sync) {
+    public BatchProcessor(@NonNull StreamLog streamLog, @NonNull BatchProcessorContext context,
+                          @NonNull ExitManager exitManager, long sealEpoch, boolean sync) {
         this.sealEpoch = sealEpoch;
         this.sync = sync;
         this.streamLog = streamLog;
         this.context = context;
+        this.exitManager = exitManager;
 
         BATCH_SIZE = 50;
         this.operationsQueue = new LinkedBlockingQueue<>();
@@ -237,13 +244,11 @@ public class BatchProcessor implements AutoCloseable {
                     lastOp = currentOp;
                 }
             }
-        } catch (Exception e) {
-            log.error("Caught exception in the write processor ", e);
-            context.setErrorStatus();
         } catch (Throwable th) {
+            // Initiate a shutdown of the JVM when an unhandled Exception/Throwable is
+            // encountered, including IOExceptions during fsync and OutOfDirectMemoryErrors.
             log.error("Encountered throwable in the write processor ", th);
-            context.setErrorStatus();
-            throw th;
+            exitManager.exit(CorfuServer.EXIT_ERROR_CODE);
         }
     }
 
@@ -256,15 +261,6 @@ public class BatchProcessor implements AutoCloseable {
                     TimeUnit.MILLISECONDS);
         } catch (InterruptedException e) {
             throw new UnrecoverableCorfuInterruptedError("BatchProcessor close interrupted.", e);
-        }
-    }
-
-    public void restart() {
-        operationsQueue.clear();
-
-        if (context.getStatus() == BatchProcessorStatus.BP_STATUS_ERROR) {
-            context.setOkStatus();
-            processorService.submit(this::process);
         }
     }
 
@@ -283,6 +279,15 @@ public class BatchProcessor implements AutoCloseable {
 
         public BatchProcessorStatus getStatus() {
             return status.get();
+        }
+    }
+
+    /**
+     * An exit manager to facilitate the injection of mocks during unit tests.
+     */
+    public static class ExitManager {
+        public void exit(int exitCode) {
+            System.exit(exitCode);
         }
     }
 }

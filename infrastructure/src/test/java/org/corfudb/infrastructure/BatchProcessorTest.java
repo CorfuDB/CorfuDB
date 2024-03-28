@@ -4,6 +4,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.BatchProcessor.BatchProcessorContext;
+import org.corfudb.infrastructure.BatchProcessor.ExitManager;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
 import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
@@ -29,6 +30,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -47,7 +49,6 @@ import static org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
 import static org.corfudb.runtime.proto.service.CorfuMessage.PriorityLevel;
 import static org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import static org.junit.Assert.assertEquals;
-import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
@@ -58,7 +59,6 @@ import static org.mockito.Mockito.when;
 @Slf4j
 public class BatchProcessorTest {
     private static final BatchProcessorStatus BP_STATUS_OK = BatchProcessorStatus.BP_STATUS_OK;
-    private static final BatchProcessorStatus BP_STATUS_ERROR = BatchProcessorStatus.BP_STATUS_ERROR;
 
     @Rule
     public MockitoRule mockito = MockitoJUnit.rule();
@@ -67,6 +67,7 @@ public class BatchProcessorTest {
     private BatchProcessorContext bpContext;
 
     private StreamLog mockStreamLog;
+    private ExitManager mockExitManager;
     private final AtomicInteger requestCounter = new AtomicInteger();
     private final long DEFAULT_SEAL_EPOCH = 1L;
     private final long LARGER_SEAL_EPOCH = 5L;
@@ -130,8 +131,9 @@ public class BatchProcessorTest {
     @Before
     public void setup() {
         mockStreamLog = mock(StreamLog.class);
+        mockExitManager = mock(ExitManager.class);
         bpContext = spy(new BatchProcessorContext());
-        batchProcessor = new BatchProcessor(mockStreamLog, bpContext, DEFAULT_SEAL_EPOCH, true);
+        batchProcessor = new BatchProcessor(mockStreamLog, bpContext, mockExitManager, DEFAULT_SEAL_EPOCH, true);
     }
 
     /**
@@ -193,37 +195,6 @@ public class BatchProcessorTest {
         batchProcessor.addTask(BatchWriterOperation.Type.RESET, request).join();
         assertEquals(BP_STATUS_OK, bpContext.getStatus());
         verify(mockStreamLog).reset();
-    }
-
-    @Test
-    public void testRestart() throws Exception {
-        assertEquals(BP_STATUS_OK, bpContext.getStatus());
-
-        final CountDownLatch errorLatch = new CountDownLatch(1);
-        final CountDownLatch okLatch = new CountDownLatch(1);
-
-        doAnswer(invocationOnMock -> {
-            final Object ret = invocationOnMock.callRealMethod();
-            errorLatch.countDown();
-            return ret;
-        }).when(bpContext).setErrorStatus();
-
-        doAnswer(invocationOnMock -> {
-            final Object ret = invocationOnMock.callRealMethod();
-            okLatch.countDown();
-            return ret;
-        }).when(bpContext).setOkStatus();
-
-        doThrow(new IOException()).when(mockStreamLog).sync(anyBoolean());
-
-        batchProcessor.addTask(BatchWriterOperation.Type.SHUTDOWN, RequestMsg.getDefaultInstance());
-        errorLatch.await();
-        assertEquals(BP_STATUS_ERROR, bpContext.getStatus());
-
-        batchProcessor.restart();
-
-        okLatch.await();
-        assertEquals(BP_STATUS_OK, bpContext.getStatus());
     }
 
     /**
@@ -337,5 +308,28 @@ public class BatchProcessorTest {
         } catch (CompletionException e) {
             throw e.getCause();
         }
+    }
+
+    /**
+     * This test validates that System.exit() is invoked when an unrecoverable
+     * exception is throw in the BatchProcessor thread.
+     */
+    @Test
+    public void testBpExceptionExit() throws Exception {
+        final AtomicBoolean validateChecked = new AtomicBoolean(false);
+        final CountDownLatch latch = new CountDownLatch(1);
+
+        // Mock an IOException from the StreamLogFiles when fsync occurs.
+        doThrow(new IOException()).when(mockStreamLog).sync(true);
+        doAnswer(invocation -> {
+            validateChecked.set(true);
+            latch.countDown();
+            return null;
+        }).when(mockExitManager).exit(CorfuServer.EXIT_ERROR_CODE);
+
+        batchProcessor.addTask(BatchWriterOperation.Type.SHUTDOWN, RequestMsg.getDefaultInstance());
+        latch.await();
+
+        assertThat(validateChecked).isTrue();
     }
 }
