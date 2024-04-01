@@ -146,35 +146,16 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
      */
     private void processUpdatesShadowStream(List<SMREntry> smrEntries, Long currentSeqNum, UUID shadowStreamUuid,
                                             UUID snapshotSyncId) {
-        CorfuStoreMetadata.Timestamp timestamp;
-
+        CorfuStoreMetadata.Timestamp ts = batchingData(smrEntries, shadowStreamUuid);
         try (TxnContext txn = logReplicationMetadataManager.getTxnContext()) {
-            updateLog(txn, smrEntries, shadowStreamUuid);
             logReplicationMetadataManager.appendUpdate(txn,
                     LogReplicationMetadataType.LAST_SNAPSHOT_TRANSFERRED_SEQUENCE_NUMBER, currentSeqNum);
-            timestamp = txn.commit();
-        CorfuStoreMetadata.Timestamp ts = batchingData(smrEntries, shadowStreamUuid);
-        try (TxnContext txn = metadataManager.getTxnContext()) {
-            ReplicationMetadata metadata = metadataManager.queryReplicationMetadata(txn, session);
-            ReplicationMetadata updatedMetadata = metadata.toBuilder().setLastSnapshotStarted(srcGlobalSnapshot)
-                    .setLastSnapshotTransferredSeqNumber(currentSeqNum)
-                    .build();
-            metadataManager.updateReplicationMetadata(txn, session, updatedMetadata);
             if (!snapshotSyncStartMarker.isPresent()) {
-                metadataManager.setSnapshotSyncStartMarker(txn, session, snapshotSyncId, ts);
+                logReplicationMetadataManager.setSnapshotSyncStartMarker(txn, snapshotSyncId, ts);
                 snapshotSyncStartMarker = Optional.of(new SnapshotSyncStartMarker(snapshotSyncId, ts.getSequence()));
             }
             txn.commit();
         }
-
-        if (!snapshotSyncStartMarker.isPresent()) {
-            try (TxnContext txn = logReplicationMetadataManager.getTxnContext()) {
-                logReplicationMetadataManager.setSnapshotSyncStartMarker(txn, snapshotSyncId, timestamp);
-                snapshotSyncStartMarker = Optional.of(new SnapshotSyncStartMarker(snapshotSyncId, timestamp.getSequence()));
-                txn.commit();
-            }
-        }
-
         log.debug("Process entries total={}, set sequence number {}", smrEntries.size(), currentSeqNum);
     }
 
@@ -512,10 +493,10 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
             // OOM on applications running with a small memory footprint.  So for such tables, introduce an
             // additional limit of max number of entries(50 by default) applied in a single transaction.  This
             // algorithm is in line with the limits imposed in Compaction and Restore workflows.
-            if (bufferSize + smrEntry.getSerializedSize() > replicationContext.getConfig(session).getMaxApplySize()
+            if (bufferSize + smrEntry.getSerializedSize() > logReplicationMetadataManager.getRuntime().getParameters().getMaxWriteSize()
                     || maxEntriesLimitReached(streamId,
                     buffer)) {
-                try (TxnContext txnContext = metadataManager.getTxnContext()) {
+                try (TxnContext txnContext = logReplicationMetadataManager.getTxnContext()) {
                     updateLog(txnContext, buffer, streamId);
                     if (ts == null) {
                         ts = txnContext.commit();
@@ -536,7 +517,7 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
             }
         }
         if (!buffer.isEmpty()) {
-            try (TxnContext txnContext = metadataManager.getTxnContext()) {
+            try (TxnContext txnContext = logReplicationMetadataManager.getTxnContext()) {
                 updateLog(txnContext, buffer, streamId);
                 if (ts == null) {
                     ts = txnContext.commit();
