@@ -345,13 +345,22 @@ public class LogReplicationAckReader {
         this.baseSnapshotTimestamp = baseSnapshotTimestamp;
     }
 
-    public void markSnapshotSyncInfoCompleted() {
+    /**
+     * This method updates the sync status on the Source cluster with:
+     * Sync Type = LOG_ENTRY
+     * Sync Status = ONGOING
+     * Additionally, it updates the timestamp and status of the last completed snapshot sync if
+     * updateSnapshotSyncInfo is true
+     * @param updateSnapshotSyncInfo
+     */
+    public void markLogEntrySyncOngoing(boolean updateSnapshotSyncInfo) {
         try {
             IRetry.build(IntervalRetry.class, () -> {
                 try {
                     lock.lock();
-                    metadataManager.updateSnapshotSyncStatusCompleted(remoteClusterId,
-                            calculateRemainingEntriesToSend(baseSnapshotTimestamp), baseSnapshotTimestamp);
+                    metadataManager.setLogEntrySyncOngoing(remoteClusterId,
+                            calculateRemainingEntriesToSend(baseSnapshotTimestamp), updateSnapshotSyncInfo,
+                            baseSnapshotTimestamp);
                 } catch (TransactionAbortedException tae) {
                     log.error("Error while attempting to markSnapshotSyncInfoCompleted for remote cluster {}.", remoteClusterId, tae);
                     throw new RetryNeededException();

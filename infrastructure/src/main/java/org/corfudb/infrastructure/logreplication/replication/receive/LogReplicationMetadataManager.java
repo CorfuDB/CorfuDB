@@ -497,18 +497,20 @@ public class LogReplicationMetadataManager {
     }
 
     /**
-     * Update replication status table's snapshot sync info as COMPLETED
-     * and update log entry sync status to ONGOING.
+     * Update replication status table's log entry sync as ONGOING.  Additionally, update the snapshot sync info as
+     * COMPLETED if updateSnapshotSyncInfo == true
      *
      * Note: TransactionAbortedException has been handled by upper level.
      *
      * @param clusterId standby cluster id
+     * @param remainingEntriesToSend An estimate of the number of entries remaining to be sent to standby cluster
+     * @param updateSnapshotSyncInfo boolean indicating if last snapshot sync's info must be updated
+     * @param baseSnapshot Corfu log timestamp at which the last snapshot was based
      */
-    public void updateSnapshotSyncStatusCompleted(String clusterId, long remainingEntriesToSend, long baseSnapshot) {
-        Instant time = Instant.now();
-        Timestamp timestamp = Timestamp.newBuilder().setSeconds(time.getEpochSecond())
-                .setNanos(time.getNano()).build();
+    public void setLogEntrySyncOngoing(String clusterId, long remainingEntriesToSend,
+                                       boolean updateSnapshotSyncInfo, long baseSnapshot) {
         ReplicationStatusKey key = ReplicationStatusKey.newBuilder().setClusterId(clusterId).build();
+        ReplicationStatusVal current;
 
         try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
 
@@ -516,33 +518,45 @@ public class LogReplicationMetadataManager {
 
             if (record.getPayload() != null) {
                 ReplicationStatusVal previous = record.getPayload();
-                SnapshotSyncInfo previousSyncInfo = previous.getSnapshotSyncInfo();
 
-                SnapshotSyncInfo currentSyncInfo = previousSyncInfo.toBuilder()
+                if (updateSnapshotSyncInfo) {
+                    SnapshotSyncInfo previousSyncInfo = previous.getSnapshotSyncInfo();
+
+                    Instant time = Instant.now();
+                    Timestamp timestamp = Timestamp.newBuilder().setSeconds(time.getEpochSecond())
+                        .setNanos(time.getNano()).build();
+                    SnapshotSyncInfo currentSyncInfo = previousSyncInfo.toBuilder()
                         .setStatus(SyncStatus.COMPLETED)
                         .setBaseSnapshot(baseSnapshot)
                         .setCompletedTime(timestamp)
                         .build();
 
-                ReplicationStatusVal current = ReplicationStatusVal.newBuilder()
+                    current = ReplicationStatusVal.newBuilder()
                         .setRemainingEntriesToSend(remainingEntriesToSend)
                         .setSyncType(SyncType.LOG_ENTRY)
                         .setStatus(SyncStatus.ONGOING)
                         .setSnapshotSyncInfo(currentSyncInfo)
                         .build();
+                    log.debug("syncStatus :: set snapshot sync to COMPLETED and log entry ONGOING, clusterId: {}," +
+                        " syncInfo: [{}]", clusterId, currentSyncInfo);
+
+                    snapshotSyncTimerSample
+                        .flatMap(sample -> MeterRegistryProvider.getInstance()
+                            .map(registry -> {
+                                Timer timer = registry.timer("logreplication.snapshot.duration");
+                                return sample.stop(timer);
+                            }));
+                } else {
+                    current = ReplicationStatusVal.newBuilder()
+                        .setRemainingEntriesToSend(remainingEntriesToSend)
+                        .setSyncType(SyncType.LOG_ENTRY)
+                        .setStatus(SyncStatus.ONGOING)
+                        .build();
+                    log.debug("syncStatus :: set log entry ONGOING, clusterId: {},", clusterId);
+                }
 
                 txn.putRecord(replicationStatusTable, key, current, null);
                 txn.commit();
-
-                snapshotSyncTimerSample
-                        .flatMap(sample -> MeterRegistryProvider.getInstance()
-                                .map(registry -> {
-                                    Timer timer = registry.timer("logreplication.snapshot.duration");
-                                    return sample.stop(timer);
-                                }));
-
-                log.debug("syncStatus :: set snapshot sync to COMPLETED and log entry ONGOING, clusterId: {}," +
-                                " syncInfo: [{}]", clusterId, currentSyncInfo);
             }
         }
     }
