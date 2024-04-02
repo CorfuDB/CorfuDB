@@ -305,8 +305,8 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         // and then gets updated to ONGOING in entry of InLogEntrySyncState
         SyncStatus replicationSyncStatusAfterEntry = SyncStatus.ONGOING;
         // snapshotInfoSyncStatus (inner) starts as NOT_STARTED by initializeReplicationStatusTable,
-        // and then gets updated to COMPLETED in entry of InLogEntrySyncState
-        SyncStatus snapshotInfoSyncStatusAfterEntry = SyncStatus.COMPLETED;
+        // and does not get updated in entry of InLogEntrySyncState as no snapshot sync has been triggered in the test
+        SyncStatus snapshotInfoSyncStatusAfterEntry = SyncStatus.NOT_STARTED;
 
         Assert.assertEquals(expectedSyncTypes, actualSyncTypes);
         Assert.assertEquals(replicationSyncStatusAfterEntry, actualSyncStatus);
@@ -397,8 +397,9 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         Set<SyncType> expectedSyncTypes = new HashSet<>(Collections.singletonList(SyncType.LOG_ENTRY));
         // Outer sync status should be ongoing for both updates
         Set<SyncStatus> expectedSyncStatus = new HashSet<>(Collections.singletonList(SyncStatus.ONGOING));
-        // Inner sync status should be completed for both updates
-        Set<SyncStatus> expectedSnapshotInfoSyncStatus = new HashSet<>(Collections.singletonList(SyncStatus.COMPLETED));
+        // Inner sync status for the last completed Snapshot Sync should be NOT_STARTED(the initial value on startup
+        // as no snapshot sync has been triggered).
+        Set<SyncStatus> expectedSnapshotInfoSyncStatus = new HashSet<>(Collections.singletonList(SyncStatus.NOT_STARTED));
         Set<SyncType> actualSyncTypes = new HashSet<>();
         Set<SyncStatus> actualSyncStatus = new HashSet<>();
         Set<SyncStatus> actualSnapshotInfoSyncStatus = new HashSet<>();
@@ -509,7 +510,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         // Current SyncStatus for ReplicationInfo should be ONGOING, and SyncStatus
         // for SnapshotSyncInfo should be COMPLETED
         Assert.assertEquals(SyncStatus.ONGOING, currentReplicationVal.getStatus());
-        Assert.assertEquals(SyncStatus.COMPLETED, currentReplicationVal.getSnapshotSyncInfo().getStatus());
+        Assert.assertEquals(SyncStatus.NOT_STARTED, currentReplicationVal.getSnapshotSyncInfo().getStatus());
 
         // Transition #2: Snapshot Sync Request
         transition(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST, LogReplicationStateType.IN_SNAPSHOT_SYNC, true);

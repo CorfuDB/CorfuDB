@@ -516,48 +516,47 @@ public class LogReplicationMetadataManager {
 
             CorfuStoreEntry<ReplicationStatusKey, ReplicationStatusVal, Message> record = txn.getRecord(replicationStatusTable, key);
 
-            if (record.getPayload() != null) {
-                ReplicationStatusVal previous = record.getPayload();
-
-                if (updateSnapshotSyncInfo) {
-                    SnapshotSyncInfo previousSyncInfo = previous.getSnapshotSyncInfo();
-
-                    Instant time = Instant.now();
-                    Timestamp timestamp = Timestamp.newBuilder().setSeconds(time.getEpochSecond())
-                        .setNanos(time.getNano()).build();
-                    SnapshotSyncInfo currentSyncInfo = previousSyncInfo.toBuilder()
-                        .setStatus(SyncStatus.COMPLETED)
-                        .setBaseSnapshot(baseSnapshot)
-                        .setCompletedTime(timestamp)
-                        .build();
-
-                    current = ReplicationStatusVal.newBuilder()
-                        .setRemainingEntriesToSend(remainingEntriesToSend)
-                        .setSyncType(SyncType.LOG_ENTRY)
-                        .setStatus(SyncStatus.ONGOING)
-                        .setSnapshotSyncInfo(currentSyncInfo)
-                        .build();
-                    log.debug("syncStatus :: set snapshot sync to COMPLETED and log entry ONGOING, clusterId: {}," +
-                        " syncInfo: [{}]", clusterId, currentSyncInfo);
-
-                    snapshotSyncTimerSample
-                        .flatMap(sample -> MeterRegistryProvider.getInstance()
-                            .map(registry -> {
-                                Timer timer = registry.timer("logreplication.snapshot.duration");
-                                return sample.stop(timer);
-                            }));
-                } else {
-                    current = ReplicationStatusVal.newBuilder()
-                        .setRemainingEntriesToSend(remainingEntriesToSend)
-                        .setSyncType(SyncType.LOG_ENTRY)
-                        .setStatus(SyncStatus.ONGOING)
-                        .build();
-                    log.debug("syncStatus :: set log entry ONGOING, clusterId: {},", clusterId);
-                }
-
-                txn.putRecord(replicationStatusTable, key, current, null);
-                txn.commit();
+            if (record.getPayload() == null) {
+                return;
             }
+
+            ReplicationStatusVal previous = record.getPayload();
+            SnapshotSyncInfo previousSyncInfo = previous.getSnapshotSyncInfo();
+            SnapshotSyncInfo currentSyncInfo;
+
+            if (updateSnapshotSyncInfo) {
+                Instant time = Instant.now();
+                Timestamp timestamp = Timestamp.newBuilder().setSeconds(time.getEpochSecond())
+                    .setNanos(time.getNano()).build();
+                currentSyncInfo = previousSyncInfo.toBuilder()
+                    .setStatus(SyncStatus.COMPLETED)
+                    .setBaseSnapshot(baseSnapshot)
+                    .setCompletedTime(timestamp)
+                    .build();
+
+                log.debug("syncStatus :: set snapshot sync to COMPLETED and log entry ONGOING, clusterId: {}," +
+                    " syncInfo: [{}]", clusterId, currentSyncInfo);
+
+                snapshotSyncTimerSample
+                    .flatMap(sample -> MeterRegistryProvider.getInstance()
+                        .map(registry -> {
+                            Timer timer = registry.timer("logreplication.snapshot.duration");
+                            return sample.stop(timer);
+                        }));
+            } else {
+                // Retain the existing snapshot sync info
+                currentSyncInfo = previousSyncInfo;
+                log.debug("syncStatus :: set log entry ONGOING, clusterId: {},", clusterId);
+            }
+            current = ReplicationStatusVal.newBuilder()
+                .setRemainingEntriesToSend(remainingEntriesToSend)
+                .setSyncType(SyncType.LOG_ENTRY)
+                .setStatus(SyncStatus.ONGOING)
+                .setSnapshotSyncInfo(currentSyncInfo)
+                .build();
+
+            txn.putRecord(replicationStatusTable, key, current, null);
+            txn.commit();
         }
     }
 
