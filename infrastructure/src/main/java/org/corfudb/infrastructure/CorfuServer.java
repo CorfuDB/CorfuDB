@@ -48,7 +48,7 @@ public class CorfuServer {
     // If set to true - triggers a reset of the server by wiping off all the data.
     private static volatile boolean cleanupServer = false;
     // Error code required to detect an ungraceful shutdown.
-    private static final int EXIT_ERROR_CODE = 100;
+    static final int EXIT_ERROR_CODE = 100;
 
     private static final String DEFAULT_METRICS_LOGGER_NAME = "org.corfudb.metricsdata";
 

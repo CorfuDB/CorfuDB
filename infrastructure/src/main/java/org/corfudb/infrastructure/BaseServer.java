@@ -106,9 +106,7 @@ public class BaseServer extends AbstractServer {
     }
 
     /**
-     * Reset the JVM. This mechanism leverages that corfu_server runs in a bash script
-     * which monitors the exit code of Corfu. If the exit code is 100, then it resets
-     * the server and DELETES ALL EXISTING DATA.
+     * Restart the CorfuServer and reset the server state by DELETING ALL EXISTING DATA.
      *
      * @param req The incoming request message.
      * @param ctx The channel context.
@@ -126,9 +124,7 @@ public class BaseServer extends AbstractServer {
     }
 
     /**
-     * Restart the JVM. This mechanism leverages that corfu_server runs in a bash script
-     * which monitors the exit code of Corfu. If the exit code is 200, then it restarts
-     * the server.
+     * Restart the CorfuServer. Do NOT reset any of the server state.
      *
      * @param req   The incoming request message.
      * @param ctx   The channel context.
