@@ -247,8 +247,8 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
     }
 
     /**
-     * Verify the lastSyncType flag is being initialized properly and SnapshotSyncInfo
-     * reflects accurate sync type for log entry sync.
+     * Verify the lastSyncType flag is being initialized properly and Log Entry and last snapshot sync info
+     * reflect the expected values.
      *
      */
     @Test

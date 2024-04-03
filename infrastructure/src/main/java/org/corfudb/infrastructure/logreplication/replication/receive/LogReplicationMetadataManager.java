@@ -557,6 +557,8 @@ public class LogReplicationMetadataManager {
 
             txn.putRecord(replicationStatusTable, key, current, null);
             txn.commit();
+            log.info("Successfully set Log Entry Sync as ONGOING.  Previous snapshot sync info updated: {}",
+                    updateSnapshotSyncInfo);
         }
     }
 
