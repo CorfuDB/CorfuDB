@@ -9,26 +9,46 @@ import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.collections.CorfuStoreEntry;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
 import org.corfudb.runtime.collections.CorfuStreamEntry;
-import org.corfudb.runtime.collections.StreamListener;
+import org.corfudb.runtime.collections.StreamListenerResumeOrFullSync;
 
+import java.util.Collections;
 import java.util.List;
 
+import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.LR_STREAM_TAG;
+import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.NAMESPACE;
+import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.REPLICATION_EVENT_TABLE_NAME;
+
 @Slf4j
-public final class LogReplicationEventListener implements StreamListener {
+public final class LogReplicationEventListener extends StreamListenerResumeOrFullSync {
     private final CorfuReplicationDiscoveryService discoveryService;
 
     public  LogReplicationEventListener(CorfuReplicationDiscoveryService discoveryService) {
+        super(discoveryService.getLogReplicationMetadataManager().getCorfuStore(), NAMESPACE, LR_STREAM_TAG,
+                Collections.singletonList(REPLICATION_EVENT_TABLE_NAME));
         this.discoveryService = discoveryService;
     }
 
     public void start() {
         // perform full sync before subscribing to the table
+        CorfuStoreMetadata.Timestamp timestamp = performFullSync();
+        discoveryService.getLogReplicationMetadataManager().subscribeReplicationEventTable(this, timestamp);
+    }
+
+    @Override
+    public CorfuStoreMetadata.Timestamp performFullSync() {
+        log.info("Performing full sync of event table");
         Pair<List<CorfuStoreEntry<LogReplicationMetadata.ReplicationEventKey, ReplicationEvent, Message>>, CorfuStoreMetadata.Timestamp> eventsAndSubscriptionTs =
                 discoveryService.getLogReplicationMetadataManager().getReplicationEventTable();
         for(CorfuStoreEntry<LogReplicationMetadata.ReplicationEventKey, ReplicationEvent, Message> event: eventsAndSubscriptionTs.getLeft()) {
+            // The event table only contains force snapshot sync requests.
+            // Incase there are multiple snapshot sync requests already enqueued by now, process any one of them.
+            // Upon successfully processing an event, clear the event table. This ensures that LR doesn't perform
+            // snapshot sync unnecessarily in a loop.
             processEvent(event.getPayload());
+            break;
         }
-        discoveryService.getLogReplicationMetadataManager().subscribeReplicationEventTable(this, eventsAndSubscriptionTs.getValue());
+
+        return eventsAndSubscriptionTs.getRight();
     }
 
     public void stop() {
@@ -75,10 +95,5 @@ public final class LogReplicationEventListener implements StreamListener {
                     event.getClusterId(),
                     event.getEventId()));
         }
-    }
-
-    @Override
-    public void onError(Throwable throwable) {
-        log.error("onError with a throwable ", throwable);
     }
 }
