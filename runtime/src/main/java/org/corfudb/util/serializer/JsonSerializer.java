@@ -8,6 +8,7 @@ import io.netty.buffer.ByteBufOutputStream;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.object.ICorfuSMR;
+import org.corfudb.util.serializer.Serializers.SerializerType;
 
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -21,8 +22,11 @@ import java.util.UUID;
 public class JsonSerializer implements ISerializer {
     private final byte type;
 
-    private static final Gson gson = new GsonBuilder()
-            .create();
+    private static final Gson gson = new GsonBuilder().create();
+
+    public JsonSerializer() {
+        this.type = SerializerType.JSON.toByte();
+    }
 
     public JsonSerializer(byte type) {
         this.type = type;

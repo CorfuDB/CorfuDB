@@ -5,10 +5,12 @@ import com.google.common.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.clients.TestRule;
 import org.corfudb.runtime.collections.PersistedCorfuTable;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
+import org.corfudb.runtime.collections.table.GenericCorfuTable;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.TrimmedException;
@@ -17,6 +19,11 @@ import org.corfudb.runtime.object.PersistenceOptions;
 import org.corfudb.runtime.object.PersistenceOptions.PersistenceOptionsBuilder;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.proto.service.CorfuMessage;
+import org.corfudb.runtime.view.AbstractViewTest;
+import org.corfudb.test.managedtable.ManagedCorfuTable;
+import org.corfudb.test.managedtable.ManagedCorfuTableConfig;
+import org.corfudb.test.managedtable.ManagedCorfuTableSetupManager;
+import org.corfudb.test.managedtable.ManagedRuntime;
 import org.corfudb.util.Sleep;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
@@ -31,146 +38,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/**
- * Created by dmalkhi on 5/25/17.
- */
-@SuppressWarnings("checkstyle:magicnumber")
 @Slf4j
 public class CheckpointTest extends AbstractObjectTest {
-
-    PersistentCorfuTable<String, Long> openTable(CorfuRuntime rt, String tableName) {
-        final byte serializerByte = (byte) 20;
-        ISerializer serializer = new CPSerializer(serializerByte);
-        rt.getSerializers().registerSerializer(serializer);
-        return rt.getObjectsView()
-                .build()
-                .setStreamName(tableName)
-                .setTypeToken(new TypeToken<PersistentCorfuTable<String, Long>>() {})
-                .setSerializer(serializer)
-                .open();
-    }
-
-    @Before
-    public void instantiateMaps() {
-        getDefaultRuntime();
-    }
-
-    final String streamNameA = "mystreamA";
-    final String streamNameB = "mystreamB";
-    final String author = "ckpointTest";
-
-    private CorfuRuntime getNewRuntime() {
-        return getNewRuntime(getDefaultNode()).connect();
-    }
-
-    /**
-     * checkpoint the tables
-     */
-    void mapCkpoint(CorfuRuntime rt, PersistentCorfuTable<?, ?>... tables) throws Exception {
-        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_VERY_LOW; i++) {
-            MultiCheckpointWriter<PersistentCorfuTable<?, ?>> mcw1 = new MultiCheckpointWriter<>();
-            for (PersistentCorfuTable<?, ?> table : tables) {
-                mcw1.addMap(table);
-            }
-
-            mcw1.appendCheckpoints(rt, author);
-        }
-    }
-
-    volatile Token lastValidCheckpoint = Token.UNINITIALIZED;
-
-    /**
-     * checkpoint the tables, and then trim the log
-     */
-    void mapCkpointAndTrim(CorfuRuntime rt, PersistentCorfuTable<?, ?>... tables) throws Exception {
-        Token checkpointAddress = Token.UNINITIALIZED;
-        Token lastCheckpointAddress = Token.UNINITIALIZED;
-
-        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_VERY_LOW; i++) {
-            try {
-                MultiCheckpointWriter<PersistentCorfuTable<?, ?>> mcw1 = new MultiCheckpointWriter<>();
-                for (PersistentCorfuTable<?, ?> table : tables) {
-                    mcw1.addMap(table);
-                }
-
-                checkpointAddress = mcw1.appendCheckpoints(rt, author);
-
-                try {
-                    Thread.sleep(PARAMETERS.TIMEOUT_SHORT.toMillis());
-                } catch (InterruptedException ie) {
-                    //
-                }
-                // Trim the log
-                rt.getAddressSpaceView().prefixTrim(checkpointAddress);
-                rt.getAddressSpaceView().gc();
-                rt.getAddressSpaceView().invalidateServerCaches();
-                rt.getAddressSpaceView().invalidateClientCache();
-                lastCheckpointAddress = checkpointAddress;
-                lastValidCheckpoint = checkpointAddress;
-            } catch (TrimmedException te) {
-                // shouldn't happen
-                te.printStackTrace();
-                throw te;
-            } catch (Exception e) {
-                // We are the only thread performing trimming, therefore any
-                // prior trim must have been by our own action.  We assume
-                // that we don't go backward, so checking for equality will
-                // catch violations of that assumption.
-                assertThat(checkpointAddress).isEqualTo(lastCheckpointAddress);
-            }
-        }
-    }
-
-    /**
-     * Start a fresh runtime and instantiate the maps.
-     * This time the we check that the new map instances contains all values
-     *
-     * @param tableSize
-     * @param expectedFullsize
-     */
-    void validateMapRebuild(int tableSize, boolean expectedFullsize, boolean trimCanHappen) {
-        CorfuRuntime rt = getNewRuntime();
-        try {
-            PersistentCorfuTable<String, Long> localm2A = openTable(rt, streamNameA);
-            PersistentCorfuTable<String, Long> localm2B = openTable(rt, streamNameB);
-            for (int i = 0; i < localm2A.size(); i++) {
-                assertThat(localm2A.get(String.valueOf(i))).isEqualTo(i);
-            }
-            for (int i = 0; i < localm2B.size(); i++) {
-                assertThat(localm2B.get(String.valueOf(i))).isEqualTo(0L);
-            }
-            if (expectedFullsize) {
-                assertThat(localm2A.size()).isEqualTo(tableSize);
-                assertThat(localm2B.size()).isEqualTo(tableSize);
-            }
-        } catch (TrimmedException te) {
-            if (!trimCanHappen) {
-                // shouldn't happen
-                te.printStackTrace();
-                throw te;
-            }
-        } finally {
-            rt.shutdown();
-        }
-    }
-
-    /**
-     * initialize the two tables, the second one is all zeros
-     *
-     * @param tableSize
-     */
-    void populateMaps(int tableSize, PersistentCorfuTable<String, Long> table1, PersistentCorfuTable<String, Long> table2) {
-        for (int i = 0; i < tableSize; i++) {
-            try {
-                table1.insert(String.valueOf(i), (long) i);
-                table2.insert(String.valueOf(i), (long) 0);
-            } catch (TrimmedException te) {
-                // shouldn't happen
-                te.printStackTrace();
-                throw te;
-            }
-        }
-    }
 
     /**
      * this test builds two maps, m2A m2B, and brings up three threads:
@@ -184,41 +53,84 @@ public class CheckpointTest extends AbstractObjectTest {
      * Finally, after all three threads finish, again we start a fresh runtime and instantiate the maps.
      * This time the we check that the new map instances contains all values
      *
-     * @throws Exception
+     * @throws Exception exception
      */
     @Test
-    public void periodicCkpointTest() throws Exception {
+    public void periodicCkPointTest() throws Exception {
+        CorfuRuntimeParameters rtParams = CorfuRuntimeParameters
+                .builder()
+                .maxMvoCacheEntries(AbstractViewTest.MVO_CACHE_SIZE)
+                .build();
+        ManagedRuntime managedRt = ManagedRuntime.from(rtParams);
+        managedRt.setup(rt -> rt.parseConfigurationString(getDefaultNode().toEndpointUrl()));
+
         final int tableSize = PARAMETERS.NUM_ITERATIONS_LOW;
-        CorfuRuntime rt = getNewRuntime();
+        //CorfuRuntime rt = getNewRuntime();
 
-        PersistentCorfuTable<String, Long> tableA = openTable(rt, streamNameA);
-        PersistentCorfuTable<String, Long> tableB = openTable(rt, streamNameB);
+        ManagedCorfuTableConfig<String, Long> cfg = new ManagedCorfuTableConfig() {
+            @Override
+            public void configure(CorfuRuntime rt) throws Exception {
+                final byte serializerByte = (byte) 20;
+                ISerializer serializer = new CPSerializer(serializerByte);
+                rt.getSerializers().registerSerializer(serializer);
+            }
 
-        // thread 1: populates the maps with mapSize items
-        scheduleConcurrently(1, ignored_task_num -> {
-            populateMaps(tableSize, tableA, tableB);
-        });
+            @Override
+            public ISerializer getSerializer(CorfuRuntime rt) {
+                return null;
+            }
 
-        // thread 2: periodic checkpoint of the maps, repeating ITERATIONS_VERY_LOW times
-        // thread 1: perform a periodic checkpoint of the maps, repeating ITERATIONS_VERY_LOW times
-        scheduleConcurrently(1, ignored_task_num -> {
-            mapCkpoint(rt, tableA, tableB);
-        });
+            @Override
+            public String getFullyQualifiedTableName() {
+                return null;
+            }
 
-        // thread 3: repeated ITERATION_LOW times starting a fresh runtime, and instantiating the maps.
-        // they should rebuild from the latest checkpoint (if available).
-        // performs some sanity checks on the map state
-        scheduleConcurrently(PARAMETERS.NUM_ITERATIONS_LOW, ignored_task_num -> {
-            validateMapRebuild(tableSize, false, false);
-        });
+            @Override
+            public String getTableName() {
+                return null;
+            }
+        };
 
-        executeScheduled(PARAMETERS.CONCURRENCY_SOME, PARAMETERS.TIMEOUT_LONG);
+        ManagedCorfuTable
+                .<String, Long>build()
+                .config(cfg)
+                .managedRt(managedRt)
+                .tableSetup(ManagedCorfuTableSetupManager.persistedPlainCorfu())
+                .execute(ctxA -> {
+                    ManagedCorfuTable
+                            .<String, Long>build()
+                            .config(cfg)
+                            .managedRt(managedRt)
+                            .tableSetup(ManagedCorfuTableSetupManager.persistedPlainCorfu())
+                            .execute(ctxB -> {
+                                GenericCorfuTable<?, String, Long> tableA = ctxA.getCorfuTable();
+                                GenericCorfuTable<?, String, Long> tableB = ctxB.getCorfuTable();
 
-        // finally, after all three threads finish, again we start a fresh runtime and instantiate the maps.
-        // This time the we check that the new map instances contains all values
-        validateMapRebuild(tableSize, true, false);
+                                // thread 1: populates the maps with mapSize items
+                                scheduleConcurrently(1, ignored_task_num -> {
+                                    populateMaps(tableSize, tableA, tableB);
+                                });
 
-        rt.shutdown();
+                                // thread 2: periodic checkpoint of the maps, repeating ITERATIONS_VERY_LOW times
+                                // thread 1: perform a periodic checkpoint of the maps, repeating ITERATIONS_VERY_LOW times
+                                scheduleConcurrently(1, ignored_task_num -> {
+                                    mapCkpoint(ctxA.getRt(), tableA, tableB);
+                                });
+
+                                // thread 3: repeated ITERATION_LOW times starting a fresh runtime, and instantiating the maps.
+                                // they should rebuild from the latest checkpoint (if available).
+                                // performs some sanity checks on the map state
+                                scheduleConcurrently(PARAMETERS.NUM_ITERATIONS_LOW, ignored_task_num -> {
+                                    validateMapRebuild(tableSize, false, false);
+                                });
+
+                                executeScheduled(PARAMETERS.CONCURRENCY_SOME, PARAMETERS.TIMEOUT_LONG);
+
+                                // finally, after all three threads finish, again we start a fresh runtime and instantiate the maps.
+                                // This time the we check that the new map instances contains all values
+                                validateMapRebuild(tableSize, true, false);
+                            });
+                });
     }
 
     /**
@@ -231,7 +143,7 @@ public class CheckpointTest extends AbstractObjectTest {
      * Finally, after the two threads finish, again we start a fresh runtime and instantiate the maps.
      * Then verify they are empty.
      *
-     * @throws Exception
+     * @throws Exception exception
      */
     @Test
     public void emptyCkpointTest() throws Exception {
@@ -298,7 +210,7 @@ public class CheckpointTest extends AbstractObjectTest {
     }
 
     @Test
-    public void emptyCkpointTest2() throws Exception {
+    public void emptyCkPointTest2() throws Exception {
         CorfuRuntime rt = getNewRuntime();
         rt.shutdown();
     }
@@ -318,7 +230,7 @@ public class CheckpointTest extends AbstractObjectTest {
      * Finally, after all three threads finish, again we start a fresh runtime and instantiate the maps.
      * This time the we check that the new map instances contains all values
      *
-     * @throws Exception
+     * @throws Exception exception
      */
     @Test
     public void periodicCkpointNoUpdatesTest() throws Exception {
@@ -367,7 +279,7 @@ public class CheckpointTest extends AbstractObjectTest {
      * Finally, after all three threads finish, again we start a fresh runtime and instantiate the maps.
      * This time the we check that the new map instances contains all values
      *
-     * @throws Exception
+     * @throws Exception exception
      */
 
     @Test
@@ -387,7 +299,7 @@ public class CheckpointTest extends AbstractObjectTest {
             // thread 2: periodic checkpoint of the maps, repeating ITERATIONS_VERY_LOW times,
             // and immediate prefix-trim of the log up to the checkpoint position
             scheduleConcurrently(1, ignored_task_num -> {
-                mapCkpointAndTrim(rt, tableA, tableB);
+                mapCkPointAndTrim(rt, tableA, tableB);
             });
 
             // thread 3: repeated ITERATION_LOW times starting a fresh runtime, and instantiating the maps.
@@ -418,7 +330,7 @@ public class CheckpointTest extends AbstractObjectTest {
      * when the prefix trim message has not reached the sequencer but yet addresses
      * have been actually trimmed from the log.
      *
-     * @throws Exception
+     * @throws Exception exception
      */
     @Test
     public void prefixTrimNotReachingSequencer() throws Exception {
@@ -443,7 +355,7 @@ public class CheckpointTest extends AbstractObjectTest {
             // thread 2: periodic checkpoint of the maps, repeating ITERATIONS_VERY_LOW times,
             // and immediate prefix-trim of the log up to the checkpoint position
             scheduleConcurrently(1, ignored_task_num -> {
-                mapCkpointAndTrim(rt, tableA, tableB);
+                mapCkPointAndTrim(rt, tableA, tableB);
             });
 
             // thread 3: repeated ITERATION_LOW times starting a fresh runtime, and instantiating the maps.
@@ -743,7 +655,7 @@ public class CheckpointTest extends AbstractObjectTest {
             }
             assertThat(table.size()).isEqualTo(numKeys);
 
-            MultiCheckpointWriter mcw = new MultiCheckpointWriter();
+            MultiCheckpointWriter<PersistedCorfuTable<String, String>> mcw = new MultiCheckpointWriter<>();
             mcw.addMap(table);
             Token token = mcw.appendCheckpoints(rt, "Author1");
             rt.getAddressSpaceView().prefixTrim(token);
@@ -814,7 +726,7 @@ public class CheckpointTest extends AbstractObjectTest {
                     .open()) {
 
                 for (int y = 0; y < 3; y++) {
-                    MultiCheckpointWriter mcw = new MultiCheckpointWriter();
+                    MultiCheckpointWriter<PersistedCorfuTable<String, String>> mcw = new MultiCheckpointWriter<>();
                     mcw.addMap(tableRef2);
                     Token token = mcw.appendCheckpoints(cpRt, "cp");
                     cpRt.getAddressSpaceView().prefixTrim(token);
@@ -830,6 +742,140 @@ public class CheckpointTest extends AbstractObjectTest {
             // Validate that table operations can still be performed correctly without crashing/exceptions.
             assertThat(tableRef.size()).isEqualTo(numKeys);
             rt.shutdown();
+        }
+    }
+
+    PersistentCorfuTable<String, Long> openTable(CorfuRuntime rt, String tableName) {
+        final byte serializerByte = (byte) 20;
+        ISerializer serializer = new CPSerializer(serializerByte);
+        rt.getSerializers().registerSerializer(serializer);
+        return rt.getObjectsView()
+                .build()
+                .setStreamName(tableName)
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, Long>>() {})
+                .setSerializer(serializer)
+                .open();
+    }
+
+    @Before
+    public void instantiateMaps() {
+        getDefaultRuntime();
+    }
+
+    final String streamNameA = "mystreamA";
+    final String streamNameB = "mystreamB";
+    final String author = "ckpointTest";
+
+    private CorfuRuntime getNewRuntime() {
+        return getNewRuntime(getDefaultNode()).connect();
+    }
+
+    /**
+     * checkpoint the tables
+     */
+    void mapCkpoint(CorfuRuntime rt, GenericCorfuTable<?, ?, ?>... tables) throws Exception {
+        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_VERY_LOW; i++) {
+            MultiCheckpointWriter<GenericCorfuTable<?, ?, ?>> mcw1 = new MultiCheckpointWriter<>();
+            for (GenericCorfuTable<?, ?, ?> table : tables) {
+                mcw1.addMap(table);
+            }
+
+            mcw1.appendCheckpoints(rt, author);
+        }
+    }
+
+    volatile Token lastValidCheckpoint = Token.UNINITIALIZED;
+
+    /**
+     * checkpoint the tables, and then trim the log
+     */
+    void mapCkPointAndTrim(CorfuRuntime rt, PersistentCorfuTable<?, ?>... tables) throws Exception {
+        Token checkpointAddress = Token.UNINITIALIZED;
+        Token lastCheckpointAddress = Token.UNINITIALIZED;
+
+        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_VERY_LOW; i++) {
+            try {
+                MultiCheckpointWriter<PersistentCorfuTable<?, ?>> mcw1 = new MultiCheckpointWriter<>();
+                for (PersistentCorfuTable<?, ?> table : tables) {
+                    mcw1.addMap(table);
+                }
+
+                checkpointAddress = mcw1.appendCheckpoints(rt, author);
+
+                try {
+                    Thread.sleep(PARAMETERS.TIMEOUT_SHORT.toMillis());
+                } catch (InterruptedException ie) {
+                    //
+                }
+                // Trim the log
+                rt.getAddressSpaceView().prefixTrim(checkpointAddress);
+                rt.getAddressSpaceView().gc();
+                rt.getAddressSpaceView().invalidateServerCaches();
+                rt.getAddressSpaceView().invalidateClientCache();
+                lastCheckpointAddress = checkpointAddress;
+                lastValidCheckpoint = checkpointAddress;
+            } catch (TrimmedException te) {
+                // shouldn't happen
+                te.printStackTrace();
+                throw te;
+            } catch (Exception e) {
+                // We are the only thread performing trimming, therefore any
+                // prior trim must have been by our own action.  We assume
+                // that we don't go backward, so checking for equality will
+                // catch violations of that assumption.
+                assertThat(checkpointAddress).isEqualTo(lastCheckpointAddress);
+            }
+        }
+    }
+
+    /**
+     * Start a fresh runtime and instantiate the maps.
+     * This time the we check that the new map instances contains all values
+     *
+     * @param tableSize table size
+     * @param expectedFullsize expected size
+     */
+    void validateMapRebuild(int tableSize, boolean expectedFullsize, boolean trimCanHappen) {
+        CorfuRuntime rt = getNewRuntime();
+        try {
+            PersistentCorfuTable<String, Long> localm2A = openTable(rt, streamNameA);
+            PersistentCorfuTable<String, Long> localm2B = openTable(rt, streamNameB);
+            for (int i = 0; i < localm2A.size(); i++) {
+                assertThat(localm2A.get(String.valueOf(i))).isEqualTo(i);
+            }
+            for (int i = 0; i < localm2B.size(); i++) {
+                assertThat(localm2B.get(String.valueOf(i))).isEqualTo(0L);
+            }
+            if (expectedFullsize) {
+                assertThat(localm2A.size()).isEqualTo(tableSize);
+                assertThat(localm2B.size()).isEqualTo(tableSize);
+            }
+        } catch (TrimmedException te) {
+            if (!trimCanHappen) {
+                // shouldn't happen
+                te.printStackTrace();
+                throw te;
+            }
+        } finally {
+            rt.shutdown();
+        }
+    }
+
+    /**
+     * initialize the two tables, the second one is all zeros
+     *
+     * @param tableSize table size
+     */
+    void populateMaps(int tableSize, GenericCorfuTable<?, String, Long> table1, GenericCorfuTable<?, String, Long> table2) {
+        for (int i = 0; i < tableSize; i++) {
+            try {
+                table1.insert(String.valueOf(i), (long) i);
+                table2.insert(String.valueOf(i), (long) 0);
+            } catch (TrimmedException te) {
+                // shouldn't happen
+                te.printStackTrace();
+                throw te;
+            }
         }
     }
 }

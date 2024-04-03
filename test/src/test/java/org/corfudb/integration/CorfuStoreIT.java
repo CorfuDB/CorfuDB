@@ -12,7 +12,6 @@ import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CompactorMetadataTables;
 import org.corfudb.runtime.CorfuOptions;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
 import org.corfudb.runtime.ExampleSchemas;
@@ -32,7 +31,6 @@ import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TableParameters;
 import org.corfudb.runtime.collections.TxnContext;
-import org.corfudb.runtime.collections.corfutable.GetVersionedObjectOptimizationSpec;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.SerializerException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
@@ -43,13 +41,12 @@ import org.corfudb.runtime.view.ObjectOpenOption;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.runtime.view.TableRegistry;
-import org.corfudb.runtime.view.TableRegistry.TableDescriptor;
-import org.corfudb.test.CacheSizeForTest;
 import org.corfudb.test.SampleSchema;
 import org.corfudb.test.SampleSchema.ManagedResources;
 import org.corfudb.test.TestSchema.Uuid;
 import org.corfudb.test.managedtable.ManagedCorfuTable;
 import org.corfudb.test.managedtable.ManagedCorfuTable.ManagedCorfuTableConfig;
+import org.corfudb.test.managedtable.ManagedCorfuTableConfig.ManagedCorfuTableProtobufConfig;
 import org.corfudb.test.managedtable.ManagedCorfuTableSetupManager;
 import org.corfudb.test.managedtable.ManagedRuntime;
 import org.corfudb.util.serializer.DynamicProtobufSerializer;
@@ -58,8 +55,6 @@ import org.corfudb.util.serializer.ProtobufSerializer;
 import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
-import org.junit.jupiter.api.DynamicTest;
-import org.junit.jupiter.api.TestFactory;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -83,15 +78,12 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.corfudb.runtime.view.ObjectsView.LOG_REPLICATOR_STREAM_INFO;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 import static org.corfudb.runtime.view.TableRegistry.getFullyQualifiedTableName;
-import static org.corfudb.test.RtParamsForTest.getLargeRtParams;
-import static org.corfudb.test.RtParamsForTest.getSmallRtParams;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.spy;
@@ -158,14 +150,14 @@ public class CorfuStoreIT extends AbstractIT {
                 .withCacheDisabled()
                 .setup(rt -> rt.parseConfigurationString(singleNodeEndpoint));
 
-        ManagedCorfuTableConfig<Uuid, ExampleValue, ManagedMetadata> cfg = ManagedCorfuTableConfig
+        ManagedCorfuTableProtobufConfig<Uuid, ExampleValue, ManagedMetadata> cfg = ManagedCorfuTableProtobufConfig
                 .buildExampleVal(tableCfg -> {});
 
-        ManagedCorfuTable<Uuid, ExampleValue, ManagedMetadata> managedTable = ManagedCorfuTable
-                .<Uuid, ExampleValue, ManagedMetadata>build()
+        ManagedCorfuTable<Uuid, ExampleValue> managedTable = ManagedCorfuTable
+                .<Uuid, ExampleValue>build()
                 .config(cfg)
                 .managedRt(managedRt)
-                .tableSetup(ManagedCorfuTableSetupManager.persistentCorfu());
+                .tableSetup(ManagedCorfuTableSetupManager.persistentProtobufCorfu());
 
         managedTable.execute((runtime, corfuTable) -> {
             CorfuStore store = new CorfuStore(runtime);

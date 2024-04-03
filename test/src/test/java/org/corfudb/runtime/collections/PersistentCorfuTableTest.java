@@ -1,7 +1,5 @@
 package org.corfudb.runtime.collections;
 
-import com.google.protobuf.Message;
-import lombok.AllArgsConstructor;
 import org.apache.commons.lang3.tuple.Pair;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
@@ -335,7 +333,7 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
 
         ManagedCorfuTable
                 .from(cfg, ManagedRuntime.from(getSmallRtParams()))
-                .tableSetup(ManagedCorfuTableSetupManager.persistentCorfu())
+                .tableSetup(ManagedCorfuTableSetupManager.persistentProtobufCorfu())
                 .execute((rt, corfuTable) -> {
                     ManagedMetadata user_1 = ManagedMetadata.newBuilder().setCreateUser("user_1").build();
 
@@ -400,7 +398,7 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
                             .build()
                     )
                     .tableSetup(new ManagedCorfuTableSetupManager<ExampleSchemas.Uuid, ExampleValue, ManagedMetadata>()
-                            .getPersistentCorfu()
+                            .getPersistentProtobufCorfu()
                     )
                     .build()
                     .execute(corfuTable -> {
@@ -461,7 +459,7 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
                             .build()
                     )
                     .tableSetup(new ManagedCorfuTableSetupManager<ExampleSchemas.Uuid, ExampleValue, ManagedMetadata>()
-                            .getPersistentCorfu()
+                            .getPersistentProtobufCorfu()
                     )
                     .build()
                     .execute(table -> {
@@ -642,7 +640,7 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
                             .build()
                     )
                     .tableSetup(new ManagedCorfuTableSetupManager<Uuid, Company, ManagedMetadata>()
-                            .getPersistentCorfu()
+                            .getPersistentProtobufCorfu()
                     )
                     .build()
                     .execute(table -> {
@@ -767,7 +765,7 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
                             .build()
                     )
                     .tableSetup(new ManagedCorfuTableSetupManager<Uuid, Person, ManagedMetadata>()
-                            .getPersistentCorfu()
+                            .getPersistentProtobufCorfu()
                     )
                     .build()
                     .execute(table -> {
@@ -834,7 +832,7 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
                             .build()
                     )
                     .tableSetup(new ManagedCorfuTableSetupManager<Uuid, Office, ManagedMetadata>()
-                            .getPersistentCorfu()
+                            .getPersistentProtobufCorfu()
                     )
                     .build()
                     .execute(table -> {
@@ -922,7 +920,7 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
                             .build()
                     )
                     .tableSetup(new ManagedCorfuTableSetupManager<Uuid, Adult, ManagedMetadata>()
-                            .getPersistentCorfu()
+                            .getPersistentProtobufCorfu()
                     )
                     .build()
                     .execute(table -> {
@@ -1025,7 +1023,7 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
                             .build()
                     )
                     .tableSetup(new ManagedCorfuTableSetupManager<Uuid, SportsProfessional, ManagedMetadata>()
-                            .getPersistentCorfu()
+                            .getPersistentProtobufCorfu()
                     )
                     .build()
                     .execute(table -> {
@@ -1302,6 +1300,6 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
                 .<Uuid, Uuid, Uuid>build()
                 .config(ManagedCorfuTableConfig.buildUuid())
                 .managedRt(managedRt)
-                .tableSetup(ManagedCorfuTableSetupManager.persistentCorfu());
+                .tableSetup(ManagedCorfuTableSetupManager.persistentProtobufCorfu());
     }
 }

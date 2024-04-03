@@ -2,6 +2,7 @@ package org.corfudb.runtime.collections;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.reflect.TypeToken;
+import org.corfudb.common.util.ClassUtils;
 import org.corfudb.runtime.collections.table.GenericCorfuTable;
 import org.corfudb.runtime.object.ICorfuSMRProxy;
 import org.corfudb.runtime.object.ICorfuSMRUpcallTarget;
@@ -17,9 +18,9 @@ public class PersistentCorfuTable<K, V> implements GenericCorfuTable<ImmutableCo
 
     private final Map<String, ICorfuSMRUpcallTarget<ImmutableCorfuTable<K, V>>> upcallTargetMap
         = ImmutableMap.<String, ICorfuSMRUpcallTarget<ImmutableCorfuTable<K, V>>>builder()
-            .put("put", (obj, args) -> obj.put((K) args[0], (V) args[1]))
+            .put("put", (obj, args) -> obj.put(ClassUtils.cast(args[0]), ClassUtils.cast(args[1])))
             .put("clear", (obj, args) -> obj.clear())
-            .put("remove", (obj, args) -> obj.remove((K) args[0]))
+            .put("remove", (obj, args) -> obj.remove(ClassUtils.cast(args[0])))
             .build();
 
     public static <K, V> TypeToken<PersistentCorfuTable<K, V>> getTypeToken() {
@@ -72,7 +73,7 @@ public class PersistentCorfuTable<K, V> implements GenericCorfuTable<ImmutableCo
     @Override
     public V get(@Nonnull Object key) {
         Object[] conflictField = new Object[]{key};
-        return proxy.access(corfuSmr -> corfuSmr.get((K)key), conflictField);
+        return proxy.access(corfuSmr -> corfuSmr.get(ClassUtils.cast(key)), conflictField);
     }
 
     @Override
@@ -88,7 +89,7 @@ public class PersistentCorfuTable<K, V> implements GenericCorfuTable<ImmutableCo
     @Override
     public boolean containsKey(@Nonnull Object key) {
         Object[] conflictField = new Object[]{key};
-        return proxy.access(corfuSmr -> corfuSmr.containsKey((K)key), conflictField);
+        return proxy.access(corfuSmr -> corfuSmr.containsKey(ClassUtils.cast(key)), conflictField);
     }
 
     @Override

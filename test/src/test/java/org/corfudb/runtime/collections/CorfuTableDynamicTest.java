@@ -8,7 +8,8 @@ import org.corfudb.runtime.collections.corfutable.MultiRuntimeSpec;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.test.CorfuTableSpec;
 import org.corfudb.test.managedtable.ManagedCorfuTable;
-import org.corfudb.test.managedtable.ManagedCorfuTable.ManagedCorfuTableConfig;
+import org.corfudb.test.managedtable.ManagedCorfuTableConfig;
+import org.corfudb.test.managedtable.ManagedCorfuTableConfig.ManagedCorfuTableProtobufConfig;
 import org.corfudb.test.managedtable.ManagedCorfuTableSetupManager;
 import org.corfudb.test.managedtable.ManagedCorfuTableSetupManager.ManagedCorfuTableSetup;
 import org.corfudb.test.managedtable.ManagedRuntime;
@@ -27,7 +28,7 @@ public class CorfuTableDynamicTest extends AbstractViewTest {
         addSingleServer(SERVERS.PORT_0);
         return dynamicTest(
                 getLargeRtParams(),
-                ManagedCorfuTableConfig.buildUuid(),
+                ManagedCorfuTableProtobufConfig.buildUuid(),
                 new GetVersionedObjectOptimizationSpec()
         );
     }
@@ -37,7 +38,7 @@ public class CorfuTableDynamicTest extends AbstractViewTest {
         addSingleServer(SERVERS.PORT_0);
         return dynamicTest(
                 getLargeRtParams(),
-                ManagedCorfuTableConfig.buildUuid(),
+                ManagedCorfuTableProtobufConfig.buildUuid(),
                 new MultiRuntimeSpec()
         );
     }
@@ -45,13 +46,13 @@ public class CorfuTableDynamicTest extends AbstractViewTest {
     private <K extends Message, V extends Message, M extends Message>
     Stream<DynamicTest> dynamicTest(
             CorfuRuntimeParameters rtParams,
-            ManagedCorfuTableConfig<K, V, M> cfg,
-            CorfuTableSpec<K, V, M> spec
+            ManagedCorfuTableConfig<K, V> cfg,
+            CorfuTableSpec<K, V> spec
     ) {
 
-        List<ManagedCorfuTableSetup<K, V, M>> tables = ImmutableList.of(
-                ManagedCorfuTableSetupManager.persistentCorfu(),
-                ManagedCorfuTableSetupManager.persistedCorfu()
+        List<ManagedCorfuTableSetup<K, V>> tables = ImmutableList.of(
+                ManagedCorfuTableSetupManager.persistentProtobufCorfu(),
+                ManagedCorfuTableSetupManager.persistedProtobufCorfu()
         );
 
         return tables.stream()
@@ -60,8 +61,8 @@ public class CorfuTableDynamicTest extends AbstractViewTest {
                                     .from(rtParams)
                                     .setup(rt -> rt.parseConfigurationString(getDefaultConfigurationString()));
 
-                            ManagedCorfuTable<K, V, M> managedTable = ManagedCorfuTable
-                                    .<K, V, M>build()
+                            ManagedCorfuTable<K, V> managedTable = ManagedCorfuTable
+                                    .<K, V>build()
                                     .config(cfg)
                                     .managedRt(managedRt)
                                     .tableSetup(tableSetup);

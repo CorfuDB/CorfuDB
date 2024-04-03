@@ -3,6 +3,7 @@ package org.corfudb.util.serializer;
 import io.netty.buffer.ByteBuf;
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.util.serializer.Serializers.SerializerType;
 
 /**
  * Created by mwei on 9/29/15.
@@ -13,6 +14,10 @@ public class CorfuSerializer implements ISerializer {
 
     /* The magic that denotes this is a corfu payload */
     public static final byte corfuPayloadMagic = 0x42;
+
+    public CorfuSerializer() {
+        this.type = SerializerType.CORFU.toByte();
+    }
 
     public CorfuSerializer(byte type) {
         this.type = type;

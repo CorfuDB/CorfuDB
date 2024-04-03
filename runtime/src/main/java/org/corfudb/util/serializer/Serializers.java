@@ -1,6 +1,7 @@
 package org.corfudb.util.serializer;
 
 import com.google.common.annotations.VisibleForTesting;
+import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.exceptions.SerializerException;
@@ -19,11 +20,11 @@ import java.util.concurrent.ConcurrentMap;
 public class Serializers {
 
     public static final int SYSTEM_SERIALIZERS_COUNT = 10;
-    public static final CorfuSerializer CORFU = new CorfuSerializer((byte) 0);
-    public static final JavaSerializer JAVA = new JavaSerializer((byte) 1);
-    public static final JsonSerializer JSON = new JsonSerializer((byte) 2);
-    public static final PrimitiveSerializer PRIMITIVE = new PrimitiveSerializer((byte) 3);
-    public static final CorfuQueueSerializer QUEUE_SERIALIZER = new CorfuQueueSerializer((byte) 4);
+    public static final CorfuSerializer CORFU = new CorfuSerializer();
+    public static final JavaSerializer JAVA = new JavaSerializer();
+    public static final JsonSerializer JSON = new JsonSerializer();
+    public static final PrimitiveSerializer PRIMITIVE = new PrimitiveSerializer();
+    public static final CorfuQueueSerializer QUEUE_SERIALIZER = new CorfuQueueSerializer();
 
     public static final Map<Byte, ISerializer> serializersMap;
 
@@ -95,5 +96,20 @@ public class Serializers {
     @VisibleForTesting
     public synchronized void removeSerializer(ISerializer serializer) {
         customSerializers.remove(serializer.getType());
+    }
+
+    @AllArgsConstructor
+    public enum SerializerType {
+        CORFU((byte)0),
+        JAVA((byte) 1),
+        JSON((byte) 2),
+        PRIMITIVE((byte) 3),
+        QUEUE((byte) 4);
+
+        private final byte serializerType;
+
+        public byte toByte() {
+            return serializerType;
+        }
     }
 }
