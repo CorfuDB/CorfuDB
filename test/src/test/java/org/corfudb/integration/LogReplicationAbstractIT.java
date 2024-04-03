@@ -1,5 +1,6 @@
 package org.corfudb.integration;
 
+import com.google.protobuf.Message;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.CorfuInterClusterReplicationServer;
@@ -60,6 +61,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.REPLICATION_EVENT_TABLE_NAME;
 import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.REPLICATION_STATUS_TABLE;
 import static org.junit.Assert.fail;
 
@@ -151,23 +153,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
             log.debug("Wait ... Delta log replication in progress ...");
             verifyDataOnStandbyNonUFO((numWrites + (numWrites / 2)));
         } finally {
-            executorService.shutdownNow();
-
-            if (activeCorfu != null) {
-                activeCorfu.destroy();
-            }
-
-            if (standbyCorfu != null) {
-                standbyCorfu.destroy();
-            }
-
-            if (activeReplicationServer != null) {
-                activeReplicationServer.destroy();
-            }
-
-            if (standbyReplicationServer != null) {
-                standbyReplicationServer.destroy();
-            }
+            tearDown();
         }
 
     }
@@ -256,23 +242,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
             }
 
         } finally {
-            executorService.shutdownNow();
-
-            if (activeCorfu != null) {
-                activeCorfu.destroy();
-            }
-
-            if (standbyCorfu != null) {
-                standbyCorfu.destroy();
-            }
-
-            if (activeReplicationServer != null) {
-                activeReplicationServer.destroy();
-            }
-
-            if (standbyReplicationServer != null) {
-                standbyReplicationServer.destroy();
-            }
+            tearDown();
         }
     }
 
@@ -321,6 +291,169 @@ public class LogReplicationAbstractIT extends AbstractIT {
         }
 
         assertThat(replicationStatusVal.getRemainingEntriesToSend()).isEqualTo(0);
+    }
+
+    /**
+     * This test verifies that the eventListener is resubscribed correctly when the streaming layer encounters an error.
+     * 1. Validate that the setup created is stable by validating the snapshot_sync data
+     * 2. Add a valid force snapshot_sync event in the event Table.
+     * 3. Ensure that the snapshot sync was completed for the event and the event is effectively removed once processed
+     * 4. Add an invalid record to the event table. This makes the eventListener in LR stall by repeatedly trying to
+     * read the invalid record and encountering an error.
+     * While LR is in that state, delete theinvalid event and run the CP/trim twice. This results in the listener
+     * hitting the Trimmed Exception.
+     * 5. Write a valid force snapshot_sync event in the event Table.
+     * A successful snapshot sync indicates that the eventListener was able to resubscribe to the eventTable even after encountering few errors.
+     */
+    protected void testEventListenerEndToEnd(int totalNumMaps) throws Exception {
+        // For the purpose of this test, standby should only update status 2 times:
+        // (1) When starting snapshot sync apply : is_data_consistent = false
+        // (2) When completing snapshot sync apply : is_data_consistent = true
+        final int totalStandbyStatusUpdates = 2;
+
+        try {
+            log.info(">> Setup active and standby Corfu's");
+            setupActiveAndStandbyCorfu();
+
+            // Subscribe to replication status table on Standby (to be sure data change on status are captured)
+            corfuStoreStandby.openTable(LogReplicationMetadataManager.NAMESPACE,
+                    REPLICATION_STATUS_TABLE,
+                    LogReplicationMetadata.ReplicationStatusKey.class,
+                    LogReplicationMetadata.ReplicationStatusVal.class,
+                    null,
+                    TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
+
+            Table<LogReplicationMetadata.ReplicationEventKey, LogReplicationMetadata.ReplicationEvent, Message> replicationEventTable =
+                    corfuStoreActive.openTable(LogReplicationMetadataManager.NAMESPACE,
+                    REPLICATION_EVENT_TABLE_NAME,
+                    LogReplicationMetadata.ReplicationEventKey.class,
+                    LogReplicationMetadata.ReplicationEvent.class,
+                    null,
+                    TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationEvent.class));
+
+            CountDownLatch statusUpdateLatch = new CountDownLatch(totalStandbyStatusUpdates);
+            ReplicationStatusListener standbyListener = new ReplicationStatusListener(statusUpdateLatch, false);
+            corfuStoreStandby.subscribeListener(standbyListener, LogReplicationMetadataManager.NAMESPACE,
+                    LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
+
+            log.info(">> Open map(s) on active and standby");
+            openMaps(totalNumMaps, false);
+
+            log.info(">> Write data to active CorfuDB before LR is started ...");
+            // Add Data for Snapshot Sync
+            writeToActive(0, numWrites);
+
+            // Confirm data does exist on Active Cluster
+            for(Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata> map : mapNameToMapActive.values()) {
+                assertThat(map.count()).isEqualTo(numWrites);
+            }
+
+            // Confirm data does not exist on Standby Cluster
+            for(Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata> map : mapNameToMapStandby.values()) {
+                assertThat(map.count()).isZero();
+            }
+
+            startLogReplicatorServers();
+
+            // Verify Standby Status Listener received all expected updates (is_data_consistent)
+            log.info(">> Wait ... Replication status UPDATE ...");
+            statusUpdateLatch.await();
+
+            verifyDataOnStandby(numWrites);
+
+            // Confirm replication status reflects snapshot sync completed
+            log.info(">> Verify replication status completed on active");
+            verifyReplicationStatusFromActive();
+
+            verifySnapshotSync(standbyListener, totalStandbyStatusUpdates);
+
+            //reset the listener
+            standbyListener.reset(new CountDownLatch(totalStandbyStatusUpdates));
+
+
+            LogReplicationMetadata.ReplicationEventKey key = LogReplicationMetadata.ReplicationEventKey
+                    .newBuilder().setKey(UUID.randomUUID().toString()).build();
+            LogReplicationMetadata.ReplicationEvent event = LogReplicationMetadata.ReplicationEvent.newBuilder()
+                    .setClusterId(DefaultClusterConfig.getStandbyClusterId())
+                    .setEventId(UUID.randomUUID().toString())
+                    .setType(LogReplicationMetadata.ReplicationEvent.ReplicationEventType.FORCE_SNAPSHOT_SYNC)
+                    .build();
+
+            // add a valid snapshot sync event in the event table
+            try(TxnContext txn = corfuStoreActive.txn(LogReplicationMetadataManager.NAMESPACE)) {
+                txn.putRecord(replicationEventTable, key, event, null);
+                txn.commit();
+            }
+
+            standbyListener.countDownLatch.await();
+            verifySnapshotSync(standbyListener, totalStandbyStatusUpdates);
+
+            while(replicationEventTable.count() != 0) {
+                //wait
+            }
+            // verify the event table is cleared after an event is processed
+            try(TxnContext txn = corfuStoreActive.txn(LogReplicationMetadataManager.NAMESPACE)) {
+                assertThat(txn.getTable(REPLICATION_EVENT_TABLE_NAME).count()).isZero();
+            }
+
+            //reset the listener
+            standbyListener.reset(new CountDownLatch(totalStandbyStatusUpdates));
+
+            // Add an invalid entry to the table so the event listener's onError() gets called in a loop, giving the test to CP/trim
+            try(TxnContext txn = corfuStoreActive.txn(LogReplicationMetadataManager.NAMESPACE)) {
+                txn.putRecord(replicationEventTable, key, LogReplicationMetadata.ReplicationEvent.newBuilder().build(), null);
+                txn.commit();
+            }
+
+            // delete the invalid entry, so the full sync upon resubscription doesn't see the invalid record
+            try(TxnContext txn = corfuStoreActive.txn(LogReplicationMetadataManager.NAMESPACE)) {
+                txn.delete(replicationEventTable, key);
+                txn.commit();
+            }
+
+            // run CP twice so the listener hits a trimmed exception
+            checkpointAndTrim(true);
+            checkpointAndTrim(true);
+
+            // add a valid entry and ensure that the listener process it
+            try(TxnContext txn = corfuStoreActive.txn(LogReplicationMetadataManager.NAMESPACE)) {
+                txn.putRecord(replicationEventTable, key, event, null);
+                txn.commit();
+            }
+            standbyListener.countDownLatch.await();
+            verifySnapshotSync(standbyListener, totalStandbyStatusUpdates);
+
+
+        } finally {
+            tearDown();
+        }
+    }
+
+    private void verifySnapshotSync(ReplicationStatusListener standbyListener, int totalStandbyStatusUpdates) {
+        assertThat(standbyListener.getAccumulatedStatus().size()).isEqualTo(totalStandbyStatusUpdates);
+        // Confirm last updates are set to true (corresponding to snapshot sync completed and log entry sync started)
+        assertThat(standbyListener.getAccumulatedStatus().get(standbyListener.getAccumulatedStatus().size() - 1)).isTrue();
+        assertThat(standbyListener.getAccumulatedStatus()).contains(false);
+    }
+
+    private void tearDown() {
+        executorService.shutdownNow();
+
+        if (activeCorfu != null) {
+            activeCorfu.destroy();
+        }
+
+        if (standbyCorfu != null) {
+            standbyCorfu.destroy();
+        }
+
+        if (activeReplicationServer != null) {
+            activeReplicationServer.destroy();
+        }
+
+        if (standbyReplicationServer != null) {
+            standbyReplicationServer.destroy();
+        }
     }
 
     private void verifyReplicationStatusFromActive() throws Exception {
@@ -400,7 +533,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
         @Getter
         List<Boolean> accumulatedStatus = new ArrayList<>();
 
-        private final CountDownLatch countDownLatch;
+        private CountDownLatch countDownLatch;
         private boolean waitSnapshotStatusComplete;
 
         public ReplicationStatusListener(CountDownLatch countdownLatch, boolean waitSnapshotStatusComplete) {
@@ -426,6 +559,11 @@ public class LogReplicationAbstractIT extends AbstractIT {
         @Override
         public void onError(Throwable throwable) {
             fail("onError for ReplicationStatusListener : " + throwable.toString());
+        }
+
+        private void reset(CountDownLatch countdownLatch) {
+            this.countDownLatch = countdownLatch;
+            accumulatedStatus.clear();
         }
     }
 
