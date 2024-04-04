@@ -9,6 +9,7 @@ import org.corfudb.common.compression.Codec;
 import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusKey;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal.SyncType;
@@ -426,10 +427,26 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
      */
     @Test
     public void testSyncStatusUpdatesForSnapshotToLogEntryTransition() throws Exception {
+        testStatusUpdatesFromSnapshotToLogEntrySync(false);
+    }
+
+    /**
+     * Verify that the status table accurately reflects the sync type and status for a transition flow from
+     * initialized -> snapshot sync -> log entry sync -> initialized -> log entry sync
+     * Also verify that the Snapshot Sync info updated on transition to 1st log entry sync was retained after the 2nd
+     * entry to log entry sync.
+     * @throws Exception
+     */
+    @Test
+    public void testLogEntryTransitionAfterReplicationStop() throws Exception {
+        testStatusUpdatesFromSnapshotToLogEntrySync(true);
+    }
+
+    private void testStatusUpdatesFromSnapshotToLogEntrySync(boolean testReplicationStop) throws Exception {
         initLogReplicationFSM(ReaderImplementation.STREAMS, false);
 
         final Table<ReplicationStatusKey, ReplicationStatusVal, Message> statusTable =
-                this.corfuStore.getTable(NAMESPACE, REPLICATION_STATUS_TABLE);
+            this.corfuStore.getTable(NAMESPACE, REPLICATION_STATUS_TABLE);
 
         ReplicationStatusKey currentReplicationKey = ReplicationStatusKey.newBuilder().setClusterId(TEST_LOCAL_CLUSTER_ID).build();
         ReplicationStatusVal currentReplicationVal;
@@ -473,6 +490,34 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         // for SnapshotSyncInfo should be COMPLETED
         Assert.assertEquals(SyncStatus.ONGOING, currentReplicationVal.getStatus());
         Assert.assertEquals(SyncStatus.COMPLETED, currentReplicationVal.getSnapshotSyncInfo().getStatus());
+
+        // Test the 2nd transition into Log Entry sync
+        if (testReplicationStop) {
+
+            // Capture the existing snapshot sync info
+            LogReplicationMetadata.SnapshotSyncInfo existingSnapshotSyncInfo = currentReplicationVal.getSnapshotSyncInfo();
+
+            // Transition back to Initialized state by enqueueing a REPLICATION_STOP event
+            transition(LogReplicationEventType.REPLICATION_STOP, LogReplicationStateType.INITIALIZED, snapshotSyncId,
+                    true);
+            assertThat(fsm.getState().getType()).isEqualTo(LogReplicationStateType.INITIALIZED);
+
+            // Transition to LogEntry sync state
+            transition(LogReplicationEventType.LOG_ENTRY_SYNC_REQUEST, LogReplicationStateType.IN_LOG_ENTRY_SYNC, true);
+
+            // Read the replication status after 2nd transition into LogEntry sync state
+            try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
+                currentReplicationVal = txn.getRecord(statusTable, currentReplicationKey).getPayload();
+            }
+
+            // Current SyncType should be LOG_ENTRY
+            Assert.assertEquals(SyncType.LOG_ENTRY, currentReplicationVal.getSyncType());
+
+            // Current SyncStatus for ReplicationInfo should be ONGOING, and SyncStatus for SnapshotSyncInfo should
+            // be unchanged from the previous value
+            Assert.assertEquals(SyncStatus.ONGOING, currentReplicationVal.getStatus());
+            Assert.assertEquals(existingSnapshotSyncInfo, currentReplicationVal.getSnapshotSyncInfo());
+        }
     }
 
     /**
