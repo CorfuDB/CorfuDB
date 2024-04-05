@@ -1,15 +1,22 @@
 package org.corfudb.integration;
 
+import com.google.protobuf.Message;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
+import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
+import org.corfudb.infrastructure.logreplication.proto.Sample.IntValue;
+import org.corfudb.infrastructure.logreplication.proto.Sample.Metadata;
+import org.corfudb.infrastructure.logreplication.proto.Sample.StringKey;
 import org.corfudb.infrastructure.logreplication.replication.LogReplicationAckReader;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.runtime.CorfuOptions;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
+import org.corfudb.runtime.ExampleSchemas.ClusterUuidMsg;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
 import org.corfudb.runtime.collections.StreamListener;
@@ -44,6 +51,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
+import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.REPLICATION_EVENT_TABLE_NAME;
+import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.REPLICATION_STATUS_TABLE;
 
 /**
  * This suite of tests validates the behavior of Log Replication
@@ -163,7 +172,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
 
         // (7) Verify replication status after all data has been replicated (no further data)
         corfuStoreActive.openTable(LogReplicationMetadataManager.NAMESPACE,
-                LogReplicationMetadataManager.REPLICATION_STATUS_TABLE,
+                REPLICATION_STATUS_TABLE,
                 LogReplicationMetadata.ReplicationStatusKey.class,
                 LogReplicationMetadata.ReplicationStatusVal.class,
                 null,
@@ -215,6 +224,108 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
         assertThat(remainingEntriesToSend).isEqualTo(0L);
     }
 
+    /**
+     * Event table can be cleared after processing the latest force sync event to avoid keeping older events.
+     *
+     */
+    @Test
+    public void testEventTableCleared() throws Exception {
+        String testStreamName = "Table001";
+        int batchSize = 5;
+
+        setupActiveAndStandbyCorfu();
+
+        Table<StringKey, IntValue, Metadata>  mapActive = corfuStoreActive.openTable(
+                NAMESPACE,
+                testStreamName,
+                StringKey.class,
+                IntValue.class,
+                Metadata.class,
+                TableOptions.builder().schemaOptions(
+                                CorfuOptions.SchemaOptions.newBuilder()
+                                        .setIsFederated(true)
+                                        .addStreamTag(ObjectsView.LOG_REPLICATOR_STREAM_INFO.getTagName())
+                                        .build())
+                        .build()
+        );
+
+        Table<StringKey, IntValue, Metadata>  mapStandby = corfuStoreStandby.openTable(
+                NAMESPACE,
+                testStreamName,
+                StringKey.class,
+                IntValue.class,
+                Metadata.class,
+                TableOptions.builder().schemaOptions(
+                                CorfuOptions.SchemaOptions.newBuilder()
+                                        .setIsFederated(true)
+                                        .addStreamTag(ObjectsView.LOG_REPLICATOR_STREAM_INFO.getTagName())
+                                        .build())
+                        .build()
+        );
+
+        // Write batchSize num of entries to active map
+        for (int i = 0; i < batchSize; i++) {
+            try (TxnContext txn = corfuStoreActive.txn(NAMESPACE)) {
+                txn.putRecord(mapActive, StringKey.newBuilder().setKey(String.valueOf(i)).build(),
+                        IntValue.newBuilder().setValue(i).build(), null);
+                txn.commit();
+            }
+        }
+        assertThat(mapActive.count()).isEqualTo(batchSize);
+        assertThat(mapStandby.count()).isZero();
+
+        startActiveLogReplicator();
+        startStandbyLogReplicator();
+        log.info("Replication servers started, and replication is in progress...");
+
+        while (mapStandby.count() != mapActive.count()) {
+            // Wait until data is fully replicated
+        }
+
+        Table<LogReplicationMetadata.ReplicationEventKey, LogReplicationMetadata.ReplicationEvent, Message> eventTable =
+                corfuStoreActive.openTable(LogReplicationMetadataManager.NAMESPACE,
+                        REPLICATION_EVENT_TABLE_NAME,
+                        LogReplicationMetadata.ReplicationEventKey.class,
+                        LogReplicationMetadata.ReplicationEvent.class,
+                        null,
+                        TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationEvent.class));
+
+        // Check that the event table is empty before performing a forced full sync
+        assertThat(eventTable.count()).isZero();
+
+        Table<ClusterUuidMsg, ClusterUuidMsg, ClusterUuidMsg> configTable = corfuStoreActive.openTable(
+                DefaultClusterManager.CONFIG_NAMESPACE, DefaultClusterManager.CONFIG_TABLE_NAME,
+                ClusterUuidMsg.class, ClusterUuidMsg.class, ClusterUuidMsg.class,
+                TableOptions.fromProtoSchema(ClusterUuidMsg.class)
+        );
+
+        // Perform a forced full sync
+        try (TxnContext txn = corfuStoreActive.txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
+            txn.putRecord(configTable, DefaultClusterManager.OP_ENFORCE_SNAPSHOT_FULL_SYNC,
+                    DefaultClusterManager.OP_ENFORCE_SNAPSHOT_FULL_SYNC, DefaultClusterManager.OP_ENFORCE_SNAPSHOT_FULL_SYNC);
+            txn.commit();
+        }
+
+        while(eventTable.count() == 0) {
+            // wait for event to queue
+        }
+        assertThat(eventTable.count()).isOne();
+
+        // Immediately restart LR on Active
+        stopActiveLogReplicator();
+        startActiveLogReplicator();
+
+        // Check we still have the initial force sync event that is now stale
+        assertThat(eventTable.count()).isEqualTo(1);
+
+        while(eventTable.count() != 0) {
+            // Old event will be picked up and one it is completed the event table will be cleared
+        }
+
+        stopActiveLogReplicator();
+        stopStandbyLogReplicator();
+    }
+
     private long verifyReplicationStatus(ReplicationStatusVal.SyncType targetSyncType,
                                          LogReplicationMetadata.SyncStatus targetSyncStatus,
                                          LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType targetSnapshotSyncType,
@@ -228,7 +339,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
 
         ReplicationStatusVal replicationStatusVal;
         try (TxnContext txn = corfuStoreActive.txn(LogReplicationMetadataManager.NAMESPACE)) {
-            replicationStatusVal = (ReplicationStatusVal)txn.getRecord(LogReplicationMetadataManager.REPLICATION_STATUS_TABLE, key).getPayload();
+            replicationStatusVal = (ReplicationStatusVal)txn.getRecord(REPLICATION_STATUS_TABLE, key).getPayload();
             txn.commit();
         }
 
@@ -506,7 +617,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
             // Wait until snapshot sync has completed
             // Open replication status table and monitor completion field
             corfuStoreActive.openTable(LogReplicationMetadataManager.NAMESPACE,
-                    LogReplicationMetadataManager.REPLICATION_STATUS_TABLE,
+                    REPLICATION_STATUS_TABLE,
                     LogReplicationMetadata.ReplicationStatusKey.class,
                     LogReplicationMetadata.ReplicationStatusVal.class,
                     null,
@@ -592,7 +703,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
 
         while (snapshotSyncCompleted) {
             try (TxnContext txn = corfuStoreActive.txn(LogReplicationMetadataManager.NAMESPACE)) {
-                replicationStatusVal = (ReplicationStatusVal) txn.getRecord(LogReplicationMetadataManager.REPLICATION_STATUS_TABLE, key).getPayload();
+                replicationStatusVal = (ReplicationStatusVal) txn.getRecord(REPLICATION_STATUS_TABLE, key).getPayload();
                 txn.commit();
             }
 

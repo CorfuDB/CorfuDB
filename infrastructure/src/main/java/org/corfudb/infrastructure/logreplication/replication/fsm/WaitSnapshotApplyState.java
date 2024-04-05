@@ -1,30 +1,23 @@
 package org.corfudb.infrastructure.logreplication.replication.fsm;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import com.google.protobuf.Message;
 import io.micrometer.core.instrument.Timer;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.infrastructure.logreplication.DataSender;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal.SyncType;
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationEventMetadata;
 import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
-import org.corfudb.runtime.collections.CorfuStoreEntry;
 
-import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * This class represents the WaitSnapshotApply state of the Log Replication State Machine.
@@ -153,7 +146,8 @@ public class WaitSnapshotApplyState implements LogReplicationState {
                     }
                     // remove the force snapshot request from the event table
                     if (forcedSnapshotSync) {
-                        deleteForcedSyncRequestFromEventTable();
+                        fsm.getAckReader().getMetadataManager().clearEventTable();
+                        log.info("Finished processing event {}. Flushing all events from the event table", transitionSyncId);
                     }
                     log.info("Snapshot Sync apply completed, syncRequestId={}, baseSnapshot={}. Transition to LOG_ENTRY_SYNC",
                             event.getMetadata().getSyncId(), event.getMetadata().getLastTransferredBaseSnapshot());
@@ -182,19 +176,6 @@ public class WaitSnapshotApplyState implements LogReplicationState {
                 throw new IllegalTransitionException(event.getType(), getType());
             }
         }
-    }
-
-    private void deleteForcedSyncRequestFromEventTable() {
-        List<CorfuStoreEntry<LogReplicationMetadata.ReplicationEventKey, LogReplicationMetadata.ReplicationEvent, Message>> eventsEnqueued =
-                fsm.getAckReader().getMetadataManager().getoutstandingEvents().getLeft();
-
-        for(CorfuStoreEntry<LogReplicationMetadata.ReplicationEventKey, LogReplicationMetadata.ReplicationEvent, Message> event : eventsEnqueued) {
-            if (event.getPayload() != null && event.getPayload().getEventId().equals(transitionSyncId.toString())) {
-                fsm.getAckReader().getMetadataManager().deleteProcessedEvent(event.getKey());
-                log.debug("Finished processing event {}. Deleting the event from the event table", transitionSyncId);
-            }
-        }
-
     }
 
     @Override
