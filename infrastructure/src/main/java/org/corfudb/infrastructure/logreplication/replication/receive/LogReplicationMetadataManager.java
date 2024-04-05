@@ -517,6 +517,10 @@ public class LogReplicationMetadataManager {
             CorfuStoreEntry<ReplicationStatusKey, ReplicationStatusVal, Message> record = txn.getRecord(replicationStatusTable, key);
 
             if (record.getPayload() == null) {
+                // If no record for the remote cluster is found, it means that no default status for it was set when
+                // that cluster was added to LR topology.  This is not expected and will eventually lead to a clear,
+                // bigger failure in LR so just log an error here instead of stopping the service.
+                log.error("Remote Cluster {} not found in Replication Status Table.  This is not expected!!!", clusterId);
                 return;
             }
 

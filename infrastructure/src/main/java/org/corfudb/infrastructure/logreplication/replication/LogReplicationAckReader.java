@@ -362,19 +362,20 @@ public class LogReplicationAckReader {
                             calculateRemainingEntriesToSend(baseSnapshotTimestamp), updateSnapshotSyncInfo,
                             baseSnapshotTimestamp);
                 } catch (TransactionAbortedException tae) {
-                    log.error("Error while attempting to markSnapshotSyncInfoCompleted for remote cluster {}.", remoteClusterId, tae);
+                    log.error("Error while attempting markLogEntrySyncOngoing for remote cluster {}.", remoteClusterId,
+                        tae);
                     throw new RetryNeededException();
                 } finally {
                     lock.unlock();
                 }
 
                 if (log.isTraceEnabled()) {
-                    log.trace("markSnapshotSyncInfoCompleted succeeds for remote cluster {}.", remoteClusterId);
+                    log.trace("markLogEntrySyncOngoing succeeds for remote cluster {}.", remoteClusterId);
                 }
                 return null;
             }).run();
         } catch (InterruptedException e) {
-            log.error("Unrecoverable exception when attempting to markSnapshotSyncInfoCompleted.", e);
+            log.error("Unrecoverable exception when attempting to markLogEntrySyncOngoing.", e);
             throw new UnrecoverableCorfuInterruptedError(e);
         }
     }

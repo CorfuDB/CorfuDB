@@ -154,7 +154,6 @@ public class InLogEntrySyncState implements LogReplicationState {
                 // Entry to this state can be 1)after a successful snapshot sync OR 2)after a simple restart or
                 // leadership change where a snapshot sync was not necessary.  In case 1), update the completion
                 // status and timestamp of the just-completed snapshot sync.
-                log.info("From Type = {}", from.getType());
                 fsm.getAckReader().markLogEntrySyncOngoing(
                     from.getType() == LogReplicationStateType.WAIT_SNAPSHOT_APPLY);
             }
