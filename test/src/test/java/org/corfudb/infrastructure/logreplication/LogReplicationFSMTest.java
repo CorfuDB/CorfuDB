@@ -443,7 +443,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
     }
 
     private void testStatusUpdatesFromSnapshotToLogEntrySync(boolean testReplicationStop) throws Exception {
-        initLogReplicationFSM(ReaderImplementation.STREAMS, false);
+        initLogReplicationFSM(ReaderImplementation.EMPTY, false);
 
         final Table<ReplicationStatusKey, ReplicationStatusVal, Message> statusTable =
             this.corfuStore.getTable(NAMESPACE, REPLICATION_STATUS_TABLE);
