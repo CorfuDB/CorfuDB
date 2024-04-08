@@ -498,53 +498,72 @@ public class LogReplicationMetadataManager {
     }
 
     /**
-     * Update replication status table's snapshot sync info as COMPLETED
-     * and update log entry sync status to ONGOING.
+     * Update replication status table's log entry sync as ONGOING.  Additionally, update the snapshot sync info as
+     * COMPLETED if updateSnapshotSyncInfo == true
      *
      * Note: TransactionAbortedException has been handled by upper level.
      *
      * @param clusterId standby cluster id
+     * @param remainingEntriesToSend An estimate of the number of entries remaining to be sent to standby cluster
+     * @param updateSnapshotSyncInfo boolean indicating if last snapshot sync's info must be updated
+     * @param baseSnapshot Corfu log timestamp at which the last snapshot was based
      */
-    public void updateSnapshotSyncStatusCompleted(String clusterId, long remainingEntriesToSend, long baseSnapshot) {
-        Instant time = Instant.now();
-        Timestamp timestamp = Timestamp.newBuilder().setSeconds(time.getEpochSecond())
-                .setNanos(time.getNano()).build();
+    public void setLogEntrySyncOngoing(String clusterId, long remainingEntriesToSend,
+                                       boolean updateSnapshotSyncInfo, long baseSnapshot) {
         ReplicationStatusKey key = ReplicationStatusKey.newBuilder().setClusterId(clusterId).build();
+        ReplicationStatusVal current;
 
         try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
 
             CorfuStoreEntry<ReplicationStatusKey, ReplicationStatusVal, Message> record = txn.getRecord(replicationStatusTable, key);
 
-            if (record.getPayload() != null) {
-                ReplicationStatusVal previous = record.getPayload();
-                SnapshotSyncInfo previousSyncInfo = previous.getSnapshotSyncInfo();
+            if (record.getPayload() == null) {
+                // If no record for the remote cluster is found, it means that no default status for it was set when
+                // that cluster was added to LR topology.  This is not expected and will eventually lead to a clear,
+                // bigger failure in LR so just log an error here instead of stopping the service.
+                log.error("Remote Cluster {} not found in Replication Status Table.  This is not expected!!!", clusterId);
+                return;
+            }
 
-                SnapshotSyncInfo currentSyncInfo = previousSyncInfo.toBuilder()
-                        .setStatus(SyncStatus.COMPLETED)
-                        .setBaseSnapshot(baseSnapshot)
-                        .setCompletedTime(timestamp)
-                        .build();
+            ReplicationStatusVal previous = record.getPayload();
+            SnapshotSyncInfo previousSyncInfo = previous.getSnapshotSyncInfo();
+            SnapshotSyncInfo currentSyncInfo;
 
-                ReplicationStatusVal current = ReplicationStatusVal.newBuilder()
-                        .setRemainingEntriesToSend(remainingEntriesToSend)
-                        .setSyncType(SyncType.LOG_ENTRY)
-                        .setStatus(SyncStatus.ONGOING)
-                        .setSnapshotSyncInfo(currentSyncInfo)
-                        .build();
-
-                txn.putRecord(replicationStatusTable, key, current, null);
-                txn.commit();
-
-                snapshotSyncTimerSample
-                        .flatMap(sample -> MeterRegistryProvider.getInstance()
-                                .map(registry -> {
-                                    Timer timer = registry.timer("logreplication.snapshot.duration");
-                                    return sample.stop(timer);
-                                }));
+            if (updateSnapshotSyncInfo) {
+                Instant time = Instant.now();
+                Timestamp timestamp = Timestamp.newBuilder().setSeconds(time.getEpochSecond())
+                    .setNanos(time.getNano()).build();
+                currentSyncInfo = previousSyncInfo.toBuilder()
+                    .setStatus(SyncStatus.COMPLETED)
+                    .setBaseSnapshot(baseSnapshot)
+                    .setCompletedTime(timestamp)
+                    .build();
 
                 log.debug("syncStatus :: set snapshot sync to COMPLETED and log entry ONGOING, clusterId: {}," +
-                                " syncInfo: [{}]", clusterId, currentSyncInfo);
+                    " syncInfo: [{}]", clusterId, currentSyncInfo);
+
+                snapshotSyncTimerSample
+                    .flatMap(sample -> MeterRegistryProvider.getInstance()
+                        .map(registry -> {
+                            Timer timer = registry.timer("logreplication.snapshot.duration");
+                            return sample.stop(timer);
+                        }));
+            } else {
+                // Retain the existing snapshot sync info
+                currentSyncInfo = previousSyncInfo;
+                log.debug("syncStatus :: set log entry ONGOING, clusterId: {},", clusterId);
             }
+            current = ReplicationStatusVal.newBuilder()
+                .setRemainingEntriesToSend(remainingEntriesToSend)
+                .setSyncType(SyncType.LOG_ENTRY)
+                .setStatus(SyncStatus.ONGOING)
+                .setSnapshotSyncInfo(currentSyncInfo)
+                .build();
+
+            txn.putRecord(replicationStatusTable, key, current, null);
+            txn.commit();
+            log.info("Successfully set Log Entry Sync as ONGOING.  Previous snapshot sync info updated: {}",
+                    updateSnapshotSyncInfo);
         }
     }
 
