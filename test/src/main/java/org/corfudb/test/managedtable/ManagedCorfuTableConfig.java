@@ -10,10 +10,13 @@ import org.corfudb.runtime.CorfuOptions.SchemaOptions;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.ExampleSchemas.ExampleValue;
 import org.corfudb.runtime.ExampleSchemas.ManagedMetadata;
+import org.corfudb.runtime.collections.Index;
 import org.corfudb.runtime.collections.ProtobufIndexer;
 import org.corfudb.runtime.view.TableRegistry;
+import org.corfudb.runtime.view.TableRegistry.TableDescriptor;
 import org.corfudb.test.TestSchema.Uuid;
 import org.corfudb.test.managedtable.ManagedCorfuTable.TableDescriptors;
+import org.corfudb.util.serializer.DynamicProtobufSerializer;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.ProtobufSerializer;
 
@@ -29,10 +32,38 @@ public interface ManagedCorfuTableConfig<K, V> {
 
     @Builder
     @Getter
+    class ManagedCorfuTableDynamicProtobufConfig<K, V> implements ManagedCorfuTableConfig<K, V> {
+        @Default
+        private final ManagedSerializer managedSerializer = new ManagedDynamicProtobufSerializer();
+
+        @Override
+        public void configure(CorfuRuntime rt) throws Exception {
+            managedSerializer.configure(rt);
+
+        }
+
+        @Override
+        public ISerializer getSerializer(CorfuRuntime rt) {
+            return null;
+        }
+
+        @Override
+        public String getFullyQualifiedTableName() {
+            return null;
+        }
+
+        @Override
+        public String getTableName() {
+            return null;
+        }
+    }
+
+    @Builder
+    @Getter
     class ManagedCorfuTableProtobufConfig<K extends Message, V extends Message, M extends Message>
             implements ManagedCorfuTableConfig<K, V> {
         @NonNull
-        private final TableRegistry.TableDescriptor<K, V, M> tableDescriptor;
+        private final TableDescriptor<K, V, M> tableDescriptor;
 
         @Default
         private final String namespace = "some-namespace";
@@ -42,6 +73,9 @@ public interface ManagedCorfuTableConfig<K, V> {
 
         @Default
         private final boolean withSchema = true;
+
+        @Default
+        private final ManagedSerializer managedSerializer = new ManagedProtobufSerializer();
 
         public static ManagedCorfuTableConfig<Uuid, Uuid> buildUuid() {
             return ManagedCorfuTableProtobufConfig
@@ -65,7 +99,7 @@ public interface ManagedCorfuTableConfig<K, V> {
 
         @Override
         public void configure(CorfuRuntime rt) throws Exception {
-            setupSerializer(rt);
+            managedSerializer.configure(rt);
 
             ProtobufSerializer serializer = getSerializer(rt);
             K defaultKeyMessage = tableDescriptor.getDefaultKeyMessage();
@@ -78,20 +112,6 @@ public interface ManagedCorfuTableConfig<K, V> {
             addTypeToClassMap(serializer, defaultMetadataMessage);
         }
 
-        /**
-         * Register a Protobuf serializer with the default runtime.
-         */
-        private void setupSerializer(CorfuRuntime rt) {
-            setupSerializer(rt, new ProtobufSerializer(new ConcurrentHashMap<>()));
-        }
-
-        /**
-         * Register a giver serializer with a given runtime.
-         */
-        protected void setupSerializer(@Nonnull final CorfuRuntime runtime, @Nonnull final ISerializer serializer) {
-            runtime.getSerializers().registerSerializer(serializer);
-        }
-
         @Override
         public ProtobufSerializer getSerializer(CorfuRuntime rt) {
             return rt
@@ -101,13 +121,13 @@ public interface ManagedCorfuTableConfig<K, V> {
 
         Object[] getArgs() throws Exception {
             if (withSchema) {
-                return new Object[]{getProtobufIndexer()};
+                return new Object[]{getIndexer()};
             } else {
                 return new Object[]{};
             }
         }
 
-        public ProtobufIndexer getProtobufIndexer() throws Exception {
+        public ProtobufIndexer getIndexer() throws Exception {
             SchemaOptions schemaOptions = tableDescriptor.getSchemaOptions();
             V msg = tableDescriptor.getDefaultValueMessage();
             return new ProtobufIndexer(msg, schemaOptions);
@@ -140,6 +160,41 @@ public interface ManagedCorfuTableConfig<K, V> {
          */
         private String getTypeUrl(Descriptor descriptor) {
             return "type.googleapis.com/" + descriptor.getFullName();
+        }
+    }
+
+    interface ManagedSerializer {
+        void configure(CorfuRuntime rt);
+    }
+
+    class ManagedProtobufSerializer implements ManagedSerializer {
+
+        @Override
+        public void configure(CorfuRuntime rt) {
+            setupSerializer(rt);
+        }
+
+        /**
+         * Register a Protobuf serializer with the default runtime.
+         */
+        private void setupSerializer(CorfuRuntime rt) {
+            setupSerializer(rt, new ProtobufSerializer(new ConcurrentHashMap<>()));
+        }
+
+        /**
+         * Register a giver serializer with a given runtime.
+         */
+        protected void setupSerializer(@Nonnull final CorfuRuntime runtime, @Nonnull final ISerializer serializer) {
+            runtime.getSerializers().registerSerializer(serializer);
+        }
+    }
+
+    class ManagedDynamicProtobufSerializer implements ManagedSerializer {
+
+        @Override
+        public void configure(CorfuRuntime rt) {
+            //create and register dynamic serializer in the runtime
+            new DynamicProtobufSerializer(rt);
         }
     }
 }

@@ -11,6 +11,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.Record;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.exceptions.SerializerException;
+import org.corfudb.util.serializer.Serializers.SerializerType;
 
 import java.io.IOException;
 import java.util.HashMap;
@@ -33,7 +34,7 @@ public class ProtobufSerializer implements ISerializer {
 
     private final byte type;
 
-    public static final byte PROTOBUF_SERIALIZER_CODE = (byte) 25;
+    public static final byte PROTOBUF_SERIALIZER_CODE = SerializerType.PROTOBUF.toByte();
 
     @Getter
     private final ConcurrentMap<String, Class<? extends Message>> classMap;

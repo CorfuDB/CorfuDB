@@ -12,6 +12,7 @@ import org.corfudb.runtime.object.PersistenceOptions;
 import org.corfudb.runtime.object.PersistenceOptions.PersistenceOptionsBuilder;
 import org.corfudb.runtime.object.SnapshotGenerator;
 import org.corfudb.runtime.view.ObjectOpenOption;
+import org.corfudb.test.managedtable.ManagedCorfuTableConfig.ManagedCorfuTableProtobufConfig;
 import org.corfudb.util.serializer.ISerializer;
 import org.rocksdb.Options;
 
@@ -45,7 +46,7 @@ public class ManagedCorfuTableSetupManager<K, V> {
                     .builder()
                     .dataPath(dataPath);
 
-            ProtobufIndexer indexer = config.getProtobufIndexer();
+            ProtobufIndexer indexer = ((ManagedCorfuTableProtobufConfig<?, ?, ?>) config).getIndexer();
             ISerializer serializer = config.getSerializer(rt);
 
             return rt
@@ -69,7 +70,7 @@ public class ManagedCorfuTableSetupManager<K, V> {
         public GenericCorfuTable<? extends SnapshotGenerator<?>, K, V> setup(
                 CorfuRuntime rt, ManagedCorfuTableConfig<K, V> config) throws Exception {
             config.configure(rt);
-            Object[] args = config.getArgs();
+            Object[] args = ((ManagedCorfuTableProtobufConfig<?, ?, ?>) config).getArgs();
             ISerializer serializer = config.getSerializer(rt);
 
             PersistentCorfuTable<K, V> table = new PersistentCorfuTable<>();

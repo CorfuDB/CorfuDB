@@ -104,7 +104,8 @@ public class Serializers {
         JAVA((byte) 1),
         JSON((byte) 2),
         PRIMITIVE((byte) 3),
-        QUEUE((byte) 4);
+        QUEUE((byte) 4),
+        PROTOBUF((byte) 25);
 
         private final byte serializerType;
 

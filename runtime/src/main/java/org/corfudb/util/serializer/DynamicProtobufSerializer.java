@@ -115,32 +115,32 @@ public class DynamicProtobufSerializer implements ISerializer {
         }
 
         // Open the Registry Table and cache its contents
-        PersistentCorfuTable<TableName, CorfuRecord<TableDescriptors, TableMetadata>> registryTable =
-            corfuRuntime.getObjectsView()
+        PersistentCorfuTable<TableName, CorfuRecord<TableDescriptors, TableMetadata>> registryTable = corfuRuntime
+                .getObjectsView()
                 .build()
-                .setTypeToken(new TypeToken<PersistentCorfuTable<TableName,
-                    CorfuRecord<TableDescriptors, TableMetadata>>>() {
-                })
-                .setStreamName(
-                   getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE,
-                       REGISTRY_TABLE_NAME))
+                .setTypeToken(PersistentCorfuTable
+                        .<TableName, CorfuRecord<TableDescriptors, TableMetadata>>getTypeToken()
+                )
+                .setStreamName(getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, REGISTRY_TABLE_NAME))
                 .setSerializer(protobufSerializer)
                 .addOpenOption(ObjectOpenOption.NO_CACHE)
                 .open();
 
-        Iterator<Map.Entry<TableName, CorfuRecord<TableDescriptors, TableMetadata>>> registryIt = registryTable.entryStream().iterator();
+        Iterator<Map.Entry<TableName, CorfuRecord<TableDescriptors, TableMetadata>>> registryIt = registryTable
+                .entryStream()
+                .iterator();
+
         while (registryIt.hasNext()) {
             Map.Entry<TableName, CorfuRecord<TableDescriptors, TableMetadata>> entry = registryIt.next();
             cachedRegistryTable.put(entry.getKey(), entry.getValue());
         }
 
         // Open the Protobuf Descriptor Table.
-        PersistentCorfuTable<ProtobufFileName, CorfuRecord<ProtobufFileDescriptor, TableMetadata>> descriptorTable = corfuRuntime.getObjectsView()
+        PersistentCorfuTable<ProtobufFileName, CorfuRecord<ProtobufFileDescriptor, TableMetadata>> descriptorTable = corfuRuntime
+                .getObjectsView()
                 .build()
-                .setTypeToken(new TypeToken<PersistentCorfuTable<ProtobufFileName, CorfuRecord<ProtobufFileDescriptor, TableMetadata>>>() {
-                })
-                .setStreamName(getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE,
-                        PROTOBUF_DESCRIPTOR_TABLE_NAME))
+                .setTypeToken(PersistentCorfuTable.<ProtobufFileName, CorfuRecord<ProtobufFileDescriptor, TableMetadata>>getTypeToken())
+                .setStreamName(getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, PROTOBUF_DESCRIPTOR_TABLE_NAME))
                 .setSerializer(protobufSerializer)
                 .addOpenOption(ObjectOpenOption.NO_CACHE)
                 .open();
