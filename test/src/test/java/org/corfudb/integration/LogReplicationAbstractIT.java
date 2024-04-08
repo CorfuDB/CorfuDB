@@ -400,6 +400,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
             standbyListener.reset(new CountDownLatch(totalStandbyStatusUpdates));
 
             // Add an invalid entry to the table so the event listener's onError() gets called in a loop, giving the test to CP/trim
+            // (The eventId is empty, so the streamListener thread encounters an error while constructing DiscoveryServiceEvent)
             try(TxnContext txn = corfuStoreActive.txn(LogReplicationMetadataManager.NAMESPACE)) {
                 txn.putRecord(replicationEventTable, key, LogReplicationMetadata.ReplicationEvent.newBuilder().build(), null);
                 txn.commit();
