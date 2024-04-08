@@ -90,7 +90,7 @@ class CommandBuilder(object):
         if "PrintGCDetails" in GCParameters and GCParameters['PrintGCDetails'] is True:
             gc_str = '-Xlog:safepoint,gc*=debug:file=' + GCParameters["Logpath"]
             if 'PrintGCTimeStamps' in GCParameters and GCParameters['PrintGCTimeStamps'] is True:
-                gc_str += ':time'
+                gc_str += ':time,uptime,level'
             if 'UseGCLogFileRotation' in GCParameters and GCParameters['UseGCLogFileRotation'] is True:
                 gc_str += ':filecount=' + str(GCParameters['NumberOfGCLogFiles']) + ',filesize=' + GCParameters['GCLogFileSize']
             cmd.append(gc_str)
@@ -126,7 +126,6 @@ class CommandBuilder(object):
         cmd = []
         cmd.append("MALLOC_TRIM_THRESHOLD_=1310720")
         cmd.append("java")
-        cmd.append("-verbose:gc")
         cmd.append("-XX:+UseStringDeduplication")
         cmd.append("-XX:+HeapDumpOnOutOfMemoryError")
         cmd.append("-XX:+CrashOnOutOfMemoryError")
