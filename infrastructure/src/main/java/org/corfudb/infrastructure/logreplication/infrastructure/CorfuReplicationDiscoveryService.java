@@ -360,7 +360,6 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         serverCallback.complete(interClusterReplicationService);
 
         logReplicationEventListener = new LogReplicationEventListener(this);
-        logReplicationEventListener.start();
         serverStarted = true;
     }
 
@@ -493,6 +492,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                             localNodeDescriptor, logReplicationMetadataManager, serverContext.getPluginConfigFilePath(),
                             getCorfuRuntime(), replicationConfigManager);
                 }
+                logReplicationEventListener.start();
                 replicationManager.setTopology(topologyDescriptor);
                 replicationManager.start();
                 lockAcquireSample = recordLockAcquire(localClusterDescriptor.getRole());
@@ -576,6 +576,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     public void processLockRelease() {
         log.debug("Lock released");
         // Unset isLeader flag after stopping log replication
+        logReplicationEventListener.stop();
         stopLogReplication();
         isLeader.set(false);
         // Signal Log Replication Server/Sink to stop receiving messages, leadership loss
@@ -603,6 +604,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         // We do not update topology until we successfully stop log replication
         if (localClusterDescriptor.getRole() == ClusterRole.ACTIVE) {
             stopLogReplication();
+            logReplicationEventListener.stop();
         }
 
         // Update topology, cluster, and node configs
