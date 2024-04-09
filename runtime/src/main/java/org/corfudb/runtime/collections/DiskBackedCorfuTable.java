@@ -142,6 +142,8 @@ public class DiskBackedCorfuTable<K, V> implements
         byte indexId = 0;
         for (Index.Spec<K, V, ?> index : indices) {
             this.secondaryIndexesAliasToPath.put(index.getAlias().get(), index.getName().get());
+            this.secondaryIndexesAliasToPath.put(index.getName().get(), index.getName().get());
+
             this.indexSpec.add(index);
             this.indexToId.put(index.getName().get(), indexId++);
         }

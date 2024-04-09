@@ -29,6 +29,8 @@ import org.corfudb.runtime.CorfuOptions.SizeComputationModel;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.CorfuStoreMetadata;
+import org.corfudb.runtime.ExampleSchemas;
+import org.corfudb.runtime.ExampleSchemas.Person;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
@@ -36,8 +38,8 @@ import org.corfudb.runtime.object.PersistenceOptions;
 import org.corfudb.runtime.object.PersistenceOptions.PersistenceOptionsBuilder;
 import org.corfudb.runtime.object.RocksDbReadCommittedTx;
 import org.corfudb.runtime.view.AbstractViewTest;
-import org.corfudb.test.SampleSchema;
 import org.corfudb.test.SampleSchema.EventInfo;
+import org.corfudb.test.SampleSchema.ManagedResources;
 import org.corfudb.test.SampleSchema.Uuid;
 import org.corfudb.util.serializer.ISerializer;
 import org.junit.Test;
@@ -76,6 +78,7 @@ import java.util.stream.LongStream;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
+import static java.util.stream.Collectors.toList;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy;
 import static org.corfudb.common.metrics.micrometer.MeterRegistryProvider.MeterRegistryInitializer.initClientMetrics;
@@ -1019,6 +1022,14 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
                         .build());
     }
 
+    Arbitrary<Person> person() {
+        return Arbitraries.strings().alpha().map(name ->
+                Person.newBuilder()
+                        .setName(name)
+                        .mergePhoneNumber(ExampleSchemas.PhoneNumber.newBuilder().addMobile(name).build())
+                        .build());
+    }
+
     /**
      * A custom generator for a set of {@link EventInfo}.
      */
@@ -1032,11 +1043,72 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
         return eventInfo().set();
     }
 
+    @Provide
+    Arbitrary<Set<Person>> personSet() {
+        return person().set();
+    }
+
     /**
      * Check {@link PersistedCorfuTable} integration with {@link CorfuStore}.
      */
     @Property(tries = NUM_OF_TRIES)
     void dataStoreIntegration(
+            @ForAll @StringLength(min = STRING_MIN, max = STRING_MAX) @AlphaChars String namespace,
+            @ForAll @StringLength(min = STRING_MIN, max = STRING_MAX) @AlphaChars String tableName,
+            @ForAll("uuidSet") @Size(SAMPLE_SIZE + 1) Set<Uuid> ids,
+            @ForAll("personSet") @Size(SAMPLE_SIZE + 1) Set<Person> persons) {
+        resetTests();
+
+
+        // Creating Corfu Store using a connected corfu client.
+        CorfuStore corfuStore = new CorfuStore(getDefaultRuntime());
+
+        // Create & Register the table.
+        // This is required to initialize the table for the current corfu client.
+        final Path persistedCacheLocation = Paths.get(diskBackedDirectory, defaultTableName);
+        try (Table<Uuid, Person, ManagedResources> table =
+                     corfuStore.openTable(namespace, tableName,
+                             Uuid.class, Person.class,
+                             ManagedResources.class,
+                             // TableOptions includes option to choose - Memory/Disk based corfu table.
+                             TableOptions.fromProtoSchema(Person.class).toBuilder()
+                                     .persistentDataPath(persistedCacheLocation)
+                                     .build())) {
+
+            ManagedResources metadata = ManagedResources.newBuilder()
+                    .setCreateUser("MrProto").build();
+
+            // Fetch timestamp to perform snapshot queries or transactions at a particular timestamp.
+            Token token = getDefaultRuntime().getSequencerView().query().getToken();
+            CorfuStoreMetadata.Timestamp timestamp = CorfuStoreMetadata.Timestamp.newBuilder()
+                    .setEpoch(token.getEpoch())
+                    .setSequence(token.getSequence())
+                    .build();
+
+            try (TxnContext tx = corfuStore.txn(namespace)) {
+                assertThat(persons.size()).isEqualTo(ids.size());
+
+                Streams.zip(ids.stream(), persons.stream(), SimpleEntry::new)
+                        .forEach(pair -> tx.putRecord(table, pair.getKey(), pair.getValue(), metadata));
+                tx.commit();
+            }
+
+            final String phoneNumber = persons.stream().findFirst().get().getPhoneNumber().getMobile(0);
+            System.out.println(phoneNumber);
+
+            try (TxnContext tx = corfuStore.txn(namespace)) {
+                List<CorfuStoreEntry<Uuid, Person, ManagedResources>> result =
+                        tx.getByIndex(table, "phoneNumber.mobile", phoneNumber);
+                System.out.println(result.size());
+            }
+        } catch (Exception e) {
+            System.out.println(e);
+        }
+
+    }
+
+    @Property(tries = NUM_OF_TRIES)
+    void testNestedIndexes(
             @ForAll @StringLength(min = STRING_MIN, max = STRING_MAX) @AlphaChars String namespace,
             @ForAll @StringLength(min = STRING_MIN, max = STRING_MAX) @AlphaChars String tableName,
             @ForAll("uuidSet") @Size(SAMPLE_SIZE + 1) Set<Uuid> ids,
@@ -1057,16 +1129,16 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
         // Create & Register the table.
         // This is required to initialize the table for the current corfu client.
         final Path persistedCacheLocation = Paths.get(diskBackedDirectory, defaultTableName);
-        try (Table<Uuid, EventInfo, SampleSchema.ManagedResources> table =
+        try (Table<Uuid, EventInfo, ManagedResources> table =
                      corfuStore.openTable(namespace, tableName,
                              Uuid.class, EventInfo.class,
-                             SampleSchema.ManagedResources.class,
+                             ManagedResources.class,
                              // TableOptions includes option to choose - Memory/Disk based corfu table.
                              TableOptions.fromProtoSchema(EventInfo.class).toBuilder()
                                      .persistentDataPath(persistedCacheLocation)
                                      .build())) {
 
-            SampleSchema.ManagedResources metadata = SampleSchema.ManagedResources.newBuilder()
+            ManagedResources metadata = ManagedResources.newBuilder()
                     .setCreateUser("MrProto").build();
 
             // Simple CRUD using the table instance.
@@ -1098,19 +1170,19 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
 
                 final Collection<Message> secondaryIndex = tx
                         .getByIndex(tableName, "event_time", sample.getValue().getEventTime())
-                        .stream().map(CorfuStoreEntry::getPayload).collect(Collectors.toList());
+                        .stream().map(CorfuStoreEntry::getPayload).collect(toList());
 
                 assertThat(secondaryIndex).containsExactly(sample.getValue());
 
                 long medianEventTime = (long) Quantiles.median().compute(events.stream()
                         .map(EventInfo::getEventTime)
-                        .collect(Collectors.toList()));
+                        .collect(toList()));
 
                 events.add(firstEvent);
                 final Set<EventInfo> filteredEvents = events.stream().filter(
                                 event -> event.getEventTime() > medianEventTime)
                         .collect(Collectors.toSet());
-                final List<CorfuStoreEntry<Uuid, EventInfo, SampleSchema.ManagedResources>> queryResult =
+                final List<CorfuStoreEntry<Uuid, EventInfo, ManagedResources>> queryResult =
                         tx.executeQuery(tableName,
                                 entry -> entry.getPayload().getEventTime() > medianEventTime);
                 final Set<EventInfo> scannedValues = queryResult.stream()
