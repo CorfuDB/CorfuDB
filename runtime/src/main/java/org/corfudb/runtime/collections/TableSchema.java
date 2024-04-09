@@ -27,10 +27,10 @@ public class TableSchema<K extends Message, V extends Message, M extends Message
 
     private final TableDescriptor<K, V, M> descriptor;
 
+    @Deprecated
     public TableSchema(@Nonnull String tableName, @Nonnull Class<K> keyClass,
                        @Nonnull Class<V> payloadClass, @Nullable Class<M> metadataClass) {
-        this.tableName = tableName;
-        this.descriptor = new TableDescriptor<>(keyClass, payloadClass, metadataClass);
+        this(tableName, new TableDescriptor<>(keyClass, payloadClass, metadataClass));
     }
 
     public String getTableName() {

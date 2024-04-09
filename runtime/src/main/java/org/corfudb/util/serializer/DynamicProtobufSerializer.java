@@ -40,10 +40,8 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
-import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
-import static org.corfudb.runtime.view.TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME;
-import static org.corfudb.runtime.view.TableRegistry.REGISTRY_TABLE_NAME;
-import static org.corfudb.runtime.view.TableRegistry.getFullyQualifiedTableName;
+import static org.corfudb.runtime.view.TableRegistry.FQ_PROTO_DESC_TABLE_NAME;
+import static org.corfudb.runtime.view.TableRegistry.FQ_REGISTRY_TABLE_NAME;
 import static org.corfudb.runtime.view.TableRegistry.getTypeUrl;
 
 
@@ -66,6 +64,7 @@ import static org.corfudb.runtime.view.TableRegistry.getTypeUrl;
 @Slf4j
 public class DynamicProtobufSerializer implements ISerializer {
 
+    public static final String CORFU_OPTIONS_PROTO = "corfudb/runtime/corfu_options.proto";
     /**
      * Type code of the serializer. In this case the code needs to override the code of {@link ProtobufSerializer}.
      */
@@ -104,24 +103,14 @@ public class DynamicProtobufSerializer implements ISerializer {
         this.messagesFdProtoNameMap = new ConcurrentHashMap<>();
 
         // Create or get a protobuf serializer to read the table registry.
-        ISerializer protobufSerializer;
-        try {
-            protobufSerializer = corfuRuntime.getSerializers().getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE);
-        } catch (SerializerException se) {
-            // This means the protobuf serializer had not been registered yet.
-            log.info("Protobuf Serializer not found. Create and register a new one.");
-            protobufSerializer = createProtobufSerializer();
-            corfuRuntime.getSerializers().registerSerializer(protobufSerializer);
-        }
+        ISerializer protobufSerializer = configureSerializer(corfuRuntime);
 
         // Open the Registry Table and cache its contents
         PersistentCorfuTable<TableName, CorfuRecord<TableDescriptors, TableMetadata>> registryTable = corfuRuntime
                 .getObjectsView()
                 .build()
-                .setTypeToken(PersistentCorfuTable
-                        .<TableName, CorfuRecord<TableDescriptors, TableMetadata>>getTypeToken()
-                )
-                .setStreamName(getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, REGISTRY_TABLE_NAME))
+                .setTypeToken(PersistentCorfuTable.<TableName, CorfuRecord<TableDescriptors, TableMetadata>>getTypeToken())
+                .setStreamName(FQ_REGISTRY_TABLE_NAME.toFqdn())
                 .setSerializer(protobufSerializer)
                 .addOpenOption(ObjectOpenOption.NO_CACHE)
                 .open();
@@ -140,33 +129,50 @@ public class DynamicProtobufSerializer implements ISerializer {
                 .getObjectsView()
                 .build()
                 .setTypeToken(PersistentCorfuTable.<ProtobufFileName, CorfuRecord<ProtobufFileDescriptor, TableMetadata>>getTypeToken())
-                .setStreamName(getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, PROTOBUF_DESCRIPTOR_TABLE_NAME))
+                .setStreamName(FQ_PROTO_DESC_TABLE_NAME.toFqdn())
                 .setSerializer(protobufSerializer)
                 .addOpenOption(ObjectOpenOption.NO_CACHE)
                 .open();
 
         // Cache the FileDescriptorProtos from the protobuf descriptor table.
-        Iterator<Map.Entry<ProtobufFileName, CorfuRecord<ProtobufFileDescriptor, TableMetadata>>> descriptorIt = descriptorTable.entryStream().iterator();
-        while (descriptorIt.hasNext()) {
-            Map.Entry<ProtobufFileName, CorfuRecord<ProtobufFileDescriptor, TableMetadata>> entry = descriptorIt.next();
+        descriptorTable.entryStream().forEach(descriptorIt -> {
+            FileDescriptorProto fdDescriptor = descriptorIt
+                    .getValue()
+                    .getPayload()
+                    .getFileDescriptor();
 
-            String protoFileName = entry.getValue().getPayload().getFileDescriptor().getName();
+            String protoFileName = fdDescriptor.getName();
             // Since corfu_options is something within repo, the path gets truncated on insert.
-            // However dynamicProtobufSerializer fails since the full path is needed.
+            // However, dynamicProtobufSerializer fails since the full path is needed.
             if (protoFileName.equals("corfu_options.proto")) {
-                fdProtoMap.putIfAbsent(protoFileName, entry.getValue().getPayload().getFileDescriptor());
+                fdProtoMap.putIfAbsent(protoFileName, fdDescriptor);
                 // Until the truncating issue can be addressed, manually add both paths.
-                protoFileName = "corfudb/runtime/corfu_options.proto";
+                protoFileName = CORFU_OPTIONS_PROTO;
             }
-            fdProtoMap.putIfAbsent(protoFileName, entry.getValue().getPayload().getFileDescriptor());
-            identifyMessageTypesinFileDescriptorProto(entry.getValue().getPayload().getFileDescriptor());
+            fdProtoMap.putIfAbsent(protoFileName, fdDescriptor);
+            identifyMessageTypesinFileDescriptorProto(fdDescriptor);
 
             // cache the entry
-            cachedProtobufDescriptorTable.put(entry.getKey(), entry.getValue());
-        }
+            cachedProtobufDescriptorTable.put(descriptorIt.getKey(), descriptorIt.getValue());
+        });
 
         // Remove the protobuf serializer
         corfuRuntime.getSerializers().clearCustomSerializers();
+    }
+
+    private static ISerializer configureSerializer(CorfuRuntime corfuRuntime) {
+        ISerializer protobufSerializer;
+        try {
+            protobufSerializer = corfuRuntime
+                    .getSerializers()
+                    .getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE);
+        } catch (SerializerException se) {
+            // This means the protobuf serializer had not been registered yet.
+            log.info("Protobuf Serializer not found. Create and register a new one.");
+            protobufSerializer = createProtobufSerializer();
+            corfuRuntime.getSerializers().registerSerializer(protobufSerializer);
+        }
+        return protobufSerializer;
     }
 
     /**
@@ -221,11 +227,11 @@ public class DynamicProtobufSerializer implements ISerializer {
             ConcurrentMap<String, FileDescriptorProto> fdProtoMap) {
         String protoFileName = fileDescriptorProto.getPayload().getFileDescriptor().getName();
         // Since corfu_options is something within repo, the path gets truncated on insert.
-        // However dynamicProtobufSerializer fails since the full path is needed.
+        // However, dynamicProtobufSerializer fails since the full path is needed.
         if (protoFileName.equals("corfu_options.proto")) {
             fdProtoMap.putIfAbsent(protoFileName, fileDescriptorProto.getPayload().getFileDescriptor());
             // Until the truncating issue can be addressed, manually add both paths.
-            protoFileName = "corfudb/runtime/corfu_options.proto";
+            protoFileName = CORFU_OPTIONS_PROTO;
         }
         fdProtoMap.putIfAbsent(protoFileName, fileDescriptorProto.getPayload().getFileDescriptor());
     }
@@ -275,7 +281,7 @@ public class DynamicProtobufSerializer implements ISerializer {
             FileDescriptor descriptor = getDescriptor(s);
             fileDescriptorList.add(descriptor);
         }
-        FileDescriptor[] fileDescriptors = fileDescriptorList.toArray(new FileDescriptor[fileDescriptorList.size()]);
+        FileDescriptor[] fileDescriptors = fileDescriptorList.toArray(new FileDescriptor[0]);
         FileDescriptor fileDescriptor = FileDescriptor.buildFrom(fdProtoMap.get(name), fileDescriptors);
         fileDescriptorMap.putIfAbsent(name, fileDescriptor);
         return fileDescriptor;
@@ -463,19 +469,19 @@ public class DynamicProtobufSerializer implements ISerializer {
         StringBuilder stringBuilder = new StringBuilder();
         stringBuilder.append("\n---------messageFdProtoNameMap Messages:---------\n");
         for (Map.Entry<String, String> mname: messagesFdProtoNameMap.entrySet()) {
-            stringBuilder.append("Message: "+ mname.getKey()+ " in file "+ mname.getValue()+"\n");
+            stringBuilder.append(String.format("Message: %s in file %s\n", mname.getKey(), mname.getValue()));
         }
 
         stringBuilder.append("\n-------fdProtoMap FileDescriptors:--------------\n");
         for (Map.Entry<String, FileDescriptorProto> fdProto: fdProtoMap.entrySet()) {
-            stringBuilder.append("File: " + fdProto.getKey());
+            stringBuilder.append("File: ").append(fdProto.getKey());
             stringBuilder.append(" ===> (FileDescriptorProto follows...)\n");
             stringBuilder.append(fdProto.getValue());
         }
 
         stringBuilder.append("\n---------fileDescriptorCache FileDescriptors----------\n");
         for (Map.Entry<String, FileDescriptor> fds: fileDescriptorMap.entrySet()) {
-            stringBuilder.append("File: "+ fds.getKey() + " ==> " + fds.getValue() + "\n");
+            stringBuilder.append(String.format("File: %s ==> %s\n", fds.getKey(), fds.getValue()));
         }
         return stringBuilder.toString();
     }

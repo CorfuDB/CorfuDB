@@ -24,10 +24,17 @@ import java.util.UUID;
 @Builder
 public class ManagedCorfuTableSetupManager<K, V> {
 
-    private final ManagedCorfuTableSetup<K, V> persistedPlainCorfu = (rt, config) -> rt.getObjectsView()
+    private final ManagedCorfuTableSetup<K, V> persistentPlainCorfu = (rt, config) -> rt.getObjectsView()
             .build()
             .setStreamName(config.getTableName().toFqdn())
             .setTypeToken(PersistentCorfuTable.<K, V>getTypeToken())
+            .setSerializer(config.getSerializer(rt))
+            .open();
+
+    private final ManagedCorfuTableSetup<K, V> persistedPlainCorfu = (rt, config) -> rt.getObjectsView()
+            .build()
+            .setStreamName(config.getTableName().toFqdn())
+            .setTypeToken(PersistedCorfuTable.<K, V>getTypeToken())
             .setSerializer(config.getSerializer(rt))
             .open();
 
@@ -118,6 +125,13 @@ public class ManagedCorfuTableSetupManager<K, V> {
                 .<K, V>builder()
                 .build()
                 .persistedPlainCorfu;
+    }
+
+    public static <K, V> ManagedCorfuTableSetup<K, V> persistentPlainCorfu() {
+        return ManagedCorfuTableSetupManager
+                .<K, V>builder()
+                .build()
+                .persistentPlainCorfu;
     }
 
     public interface ManagedCorfuTableSetup<K, V> {

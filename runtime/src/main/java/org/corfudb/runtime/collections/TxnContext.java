@@ -162,7 +162,9 @@ public class TxnContext implements AutoCloseable {
     void validateWrite(@Nonnull Table<K, V, M> table, K key, M metadata, boolean validateKey) {
         baseValidateWrite(table, key, validateKey);
         if (table.getMetadataClass() == null && metadata != null) {
-            throw new IllegalArgumentException("Metadata schema for table " + table.getFullyQualifiedTableName() + " is defined as NULL, non-null metadata is not allowed.");
+            String errMsg = "Metadata schema for table " + table.getFullyQualifiedTableName() +
+                    " is defined as NULL, non-null metadata is not allowed.";
+            throw new IllegalArgumentException(errMsg);
         }
     }
 
@@ -240,7 +242,7 @@ public class TxnContext implements AutoCloseable {
          * @param <K>       type of the key
          * @param <V>       type of value or payload
          * @param <M>       type of metadata
-         * @return
+         * @return corfu record
          */
         <K extends Message, V extends Message, M extends Message>
         CorfuRecord<V, M> doMerge(Table<K, V, M> table,

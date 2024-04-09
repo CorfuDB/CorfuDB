@@ -940,11 +940,19 @@ public class TableRegistry {
             return StreamId.build(toFqdn());
         }
 
+        public static StreamId streamId(String ns, String name) {
+            return build(ns, name).toStreamId();
+        }
+
         public static FullyQualifiedTableName build(String ns, String name) {
             return FullyQualifiedTableName.builder()
                     .namespace(Optional.of(ns))
                     .tableName(name)
                     .build();
+        }
+
+        public static StreamId streamId(TableName tableName) {
+            return build(tableName).toStreamId();
         }
 
         /**

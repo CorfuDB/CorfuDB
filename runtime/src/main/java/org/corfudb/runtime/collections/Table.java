@@ -149,7 +149,7 @@ public class Table<K extends Message, V extends Message, M extends Message> impl
         return getDescriptor().getVClass();
     }
 
-    public Class<M> metadataClass() {
+    public Class<M> getMetadataClass() {
         return getDescriptor().getMClass();
     }
 

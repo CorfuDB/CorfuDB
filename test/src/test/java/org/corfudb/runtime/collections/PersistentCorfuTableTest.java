@@ -33,7 +33,6 @@ import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.test.CacheSizeForTest;
 import org.corfudb.test.TestSchema.Uuid;
 import org.corfudb.test.managedtable.ManagedCorfuTable;
-import org.corfudb.test.managedtable.ManagedCorfuTable.ManagedCorfuTableConfig;
 import org.corfudb.test.managedtable.ManagedCorfuTableSetupManager;
 import org.corfudb.test.managedtable.ManagedRuntime;
 import org.junit.Test;
