@@ -105,7 +105,8 @@ public class Serializers {
         JSON((byte) 2),
         PRIMITIVE((byte) 3),
         QUEUE((byte) 4),
-        PROTOBUF((byte) 25);
+        PROTOBUF((byte) 25),
+        CHECKPOINT((byte) 20);
 
         private final byte serializerType;
 

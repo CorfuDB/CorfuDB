@@ -13,6 +13,7 @@ import org.corfudb.runtime.ExampleSchemas.ManagedMetadata;
 import org.corfudb.runtime.collections.ProtobufIndexer;
 import org.corfudb.runtime.view.TableRegistry.FullyQualifiedTableName;
 import org.corfudb.runtime.view.TableRegistry.TableDescriptor;
+import org.corfudb.test.CPSerializer;
 import org.corfudb.test.TestSchema.Uuid;
 import org.corfudb.test.managedtable.ManagedCorfuTable.TableDescriptors;
 import org.corfudb.util.serializer.DynamicProtobufSerializer;
@@ -31,9 +32,9 @@ public interface ManagedCorfuTableConfig<K, V> {
 
     @Builder
     @Getter
-    class ManagedCorfuTableDynamicProtobufConfig<K, V> implements ManagedCorfuTableConfig<K, V> {
-        @Default
-        private final ManagedSerializer managedSerializer = new ManagedDynamicProtobufSerializer();
+    class ManagedCorfuTableGenericConfig<K, V> implements ManagedCorfuTableConfig<K, V> {
+        @NonNull
+        private final ManagedSerializer managedSerializer;
 
         @Default
         private final FullyQualifiedTableName tableName = FullyQualifiedTableName.builder()
@@ -186,6 +187,17 @@ public interface ManagedCorfuTableConfig<K, V> {
         public void configure(CorfuRuntime rt) {
             //create and register dynamic serializer in the runtime
             serializer = new DynamicProtobufSerializer(rt);
+        }
+    }
+
+    class ManagedCPSerializer implements ManagedSerializer {
+        @Getter
+        private ISerializer serializer;
+
+        @Override
+        public void configure(CorfuRuntime rt) {
+            serializer = new CPSerializer();
+            rt.getSerializers().registerSerializer(serializer);
         }
     }
 }

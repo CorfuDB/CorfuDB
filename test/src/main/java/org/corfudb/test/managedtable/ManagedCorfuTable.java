@@ -3,6 +3,7 @@ package org.corfudb.test.managedtable;
 import lombok.Setter;
 import lombok.SneakyThrows;
 import lombok.experimental.Accessors;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.ExampleSchemas.ExampleValue;
 import org.corfudb.runtime.ExampleSchemas.ManagedMetadata;
 import org.corfudb.runtime.collections.table.GenericCorfuTable;
@@ -71,6 +72,16 @@ public class ManagedCorfuTable<K, V> {
                 action.accept(new CorfuTableSpecContext<>(rt, table));
             }
         });
+    }
+
+    @SneakyThrows
+    public void noRtExecute(ThrowableConsumer<CorfuTableSpecContext<K, V>> action) throws Exception {
+        Objects.requireNonNull(tableSetup);
+
+        CorfuRuntime rt = managedRt.getRt();
+        try (GenericCorfuTable<? extends SnapshotGenerator<?>, K, V> table = tableSetup.open(rt, config)) {
+            action.accept(new CorfuTableSpecContext<>(rt, table));
+        }
     }
 
     public static class TableDescriptors {

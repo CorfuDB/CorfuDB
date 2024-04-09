@@ -20,8 +20,11 @@ import org.corfudb.runtime.object.PersistenceOptions.PersistenceOptionsBuilder;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.proto.service.CorfuMessage;
 import org.corfudb.runtime.view.AbstractViewTest;
+import org.corfudb.test.CPSerializer;
 import org.corfudb.test.managedtable.ManagedCorfuTable;
 import org.corfudb.test.managedtable.ManagedCorfuTableConfig;
+import org.corfudb.test.managedtable.ManagedCorfuTableConfig.ManagedCPSerializer;
+import org.corfudb.test.managedtable.ManagedCorfuTableConfig.ManagedCorfuTableGenericConfig;
 import org.corfudb.test.managedtable.ManagedCorfuTableSetupManager;
 import org.corfudb.test.managedtable.ManagedRuntime;
 import org.corfudb.util.Sleep;
@@ -65,31 +68,11 @@ public class CheckpointTest extends AbstractObjectTest {
         managedRt.setup(rt -> rt.parseConfigurationString(getDefaultNode().toEndpointUrl()));
 
         final int tableSize = PARAMETERS.NUM_ITERATIONS_LOW;
-        //CorfuRuntime rt = getNewRuntime();
 
-        ManagedCorfuTableConfig<String, Long> cfg = new ManagedCorfuTableConfig() {
-            @Override
-            public void configure(CorfuRuntime rt) throws Exception {
-                final byte serializerByte = (byte) 20;
-                ISerializer serializer = new CPSerializer(serializerByte);
-                rt.getSerializers().registerSerializer(serializer);
-            }
-
-            @Override
-            public ISerializer getSerializer(CorfuRuntime rt) {
-                return null;
-            }
-
-            @Override
-            public String getFullyQualifiedTableName() {
-                return null;
-            }
-
-            @Override
-            public String getTableName() {
-                return null;
-            }
-        };
+        ManagedCorfuTableConfig<String, Long> cfg = ManagedCorfuTableGenericConfig
+                .<String, Long>builder()
+                .managedSerializer(new ManagedCPSerializer())
+                .build();
 
         ManagedCorfuTable
                 .<String, Long>build()
@@ -102,7 +85,7 @@ public class CheckpointTest extends AbstractObjectTest {
                             .config(cfg)
                             .managedRt(managedRt)
                             .tableSetup(ManagedCorfuTableSetupManager.persistedPlainCorfu())
-                            .execute(ctxB -> {
+                            .noRtExecute(ctxB -> {
                                 GenericCorfuTable<?, String, Long> tableA = ctxA.getCorfuTable();
                                 GenericCorfuTable<?, String, Long> tableB = ctxB.getCorfuTable();
 

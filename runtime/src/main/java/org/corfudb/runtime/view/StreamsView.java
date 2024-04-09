@@ -3,7 +3,9 @@ package org.corfudb.runtime.view;
 import com.google.common.annotations.VisibleForTesting;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
+import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.protocols.wireprotocol.DataType;
@@ -294,6 +296,8 @@ public class StreamsView extends AbstractView {
     }
 
     @AllArgsConstructor(access = AccessLevel.PRIVATE)
+    @EqualsAndHashCode
+    @ToString
     public static class StreamId {
         @Getter
         private final UUID id;

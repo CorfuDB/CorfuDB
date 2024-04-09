@@ -32,10 +32,15 @@ import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.ObjectOpenOption;
 import org.corfudb.runtime.view.StreamOptions;
 import org.corfudb.runtime.view.TableRegistry;
+import org.corfudb.runtime.view.TableRegistry.FullyQualifiedTableName;
+import org.corfudb.runtime.view.TableRegistry.TableDescriptor;
 import org.corfudb.runtime.view.stream.AddressMapStreamView;
 import org.corfudb.runtime.view.stream.IStreamView;
+import org.corfudb.test.CPSerializer;
 import org.corfudb.test.SampleAppliance;
-import org.corfudb.test.SampleSchema;
+import org.corfudb.test.SampleSchema.FirewallRule;
+import org.corfudb.test.SampleSchema.ManagedMetadata;
+import org.corfudb.test.SampleSchema.Uuid;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.KeyDynamicProtobufSerializer;
@@ -56,7 +61,6 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.corfudb.runtime.view.TableRegistry.getFullyQualifiedTableName;
 import static org.junit.Assert.fail;
 
 /**
@@ -977,8 +981,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         PersistentCorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord> tableRegistry = runtime.getObjectsView()
                 .build()
                 .setTypeToken(PersistentCorfuTable.<CorfuDynamicKey, OpaqueCorfuDynamicRecord>getTypeToken())
-                .setStreamName(TableRegistry.getFullyQualifiedTableName(TableRegistry.CORFU_SYSTEM_NAMESPACE,
-                        TableRegistry.REGISTRY_TABLE_NAME))
+                .setStreamName(TableRegistry.FQ_REGISTRY_TABLE_NAME.toFqdn())
                 .setSerializer(serializer)
                 .addOpenOption(ObjectOpenOption.NO_CACHE)
                 .open();
@@ -986,8 +989,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         PersistentCorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord> descriptorTable = runtime.getObjectsView()
                 .build()
                 .setTypeToken(PersistentCorfuTable.<CorfuDynamicKey, OpaqueCorfuDynamicRecord>getTypeToken())
-                .setStreamName(TableRegistry.getFullyQualifiedTableName(TableRegistry.CORFU_SYSTEM_NAMESPACE,
-                        TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME))
+                .setStreamName(TableRegistry.FQ_PROTO_DESC_TABLE_NAME.toFqdn())
                 .setSerializer(serializer)
                 .addOpenOption(ObjectOpenOption.NO_CACHE)
                 .open();
@@ -1000,29 +1002,30 @@ public class CheckpointSmokeTest extends AbstractViewTest {
 
     @Test
     public void checkpointWithoutDeserializingValueTest() throws Exception {
-        final String streamName = "mystream9";
-        final String namespace = "test";
-        UUID streamId = UUID.nameUUIDFromBytes(getFullyQualifiedTableName(namespace, streamName).getBytes());
+        FullyQualifiedTableName fqTableName = FullyQualifiedTableName.build("mystream9", "test");
+        UUID streamId = fqTableName.toStreamId().getId();
         final int numKeys = 123;
 
         // Create and populate the test table
         CorfuStore corfuStoreWriter = new CorfuStore(r);
-        Table table = corfuStoreWriter.openTable(namespace, streamName,
-                SampleSchema.Uuid.class,
-                SampleSchema.FirewallRule.class, SampleSchema.ManagedMetadata.class,
-                TableOptions.fromProtoSchema(SampleSchema.FirewallRule.class));
-        TxnContext txn = corfuStoreWriter.txn(namespace);
-        Map<SampleSchema.Uuid, CorfuRecord<SampleSchema.FirewallRule, SampleSchema.ManagedMetadata>> mockedMap = new HashMap<>();
+        Table table = corfuStoreWriter.openTable(
+                fqTableName,
+                new TableDescriptor<>(Uuid.class, FirewallRule.class, ManagedMetadata.class),
+                TableOptions.fromProtoSchema(FirewallRule.class)
+        );
+
+        TxnContext txn = corfuStoreWriter.txn(fqTableName.rawNamespace());
+        Map<Uuid, CorfuRecord<FirewallRule, ManagedMetadata>> mockedMap = new HashMap<>();
         for (int i = 0; i < numKeys; i++) {
-            SampleSchema.Uuid uuid = SampleSchema.Uuid.newBuilder().setLsb(i).setMsb(i).build();
-            SampleSchema.FirewallRule firewallRuleVal = SampleSchema.FirewallRule.newBuilder()
+            Uuid uuid = Uuid.newBuilder().setLsb(i).setMsb(i).build();
+            FirewallRule firewallRuleVal = FirewallRule.newBuilder()
                     .setRuleId(i).setRuleName("test_rule_" + i)
                     .setInput(
                             SampleAppliance.Appliance.newBuilder().setEndpoint("localhost_" + i))
                     .setOutput(
                             SampleAppliance.Appliance.newBuilder().setEndpoint("localhost_" + i))
                     .build();
-            SampleSchema.ManagedMetadata metadata = SampleSchema.ManagedMetadata
+            ManagedMetadata metadata = ManagedMetadata
                     .newBuilder().setCreateUser("test_use_" + i).build();
             txn.putRecord(table, uuid, firewallRuleVal, metadata);
             mockedMap.put(uuid, new CorfuRecord<>(firewallRuleVal, metadata));
@@ -1036,7 +1039,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         PersistentCorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord> corfuTable = r.getObjectsView()
                 .build()
                 .setTypeToken(PersistentCorfuTable.<CorfuDynamicKey, OpaqueCorfuDynamicRecord>getTypeToken())
-                .setStreamName(getFullyQualifiedTableName(namespace, streamName))
+                .setStreamName(fqTableName.toFqdn())
                 .setSerializer(serializer)
                 .addOpenOption(ObjectOpenOption.NO_CACHE)
                 .open();
@@ -1053,23 +1056,22 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         assertThat(ld.isHole()).isTrue();
         assertThat(ld.getStreams())
                 .containsExactlyInAnyOrder(streamId,
-                        TableRegistry.getStreamIdForStreamTag(namespace, "firewall_tag"));
+                        TableRegistry.getStreamIdForStreamTag(fqTableName.rawNamespace(), "firewall_tag"));
 
         // Read the checkpointed table, verify that the table entries are intact
         setRuntime();
         CorfuStore corfuStoreReader = new CorfuStore(r);
-        Table<SampleSchema.Uuid, SampleSchema.FirewallRule, SampleSchema.ManagedMetadata> tableRead =
+        Table<Uuid, FirewallRule, ManagedMetadata> tableRead =
                 corfuStoreReader.openTable(
-                        namespace, streamName,
-                        SampleSchema.Uuid.class,
-                        SampleSchema.FirewallRule.class, SampleSchema.ManagedMetadata.class,
-                        TableOptions.fromProtoSchema(SampleSchema.FirewallRule.class));
-        TxnContext txnReader = corfuStoreReader.txn(namespace);
+                        fqTableName,
+                        new TableDescriptor<>(Uuid.class, FirewallRule.class, ManagedMetadata.class),
+                        TableOptions.fromProtoSchema(FirewallRule.class));
+        TxnContext txnReader = corfuStoreReader.txn(fqTableName.rawNamespace());
 
         assertThat(mockedMap.size()).isEqualTo(tableRead.count());
-        for (Map.Entry<SampleSchema.Uuid, CorfuRecord<SampleSchema.FirewallRule, SampleSchema.ManagedMetadata>>
+        for (Map.Entry<Uuid, CorfuRecord<FirewallRule, ManagedMetadata>>
                 entry : mockedMap.entrySet()) {
-            CorfuStoreEntry<SampleSchema.Uuid, SampleSchema.FirewallRule, SampleSchema.ManagedMetadata> entryRead =
+            CorfuStoreEntry<Uuid, FirewallRule, ManagedMetadata> entryRead =
                     txnReader.getRecord(tableRead, entry.getKey());
             assertThat(entryRead.getPayload().getRuleId())
                     .isEqualTo(entry.getValue().getPayload().getRuleId());

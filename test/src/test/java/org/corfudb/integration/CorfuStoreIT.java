@@ -17,7 +17,7 @@ import org.corfudb.runtime.CorfuStoreMetadata.TableDescriptors;
 import org.corfudb.runtime.CorfuStoreMetadata.TableMetadata;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
-import org.corfudb.runtime.ExampleSchemas;
+import org.corfudb.runtime.ExampleSchemas.ContactBookId;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.CorfuDynamicKey;
 import org.corfudb.runtime.collections.CorfuDynamicRecord;
@@ -50,7 +50,8 @@ import org.corfudb.test.SampleSchema;
 import org.corfudb.test.SampleSchema.ManagedResources;
 import org.corfudb.test.TestSchema.Uuid;
 import org.corfudb.test.managedtable.ManagedCorfuTable;
-import org.corfudb.test.managedtable.ManagedCorfuTableConfig.ManagedCorfuTableDynamicProtobufConfig;
+import org.corfudb.test.managedtable.ManagedCorfuTableConfig.ManagedCorfuTableGenericConfig;
+import org.corfudb.test.managedtable.ManagedCorfuTableConfig.ManagedDynamicProtobufSerializer;
 import org.corfudb.test.managedtable.ManagedCorfuTableSetupManager;
 import org.corfudb.test.managedtable.ManagedRuntime;
 import org.corfudb.util.serializer.DynamicProtobufSerializer;
@@ -182,8 +183,9 @@ public class CorfuStoreIT extends AbstractIT {
         final long newMetadataUuid = 99L;
         ManagedRuntime managedRt = buildManagedRuntime();
 
-        ManagedCorfuTableDynamicProtobufConfig<CorfuDynamicKey, CorfuDynamicRecord> config = ManagedCorfuTableDynamicProtobufConfig
+        ManagedCorfuTableGenericConfig<CorfuDynamicKey, CorfuDynamicRecord> config = ManagedCorfuTableGenericConfig
                 .<CorfuDynamicKey, CorfuDynamicRecord>builder()
+                .managedSerializer(new ManagedDynamicProtobufSerializer())
                 .build();
 
         ManagedCorfuTable<CorfuDynamicKey, CorfuDynamicRecord> managedTable = ManagedCorfuTable
@@ -389,6 +391,7 @@ public class CorfuStoreIT extends AbstractIT {
                 TableOptions.builder().persistenceOptions(persistenceOptions).build()
         );
 
+        String namespace = fqTableName.rawNamespace();
         final long aLong = 1L;
         Uuid uuidVal = Uuid.newBuilder().setMsb(aLong).setLsb(aLong).build();
         ManagedResources metadata = ManagedResources.newBuilder()
@@ -584,20 +587,13 @@ public class CorfuStoreIT extends AbstractIT {
 
         // Creating Corfu Store using a connected corfu client.
         CorfuStore corfuStore = new CorfuStore(runtime);
-
-        // Define a namespace for the table.
-        final String someNamespace = "some-namespace";
-        // Define table name.
-        final String tableName = "EventInfo";
+        FullyQualifiedTableName fqTableName = FullyQualifiedTableName.build("some-namespace", "EventInfo");
 
         // Create & Register the table.
         // This is required to initialize the table for the current corfu client.
         Table<Uuid, SampleSchema.EventInfo, ManagedResources> table = corfuStore.openTable(
-                someNamespace,
-                tableName,
-                Uuid.class,
-                SampleSchema.EventInfo.class,
-                ManagedResources.class,
+                fqTableName,
+                new TableDescriptor<>(Uuid.class, SampleSchema.EventInfo.class, ManagedResources.class),
                 // TableOptions includes option to choose - Memory/Disk based corfu table.
                 TableOptions.builder().build());
 
@@ -609,18 +605,17 @@ public class CorfuStoreIT extends AbstractIT {
          * records of the wrong type (ContactBookId) into a table which was opened with a different schema
          * (EventInfo)
          */
-        ExampleSchemas.ContactBookId defaultValueMessage = (ExampleSchemas.ContactBookId) ExampleSchemas
-                .ContactBookId.class.getMethod("getDefaultInstance").invoke(null);
+        ContactBookId defaultValueMessage = (ContactBookId) ContactBookId.class.getMethod("getDefaultInstance").invoke(null);
         ManagedResources defaultMetadataMessage = (ManagedResources) ManagedResources
                 .class.getMethod("getDefaultInstance").invoke(null);
         CorfuOptions.PersistenceOptions persistenceOptions = CorfuOptions.PersistenceOptions.newBuilder().build();
 
-        Table<Uuid, ExampleSchemas.ContactBookId, ManagedResources> badTable = new Table<>(
-                TableParameters.<Uuid, ExampleSchemas.ContactBookId, ManagedResources>builder()
-                        .namespace(someNamespace)
-                        .fullyQualifiedTableName(getFullyQualifiedTableName(someNamespace, tableName))
+        Table<Uuid, ContactBookId, ManagedResources> badTable = new Table<>(
+                TableParameters.<Uuid, ContactBookId, ManagedResources>builder()
+                        .namespace(fqTableName.rawNamespace())
+                        .fullyQualifiedTableName(fqTableName.toFqdn())
                         .kClass(Uuid.class)
-                        .vClass(ExampleSchemas.ContactBookId.class)
+                        .vClass(ContactBookId.class)
                         .mClass(ManagedResources.class)
                         .valueSchema(defaultValueMessage)
                         .metadataSchema(defaultMetadataMessage)
@@ -633,10 +628,10 @@ public class CorfuStoreIT extends AbstractIT {
                 new HashSet<>(Collections.singletonList(LOG_REPLICATOR_STREAM_INFO.getStreamId())));
 
         // Now this badTable is completely hidden from both the TableRegistry and the Serializer!
-        TxnContext tx = corfuStore.txn(someNamespace);
+        TxnContext tx = corfuStore.txn(fqTableName.rawNamespace());
         long timestamp = System.currentTimeMillis();
-        ExampleSchemas.ContactBookId badSchema = ExampleSchemas.ContactBookId.newBuilder()
-                .setName(tableName).build();
+        ContactBookId badSchema = ContactBookId.newBuilder()
+                .setName(fqTableName.rawTableName()).build();
         tx.putRecord(badTable, key, badSchema,
                 ManagedResources.newBuilder()
                         .setCreateTimestamp(timestamp).build());
@@ -650,16 +645,13 @@ public class CorfuStoreIT extends AbstractIT {
         // Re-open the table with the same schema and test if it hits a serializer exception
         // as it would when a new code is trying to open something from an older instance
         Table<Uuid, SampleSchema.EventInfo, ManagedResources> tableV2 = corfuStore.openTable(
-                someNamespace,
-                tableName,
-                Uuid.class,
-                SampleSchema.EventInfo.class,
-                ManagedResources.class,
+                fqTableName,
+                new TableDescriptor<>(Uuid.class, SampleSchema.EventInfo.class, ManagedResources.class),
                 // TableOptions includes option to choose - Memory/Disk based corfu table.
                 TableOptions.builder().build());
 
         boolean didAssertFire = false;
-        tx = corfuStore.txn(someNamespace);
+        tx = corfuStore.txn(fqTableName.rawNamespace());
         try {
             tx.clear(tableV2);
             tx.commit();
@@ -669,9 +661,9 @@ public class CorfuStoreIT extends AbstractIT {
         }
         assertThat(didAssertFire).isTrue();
         // Once the unknown type is added to the map it should be ok to clear the table
-        runtime.getTableRegistry().addTypeToClassMap(ExampleSchemas.ContactBookId.getDefaultInstance());
+        runtime.getTableRegistry().addTypeToClassMap(ContactBookId.getDefaultInstance());
 
-        tx = corfuStore.txn(someNamespace);
+        tx = corfuStore.txn(fqTableName.rawNamespace());
         tx.clear(tableV2);
         tx.commit();
 
@@ -877,8 +869,7 @@ public class CorfuStoreIT extends AbstractIT {
         Process corfuServer = null;
         try {
             corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
-            final String namespace = "namespace";
-            final String tableName = "table";
+            FullyQualifiedTableName fqTableName = FullyQualifiedTableName.build("namespace", "table");
             Timestamp commitTimestamp;
 
             // Start a Corfu runtime & Corfu Store
@@ -887,19 +878,17 @@ public class CorfuStoreIT extends AbstractIT {
 
             // Open one table and write one update
             final Table<SampleSchema.Uuid, SampleSchema.SampleTableAMsg, SampleSchema.ManagedMetadata> tableA = store.openTable(
-                    namespace,
-                    tableName,
-                    SampleSchema.Uuid.class,
-                    SampleSchema.SampleTableAMsg.class,
-                    SampleSchema.ManagedMetadata.class,
-                    TableOptions.fromProtoSchema(SampleSchema.SampleTableAMsg.class));
+                    fqTableName,
+                    new TableDescriptor<>(SampleSchema.Uuid.class, SampleSchema.SampleTableAMsg.class, SampleSchema.ManagedMetadata.class),
+                    TableOptions.fromProtoSchema(SampleSchema.SampleTableAMsg.class)
+            );
 
             SampleSchema.Uuid key = SampleSchema.Uuid.newBuilder().setLsb(0).setMsb(0).build();
             SampleSchema.SampleTableAMsg value = SampleSchema.SampleTableAMsg.newBuilder().setPayload("Payload Value").build();
             SampleSchema.ManagedMetadata metadata = SampleSchema.ManagedMetadata.newBuilder().setCreateTime(System.currentTimeMillis())
                     .setCreateUser("User_IT").build();
 
-            try (TxnContext tx = store.txn(namespace)) {
+            try (TxnContext tx = store.txn(fqTableName.rawNamespace())) {
                 tx.putRecord(tableA, key, value, metadata);
                 commitTimestamp = tx.commit();
             }
@@ -921,10 +910,10 @@ public class CorfuStoreIT extends AbstractIT {
             Map<UUID, Long> backpointerMap = (Map<UUID, Long>) ld.getMetadataMap().get(IMetadata.LogUnitMetadataType.BACKPOINTER_MAP);
             Set<UUID> expectedTableUpdates = new HashSet<>();
             // Table itself (tableA)
-            expectedTableUpdates.add(CorfuRuntime.getStreamID(getFullyQualifiedTableName(namespace, tableName)));
+            expectedTableUpdates.add(fqTableName.toStreamId().getId());
             // Stream tags for tableA
-            expectedTableUpdates.add(TableRegistry.getStreamIdForStreamTag(namespace, "sample_streamer_1"));
-            expectedTableUpdates.add(TableRegistry.getStreamIdForStreamTag(namespace, "sample_streamer_2"));
+            expectedTableUpdates.add(TableRegistry.getStreamIdForStreamTag(fqTableName.rawNamespace(), "sample_streamer_1"));
+            expectedTableUpdates.add(TableRegistry.getStreamIdForStreamTag(fqTableName.rawNamespace(), "sample_streamer_2"));
             // This is a federated table so add Log Replicator Stream Id
             expectedTableUpdates.add(ObjectsView.getLogReplicatorStreamId());
             assertThat(expectedTableUpdates.size()).isEqualTo(backpointerMap.size());
