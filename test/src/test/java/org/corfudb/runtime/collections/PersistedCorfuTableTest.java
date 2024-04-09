@@ -11,6 +11,7 @@ import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import net.jqwik.api.Arbitraries;
 import net.jqwik.api.Arbitrary;
+import net.jqwik.api.Combinators;
 import net.jqwik.api.ForAll;
 import net.jqwik.api.Property;
 import net.jqwik.api.Provide;
@@ -29,6 +30,13 @@ import org.corfudb.runtime.CorfuOptions.SizeComputationModel;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.CorfuStoreMetadata;
+import org.corfudb.runtime.ExampleSchemas;
+import org.corfudb.runtime.ExampleSchemas.Address;
+import org.corfudb.runtime.ExampleSchemas.Adult;
+import org.corfudb.runtime.ExampleSchemas.Child;
+import org.corfudb.runtime.ExampleSchemas.Children;
+import org.corfudb.runtime.ExampleSchemas.Person;
+import org.corfudb.runtime.ExampleSchemas.PhoneNumber;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
@@ -36,8 +44,8 @@ import org.corfudb.runtime.object.PersistenceOptions;
 import org.corfudb.runtime.object.PersistenceOptions.PersistenceOptionsBuilder;
 import org.corfudb.runtime.object.RocksDbReadCommittedTx;
 import org.corfudb.runtime.view.AbstractViewTest;
-import org.corfudb.test.SampleSchema;
 import org.corfudb.test.SampleSchema.EventInfo;
+import org.corfudb.test.SampleSchema.ManagedResources;
 import org.corfudb.test.SampleSchema.Uuid;
 import org.corfudb.util.serializer.ISerializer;
 import org.junit.Test;
@@ -1006,6 +1014,11 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
                 idx -> Uuid.newBuilder().setMsb(idx).setLsb(idx).build());
     }
 
+    Arbitrary<ExampleSchemas.Uuid> exampleUuid() {
+        return Arbitraries.integers().map(
+                idx -> ExampleSchemas.Uuid.newBuilder().setMsb(idx).setLsb(idx).build());
+    }
+
     /**
      * A custom generator for {@link EventInfo}.
      */
@@ -1016,6 +1029,71 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
                         .setId(idx)
                         .setName("event_" + idx)
                         .setEventTime(idx)
+                        .build());
+    }
+
+    Arbitrary<Child> child() {
+        Arbitrary<String> names = Arbitraries.strings().withCharRange('a', 'z')
+                .ofMinLength(3).ofMaxLength(21);
+        Arbitrary<Integer> ages = Arbitraries.integers();
+        return Combinators.combine(names, ages)
+                .as((name, age) -> Child.newBuilder().setName(name)
+                        .setAge(age).build());
+    }
+
+    Arbitrary<Children> children() {
+        return Combinators.combine(child(), child())
+                .as((child0, child1) -> Children .newBuilder()
+                        .addChild(child0)
+                        .addChild(child1)
+                        .build());
+    }
+
+    Arbitrary<PhoneNumber> phoneNumber() {
+        return Arbitraries.integers().between(1_000_000, 9_000_000)
+                .map(number -> PhoneNumber .newBuilder()
+                        .addMobile(Integer.toString(number))
+                        .build());
+    }
+
+    Arbitrary<Person> person() {
+        Arbitrary<String> names = Arbitraries.strings().withCharRange('a', 'z')
+                .ofMinLength(3).ofMaxLength(21);
+        Arbitrary<Integer> ages = Arbitraries.integers().between(0, 130);
+
+        return Combinators.combine(names, ages, children(), phoneNumber())
+                .as((name, age, children, phoneNumber) ->
+                        Person.newBuilder()
+                                .setName(name)
+                                .setAge(age)
+                                .setPhoneNumber(phoneNumber)
+                                .setChildren(children).build());
+    }
+
+    Arbitrary<Address> address() {
+        Arbitrary<String> cities = Arbitraries.strings().withCharRange('a', 'z')
+                .ofMinLength(3).ofMaxLength(21);
+        Arbitrary<String> streets = Arbitraries.strings().withCharRange('a', 'z')
+                .ofMinLength(3).ofMaxLength(21);
+        Arbitrary<String> units = Arbitraries.strings().withCharRange('a', 'z')
+                .ofMinLength(3).ofMaxLength(21);
+
+        Arbitrary<Integer> numbers = Arbitraries.integers().between(1, 128);
+        return Combinators.combine(exampleUuid(), cities, streets, units, numbers)
+                .as((uuid, city, street, unit, number) -> Address.newBuilder()
+                        .setUniqueAddressId(uuid)
+                        .setCity(city)
+                        .setStreet(street)
+                        .setUnit(unit)
+                        .setNumber(number)
+                        .build());
+    }
+
+    Arbitrary<Adult> adult() {
+        return Combinators.combine(person(), address())
+                .as((person, address) -> Adult.newBuilder()
+                        .setPerson(person)
+                        .addAddresses(address)
                         .build());
     }
 
@@ -1032,9 +1110,85 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
         return eventInfo().set();
     }
 
+    @Provide
+    Arbitrary<Set<Adult>> adultSet() {
+        return adult().set();
+    }
+
     /**
-     * Check {@link PersistedCorfuTable} integration with {@link CorfuStore}.
+     * Test different ways of referencing secondary indexes.
      */
+    @Property(tries = NUM_OF_TRIES)
+    void testSecondaryIndexesNaming(
+            @ForAll @StringLength(min = STRING_MIN, max = STRING_MAX) @AlphaChars String namespace,
+            @ForAll @StringLength(min = STRING_MIN, max = STRING_MAX) @AlphaChars String tableName,
+            @ForAll("uuidSet") @Size(SAMPLE_SIZE + 1) @UniqueElements  Set<Uuid> ids,
+            @ForAll("adultSet") @Size(SAMPLE_SIZE + 1) @UniqueElements Set<Adult> adults) throws Exception {
+        resetTests();
+
+        // Creating Corfu Store using a connected corfu client.
+        CorfuStore corfuStore = new CorfuStore(getDefaultRuntime());
+
+        // Create & Register the table.
+        // This is required to initialize the table for the current corfu client.
+        final Path persistedCacheLocation = Paths.get(diskBackedDirectory, defaultTableName);
+        try (Table<Uuid, Adult, ManagedResources> table =
+                     corfuStore.openTable(namespace, tableName,
+                             Uuid.class, Adult.class,
+                             ManagedResources.class,
+                             // TableOptions includes option to choose - Memory/Disk based corfu table.
+                             TableOptions.fromProtoSchema(Adult.class).toBuilder()
+                                     .persistentDataPath(persistedCacheLocation)
+                                     .build())) {
+
+            ManagedResources metadata = ManagedResources.newBuilder()
+                    .setCreateUser("MrProto").build();
+
+            try (TxnContext tx = corfuStore.txn(namespace)) {
+                assertThat(adults.size()).isEqualTo(ids.size());
+                Streams.zip(ids.stream(), adults.stream(), SimpleEntry::new)
+                        .forEach(pair -> tx.putRecord(table, pair.getKey(), pair.getValue(), metadata));
+                tx.commit();
+            }
+
+            try (TxnContext tx = corfuStore.txn(namespace)) {
+                final Set<Adult> adultSet = adults.stream()
+                        .map(adult -> tx.getByIndex(table, "person.children.child.age",
+                                adult.getPerson().getChildren().getChild(0).getAge()))
+                        .flatMap(List::stream)
+                        .map(CorfuStoreEntry::getPayload)
+                        .collect(Collectors.toSet());
+                assertThat(adults).isEqualTo(adultSet);
+                tx.commit();
+            }
+
+            try (TxnContext tx = corfuStore.txn(namespace)) {
+                final Set<Adult> adultSet = adults.stream()
+                        .map(adult -> tx.getByIndex(table,
+                                "person.children.child",
+                                adult.getPerson().getChildren().getChild(0)))
+                        .flatMap(List::stream)
+                        .map(CorfuStoreEntry::getPayload)
+                        .collect(Collectors.toSet());
+                assertThat(adults).isEqualTo(adultSet);
+                tx.commit();
+            }
+
+            try (TxnContext tx = corfuStore.txn(namespace)) {
+                final Set<Adult> adultSet = adults.stream()
+                        .map(adult -> tx.getByIndex(table,
+                                "kidsAge",
+                                adult.getPerson().getChildren().getChild(0).getAge()))
+                        .flatMap(List::stream)
+                        .map(CorfuStoreEntry::getPayload)
+                        .collect(Collectors.toSet());
+                assertThat(adults).isEqualTo(adultSet);
+                tx.commit();
+            }
+        }
+
+    }
+
     @Property(tries = NUM_OF_TRIES)
     void dataStoreIntegration(
             @ForAll @StringLength(min = STRING_MIN, max = STRING_MAX) @AlphaChars String namespace,
@@ -1057,16 +1211,16 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
         // Create & Register the table.
         // This is required to initialize the table for the current corfu client.
         final Path persistedCacheLocation = Paths.get(diskBackedDirectory, defaultTableName);
-        try (Table<Uuid, EventInfo, SampleSchema.ManagedResources> table =
+        try (Table<Uuid, EventInfo, ManagedResources> table =
                      corfuStore.openTable(namespace, tableName,
                              Uuid.class, EventInfo.class,
-                             SampleSchema.ManagedResources.class,
+                             ManagedResources.class,
                              // TableOptions includes option to choose - Memory/Disk based corfu table.
                              TableOptions.fromProtoSchema(EventInfo.class).toBuilder()
                                      .persistentDataPath(persistedCacheLocation)
                                      .build())) {
 
-            SampleSchema.ManagedResources metadata = SampleSchema.ManagedResources.newBuilder()
+            ManagedResources metadata = ManagedResources.newBuilder()
                     .setCreateUser("MrProto").build();
 
             // Simple CRUD using the table instance.
@@ -1110,7 +1264,7 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
                 final Set<EventInfo> filteredEvents = events.stream().filter(
                                 event -> event.getEventTime() > medianEventTime)
                         .collect(Collectors.toSet());
-                final List<CorfuStoreEntry<Uuid, EventInfo, SampleSchema.ManagedResources>> queryResult =
+                final List<CorfuStoreEntry<Uuid, EventInfo, ManagedResources>> queryResult =
                         tx.executeQuery(tableName,
                                 entry -> entry.getPayload().getEventTime() > medianEventTime);
                 final Set<EventInfo> scannedValues = queryResult.stream()

@@ -120,8 +120,9 @@ public class DiskBackedCorfuTable<K, V> implements
     private final RocksDbSnapshotGenerator<DiskBackedCorfuTable<K, V>> rocksDbSnapshotGenerator;
     private final ColumnFamilyRegistry columnFamilyRegistry;
     private final ISerializer serializer;
-    // Index.
-    private final Map<String, String> secondaryIndexesAliasToPath;
+    // Contains : Index Alias -> Index Path:
+    //            Index Path -> Index Path (Identity Function)
+    private final Map<String, String> secondaryIndexesPath;
     private final Map<String, Byte> indexToId;
     private final Set<Index.Spec<K, V, ?>> indexSpec;
     // Metrics.
@@ -135,13 +136,15 @@ public class DiskBackedCorfuTable<K, V> implements
                                 @Nonnull Index.Registry<K, V> indices) {
 
         this.persistenceOptions = persistenceOptions;
-        this.secondaryIndexesAliasToPath = new HashMap<>();
+        this.secondaryIndexesPath = new HashMap<>();
         this.indexToId = new HashMap<>();
         this.indexSpec = new HashSet<>();
 
         byte indexId = 0;
         for (Index.Spec<K, V, ?> index : indices) {
-            this.secondaryIndexesAliasToPath.put(index.getAlias().get(), index.getName().get());
+            this.secondaryIndexesPath.put(index.getAlias().get(), index.getName().get());
+            this.secondaryIndexesPath.put(index.getName().get(), index.getName().get());
+
             this.indexSpec.add(index);
             this.indexToId.put(index.getName().get(), indexId++);
         }
@@ -456,11 +459,11 @@ public class DiskBackedCorfuTable<K, V> implements
 
         try {
             String secondaryIndex = indexName.get();
-            if (!secondaryIndexesAliasToPath.containsKey(secondaryIndex)) {
+            if (!secondaryIndexesPath.containsKey(secondaryIndex)) {
                 return null;
             }
 
-            byte indexId = indexToId.get(secondaryIndexesAliasToPath.get(secondaryIndex));
+            byte indexId = indexToId.get(secondaryIndexesPath.get(secondaryIndex));
             rocksApi.prefixScan(columnFamilyRegistry.getSecondaryIndexColumnFamily(),
                     indexId, indexKey, serializer, keys, values);
 
