@@ -5,6 +5,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEvent;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEventKey;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
 import org.corfudb.infrastructure.logreplication.proto.Sample.IntValue;
@@ -30,6 +32,7 @@ import org.corfudb.test.SampleSchema.SampleTableAMsg;
 import org.corfudb.test.SampleSchema.ValueFieldTagOne;
 import org.corfudb.test.SampleSchema.ValueFieldTagOneAndTwo;
 import org.corfudb.util.Sleep;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -232,98 +235,162 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
     public void testEventTableCleared() throws Exception {
         String testStreamName = "Table001";
         int batchSize = 5;
+        int numStaleEvents = 3;
 
-        setupActiveAndStandbyCorfu();
+        try {
+            setupActiveAndStandbyCorfu();
 
-        Table<StringKey, IntValue, Metadata>  mapActive = corfuStoreActive.openTable(
-                NAMESPACE,
-                testStreamName,
-                StringKey.class,
-                IntValue.class,
-                Metadata.class,
-                TableOptions.builder().schemaOptions(
-                                CorfuOptions.SchemaOptions.newBuilder()
-                                        .setIsFederated(true)
-                                        .addStreamTag(ObjectsView.LOG_REPLICATOR_STREAM_INFO.getTagName())
-                                        .build())
-                        .build()
-        );
+            Table<LogReplicationMetadata.ReplicationEventKey, LogReplicationMetadata.ReplicationEvent, Message> eventTable =
+                    corfuStoreActive.openTable(LogReplicationMetadataManager.NAMESPACE,
+                            REPLICATION_EVENT_TABLE_NAME,
+                            LogReplicationMetadata.ReplicationEventKey.class,
+                            LogReplicationMetadata.ReplicationEvent.class,
+                            null,
+                            TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationEvent.class));
 
-        Table<StringKey, IntValue, Metadata>  mapStandby = corfuStoreStandby.openTable(
-                NAMESPACE,
-                testStreamName,
-                StringKey.class,
-                IntValue.class,
-                Metadata.class,
-                TableOptions.builder().schemaOptions(
-                                CorfuOptions.SchemaOptions.newBuilder()
-                                        .setIsFederated(true)
-                                        .addStreamTag(ObjectsView.LOG_REPLICATOR_STREAM_INFO.getTagName())
-                                        .build())
-                        .build()
-        );
+            Table<StringKey, IntValue, Metadata>  mapActive = corfuStoreActive.openTable(
+                    NAMESPACE,
+                    testStreamName,
+                    StringKey.class,
+                    IntValue.class,
+                    Metadata.class,
+                    TableOptions.builder().schemaOptions(
+                                    CorfuOptions.SchemaOptions.newBuilder()
+                                            .setIsFederated(true)
+                                            .addStreamTag(ObjectsView.LOG_REPLICATOR_STREAM_INFO.getTagName())
+                                            .build())
+                            .build()
+            );
 
-        // Write batchSize num of entries to active map
-        for (int i = 0; i < batchSize; i++) {
-            try (TxnContext txn = corfuStoreActive.txn(NAMESPACE)) {
-                txn.putRecord(mapActive, StringKey.newBuilder().setKey(String.valueOf(i)).build(),
-                        IntValue.newBuilder().setValue(i).build(), null);
+            Table<StringKey, IntValue, Metadata>  mapStandby = corfuStoreStandby.openTable(
+                    NAMESPACE,
+                    testStreamName,
+                    StringKey.class,
+                    IntValue.class,
+                    Metadata.class,
+                    TableOptions.builder().schemaOptions(
+                                    CorfuOptions.SchemaOptions.newBuilder()
+                                            .setIsFederated(true)
+                                            .addStreamTag(ObjectsView.LOG_REPLICATOR_STREAM_INFO.getTagName())
+                                            .build())
+                            .build()
+            );
+
+            // Write batchSize num of entries to active map
+            for (int i = 0; i < batchSize; i++) {
+                try (TxnContext txn = corfuStoreActive.txn(NAMESPACE)) {
+                    txn.putRecord(mapActive, StringKey.newBuilder().setKey(String.valueOf(i)).build(),
+                            IntValue.newBuilder().setValue(i).build(), null);
+                    txn.commit();
+                }
+            }
+            assertThat(mapActive.count()).isEqualTo(batchSize);
+            assertThat(mapStandby.count()).isZero();
+
+            startActiveLogReplicator();
+            startStandbyLogReplicator();
+            log.info("Replication servers started, and replication is in progress...");
+
+            // Wait for replication to finish and check sink has all the writes
+            boolean entriesReplicated = false;
+            for(int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
+                if (mapStandby.count() == mapActive.count()) {
+                    entriesReplicated = true;
+                    break;
+                }
+                Thread.sleep(50);
+            }
+            assertThat(entriesReplicated).isTrue();
+
+            // Check that the event table is empty to begin
+            assertThat(eventTable.count()).isZero();
+
+            // Add some empty event to act as older stale events.
+            for (int i = 0; i < numStaleEvents; i++) {
+                try (TxnContext txn = corfuStoreActive.txn(LogReplicationMetadataManager.NAMESPACE)) {
+                    ReplicationEventKey key = ReplicationEventKey.newBuilder().setKey(
+                            System.currentTimeMillis() + " " + DefaultClusterConfig.getStandbyClusterId()
+                    ).build();
+                    ReplicationEvent event = ReplicationEvent.newBuilder()
+                            .setClusterId(DefaultClusterConfig.getStandbyClusterId())
+                            .setEventId(UUID.randomUUID().toString())
+                            .build();
+
+                    txn.putRecord(eventTable, key, event, null);
+                    txn.commit();
+                }
+            }
+
+            Table<ClusterUuidMsg, ClusterUuidMsg, ClusterUuidMsg> configTable = corfuStoreActive.openTable(
+                    DefaultClusterManager.CONFIG_NAMESPACE, DefaultClusterManager.CONFIG_TABLE_NAME,
+                    ClusterUuidMsg.class, ClusterUuidMsg.class, ClusterUuidMsg.class,
+                    TableOptions.fromProtoSchema(ClusterUuidMsg.class)
+            );
+
+            // Perform a forced full sync by adding event to config table
+            try (TxnContext txn = corfuStoreActive.txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
+                txn.putRecord(configTable, DefaultClusterManager.OP_ENFORCE_SNAPSHOT_FULL_SYNC,
+                        DefaultClusterManager.OP_ENFORCE_SNAPSHOT_FULL_SYNC, DefaultClusterManager.OP_ENFORCE_SNAPSHOT_FULL_SYNC);
                 txn.commit();
             }
+
+            // Wait for force sync event queued
+            boolean forceSyncQueued = false;
+            for(int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
+                // Added stale events plus the additional one queued for an actual forced sync
+                if (eventTable.count() == numStaleEvents + 1) {
+                    forceSyncQueued = true;
+                    break;
+                }
+                Thread.sleep(50);
+            }
+            assertThat(forceSyncQueued).isTrue();
+
+            corfuStoreStandby.openTable(LogReplicationMetadataManager.NAMESPACE,
+                    REPLICATION_STATUS_TABLE,
+                    LogReplicationMetadata.ReplicationStatusKey.class,
+                    LogReplicationMetadata.ReplicationStatusVal.class,
+                    null,
+                    TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
+
+            // Subscribe listener to know when data is consistent on the sink
+            CountDownLatch awaitSyncCompletion = new CountDownLatch(1);
+            DataConsistentListener standbyListener = new DataConsistentListener(awaitSyncCompletion);
+            corfuStoreStandby.subscribeListener(standbyListener, LogReplicationMetadataManager.NAMESPACE,
+                    LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
+
+            // Wait for the real force sync event to complete which should clear all events when done
+            awaitSyncCompletion.await();
+
+            // Check that the event table is cleared, could be small delay for clear after data is consistent
+            boolean tableCleared = false;
+            for(int i = 0; i < PARAMETERS.NUM_ITERATIONS_LOW; i++) {
+                if (eventTable.count() == 0) {
+                    tableCleared = true;
+                    break;
+                }
+                Thread.sleep(50);
+            }
+            assertThat(tableCleared).isTrue();
+        } finally {
+            executorService.shutdownNow();
+
+            if (activeCorfu != null) {
+                activeCorfu.destroy();
+            }
+
+            if (standbyCorfu != null) {
+                standbyCorfu.destroy();
+            }
+
+            if (activeReplicationServer != null) {
+                activeReplicationServer.destroy();
+            }
+
+            if (standbyReplicationServer != null) {
+                standbyReplicationServer.destroy();
+            }
         }
-        assertThat(mapActive.count()).isEqualTo(batchSize);
-        assertThat(mapStandby.count()).isZero();
-
-        startActiveLogReplicator();
-        startStandbyLogReplicator();
-        log.info("Replication servers started, and replication is in progress...");
-
-        while (mapStandby.count() != mapActive.count()) {
-            // Wait until data is fully replicated
-        }
-
-        Table<LogReplicationMetadata.ReplicationEventKey, LogReplicationMetadata.ReplicationEvent, Message> eventTable =
-                corfuStoreActive.openTable(LogReplicationMetadataManager.NAMESPACE,
-                        REPLICATION_EVENT_TABLE_NAME,
-                        LogReplicationMetadata.ReplicationEventKey.class,
-                        LogReplicationMetadata.ReplicationEvent.class,
-                        null,
-                        TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationEvent.class));
-
-        // Check that the event table is empty before performing a forced full sync
-        assertThat(eventTable.count()).isZero();
-
-        Table<ClusterUuidMsg, ClusterUuidMsg, ClusterUuidMsg> configTable = corfuStoreActive.openTable(
-                DefaultClusterManager.CONFIG_NAMESPACE, DefaultClusterManager.CONFIG_TABLE_NAME,
-                ClusterUuidMsg.class, ClusterUuidMsg.class, ClusterUuidMsg.class,
-                TableOptions.fromProtoSchema(ClusterUuidMsg.class)
-        );
-
-        // Perform a forced full sync
-        try (TxnContext txn = corfuStoreActive.txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
-            txn.putRecord(configTable, DefaultClusterManager.OP_ENFORCE_SNAPSHOT_FULL_SYNC,
-                    DefaultClusterManager.OP_ENFORCE_SNAPSHOT_FULL_SYNC, DefaultClusterManager.OP_ENFORCE_SNAPSHOT_FULL_SYNC);
-            txn.commit();
-        }
-
-        while(eventTable.count() == 0) {
-            // wait for event to queue
-        }
-        assertThat(eventTable.count()).isOne();
-
-        // Immediately restart LR on Active
-        stopActiveLogReplicator();
-        startActiveLogReplicator();
-
-        // Check we still have the initial force sync event that is now stale
-        assertThat(eventTable.count()).isEqualTo(1);
-
-        while(eventTable.count() != 0) {
-            // Old event will be picked up and one it is completed the event table will be cleared
-        }
-
-        stopActiveLogReplicator();
-        stopStandbyLogReplicator();
     }
 
     private long verifyReplicationStatus(ReplicationStatusVal.SyncType targetSyncType,
@@ -869,6 +936,34 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
                     txn.commit();
                 }
             }
+        }
+    }
+
+    /**
+     * Stream listener that listens on the replication status and counts down it's latch on
+     * the dataConsistent field being set to true.
+     */
+    class DataConsistentListener implements StreamListener {
+
+        private CountDownLatch countDownLatch;
+
+        public DataConsistentListener(CountDownLatch countdownLatch) {
+            this.countDownLatch = countdownLatch;
+        }
+
+        @Override
+        public void onNext(CorfuStreamEntries results) {
+            results.getEntries().forEach((schema, entries) -> entries.forEach(e -> {
+                LogReplicationMetadata.ReplicationStatusVal statusVal = (LogReplicationMetadata.ReplicationStatusVal)e.getPayload();
+                if (statusVal.getDataConsistent()) {
+                    countDownLatch.countDown();
+                }
+            }));
+        }
+
+        @Override
+        public void onError(Throwable throwable) {
+            Assert.fail("onError for DataConsistentListener : " + throwable.toString());
         }
     }
 
