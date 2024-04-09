@@ -1,6 +1,7 @@
 package org.corfudb.test.managedtable;
 
 import lombok.AllArgsConstructor;
+import lombok.Getter;
 import lombok.NonNull;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
@@ -15,6 +16,7 @@ public class ManagedRuntime {
 
     @NonNull
     private final CorfuRuntimeParameters params;
+    @Getter
     private final CorfuRuntime rt;
 
     public static ManagedRuntime from(CorfuRuntimeParameters params) {

@@ -10,9 +10,8 @@ import org.corfudb.runtime.CorfuOptions.SchemaOptions;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.ExampleSchemas.ExampleValue;
 import org.corfudb.runtime.ExampleSchemas.ManagedMetadata;
-import org.corfudb.runtime.collections.Index;
 import org.corfudb.runtime.collections.ProtobufIndexer;
-import org.corfudb.runtime.view.TableRegistry;
+import org.corfudb.runtime.view.TableRegistry.FullyQualifiedTableName;
 import org.corfudb.runtime.view.TableRegistry.TableDescriptor;
 import org.corfudb.test.TestSchema.Uuid;
 import org.corfudb.test.managedtable.ManagedCorfuTable.TableDescriptors;
@@ -21,14 +20,14 @@ import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.ProtobufSerializer;
 
 import javax.annotation.Nonnull;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
 public interface ManagedCorfuTableConfig<K, V> {
     void configure(CorfuRuntime rt) throws Exception;
     ISerializer getSerializer(CorfuRuntime rt);
-    String getFullyQualifiedTableName();
-    String getTableName();
+    FullyQualifiedTableName getTableName();
 
     @Builder
     @Getter
@@ -36,26 +35,22 @@ public interface ManagedCorfuTableConfig<K, V> {
         @Default
         private final ManagedSerializer managedSerializer = new ManagedDynamicProtobufSerializer();
 
+        @Default
+        private final FullyQualifiedTableName tableName = FullyQualifiedTableName.builder()
+                .namespace(Optional.of("some-namespace"))
+                .tableName("some-table")
+                .build();
+
         @Override
         public void configure(CorfuRuntime rt) throws Exception {
             managedSerializer.configure(rt);
-
         }
 
         @Override
         public ISerializer getSerializer(CorfuRuntime rt) {
-            return null;
+            return managedSerializer.getSerializer();
         }
 
-        @Override
-        public String getFullyQualifiedTableName() {
-            return null;
-        }
-
-        @Override
-        public String getTableName() {
-            return null;
-        }
     }
 
     @Builder
@@ -66,10 +61,10 @@ public interface ManagedCorfuTableConfig<K, V> {
         private final TableDescriptor<K, V, M> tableDescriptor;
 
         @Default
-        private final String namespace = "some-namespace";
-
-        @Default
-        private final String tableName = "some-table";
+        private final FullyQualifiedTableName tableName = FullyQualifiedTableName.builder()
+                .namespace(Optional.of("some-namespace"))
+                .tableName("some-table")
+                .build();
 
         @Default
         private final boolean withSchema = true;
@@ -134,19 +129,6 @@ public interface ManagedCorfuTableConfig<K, V> {
         }
 
         /**
-         * Fully qualified table name created to produce the stream uuid.
-         */
-        @Override
-        public String getFullyQualifiedTableName() {
-            return namespace + "$" + tableName;
-        }
-
-        @Override
-        public String getTableName() {
-            return tableName;
-        }
-
-        /**
          * Adds the schema to the class map to enable serialization of this table data.
          */
         private <T extends Message> void addTypeToClassMap(ProtobufSerializer serializer, T msg) {
@@ -165,20 +147,27 @@ public interface ManagedCorfuTableConfig<K, V> {
 
     interface ManagedSerializer {
         void configure(CorfuRuntime rt);
+        ISerializer getSerializer();
     }
 
     class ManagedProtobufSerializer implements ManagedSerializer {
+        @Getter
+        private ISerializer serializer;
 
         @Override
         public void configure(CorfuRuntime rt) {
-            setupSerializer(rt);
+            serializer = setupSerializer(rt);
         }
 
         /**
          * Register a Protobuf serializer with the default runtime.
+         *
+         * @return ProtobufSerializer
          */
-        private void setupSerializer(CorfuRuntime rt) {
-            setupSerializer(rt, new ProtobufSerializer(new ConcurrentHashMap<>()));
+        private ProtobufSerializer setupSerializer(CorfuRuntime rt) {
+            ProtobufSerializer protoSerializer = new ProtobufSerializer(new ConcurrentHashMap<>());
+            setupSerializer(rt, protoSerializer);
+            return protoSerializer;
         }
 
         /**
@@ -190,11 +179,13 @@ public interface ManagedCorfuTableConfig<K, V> {
     }
 
     class ManagedDynamicProtobufSerializer implements ManagedSerializer {
+        @Getter
+        private ISerializer serializer;
 
         @Override
         public void configure(CorfuRuntime rt) {
             //create and register dynamic serializer in the runtime
-            new DynamicProtobufSerializer(rt);
+            serializer = new DynamicProtobufSerializer(rt);
         }
     }
 }

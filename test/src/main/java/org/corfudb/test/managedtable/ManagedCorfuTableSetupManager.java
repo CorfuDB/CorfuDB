@@ -1,7 +1,7 @@
 package org.corfudb.test.managedtable;
 
-import com.google.common.reflect.TypeToken;
 import lombok.Builder;
+import org.corfudb.common.util.ClassUtils;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.PersistedCorfuTable;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
@@ -26,14 +26,14 @@ public class ManagedCorfuTableSetupManager<K, V> {
 
     private final ManagedCorfuTableSetup<K, V> persistedPlainCorfu = (rt, config) -> rt.getObjectsView()
             .build()
-            .setStreamName(config.getTableName())
-            .setTypeToken(new TypeToken<PersistentCorfuTable<K, V>>() {})
+            .setStreamName(config.getTableName().toFqdn())
+            .setTypeToken(PersistentCorfuTable.<K, V>getTypeToken())
             .setSerializer(config.getSerializer(rt))
             .open();
 
     private final ManagedCorfuTableSetup<K, V> persistedProtobufCorfu = new ManagedCorfuTableSetup<>() {
         @Override
-        public GenericCorfuTable<? extends SnapshotGenerator<?>, K, V> setup(
+        public GenericCorfuTable<? extends SnapshotGenerator<?>, K, V> open(
                 CorfuRuntime rt, ManagedCorfuTableConfig<K, V> config) throws Exception {
             config.configure(rt);
 
@@ -41,7 +41,7 @@ public class ManagedCorfuTableSetupManager<K, V> {
 
             Options defaultOptions = new Options().setCreateIfMissing(true);
 
-            Path dataPath = Paths.get(diskBackedDirectory, config.getTableName());
+            Path dataPath = Paths.get(diskBackedDirectory, config.getTableName().toFqdn());
             PersistenceOptionsBuilder persistenceOptions = PersistenceOptions
                     .builder()
                     .dataPath(dataPath);
@@ -54,7 +54,7 @@ public class ManagedCorfuTableSetupManager<K, V> {
                     .build()
                     .setTypeToken(PersistedCorfuTable.<K, V>getTypeToken())
                     .setArguments(persistenceOptions.build(), defaultOptions, serializer, indexer)
-                    .setStreamName(config.getTableName())
+                    .setStreamName(config.getTableName().toFqdn())
                     .setSerializer(serializer)
                     .open();
         }
@@ -65,9 +65,9 @@ public class ManagedCorfuTableSetupManager<K, V> {
         }
     };
 
-    private final ManagedCorfuTableSetup<K, V> persistentProtobufCorfu = new ManagedCorfuTableSetup<K, V>() {
+    private final ManagedCorfuTableSetup<K, V> persistentProtobufCorfu = new ManagedCorfuTableSetup<>() {
         @Override
-        public GenericCorfuTable<? extends SnapshotGenerator<?>, K, V> setup(
+        public GenericCorfuTable<? extends SnapshotGenerator<?>, K, V> open(
                 CorfuRuntime rt, ManagedCorfuTableConfig<K, V> config) throws Exception {
             config.configure(rt);
             Object[] args = ((ManagedCorfuTableProtobufConfig<?, ?, ?>) config).getArgs();
@@ -75,10 +75,9 @@ public class ManagedCorfuTableSetupManager<K, V> {
 
             PersistentCorfuTable<K, V> table = new PersistentCorfuTable<>();
 
-            String fullyQualifiedTableName = config.getFullyQualifiedTableName();
             MVOCorfuCompileProxy proxy = new MVOCorfuCompileProxy(
                     rt,
-                    UUID.nameUUIDFromBytes(fullyQualifiedTableName.getBytes()),
+                    config.getTableName().toStreamId().getId(),
                     table.getTableTypeToken().getRawType(),
                     PersistentCorfuTable.class,
                     args,
@@ -89,7 +88,7 @@ public class ManagedCorfuTableSetupManager<K, V> {
                     rt.getObjectsView().getMvoCache()
             );
 
-            table.setCorfuSMRProxy(proxy);
+            table.setCorfuSMRProxy(ClassUtils.cast(proxy));
 
             return table;
         }
@@ -122,7 +121,7 @@ public class ManagedCorfuTableSetupManager<K, V> {
     }
 
     public interface ManagedCorfuTableSetup<K, V> {
-        GenericCorfuTable<? extends SnapshotGenerator<?>, K, V> setup(
+        GenericCorfuTable<? extends SnapshotGenerator<?>, K, V> open(
                 CorfuRuntime rt, ManagedCorfuTableConfig<K, V> config
         ) throws Exception;
     }

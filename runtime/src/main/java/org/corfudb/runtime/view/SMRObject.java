@@ -10,6 +10,7 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.object.CorfuCompileWrapperBuilder;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.view.ObjectsView.ObjectID;
+import org.corfudb.runtime.view.StreamsView.StreamId;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 
@@ -24,7 +25,7 @@ import java.util.function.Function;
  * This class provides a builder that takes an SMR object definition with some options, wraps it with
  * a proxy and returns a object reference consumable through the ObjectsView (i.e. becomes replicated and
  * transactional)
- *
+ * <p>
  * Created by mwei on 4/6/16.
  */
 @Slf4j

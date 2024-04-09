@@ -1,6 +1,5 @@
 package org.corfudb.runtime.view;
 
-import com.google.common.reflect.TypeToken;
 import com.google.protobuf.Any;
 import com.google.protobuf.DescriptorProtos.FileDescriptorProto;
 import com.google.protobuf.Descriptors.Descriptor;
@@ -9,13 +8,17 @@ import com.google.protobuf.Message;
 import com.google.protobuf.ProtocolStringList;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
+import lombok.Builder.Default;
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NonNull;
+import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.util.ClassUtils;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.runtime.CheckpointWriter;
 import org.corfudb.runtime.CorfuOptions;
+import org.corfudb.runtime.CorfuOptions.PersistenceOptions;
 import org.corfudb.runtime.CorfuOptions.SchemaOptions;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.ProtobufFileDescriptor;
@@ -29,7 +32,6 @@ import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TableParameters;
-import org.corfudb.runtime.collections.TableSchema;
 import org.corfudb.runtime.collections.streaming.StreamingManager;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.SerializerException;
@@ -37,6 +39,7 @@ import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.ObjectsView.StreamTagInfo;
+import org.corfudb.runtime.view.StreamsView.StreamId;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.GitRepositoryState;
 import org.corfudb.util.serializer.ISerializer;
@@ -61,6 +64,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 import static org.corfudb.runtime.view.ObjectsView.LOG_REPLICATOR_STREAM_INFO;
@@ -84,8 +88,16 @@ public class TableRegistry {
      * application for the schemas.
      */
     public static final String CORFU_SYSTEM_NAMESPACE = "CorfuSystem";
+
     public static final String REGISTRY_TABLE_NAME = "RegistryTable";
+    public static final FullyQualifiedTableName FQ_REGISTRY_TABLE_NAME = FullyQualifiedTableName.build(
+            CORFU_SYSTEM_NAMESPACE, REGISTRY_TABLE_NAME
+    );
+
     public static final String PROTOBUF_DESCRIPTOR_TABLE_NAME = "ProtobufDescriptorTable";
+    public static final FullyQualifiedTableName FQ_PROTO_DESC_TABLE_NAME = FullyQualifiedTableName.build(
+            CORFU_SYSTEM_NAMESPACE, PROTOBUF_DESCRIPTOR_TABLE_NAME
+    );
 
     /**
      * A common prefix for all string based stream tags defined in protobuf.
@@ -105,7 +117,7 @@ public class TableRegistry {
     /**
      * Cache of tables allowing the user to fetch a table by fullyQualified table name without the other options.
      */
-    private final ConcurrentMap<String, Table<Message, Message, Message>> tableMap;
+    private final ConcurrentMap<FullyQualifiedTableName, Table<Message, Message, Message>> tableMap;
 
     /**
      * Serializer to be used for protobuf messages.
@@ -146,17 +158,15 @@ public class TableRegistry {
         }
         this.protobufSerializer = protoSerializer;
         this.registryTable = this.runtime.getObjectsView().build()
-            .setTypeToken(new TypeToken<PersistentCorfuTable<TableName, CorfuRecord<TableDescriptors, TableMetadata>>>() {
-            })
-            .setStreamName(getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, REGISTRY_TABLE_NAME))
+            .setTypeToken(PersistentCorfuTable.<TableName, CorfuRecord<TableDescriptors, TableMetadata>>getTypeToken())
+            .setStreamName(FQ_REGISTRY_TABLE_NAME.toFqdn())
             .setSerializer(this.protobufSerializer)
             .setStreamTags(LOG_REPLICATOR_STREAM_INFO.getStreamId())
             .open();
 
         this.protobufDescriptorTable = this.runtime.getObjectsView().build()
-            .setTypeToken(new TypeToken<PersistentCorfuTable<ProtobufFileName, CorfuRecord<ProtobufFileDescriptor, TableMetadata>>>() {
-            })
-            .setStreamName(getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, PROTOBUF_DESCRIPTOR_TABLE_NAME))
+            .setTypeToken(PersistentCorfuTable.<ProtobufFileName, CorfuRecord<ProtobufFileDescriptor, TableMetadata>>getTypeToken())
+            .setStreamName(FQ_PROTO_DESC_TABLE_NAME.toFqdn())
             .setSerializer(this.protobufSerializer)
             .setStreamTags(LOG_REPLICATOR_STREAM_INFO.getStreamId())
             .open();
@@ -170,15 +180,17 @@ public class TableRegistry {
 
         // Register the registry table itself.
         try {
-            registerTable(CORFU_SYSTEM_NAMESPACE,
-                REGISTRY_TABLE_NAME,
-                new TableDescriptor<>(TableName.class, TableDescriptors.class, TableMetadata.class),
-                TableOptions.fromProtoSchema(TableDescriptors.class));
+            registerTable(
+                    FQ_REGISTRY_TABLE_NAME,
+                    new TableDescriptor<>(TableName.class, TableDescriptors.class, TableMetadata.class),
+                    TableOptions.fromProtoSchema(TableDescriptors.class)
+            );
 
-            registerTable(CORFU_SYSTEM_NAMESPACE,
-                PROTOBUF_DESCRIPTOR_TABLE_NAME,
-                new TableDescriptor<>(ProtobufFileName.class, ProtobufFileDescriptor.class, TableMetadata.class),
-                TableOptions.fromProtoSchema(ProtobufFileDescriptor.class));
+            registerTable(
+                    FQ_PROTO_DESC_TABLE_NAME,
+                    new TableDescriptor<>(ProtobufFileName.class, ProtobufFileDescriptor.class, TableMetadata.class),
+                    TableOptions.fromProtoSchema(ProtobufFileDescriptor.class)
+            );
         } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
             throw new RuntimeException(e);
         }
@@ -187,8 +199,7 @@ public class TableRegistry {
     /**
      * Register a table in the internal Table Registry.
      *
-     * @param namespace     Namespace of the table to be registered.
-     * @param tableName     Table name of the table to be registered.
+     * @param fqTableName     Table name of the table to be registered.
      * @param descriptor table descriptor.
      * @param <K>           Type of Key.
      * @param <V>           Type of Value.
@@ -198,16 +209,10 @@ public class TableRegistry {
      * @throws IllegalAccessException    If this is not a protobuf message.
      */
     private <K extends Message, V extends Message, M extends Message>
-    void registerTable(@Nonnull String namespace,
-                       @Nonnull String tableName,
+    void registerTable(@Nonnull FullyQualifiedTableName fqTableName,
                        @Nonnull TableDescriptor<K, V, M> descriptor,
                        @Nonnull final TableOptions tableOptions)
             throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
-
-        TableName tableNameKey = TableName.newBuilder()
-                .setNamespace(namespace)
-                .setTableName(tableName)
-                .build();
 
         K defaultKeyMessage = descriptor.getDefaultKeyMessage();
         V defaultValueMessage = descriptor.getDefaultValueMessage();
@@ -266,6 +271,8 @@ public class TableRegistry {
                 throw new IllegalThreadStateException("openTable: Called on an existing transaction");
             }
             try {
+                TableName tableNameKey = fqTableName.toTableName();
+
                 this.runtime.getObjectsView().TXBuild()
                         .type(TransactionType.WRITE_AFTER_WRITE)
                         .build()
@@ -276,16 +283,15 @@ public class TableRegistry {
                         new CorfuRecord<>(tableDescriptors, tableMetadata);
                 boolean protoFileChanged = tryUpdateTableSchemas(allDescriptors);
 
-                String fullyQualifiedTableName = getFullyQualifiedTableName(namespace, tableName);
-                UUID streamId = CorfuRuntime.getStreamID(fullyQualifiedTableName);
+                UUID streamId = fqTableName.toStreamId().getId();
 
                 if (oldRecord == null) {
                     StreamAddressSpace streamAddressSpace = this.runtime.getSequencerView()
                             .getStreamAddressSpace(new StreamAddressRange(streamId, Address.MAX, Address.NON_ADDRESS));
                     if (streamAddressSpace.size() == 0
                             && streamAddressSpace.getTrimMark() != Address.NON_ADDRESS) {
-                        log.info("Found trimmed table that is re-opened. Reset table {}", fullyQualifiedTableName);
-                        resetTrimmedTable(fullyQualifiedTableName);
+                        log.info("Found trimmed table that is re-opened. Reset table {}", fqTableName.toFqdn());
+                        resetTrimmedTable(fqTableName);
                     }
                 }
                 if (oldRecord == null || protoFileChanged || tableRecordChanged(oldRecord, newRecord)) {
@@ -299,7 +305,7 @@ public class TableRegistry {
                     // Updates to protobuf descriptor tables are internal so conflicts hit here
                     // should not count towards the normal retry count.
                     log.info("registerTable {}${} failed due to conflict in protobuf descriptors. Retrying",
-                            namespace, tableName);
+                            fqTableName.rawNamespace(), fqTableName.rawTableName());
                     numRetries++;
                     continue;
                 }
@@ -324,30 +330,28 @@ public class TableRegistry {
      * checkpoints. Since the checkpoints are both written only at or before the successful registerTable
      * transaction snapshot, the table's state remains as intended.
      *
-     * @param fullyQualifiedTableName get the fullyQualified name of a table
+     * @param fqTableName get the fullyQualified name of a table
      */
-    private void resetTrimmedTable(String fullyQualifiedTableName) {
+    private void resetTrimmedTable(FullyQualifiedTableName fqTableName) {
         if (!TransactionalContext.isInTransaction()) {
-            throw new IllegalStateException(
-                    "resetTrimmedTable cannot be invoked outside a transaction.");
+            String errMsg = "resetTrimmedTable cannot be invoked outside a transaction.";
+            throw new IllegalStateException(errMsg);
         }
 
-        UUID streamId = CorfuRuntime.getStreamID(fullyQualifiedTableName);
-        PersistentCorfuTable<TableName, CorfuRecord<TableDescriptors, TableMetadata>> corfuTable =
-                this.runtime.getObjectsView().build()
-                        .setTypeToken(new TypeToken<PersistentCorfuTable<TableName, CorfuRecord<TableDescriptors, TableMetadata>>>() {
+        PersistentCorfuTable<TableName, CorfuRecord<TableDescriptors, TableMetadata>> corfuTable = runtime
+                .getObjectsView().build()
+                .setTypeToken(PersistentCorfuTable.<TableName, CorfuRecord<TableDescriptors, TableMetadata>>getTypeToken())
+                .setStreamName(fqTableName.toFqdn())
+                .setSerializer(Serializers.JSON)
+                .open();
 
-                        })
-                        .setStreamName(fullyQualifiedTableName)
-                        .setSerializer(Serializers.JSON)
-                        .open();
-
+        UUID streamId = fqTableName.toStreamId().getId();
         CheckpointWriter<ICorfuTable<?,?>> cpw =
                 new CheckpointWriter<>(runtime, streamId, "resetTrimmedTable", corfuTable);
         cpw.forceNoOpEntry();
         cpw.startCheckpoint(TransactionalContext.getCurrentContext().getSnapshotTimestamp());
         cpw.finishCheckpoint();
-        log.info("Finished resetting trimmed table {}", fullyQualifiedTableName);
+        log.info("Finished resetting trimmed table {}", fqTableName.toFqdn());
     }
 
     /**
@@ -390,7 +394,7 @@ public class TableRegistry {
         ProtocolStringList oldStreamTagList = oldOptions.getStreamTagList();
         ProtocolStringList newStreamTagList = newOptions.getStreamTagList();
         // Only needs to check in one direction as their sizes have been compared.
-        if (!oldStreamTagList.containsAll(newStreamTagList)) {
+        if (!new HashSet<>(oldStreamTagList).containsAll(newStreamTagList)) {
             log.debug("The record of {} will be updated as stream tags were changed", tableName);
             return true;
         }
@@ -398,7 +402,7 @@ public class TableRegistry {
         List<CorfuOptions.SecondaryIndex> oldSecondaryIndices = oldOptions.getSecondaryKeyList();
         List<CorfuOptions.SecondaryIndex> newSecondaryIndices = newOptions.getSecondaryKeyList();
         // Only needs to check in one direction as their sizes have been compared.
-        if (!oldSecondaryIndices.containsAll(newSecondaryIndices)) {
+        if (!new HashSet<>(oldSecondaryIndices).containsAll(newSecondaryIndices)) {
             log.debug("The record of {} will be updated as secondary keys were changed", tableName);
             return true;
         }
@@ -416,8 +420,9 @@ public class TableRegistry {
      *                               protobuf file descriptors.
      * @return true if a schema change was detected and new schema was updated, false otherwise
      */
-    private boolean tryUpdateTableSchemas(Map<ProtobufFileName,
-                                          CorfuRecord<ProtobufFileDescriptor, TableMetadata>> allTableDescriptors) {
+    private boolean tryUpdateTableSchemas(
+            Map<ProtobufFileName, CorfuRecord<ProtobufFileDescriptor, TableMetadata>> allTableDescriptors) {
+
         boolean schemaChangeDetected = false;
         for (Map.Entry<ProtobufFileName, CorfuRecord<ProtobufFileDescriptor, TableMetadata>> e :
                 allTableDescriptors.entrySet()) {
@@ -458,10 +463,12 @@ public class TableRegistry {
      * @param tableDescriptorsBuilder Builder instance.
      * @param rootFileDescriptor      File descriptor to be added.
      */
-    public static void insertAllDependingFileDescriptorProtos(TableDescriptors.Builder tableDescriptorsBuilder,
-                                                              FileDescriptor rootFileDescriptor,
-                                                              Map<ProtobufFileName, CorfuRecord<ProtobufFileDescriptor, TableMetadata>>
-                                                                      allDescriptors) {
+    public static void insertAllDependingFileDescriptorProtos(
+            TableDescriptors.Builder tableDescriptorsBuilder,
+            FileDescriptor rootFileDescriptor,
+            Map<ProtobufFileName, CorfuRecord<ProtobufFileDescriptor, TableMetadata>> allDescriptors
+    ) {
+
         Deque<FileDescriptor> fileDescriptorStack = new LinkedList<>();
         fileDescriptorStack.push(rootFileDescriptor);
 
@@ -517,30 +524,6 @@ public class TableRegistry {
     }
 
     /**
-     * Fully qualified table name created to produce the stream uuid.
-     *
-     * @param namespace Namespace of the table.
-     * @param tableName Table name of the table.
-     * @return Fully qualified table name.
-     */
-    public static String getFullyQualifiedTableName(String namespace, String tableName) {
-        if (namespace == null || namespace.isEmpty()) {
-            return tableName;
-        }
-        return namespace + "$" + tableName;
-    }
-
-    /**
-     * Fully qualified table name created to produce the stream uuid.
-     *
-     * @param tableName TableName of the table.
-     * @return Fully qualified table name.
-     */
-    public static String getFullyQualifiedTableName(TableName tableName) {
-        return getFullyQualifiedTableName(tableName.getNamespace(), tableName.getTableName());
-    }
-
-    /**
      * Return the stream Id for the provided stream tag.
      *
      * @param namespace namespace of the stream
@@ -568,6 +551,7 @@ public class TableRegistry {
                 .getClassMap().put(typeUrl, msg.getClass());
     }
 
+    @Deprecated
     public <K extends Message, V extends Message, M extends Message>
     Table<K, V, M> openTable(@Nonnull final String namespace,
                              @Nonnull final String tableName,
@@ -576,14 +560,17 @@ public class TableRegistry {
                              @Nullable final Class<M> mClass,
                              @Nonnull final TableOptions tableOptions)
             throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
-        return openTable(namespace, tableName, new TableDescriptor<>(kClass, vClass, mClass), tableOptions);
+        return openTable(
+                FullyQualifiedTableName.build(namespace, tableName),
+                new TableDescriptor<>(kClass, vClass, mClass),
+                tableOptions
+        );
     }
 
     /**
      * Opens a Corfu table with the specified options.
      *
-     * @param namespace    Namespace of the table.
-     * @param tableName    Name of the table.
+     * @param fqTableName    Name of the table.
      * @param descriptor   Table Descriptor.
      * @param tableOptions Table options.
      * @param <K>          Key type.
@@ -595,8 +582,7 @@ public class TableRegistry {
      * @throws IllegalAccessException    If this is not a protobuf message.
      */
     public <K extends Message, V extends Message, M extends Message>
-    Table<K, V, M> openTable(@Nonnull final String namespace,
-                             @Nonnull final String tableName,
+    Table<K, V, M> openTable(@Nonnull FullyQualifiedTableName fqTableName,
                              @Nonnull final TableDescriptor<K, V, M> descriptor,
                              @Nonnull final TableOptions tableOptions)
             throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
@@ -613,10 +599,8 @@ public class TableRegistry {
             addTypeToClassMap(defaultMetadataMessage);
         }
 
-        String fullyQualifiedTableName = getFullyQualifiedTableName(namespace, tableName);
-
         // persistentDataPath is deprecated and needs to be removed.
-        CorfuOptions.PersistenceOptions persistenceOptions =
+        PersistenceOptions persistenceOptions =
                 tableOptions.getPersistenceOptions();
         if (tableOptions.getPersistentDataPath().isPresent()) {
             persistenceOptions = tableOptions.getPersistenceOptions().toBuilder().setDataPath(
@@ -631,7 +615,7 @@ public class TableRegistry {
         }
         final Set<StreamTagInfo> streamTagInfoForTable = tableSchemaOptions
                 .getStreamTagList().stream()
-                .map(tag -> new StreamTagInfo(tag, getStreamIdForStreamTag(namespace, tag)))
+                .map(tag -> new StreamTagInfo(tag, getStreamIdForStreamTag(fqTableName.rawNamespace(), tag)))
                 .collect(Collectors.toSet());
 
         final boolean isFederated = tableSchemaOptions.getIsFederated();
@@ -646,13 +630,17 @@ public class TableRegistry {
                 .map(StreamTagInfo::getStreamId)
                 .collect(Collectors.toSet());
 
-        log.info(CorfuRuntime.LOG_NOT_IMPORTANT, "openTable: opening {}${} with stream tags {}", namespace, tableName, streamTagInfoForTable);
+        log.info(
+                CorfuRuntime.LOG_NOT_IMPORTANT,
+                "openTable: opening {} with stream tags {}", fqTableName,
+                streamTagInfoForTable
+        );
 
         // Open and return table instance.
         Table<K, V, M> table = new Table<>(
                 TableParameters.<K, V, M>builder()
-                        .namespace(namespace)
-                        .fullyQualifiedTableName(fullyQualifiedTableName)
+                        .namespace(fqTableName.rawNamespace())
+                        .fullyQualifiedTableName(fqTableName.toFqdn())
                         .kClass(descriptor.kClass)
                         .vClass(descriptor.vClass)
                         .mClass(descriptor.mClass)
@@ -665,9 +653,9 @@ public class TableRegistry {
                 this.runtime,
                 this.protobufSerializer,
                 streamTagIdsForTable);
-        tableMap.put(fullyQualifiedTableName, ClassUtils.cast(table));
+        tableMap.put(fqTableName, ClassUtils.cast(table));
+        registerTable(fqTableName, descriptor, tableOptions);
 
-        registerTable(namespace, tableName, descriptor, tableOptions);
         return table;
     }
 
@@ -682,46 +670,53 @@ public class TableRegistry {
      * @param <M>       Metadata type.
      * @return Table instance.
      */
+    @Deprecated
     public <K extends Message, V extends Message, M extends Message>
     Table<K, V, M> getTable(String namespace, String tableName) {
-        String fullyQualifiedTableName = getFullyQualifiedTableName(namespace, tableName);
-        if (!tableMap.containsKey(fullyQualifiedTableName)) {
-            // Table has not been opened, but let's first find out if this table even exists
-            // To do so, consult the TableRegistry for an entry which indicates the table exists.
-            if (registryTable.containsKey(
-                    TableName.newBuilder()
-                            .setNamespace(namespace)
-                            .setTableName(tableName)
-                            .build())
-            ) {
-                // If table does exist then the caller must use the long form of the openTable()
-                // since there are too few arguments to open a table not seen by this runtime.
-                throw new IllegalArgumentException("Please provide Key, Value & Metadata schemas to re-open"
-                        + " this existing table " + tableName + " in namespace " + namespace);
-            } else {
-                // If the table is completely unheard of return NoSuchElementException.
-                throw new NoSuchElementException(String.format(
-                        "No such table found: namespace: %s, tableName: %s", namespace, tableName));
-            }
+        FullyQualifiedTableName fqTableName = FullyQualifiedTableName.build(namespace, tableName);
+        return getTable(fqTableName);
+    }
+
+    public <K extends Message, V extends Message, M extends Message>
+    Table<K, V, M> getTable(FullyQualifiedTableName fqTableName) {
+        if (tableMap.containsKey(fqTableName)) {
+            return ClassUtils.cast(tableMap.get(fqTableName));
         }
-        return (Table<K, V, M>) tableMap.get(fullyQualifiedTableName);
+
+        // Table has not been opened, but let's first find out if this table even exists
+        // To do so, consult the TableRegistry for an entry which indicates the table exists.
+        if (registryTable.containsKey(fqTableName.toTableName())) {
+            // If table does exist then the caller must use the long form of the openTable()
+            // since there are too few arguments to open a table not seen by this runtime.
+            String errMsg = "Please provide Key, Value & Metadata schemas to re-open"
+                    + " this existing table: " + fqTableName;
+            throw new IllegalArgumentException(errMsg);
+        } else {
+            // If the table is completely unheard of return NoSuchElementException.
+            String errMsg = String.format("No such table found: %s", fqTableName);
+            throw new NoSuchElementException(errMsg);
+        }
     }
 
     /**
      * Allow underlying objects of this table to be garbage collected
      * while still retaining the metadata of the table.
      *
-     * @param namespace Namespace of the table.
-     * @param tableName Name of the table.
+     * @param fqTableName Name of the table.
      * @throws NoSuchElementException - if the table does not exist.
      */
-    public void freeTableData(String namespace, String tableName) {
-        String fullyQualifiedTableName = getFullyQualifiedTableName(namespace, tableName);
-        Table<Message, Message, Message> table = tableMap.get(fullyQualifiedTableName);
+    public void freeTableData(FullyQualifiedTableName fqTableName) {
+        Table<Message, Message, Message> table = tableMap.get(fqTableName);
         if (table == null) {
-            throw new NoSuchElementException("freeTableData: Did not find any table "+ fullyQualifiedTableName);
+            throw new NoSuchElementException("freeTableData: Did not find any table "+ fqTableName);
         }
         table.resetTableData(runtime);
+    }
+
+    @Deprecated
+    public void freeTableData(String namespace, String tableName) {
+        FullyQualifiedTableName fullyQualifiedTableName = FullyQualifiedTableName.build(namespace, tableName);
+        freeTableData(fullyQualifiedTableName);
     }
 
     /**
@@ -739,12 +734,16 @@ public class TableRegistry {
      * 2. running checkpoint and trim
      * 3. re-open the table with new proto files.
      *
-     * @param namespace Namespace of the table.
-     * @param tableName Name of the table.
+     * @param fqTableName Name of the table.
      */
-    public void deleteTable(String namespace, String tableName) {
-        Table<Message, Message, Message> table = getTable(namespace, tableName);
+    public void deleteTable(FullyQualifiedTableName fqTableName) {
+        Table<Message, Message, Message> table = getTable(fqTableName);
         table.clearAll();
+    }
+
+    @Deprecated
+    public void deleteTable(String namespace, String tableName) {
+        deleteTable(FullyQualifiedTableName.build(namespace, tableName));
     }
 
     /**
@@ -792,7 +791,8 @@ public class TableRegistry {
      */
     @Nullable
     public TableDescriptors getTableDescriptor(@Nonnull TableName tableName) {
-        return Optional.ofNullable(this.registryTable.get(tableName))
+        return Optional
+                .ofNullable(this.registryTable.get(tableName))
                 .map(CorfuRecord::getPayload)
                 .orElse(null);
     }
@@ -805,10 +805,17 @@ public class TableRegistry {
     public List<Table<Message, Message, Message>> getAllOpenTables() {
         List<Table<Message, Message, Message>> allTables = new ArrayList<>(this.tableMap.values());
         try {
-            allTables.add(wrapInternalTable(REGISTRY_TABLE_NAME, TableName.class,
-                    TableDescriptors.class, TableMetadata.class, TableOptions.<TableName, TableDescriptors>builder().build()));
-            allTables.add(wrapInternalTable(PROTOBUF_DESCRIPTOR_TABLE_NAME, ProtobufFileName.class,
-                    ProtobufFileDescriptor.class, TableMetadata.class, TableOptions.<TableName, TableDescriptors>builder().build()));
+            allTables.add(wrapInternalTable(
+                    REGISTRY_TABLE_NAME,
+                    new TableDescriptor<>(TableName.class, TableDescriptors.class, TableMetadata.class),
+                    TableOptions.builder().build()
+            ));
+
+            allTables.add(wrapInternalTable(
+                    PROTOBUF_DESCRIPTOR_TABLE_NAME,
+                    new TableDescriptor<>(ProtobufFileName.class, ProtobufFileDescriptor.class, TableMetadata.class),
+                    TableOptions.<TableName, TableDescriptors>builder().build()
+            ));
         } catch (Exception e) {
             log.warn("Unable to wrap into Table object due to {}. StackTrace: {}", e.getMessage(), e.getStackTrace());
         }
@@ -816,19 +823,20 @@ public class TableRegistry {
     }
 
     private <K extends Message, V extends Message, M extends Message>
-    Table<Message, Message, Message> wrapInternalTable(@Nonnull String tableName,
-                                                       @Nonnull Class<K> kClass,
-                                                       @Nonnull Class<V> vClass,
-                                                       @Nullable Class<M> mClass,
-                                                       @Nonnull final TableOptions tableOptions)
-            throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
+    Table<Message, Message, Message> wrapInternalTable(
+            @Nonnull String tableName,
+            @Nonnull TableDescriptor<K, V, M> descriptor,
+            @Nonnull final TableOptions tableOptions
+    ) throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
 
         // persistentDataPath is deprecated and needs to be removed.
-        CorfuOptions.PersistenceOptions persistenceOptions =
-                tableOptions.getPersistenceOptions();
+        PersistenceOptions persistenceOptions = tableOptions.getPersistenceOptions();
         if (tableOptions.getPersistentDataPath().isPresent()) {
-            persistenceOptions = tableOptions.getPersistenceOptions().toBuilder().setDataPath(
-                    tableOptions.getPersistentDataPath().get().toString()).build();
+            persistenceOptions = tableOptions
+                    .getPersistenceOptions()
+                    .toBuilder()
+                    .setDataPath(tableOptions.getPersistentDataPath().get().toString())
+                    .build();
         }
 
         CorfuOptions.SchemaOptions tableSchemaOptions;
@@ -837,25 +845,28 @@ public class TableRegistry {
         } else {
             tableSchemaOptions = CorfuOptions.SchemaOptions.getDefaultInstance();
         }
-        V defaultValueMessage = (V) vClass.getMethod("getDefaultInstance").invoke(null);
-        M defaultMetadataMessage = (M) mClass.getMethod("getDefaultInstance").invoke(null);
+        V defaultValueMessage = descriptor.getDefaultValueMessage();
+        M defaultMetadataMessage = descriptor.getDefaultMetadataMessage();
+
+        TableParameters<K, V, M> params = TableParameters.<K, V, M>builder()
+                .namespace(CORFU_SYSTEM_NAMESPACE)
+                .fullyQualifiedTableName(FullyQualifiedTableName.build(CORFU_SYSTEM_NAMESPACE, tableName).toFqdn())
+                .kClass(descriptor.getKClass())
+                .vClass(descriptor.getVClass())
+                .mClass(descriptor.getMClass())
+                .valueSchema(defaultValueMessage)
+                .metadataSchema(defaultMetadataMessage)
+                .schemaOptions(tableSchemaOptions)
+                .persistenceOptions(persistenceOptions)
+                .secondaryIndexesDisabled(tableOptions.isSecondaryIndexesDisabled())
+                .build();
 
         return (Table<Message, Message, Message>) new Table<K, V, M>(
-                TableParameters.<K, V, M>builder()
-                        .namespace(CORFU_SYSTEM_NAMESPACE)
-                        .fullyQualifiedTableName(getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, tableName))
-                        .kClass(kClass)
-                        .vClass(vClass)
-                        .mClass(mClass)
-                        .valueSchema(defaultValueMessage)
-                        .metadataSchema(defaultMetadataMessage)
-                        .schemaOptions(tableSchemaOptions)
-                        .persistenceOptions(persistenceOptions)
-                        .secondaryIndexesDisabled(tableOptions.isSecondaryIndexesDisabled())
-                        .build(),
+                params,
                 this.runtime,
                 this.protobufSerializer,
-                new HashSet<>(Collections.singletonList(LOG_REPLICATOR_STREAM_INFO.getStreamId())));
+                new HashSet<>(Collections.singletonList(LOG_REPLICATOR_STREAM_INFO.getStreamId()))
+        );
     }
 
     /**
@@ -903,6 +914,85 @@ public class TableRegistry {
 
         public M getDefaultMetadataMessage() throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
             return ClassUtils.cast(mClass.getMethod(defaultInstanceMethodName).invoke(null));
+        }
+    }
+
+    @Builder
+    @EqualsAndHashCode
+    @ToString
+    public static class FullyQualifiedTableName {
+        @Default
+        private final Optional<String> namespace = Optional.empty();
+        private final String tableName;
+
+        /**
+         * Fully qualified table name created to produce the stream uuid.
+         *
+         * @return Fully qualified table name.
+         */
+        public String toFqdn() {
+            return namespace
+                    .map(ns -> ns + "$" + tableName)
+                    .orElse(tableName);
+        }
+
+        public StreamId toStreamId() {
+            return StreamId.build(toFqdn());
+        }
+
+        public static FullyQualifiedTableName build(String ns, String name) {
+            return FullyQualifiedTableName.builder()
+                    .namespace(Optional.of(ns))
+                    .tableName(name)
+                    .build();
+        }
+
+        /**
+         * Fully qualified table name created to produce the stream uuid.
+         *
+         * @param tableName TableName of the table.
+         * @return Fully qualified table name.
+         */
+        public static FullyQualifiedTableName build(TableName tableName) {
+            Optional<String> ns = Optional
+                    .of(tableName.getNamespace())
+                    .filter(Predicate.not(String::isEmpty));
+
+            return FullyQualifiedTableName.builder()
+                    .tableName(tableName.getTableName())
+                    .namespace(ns)
+                    .build();
+        }
+
+        public TableName toTableName() {
+            return TableName.newBuilder()
+                    .setNamespace(rawNamespace())
+                    .setTableName(tableName)
+                    .build();
+        }
+
+        public boolean isSystemNs(){
+            return namespace
+                    .map(ns -> ns.equals(CORFU_SYSTEM_NAMESPACE))
+                    .orElse(false);
+        }
+
+        public boolean isSystemTable() {
+            boolean isDescriptorTable = tableName.equals(TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME);
+            boolean isRegistryTable = tableName.equals(TableRegistry.REGISTRY_TABLE_NAME);
+            return isDescriptorTable || isRegistryTable;
+        }
+
+        public boolean isSystemNsAndTable() {
+            return isSystemNs() && isSystemTable();
+        }
+
+        public String rawNamespace() {
+            return namespace.orElse("");
+        }
+
+        public String rawTableName() {
+            return tableName;
         }
     }
 }

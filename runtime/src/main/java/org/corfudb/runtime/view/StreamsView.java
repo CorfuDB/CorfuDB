@@ -1,6 +1,9 @@
 package org.corfudb.runtime.view;
 
 import com.google.common.annotations.VisibleForTesting;
+import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.protocols.wireprotocol.DataType;
@@ -288,5 +291,29 @@ public class StreamsView extends AbstractView {
     @VisibleForTesting
     List<IStreamView> getOpenedStreams() {
         return openedStreams;
+    }
+
+    @AllArgsConstructor(access = AccessLevel.PRIVATE)
+    public static class StreamId {
+        @Getter
+        private final UUID id;
+
+        /**
+         * Get a UUID for a named stream.
+         *
+         * @param string The name of the stream.
+         * @return The ID of the stream.
+         */
+        public static StreamId build(String string) {
+            return new StreamId(UUID.nameUUIDFromBytes(string.getBytes()));
+        }
+
+        public static StreamId buildCkpStreamId(UUID streamId) {
+            return build(streamId.toString() + StreamsView.CHECKPOINT_SUFFIX);
+        }
+
+        public static StreamId buildCkpStreamId(String streamName) {
+            return buildCkpStreamId(CorfuRuntime.getStreamID(streamName));
+        }
     }
 }

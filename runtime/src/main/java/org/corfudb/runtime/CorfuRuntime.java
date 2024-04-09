@@ -15,6 +15,7 @@ import org.corfudb.common.compression.Codec;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider.MeterRegistryInitializer;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
+import org.corfudb.runtime.view.StreamsView.StreamId;
 import org.corfudb.util.FileWatcher;
 import org.corfudb.runtime.clients.BaseClient;
 import org.corfudb.runtime.clients.IClientRouter;
@@ -1113,21 +1114,21 @@ public class CorfuRuntime {
      */
     @SuppressWarnings("checkstyle:abbreviation")
     public static UUID getStreamID(String string) {
-        return UUID.nameUUIDFromBytes(string.getBytes());
+        return StreamId.build(string).getId();
     }
 
     public static UUID getCheckpointStreamIdFromId(UUID streamId) {
-        return getStreamID(streamId.toString() + StreamsView.CHECKPOINT_SUFFIX);
+        return StreamId.buildCkpStreamId(streamId).getId();
     }
 
     public static UUID getCheckpointStreamIdFromName(String streamName) {
-        return getCheckpointStreamIdFromId(CorfuRuntime.getStreamID(streamName));
+        return StreamId.buildCkpStreamId(streamName).getId();
     }
 
     /**
      * Parse a configuration string and get a CorfuRuntime.
      * Both Pure IPv6 and Pure IPv4 addresses are supported.
-     *
+     * <p>
      *
      * @param configurationString The configuration string to parse.
      * @return A CorfuRuntime Configured based on the configuration string.

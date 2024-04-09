@@ -67,7 +67,7 @@ public class ManagedCorfuTable<K, V> {
         Objects.requireNonNull(tableSetup);
 
         managedRt.connect(rt -> {
-            try (GenericCorfuTable<? extends SnapshotGenerator<?>, K, V> table = tableSetup.setup(rt, config)) {
+            try (GenericCorfuTable<? extends SnapshotGenerator<?>, K, V> table = tableSetup.open(rt, config)) {
                 action.accept(new CorfuTableSpecContext<>(rt, table));
             }
         });
