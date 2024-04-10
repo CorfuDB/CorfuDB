@@ -747,41 +747,44 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object> imple
      * @return Return true if the Channel used in this router is active and so connected.
      */
     public boolean isChannelActive() {
-        if (null != channel) {
+        try {
             return channel.isActive();
+        } catch (Exception e) {
+            log.error("isChannelActive: Error in accessing the Channel." +
+                    " May be it is not initialized yet?", e);
+            return false;
         }
-        return false;
     }
 
     public List<String> getLocalCertificateThumbprints() {
-        if (isChannelActive()) {
-            try {
-                return Arrays.stream(((SslHandler) this.channel.pipeline().get("ssl"))
-                                .engine().getSession().getLocalCertificates())
-                        .map(CertificateUtils::computeCertificateThumbprint)
-                        .collect(Collectors.toList());
-            } catch (Exception e) {
-                log.error("Error in getLocalCertificateThumbprints, node {}, isChannelActive {}.",
-                        node.toEndpointUrl(),
-                        isChannelActive(), e);
-            }
+        if (!isChannelActive()) {
+            return Collections.emptyList();
         }
-        return Collections.emptyList();
+        try {
+            return Arrays.stream(((SslHandler) this.channel.pipeline().get("ssl"))
+                            .engine().getSession().getLocalCertificates())
+                    .map(CertificateUtils::computeCertificateThumbprint)
+                    .collect(Collectors.toList());
+        } catch (Exception e) {
+            String errMsg = "Error in getLocalCertificateThumbprints, node {}, isChannelActive {}.";
+            log.error(errMsg, node.toEndpointUrl(), isChannelActive(), e);
+            return Collections.emptyList();
+        }
     }
 
     public List<String> getPeerCertificateThumbprints() {
-        if (isChannelActive()) {
-            try {
-                return Arrays.stream(((SslHandler) this.channel.pipeline().get("ssl"))
-                                .engine().getSession().getPeerCertificates())
-                        .map(CertificateUtils::computeCertificateThumbprint)
-                        .collect(Collectors.toList());
-            } catch (Exception e) {
-                log.error("Error in getPeerCertificateThumbprints, node {}, isChannelActive {}.",
-                        node.toEndpointUrl(),
-                        isChannelActive(), e);
-            }
+        if (!isChannelActive()) {
+            return Collections.emptyList();
         }
-        return Collections.emptyList();
+        try {
+            return Arrays.stream(((SslHandler) this.channel.pipeline().get("ssl"))
+                            .engine().getSession().getPeerCertificates())
+                    .map(CertificateUtils::computeCertificateThumbprint)
+                    .collect(Collectors.toList());
+        } catch (Exception e) {
+            String errMsg = "Error in getPeerCertificateThumbprints, node {}, isChannelActive {}.";
+            log.error(errMsg, node.toEndpointUrl(), isChannelActive(), e);
+            return Collections.emptyList();
+        }
     }
 }
