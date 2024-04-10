@@ -228,7 +228,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
     }
 
     /**
-     * Event table can be cleared after processing the latest force sync event to avoid keeping older events.
+     * Verify event table is cleared after processing latest force sync event to avoid keeping older events.
      *
      */
     @Test
@@ -305,14 +305,26 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
             // Check that the event table is empty to begin
             assertThat(eventTable.count()).isZero();
 
-            // Add some empty event to act as older stale events.
+            corfuStoreStandby.openTable(LogReplicationMetadataManager.NAMESPACE,
+                    REPLICATION_STATUS_TABLE,
+                    LogReplicationMetadata.ReplicationStatusKey.class,
+                    LogReplicationMetadata.ReplicationStatusVal.class,
+                    null,
+                    TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
+
+            // Subscribe listener to know when data is consistent on the sink
+            CountDownLatch awaitSyncCompletion = new CountDownLatch(1);
+            DataConsistentListener standbyListener = new DataConsistentListener(awaitSyncCompletion);
+            corfuStoreStandby.subscribeListener(standbyListener, LogReplicationMetadataManager.NAMESPACE,
+                    LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
+
+            // Add some full sync events with an empty cluster ID, these will fail to run
             for (int i = 0; i < numStaleEvents; i++) {
                 try (TxnContext txn = corfuStoreActive.txn(LogReplicationMetadataManager.NAMESPACE)) {
                     ReplicationEventKey key = ReplicationEventKey.newBuilder().setKey(
                             System.currentTimeMillis() + " " + DefaultClusterConfig.getStandbyClusterId()
                     ).build();
                     ReplicationEvent event = ReplicationEvent.newBuilder()
-                            .setClusterId(DefaultClusterConfig.getStandbyClusterId())
                             .setEventId(UUID.randomUUID().toString())
                             .build();
 
@@ -327,17 +339,16 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
                     TableOptions.fromProtoSchema(ClusterUuidMsg.class)
             );
 
-            // Perform a forced full sync by adding event to config table
+            // Enqueue one last force sync event through the config table, this will be the one to go through
             try (TxnContext txn = corfuStoreActive.txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
                 txn.putRecord(configTable, DefaultClusterManager.OP_ENFORCE_SNAPSHOT_FULL_SYNC,
                         DefaultClusterManager.OP_ENFORCE_SNAPSHOT_FULL_SYNC, DefaultClusterManager.OP_ENFORCE_SNAPSHOT_FULL_SYNC);
                 txn.commit();
             }
 
-            // Wait for force sync event queued
+            // Wait for last force sync event queued
             boolean forceSyncQueued = false;
             for(int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
-                // Added stale events plus the additional one queued for an actual forced sync
                 if (eventTable.count() == numStaleEvents + 1) {
                     forceSyncQueued = true;
                     break;
@@ -346,20 +357,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
             }
             assertThat(forceSyncQueued).isTrue();
 
-            corfuStoreStandby.openTable(LogReplicationMetadataManager.NAMESPACE,
-                    REPLICATION_STATUS_TABLE,
-                    LogReplicationMetadata.ReplicationStatusKey.class,
-                    LogReplicationMetadata.ReplicationStatusVal.class,
-                    null,
-                    TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
-
-            // Subscribe listener to know when data is consistent on the sink
-            CountDownLatch awaitSyncCompletion = new CountDownLatch(1);
-            DataConsistentListener standbyListener = new DataConsistentListener(awaitSyncCompletion);
-            corfuStoreStandby.subscribeListener(standbyListener, LogReplicationMetadataManager.NAMESPACE,
-                    LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
-
-            // Wait for the real force sync event to complete which should clear all events when done
+            // Wait for the last force sync event to complete which should clear all events when done
             awaitSyncCompletion.await();
 
             // Check that the event table is cleared, could be small delay for clear after data is consistent
