@@ -360,7 +360,6 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         serverCallback.complete(interClusterReplicationService);
 
         logReplicationEventListener = new LogReplicationEventListener(this);
-        logReplicationEventListener.start();
         serverStarted = true;
     }
 
@@ -493,6 +492,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                             localNodeDescriptor, logReplicationMetadataManager, serverContext.getPluginConfigFilePath(),
                             getCorfuRuntime(), replicationConfigManager);
                 }
+                logReplicationEventListener.start();
                 replicationManager.setTopology(topologyDescriptor);
                 replicationManager.start();
                 lockAcquireSample = recordLockAcquire(localClusterDescriptor.getRole());
@@ -576,6 +576,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     public void processLockRelease() {
         log.debug("Lock released");
         // Unset isLeader flag after stopping log replication
+        logReplicationEventListener.stop();
         stopLogReplication();
         isLeader.set(false);
         // Signal Log Replication Server/Sink to stop receiving messages, leadership loss
@@ -603,6 +604,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         // We do not update topology until we successfully stop log replication
         if (localClusterDescriptor.getRole() == ClusterRole.ACTIVE) {
             stopLogReplication();
+            logReplicationEventListener.stop();
         }
 
         // Update topology, cluster, and node configs
@@ -612,9 +614,45 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         logReplicationMetadataManager.setupTopologyConfigId(topologyDescriptor.getTopologyConfigId());
 
         if (isLeader.get()) {
-            // Reset the Replication Status on Active and Standby only for the leader node
+            // Clear the Replication Status on the leader node only.
             // Consider the case of async configuration changes, non-lead nodes could overwrite
             // the replication status if it has already completed by the lead node
+            // Note: For the cluster which was Active, this clear can race with the async 'replication stop'
+            // (stopLogReplication()) which updates the status table with STOPPED state.  So the status table
+            // can have 2 entries - 1 from the new Standby State showing the dataConsistent flag, and the other from
+            // the time it was Active, showing the replication status as 'STOPPED'.
+            // For example:
+            // Key:
+            //{
+            //  "clusterId": "b4c1ae3a-528a-4677-9f15-4a213ffd0da8"
+            //}
+            //
+            //Payload:
+            //{
+            //  "dataConsistent": true,
+            //  "status": "UNAVAILABLE"
+            //}
+            //                      and
+            //Key:
+            //{
+            //  "clusterId": "3c1bf6c7-70bd-4ad6-8a4f-7b4e5181ddb1"
+            //}
+            //
+            //Payload:
+            //{
+            //  "syncType": "LOG_ENTRY",
+            //  "status": "STOPPED",
+            //  "snapshotSyncInfo": {
+            //    "type": "FORCED",
+            //    "status": "COMPLETED",
+            //    "snapshotRequestId": "3671bdb0-d5ec-46cc-9c87-d1a9a2436083",
+            //    "completedTime": "2024-03-20T19:11:23.431973Z",
+            //    "baseSnapshot": "1575363"
+            //  }
+            //}
+            // This is a known limitation which can be ignored and does not have any functional impact.
+            // The limitation is because conflict detection between putRecord()(which sets the status to 'STOPPED') and
+            // clear() (clear of the table) is currently not available.
             resetReplicationStatusTableWithRetry();
             // In the event of Standby -> Active we should add the default replication values
             if (localClusterDescriptor.getRole() == ClusterRole.ACTIVE) {

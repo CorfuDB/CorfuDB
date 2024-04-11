@@ -149,7 +149,13 @@ public class InLogEntrySyncState implements LogReplicationState {
                 fsm.getAckReader().setSyncType(SyncType.LOG_ENTRY);
                 logEntrySender.reset(fsm.getBaseSnapshot(), fsm.getAckedTimestamp());
                 fsm.getAckReader().setBaseSnapshot(fsm.getAckedTimestamp());
-                fsm.getAckReader().markSnapshotSyncInfoCompleted();
+
+                // Update the Replication Status table to indicate that Log Entry Sync is ongoing.
+                // Entry to this state can be 1)after a successful snapshot sync OR 2)after a simple restart or
+                // leadership change where a snapshot sync was not necessary.  In case 1), update the completion
+                // status and timestamp of the just-completed snapshot sync.
+                fsm.getAckReader().markLogEntrySyncOngoing(
+                    from.getType() == LogReplicationStateType.WAIT_SNAPSHOT_APPLY);
             }
 
             logEntrySyncFuture = fsm.getLogReplicationFSMWorkers().submit(() ->

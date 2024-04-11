@@ -1,6 +1,5 @@
 package org.corfudb.infrastructure.logreplication.replication.receive;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.Message;
 import com.google.protobuf.Timestamp;
 import io.micrometer.core.instrument.Timer;
@@ -60,8 +59,9 @@ public class LogReplicationMetadataManager {
     public static final String REPLICATION_STATUS_TABLE = "LogReplicationStatus";
     public static final String LR_STATUS_STREAM_TAG = "lr_status";
     public static final String REPLICATION_EVENT_TABLE_NAME = "LogReplicationEventTable";
-    private static final String LR_STREAM_TAG = "log_replication";
+    public static final String LR_STREAM_TAG = "log_replication";
 
+    @Getter
     private final CorfuStore corfuStore;
 
     private final String metadataTableName;
@@ -497,53 +497,72 @@ public class LogReplicationMetadataManager {
     }
 
     /**
-     * Update replication status table's snapshot sync info as COMPLETED
-     * and update log entry sync status to ONGOING.
+     * Update replication status table's log entry sync as ONGOING.  Additionally, update the snapshot sync info as
+     * COMPLETED if updateSnapshotSyncInfo == true
      *
      * Note: TransactionAbortedException has been handled by upper level.
      *
      * @param clusterId standby cluster id
+     * @param remainingEntriesToSend An estimate of the number of entries remaining to be sent to standby cluster
+     * @param updateSnapshotSyncInfo boolean indicating if last snapshot sync's info must be updated
+     * @param baseSnapshot Corfu log timestamp at which the last snapshot was based
      */
-    public void updateSnapshotSyncStatusCompleted(String clusterId, long remainingEntriesToSend, long baseSnapshot) {
-        Instant time = Instant.now();
-        Timestamp timestamp = Timestamp.newBuilder().setSeconds(time.getEpochSecond())
-                .setNanos(time.getNano()).build();
+    public void setLogEntrySyncOngoing(String clusterId, long remainingEntriesToSend,
+                                       boolean updateSnapshotSyncInfo, long baseSnapshot) {
         ReplicationStatusKey key = ReplicationStatusKey.newBuilder().setClusterId(clusterId).build();
+        ReplicationStatusVal current;
 
         try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
 
             CorfuStoreEntry<ReplicationStatusKey, ReplicationStatusVal, Message> record = txn.getRecord(replicationStatusTable, key);
 
-            if (record.getPayload() != null) {
-                ReplicationStatusVal previous = record.getPayload();
-                SnapshotSyncInfo previousSyncInfo = previous.getSnapshotSyncInfo();
+            if (record.getPayload() == null) {
+                // If no record for the remote cluster is found, it means that no default status for it was set when
+                // that cluster was added to LR topology.  This is not expected and will eventually lead to a clear,
+                // bigger failure in LR so just log an error here instead of stopping the service.
+                log.error("Remote Cluster {} not found in Replication Status Table.  This is not expected!!!", clusterId);
+                return;
+            }
 
-                SnapshotSyncInfo currentSyncInfo = previousSyncInfo.toBuilder()
-                        .setStatus(SyncStatus.COMPLETED)
-                        .setBaseSnapshot(baseSnapshot)
-                        .setCompletedTime(timestamp)
-                        .build();
+            ReplicationStatusVal previous = record.getPayload();
+            SnapshotSyncInfo previousSyncInfo = previous.getSnapshotSyncInfo();
+            SnapshotSyncInfo currentSyncInfo;
 
-                ReplicationStatusVal current = ReplicationStatusVal.newBuilder()
-                        .setRemainingEntriesToSend(remainingEntriesToSend)
-                        .setSyncType(SyncType.LOG_ENTRY)
-                        .setStatus(SyncStatus.ONGOING)
-                        .setSnapshotSyncInfo(currentSyncInfo)
-                        .build();
-
-                txn.putRecord(replicationStatusTable, key, current, null);
-                txn.commit();
-
-                snapshotSyncTimerSample
-                        .flatMap(sample -> MeterRegistryProvider.getInstance()
-                                .map(registry -> {
-                                    Timer timer = registry.timer("logreplication.snapshot.duration");
-                                    return sample.stop(timer);
-                                }));
+            if (updateSnapshotSyncInfo) {
+                Instant time = Instant.now();
+                Timestamp timestamp = Timestamp.newBuilder().setSeconds(time.getEpochSecond())
+                    .setNanos(time.getNano()).build();
+                currentSyncInfo = previousSyncInfo.toBuilder()
+                    .setStatus(SyncStatus.COMPLETED)
+                    .setBaseSnapshot(baseSnapshot)
+                    .setCompletedTime(timestamp)
+                    .build();
 
                 log.debug("syncStatus :: set snapshot sync to COMPLETED and log entry ONGOING, clusterId: {}," +
-                                " syncInfo: [{}]", clusterId, currentSyncInfo);
+                    " syncInfo: [{}]", clusterId, currentSyncInfo);
+
+                snapshotSyncTimerSample
+                    .flatMap(sample -> MeterRegistryProvider.getInstance()
+                        .map(registry -> {
+                            Timer timer = registry.timer("logreplication.snapshot.duration");
+                            return sample.stop(timer);
+                        }));
+            } else {
+                // Retain the existing snapshot sync info
+                currentSyncInfo = previousSyncInfo;
+                log.debug("syncStatus :: set log entry ONGOING, clusterId: {},", clusterId);
             }
+            current = ReplicationStatusVal.newBuilder()
+                .setRemainingEntriesToSend(remainingEntriesToSend)
+                .setSyncType(SyncType.LOG_ENTRY)
+                .setStatus(SyncStatus.ONGOING)
+                .setSnapshotSyncInfo(currentSyncInfo)
+                .build();
+
+            txn.putRecord(replicationStatusTable, key, current, null);
+            txn.commit();
+            log.info("Successfully set Log Entry Sync as ONGOING.  Previous snapshot sync info updated: {}",
+                    updateSnapshotSyncInfo);
         }
     }
 
@@ -762,8 +781,6 @@ public class LogReplicationMetadataManager {
 
         long currentSnapshotSyncIdLong = currentSnapshotSyncId.getMostSignificantBits() & Long.MAX_VALUE;
 
-        // Update if current Snapshot Sync differs from the persisted one, otherwise ignore.
-        // It could have already been updated in the case that leader changed in between a snapshot sync cycle
         appendUpdate(txn, LogReplicationMetadataType.CURRENT_SNAPSHOT_CYCLE_ID, currentSnapshotSyncIdLong);
         appendUpdate(txn, LogReplicationMetadataType.CURRENT_CYCLE_MIN_SHADOW_STREAM_TS, shadowStreamTs.getSequence());
     }
@@ -795,7 +812,7 @@ public class LogReplicationMetadataManager {
         }
     }
 
-    public Pair<List<CorfuStoreEntry<ReplicationEventKey, ReplicationEvent, Message>>, CorfuStoreMetadata.Timestamp> getReplicationEventTable() {
+    public Pair<List<CorfuStoreEntry<ReplicationEventKey, ReplicationEvent, Message>>, CorfuStoreMetadata.Timestamp> getoutstandingEvents() {
         List<CorfuStoreEntry<ReplicationEventKey, ReplicationEvent, Message>> outstandingEvents;
         CorfuStoreMetadata.Timestamp ts;
         try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
@@ -805,22 +822,23 @@ public class LogReplicationMetadataManager {
         return Pair.of(outstandingEvents, ts);
     }
 
-    public void deleteProcessedEvent(ReplicationEventKey keyToDelete) {
+    public void clearEventTable() {
         try {
             IRetry.build(IntervalRetry.class, () -> {
                 try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
-                    txn.delete(REPLICATION_EVENT_TABLE_NAME, keyToDelete);
+                    txn.clear(REPLICATION_EVENT_TABLE_NAME);
                     txn.commit();
                 } catch (TransactionAbortedException tae) {
-                    log.error("Error while attempting to delete event", tae);
+                    log.error("Error while attempting to clear {}", REPLICATION_EVENT_TABLE_NAME, tae);
                     throw new RetryNeededException();
                 }
                 return null;
             }).run();
         } catch (InterruptedException e) {
-            log.error("Unrecoverable exception when attempting to reset replication status", e);
+            log.error("Unrecoverable exception when attempting clear the event table", e);
             throw new UnrecoverableCorfuInterruptedError(e);
         }
+        log.info("Cleared the event table, size is now: " + replicationEventTable.count());
     }
 
     public void removeFromStatusTable(String clusterId) {

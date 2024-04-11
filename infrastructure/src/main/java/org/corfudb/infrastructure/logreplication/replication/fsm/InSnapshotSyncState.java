@@ -119,7 +119,6 @@ public class InSnapshotSyncState implements LogReplicationState {
                 // If cancel was intended for current snapshot sync task, cancel and transition to new state
                 if (fsm.isValidTransition(transitionSyncId, event.getMetadata().getSyncId())) {
                     cancelSnapshotSync("cancellation request.");
-                    // Re-trigger SnapshotSync due to error, generate a new event Id for the new snapshot sync
                     LogReplicationState inSnapshotSyncState = fsm.getStates().get(LogReplicationStateType.IN_SNAPSHOT_SYNC);
                     // If the cancelled sync is a force snapshot sync, retain the syncID. This is to track and clear
                     // the snapshot sync requests in the eventTable

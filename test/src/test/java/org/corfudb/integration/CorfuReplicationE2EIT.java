@@ -79,4 +79,11 @@ public class CorfuReplicationE2EIT extends LogReplicationAbstractIT {
         final int totalNumMaps = 3;
         testEndToEndSnapshotAndLogEntrySyncUFO(totalNumMaps, true, true);
     }
+
+    @Test
+    public void testEventListenerE2E() throws Exception {
+        log.debug("Using plugin :: {}", pluginConfigFilePath);
+        final int totalNumMaps = 3;
+        testEventListenerEndToEnd(totalNumMaps);
+    }
 }
