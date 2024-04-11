@@ -357,11 +357,14 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.11.0</version>
                 <configuration>
-                    <release>11</release>
+                    <source>11</source>
+                    <target>11</target>
                     <encoding>${project.build.sourceEncoding}</encoding>
                     <showDeprecation>false</showDeprecation>
                     <compilerArgs>
                         <arg>-XDignore.symbol.file</arg>
+                        <arg>--add-exports</arg>
+                        <arg>java.management/sun.management=ALL-UNNAMED</arg>
                     </compilerArgs>
                     <fork>true</fork>
                 </configuration>
