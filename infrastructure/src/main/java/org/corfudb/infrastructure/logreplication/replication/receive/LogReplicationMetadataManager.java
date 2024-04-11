@@ -1,6 +1,5 @@
 package org.corfudb.infrastructure.logreplication.replication.receive;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.Message;
 import com.google.protobuf.Timestamp;
 import io.micrometer.core.instrument.Timer;
@@ -823,22 +822,23 @@ public class LogReplicationMetadataManager {
         return Pair.of(outstandingEvents, ts);
     }
 
-    public void deleteProcessedEvent(ReplicationEventKey keyToDelete) {
+    public void clearEventTable() {
         try {
             IRetry.build(IntervalRetry.class, () -> {
                 try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
-                    txn.delete(REPLICATION_EVENT_TABLE_NAME, keyToDelete);
+                    txn.clear(REPLICATION_EVENT_TABLE_NAME);
                     txn.commit();
                 } catch (TransactionAbortedException tae) {
-                    log.error("Error while attempting to delete event", tae);
+                    log.error("Error while attempting to clear {}", REPLICATION_EVENT_TABLE_NAME, tae);
                     throw new RetryNeededException();
                 }
                 return null;
             }).run();
         } catch (InterruptedException e) {
-            log.error("Unrecoverable exception when attempting to reset replication status", e);
+            log.error("Unrecoverable exception when attempting clear the event table", e);
             throw new UnrecoverableCorfuInterruptedError(e);
         }
+        log.info("Cleared the event table, size is now: " + replicationEventTable.count());
     }
 
     public void removeFromStatusTable(String clusterId) {
