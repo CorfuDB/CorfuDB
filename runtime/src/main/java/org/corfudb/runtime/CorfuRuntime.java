@@ -68,6 +68,7 @@ import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import static org.corfudb.common.metrics.micrometer.JVMMetrics.subscribeSafepointMetrics;
 import static org.corfudb.common.util.URLUtils.getVersionFormattedEndpointURL;
 
 /**
