@@ -30,6 +30,7 @@ import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TableParameters;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.AbortCause;
+import org.corfudb.runtime.exceptions.SerializerException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.PersistenceOptions;
 import org.corfudb.runtime.object.transactions.TransactionType;
@@ -1060,6 +1061,69 @@ public class CorfuStoreIT extends AbstractIT {
         tx.commit();
         runtime.shutdown();
         shutdownCorfuServer(corfuServer);
+    }
+
+    /**
+     * This test is divided into 2 phases.
+     * Phase 1: Open a table with metadata A but write record with metadata B
+     * Phase 2: Use a new runtime and open with metadata A and verify deserialization exception
+     */
+    @Test
+    public void badMetadataDeserializationTest() throws Exception {
+        final String namespace = "namespace";
+        final String tableName = "table";
+
+        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
+
+        // PHASE 1 - Start a Corfu runtime & a CorfuStore instance
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
+        CorfuStore store = new CorfuStore(runtime);
+
+        final Table<Uuid, Uuid, Uuid> table = store.openTable(namespace, tableName,
+                Uuid.class, Uuid.class, Uuid.class,
+                TableOptions.fromProtoSchema(Uuid.class));
+
+        final long aLong = 1L;
+        Uuid uuidVal = Uuid.newBuilder().setMsb(aLong).setLsb(aLong).build();
+        try (TxnContext tx = store.txn(namespace)) {
+            Uuid uuidKey = Uuid.newBuilder().setMsb(aLong).setLsb(aLong).build();
+            tx.putRecord(table, uuidKey, uuidVal, uuidVal);
+            tx.commit();
+        }
+
+        // Stunts performed by experts please don't try this at home.
+        final Table<Uuid, Uuid, ManagedResources> tableBad = store.openTable(namespace, tableName,
+                Uuid.class, Uuid.class, ManagedResources.class,
+                TableOptions.fromProtoSchema(Uuid.class));
+
+        ManagedResources metadata = ManagedResources.newBuilder()
+                .setCreateTimestamp(aLong).build();
+        try (TxnContext tx = store.txn(namespace)) {
+            Uuid uuidKey = Uuid.newBuilder().setMsb(aLong).setLsb(aLong).build();
+            tx.putRecord(tableBad, uuidKey, uuidVal, metadata);
+            tx.commit();
+        }
+        runtime.shutdown();
+
+        // PHASE 2 - open the same table this time only with one metadata type
+        CorfuRuntime runtimeC = new CorfuRuntime(singleNodeEndpoint)
+                .setCacheDisabled(true)
+                .connect();
+        store = new CorfuStore(runtimeC);
+        final Table<Uuid, Uuid, Uuid> tableVictim = store.openTable(namespace, tableName,
+                Uuid.class, Uuid.class, Uuid.class,
+                TableOptions.fromProtoSchema(Uuid.class));
+        Exception whichException = null;
+        try {
+            tableVictim.count();
+        } catch (Exception ex) {
+            whichException = ex;
+        }
+        assertThat(whichException).isExactlyInstanceOf(SerializerException.class);
+        assertThat(whichException.getMessage()).contains("ManagedResource");
+        runtimeC.shutdown();
+
+        assertThat(shutdownCorfuServer(corfuServer)).isTrue();
     }
 
     @Test
