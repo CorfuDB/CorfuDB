@@ -2,6 +2,7 @@ package org.corfudb.test.managedtable;
 
 import com.google.protobuf.Descriptors.Descriptor;
 import com.google.protobuf.Message;
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Builder.Default;
 import lombok.Getter;
@@ -10,12 +11,15 @@ import org.corfudb.runtime.CorfuOptions.SchemaOptions;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.ExampleSchemas.ExampleValue;
 import org.corfudb.runtime.ExampleSchemas.ManagedMetadata;
+import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.ProtobufIndexer;
 import org.corfudb.runtime.view.TableRegistry.FullyQualifiedTableName;
 import org.corfudb.runtime.view.TableRegistry.TableDescriptor;
 import org.corfudb.test.CPSerializer;
 import org.corfudb.test.TestSchema.Uuid;
+import org.corfudb.test.managedtable.ManagedCorfuTable.ManagedCorfuTableType;
 import org.corfudb.test.managedtable.ManagedCorfuTable.TableDescriptors;
+import org.corfudb.test.managedtable.ManagedCorfuTableSetupManager.ManagedCorfuTableSetupType;
 import org.corfudb.util.serializer.DynamicProtobufSerializer;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.ProtobufSerializer;
@@ -25,16 +29,19 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
-public interface ManagedCorfuTableConfig<K, V> {
+public interface ManagedCorfuTableConfig {
     void configure(CorfuRuntime rt) throws Exception;
     ISerializer getSerializer(CorfuRuntime rt);
     FullyQualifiedTableName getTableName();
+    ManagedCorfuTableConfigParams getParams();
 
     @Builder
     @Getter
-    class ManagedCorfuTableGenericConfig<K, V> implements ManagedCorfuTableConfig<K, V> {
+    class ManagedCorfuTableGenericConfig implements ManagedCorfuTableConfig {
         @NonNull
         private final ManagedSerializer managedSerializer;
+        @NonNull
+        private final ManagedCorfuTableConfigParams params;
 
         @Default
         private final FullyQualifiedTableName tableName = FullyQualifiedTableName.builder()
@@ -57,9 +64,11 @@ public interface ManagedCorfuTableConfig<K, V> {
     @Builder
     @Getter
     class ManagedCorfuTableProtobufConfig<K extends Message, V extends Message, M extends Message>
-            implements ManagedCorfuTableConfig<K, V> {
+            implements ManagedCorfuTableConfig {
         @NonNull
         private final TableDescriptor<K, V, M> tableDescriptor;
+        @NonNull
+        private final ManagedCorfuTableConfigParams params;
 
         @Default
         private final FullyQualifiedTableName tableName = FullyQualifiedTableName.builder()
@@ -73,7 +82,7 @@ public interface ManagedCorfuTableConfig<K, V> {
         @Default
         private final ManagedSerializer managedSerializer = new ManagedProtobufSerializer();
 
-        public static ManagedCorfuTableConfig<Uuid, Uuid> buildUuid() {
+        public static ManagedCorfuTableConfig buildUuid() {
             return ManagedCorfuTableProtobufConfig
                     .<Uuid, Uuid, Uuid>builder()
                     .tableDescriptor(TableDescriptors.UUID)
@@ -199,5 +208,20 @@ public interface ManagedCorfuTableConfig<K, V> {
             serializer = new CPSerializer();
             rt.getSerializers().registerSerializer(serializer);
         }
+    }
+
+    @AllArgsConstructor
+    @Getter
+    class ManagedCorfuTableConfigParams {
+        public static final ManagedCorfuTableConfigParams PERSISTED_PROTOBUF_TABLE = new ManagedCorfuTableConfigParams(
+                ManagedCorfuTableType.PERSISTED, ManagedCorfuTableSetupType.PROTOBUF_TABLE
+        );
+
+        public static final ManagedCorfuTableConfigParams PERSISTENT_PROTOBUF_TABLE = new ManagedCorfuTableConfigParams(
+                ManagedCorfuTableType.PERSISTENT, ManagedCorfuTableSetupType.PROTOBUF_TABLE
+        );
+
+        private final ManagedCorfuTableType tableType;
+        private final ManagedCorfuTableSetupType setupType;
     }
 }

@@ -24,6 +24,7 @@ import org.corfudb.test.CPSerializer;
 import org.corfudb.test.managedtable.ManagedCorfuTable;
 import org.corfudb.test.managedtable.ManagedCorfuTableConfig;
 import org.corfudb.test.managedtable.ManagedCorfuTableConfig.ManagedCPSerializer;
+import org.corfudb.test.managedtable.ManagedCorfuTableConfig.ManagedCorfuTableConfigParams;
 import org.corfudb.test.managedtable.ManagedCorfuTableConfig.ManagedCorfuTableGenericConfig;
 import org.corfudb.test.managedtable.ManagedCorfuTableSetupManager;
 import org.corfudb.test.managedtable.ManagedCorfuTableSetupManager.ManagedCorfuTableSetup;
@@ -70,13 +71,14 @@ public class CheckpointTest extends AbstractObjectTest {
 
         final int tableSize = PARAMETERS.NUM_ITERATIONS_LOW;
 
-        ManagedCorfuTableConfig<String, Long> cfg = ManagedCorfuTableGenericConfig
-                .<String, Long>builder()
+        ManagedCorfuTableConfig cfg = ManagedCorfuTableGenericConfig
+                .builder()
                 .managedSerializer(new ManagedCPSerializer())
+                .params(ManagedCorfuTableConfigParams.PERSISTENT_PROTOBUF_TABLE)
                 .build();
 
         ManagedCorfuTableSetup<String, Long> tableSetup = ManagedCorfuTableSetupManager
-                .persistedPlainCorfu();
+                .getTableSetup(cfg.getParams());
 
         ManagedCorfuTable
                 .<String, Long>build()

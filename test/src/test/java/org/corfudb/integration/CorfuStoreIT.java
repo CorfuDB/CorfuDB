@@ -50,9 +50,12 @@ import org.corfudb.test.SampleSchema;
 import org.corfudb.test.SampleSchema.ManagedResources;
 import org.corfudb.test.TestSchema.Uuid;
 import org.corfudb.test.managedtable.ManagedCorfuTable;
+import org.corfudb.test.managedtable.ManagedCorfuTable.ManagedCorfuTableType;
+import org.corfudb.test.managedtable.ManagedCorfuTableConfig.ManagedCorfuTableConfigParams;
 import org.corfudb.test.managedtable.ManagedCorfuTableConfig.ManagedCorfuTableGenericConfig;
 import org.corfudb.test.managedtable.ManagedCorfuTableConfig.ManagedDynamicProtobufSerializer;
 import org.corfudb.test.managedtable.ManagedCorfuTableSetupManager;
+import org.corfudb.test.managedtable.ManagedCorfuTableSetupManager.ManagedCorfuTableSetupType;
 import org.corfudb.test.managedtable.ManagedRuntime;
 import org.corfudb.util.serializer.DynamicProtobufSerializer;
 import org.corfudb.util.serializer.ISerializer;
@@ -183,9 +186,14 @@ public class CorfuStoreIT extends AbstractIT {
         final long newMetadataUuid = 99L;
         ManagedRuntime managedRt = buildManagedRuntime();
 
-        ManagedCorfuTableGenericConfig<CorfuDynamicKey, CorfuDynamicRecord> config = ManagedCorfuTableGenericConfig
+        ManagedCorfuTableConfigParams params = new ManagedCorfuTableConfigParams(
+                ManagedCorfuTableType.PERSISTENT, ManagedCorfuTableSetupType.PLAIN_TABLE
+        );
+
+        ManagedCorfuTableGenericConfig config = ManagedCorfuTableGenericConfig
                 .<CorfuDynamicKey, CorfuDynamicRecord>builder()
                 .managedSerializer(new ManagedDynamicProtobufSerializer())
+                .params(params)
                 .build();
 
         ManagedCorfuTable<CorfuDynamicKey, CorfuDynamicRecord> managedTable = ManagedCorfuTable

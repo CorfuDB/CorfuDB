@@ -20,7 +20,7 @@ import java.util.Objects;
 @Accessors(fluent = true, chain = true)
 public class ManagedCorfuTable<K, V> {
     @Setter
-    private ManagedCorfuTableConfig<K, V> config;
+    private ManagedCorfuTableConfig config;
     @Setter
     private ManagedRuntime managedRt;
     @Setter
@@ -31,7 +31,7 @@ public class ManagedCorfuTable<K, V> {
     }
 
     public static <K, V> ManagedCorfuTable<K, V>
-    from(ManagedCorfuTableConfig<K, V> config, ManagedRuntime managedRt) {
+    from(ManagedCorfuTableConfig config, ManagedRuntime managedRt) {
         return new ManagedCorfuTable<K, V>()
                 .config(config)
                 .managedRt(managedRt);
@@ -39,7 +39,7 @@ public class ManagedCorfuTable<K, V> {
 
     public static ManagedCorfuTable<Uuid, ExampleValue> buildExample(ManagedRuntime rt) {
 
-        ManagedCorfuTableConfig<Uuid, ExampleValue> cfg = ManagedCorfuTableProtobufConfig
+        ManagedCorfuTableConfig cfg = ManagedCorfuTableProtobufConfig
                 .<Uuid, ExampleValue, ManagedMetadata>builder()
                 .tableDescriptor(TableDescriptors.EXAMPLE_VALUE)
                 .build();
@@ -47,7 +47,7 @@ public class ManagedCorfuTable<K, V> {
         return ManagedCorfuTable.<Uuid, ExampleValue>build()
                 .config(cfg)
                 .managedRt(rt)
-                .tableSetup(ManagedCorfuTableSetupManager.persistentProtobufCorfu());
+                .tableSetup(ManagedCorfuTableSetupManager.getTableSetup(cfg.getParams()));
     }
 
     public static ManagedCorfuTable<Uuid, Uuid> buildDefault(ManagedRuntime rt) {
@@ -60,7 +60,7 @@ public class ManagedCorfuTable<K, V> {
                 .<Uuid, Uuid>build()
                 .config(cfg)
                 .managedRt(rt)
-                .tableSetup(ManagedCorfuTableSetupManager.persistentProtobufCorfu());
+                .tableSetup(ManagedCorfuTableSetupManager.getTableSetup(cfg.getParams()));
     }
 
     @SneakyThrows
@@ -69,7 +69,7 @@ public class ManagedCorfuTable<K, V> {
 
         managedRt.connect(rt -> {
             try (GenericCorfuTable<? extends SnapshotGenerator<?>, K, V> table = tableSetup.open(rt, config)) {
-                action.accept(new CorfuTableSpecContext<>(rt, table));
+                action.accept(new CorfuTableSpecContext<>(rt, table, config));
             }
         });
     }
@@ -80,7 +80,7 @@ public class ManagedCorfuTable<K, V> {
 
         CorfuRuntime rt = managedRt.getRt();
         try (GenericCorfuTable<? extends SnapshotGenerator<?>, K, V> table = tableSetup.open(rt, config)) {
-            action.accept(new CorfuTableSpecContext<>(rt, table));
+            action.accept(new CorfuTableSpecContext<>(rt, table, config));
         }
     }
 
@@ -89,5 +89,9 @@ public class ManagedCorfuTable<K, V> {
         public static TableDescriptor<Uuid, ExampleValue, ManagedMetadata> EXAMPLE_VALUE = new TableDescriptor<>(
                 Uuid.class, ExampleValue.class, ManagedMetadata.class
         );
+    }
+
+    public enum ManagedCorfuTableType {
+        PERSISTENT, PERSISTED
     }
 }

@@ -12,6 +12,8 @@ import org.corfudb.runtime.object.PersistenceOptions;
 import org.corfudb.runtime.object.PersistenceOptions.PersistenceOptionsBuilder;
 import org.corfudb.runtime.object.SnapshotGenerator;
 import org.corfudb.runtime.view.ObjectOpenOption;
+import org.corfudb.test.managedtable.ManagedCorfuTable.ManagedCorfuTableType;
+import org.corfudb.test.managedtable.ManagedCorfuTableConfig.ManagedCorfuTableConfigParams;
 import org.corfudb.test.managedtable.ManagedCorfuTableConfig.ManagedCorfuTableProtobufConfig;
 import org.corfudb.util.serializer.ISerializer;
 import org.rocksdb.Options;
@@ -41,7 +43,7 @@ public class ManagedCorfuTableSetupManager<K, V> {
     private final ManagedCorfuTableSetup<K, V> persistedProtobufCorfu = new ManagedCorfuTableSetup<>() {
         @Override
         public GenericCorfuTable<? extends SnapshotGenerator<?>, K, V> open(
-                CorfuRuntime rt, ManagedCorfuTableConfig<K, V> config) throws Exception {
+                CorfuRuntime rt, ManagedCorfuTableConfig config) throws Exception {
             config.configure(rt);
 
             String diskBackedDirectory = "/tmp/";
@@ -75,7 +77,7 @@ public class ManagedCorfuTableSetupManager<K, V> {
     private final ManagedCorfuTableSetup<K, V> persistentProtobufCorfu = new ManagedCorfuTableSetup<>() {
         @Override
         public GenericCorfuTable<? extends SnapshotGenerator<?>, K, V> open(
-                CorfuRuntime rt, ManagedCorfuTableConfig<K, V> config) throws Exception {
+                CorfuRuntime rt, ManagedCorfuTableConfig config) throws Exception {
             config.configure(rt);
             Object[] args = ((ManagedCorfuTableProtobufConfig<?, ?, ?>) config).getArgs();
             ISerializer serializer = config.getSerializer(rt);
@@ -106,28 +108,51 @@ public class ManagedCorfuTableSetupManager<K, V> {
         }
     };
 
-    public static <K, V> ManagedCorfuTableSetup<K, V> persistentProtobufCorfu() {
+    public static <K, V> ManagedCorfuTableSetup<K, V> getTableSetup(ManagedCorfuTableConfigParams params){
+        switch (params.getTableType()) {
+            case PERSISTENT:
+                switch (params.getSetupType()) {
+                    case PLAIN_TABLE:
+                        return persistentPlainCorfu();
+                    case PROTOBUF_TABLE:
+                        return persistentProtobufCorfu();
+                }
+                break;
+            case PERSISTED:
+                switch (params.getSetupType()){
+                    case PLAIN_TABLE:
+                        return persistedPlainCorfu();
+                    case PROTOBUF_TABLE:
+                        return persistedProtobufCorfu();
+                }
+                break;
+        }
+
+        throw new IllegalStateException("Unknown configuration");
+    }
+
+    private static <K, V> ManagedCorfuTableSetup<K, V> persistentProtobufCorfu() {
         return ManagedCorfuTableSetupManager
                 .<K, V>builder()
                 .build()
                 .persistentProtobufCorfu;
     }
 
-    public static <K, V> ManagedCorfuTableSetup<K, V> persistedProtobufCorfu() {
+    private static <K, V> ManagedCorfuTableSetup<K, V> persistedProtobufCorfu() {
         return ManagedCorfuTableSetupManager
                 .<K, V>builder()
                 .build()
                 .persistedProtobufCorfu;
     }
 
-    public static <K, V> ManagedCorfuTableSetup<K, V> persistedPlainCorfu() {
+    private static <K, V> ManagedCorfuTableSetup<K, V> persistedPlainCorfu() {
         return ManagedCorfuTableSetupManager
                 .<K, V>builder()
                 .build()
                 .persistedPlainCorfu;
     }
 
-    public static <K, V> ManagedCorfuTableSetup<K, V> persistentPlainCorfu() {
+    private static <K, V> ManagedCorfuTableSetup<K, V> persistentPlainCorfu() {
         return ManagedCorfuTableSetupManager
                 .<K, V>builder()
                 .build()
@@ -136,7 +161,11 @@ public class ManagedCorfuTableSetupManager<K, V> {
 
     public interface ManagedCorfuTableSetup<K, V> {
         GenericCorfuTable<? extends SnapshotGenerator<?>, K, V> open(
-                CorfuRuntime rt, ManagedCorfuTableConfig<K, V> config
+                CorfuRuntime rt, ManagedCorfuTableConfig config
         ) throws Exception;
+    }
+
+    public enum ManagedCorfuTableSetupType {
+        PLAIN_TABLE, PROTOBUF_TABLE,
     }
 }

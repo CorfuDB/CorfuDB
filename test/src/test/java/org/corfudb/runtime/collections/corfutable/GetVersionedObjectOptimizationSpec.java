@@ -1,6 +1,5 @@
 package org.corfudb.runtime.collections.corfutable;
 
-import com.google.protobuf.Message;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuRecord;
@@ -13,9 +12,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-public class GetVersionedObjectOptimizationSpec implements CorfuTableSpec<Uuid, Uuid, Uuid> {
+public class GetVersionedObjectOptimizationSpec implements CorfuTableSpec<Uuid, CorfuRecord<Uuid, Uuid>> {
 
-    public void test(CorfuTableSpecContext<Uuid, Uuid, Uuid> ctx) throws Exception {
+    public void test(CorfuTableSpecContext<Uuid, CorfuRecord<Uuid, Uuid>> ctx) throws Exception {
         GenericCorfuTable<?, Uuid, CorfuRecord<Uuid, Uuid>> corfuTable = ctx.getCorfuTable();
         CorfuRuntime rt = ctx.getRt();
 

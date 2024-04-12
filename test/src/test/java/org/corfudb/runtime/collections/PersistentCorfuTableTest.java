@@ -33,6 +33,7 @@ import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.test.CacheSizeForTest;
 import org.corfudb.test.TestSchema.Uuid;
 import org.corfudb.test.managedtable.ManagedCorfuTable;
+import org.corfudb.test.managedtable.ManagedCorfuTableConfig.ManagedCorfuTableProtobufConfig;
 import org.corfudb.test.managedtable.ManagedCorfuTableSetupManager;
 import org.corfudb.test.managedtable.ManagedRuntime;
 import org.junit.Test;
@@ -74,7 +75,10 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
     public void testTxn() throws Exception {
         addSingleServer(SERVERS.PORT_0);
 
-        largeUuidManagedTable().execute((rt, corfuTable) -> {
+        largeUuidManagedTable().execute(ctx -> {
+            CorfuRuntime rt = ctx.getRt();
+            GenericCorfuTable<?, Uuid, CorfuRecord<Uuid, Uuid>> corfuTable = ctx.getCorfuTable();
+
             Uuid key1 = Uuid.newBuilder().setLsb(1).setMsb(1).build();
             Uuid payload1 = Uuid.newBuilder().setLsb(1).setMsb(1).build();
             Uuid metadata1 = Uuid.newBuilder().setLsb(1).setMsb(1).build();
@@ -156,7 +160,10 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
     public void simpleParallelAccess() throws Exception {
         addSingleServer(SERVERS.PORT_0);
 
-        smallUuidManagedTable().execute((rt, corfuTable) -> {
+        smallUuidManagedTable().execute(ctx -> {
+            CorfuRuntime rt = ctx.getRt();
+            GenericCorfuTable<?, Uuid, CorfuRecord<Uuid, Uuid>> corfuTable = ctx.getCorfuTable();
+
             int readSize = 100;
 
             // 1st txn at v0 puts keys {0, .., readSize-1} into the table
@@ -200,70 +207,71 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
     public void testUncommittedChangesIsolationBetweenParallelTxns() throws Exception {
         addSingleServer(SERVERS.PORT_0);
 
-        buildNewManagedRuntime(getLargeRtParams(), rt -> {
-            ManagedCorfuTable.buildDefault(rt).execute(corfuTable -> {
-                Uuid key1 = Uuid.newBuilder().setLsb(1).setMsb(1).build();
-                Uuid payload1 = Uuid.newBuilder().setLsb(1).setMsb(1).build();
-                Uuid payload2 = Uuid.newBuilder().setLsb(2).setMsb(2).build();
-                Uuid metadata1 = Uuid.newBuilder().setLsb(1).setMsb(1).build();
-                CorfuRecord<Uuid, Uuid> value1 = new CorfuRecord<>(payload1, metadata1);
+        largeUuidManagedTable().execute(ctx -> {
+            CorfuRuntime rt = ctx.getRt();
+            GenericCorfuTable<?, Uuid, CorfuRecord<Uuid, Uuid>> corfuTable = ctx.getCorfuTable();
 
-                // put(k1, v1)
+            Uuid key1 = Uuid.newBuilder().setLsb(1).setMsb(1).build();
+            Uuid payload1 = Uuid.newBuilder().setLsb(1).setMsb(1).build();
+            Uuid payload2 = Uuid.newBuilder().setLsb(2).setMsb(2).build();
+            Uuid metadata1 = Uuid.newBuilder().setLsb(1).setMsb(1).build();
+            CorfuRecord<Uuid, Uuid> value1 = new CorfuRecord<>(payload1, metadata1);
+
+            // put(k1, v1)
+            rt.getObjectsView().TXBegin();
+            corfuTable.insert(key1, value1);
+            rt.getObjectsView().TXEnd();
+            assertThat(corfuTable.get(key1).getPayload().getLsb()).isEqualTo(payload1.getLsb());
+
+            CountDownLatch readLatch = new CountDownLatch(1);
+            CountDownLatch writeLatch = new CountDownLatch(1);
+            AtomicLong readerResult = new AtomicLong();
+            AtomicLong writerResult = new AtomicLong();
+
+            Thread readerThread = new Thread(() -> {
                 rt.getObjectsView().TXBegin();
-                corfuTable.insert(key1, value1);
+                try {
+                    // Unblocked until writerThread puts uncommitted changes
+                    readLatch.await();
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+
+                // Changes made by writeThread should be isolated.
+                readerResult.set(corfuTable.get(key1).getPayload().getLsb());
+
+                // Read is done. Signal the writerThread to commit
+                writeLatch.countDown();
                 rt.getObjectsView().TXEnd();
-                assertThat(corfuTable.get(key1).getPayload().getLsb()).isEqualTo(payload1.getLsb());
-
-                CountDownLatch readLatch = new CountDownLatch(1);
-                CountDownLatch writeLatch = new CountDownLatch(1);
-                AtomicLong readerResult = new AtomicLong();
-                AtomicLong writerResult = new AtomicLong();
-
-                Thread readerThread = new Thread(() -> {
-                    rt.getObjectsView().TXBegin();
-                    try {
-                        // Unblocked until writerThread puts uncommitted changes
-                        readLatch.await();
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
-                    }
-
-                    // Changes made by writeThread should be isolated.
-                    readerResult.set(corfuTable.get(key1).getPayload().getLsb());
-
-                    // Read is done. Signal the writerThread to commit
-                    writeLatch.countDown();
-                    rt.getObjectsView().TXEnd();
-                });
-
-                // put(k1, v2) to overwrite the previous put, but do not commit
-                Thread writerThread = new Thread(() -> {
-                    rt.getObjectsView().TXBegin();
-                    CorfuRecord<Uuid, Uuid> value2 = new CorfuRecord<>(payload2, metadata1);
-                    corfuTable.insert(key1, value2);
-                    writerResult.set(corfuTable.get(key1).getPayload().getLsb());
-
-                    // Signals the readerThread to read
-                    readLatch.countDown();
-
-                    try {
-                        // Unblocked until the readThread has read the table.
-                        // Without this, the readThread might read this change as a committed transaction.
-                        writeLatch.await();
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
-                    }
-                    rt.getObjectsView().TXEnd();
-                });
-
-                readerThread.start();
-                writerThread.start();
-                readerThread.join();
-                writerThread.join();
-
-                assertThat(readerResult.get()).isEqualTo(payload1.getLsb());
-                assertThat(writerResult.get()).isEqualTo(payload2.getLsb());
             });
+
+            // put(k1, v2) to overwrite the previous put, but do not commit
+            Thread writerThread = new Thread(() -> {
+                rt.getObjectsView().TXBegin();
+                CorfuRecord<Uuid, Uuid> value2 = new CorfuRecord<>(payload2, metadata1);
+                corfuTable.insert(key1, value2);
+                writerResult.set(corfuTable.get(key1).getPayload().getLsb());
+
+                // Signals the readerThread to read
+                readLatch.countDown();
+
+                try {
+                    // Unblocked until the readThread has read the table.
+                    // Without this, the readThread might read this change as a committed transaction.
+                    writeLatch.await();
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+                rt.getObjectsView().TXEnd();
+            });
+
+            readerThread.start();
+            writerThread.start();
+            readerThread.join();
+            writerThread.join();
+
+            assertThat(readerResult.get()).isEqualTo(payload1.getLsb());
+            assertThat(writerResult.get()).isEqualTo(payload2.getLsb());
         });
     }
 
@@ -275,7 +283,10 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
     public void testNoCacheOption() throws Exception {
         addSingleServer(SERVERS.PORT_0);
 
-        buildNewManagedRuntime(getLargeRtParams(), rt -> {
+        largeUuidManagedTable().execute(ctx -> {
+            CorfuRuntime rt = ctx.getRt();
+            GenericCorfuTable<?, Uuid, CorfuRecord<Uuid, Uuid>> corfuTable = ctx.getCorfuTable();
+
             UUID streamA = UUID.randomUUID();
             UUID streamB = UUID.randomUUID();
 
@@ -1282,22 +1293,22 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
         rt.getObjectsView().TXEnd();
     }
 
-    private ManagedCorfuTable<Uuid, Uuid, Uuid> smallUuidManagedTable() {
+    private ManagedCorfuTable<Uuid, CorfuRecord<Uuid, Uuid>> smallUuidManagedTable() {
         return managedTable(getSmallRtParams());
     }
 
-    private ManagedCorfuTable<Uuid, Uuid, Uuid> largeUuidManagedTable() {
+    private ManagedCorfuTable<Uuid, CorfuRecord<Uuid, Uuid>> largeUuidManagedTable() {
         return managedTable(getLargeRtParams());
     }
 
-    private ManagedCorfuTable<Uuid, Uuid, Uuid> managedTable(CorfuRuntimeParameters rtParams) {
+    private ManagedCorfuTable<Uuid, CorfuRecord<Uuid, Uuid>> managedTable(CorfuRuntimeParameters rtParams) {
         ManagedRuntime managedRt = ManagedRuntime
                 .from(rtParams)
                 .setup(rt -> rt.parseConfigurationString(getDefaultConfigurationString()));
 
         return ManagedCorfuTable
-                .<Uuid, Uuid, Uuid>build()
-                .config(ManagedCorfuTableConfig.buildUuid())
+                .<Uuid, CorfuRecord<Uuid, Uuid>>build()
+                .config(ManagedCorfuTableProtobufConfig.buildUuid())
                 .managedRt(managedRt)
                 .tableSetup(ManagedCorfuTableSetupManager.persistentProtobufCorfu());
     }
