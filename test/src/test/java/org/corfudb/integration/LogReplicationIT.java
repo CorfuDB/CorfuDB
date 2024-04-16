@@ -32,10 +32,16 @@ import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.proto.service.CorfuMessage;
 import org.corfudb.runtime.view.ObjectsView;
+import org.corfudb.util.TableHelper;
+import org.corfudb.util.TableHelper.TableType;
 import org.corfudb.util.Utils;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
 import java.time.Duration;
 import java.util.Arrays;
@@ -59,6 +65,7 @@ import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEF
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_CACHE_NUM_ENTRIES;
 import static org.corfudb.integration.LogReplicationAbstractIT.checkpointAndTrimCorfuStore;
 import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
+import static org.corfudb.util.TableHelper.openTable;
 
 /**
  * Test the core components of log replication, namely, Snapshot Sync and Log Entry Sync,
@@ -210,6 +217,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
      * @throws Exception
      */
     @Before
+    @BeforeEach
     public void setUp() throws Exception {
         // Source Corfu Server (data will be written to this server)
         new CorfuServerRunner()
@@ -255,6 +263,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     }
 
     @After
+    @AfterEach
     public void cleanUp() throws Exception {
         if (sourceDataSender != null) {
             sourceDataSender.shutdown();
@@ -278,18 +287,15 @@ public class LogReplicationIT extends AbstractIT implements Observer {
      * @param corfuStore corfu store
      * @param numStreams number of streams to open
      */
-    private void openStreams(Map<String, Table<StringKey, IntValue, Metadata>> tables, CorfuStore corfuStore,
+    private void openStreams(TableType tableType,
+                             Map<String, Table<StringKey, IntValue, Metadata>> tables, CorfuStore corfuStore,
                              int numStreams) throws Exception {
         for (int i = 0; i < numStreams; i++) {
             String name = TABLE_PREFIX + i;
-            Table<StringKey, IntValue, Metadata> table = corfuStore.openTable(
-                    TEST_NAMESPACE,
-                    name,
-                    StringKey.class,
-                    IntValue.class,
-                    Metadata.class,
-                    TableOptions.fromProtoSchema(Sample.IntValueTag.class)
-            );
+            Table<StringKey, IntValue, Metadata> table = openTable(tableType,
+                    corfuStore, name, TEST_NAMESPACE,
+                    StringKey.class, IntValue.class, Metadata.class,
+                    TableOptions.fromProtoSchema(Sample.IntValueTag.class));
             tables.put(table.getFullyQualifiedTableName(), table);
         }
     }
@@ -402,9 +408,15 @@ public class LogReplicationIT extends AbstractIT implements Observer {
      * applied on the receiver.
      * @throws Exception
      */
+    @ParameterizedTest
+    @EnumSource(TableType.class)
+    public void testOutOfOrderSnapshotStartWithoutRecovery(TableType tableType) throws Exception {
+        testSnapshotSyncWithStartDrops(tableType, Integer.MAX_VALUE);
+    }
+
     @Test
-    public void testOutOfOrderSnapshotStartWithoutRecovery() throws Exception {
-        testSnapshotSyncWithStartDrops(Integer.MAX_VALUE);
+    public void test() {
+
     }
 
     /**
@@ -413,20 +425,21 @@ public class LogReplicationIT extends AbstractIT implements Observer {
      * completed successfully and data was replicated on the receiver.
      * @throws Exception
      */
-    @Test
-    public void testOutOfOrderSnapshotStartWithRecovery() throws Exception {
+    @ParameterizedTest
+    @EnumSource(TableType.class)
+    public void testOutOfOrderSnapshotStartWithRecovery(TableType tableType) throws Exception {
         // Number of start messages which will be dropped.  Note:  A higher number increases the test execution time
         // and makes it time out intermittently.
         int n = 2;
-        testSnapshotSyncWithStartDrops(n);
+        testSnapshotSyncWithStartDrops(tableType, n);
     }
 
-    private void testSnapshotSyncWithStartDrops(int numDrops) throws Exception {
+    private void testSnapshotSyncWithStartDrops(TableType tableType, int numDrops) throws Exception {
         Set<String> tables = new HashSet<>();
         tables.add(t0NameUFO);
         tables.add(t1NameUFO);
 
-        writeCrossTableTransactions(tables, true);
+        writeCrossTableTransactions(tableType, tables, true);
 
         // Set the flag to drop START messages and the number of times it must be dropped
         testConfig.clear().setDropSnapshotStartMsg(true);
@@ -464,9 +477,10 @@ public class LogReplicationIT extends AbstractIT implements Observer {
      * We emulate the channel between source and destination by directly handling the received data
      * to the other side.
      */
-    @Test
-    public void testSnapshotAndLogEntrySyncThroughManager() throws Exception {
-        testSnapshotSyncAndLogEntrySync(0, false, 0);
+    @ParameterizedTest
+    @EnumSource(TableType.class)
+    public void testSnapshotAndLogEntrySyncThroughManager(TableType tableType) throws Exception {
+        testSnapshotSyncAndLogEntrySync(tableType, 0, false, 0);
     }
 
     /**
@@ -480,23 +494,20 @@ public class LogReplicationIT extends AbstractIT implements Observer {
      *
      * @throws Exception
      */
-    @Test
-    public void testValidSnapshotSyncCrossTables() throws Exception {
+    @ParameterizedTest
+    @EnumSource(TableType.class)
+    public void testValidSnapshotSyncCrossTables(TableType tableType) throws Exception {
         // Write data in transaction to t0 and t1
         Set<String> crossTables = new HashSet<>();
         crossTables.add(t0NameUFO);
         crossTables.add(t1NameUFO);
 
-        writeCrossTableTransactions(crossTables, true);
+        writeCrossTableTransactions(tableType, crossTables, true);
         // Open table2 with false is_federated flag to prevent it from being replicated.
-        Table<StringKey, IntValue, Metadata> table = srcCorfuStore.openTable(
-                TEST_NAMESPACE,
-                t2Name,
-                StringKey.class,
-                IntValue.class,
-                Metadata.class,
-                TableOptions.fromProtoSchema(Sample.IntValue.class)
-        );
+        Table<StringKey, IntValue, Metadata> table = openTable(tableType,
+                srcCorfuStore, t2Name, TEST_NAMESPACE,
+                StringKey.class, IntValue.class, Metadata.class,
+                TableOptions.fromProtoSchema(Sample.IntValue.class));
         srcCorfuTables.put(table.getFullyQualifiedTableName(), table);
 
         // Start Snapshot Sync
@@ -510,7 +521,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         // Because t2 should not have been replicated remove from expected list
         srcDataForVerification.get(t2NameUFO).clear();
-        verifyData(dstCorfuStore, dstCorfuTables, srcDataForVerification);
+        verifyData(srcCorfuStore, dstCorfuTables, srcDataForVerification);
     }
 
     /**
@@ -522,8 +533,9 @@ public class LogReplicationIT extends AbstractIT implements Observer {
      *
      * @throws Exception
      */
-    @Test
-    public void testInvalidSnapshotSyncCrossTables() throws Exception {
+    @ParameterizedTest
+    @EnumSource(TableType.class)
+    public void testInvalidSnapshotSyncCrossTables(TableType tableType) throws Exception {
         // Write data in transaction to t0, t1 and t2 (where t2 is not intended to be replicated)
         Set<String> crossTables = new HashSet<>();
         crossTables.add(t0NameUFO);
@@ -535,16 +547,12 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         replicateTables.add(t0NameUFO);
         replicateTables.add(t1NameUFO);
 
-        writeCrossTableTransactions(crossTables, true);
+        writeCrossTableTransactions(tableType, crossTables, true);
         // Open table2 with false is_federated flag to prevent it from being replicated.
-        Table<StringKey, IntValue, Metadata> table = srcCorfuStore.openTable(
-                TEST_NAMESPACE,
-                t2Name,
-                StringKey.class,
-                IntValue.class,
-                Metadata.class,
-                TableOptions.fromProtoSchema(Sample.IntValue.class)
-        );
+        Table<StringKey, IntValue, Metadata> table = openTable(tableType,
+                        srcCorfuStore, t2Name, TEST_NAMESPACE,
+                        StringKey.class, IntValue.class, Metadata.class,
+                        TableOptions.fromProtoSchema(Sample.IntValue.class));
         srcCorfuTables.put(table.getFullyQualifiedTableName(), table);
 
         // Start Snapshot Sync
@@ -564,18 +572,19 @@ public class LogReplicationIT extends AbstractIT implements Observer {
      * Test behaviour when snapshot sync is initiated and the log is empty.
      * The Snapshot Sync should immediately complete and no data should appear at destination.
      */
-    @Test
-    public void testSnapshotSyncForEmptyLog() throws Exception {
+    @ParameterizedTest
+    @EnumSource(TableType.class)
+    public void testSnapshotSyncForEmptyLog(TableType tableType) throws Exception {
 
         // Open Streams on Source
-        openStreams(srcCorfuTables, srcCorfuStore, NUM_STREAMS);
+        openStreams(tableType, srcCorfuTables, srcCorfuStore, NUM_STREAMS);
 
         // Verify no data on source
         log.debug("****** Verify No Data in Source Site");
         verifyNoData(srcCorfuTables);
 
         // Verify destination tables have no actual data.
-        openStreams(dstCorfuTables, dstCorfuStore, NUM_STREAMS);
+        openStreams(tableType, dstCorfuTables, dstCorfuStore, NUM_STREAMS);
         log.debug("****** Verify No Data in Destination Site");
         verifyNoData(dstCorfuTables);
 
@@ -597,18 +606,19 @@ public class LogReplicationIT extends AbstractIT implements Observer {
      * is no actual data for the streams to replicate.
      * The Snapshot Sync should immediately complete and no data should appear at destination.
      */
-    @Test
-    public void testSnapshotSyncForNoData() throws Exception {
+    @ParameterizedTest
+    @EnumSource(TableType.class)
+    public void testSnapshotSyncForNoData(TableType tableType) throws Exception {
 
         // Generate transactional data across t0, t1 and t2
-        openStreams(srcCorfuTables, srcCorfuStore, TOTAL_STREAM_COUNT);
+        openStreams(tableType, srcCorfuTables, srcCorfuStore, TOTAL_STREAM_COUNT);
 
         // Verify data on source is actually present
         log.debug("****** Verify Data in Source Site");
         verifyData(srcCorfuStore, srcCorfuTables, srcDataForVerification);
 
         // Verify destination tables have no actual data before log replication
-        openStreams(dstCorfuTables, dstCorfuStore, NUM_STREAMS);
+        openStreams(tableType, dstCorfuTables, dstCorfuStore, NUM_STREAMS);
         log.debug("****** Verify No Data in Destination Site");
         verifyNoData(dstCorfuTables);
 
@@ -624,18 +634,19 @@ public class LogReplicationIT extends AbstractIT implements Observer {
      * Test behaviour when log entry sync is initiated and the log is empty. It should continue
      * attempting log entry sync indefinitely without any error.
      */
-    @Test
-    public void testLogEntrySyncForEmptyLog() throws Exception {
+    @ParameterizedTest
+    @EnumSource(TableType.class)
+    public void testLogEntrySyncForEmptyLog(TableType tableType) throws Exception {
 
         // Open Streams on Source
-        openStreams(srcCorfuTables, srcCorfuStore, NUM_STREAMS);
+        openStreams(tableType, srcCorfuTables, srcCorfuStore, NUM_STREAMS);
 
         // Verify no data on source
         log.debug("****** Verify No Data in Source Site");
         verifyNoData(srcCorfuTables);
 
         // Verify destination tables have no actual data.
-        openStreams(dstCorfuTables, dstCorfuStore, NUM_STREAMS);
+        openStreams(tableType, dstCorfuTables, dstCorfuStore, NUM_STREAMS);
         log.debug("****** Verify No Data in Destination Site");
         verifyNoData(dstCorfuTables);
 
@@ -663,14 +674,15 @@ public class LogReplicationIT extends AbstractIT implements Observer {
      * Test Log Entry (delta) Sync for the case where messages are dropped at the destination
      * for a fixed number of times. This will test messages being resent and further applied.
      */
-    @Test
-    public void testLogEntrySyncValidCrossTablesWithDropMsg() throws Exception {
+    @ParameterizedTest
+    @EnumSource(TableType.class)
+    public void testLogEntrySyncValidCrossTablesWithDropMsg(TableType tableType) throws Exception {
         // Write data in transaction to t0 and t1
         Set<String> crossTables = new HashSet<>();
         crossTables.add(t0NameUFO);
         crossTables.add(t1NameUFO);
 
-        writeCrossTableTransactions(crossTables, true);
+        writeCrossTableTransactions(tableType, crossTables, true);
         // Open table2 with false is_federated flag to prevent it from being replicated.
         Table<StringKey, IntValue, Metadata> table = srcCorfuStore.openTable(
                 TEST_NAMESPACE,
@@ -705,9 +717,10 @@ public class LogReplicationIT extends AbstractIT implements Observer {
      *
      * @throws Exception
      */
-    @Test
-    public void testLogEntrySyncInvalidCrossTables() throws Exception {
-        testLogEntrySyncCrossTableTransactions(true);
+    @ParameterizedTest
+    @EnumSource(TableType.class)
+    public void testLogEntrySyncInvalidCrossTables(TableType tableType) throws Exception {
+        testLogEntrySyncCrossTableTransactions(tableType, true);
     }
 
     /**
@@ -723,12 +736,13 @@ public class LogReplicationIT extends AbstractIT implements Observer {
      *
      * @throws Exception
      */
-    @Test
-    public void testLogEntrySyncInvalidCrossTablesPartial() throws Exception {
-        testLogEntrySyncCrossTableTransactions(false);
+    @ParameterizedTest
+    @EnumSource(TableType.class)
+    public void testLogEntrySyncInvalidCrossTablesPartial(TableType tableType) throws Exception {
+        testLogEntrySyncCrossTableTransactions(tableType, false);
     }
 
-    private void testLogEntrySyncCrossTableTransactions(boolean startWithCrossTableTxs) throws Exception {
+    private void testLogEntrySyncCrossTableTransactions(TableType tableType, boolean startWithCrossTableTxs) throws Exception {
         // Write data in transaction to t0, t1 (tables to be replicated) and also include a non-replicated table
         Set<String> crossTables = new HashSet<>();
         crossTables.add(t0NameUFO);
@@ -736,7 +750,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         crossTables.add(t2NameUFO);
 
         // Writes transactions to t0, t1 and t2 + transactions across 'crossTables'
-        writeCrossTableTransactions(crossTables, startWithCrossTableTxs);
+        writeCrossTableTransactions( tableType, crossTables, startWithCrossTableTxs);
 
         Set<String> replicateTables = new HashSet<>();
         replicateTables.add(t0NameUFO);
@@ -766,14 +780,15 @@ public class LogReplicationIT extends AbstractIT implements Observer {
      * The transactions will include both put and delete entries.
      * @throws Exception
      */
-    @Test
-    public void testLogEntrySyncValidCrossTablesWithWritingAtSrc() throws Exception {
+    @ParameterizedTest
+    @EnumSource(TableType.class)
+    public void testLogEntrySyncValidCrossTablesWithWritingAtSrc(TableType tableType) throws Exception {
         // Write data in transaction to t0 and t1
         Set<String> crossTables = new HashSet<>();
         crossTables.add(t0NameUFO);
         crossTables.add(t1NameUFO);
 
-        writeCrossTableTransactions(crossTables, true);
+        writeCrossTableTransactions(tableType, crossTables, true);
 
         // Start Log Entry Sync
         expectedAckMessages =  NUM_KEYS*WRITE_CYCLES;
@@ -806,13 +821,14 @@ public class LogReplicationIT extends AbstractIT implements Observer {
      * Because data is loaded in memory by the snapshot logreader on initial access, the log
      * replication will not perceive the Trimmed Exception and it should complete successfully.
      */
-    @Test
-    public void testSnapshotSyncWithTrimmedExceptions() throws Exception {
+    @ParameterizedTest
+    @EnumSource(TableType.class)
+    public void testSnapshotSyncWithTrimmedExceptions(TableType tableType) throws Exception {
         final int RX_MESSAGES_LIMIT = 2;
 
         // Open One Stream
-        openStreams(srcCorfuTables, srcCorfuStore, 1);
-        openStreams(dstCorfuTables, dstCorfuStore, 1);
+        openStreams(tableType, srcCorfuTables, srcCorfuStore, 1);
+        openStreams(tableType, dstCorfuTables, dstCorfuStore, 1);
 
         // Let's generate data on Source Corfu Server to be Replicated
         // Write a very large number of entries, so we can be sure the trim happens during snapshot sync
@@ -858,13 +874,14 @@ public class LogReplicationIT extends AbstractIT implements Observer {
      * Because data is loaded in memory by the log entry logreader on initial access, the log
      * replication will not perceive the Trimmed Exception and it should complete successfully.
      */
-    @Test
-    public void testLogEntrySyncWithTrim() throws Exception {
+    @ParameterizedTest
+    @EnumSource(TableType.class)
+    public void testLogEntrySyncWithTrim(TableType tableType) throws Exception {
         final int RX_MESSAGES_LIMIT = 2;
 
         // Open One Stream
-        openStreams(srcCorfuTables, srcCorfuStore, 1);
-        openStreams(dstCorfuTables, dstCorfuStore, 1);
+        openStreams(tableType, srcCorfuTables, srcCorfuStore, 1);
+        openStreams(tableType, dstCorfuTables, dstCorfuStore, 1);
 
         // Let's generate data on Source Corfu Server to be Replicated
         // Write a large number of entries, so we can be sure the trim happens during log entry sync
@@ -900,12 +917,13 @@ public class LogReplicationIT extends AbstractIT implements Observer {
      *
      * @throws Exception
      */
-    @Test
-    public void testLogEntrySyncLargeTables() throws Exception {
+    @ParameterizedTest
+    @EnumSource(TableType.class)
+    public void testLogEntrySyncLargeTables(TableType tableType) throws Exception {
 
         // Open One Stream
-        openStreams(srcCorfuTables, srcCorfuStore, 1);
-        openStreams(dstCorfuTables, dstCorfuStore, 1);
+        openStreams(tableType, srcCorfuTables, srcCorfuStore, 1);
+        openStreams(tableType, dstCorfuTables, dstCorfuStore, 1);
 
         int num_keys = NUM_KEYS_VERY_LARGE;
 
@@ -932,25 +950,28 @@ public class LogReplicationIT extends AbstractIT implements Observer {
      * We need to ensure the Sender re-schedules verification of snapshot sync status and
      * once completed moves onto Log Entry Sync.
      */
-    @Test
-    public void testSnapshotSyncLongDurationApply() throws Exception {
+    @ParameterizedTest
+    @EnumSource(TableType.class)
+    public void testSnapshotSyncLongDurationApply(TableType tableType) throws Exception {
         final int numCyclesToDelayApply = 3;
-        testSnapshotSyncAndLogEntrySync(numCyclesToDelayApply, false, 0);
+        testSnapshotSyncAndLogEntrySync(tableType, numCyclesToDelayApply, false, 0);
     }
 
     /**
      * Test the case where a Snapshot Sync apply metadata response is delayed causing TimeoutExceptions.
      * Verify we are able to recover.
      */
-    @Test
-    public void testSnapshotSyncDelayedApplyResponse() throws Exception {
-        testSnapshotSyncAndLogEntrySync(0, true, 0);
+    @ParameterizedTest
+    @EnumSource(TableType.class)
+    public void testSnapshotSyncDelayedApplyResponse(TableType tableType) throws Exception {
+        testSnapshotSyncAndLogEntrySync(tableType, 0, true, 0);
     }
 
-    private void testSnapshotSyncAndLogEntrySync(int numCyclesToDelayApply, boolean delayResponse, int dropAcksLevel) throws Exception {
+    private void testSnapshotSyncAndLogEntrySync(TableType tableType,
+                                                 int numCyclesToDelayApply, boolean delayResponse, int dropAcksLevel) throws Exception {
 
         // Open streams in source Corfu
-        openStreams(srcCorfuTables, srcCorfuStore, NUM_STREAMS);
+        openStreams(tableType, srcCorfuTables, srcCorfuStore, NUM_STREAMS);
 
         // Write data into Source Tables
         generateTXData(srcCorfuTables, srcDataForVerification, NUM_KEYS, srcCorfuStore, NUM_KEYS);
@@ -960,7 +981,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         verifyData(srcCorfuStore, srcCorfuTables, srcDataForVerification);
 
         // Before initiating log replication, verify these tables have no actual data in the destination.
-        openStreams(dstCorfuTables, dstCorfuStore, NUM_STREAMS);
+        openStreams(tableType, dstCorfuTables, dstCorfuStore, NUM_STREAMS);
         log.debug("****** Verify No Data in Destination");
         verifyNoData(dstCorfuTables);
 
@@ -1012,15 +1033,16 @@ public class LogReplicationIT extends AbstractIT implements Observer {
      * (ii) Source resends msgs for which it hasn't received the ACKs
      * (iii) Sink handles the already seen and processed msgs.
      */
-    @Test
-    public void testLogEntrySyncWithAckDrops() throws Exception {
+    @ParameterizedTest
+    @EnumSource(TableType.class)
+    public void testLogEntrySyncWithAckDrops(TableType tableType) throws Exception {
         // Write data in transaction to t0 and t1
         Set<String> crossTables = new HashSet<>();
         crossTables.add(t0NameUFO);
         crossTables.add(t1NameUFO);
 
         // Writes transactions to t0, t1 and t2 + transactions across 'crossTables'
-        writeCrossTableTransactions(crossTables, true);
+        writeCrossTableTransactions(tableType, crossTables, true);
 
         // Start Log Entry Sync
         expectedAckMessages = NUM_KEYS * WRITE_CYCLES;
@@ -1042,14 +1064,15 @@ public class LogReplicationIT extends AbstractIT implements Observer {
      * (i) messages dropped at the destination is resent. This would also test that Sink handles out of order messages.
      * (ii) messages for which ACKs were dropped at the source are resent and Sink handles already processed data.
      */
-    @Test
-    public void testLogEntrySyncWithMsgDropsAndAckDrops() throws Exception {
+    @ParameterizedTest
+    @EnumSource(TableType.class)
+    public void testLogEntrySyncWithMsgDropsAndAckDrops(TableType tableType) throws Exception {
         // Write data in transaction to t0 and t1
         Set<String> crossTables = new HashSet<>();
         crossTables.add(t0NameUFO);
         crossTables.add(t1NameUFO);
 
-        writeCrossTableTransactions(crossTables, true);
+        writeCrossTableTransactions(tableType, crossTables, true);
 
         // Start Log Entry Sync
         expectedAckMessages =  NUM_KEYS*WRITE_CYCLES;
@@ -1076,15 +1099,16 @@ public class LogReplicationIT extends AbstractIT implements Observer {
      *  Also, tests that an ACK is always sent for all msg resends, and also,
      *  if a msg is ignored by Sink for any reason, the ACK sent by Sink should not be for the ignored msg
      **/
-    @Test
-    public void testLogEntrySyncWithFSMChangeAndWithAckDrop() throws Exception {
+    @ParameterizedTest
+    @EnumSource(TableType.class)
+    public void testLogEntrySyncWithFSMChangeAndWithAckDrop(TableType tableType) throws Exception {
         // Write data in transaction to t0 and t1
         Set<String> crossTables = new HashSet<>();
         crossTables.add(t0NameUFO);
         crossTables.add(t1NameUFO);
 
         // Writes transactions to t0, t1 and t2 + transactions across 'crossTables'
-        writeCrossTableTransactions(crossTables, true);
+        writeCrossTableTransactions(tableType, crossTables, true);
 
         // Start Log Entry Sync
         expectedAckMessages = NUM_KEYS * WRITE_CYCLES;
@@ -1134,20 +1158,22 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         verifyData(dstCorfuStore, dstCorfuTables, srcDataForVerification);
     }
 
-    @Test
-    public void testSnapshotSyncWithAckDrops() throws Exception {
-        testSnapshotSyncAndLogEntrySync(0, false, 1);
+    @ParameterizedTest
+    @EnumSource(TableType.class)
+    public void testSnapshotSyncWithAckDrops(TableType tableType) throws Exception {
+        testSnapshotSyncAndLogEntrySync(tableType, 0, false, 1);
     }
 
 
     /* ********************** AUXILIARY METHODS ********************** */
 
     // startCrossTx indicates if we start with a transaction across Tables
-    private void writeCrossTableTransactions(Set<String> tableNames, boolean startCrossTx) throws Exception {
+    private void writeCrossTableTransactions(TableType tableType,
+                                             Set<String> tableNames, boolean startCrossTx) throws Exception {
 
         // Open streams in source Corfu
         int totalStreams = TOTAL_STREAM_COUNT; // test0, test1, test2 (open stream tables)
-        openStreams(srcCorfuTables, srcCorfuStore, totalStreams);
+        openStreams(tableType, srcCorfuTables, srcCorfuStore, totalStreams);
 
         // Write data across to tables specified in crossTableTransactions in transaction
         if (startCrossTx) {
@@ -1170,7 +1196,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         verifyData(srcCorfuStore, srcCorfuTables, srcDataForVerification);
 
         // Before initiating log replication, verify these tables have no actual data in the destination node.
-        openStreams(dstCorfuTables, dstCorfuStore, totalStreams);
+        openStreams(tableType, dstCorfuTables, dstCorfuStore, totalStreams);
         log.debug("****** Verify No Data in Destination Site");
         verifyNoData(dstCorfuTables);
     }

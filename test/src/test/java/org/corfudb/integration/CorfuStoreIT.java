@@ -42,12 +42,16 @@ import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.test.SampleSchema;
 import org.corfudb.test.SampleSchema.ManagedResources;
 import org.corfudb.test.SampleSchema.Uuid;
+import org.corfudb.util.TableHelper.TableType;
 import org.corfudb.util.serializer.DynamicProtobufSerializer;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.ProtobufSerializer;
 import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -77,6 +81,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.corfudb.runtime.view.ObjectsView.LOG_REPLICATOR_STREAM_INFO;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 import static org.corfudb.runtime.view.TableRegistry.getFullyQualifiedTableName;
+import static org.corfudb.util.TableHelper.openTable;
+import static org.corfudb.util.TableHelper.openTablePlain;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.spy;
@@ -117,6 +123,7 @@ public class CorfuStoreIT extends AbstractIT {
      * Load properties for a single node corfu server before each test
      */
     @Before
+    @BeforeEach
     public void loadProperties() {
         corfuSingleNodeHost = PROPERTIES.getProperty("corfuSingleNodeHost");
         corfuStringNodePort = Integer.valueOf(PROPERTIES.getProperty("corfuSingleNodePort"));
@@ -910,8 +917,9 @@ public class CorfuStoreIT extends AbstractIT {
      * that can correspond to new tables that have been registered after listTables is
      * invoked by the compactor.
      */
-    @Test
-    public void validateTrimTokenListTableRace() throws Exception {
+    @ParameterizedTest
+    @EnumSource(TableType.class)
+    public void validateTrimTokenListTableRace(TableType tableType) throws Exception {
         final Process p = new AbstractIT.CorfuServerRunner()
                 .setHost(DEFAULT_HOST)
                 .setPort(DEFAULT_PORT)
@@ -962,7 +970,7 @@ public class CorfuStoreIT extends AbstractIT {
                 listTableLatch.await();
 
                 // Open a previously unused table. The registration process writes to the RegistryTable.
-                clientStore.openTable(NAMESPACE, UNUSED_TABLE_NAME, RpcCommon.UuidMsg.class,
+                openTable(tableType, clientStore, UNUSED_TABLE_NAME, NAMESPACE, RpcCommon.UuidMsg.class,
                         RpcCommon.UuidMsg.class, null, TableOptions.builder().build());
 
                 // Notify the compactor thread to proceed with computing the trim token.
@@ -997,8 +1005,9 @@ public class CorfuStoreIT extends AbstractIT {
         shutdownCorfuServer(p);
     }
 
-    @Test
-    public void resetTrimmedTableTest() throws Exception {
+    @ParameterizedTest
+    @EnumSource(TableType.class)
+    public void resetTrimmedTableTest(TableType tableType) throws Exception {
         final Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort, true);
         CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
         CorfuStore corfuStore = new CorfuStore(runtime);
@@ -1009,20 +1018,10 @@ public class CorfuStoreIT extends AbstractIT {
 
         // Create & Register the table.
         // This is required to initialize the table for the current corfu client.
-        Table<Uuid, Uuid, Uuid> tableA = corfuStore.openTable(
-                namespace,
-                tableNameA,
-                Uuid.class,
-                Uuid.class,
-                null,
-                TableOptions.builder().build());
-        Table<Uuid, Uuid, Uuid> tableB = corfuStore.openTable(
-                namespace,
-                tableNameB,
-                Uuid.class,
-                Uuid.class,
-                null,
-                TableOptions.builder().build());
+        Table<Uuid, Uuid, Uuid> tableA = openTable(tableType, corfuStore, tableNameA, namespace,
+                Uuid.class, Uuid.class, null, TableOptions.builder().build());
+        Table<Uuid, Uuid, Uuid> tableB = openTable(tableType, corfuStore, tableNameB, namespace,
+                Uuid.class, Uuid.class, null, TableOptions.builder().build());
 
         Uuid key1 = Uuid.newBuilder().setLsb(1L).setMsb(1L).build();
         Uuid key2 = Uuid.newBuilder().setLsb(2L).setMsb(2L).build();
@@ -1037,9 +1036,9 @@ public class CorfuStoreIT extends AbstractIT {
 
         // Unregister table B and invoke checkpointer
         unregisterTable(runtime, namespace, tableNameB);
-        MultiCheckpointWriter<PersistentCorfuTable<?, ?>> mcw = new MultiCheckpointWriter<>();
-        PersistentCorfuTable<Uuid, CorfuRecord<Uuid, Uuid>> corfuTableA =
-                createCorfuTable(runtime, tableA.getFullyQualifiedTableName());
+        MultiCheckpointWriter<ICorfuTable<?, ?>> mcw = new MultiCheckpointWriter<>();
+        ICorfuTable<Uuid, CorfuRecord<Uuid, Uuid>> corfuTableA = openTablePlain(tableA.getFullyQualifiedTableName(),
+                runtime, tableType);
         mcw.addMap(corfuTableA); //Checkpoint only table A
         mcw.addMap(runtime.getTableRegistry().getRegistryTable());
         mcw.addMap(runtime.getTableRegistry().getProtobufDescriptorTable());
