@@ -68,6 +68,7 @@ import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import static java.util.Arrays.stream;
 import static org.corfudb.common.util.URLUtils.getVersionFormattedEndpointURL;
 
 /**
@@ -1235,7 +1236,43 @@ public class CorfuRuntime {
                     }
                 });
     }
+    private CompletableFuture<Layout> broadcast(List<String> servers) throws ExecutionException, InterruptedException {
+        CompletableFuture<Layout>[] futures = new CompletableFuture[servers.size()];
+        for (int idx = 0; idx < servers.size(); idx++) {
+            String remoteAddress = servers.get(idx);
+            IClientRouter router = getRouter(remoteAddress);
+            futures[idx] = new LayoutClient(router, Layout.INVALID_EPOCH, Layout.INVALID_CLUSTER_ID).getLayout();
+            //System.out.println("sent to " + remoteAddress);
+        }
 
+
+        CompletableFuture<Layout>[] waitList = futures;
+
+        int quorumSize = servers.size() == 3 ? 2 : 1;
+        int completed = 0;
+        while (completed < quorumSize) {
+            CompletableFuture.anyOf(waitList);
+            completed++;
+
+            waitList = stream(futures)
+                    .filter(x -> !x.isDone())
+                    .toArray(CompletableFuture[]::new);
+        }
+
+        CompletableFuture<Layout> result = null;
+        for (CompletableFuture<Layout> future : futures) {
+            if (result == null) {
+                result = future;
+            } else if (CFUtils.hasValue(result) && CFUtils.hasValue(future)) {
+                if (future.get().getEpoch() > result.get().getEpoch()) {
+                    result = future;
+                }
+            } else {
+                // ignore: both res and future don't have values
+            }
+        }
+        return result;
+    }
     /**
      * Return a completable future which is guaranteed to contain a layout.
      * This future will continue retrying until it gets a layout.
@@ -1256,22 +1293,24 @@ public class CorfuRuntime {
 
                 Collections.shuffle(layoutServersCopy);
                 // Iterate through the layout servers, attempting to connect to one
-                for (String s : layoutServersCopy) {
-                    log.trace("Trying connection to layout server {}", s);
+
+                    //log.trace("Trying connection to layout server {}", s);
                     try {
-                        IClientRouter router = getRouter(s);
+
+                        //IClientRouter router = getRouter(s);
                         // Try to get a layout.
-                        CompletableFuture<Layout> layoutFuture =
-                                new LayoutClient(router, Layout.INVALID_EPOCH, Layout.INVALID_CLUSTER_ID).getLayout();
+                        //CompletableFuture<Layout> layoutFuture =
+                        //        new LayoutClient(router, Layout.INVALID_EPOCH, Layout.INVALID_CLUSTER_ID).getLayout();
+                        CompletableFuture<Layout> layoutFuture = broadcast(layoutServersCopy);
                         // Wait for layout
                         Layout l = layoutFuture.get();
 
                         // If the layout we got has a smaller epoch than the latestLayout epoch,
                         // we discard it.
                         if (latestLayout != null && latestLayout.getEpoch() > l.getEpoch()) {
-                            log.warn("fetchLayout: latest layout epoch {} > received {}" +
-                                            " from {}:{}, discarded.", latestLayout.getEpoch(), l.getEpoch(),
-                                    router.getHost(), router.getPort());
+                            //log.warn("fetchLayout: latest layout epoch {} > received {}" +
+                              //              " from {}:{}, discarded.", latestLayout.getEpoch(), l.getEpoch(),
+                                //    router.getHost(), router.getPort());
                             continue;
                         }
 
@@ -1282,7 +1321,7 @@ public class CorfuRuntime {
 
                         layout = layoutFuture;
                         latestLayout = l;
-                        log.debug("Layout server {} responded with layout {}", s, l);
+                        //log.debug("Layout server {} responded with layout {}", s, l);
 
                         // Prune away removed node routers from the nodeRouterPool.
                         pruneRemovedRouters(l);
@@ -1299,14 +1338,13 @@ public class CorfuRuntime {
                         throw we;
                     } catch (ExecutionException ee) {
                         if (ee.getCause() instanceof TimeoutException) {
-                            log.warn("Tried to get layout from {} but failed by timeout", s);
+                            //log.warn("Tried to get layout from {} but failed by timeout", s);
                         } else {
-                            log.warn("Tried to get layout from {} but failed with exception:", s, ee);
+                            //log.warn("Tried to get layout from {} but failed with exception:", s, ee);
                         }
                     } catch (Exception e) {
-                        log.warn("Tried to get layout from {} but failed with exception:", s, e);
+                        //log.warn("Tried to get layout from {} but failed with exception:", s, e);
                     }
-                }
 
                 log.warn("Couldn't connect to any up-to-date layout servers, retrying in {}, "
                                 + "Retried {} times, systemDownHandlerTriggerLimit = {}",

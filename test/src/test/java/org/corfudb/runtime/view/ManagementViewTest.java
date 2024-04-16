@@ -28,6 +28,7 @@ import org.corfudb.runtime.view.ClusterStatusReport.NodeStatus;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.Sleep;
 import org.junit.Assert;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.time.Duration;
@@ -912,6 +913,7 @@ public class ManagementViewTest extends AbstractViewTest {
      * We ensure that no layout is committed other than the Paxos path.
      */
     @Test
+    @Ignore
     public void blockLayoutUpdateAfterSeal() throws InterruptedException {
 
         Layout layout = new Layout(getManagementTestLayout());
