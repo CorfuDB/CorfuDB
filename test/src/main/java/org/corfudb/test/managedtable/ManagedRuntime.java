@@ -23,6 +23,10 @@ public class ManagedRuntime {
         return new ManagedRuntime(params,  CorfuRuntime.fromParameters(params));
     }
 
+    public static ManagedRuntime from(CorfuRuntime rt) {
+        return new ManagedRuntime(rt.getParameters(),  rt);
+    }
+
     public static ManagedRuntime withCacheDisabled() {
         CorfuRuntimeParameters rtParams = CorfuRuntime.CorfuRuntimeParameters
                 .builder()

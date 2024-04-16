@@ -200,7 +200,7 @@ public class CorfuStoreIT extends AbstractIT {
                 .<CorfuDynamicKey, CorfuDynamicRecord>build()
                 .config(config)
                 .managedRt(managedRt)
-                .tableSetup(ManagedCorfuTableSetupManager.persistentProtobufCorfu());
+                .tableSetup(ManagedCorfuTableSetupManager.getTableSetup(params));
 
         managedTable.execute(ctx -> {
             // PHASE 2

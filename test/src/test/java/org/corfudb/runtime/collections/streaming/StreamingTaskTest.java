@@ -17,6 +17,7 @@ import org.corfudb.runtime.view.AddressSpaceView;
 import org.corfudb.runtime.view.ReadOptions;
 import org.corfudb.runtime.view.SequencerView;
 import org.corfudb.runtime.view.TableRegistry;
+import org.corfudb.runtime.view.TableRegistry.FullyQualifiedTableName;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.test.SampleSchema;
 import org.corfudb.test.TestSchema;
@@ -137,7 +138,7 @@ public class StreamingTaskTest {
         // Since there are items to read, verify that the task re-submits itself (i.e., keeps syncing)
         verify(workers, times(1)).execute(task);
 
-        UUID tableStream = CorfuRuntime.getStreamID(TableRegistry.getFullyQualifiedTableName(namespace, tableName));
+        UUID tableStream = FullyQualifiedTableName.streamId(namespace, tableName).getId();
 
         MultiObjectSMREntry multiObject = new MultiObjectSMREntry();
         TestSchema.Uuid key = TestSchema.Uuid

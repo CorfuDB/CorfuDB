@@ -59,7 +59,7 @@ public class MultiRuntimeSpec extends AbstractViewTest implements CorfuTableSpec
                 .<Uuid, CorfuRecord<Uuid, Uuid>>from(ctx.getConfig(), managedRt)
                 .tableSetup(ManagedCorfuTableSetupManager.getTableSetup(ctx.getConfig().getParams()))
                 .execute(ctx2 -> {
-                    val ct = ctx2.getCorfuTable();
+                    var ct = ctx2.getCorfuTable();
                     assertThat(ct.get(key1).getPayload().getLsb()).isEqualTo(payload1.getLsb());
                     assertThat(ct.get(key1).getPayload().getMsb()).isEqualTo(payload1.getMsb());
                     assertThat(ct.size()).isEqualTo(1);

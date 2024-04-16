@@ -9,9 +9,14 @@ import lombok.Getter;
 import lombok.NonNull;
 import org.corfudb.runtime.CorfuOptions.SchemaOptions;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.ExampleSchemas;
+import org.corfudb.runtime.ExampleSchemas.Adult;
+import org.corfudb.runtime.ExampleSchemas.Company;
 import org.corfudb.runtime.ExampleSchemas.ExampleValue;
 import org.corfudb.runtime.ExampleSchemas.ManagedMetadata;
-import org.corfudb.runtime.collections.CorfuRecord;
+import org.corfudb.runtime.ExampleSchemas.Office;
+import org.corfudb.runtime.ExampleSchemas.Person;
+import org.corfudb.runtime.ExampleSchemas.SportsProfessional;
 import org.corfudb.runtime.collections.ProtobufIndexer;
 import org.corfudb.runtime.view.TableRegistry.FullyQualifiedTableName;
 import org.corfudb.runtime.view.TableRegistry.TableDescriptor;
@@ -23,6 +28,7 @@ import org.corfudb.test.managedtable.ManagedCorfuTableSetupManager.ManagedCorfuT
 import org.corfudb.util.serializer.DynamicProtobufSerializer;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.ProtobufSerializer;
+import org.corfudb.util.serializer.Serializers;
 
 import javax.annotation.Nonnull;
 import java.util.Optional;
@@ -89,11 +95,59 @@ public interface ManagedCorfuTableConfig {
                     .build();
         }
 
+        public static ManagedCorfuTableConfig buildTestSchemaUuid() {
+            return ManagedCorfuTableProtobufConfig
+                    .<Uuid, ExampleValue, ManagedMetadata>builder()
+                    .tableDescriptor(TableDescriptors.EXAMPLE_VALUE)
+                    .build();
+        }
+
+        public static ManagedCorfuTableConfig buildExampleSchemaUuid() {
+            return ManagedCorfuTableProtobufConfig
+                    .<ExampleSchemas.Uuid, ExampleValue, ManagedMetadata>builder()
+                    .tableDescriptor(TableDescriptors.EXAMPLE_SCHEMA_UUID_VALUE)
+                    .build();
+        }
+
+        public static ManagedCorfuTableConfig buildCompanyAndUuid() {
+            return ManagedCorfuTableProtobufConfig
+                    .<Uuid, Company, ManagedMetadata>builder()
+                    .tableDescriptor(TableDescriptors.COMPANY)
+                    .build();
+        }
+
+        public static ManagedCorfuTableConfig buildPerson() {
+            return ManagedCorfuTableProtobufConfig
+                    .<Uuid, Person, ManagedMetadata>builder()
+                    .tableDescriptor(TableDescriptors.PERSON)
+                    .build();
+        }
+
+        public static ManagedCorfuTableConfig buildOffice() {
+            return ManagedCorfuTableProtobufConfig
+                    .<Uuid, Office, ManagedMetadata>builder()
+                    .tableDescriptor(TableDescriptors.OFFICE)
+                    .build();
+        }
+
+        public static ManagedCorfuTableConfig buildAdult() {
+            return ManagedCorfuTableProtobufConfig
+                    .<Uuid, Adult, ManagedMetadata>builder()
+                    .tableDescriptor(TableDescriptors.ADULT)
+                    .build();
+        }
+
+        public static ManagedCorfuTableConfig buildSportsProfessional() {
+            return ManagedCorfuTableProtobufConfig
+                    .<Uuid, SportsProfessional, ManagedMetadata>builder()
+                    .tableDescriptor(TableDescriptors.SPORTS_PROFESSIONAL)
+                    .build();
+        }
+
         public static ManagedCorfuTableProtobufConfig<Uuid, ExampleValue, ManagedMetadata> buildExampleVal(
                 Consumer<ManagedCorfuTableProtobufConfigBuilder<Uuid, ExampleValue, ManagedMetadata>> customizer) {
 
-            ManagedCorfuTableProtobufConfigBuilder<Uuid, ExampleValue, ManagedMetadata> builder =
-                    ManagedCorfuTableProtobufConfig
+            var builder = ManagedCorfuTableProtobufConfig
                             .<Uuid, ExampleValue, ManagedMetadata>builder()
                             .tableDescriptor(TableDescriptors.EXAMPLE_VALUE);
 
@@ -188,6 +242,16 @@ public interface ManagedCorfuTableConfig {
         }
     }
 
+    class ManagedDefaultSerializer implements ManagedSerializer {
+        @Getter
+        private ISerializer serializer;
+
+        @Override
+        public void configure(CorfuRuntime rt) {
+            serializer = Serializers.getDefaultSerializer();
+        }
+    }
+
     class ManagedDynamicProtobufSerializer implements ManagedSerializer {
         @Getter
         private ISerializer serializer;
@@ -219,6 +283,14 @@ public interface ManagedCorfuTableConfig {
 
         public static final ManagedCorfuTableConfigParams PERSISTENT_PROTOBUF_TABLE = new ManagedCorfuTableConfigParams(
                 ManagedCorfuTableType.PERSISTENT, ManagedCorfuTableSetupType.PROTOBUF_TABLE
+        );
+
+        public static final ManagedCorfuTableConfigParams PERSISTENT_PLAIN_TABLE = new ManagedCorfuTableConfigParams(
+                ManagedCorfuTableType.PERSISTENT, ManagedCorfuTableSetupType.PLAIN_TABLE
+        );
+
+        public static final ManagedCorfuTableConfigParams PERSISTED_PLAIN_TABLE = new ManagedCorfuTableConfigParams(
+                ManagedCorfuTableType.PERSISTED, ManagedCorfuTableSetupType.PLAIN_TABLE
         );
 
         private final ManagedCorfuTableType tableType;

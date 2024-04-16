@@ -11,10 +11,11 @@ import org.corfudb.test.CorfuTableSpec;
 import org.corfudb.test.managedtable.ManagedCorfuTable;
 
 public class PeriodicCkPointSpec implements CorfuTableSpec<String, Long> {
+
     @Override
     public void test(CorfuTableSpecContext<String, Long> ctx) throws Exception {
         final int tableSize = AbstractCorfuTest.PARAMETERS.NUM_ITERATIONS_LOW;
-        val tableA = ctx.getCorfuTable();
+        var tableA = ctx.getCorfuTable();
 
         ManagedCorfuTable
                 .<String, Long>build()
@@ -22,7 +23,7 @@ public class PeriodicCkPointSpec implements CorfuTableSpec<String, Long> {
                 .managedRt(managedRt)
                 .tableSetup(tableSetup)
                 .noRtExecute(ctxB -> {
-                    val tableB = ctxB.getCorfuTable();
+                    var tableB = ctxB.getCorfuTable();
                     // thread 1: populates the maps with mapSize items
                     scheduleConcurrently(1, ignored_task_num -> {
                         populateMaps(tableSize, tableA, tableB);

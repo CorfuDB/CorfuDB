@@ -4,8 +4,14 @@ import lombok.Setter;
 import lombok.SneakyThrows;
 import lombok.experimental.Accessors;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.ExampleSchemas;
+import org.corfudb.runtime.ExampleSchemas.Adult;
+import org.corfudb.runtime.ExampleSchemas.Company;
 import org.corfudb.runtime.ExampleSchemas.ExampleValue;
 import org.corfudb.runtime.ExampleSchemas.ManagedMetadata;
+import org.corfudb.runtime.ExampleSchemas.Office;
+import org.corfudb.runtime.ExampleSchemas.Person;
+import org.corfudb.runtime.ExampleSchemas.SportsProfessional;
 import org.corfudb.runtime.collections.table.GenericCorfuTable;
 import org.corfudb.runtime.object.SnapshotGenerator;
 import org.corfudb.runtime.view.TableRegistry.TableDescriptor;
@@ -86,9 +92,28 @@ public class ManagedCorfuTable<K, V> {
 
     public static class TableDescriptors {
         public static TableDescriptor<Uuid, Uuid, Uuid> UUID = new TableDescriptor<>(Uuid.class, Uuid.class, Uuid.class);
+
         public static TableDescriptor<Uuid, ExampleValue, ManagedMetadata> EXAMPLE_VALUE = new TableDescriptor<>(
                 Uuid.class, ExampleValue.class, ManagedMetadata.class
         );
+
+        public static TableDescriptor<ExampleSchemas.Uuid, ExampleValue, ManagedMetadata> EXAMPLE_SCHEMA_UUID_VALUE =
+                new TableDescriptor<>(ExampleSchemas.Uuid.class, ExampleValue.class, ManagedMetadata.class);
+
+        public static TableDescriptor<Uuid, Company, ManagedMetadata> COMPANY =
+                new TableDescriptor<>(Uuid.class, Company.class, ManagedMetadata.class);
+
+        public static TableDescriptor<Uuid, Person, ManagedMetadata> PERSON =
+                new TableDescriptor<>(Uuid.class, Person.class, ManagedMetadata.class);
+
+        public static TableDescriptor<Uuid, Office, ManagedMetadata> OFFICE =
+                new TableDescriptor<>(Uuid.class, Office.class, ManagedMetadata.class);
+
+        public static TableDescriptor<Uuid, Adult, ManagedMetadata> ADULT =
+                new TableDescriptor<>(Uuid.class, Adult.class, ManagedMetadata.class);
+
+        public static TableDescriptor<Uuid, SportsProfessional, ManagedMetadata> SPORTS_PROFESSIONAL =
+                new TableDescriptor<>(Uuid.class, SportsProfessional.class, ManagedMetadata.class);
     }
 
     public enum ManagedCorfuTableType {
