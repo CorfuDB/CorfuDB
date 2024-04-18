@@ -183,6 +183,7 @@ public class LogEntryWriter extends SinkWriter {
                             registryTableUpdated.set(false);
                         }
                     } catch (TransactionAbortedException tae) {
+                        log.error("Caught exception while trying to apply the logEntryMsg.", tae);
                         throw new RetryNeededException();
                     }
                     return null;
