@@ -91,28 +91,30 @@ public class ManagedCorfuTable<K, V> {
     }
 
     public static class TableDescriptors {
-        public static TableDescriptor<Uuid, Uuid, Uuid> UUID = new TableDescriptor<>(Uuid.class, Uuid.class, Uuid.class);
+        public static final TableDescriptor<Uuid, Uuid, Uuid> UUID = new TableDescriptor<>(
+                Uuid.class, Uuid.class, Uuid.class
+        );
 
-        public static TableDescriptor<Uuid, ExampleValue, ManagedMetadata> EXAMPLE_VALUE = new TableDescriptor<>(
+        public static final TableDescriptor<Uuid, ExampleValue, ManagedMetadata> EXAMPLE_VALUE = new TableDescriptor<>(
                 Uuid.class, ExampleValue.class, ManagedMetadata.class
         );
 
-        public static TableDescriptor<ExampleSchemas.Uuid, ExampleValue, ManagedMetadata> EXAMPLE_SCHEMA_UUID_VALUE =
+        public static final TableDescriptor<ExampleSchemas.Uuid, ExampleValue, ManagedMetadata> EXAMPLE_SCHEMA_UUID_VALUE =
                 new TableDescriptor<>(ExampleSchemas.Uuid.class, ExampleValue.class, ManagedMetadata.class);
 
-        public static TableDescriptor<Uuid, Company, ManagedMetadata> COMPANY =
+        public static final TableDescriptor<Uuid, Company, ManagedMetadata> COMPANY =
                 new TableDescriptor<>(Uuid.class, Company.class, ManagedMetadata.class);
 
-        public static TableDescriptor<Uuid, Person, ManagedMetadata> PERSON =
+        public static final TableDescriptor<Uuid, Person, ManagedMetadata> PERSON =
                 new TableDescriptor<>(Uuid.class, Person.class, ManagedMetadata.class);
 
-        public static TableDescriptor<Uuid, Office, ManagedMetadata> OFFICE =
+        public static final TableDescriptor<Uuid, Office, ManagedMetadata> OFFICE =
                 new TableDescriptor<>(Uuid.class, Office.class, ManagedMetadata.class);
 
-        public static TableDescriptor<Uuid, Adult, ManagedMetadata> ADULT =
+        public static final TableDescriptor<Uuid, Adult, ManagedMetadata> ADULT =
                 new TableDescriptor<>(Uuid.class, Adult.class, ManagedMetadata.class);
 
-        public static TableDescriptor<Uuid, SportsProfessional, ManagedMetadata> SPORTS_PROFESSIONAL =
+        public static final TableDescriptor<Uuid, SportsProfessional, ManagedMetadata> SPORTS_PROFESSIONAL =
                 new TableDescriptor<>(Uuid.class, SportsProfessional.class, ManagedMetadata.class);
     }
 

@@ -1,6 +1,11 @@
 package org.corfudb.runtime.object;
 
+import org.corfudb.common.util.ClassUtils;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.collections.DiskBackedCorfuTable;
+import org.corfudb.runtime.collections.ImmutableCorfuTable;
+import org.corfudb.runtime.collections.PersistedCorfuTable;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.view.ObjectOpenOption;
 import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.util.ReflectionUtils;
@@ -16,11 +21,11 @@ import java.util.UUID;
  */
 public class CorfuCompileWrapperBuilder {
 
-    static final String PERSISTENT_CORFU_TABLE_CLASS_NAME = "org.corfudb.runtime.collections.PersistentCorfuTable";
-    static final String IMMUTABLE_CORFU_TABLE_CLASS_NAME = "org.corfudb.runtime.collections.ImmutableCorfuTable";
+    static final String PERSISTENT_CORFU_TABLE_CLASS_NAME = PersistentCorfuTable.class.getName();
+    static final String IMMUTABLE_CORFU_TABLE_CLASS_NAME = ImmutableCorfuTable.class.getName();
 
-    static final String PERSISTED_CORFU_TABLE_CLASS_NAME = "org.corfudb.runtime.collections.PersistedCorfuTable";
-    static final String DISKBACKED_CORFU_TABLE_CLASS_NAME = "org.corfudb.runtime.collections.DiskBackedCorfuTable";
+    static final String PERSISTED_CORFU_TABLE_CLASS_NAME = PersistedCorfuTable.class.getName();
+    static final String DISKBACKED_CORFU_TABLE_CLASS_NAME = DiskBackedCorfuTable.class.getName();
 
     /**
      * Returns a wrapper for the underlying SMR Object
@@ -78,7 +83,8 @@ public class CorfuCompileWrapperBuilder {
             wrapperObject.setCorfuSMRProxy(new MVOCorfuCompileProxy<>(rt, streamID,
                     coreClass, wrapperClass, args, serializer, streamTags, wrapperObject, objectOpenOption,
                     mvoCache));
-            return (T) wrapperObject;
+
+            return ClassUtils.cast(wrapperObject);
         }
 
         throw new UnsupportedOperationException(type.getName() + " not supported.");

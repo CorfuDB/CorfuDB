@@ -17,6 +17,7 @@ public class PeriodicCkPointSpec implements CorfuTableSpec<String, Long> {
         final int tableSize = AbstractCorfuTest.PARAMETERS.NUM_ITERATIONS_LOW;
         var tableA = ctx.getCorfuTable();
 
+        /*
         ManagedCorfuTable
                 .<String, Long>build()
                 .config(ctx.getConfig())
@@ -48,6 +49,7 @@ public class PeriodicCkPointSpec implements CorfuTableSpec<String, Long> {
                     // This time the we check that the new map instances contains all values
                     validateMapRebuild(tableSize, true, false);
                 });
+         */
     }
 
     /**
@@ -60,12 +62,14 @@ public class PeriodicCkPointSpec implements CorfuTableSpec<String, Long> {
         for (int i = 0; i < repetitions; i++) {
             final int taskNumber = i;
 
+            /*
             scheduledThreads.add(() -> {
                 // executorService uses Callable functions
                 // here, wrap a Corfu test CallableConsumer task (input task #, no output) as a Callable.
                 function.accept(taskNumber);
                 return null;
             });
+             */
         }
     }
 

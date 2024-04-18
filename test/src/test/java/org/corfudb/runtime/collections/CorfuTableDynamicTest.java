@@ -47,7 +47,6 @@ import org.corfudb.test.managedtable.ManagedCorfuTableConfig.ManagedCorfuTableCo
 import org.corfudb.test.managedtable.ManagedCorfuTableConfig.ManagedCorfuTableGenericConfig;
 import org.corfudb.test.managedtable.ManagedCorfuTableConfig.ManagedCorfuTableProtobufConfig;
 import org.corfudb.test.managedtable.ManagedCorfuTableConfig.ManagedDefaultSerializer;
-import org.corfudb.test.managedtable.ManagedCorfuTableConfig.ManagedDynamicProtobufSerializer;
 import org.corfudb.test.managedtable.ManagedCorfuTableSetupManager;
 import org.corfudb.test.managedtable.ManagedCorfuTableSetupManager.ManagedCorfuTableSetup;
 import org.corfudb.test.managedtable.ManagedRuntime;
@@ -72,6 +71,8 @@ import static org.assertj.core.api.Assertions.fail;
 import static org.corfudb.test.RtParamsForTest.getLargeRtParams;
 import static org.corfudb.test.RtParamsForTest.getMediumRtParams;
 import static org.corfudb.test.RtParamsForTest.getSmallRtParams;
+import static org.corfudb.test.managedtable.ManagedCorfuTableConfig.ManagedCorfuTableConfigParams.*;
+import static org.corfudb.test.managedtable.ManagedCorfuTableSetupManager.*;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -945,7 +946,7 @@ public class CorfuTableDynamicTest extends AbstractViewTest {
         var config = ManagedCorfuTableGenericConfig
                 .builder()
                 .managedSerializer(new ManagedDefaultSerializer())
-                .params(ManagedCorfuTableConfigParams.PERSISTENT_PLAIN_TABLE) //TODO add persisted tables
+                .params(PERSISTENT_PLAIN_TABLE) //TODO add persisted tables
                 .build();
 
         return dynamicTest(
@@ -956,7 +957,7 @@ public class CorfuTableDynamicTest extends AbstractViewTest {
 
                     ManagedCorfuTable
                             .<String, String>from(ctx.getConfig(), ManagedRuntime.from(ctx.getRt()))
-                            .tableSetup(ManagedCorfuTableSetupManager.getTableSetup(ctx.getConfig().getParams()))
+                            .tableSetup(getTableSetup(ctx.getConfig().getParams()))
                             .noRtExecute(ctx2 -> {
                                 var table2 = ctx2.getCorfuTable();
 
@@ -1034,7 +1035,7 @@ public class CorfuTableDynamicTest extends AbstractViewTest {
         var config = ManagedCorfuTableGenericConfig
                 .builder()
                 .managedSerializer(new ManagedDefaultSerializer())
-                .params(ManagedCorfuTableConfigParams.PERSISTENT_PLAIN_TABLE) //TODO add persisted tables
+                .params(PERSISTENT_PLAIN_TABLE) //TODO add persisted tables
                 .build();
 
         return dynamicTest(
@@ -1113,18 +1114,22 @@ public class CorfuTableDynamicTest extends AbstractViewTest {
         );
     }
 
+    public static class DynamicTestContext<K, V> {
+        CorfuRuntimeParameters rtParams;
+        ManagedCorfuTableConfig cfg;
+        CorfuTableSpec<K, V> spec;
+        List<ManagedCorfuTableSetup<K, V>> tables;
+    }
+
     private <K, V> Stream<DynamicTest> dynamicTest(
             CorfuRuntimeParameters rtParams,
             ManagedCorfuTableConfig cfg,
             CorfuTableSpec<K, V> spec
     ) {
 
-        var persistentParams = ManagedCorfuTableConfigParams.PERSISTENT_PROTOBUF_TABLE;
-        var persistedParams = ManagedCorfuTableConfigParams.PERSISTED_PROTOBUF_TABLE;
-
         List<ManagedCorfuTableSetup<K, V>> tables = ImmutableList.of(
-                ManagedCorfuTableSetupManager.getTableSetup(persistentParams),
-                ManagedCorfuTableSetupManager.getTableSetup(persistedParams)
+                getTableSetup(PERSISTENT_PROTOBUF_TABLE),
+                getTableSetup(PERSISTED_PROTOBUF_TABLE)
         );
 
         return tables.stream().map(tableSetup -> DynamicTest.dynamicTest(tableSetup.toString(), () -> {

@@ -12,7 +12,6 @@ import org.corfudb.runtime.object.PersistenceOptions;
 import org.corfudb.runtime.object.PersistenceOptions.PersistenceOptionsBuilder;
 import org.corfudb.runtime.object.SnapshotGenerator;
 import org.corfudb.runtime.view.ObjectOpenOption;
-import org.corfudb.test.managedtable.ManagedCorfuTable.ManagedCorfuTableType;
 import org.corfudb.test.managedtable.ManagedCorfuTableConfig.ManagedCorfuTableConfigParams;
 import org.corfudb.test.managedtable.ManagedCorfuTableConfig.ManagedCorfuTableProtobufConfig;
 import org.corfudb.util.serializer.ISerializer;
