@@ -117,8 +117,4 @@ public class ManagedCorfuTable<K, V> {
         public static final TableDescriptor<Uuid, SportsProfessional, ManagedMetadata> SPORTS_PROFESSIONAL =
                 new TableDescriptor<>(Uuid.class, SportsProfessional.class, ManagedMetadata.class);
     }
-
-    public enum ManagedCorfuTableType {
-        PERSISTENT, PERSISTED
-    }
 }

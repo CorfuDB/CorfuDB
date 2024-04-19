@@ -128,7 +128,7 @@ public class MultiVersionObject<S extends SnapshotGenerator<S> & ConsistencyView
      */
     public MultiVersionObject(
             @Nonnull CorfuRuntime corfuRuntime, @Nonnull Supplier<S> newObjectFn,
-            @Nonnull StreamViewSMRAdapter smrStream, @Nonnull ICorfuSMR wrapperObject,
+            @Nonnull StreamViewSMRAdapter smrStream, @Nonnull ICorfuSMR<?> wrapperObject,
             @Nonnull MVOCache<S> mvoCache, @Nonnull ObjectOpenOption objectOpenOption) {
 
         this.mvoCache = mvoCache;
