@@ -166,7 +166,7 @@ public abstract class DistributedCheckpointer {
         log.info("{} Starting checkpoint: {}${}", clientName,
                 tableName.getNamespace(), tableName.getTableName());
 
-        this.livenessUpdater.updateLiveness(tableName);
+        this.livenessUpdater.setCurrentTable(tableName);
         StatusType returnStatus = StatusType.FAILED;
         for (int retry = 0; retry < MAX_RETRIES; retry++) {
             CheckpointWriter<ICorfuTable<?,?>> cpw = null;
@@ -188,7 +188,7 @@ public abstract class DistributedCheckpointer {
                 }
              }
         }
-        this.livenessUpdater.notifyOnSyncComplete();
+        this.livenessUpdater.unsetCurrentTable();
         return CheckpointingStatus.newBuilder()
                 .setStatus(returnStatus).setClientName(clientName)
                 .setCycleCount(compactorCycleCount).setTimeTaken(System.currentTimeMillis() - tableCkptStartTime)

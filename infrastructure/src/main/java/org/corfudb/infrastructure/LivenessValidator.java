@@ -72,6 +72,17 @@ public class LivenessValidator {
         FINISH
     }
 
+    /**
+     * Check if the Checkpointer JVM is making progress checkpointing this table.
+     * The task is considered active if there is at least one status update within the last 'timeout' period.
+     * The default timeout period is 5 minutes.
+     * A status change can be either:
+     *   1. Heartbeat updates, refreshed by the Checkpointer JVM
+     *   2. Movement of Checkpoint stream tail, indicating that the checkpointer is writing cp entries.
+     * @param table the table to check for checkpoint progress
+     * @param currentTime used to refresh the cached status change time if updated
+     * @return true if the table is actively checkpointed
+     */
     public boolean isTableCheckpointActive(TableName table, Duration currentTime) {
         livenessValidatorHelper.clear();
         log.trace("Checking if table checkpoint is active...");
@@ -85,6 +96,14 @@ public class LivenessValidator {
         return true;
     }
 
+    /**
+     * Check if the stream tail of the checkpoint-stream for this table has advanced.
+     * If moved, refresh the status change time in the cache (validateLivenessMap).
+     * Moving tail indicates that the Checkpointer JVM is actively writing checkpoint entries.
+     * @param table the table to check for cpStream movement
+     * @param currentTime used to refresh the cached status change time if updated
+     * @return true if cpStream tail has moved since last status change
+     */
     private boolean isTailMovingForward(TableName table, Duration currentTime) {
         long cpStreamTail = getCpStreamTail(table);
         LivenessMetadata previousStatus = validateLivenessMap.get(table);
@@ -97,6 +116,14 @@ public class LivenessValidator {
         return false;
     }
 
+    /**
+     * Check if heartbeat has been updated for this table since last cached heartbeat.
+     * If updated, refresh the status change time in the cache (validateLivenessMap).
+     * Heartbeat is updated by CheckpointLivenessUpdater for tables being actively checkpointed.
+     * @param table the table to check for heartbeat
+     * @param currentTime used to refresh the cached status change time if updated
+     * @return true if heartbeat has been updated since last status change
+     */
     private boolean isHeartBeatMovingForward(TableName table, Duration currentTime) {
         long syncHeartBeat = getHeartbeat(table);
         LivenessMetadata previousStatus = validateLivenessMap.get(table);
